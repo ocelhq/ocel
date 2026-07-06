@@ -27,7 +27,8 @@ export async function GET(request: Request) {
   const projects = await db
     .select()
     .from(project)
-    .where(eq(project.organizationId, session.activeOrganizationId));
+    .where(eq(project.organizationId, session.activeOrganizationId))
+    .orderBy(project.createdAt);
 
   return NextResponse.json(projects, { status: 200 });
 }
