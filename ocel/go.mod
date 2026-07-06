@@ -4,6 +4,7 @@ go 1.25.3
 
 require (
 	connectrpc.com/connect v1.20.0
+	github.com/evanw/esbuild v0.28.1
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/spf13/cobra v1.10.2
 	github.com/zalando/go-keyring v0.2.8
