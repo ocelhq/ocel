@@ -1,6 +1,6 @@
 # Prefactor — SDK config API + `OCEL_DEV_SERVER` canonicalization
 
-Status: in-progress
+Status: done
 
 ## Parent
 
@@ -24,11 +24,11 @@ No CLI changes in this slice.
 
 ## Acceptance criteria
 
-- [ ] `import { defineConfig, type OcelConfig } from "ocel"` type-checks and returns its input typed.
-- [ ] `OcelConfig` requires `projectId` and allows optional `discovery.paths: string[]`.
-- [ ] The package's `exports` map serves the new root entry alongside `./postgres`.
-- [ ] The SDK references only `OCEL_DEV_SERVER` (no lingering `OCEL_SERVER` string, including in error messages).
-- [ ] `pnpm --filter ocel build` compiles cleanly.
+- [x] `import { defineConfig, type OcelConfig } from "ocel"` type-checks and returns its input typed.
+- [x] `OcelConfig` requires `projectId` and allows optional `discovery.paths: string[]`.
+- [x] The package's `exports` map serves the new root entry alongside `./postgres`.
+- [x] The SDK references only `OCEL_DEV_SERVER` (no lingering `OCEL_SERVER` string, including in error messages).
+- [x] `pnpm --filter ocel build` compiles cleanly.
 
 ## Blocked by
 

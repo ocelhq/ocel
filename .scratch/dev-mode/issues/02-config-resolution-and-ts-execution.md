@@ -1,6 +1,6 @@
 # Config resolution & TypeScript execution
 
-Status: ready-for-agent
+Status: in-progress
 
 ## Parent
 
