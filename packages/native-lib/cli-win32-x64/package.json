@@ -1,0 +1,19 @@
+{
+  "name": "@ocel/win32-x64",
+  "version": "0.0.1-alpha.0",
+  "description": "Ocel CLI prebuilt binary for win32-x64",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
