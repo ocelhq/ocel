@@ -4,9 +4,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
 )
@@ -44,7 +46,15 @@ var devCmd = &cobra.Command{
 
 		// if not authed, prompt to login on dashboard
 
-		// read projectId from config and link to variables on anything else
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine working directory: %w", err)
+		}
+		cfg, err := projectconfig.Resolve(cwd)
+		if err != nil {
+			return err
+		}
+		_ = cfg // used by discovery, wired in a follow-up issue
 
 		// detect language, framework, and run discovery
 
