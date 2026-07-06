@@ -12,11 +12,16 @@ import {
 	mkdirSync,
 	readdirSync,
 	readFileSync,
+	rmSync,
 	writeFileSync,
 } from "node:fs";
 import path from "node:path";
 
-const MAX_ITERATIONS = 3;
+// Max issues run concurrently (in separate worktrees) within one supercycle.
+const MAX_ITERATIONS = 4;
+// Safety cap on the number of re-selection batches, in case something keeps
+// re-selecting without making progress.
+const MAX_SUPERCYCLES = 20;
 const IMPLEMENT_TIMEOUT_MS = 30 * 60 * 1000;
 const WORKTREE_BASE_DIRNAME = "ocel-orchestrator-worktrees";
 
@@ -192,6 +197,29 @@ function runClaudeSelection(prompt, repoRoot) {
 	return { issues: envelope.structured_output?.issues ?? [], raw: res.stdout };
 }
 
+// Copies one issue's result back from a worktree into the main checkout's
+// .scratch tree. Only ever touches the single file for this candidate's id,
+// so it's safe to call concurrently from multiple in-flight agents — each
+// writes to a distinct destination path. Returns true if the issue was moved
+// to issues/done/ inside the worktree (i.e. the agent considers it complete).
+function ferryIssueBack(worktreeScratchDir, scratchDir, issueFileName) {
+	const wtIssuePath = path.join(worktreeScratchDir, "issues", issueFileName);
+	const wtDonePath = path.join(worktreeScratchDir, "issues", "done", issueFileName);
+	const mainIssuePath = path.join(scratchDir, "issues", issueFileName);
+	const mainDonePath = path.join(scratchDir, "issues", "done", issueFileName);
+
+	if (existsSync(wtDonePath)) {
+		mkdirSync(path.dirname(mainDonePath), { recursive: true });
+		cpSync(wtDonePath, mainDonePath);
+		if (existsSync(mainIssuePath)) rmSync(mainIssuePath);
+		return true;
+	}
+	if (existsSync(wtIssuePath)) {
+		cpSync(wtIssuePath, mainIssuePath);
+	}
+	return false;
+}
+
 function truncate(str, n) {
 	return str.length > n ? `${str.slice(0, n)}…` : str;
 }
@@ -318,8 +346,8 @@ async function main() {
 
 	log(`Starting orchestrator run for folder "${folderName}" on base branch "${baseBranch}"`);
 
-	for (let iteration = 1; iteration <= MAX_ITERATIONS; iteration++) {
-		log(`--- Supercycle ${iteration}/${MAX_ITERATIONS} ---`);
+	for (let supercycle = 1; supercycle <= MAX_SUPERCYCLES; supercycle++) {
+		log(`--- Supercycle ${supercycle}/${MAX_SUPERCYCLES} ---`);
 
 		const openIssueNames = listMarkdownFiles(issuesDir);
 		const doneIssueNames = listMarkdownFiles(doneDir);
@@ -338,82 +366,103 @@ async function main() {
 			log(`Selection call failed: ${err.message}`);
 			break;
 		}
-		writeFileSync(path.join(runDir, `selection-${iteration}.json`), selection.raw);
+		writeFileSync(path.join(runDir, `selection-${supercycle}.json`), selection.raw);
 
 		if (selection.issues.length === 0) {
 			log("Selection returned no candidates. Stopping.");
 			break;
 		}
 
-		const candidate = selection.issues[0];
-		const issueFileName = `${candidate.id}.md`;
-		const issueFilePath = path.join(issuesDir, issueFileName);
+		const batch = selection.issues.slice(0, MAX_ITERATIONS);
+		log(`Selected ${batch.length} issue(s) to run in parallel this supercycle: ${batch.map((c) => c.id).join(", ")}`);
 
-		if (!existsSync(issueFilePath)) {
-			log(`Selected id "${candidate.id}" does not match an existing open issue file. Skipping.`);
-			failedIds.add(candidate.id);
-			continue;
-		}
+		// Sequential setup: file validation, in-progress marking, and worktree
+		// creation all touch shared git/repo state, so they run one at a time.
+		// Only the (slow) implement calls themselves run concurrently below.
+		const prepared = [];
+		for (const candidate of batch) {
+			const issueFileName = `${candidate.id}.md`;
+			const issueFilePath = path.join(issuesDir, issueFileName);
 
-		log(`Selected "${candidate.id}" -> branch ${candidate.branch}`);
-
-		const { status: originalStatus } = readIssueStatus(issueFilePath);
-		setIssueStatus(issueFilePath, "in-progress");
-
-		let worktreePath;
-		try {
-			worktreePath = path.join(worktreeBase, candidate.branch);
-			mkdirSync(path.dirname(worktreePath), { recursive: true });
-			git(["worktree", "add", "-b", candidate.branch, worktreePath, baseBranch], repoRoot);
-		} catch (err) {
-			log(`Failed to create worktree for "${candidate.branch}": ${err.message}`);
-			setIssueStatus(issueFilePath, originalStatus ?? "ready-for-agent");
-			failedIds.add(candidate.id);
-			continue;
-		}
-
-		const worktreeScratchDir = path.join(worktreePath, ".scratch", folderName);
-		cpSync(scratchDir, worktreeScratchDir, { recursive: true });
-
-		const issueRelPath = path.relative(worktreePath, path.join(worktreeScratchDir, "issues", issueFileName));
-		const implementPrompt = buildImplementPrompt(issueRelPath, candidate.branch, baseBranch);
-
-		const implementLogPath = path.join(runDir, `implement-${candidate.id}.log`);
-		log(`Running implement call for "${candidate.id}" in ${worktreePath} (timeout ${IMPLEMENT_TIMEOUT_MS / 60000}min)`);
-		log(`Follow along: condensed progress prints below as it happens; the full raw event stream is being written live to ${implementLogPath} (tail -f it in another terminal for full detail).`);
-		const implementRes = await runClaudeImplement(implementPrompt, worktreePath, implementLogPath, (summary) => log(summary));
-		if (implementRes.stderr) {
-			appendFileSync(implementLogPath, `\n--- stderr ---\n${implementRes.stderr}\n`);
-		}
-		if (implementRes.finalResult) {
-			log(
-				`Implement result for "${candidate.id}": ${implementRes.finalResult.subtype} (cost $${implementRes.finalResult.total_cost_usd?.toFixed?.(4) ?? "?"})`,
-			);
-		}
-
-		// Ferry the worktree's .scratch state back into the main checkout so the
-		// next selection cycle sees whatever the sub-agent did (done-move, notes).
-		cpSync(worktreeScratchDir, scratchDir, { recursive: true });
-
-		const timedOut = implementRes.timedOut;
-		const succeeded = !timedOut && !implementRes.error && implementRes.status === 0 && existsSync(path.join(doneDir, issueFileName));
-
-		if (succeeded) {
-			log(`Issue "${candidate.id}" completed successfully.`);
-		} else {
-			const reason = timedOut
-				? "timed out"
-				: implementRes.error
-					? `spawn error: ${implementRes.error.message}`
-					: implementRes.status !== 0
-						? `exited with status ${implementRes.status}`
-						: "did not move issue file to issues/done/";
-			log(`Issue "${candidate.id}" did not complete (${reason}). Reverting status, worktree left at ${worktreePath} for inspection.`);
-			if (existsSync(issueFilePath)) {
-				setIssueStatus(issueFilePath, originalStatus ?? "ready-for-agent");
+			if (!existsSync(issueFilePath)) {
+				log(`Selected id "${candidate.id}" does not match an existing open issue file. Skipping.`);
+				failedIds.add(candidate.id);
+				continue;
 			}
-			failedIds.add(candidate.id);
+
+			const { status: originalStatus } = readIssueStatus(issueFilePath);
+			setIssueStatus(issueFilePath, "in-progress");
+
+			let worktreePath;
+			try {
+				worktreePath = path.join(worktreeBase, candidate.branch);
+				mkdirSync(path.dirname(worktreePath), { recursive: true });
+				git(["worktree", "add", "-b", candidate.branch, worktreePath, baseBranch], repoRoot);
+			} catch (err) {
+				log(`Failed to create worktree for "${candidate.branch}": ${err.message}`);
+				setIssueStatus(issueFilePath, originalStatus ?? "ready-for-agent");
+				failedIds.add(candidate.id);
+				continue;
+			}
+
+			const worktreeScratchDir = path.join(worktreePath, ".scratch", folderName);
+			cpSync(scratchDir, worktreeScratchDir, { recursive: true });
+
+			prepared.push({ candidate, issueFileName, originalStatus, worktreePath, worktreeScratchDir });
 		}
+
+		if (prepared.length === 0) {
+			log("No candidates survived setup this supercycle.");
+			continue;
+		}
+
+		await Promise.allSettled(
+			prepared.map(async ({ candidate, issueFileName, originalStatus, worktreePath, worktreeScratchDir }) => {
+				const issueRelPath = path.relative(worktreePath, path.join(worktreeScratchDir, "issues", issueFileName));
+				const implementPrompt = buildImplementPrompt(issueRelPath, candidate.branch, baseBranch);
+
+				const implementLogPath = path.join(runDir, `implement-${candidate.id}.log`);
+				log(`[${candidate.id}] Running implement call in ${worktreePath} (timeout ${IMPLEMENT_TIMEOUT_MS / 60000}min)`);
+				log(`[${candidate.id}] Follow along: tail -f ${implementLogPath} for the full raw event stream.`);
+
+				const implementRes = await runClaudeImplement(implementPrompt, worktreePath, implementLogPath, (summary) =>
+					log(`[${candidate.id}] ${summary}`),
+				);
+				if (implementRes.stderr) {
+					appendFileSync(implementLogPath, `\n--- stderr ---\n${implementRes.stderr}\n`);
+				}
+				if (implementRes.finalResult) {
+					log(
+						`[${candidate.id}] Implement result: ${implementRes.finalResult.subtype} (cost $${implementRes.finalResult.total_cost_usd?.toFixed?.(4) ?? "?"})`,
+					);
+				}
+
+				// Ferry only this candidate's own issue file back — safe under
+				// concurrency since every candidate writes to a distinct path.
+				const movedToDone = ferryIssueBack(worktreeScratchDir, scratchDir, issueFileName);
+
+				const timedOut = implementRes.timedOut;
+				const succeeded = !timedOut && !implementRes.error && implementRes.status === 0 && movedToDone;
+
+				if (succeeded) {
+					log(`[${candidate.id}] completed successfully.`);
+				} else {
+					const reason = timedOut
+						? "timed out"
+						: implementRes.error
+							? `spawn error: ${implementRes.error.message}`
+							: implementRes.status !== 0
+								? `exited with status ${implementRes.status}`
+								: "did not move issue file to issues/done/";
+					log(`[${candidate.id}] did not complete (${reason}). Reverting status, worktree left at ${worktreePath} for inspection.`);
+					const mainIssuePath = path.join(issuesDir, issueFileName);
+					if (existsSync(mainIssuePath)) {
+						setIssueStatus(mainIssuePath, originalStatus ?? "ready-for-agent");
+					}
+					failedIds.add(candidate.id);
+				}
+			}),
+		);
 	}
 
 	log("Orchestrator run finished.");
