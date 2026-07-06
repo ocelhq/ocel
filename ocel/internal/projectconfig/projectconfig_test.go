@@ -3,6 +3,7 @@ package projectconfig
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -65,5 +66,86 @@ export default {
 	}
 	if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "resources" {
 		t.Fatalf("Discovery.Paths = %v, want [resources]", cfg.Discovery.Paths)
+	}
+}
+
+func TestResolve_DefaultsDiscoveryPaths(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_456",
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "ocel" {
+		t.Fatalf("Discovery.Paths = %v, want [ocel]", cfg.Discovery.Paths)
+	}
+}
+
+func TestResolve_MissingConfig(t *testing.T) {
+	root := t.TempDir()
+
+	_, err := Resolve(root)
+	if err == nil {
+		t.Fatal("Resolve: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "ocel init") {
+		t.Fatalf("err = %q, want it to mention `ocel init`", err.Error())
+	}
+}
+
+func TestResolve_UnparseableConfig(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_789"
+  this is not valid typescript +++
+`)
+
+	_, err := Resolve(root)
+	if err == nil {
+		t.Fatal("Resolve: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "ocel init") {
+		t.Fatalf("err = %q, want it to mention `ocel init`", err.Error())
+	}
+}
+
+func TestResolve_MissingProjectID(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  discovery: { paths: ["x"] },
+};
+`)
+
+	_, err := Resolve(root)
+	if err == nil {
+		t.Fatal("Resolve: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "ocel init") {
+		t.Fatalf("err = %q, want it to mention `ocel init`", err.Error())
+	}
+}
+
+func TestResolve_WritesBuildArtifactsUnderOcelDir(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+};
+`)
+
+	if _, err := Resolve(root); err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+
+	artifact := filepath.Join(root, buildDirName, "config.mjs")
+	if _, err := os.Stat(artifact); err != nil {
+		t.Fatalf("expected build artifact at %s: %v", artifact, err)
 	}
 }
