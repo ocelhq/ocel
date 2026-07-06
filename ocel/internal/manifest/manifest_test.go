@@ -32,6 +32,24 @@ func TestManifest_SnapshotIsIndependentCopy(t *testing.T) {
 	}
 }
 
+func TestManifest_Reset_ClearsEntries(t *testing.T) {
+	m := New()
+	m.Add(Entry{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+
+	m.Reset()
+
+	if got := m.Snapshot(); len(got) != 0 {
+		t.Fatalf("Snapshot() after Reset = %+v, want empty", got)
+	}
+
+	m.Add(Entry{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES})
+	got := m.Snapshot()
+	want := []Entry{{Name: "second", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+	if len(got) != len(want) || got[0] != want[0] {
+		t.Fatalf("Snapshot() after Reset+Add = %+v, want %+v", got, want)
+	}
+}
+
 func TestManifest_ConcurrentAdd(t *testing.T) {
 	m := New()
 	var wg sync.WaitGroup
