@@ -1,6 +1,6 @@
 # Single-app happy path: discovery → sync → inject → spawn
 
-Status: ready-for-agent
+Status: in-progress
 
 ## Parent
 
