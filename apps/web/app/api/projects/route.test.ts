@@ -4,7 +4,7 @@ import { project } from "@/db/schema";
 import { db } from "@/lib/db";
 import { createTestSessionWithOrganization } from "../../../test/auth-harness";
 import { setupTestDatabase } from "../../../test/db";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 function postRequest(body: unknown, headers: Headers) {
   return new Request("http://localhost/api/projects", {
@@ -15,6 +15,10 @@ function postRequest(body: unknown, headers: Headers) {
     },
     body: JSON.stringify(body),
   });
+}
+
+function getRequest(headers: Headers) {
+  return new Request("http://localhost/api/projects", { headers });
 }
 
 describe("POST /api/projects", () => {
@@ -136,6 +140,69 @@ describe("POST /api/projects", () => {
     const response = await POST(
       postRequest({ name: "My Project", slug: "my-project" }, new Headers()),
     );
+
+    expect(response.status).toBe(401);
+  });
+});
+
+describe("GET /api/projects", () => {
+  beforeAll(async () => {
+    await setupTestDatabase();
+  });
+
+  it("lists every Project in the caller's active org and none from another org", async () => {
+    const session = await createTestSessionWithOrganization();
+    const otherSession = await createTestSessionWithOrganization();
+
+    try {
+      await POST(
+        postRequest({ name: "Alpha", slug: "alpha" }, session.headers),
+      );
+      await POST(postRequest({ name: "Beta", slug: "beta" }, session.headers));
+      await POST(
+        postRequest(
+          { name: "Not Mine", slug: "not-mine" },
+          otherSession.headers,
+        ),
+      );
+
+      const response = await GET(getRequest(session.headers));
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toHaveLength(2);
+      expect(body.map((p: { slug: string }) => p.slug).sort()).toEqual([
+        "alpha",
+        "beta",
+      ]);
+      expect(
+        body.every(
+          (p: { organizationId: string }) =>
+            p.organizationId === session.organization.id,
+        ),
+      ).toBe(true);
+    } finally {
+      await session.cleanup();
+      await otherSession.cleanup();
+    }
+  });
+
+  it("returns an empty collection when the active org has no Projects", async () => {
+    const session = await createTestSessionWithOrganization();
+
+    try {
+      const response = await GET(getRequest(session.headers));
+
+      expect(response.status).toBe(200);
+      const body = await response.json();
+      expect(body).toEqual([]);
+    } finally {
+      await session.cleanup();
+    }
+  });
+
+  it("returns 401 when unauthenticated", async () => {
+    const response = await GET(getRequest(new Headers()));
 
     expect(response.status).toBe(401);
   });
