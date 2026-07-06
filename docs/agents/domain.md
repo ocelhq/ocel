@@ -2,6 +2,8 @@
 
 How the engineering skills should consume this repo's domain documentation when exploring the codebase.
 
+This repo is **single-context**: one `CONTEXT.md` + `docs/adr/` at the repo root.
+
 ## Before exploring, read these
 
 - **`CONTEXT.md`** at the repo root, or
@@ -12,7 +14,7 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 ## File structure
 
-This repo is **single-context**: one `CONTEXT.md` + `docs/adr/` at the repo root.
+Single-context repo (this repo):
 
 ```
 /
@@ -23,7 +25,7 @@ This repo is **single-context**: one `CONTEXT.md` + `docs/adr/` at the repo root
 └── src/
 ```
 
-For reference, a multi-context repo (signalled by a `CONTEXT-MAP.md` at the root) would instead look like:
+Multi-context repo (presence of `CONTEXT-MAP.md` at the root):
 
 ```
 /

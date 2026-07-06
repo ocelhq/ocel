@@ -4,7 +4,7 @@
 // `claude` CLI. See `.scratch/<folder>/orchestrator-runs/<timestamp>/` for
 // per-run logs after a run.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import {
 	appendFileSync,
 	cpSync,
@@ -192,19 +192,95 @@ function runClaudeSelection(prompt, repoRoot) {
 	return { issues: envelope.structured_output?.issues ?? [], raw: res.stdout };
 }
 
-function runClaudeImplement(prompt, cwd) {
-	const res = spawnSync("claude", ["-p", "--permission-mode", "bypassPermissions"], {
-		cwd,
-		input: prompt,
-		encoding: "utf8",
-		maxBuffer: 1024 * 1024 * 200,
-		timeout: IMPLEMENT_TIMEOUT_MS,
-		killSignal: "SIGKILL",
-	});
-	return res;
+function truncate(str, n) {
+	return str.length > n ? `${str.slice(0, n)}…` : str;
 }
 
-function main() {
+function summarizeStreamEvent(event) {
+	switch (event.type) {
+		case "assistant": {
+			const parts = [];
+			for (const item of event.message?.content ?? []) {
+				if (item.type === "text" && item.text) {
+					parts.push(`assistant: ${truncate(item.text, 300)}`);
+				} else if (item.type === "tool_use") {
+					const detail = item.input?.command ?? item.input?.file_path ?? item.input?.description ?? "";
+					parts.push(`tool: ${item.name}${detail ? ` (${truncate(String(detail), 100)})` : ""}`);
+				}
+			}
+			return parts.length ? parts.join("\n") : null;
+		}
+		case "result":
+			return `implement call finished: ${event.subtype} (cost $${event.total_cost_usd?.toFixed?.(4) ?? "?"}, ${event.num_turns} turns)`;
+		case "rate_limit_event":
+			return `rate limit status: ${event.rate_limit_info?.status}`;
+		default:
+			return null;
+	}
+}
+
+// Streams the implement call live: prints a condensed one-line-per-event
+// summary via onProgress, while writing the full raw stream-json event log
+// to logFilePath (for `tail -f`-ing the exact tool calls/output).
+function runClaudeImplement(prompt, cwd, logFilePath, onProgress) {
+	return new Promise((resolve) => {
+		const child = spawn(
+			"claude",
+			["-p", "--output-format", "stream-json", "--verbose", "--permission-mode", "bypassPermissions"],
+			{ cwd, stdio: ["pipe", "pipe", "pipe"] },
+		);
+
+		let buffer = "";
+		let stderr = "";
+		let finalResult = null;
+		let timedOut = false;
+
+		const timer = setTimeout(() => {
+			timedOut = true;
+			child.kill("SIGKILL");
+		}, IMPLEMENT_TIMEOUT_MS);
+
+		child.stdout.on("data", (chunk) => {
+			buffer += chunk.toString();
+			let idx = buffer.indexOf("\n");
+			while (idx !== -1) {
+				const line = buffer.slice(0, idx);
+				buffer = buffer.slice(idx + 1);
+				idx = buffer.indexOf("\n");
+				if (!line.trim()) continue;
+				appendFileSync(logFilePath, `${line}\n`);
+				let event;
+				try {
+					event = JSON.parse(line);
+				} catch {
+					continue;
+				}
+				if (event.type === "result") finalResult = event;
+				const summary = summarizeStreamEvent(event);
+				if (summary) onProgress(summary);
+			}
+		});
+
+		child.stderr.on("data", (chunk) => {
+			stderr += chunk.toString();
+		});
+
+		child.on("error", (error) => {
+			clearTimeout(timer);
+			resolve({ status: null, error, timedOut, finalResult, stderr });
+		});
+
+		child.on("close", (status) => {
+			clearTimeout(timer);
+			resolve({ status, error: null, timedOut, finalResult, stderr });
+		});
+
+		child.stdin.write(prompt);
+		child.stdin.end();
+	});
+}
+
+async function main() {
 	const folderName = process.argv[2];
 	if (!folderName) usageError("Missing <folder-name> argument.");
 
@@ -302,18 +378,24 @@ function main() {
 		const issueRelPath = path.relative(worktreePath, path.join(worktreeScratchDir, "issues", issueFileName));
 		const implementPrompt = buildImplementPrompt(issueRelPath, candidate.branch, baseBranch);
 
+		const implementLogPath = path.join(runDir, `implement-${candidate.id}.log`);
 		log(`Running implement call for "${candidate.id}" in ${worktreePath} (timeout ${IMPLEMENT_TIMEOUT_MS / 60000}min)`);
-		const implementRes = runClaudeImplement(implementPrompt, worktreePath);
-		writeFileSync(
-			path.join(runDir, `implement-${candidate.id}.log`),
-			`${implementRes.stdout ?? ""}\n--- stderr ---\n${implementRes.stderr ?? ""}`,
-		);
+		log(`Follow along: condensed progress prints below as it happens; the full raw event stream is being written live to ${implementLogPath} (tail -f it in another terminal for full detail).`);
+		const implementRes = await runClaudeImplement(implementPrompt, worktreePath, implementLogPath, (summary) => log(summary));
+		if (implementRes.stderr) {
+			appendFileSync(implementLogPath, `\n--- stderr ---\n${implementRes.stderr}\n`);
+		}
+		if (implementRes.finalResult) {
+			log(
+				`Implement result for "${candidate.id}": ${implementRes.finalResult.subtype} (cost $${implementRes.finalResult.total_cost_usd?.toFixed?.(4) ?? "?"})`,
+			);
+		}
 
 		// Ferry the worktree's .scratch state back into the main checkout so the
 		// next selection cycle sees whatever the sub-agent did (done-move, notes).
 		cpSync(worktreeScratchDir, scratchDir, { recursive: true });
 
-		const timedOut = implementRes.signal === "SIGKILL" || implementRes.error?.code === "ETIMEDOUT";
+		const timedOut = implementRes.timedOut;
 		const succeeded = !timedOut && !implementRes.error && implementRes.status === 0 && existsSync(path.join(doneDir, issueFileName));
 
 		if (succeeded) {
@@ -337,4 +419,7 @@ function main() {
 	log("Orchestrator run finished.");
 }
 
-main();
+main().catch((err) => {
+	console.error(err);
+	process.exit(1);
+});
