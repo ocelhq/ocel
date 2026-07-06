@@ -1,0 +1,27 @@
+# Config for `air` (https://github.com/air-verse/air), driving `pnpm dev:cli`.
+#
+# Build-only watch loop for the ocel Go CLI: on `.go` changes, rebuilds the
+# host's native binary via the shared scripts/build-native.mjs so that
+# pnpm's symlinked packages/native-lib/cli-<platform>-<arch> package stays
+# up to date without a manual reinstall.
+#
+# Air always runs a "run step" after a successful build (there's no built-in
+# build-only mode), so `entrypoint` points at a real no-op command instead of
+# air's default `./tmp/main` (which build-native.mjs never produces, and
+# which would otherwise fail with a confusing "not found" error every
+# rebuild). The `ocel` CLI binary itself is never invoked by air.
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+cmd = "node ../scripts/build-native.mjs --host"
+entrypoint = ["true"]
+include_ext = ["go"]
+exclude_dir = ["tmp"]
+
+[build.windows]
+entrypoint = ["cmd", "/c", "exit 0"]
+
+[log]
+main_only = true
