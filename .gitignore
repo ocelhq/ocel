@@ -179,3 +179,5 @@ vite.config.ts.timestamp-*
 .workflow-data
 packages/native-lib/**
 .local/
+.agents/
+agent/
