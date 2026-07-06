@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/internal/lockfile"
 	"github.com/ocelhq/ocel/internal/projectconfig"
 	"github.com/ocelhq/ocel/internal/provision"
+	"github.com/ocelhq/ocel/internal/watcher"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 )
@@ -27,6 +29,11 @@ import (
 // loadCredentials is a seam over credentials.Load so tests can simulate an
 // unauthenticated CLI without touching the real keyring/credentials file.
 var loadCredentials = credentials.Load
+
+// watchDebounce is the quiet period the leader's file watcher waits for
+// after the last change under discovery.paths before re-resolving. It's a
+// var so tests can shorten it.
+var watchDebounce = 300 * time.Millisecond
 
 // devCmd runs the current Ocel project in development mode.
 var devCmd = &cobra.Command{
@@ -103,31 +110,17 @@ func runLeader(ctx context.Context, creds credentials.Credentials, cfg *projectc
 	}
 	defer lockfile.Remove(cfg.ProjectID)
 
-	files, err := discovery.Discover(cfg.Dir, cfg.Discovery.Paths)
+	devServerAddr := "http://" + addr
+
+	resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, stdout, stderr)
 	if err != nil {
-		return fmt.Errorf("discover resources: %w", err)
+		return err
 	}
-
-	entry, err := discovery.Bundle(cfg.Dir, files)
-	if err != nil {
-		return fmt.Errorf("bundle discovery entrypoint: %w", err)
-	}
-
-	nodeCmd := exec.CommandContext(ctx, "node", entry)
-	nodeCmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER=http://"+addr)
-	nodeCmd.Stdout = stdout
-	nodeCmd.Stderr = stderr
-	if err := nodeCmd.Run(); err != nil {
-		return fmt.Errorf("discovery failed: %w", err)
-	}
-
-	syncResult := <-srv.Sync()
-	if syncResult.Err != nil {
-		return fmt.Errorf("sync failed: %w", syncResult.Err)
-	}
-
-	resolved := resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.Resources)
 	srv.PushEnv(resolved)
+
+	if err := watchAndReResolve(ctx, srv, cfg, devServerAddr, stdout, stderr); err != nil {
+		return fmt.Errorf("watch discovery paths: %w", err)
+	}
 
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
 	appCmd.Env = applyEnv(os.Environ(), resolved)
@@ -137,11 +130,67 @@ func runLeader(ctx context.Context, creds credentials.Credentials, cfg *projectc
 	return waitExitError(appCmd.Run())
 }
 
+// discoverAndSync runs discovery over cfg's resolved discovery.paths,
+// bundles and executes the entrypoint against srv (which accumulates
+// Declare calls into its manifest), waits for the resulting /sync
+// provisioning, and returns the full resolved env — ready to push to
+// followers or apply to the leader's own child.
+func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, devServerAddr string, stdout, stderr io.Writer) (map[string]string, error) {
+	files, err := discovery.Discover(cfg.Dir, cfg.Discovery.Paths)
+	if err != nil {
+		return nil, fmt.Errorf("discover resources: %w", err)
+	}
+
+	entry, err := discovery.Bundle(cfg.Dir, files)
+	if err != nil {
+		return nil, fmt.Errorf("bundle discovery entrypoint: %w", err)
+	}
+
+	nodeCmd := exec.CommandContext(ctx, "node", entry)
+	nodeCmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+devServerAddr)
+	nodeCmd.Stdout = stdout
+	nodeCmd.Stderr = stderr
+	if err := nodeCmd.Run(); err != nil {
+		return nil, fmt.Errorf("discovery failed: %w", err)
+	}
+
+	syncResult := <-srv.Sync()
+	if syncResult.Err != nil {
+		return nil, fmt.Errorf("sync failed: %w", syncResult.Err)
+	}
+
+	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.Resources), nil
+}
+
+// watchAndReResolve watches cfg's resolved discovery.paths and, on a
+// debounced change, resets the manifest and re-runs discoverAndSync (a full
+// re-discovery: declares from the new run replace the prior manifest), then
+// pushes the freshly resolved env to every connected follower. It returns
+// once the watch is established; re-resolution happens in the background
+// until ctx is done.
+func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, devServerAddr string, stdout, stderr io.Writer) error {
+	dirs, err := discovery.Dirs(cfg.Dir, cfg.Discovery.Paths)
+	if err != nil {
+		return fmt.Errorf("resolve watch directories: %w", err)
+	}
+
+	return watcher.Watch(ctx, dirs, watchDebounce, func() {
+		srv.ResetManifest()
+		resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, stdout, stderr)
+		if err != nil {
+			fmt.Fprintln(stderr, "re-resolve failed:", err)
+			return
+		}
+		srv.PushEnv(resolved)
+	})
+}
+
 // runFollower connects to the leader at leaderAddr, waits for its initial
-// env push, and spawns appArgs with it. If the leader disconnects while
-// appArgs is running, the child is stopped and runFollower returns a
-// non-zero *ExitError after printing a message instructing the user to
-// restart the leader.
+// env push, and spawns appArgs with it. On every later push (the leader
+// re-resolved after a watched file changed), the child is stopped and
+// restarted with the new env. If the leader disconnects, the child is
+// stopped and runFollower returns a non-zero *ExitError after printing a
+// message instructing the user to restart the leader.
 func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	client := devv1connect.NewDevServiceClient(http.DefaultClient, "http://"+leaderAddr)
 
@@ -158,44 +207,68 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 		return errors.New("connect to leader: stream closed before first env push")
 	}
 
+	child, err := startFollowerChild(ctx, appArgs, stream.Msg().Env, stdin, stdout, stderr)
+	if err != nil {
+		return err
+	}
+
+	updates := make(chan map[string]string)
+	streamDone := make(chan error, 1)
+	go func() {
+		for stream.Receive() {
+			select {
+			case updates <- stream.Msg().Env:
+			case <-ctx.Done():
+				return
+			}
+		}
+		streamDone <- stream.Err()
+	}()
+
+	for {
+		select {
+		case err := <-child.done:
+			return waitExitError(err)
+		case env := <-updates:
+			_ = killProcessGroup(child.cmd)
+			<-child.done
+			child, err = startFollowerChild(ctx, appArgs, env, stdin, stdout, stderr)
+			if err != nil {
+				return err
+			}
+		case <-streamDone:
+			_ = killProcessGroup(child.cmd)
+			<-child.done
+			fmt.Fprintln(stderr, "Leader disconnected. Restart `ocel dev` in the leader's terminal, then re-run this command.")
+			return &ExitError{Code: 1}
+		}
+	}
+}
+
+// followerChild is a running app child process along with the channel its
+// exit is delivered on.
+type followerChild struct {
+	cmd  *exec.Cmd
+	done chan error
+}
+
+// startFollowerChild spawns appArgs with env applied over the inherited
+// environment, in its own process group so a later restart or leader
+// disconnect can kill it (and anything it forked) as a unit.
+func startFollowerChild(ctx context.Context, appArgs []string, env map[string]string, stdin io.Reader, stdout, stderr io.Writer) (*followerChild, error) {
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
-	appCmd.Env = applyEnv(os.Environ(), stream.Msg().Env)
+	appCmd.Env = applyEnv(os.Environ(), env)
 	appCmd.Stdin = stdin
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
 	setNewProcessGroup(appCmd)
 	if err := appCmd.Start(); err != nil {
-		return err
+		return nil, err
 	}
 
-	childDone := make(chan error, 1)
-	go func() { childDone <- appCmd.Wait() }()
-
-	streamDone := make(chan error, 1)
-	go func() {
-		// Draining further pushes (rather than stopping after the first)
-		// lets a stream close/error be distinguished from a leader
-		// disconnect. Restarting the child on later updates is future work
-		// (the file-watcher/re-resolve issue).
-		for stream.Receive() {
-		}
-		streamDone <- stream.Err()
-	}()
-
-	select {
-	case err := <-childDone:
-		return waitExitError(err)
-	case <-streamDone:
-		_ = killProcessGroup(appCmd)
-		err := <-childDone
-		if ctx.Err() != nil {
-			// The stream closed because we are shutting down, not because
-			// the leader went away.
-			return waitExitError(err)
-		}
-		fmt.Fprintln(stderr, "Leader disconnected. Restart `ocel dev` in the leader's terminal, then re-run this command.")
-		return &ExitError{Code: 1}
-	}
+	done := make(chan error, 1)
+	go func() { done <- appCmd.Wait() }()
+	return &followerChild{cmd: appCmd, done: done}, nil
 }
 
 // waitExitError converts the error from an *exec.Cmd's Run/Wait into an
