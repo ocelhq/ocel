@@ -1,6 +1,7 @@
 packages:
   - apps/*
   - packages/*
+  - packages/native-lib/*
 
 allowBuilds:
   '@bufbuild/buf': true

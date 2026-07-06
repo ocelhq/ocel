@@ -279,6 +279,14 @@ importers:
         specifier: ^5
         version: 5.9.3
 
+  packages/native-lib/cli-darwin-arm64: {}
+
+  packages/native-lib/cli-darwin-x64: {}
+
+  packages/native-lib/cli-linux-x64: {}
+
+  packages/native-lib/cli-win32-x64: {}
+
   packages/ocel:
     dependencies:
       '@connectrpc/connect':
@@ -312,6 +320,19 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+    optionalDependencies:
+      '@ocel/darwin-arm64':
+        specifier: workspace:^
+        version: link:../native-lib/cli-darwin-arm64
+      '@ocel/darwin-x64':
+        specifier: workspace:^
+        version: link:../native-lib/cli-darwin-x64
+      '@ocel/linux-x64':
+        specifier: workspace:^
+        version: link:../native-lib/cli-linux-x64
+      '@ocel/win32-x64':
+        specifier: workspace:^
+        version: link:../native-lib/cli-win32-x64
 
 packages:
 
