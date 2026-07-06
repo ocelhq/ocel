@@ -13,6 +13,10 @@
     "README.md"
   ],
   "exports": {
+    ".": {
+      "import": "./dist/config.js",
+      "types": "./dist/config.d.ts"
+    },
     "./postgres": {
       "import": "./dist/postgres/index.js",
       "types": "./dist/postgres/index.d.ts"

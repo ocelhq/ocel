@@ -6,7 +6,7 @@ declare global {
 
 export function defer(p: Promise<any>) {
   if (!OCEL_DEV_SERVER) {
-    throw new Error("OCEL_SERVER environment variable is not set");
+    throw new Error("OCEL_DEV_SERVER environment variable is not set");
   }
 
   globalThis.__ocelRegister ??= [];
