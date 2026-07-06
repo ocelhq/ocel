@@ -6,9 +6,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/internal/manifest"
 	"github.com/ocelhq/ocel/internal/provision"
+	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
+	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
 )
@@ -93,5 +96,64 @@ func TestSync_PropagatesProvisionError(t *testing.T) {
 	result := <-s.Sync()
 	if result.Err == nil {
 		t.Fatal("Sync result: expected error, got nil")
+	}
+}
+
+func TestSubscribe_ReceivesEnvPushedAfterConnecting(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1")
+	// Seed an initial env so the subscribe call below has something to
+	// receive immediately (a follower connecting before the leader has
+	// resolved anything simply waits — see
+	// TestSubscribe_NewSubscriberImmediatelyGetsLatestEnv for that case).
+	s.PushEnv(map[string]string{"INITIAL": "1"})
+
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := devv1connect.NewDevServiceClient(http.DefaultClient, ts.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := client.Subscribe(ctx, &devv1.SubscribeRequest{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer stream.Close()
+
+	if !stream.Receive() {
+		t.Fatalf("stream.Receive() (initial) = false, err = %v", stream.Err())
+	}
+
+	s.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"})
+
+	if !stream.Receive() {
+		t.Fatalf("stream.Receive() (update) = false, err = %v", stream.Err())
+	}
+	got := stream.Msg().Env
+	if got["OCEL_RESOURCE_POSTGRES_main"] != "conn" {
+		t.Fatalf("pushed env = %+v, want OCEL_RESOURCE_POSTGRES_main=conn", got)
+	}
+}
+
+func TestSubscribe_NewSubscriberImmediatelyGetsLatestEnv(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1")
+	s.PushEnv(map[string]string{"FOO": "bar"})
+
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := devv1connect.NewDevServiceClient(http.DefaultClient, ts.URL)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	stream, err := client.Subscribe(ctx, &devv1.SubscribeRequest{})
+	if err != nil {
+		t.Fatalf("Subscribe: %v", err)
+	}
+	defer stream.Close()
+
+	if !stream.Receive() {
+		t.Fatalf("stream.Receive() = false, err = %v", stream.Err())
+	}
+	if got := stream.Msg().Env["FOO"]; got != "bar" {
+		t.Fatalf("pushed env FOO = %q, want %q", got, "bar")
 	}
 }
