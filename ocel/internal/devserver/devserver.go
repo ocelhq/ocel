@@ -7,9 +7,14 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sync"
+
+	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/internal/manifest"
 	"github.com/ocelhq/ocel/internal/provision"
+	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
+	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
 )
@@ -24,6 +29,8 @@ type SyncResult struct {
 
 // Server accumulates declared resources via the Connect ResourceService and,
 // on /sync, fetches project identity and provisions the declared manifest.
+// It also serves DevService.Subscribe, pushing the full resolved env to
+// followers as it's known (see PushEnv).
 type Server struct {
 	manifest  *manifest.Manifest
 	apiURL    string
@@ -33,6 +40,10 @@ type Server struct {
 
 	fetchProjectConfig func(ctx context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error)
 	provision          func(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.ProvisionedResource, error)
+
+	subMu       sync.Mutex
+	latestEnv   *devv1.EnvUpdate
+	subscribers map[chan *devv1.EnvUpdate]struct{}
 }
 
 // Option configures a Server constructed via New.
@@ -62,6 +73,7 @@ func New(apiURL, token, projectID string, opts ...Option) *Server {
 		syncCh:             make(chan SyncResult, 1),
 		fetchProjectConfig: provision.FetchProjectConfig,
 		provision:          provision.Provision,
+		subscribers:        make(map[chan *devv1.EnvUpdate]struct{}),
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -80,14 +92,67 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
-// Mux returns the HTTP handler serving both the Connect ResourceService and
-// the plain /sync route.
+// Mux returns the HTTP handler serving the Connect ResourceService, the
+// Connect DevService, and the plain /sync route.
 func (s *Server) Mux() *http.ServeMux {
 	mux := http.NewServeMux()
-	path, handler := resourcesv1connect.NewResourceServiceHandler(s)
-	mux.Handle(path, handler)
+	resourcePath, resourceHandler := resourcesv1connect.NewResourceServiceHandler(s)
+	mux.Handle(resourcePath, resourceHandler)
+	devPath, devHandler := devv1connect.NewDevServiceHandler(s)
+	mux.Handle(devPath, devHandler)
 	mux.HandleFunc("/sync", s.handleSync)
 	return mux
+}
+
+// PushEnv records env as the latest full resolved environment and delivers
+// it to every connected follower. It's also handed to any follower that
+// subscribes afterwards (see Subscribe), so followers always see the
+// current state regardless of connection order.
+func (s *Server) PushEnv(env map[string]string) {
+	update := &devv1.EnvUpdate{Env: env}
+
+	s.subMu.Lock()
+	defer s.subMu.Unlock()
+	s.latestEnv = update
+	for ch := range s.subscribers {
+		select {
+		case ch <- update:
+		default:
+			// Slow subscriber: it'll get this state (or a newer one) on its
+			// next receive since ch already holds an undelivered update.
+		}
+	}
+}
+
+// Subscribe implements devv1connect.DevServiceHandler, streaming the latest
+// resolved env to the caller immediately (if one is already known) and every
+// time PushEnv is called thereafter, until ctx is done.
+func (s *Server) Subscribe(ctx context.Context, _ *devv1.SubscribeRequest, stream *connect.ServerStream[devv1.EnvUpdate]) error {
+	ch := make(chan *devv1.EnvUpdate, 1)
+
+	s.subMu.Lock()
+	if s.latestEnv != nil {
+		ch <- s.latestEnv
+	}
+	s.subscribers[ch] = struct{}{}
+	s.subMu.Unlock()
+
+	defer func() {
+		s.subMu.Lock()
+		delete(s.subscribers, ch)
+		s.subMu.Unlock()
+	}()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case update := <-ch:
+			if err := stream.Send(update); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 // Sync returns the channel a single SyncResult is delivered on once /sync
