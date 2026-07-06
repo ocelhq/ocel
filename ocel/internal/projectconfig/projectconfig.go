@@ -37,6 +37,9 @@ type Discovery struct {
 type Config struct {
 	ProjectID string
 	Discovery Discovery
+	// Dir is the directory containing the resolved ocel.config.ts.
+	// discovery.paths are relative to it.
+	Dir string
 }
 
 // rawConfig mirrors the JSON shape emitted by executing the user's bundled
@@ -82,6 +85,7 @@ func Resolve(startDir string) (*Config, error) {
 	return &Config{
 		ProjectID: raw.ProjectID,
 		Discovery: Discovery{Paths: paths},
+		Dir:       filepath.Dir(configPath),
 	}, nil
 }
 
