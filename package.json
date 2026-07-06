@@ -2,7 +2,8 @@
   "name": "ocelhq",
   "description": "Ocel monorepo",
   "scripts": {
-    "gen": "buf generate --template buf.gen.go.yaml && pnpm buf generate --template buf.gen.ts.yaml"
+    "gen": "buf generate --template buf.gen.go.yaml && pnpm buf generate --template buf.gen.ts.yaml",
+    "dev:cli": "cd ocel && go tool air"
   },
   "license": "MIT",
   "devEngines": {
