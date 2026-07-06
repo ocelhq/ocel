@@ -32,6 +32,14 @@ func (m *Manifest) Add(e Entry) {
 	m.entries = append(m.entries, e)
 }
 
+// Reset clears every declared resource, so a subsequent full re-discovery's
+// declares fully replace (rather than append to) the prior set.
+func (m *Manifest) Reset() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.entries = nil
+}
+
 // Snapshot returns a copy of the currently declared resources.
 func (m *Manifest) Snapshot() []Entry {
 	m.mu.Lock()
