@@ -1,0 +1,20 @@
+syntax = "proto3";
+package dev.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/dev/v1;devv1";
+
+// DevService is served by the leader's dev server so followers (other
+// `ocel dev` processes for the same project) can receive the resolved
+// environment without repeating discovery themselves.
+service DevService {
+    rpc Subscribe(SubscribeRequest) returns (stream EnvUpdate);
+}
+
+message SubscribeRequest {
+}
+
+// EnvUpdate carries the full resolved environment (project env vars merged
+// with every provisioned resource's env), not a diff.
+message EnvUpdate {
+  map<string, string> env = 1;
+}
