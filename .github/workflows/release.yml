@@ -1,0 +1,185 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Avoid two release runs racing each other (e.g. a rapid double-push to
+# main) from opening duplicate Version PRs or double-publishing.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  # Gate: does this push still have unreleased changesets? If yes, the next
+  # step is to open/update the Version PR. If no, the Version PR was just
+  # merged and this push's package.json versions are the ones to publish.
+  check-release:
+    runs-on: ubuntu-latest
+    outputs:
+      has-changesets: ${{ steps.check.outputs.has-changesets }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check for pending changesets
+        id: check
+        run: |
+          # Pending changesets = *.md files under .changeset/ other than the
+          # scaffolded README. This repo never enters changesets' "pre"
+          # (pre-release) mode, so .changeset/pre.json never exists and
+          # doesn't need to be consulted here.
+          count=$(find .changeset -maxdepth 1 -name '*.md' ! -name 'README.md' | wc -l)
+          echo "Pending changesets: $count"
+          if [ "$count" -gt 0 ]; then
+            echo "has-changesets=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has-changesets=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  # Runs only while changesets are pending: opens or updates the Version PR.
+  # Merging that PR is what removes the pending changesets and flips
+  # check-release to false on the next push.
+  version-pr:
+    needs: check-release
+    if: needs.check-release.outputs.has-changesets == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Create/update Version PR
+        uses: changesets/action@v1
+        with:
+          version: pnpm ci:version
+          commit: "chore: version packages"
+          title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Runs only once no changesets are pending, i.e. right after the Version
+  # PR was merged. Cross-compiles all 4 targets from this single Linux
+  # runner (see scripts/build-native.mjs / AGENTS.md for why that's safe).
+  build-binaries:
+    needs: check-release
+    if: needs.check-release.outputs.has-changesets == 'false'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+            pkg: cli-darwin-arm64
+          - goos: darwin
+            goarch: amd64
+            pkg: cli-darwin-x64
+          - goos: linux
+            goarch: amd64
+            pkg: cli-linux-x64
+          - goos: windows
+            goarch: amd64
+            pkg: cli-win32-x64
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: ocel/go.mod
+
+      - name: Read release version
+        id: version
+        run: echo "version=$(node -p "require('./packages/ocel/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
+        run: node scripts/build-native.mjs --goos ${{ matrix.goos }} --goarch ${{ matrix.goarch }} --version ${{ steps.version.outputs.version }}
+
+      - name: Upload ${{ matrix.pkg }} binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.pkg }}
+          path: packages/native-lib/${{ matrix.pkg }}/bin
+
+  # Assembles the 4 cross-compiled binaries into their native packages and
+  # publishes all 5 publishable packages to npm with provenance.
+  publish:
+    needs: build-binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download binary artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Assemble binaries into native packages
+        run: |
+          set -euo pipefail
+          for pkg in cli-darwin-arm64 cli-darwin-x64 cli-linux-x64 cli-win32-x64; do
+            dest="packages/native-lib/$pkg/bin"
+            mkdir -p "$dest"
+            cp -r "artifacts/$pkg/." "$dest/"
+          done
+          # Executable bit doesn't reliably round-trip through artifact
+          # zip/unzip, so re-set it explicitly on every non-Windows binary.
+          chmod +x packages/native-lib/cli-darwin-arm64/bin/ocel
+          chmod +x packages/native-lib/cli-darwin-x64/bin/ocel
+          chmod +x packages/native-lib/cli-linux-x64/bin/ocel
+
+      - name: Build ocel SDK
+        run: pnpm --filter ocel build
+
+      - name: Publish packages
+        run: |
+          set -euo pipefail
+          for pkg in ocel native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
+            (cd "packages/$pkg" && pnpm publish --access public --provenance --no-git-checks)
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Tag release
+        run: pnpm changeset tag
+
+      - name: Push tags
+        run: git push --follow-tags
