@@ -69,6 +69,23 @@ export default {
 	}
 }
 
+func TestResolve_ReturnsConfigDirectory(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+};
+`)
+
+	cfg, err := Resolve(filepath.Join(root))
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.Dir != root {
+		t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
+	}
+}
+
 func TestResolve_DefaultsDiscoveryPaths(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
