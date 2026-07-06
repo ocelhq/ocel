@@ -18,7 +18,7 @@ import {
 import path from "node:path";
 
 // Max issues run concurrently (in separate worktrees) within one supercycle.
-const MAX_ITERATIONS = 1;
+const MAX_ITERATIONS = 3;
 // Safety cap on the number of re-selection batches, in case something keeps
 // re-selecting without making progress.
 const MAX_SUPERCYCLES = 20;
@@ -64,6 +64,48 @@ function remoteBranchExists(branch, cwd) {
 		encoding: "utf8",
 	});
 	return res.status === 0;
+}
+
+function localBranchExists(branch, cwd) {
+	const res = spawnSync("git", ["rev-parse", "--verify", "--quiet", branch], { cwd, encoding: "utf8" });
+	return res.status === 0;
+}
+
+function listExistingWorktrees(cwd) {
+	const res = spawnSync("git", ["worktree", "list", "--porcelain"], { cwd, encoding: "utf8" });
+	if (res.status !== 0) return [];
+
+	const worktrees = [];
+	let current = null;
+	for (const line of res.stdout.split("\n")) {
+		if (line.startsWith("worktree ")) {
+			if (current) worktrees.push(current);
+			current = { path: line.slice("worktree ".length).trim(), branch: null };
+		} else if (line.startsWith("branch ") && current) {
+			current.branch = line.slice("branch ".length).trim().replace(/^refs\/heads\//, "");
+		}
+	}
+	if (current) worktrees.push(current);
+	return worktrees;
+}
+
+// Creates a worktree for `branch`, or reuses one already there (branch and/or
+// worktree directory) — a previous run may have left one behind after a
+// failed implement call, and retrying should resume in it rather than error
+// out because "git worktree add" refuses to recreate an existing branch/path.
+function ensureWorktree(branch, worktreePath, baseBranch, repoRoot) {
+	const existing = listExistingWorktrees(repoRoot).find((w) => w.branch === branch || w.path === worktreePath);
+	if (existing) {
+		return { worktreePath: existing.path, reused: true };
+	}
+
+	mkdirSync(path.dirname(worktreePath), { recursive: true });
+	if (localBranchExists(branch, repoRoot)) {
+		git(["worktree", "add", worktreePath, branch], repoRoot);
+	} else {
+		git(["worktree", "add", "-b", branch, worktreePath, baseBranch], repoRoot);
+	}
+	return { worktreePath, reused: false };
 }
 
 function listMarkdownFiles(dir) {
@@ -395,9 +437,12 @@ async function main() {
 
 			let worktreePath;
 			try {
-				worktreePath = path.join(worktreeBase, candidate.branch);
-				mkdirSync(path.dirname(worktreePath), { recursive: true });
-				git(["worktree", "add", "-b", candidate.branch, worktreePath, baseBranch], repoRoot);
+				const desiredPath = path.join(worktreeBase, candidate.branch);
+				const result = ensureWorktree(candidate.branch, desiredPath, baseBranch, repoRoot);
+				worktreePath = result.worktreePath;
+				if (result.reused) {
+					log(`[${candidate.id}] Reusing existing branch/worktree at ${worktreePath} (left over from a previous attempt).`);
+				}
 			} catch (err) {
 				log(`Failed to create worktree for "${candidate.branch}": ${err.message}`);
 				setIssueStatus(issueFilePath, originalStatus ?? "ready-for-agent");
@@ -405,6 +450,9 @@ async function main() {
 				continue;
 			}
 
+			// Always refresh .scratch from the main checkout (even when reusing a
+			// worktree) so the agent sees the latest notes/status, e.g. from a
+			// previous failed attempt at this same issue.
 			const worktreeScratchDir = path.join(worktreePath, ".scratch", folderName);
 			cpSync(scratchDir, worktreeScratchDir, { recursive: true });
 
