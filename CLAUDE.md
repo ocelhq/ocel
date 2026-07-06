@@ -1,4 +1,4 @@
-# AGENTS.md
+# CLAUDE.md
 
 Ocel is a monorepo: a Go CLI/dev-server, a TypeScript SDK (`ocel` npm package),
 and a Next.js dashboard (`apps/web`), all wired together by protobuf
