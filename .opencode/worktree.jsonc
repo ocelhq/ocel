@@ -5,6 +5,6 @@
     "symlinkDirs": ["node_modules"],
   },
   "hooks": {
-    "postCreate": ["pnpm install"],
+    "postCreate": [],
   },
 }
