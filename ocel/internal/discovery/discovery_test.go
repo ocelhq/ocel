@@ -92,6 +92,67 @@ func TestDiscover_MissingPathYieldsNoFilesNoError(t *testing.T) {
 	}
 }
 
+func TestDirs_ReturnsRootAndSubdirsNotFiles(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "ocel", "main.ts"), "export {};")
+	write(t, filepath.Join(root, "ocel", "sub", "nested.ts"), "export {};")
+
+	got, err := Dirs(root, []string{"ocel"})
+	if err != nil {
+		t.Fatalf("Dirs: %v", err)
+	}
+
+	want := []string{
+		filepath.Join(root, "ocel"),
+		filepath.Join(root, "ocel", "sub"),
+	}
+	assertFiles(t, got, want)
+}
+
+func TestDirs_IgnoresNodeModulesAndHiddenDirs(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "ocel", "main.ts"), "export {};")
+	write(t, filepath.Join(root, "ocel", "node_modules", "dep.ts"), "export {};")
+	write(t, filepath.Join(root, "ocel", ".hidden", "skip.ts"), "export {};")
+
+	got, err := Dirs(root, []string{"ocel"})
+	if err != nil {
+		t.Fatalf("Dirs: %v", err)
+	}
+
+	want := []string{filepath.Join(root, "ocel")}
+	assertFiles(t, got, want)
+}
+
+func TestDirs_SupportsGlobPatternsAcrossPackages(t *testing.T) {
+	root := t.TempDir()
+	write(t, filepath.Join(root, "packages", "a", "ocel", "one.ts"), "export {};")
+	write(t, filepath.Join(root, "packages", "b", "ocel", "two.ts"), "export {};")
+
+	got, err := Dirs(root, []string{"packages/*/ocel"})
+	if err != nil {
+		t.Fatalf("Dirs: %v", err)
+	}
+
+	want := []string{
+		filepath.Join(root, "packages", "a", "ocel"),
+		filepath.Join(root, "packages", "b", "ocel"),
+	}
+	assertFiles(t, got, want)
+}
+
+func TestDirs_MissingPathYieldsNoDirsNoError(t *testing.T) {
+	root := t.TempDir()
+
+	got, err := Dirs(root, []string{"ocel"})
+	if err != nil {
+		t.Fatalf("Dirs: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("Dirs() = %v, want empty", got)
+	}
+}
+
 func assertFiles(t *testing.T, got, want []string) {
 	t.Helper()
 	if len(got) != len(want) {
