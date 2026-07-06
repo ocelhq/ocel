@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -30,6 +32,8 @@ import (
 // unauthenticated CLI without touching the real keyring/credentials file.
 var loadCredentials = credentials.Load
 
+var devVerbose bool
+
 // watchDebounce is the quiet period the leader's file watcher waits for
 // after the last change under discovery.paths before re-resolving. It's a
 // var so tests can shorten it.
@@ -45,20 +49,47 @@ var devCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runDev(cmd.Context(), cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDev(cmd.Context(), cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin(), devVerbose)
 	},
+}
+
+func init() {
+	devCmd.Flags().BoolVar(&devVerbose, "verbose", false, "print staged internal steps (discovery, auth, sync, assign)")
+}
+
+// progress prints the CLI's dev-mode UX: concise "✓ ..." lines always, plus
+// "→ ..." staged internal steps when verbose is enabled.
+type progress struct {
+	out     io.Writer
+	verbose bool
+}
+
+// stage announces an internal step; only printed with --verbose.
+func (p *progress) stage(format string, args ...any) {
+	if p.verbose {
+		fmt.Fprintf(p.out, "→ "+format+"\n", args...)
+	}
+}
+
+// done announces a concise, always-on milestone.
+func (p *progress) done(format string, args ...any) {
+	fmt.Fprintf(p.out, "✓ "+format+"\n", args...)
 }
 
 // runDev resolves the project config, verifies auth, then elects this
 // process as either the leader (first `ocel dev` for the project) or a
 // follower (a later one), and runs the corresponding flow.
-func runDev(ctx context.Context, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+func runDev(ctx context.Context, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader, verbose bool) error {
+	p := &progress{out: stdout, verbose: verbose}
+
+	p.stage("Checking authentication")
 	creds, err := loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &ExitError{Code: 1}
 	}
 
+	p.stage("Resolving project config")
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -296,6 +327,51 @@ func waitExitError(err error) error {
 		return &ExitError{Code: exitErr.ExitCode()}
 	}
 	return err
+}
+
+// runChildForwardingSignals starts cmd and forwards SIGINT/SIGTERM received
+// by this process to it, so Ctrl+C stops the child promptly instead of
+// leaving it orphaned.
+func runChildForwardingSignals(cmd *exec.Cmd) error {
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigCh)
+
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+
+	waitErr := make(chan error, 1)
+	go func() { waitErr <- cmd.Wait() }()
+
+	for {
+		select {
+		case sig := <-sigCh:
+			_ = cmd.Process.Signal(sig)
+		case err := <-waitErr:
+			return err
+		}
+	}
+}
+
+// resolvedResourcesSummary renders the "Resolved N resource(s): ..." line.
+func resolvedResourcesSummary(resources []provision.ProvisionedResource) string {
+	names := make([]string, len(resources))
+	for i, r := range resources {
+		names[i] = fmt.Sprintf("%s(%q)", strings.ToLower(strings.TrimPrefix(r.Type.String(), "RESOURCE_TYPE_")), r.Name)
+	}
+
+	noun := "resource"
+	if len(resources) != 1 {
+		noun = "resources"
+	}
+	return fmt.Sprintf("Resolved %d %s: %s", len(resources), noun, strings.Join(names, ", "))
+}
+
+// formatElapsed renders an elapsed duration the way the "ready in Ns" line
+// expects, e.g. "0.4s".
+func formatElapsed(d time.Duration) string {
+	return fmt.Sprintf("%.1fs", d.Seconds())
 }
 
 // mergeEnv merges, in increasing precedence: base (typically the CLI's

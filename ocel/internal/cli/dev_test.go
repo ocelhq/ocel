@@ -61,7 +61,7 @@ func TestRunDev_NotLoggedIn_ReturnsExitErrorWithLoginInstruction(t *testing.T) {
 	defer func() { loadCredentials = prev }()
 
 	var stderr bytes.Buffer
-	err := runDev(context.Background(), t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+	err := runDev(context.Background(), t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""), false)
 
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) {
@@ -114,7 +114,7 @@ export {};
 	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 	var stdout, stderr bytes.Buffer
-	err := runDev(context.Background(), root, appCmd, &stdout, &stderr, strings.NewReader(""))
+	err := runDev(context.Background(), root, appCmd, &stdout, &stderr, strings.NewReader(""), false)
 
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) {
@@ -186,7 +186,7 @@ export {};
 		// A bare "sleep" (not "sh -c sleep 10") so ctx cancellation's
 		// Process.Kill() actually stops it directly, rather than killing a
 		// forking shell and leaving a "sleep" grandchild running.
-		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""), false)
 	}()
 
 	waitForLockfile(t, projectID)
@@ -195,7 +195,7 @@ export {};
 	followerAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 	var followerStdout, followerStderr bytes.Buffer
-	err := runDev(context.Background(), root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+	err := runDev(context.Background(), root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""), false)
 
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) {
@@ -263,7 +263,7 @@ export default {
 
 	leaderDone := make(chan error, 1)
 	go func() {
-		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""), false)
 	}()
 
 	waitForLockfile(t, projectID)
@@ -278,7 +278,7 @@ export default {
 	followerDone := make(chan error, 1)
 	var followerStdout, followerStderr bytes.Buffer
 	go func() {
-		followerDone <- runDev(followerCtx, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+		followerDone <- runDev(followerCtx, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""), false)
 	}()
 
 	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
@@ -343,7 +343,7 @@ export default {
 	followerDone := make(chan error, 1)
 	var stdout, stderr bytes.Buffer
 	go func() {
-		followerDone <- runDev(context.Background(), root, appArgs, &stdout, &stderr, strings.NewReader(""))
+		followerDone <- runDev(context.Background(), root, appArgs, &stdout, &stderr, strings.NewReader(""), false)
 	}()
 
 	waitForFile(t, startedPath)
