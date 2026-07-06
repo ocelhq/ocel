@@ -55,6 +55,39 @@ func Discover(configDir string, paths []string) ([]string, error) {
 	return files, nil
 }
 
+// Dirs resolves paths the same way Discover does, but returns every
+// directory under them (each resolved root plus every subdirectory beneath
+// it, applying the same node_modules/dotdir skip as Discover) instead of
+// source files. It's used to build the set of directories the leader's file
+// watcher subscribes to.
+func Dirs(configDir string, paths []string) ([]string, error) {
+	seen := make(map[string]bool)
+	var dirs []string
+
+	for _, p := range paths {
+		roots, err := resolveRoots(configDir, p)
+		if err != nil {
+			return nil, err
+		}
+
+		for _, root := range roots {
+			found, err := walkDirs(root)
+			if err != nil {
+				return nil, err
+			}
+			for _, d := range found {
+				if !seen[d] {
+					seen[d] = true
+					dirs = append(dirs, d)
+				}
+			}
+		}
+	}
+
+	sort.Strings(dirs)
+	return dirs, nil
+}
+
 // resolveRoots expands a single discovery.paths entry into the concrete
 // directories (or files) it refers to.
 func resolveRoots(configDir, pattern string) ([]string, error) {
@@ -97,8 +130,7 @@ func walkSourceFiles(root string) ([]string, error) {
 			return err
 		}
 		if d.IsDir() {
-			name := d.Name()
-			if path != root && (strings.HasPrefix(name, ".") || name == "node_modules") {
+			if path != root && skipDir(d.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -116,6 +148,46 @@ func walkSourceFiles(root string) ([]string, error) {
 		return nil, err
 	}
 	return files, nil
+}
+
+// walkDirs returns root (if it's a directory) and every subdirectory beneath
+// it, skipping node_modules and dotdirs the same way walkSourceFiles skips
+// them for files. A missing or non-directory root yields no directories and
+// no error.
+func walkDirs(root string) ([]string, error) {
+	info, err := os.Stat(root)
+	if err != nil || !info.IsDir() {
+		return nil, nil
+	}
+
+	var dirs []string
+	err = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if path != root && skipDir(d.Name()) {
+			return filepath.SkipDir
+		}
+		abs, absErr := filepath.Abs(path)
+		if absErr != nil {
+			return absErr
+		}
+		dirs = append(dirs, abs)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return dirs, nil
+}
+
+// skipDir reports whether a directory named name should be excluded from
+// discovery/watching, the same rule for both source files and watch dirs.
+func skipDir(name string) bool {
+	return strings.HasPrefix(name, ".") || name == "node_modules"
 }
 
 func isSourceFile(path string) bool {
