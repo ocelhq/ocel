@@ -173,3 +173,9 @@ not Next.js
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
+
+# custom
+.ocel
+.workflow-data
+packages/native-lib/**
+.local/

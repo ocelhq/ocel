@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useState } from "react";
 import { authClient } from "@/lib/auth-client";
 
-export default function SignInPage() {
+function SignInForm() {
+  const searchParams = useSearchParams();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -11,9 +13,12 @@ export default function SignInPage() {
     setError(null);
     setIsLoading(true);
 
+    const redirect = searchParams.get("redirect");
+    const callbackURL = redirect?.startsWith("/") ? redirect : "/";
+
     const { error: signInError } = await authClient.signIn.social({
       provider: "github",
-      callbackURL: "/",
+      callbackURL,
     });
 
     if (signInError) {
@@ -59,5 +64,13 @@ export default function SignInPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function SignInPage() {
+  return (
+    <Suspense fallback={null}>
+      <SignInForm />
+    </Suspense>
   );
 }

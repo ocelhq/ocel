@@ -1,0 +1,34 @@
+syntax = "proto3";
+package resources.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/resources/v1;resourcesv1";
+
+service ResourceService {
+    rpc Declare(DeclareRequest) returns (DeclareResponse);
+}
+
+enum ResourceType {
+    RESOURCE_TYPE_UNSPECIFIED = 0;
+    RESOURCE_TYPE_POSTGRES = 1;
+}
+
+message ResourceIdentifier {
+  ResourceType type = 1;
+  string name = 2;
+}
+
+message DeclareResponse {
+}
+
+message DeclareRequest {
+  ResourceIdentifier resource = 1;
+
+  oneof config {
+    PostgresConfig postgres = 2;
+  }
+}
+
+// config messages
+message PostgresConfig {
+  string version = 1;
+}

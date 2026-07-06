@@ -1,0 +1,69 @@
+{
+  "name": "ocel",
+  "version": "0.0.1-alpha.0",
+  "type": "module",
+  "description": "The power of AWS with the DX of Vercel",
+  "bin": {
+    "ocel": "./bin/run.js"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "src/",
+    "README.md"
+  ],
+  "exports": {
+    "./postgres": {
+      "import": "./dist/postgres/index.js",
+      "types": "./dist/postgres/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@connectrpc/connect": "^2.1.2",
+    "@connectrpc/connect-node": "^2.1.2",
+    "zod": "^4.4.3"
+  },
+  "optionalDependencies": {
+    "@ocel/darwin-arm64": "workspace:^",
+    "@ocel/darwin-x64": "workspace:^",
+    "@ocel/linux-x64": "workspace:^",
+    "@ocel/win32-x64": "workspace:^"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.160",
+    "@types/express": "~5.0.0",
+    "@types/pg": "^8.20.0",
+    "express": "~5.0.0",
+    "hono": "~4.11.1",
+    "pg": "^8.22.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@types/express": ">=5.0.0",
+    "express": ">=5.0.0",
+    "hono": ">=4.11.1",
+    "pg": "^8.22.0"
+  },
+  "peerDependenciesMeta": {
+    "hono": {
+      "optional": true
+    },
+    "@types/express": {
+      "optional": true
+    },
+    "express": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

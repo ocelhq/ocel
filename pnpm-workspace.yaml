@@ -1,5 +1,10 @@
 packages:
   - apps/*
   - packages/*
+
 allowBuilds:
-  sharp: set this to true or false
+  '@bufbuild/buf': true
+  esbuild: true
+  sharp: true
+
+linkWorkspacePackages: true

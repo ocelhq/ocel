@@ -1,0 +1,6 @@
+version: v2
+plugins:
+  - local: protoc-gen-es
+    out: packages/ocel/src/gen/proto
+    include_imports: true
+    opt: target=ts

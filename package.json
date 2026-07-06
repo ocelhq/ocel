@@ -2,7 +2,7 @@
   "name": "ocelhq",
   "description": "Ocel monorepo",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "gen": "buf generate --template buf.gen.go.yaml && pnpm buf generate --template buf.gen.ts.yaml"
   },
   "license": "MIT",
   "devEngines": {
@@ -15,5 +15,11 @@
   "type": "module",
   "dependencies": {
     "typescript": "^6.0.3"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "^1.71.0",
+    "@bufbuild/protobuf": "^2.12.1",
+    "@bufbuild/protoc-gen-es": "^2.12.1",
+    "@connectrpc/validate": "^0.2.0"
   }
 }

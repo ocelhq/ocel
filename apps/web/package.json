@@ -17,6 +17,7 @@
     "better-auth": "^1.6.23",
     "drizzle-orm": "^0.45.2",
     "next": "16.2.10",
+    "ocel": "workspace:^",
     "pg": "^8.22.0",
     "react": "19.2.4",
     "react-dom": "19.2.4"
