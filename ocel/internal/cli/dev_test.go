@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -352,6 +353,81 @@ export {};
 	}
 }
 
+func TestRunDev_Leader_FileChangeReResolvesAndPushesUpdatedEnvToFollower(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	prevDebounce := watchDebounce
+	watchDebounce = 20 * time.Millisecond
+	defer func() { watchDebounce = prevDebounce }()
+
+	prev := loadCredentials
+	loadCredentials = func() (credentials.Credentials, error) {
+		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+	}
+	defer func() { loadCredentials = prev }()
+
+	projectID := "proj_" + t.Name()
+	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
+export default {
+  projectId: %q,
+};
+`, projectID))
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	defer cancelLeader()
+
+	// The leader's own long-running app child and its periodic re-discovery
+	// child both write to these concurrently, so a plain bytes.Buffer (not
+	// safe for concurrent writers) won't do.
+	var leaderStdout, leaderStderr syncBuffer
+
+	leaderDone := make(chan error, 1)
+	go func() {
+		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+	}()
+
+	waitForLockfile(t, projectID)
+
+	envDumpPath := filepath.Join(root, "follower-env.out")
+	// Loops so the test can observe the follower child's env both before
+	// and after a restart triggered by the leader's re-resolve push.
+	followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
+
+	followerCtx, cancelFollower := context.WithCancel(context.Background())
+	defer cancelFollower()
+	followerDone := make(chan error, 1)
+	var followerStdout, followerStderr bytes.Buffer
+	go func() {
+		followerDone <- runDev(followerCtx, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+	}()
+
+	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")
+
+	writeFile(t, filepath.Join(root, "ocel", "second.ts"), declareResourceScript("second"))
+
+	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_second")
+
+	cancelFollower()
+	select {
+	case <-followerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("follower runDev did not exit after cancellation")
+	}
+
+	cancelLeader()
+	select {
+	case <-leaderDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("leader runDev did not exit after cancellation")
+	}
+}
+
 func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZero(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -430,6 +506,65 @@ func waitForLockfile(t *testing.T, projectID string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("lockfile for %q never appeared", projectID)
+}
+
+// syncBuffer is a mutex-guarded bytes.Buffer, standing in for the
+// concurrency os.Stdout/os.Stderr provide for real CLI runs: multiple child
+// processes (the leader's own app child and its periodic re-discovery
+// child) can write to it at once.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *syncBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *syncBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
+}
+
+// declareResourceScript is a discovery-path fixture file that self-registers
+// a single postgres resource named name via ResourceService.Declare.
+func declareResourceScript(name string) string {
+	return fmt.Sprintf(`
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+globalThis.__ocelRegister ??= [];
+globalThis.__ocelRegister.push(
+  fetch(new URL("/resources.v1.ResourceService/Declare", process.env.OCEL_DEV_SERVER), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      resource: { type: "RESOURCE_TYPE_POSTGRES", name: %q },
+      postgres: { version: "17" },
+    }),
+  }),
+);
+export {};
+`, name)
+}
+
+// waitForEnvVar polls until path is a dumped `env` file containing key.
+func waitForEnvVar(t *testing.T, path, key string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if dumped, err := os.ReadFile(path); err == nil {
+			env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+			if _, ok := env[key]; ok {
+				return
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("%q never contained env key %q", path, key)
 }
 
 // waitForFile polls until path exists.
