@@ -1,4 +1,4 @@
-# AGENTS.md
+# CLAUDE.md
 
 Ocel is a monorepo: a Go CLI/dev-server, a TypeScript SDK (`ocel` npm package),
 and a Next.js dashboard (`apps/web`), all wired together by protobuf
@@ -106,12 +106,16 @@ the dashboard must be running locally (`pnpm --filter web dev`) for
 
 ### Issue tracker
 
-Issues and PRDs are tracked as local markdown files under `.scratch/<feature-slug>/` (no remote issue tracker; PRs are not a triage surface). See `docs/agents/issue-tracker.md`.
+Issues and PRDs live as local markdown files under `.scratch/<feature>/` in this
+repo (no external tracker). See `docs/agents/issue-tracker.md`.
 
 ### Triage labels
 
-Canonical triage roles (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`) are used unchanged, recorded as a `Status:` line in each issue file. See `docs/agents/triage-labels.md`.
+Five canonical triage roles, recorded as a `Status:` line in each issue file,
+using the default strings (`needs-triage`, `needs-info`, `ready-for-agent`,
+`ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
 
 ### Domain docs
 
-Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Single-context: one `CONTEXT.md` + `docs/adr/` at the repo root. See
+`docs/agents/domain.md`.
