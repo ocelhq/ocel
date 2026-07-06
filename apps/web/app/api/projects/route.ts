@@ -1,3 +1,4 @@
+import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { uuidv7 } from "uuidv7";
 import { project } from "@/db/schema";
@@ -15,6 +16,20 @@ function isUniqueConstraintViolation(error: unknown): boolean {
     return true;
   }
   return isUniqueConstraintViolation((error as { cause?: unknown }).cause);
+}
+
+export async function GET(request: Request) {
+  const session = await getActiveOrganizationSession(request.headers);
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const projects = await db
+    .select()
+    .from(project)
+    .where(eq(project.organizationId, session.activeOrganizationId));
+
+  return NextResponse.json(projects, { status: 200 });
 }
 
 export async function POST(request: Request) {
