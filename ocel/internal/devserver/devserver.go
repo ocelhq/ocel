@@ -92,6 +92,13 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
+// ResetManifest clears every declared resource, so the next full
+// re-discovery's declares fully replace (rather than accumulate onto) the
+// prior set before the following /sync provisions them.
+func (s *Server) ResetManifest() {
+	s.manifest.Reset()
+}
+
 // Mux returns the HTTP handler serving the Connect ResourceService, the
 // Connect DevService, and the plain /sync route.
 func (s *Server) Mux() *http.ServeMux {

@@ -61,6 +61,43 @@ func TestDeclareThenSync_ProvisionsDeclaredResource(t *testing.T) {
 	}
 }
 
+func TestDeclareResetSyncDeclare_SyncOnlySeesResourcesDeclaredAfterReset(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1")
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, ts.URL)
+	_, err := client.Declare(context.Background(), &resourcesv1.DeclareRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Name: "stale", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+	})
+	if err != nil {
+		t.Fatalf("Declare: %v", err)
+	}
+
+	s.ResetManifest()
+
+	_, err = client.Declare(context.Background(), &resourcesv1.DeclareRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Name: "fresh", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
+	})
+	if err != nil {
+		t.Fatalf("Declare: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+
+	result := <-s.Sync()
+	if result.Err != nil {
+		t.Fatalf("Sync result error: %v", result.Err)
+	}
+	if len(result.Resources) != 1 || result.Resources[0].Name != "fresh" {
+		t.Fatalf("Resources = %+v, want one entry named fresh", result.Resources)
+	}
+}
+
 func TestSync_MethodNotAllowedForNonPost(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1")
 	ts := httptest.NewServer(s.Mux())
