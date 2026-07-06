@@ -18,7 +18,7 @@ import {
 import path from "node:path";
 
 // Max issues run concurrently (in separate worktrees) within one supercycle.
-const MAX_ITERATIONS = 4;
+const MAX_ITERATIONS = 1;
 // Safety cap on the number of re-selection batches, in case something keeps
 // re-selecting without making progress.
 const MAX_SUPERCYCLES = 20;
