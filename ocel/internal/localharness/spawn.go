@@ -49,7 +49,7 @@ func Spawn(ctx context.Context, cfg SpawnConfig) (*Process, error) {
 		cfg.StartTimeout = 10 * time.Second
 	}
 
-	port, err := freePort()
+	port, closePort, err := freePort()
 	if err != nil {
 		return nil, fmt.Errorf("find free port: %w", err)
 	}
@@ -59,6 +59,9 @@ func Spawn(ctx context.Context, cfg SpawnConfig) (*Process, error) {
 	cmd.Dir = cfg.Dir
 	cmd.Env = append(append([]string{}, cfg.Env...), fmt.Sprintf("PORT=%d", port))
 
+	// Hold the reservation open until immediately before Start, to shrink
+	// the window in which another process could grab the port first.
+	closePort()
 	if err := cmd.Start(); err != nil {
 		return nil, fmt.Errorf("start process: %w", err)
 	}
@@ -81,7 +84,11 @@ func Spawn(ctx context.Context, cfg SpawnConfig) (*Process, error) {
 			_ = cmd.Process.Kill()
 			return nil, fmt.Errorf("process did not become healthy within %s", cfg.StartTimeout)
 		case <-ticker.C:
-			resp, err := http.Get(healthURL)
+			req, err := http.NewRequestWithContext(healthCtx, http.MethodGet, healthURL, nil)
+			if err != nil {
+				continue
+			}
+			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
 				continue
 			}
@@ -101,11 +108,14 @@ func (p *Process) Stop() {
 	<-p.exited
 }
 
-func freePort() (int, error) {
+// freePort returns a free port and a close function that releases the
+// reservation. The caller should hold the reservation open for as long as
+// possible and close it only immediately before the real listener binds, to
+// minimize the window in which another process could steal the port.
+func freePort() (int, func(), error) {
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
-	defer l.Close()
-	return l.Addr().(*net.TCPAddr).Port, nil
+	return l.Addr().(*net.TCPAddr).Port, func() { l.Close() }, nil
 }
