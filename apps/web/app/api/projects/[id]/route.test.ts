@@ -1,5 +1,5 @@
+import { auth } from "@repo/auth/next";
 import { beforeAll, describe, expect, it } from "vitest";
-import { auth } from "@/lib/auth";
 import { createTestSessionWithOrganization } from "../../../../test/auth-harness";
 import { setupTestDatabase } from "../../../../test/db";
 import { POST as createProject } from "../route";

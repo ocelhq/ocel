@@ -1,0 +1,21 @@
+{
+  "name": "@repo/auth",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./next": "./src/next.ts"
+  },
+  "scripts": {
+    "auth:generate": "npx @better-auth/cli@latest generate --config ./src/auth.ts --output ../db/src/schema/auth-schema.ts"
+  },
+  "dependencies": {
+    "@repo/db": "workspace:*",
+    "better-auth": "^1.6.23",
+    "drizzle-orm": "^0.45.2"
+  },
+  "devDependencies": {
+    "typescript": "^5"
+  }
+}
