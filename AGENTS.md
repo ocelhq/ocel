@@ -48,6 +48,26 @@ stubs with finalized signatures — e.g. `ocel init` and `internal/provision` �
 ahead of the real backend/API. Check the code, not just the docs, before assuming a
 described behavior is live.
 
+## Parallel Agent Orchestrator
+
+`tools/orchestrator` (`pnpm --filter @ocel/orchestrator orchestrate <parent-issue-id>`)
+claims `ready-for-agent` bd issues under an epic/PRD and implements them in parallel,
+each in its own Docker sandbox via [sandcastle](https://github.com/mattpocock/sandcastle)
+(`.sandcastle/Dockerfile`, requires `CLAUDE_CODE_OAUTH_TOKEN` in `.sandcastle/.env` — run
+`claude setup-token` to get one). Agents never hold a GitHub token; the host tracks and
+submits each closed issue's branch with Graphite (`gt`) once the sandbox run finishes.
+
+- A dependent issue's branch stacks on its last-unmerged bd blocker's branch (real
+  Graphite stack); an issue with no unmerged blockers is a sibling off the run's feature
+  branch. `gt sync` runs at each supercycle boundary to restack once a blocker's PR merges.
+- Requires a one-time `gt auth` + `gt repo init --trunk main` per machine.
+- **Known hazard:** once the run's feature branch is `gt track`ed, a later `gt sync` can
+  silently drop plain `git commit`s made on it since gt's last look (rebases from gt's
+  cached tip, not live HEAD) — don't hand-commit to that branch while a run against it is
+  in progress. See the comment above `gtTrack(baseBranch, ...)` in `orchestrator.ts`.
+- Supersedes the old host-executed `scripts/orchestrator.mjs` (unsandboxed
+  `claude -p --permission-mode bypassPermissions`), removed in favor of this.
+
 ## Build & Test
 
 ```bash
