@@ -250,8 +250,8 @@ func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZer
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 
-	if err := lockfile.Write(projectID, listener.Addr().String()); err != nil {
-		t.Fatalf("lockfile.Write: %v", err)
+	if err := lockfile.Create(projectID, listener.Addr().String()); err != nil {
+		t.Fatalf("lockfile.Create: %v", err)
 	}
 
 	root := t.TempDir()

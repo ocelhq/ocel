@@ -1,6 +1,7 @@
 package lockfile
 
 import (
+	"errors"
 	"os"
 	"testing"
 )
@@ -12,12 +13,12 @@ func TestRead_NoLockfile_ReturnsErrNotExist(t *testing.T) {
 	}
 }
 
-func TestWriteThenRead_RoundTrips(t *testing.T) {
+func TestCreateThenRead_RoundTrips(t *testing.T) {
 	projectID := uniqueProjectID(t)
 	t.Cleanup(func() { _ = Remove(projectID) })
 
-	if err := Write(projectID, "127.0.0.1:54321"); err != nil {
-		t.Fatalf("Write: %v", err)
+	if err := Create(projectID, "127.0.0.1:54321"); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 
 	got, err := Read(projectID)
@@ -29,11 +30,33 @@ func TestWriteThenRead_RoundTrips(t *testing.T) {
 	}
 }
 
+func TestCreate_ExistingLockfile_FailsWithErrExistAndKeepsWinner(t *testing.T) {
+	projectID := uniqueProjectID(t)
+	t.Cleanup(func() { _ = Remove(projectID) })
+
+	if err := Create(projectID, "127.0.0.1:1"); err != nil {
+		t.Fatalf("first Create: %v", err)
+	}
+
+	err := Create(projectID, "127.0.0.1:2")
+	if !errors.Is(err, os.ErrExist) {
+		t.Fatalf("second Create err = %v, want os.ErrExist", err)
+	}
+
+	got, err := Read(projectID)
+	if err != nil {
+		t.Fatalf("Read: %v", err)
+	}
+	if got != "127.0.0.1:1" {
+		t.Fatalf("Read = %q, want the first writer's address %q", got, "127.0.0.1:1")
+	}
+}
+
 func TestRemove_ThenRead_ReturnsErrNotExist(t *testing.T) {
 	projectID := uniqueProjectID(t)
 
-	if err := Write(projectID, "127.0.0.1:1"); err != nil {
-		t.Fatalf("Write: %v", err)
+	if err := Create(projectID, "127.0.0.1:1"); err != nil {
+		t.Fatalf("Create: %v", err)
 	}
 	if err := Remove(projectID); err != nil {
 		t.Fatalf("Remove: %v", err)

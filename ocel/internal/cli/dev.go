@@ -57,16 +57,28 @@ func runDev(ctx context.Context, cwd string, appArgs []string, stdout, stderr io
 		return err
 	}
 
-	role, err := election.Elect(cfg.ProjectID)
-	if err != nil {
-		return fmt.Errorf("determine leader/follower role: %w", err)
-	}
+	// A concurrent `ocel dev` can create the lockfile between our Elect and
+	// runLeader's exclusive lockfile.Create; on that loss, re-elect to join
+	// the winner as a follower.
+	for range 3 {
+		role, err := election.Elect(cfg.ProjectID)
+		if err != nil {
+			return fmt.Errorf("determine leader/follower role: %w", err)
+		}
 
-	if role.Role == election.Follower {
-		return runFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
+		if role.Role == election.Follower {
+			return runFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
+		}
+		if err := runLeader(ctx, creds, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, errLostElection) {
+			return err
+		}
 	}
-	return runLeader(ctx, creds, cfg, appArgs, stdout, stderr, stdin)
+	return errors.New("determine leader/follower role: repeatedly lost the leader election; try again")
 }
+
+// errLostElection reports that another process created the leader lockfile
+// between this process's Elect and its own lockfile.Create.
+var errLostElection = errors.New("another process became leader first")
 
 // runLeader discovers and syncs resources, pushes the resolved env to any
 // connected followers, and spawns appArgs verbatim with that same
@@ -83,7 +95,10 @@ func runLeader(ctx context.Context, creds credentials.Credentials, cfg *projectc
 	defer httpSrv.Close()
 
 	addr := listener.Addr().String()
-	if err := lockfile.Write(cfg.ProjectID, addr); err != nil {
+	if err := lockfile.Create(cfg.ProjectID, addr); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return errLostElection
+		}
 		return fmt.Errorf("write leader lockfile: %w", err)
 	}
 	defer lockfile.Remove(cfg.ProjectID)
