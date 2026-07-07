@@ -16,7 +16,7 @@ func TestWatch_BurstOfChangesTriggersOnChangeOnce(t *testing.T) {
 	defer cancel()
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, 50*time.Millisecond, func() { calls.Add(1) }); err != nil {
+	if err := Watch(ctx, []string{dir}, 50*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 
@@ -39,7 +39,7 @@ func TestWatch_NewSubdirectoryIsWatchedForFutureChanges(t *testing.T) {
 	defer cancel()
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, 20*time.Millisecond, func() { calls.Add(1) }); err != nil {
+	if err := Watch(ctx, []string{dir}, 20*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 
@@ -59,7 +59,7 @@ func TestWatch_StopsReactingAfterContextCancelled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, 10*time.Millisecond, func() { calls.Add(1) }); err != nil {
+	if err := Watch(ctx, []string{dir}, 10*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 	cancel()

@@ -14,9 +14,11 @@ import (
 // invokes onChange once after every quiet period of debounce following one
 // or more change events. A directory created under an already-watched
 // directory is itself watched, so files later added under it are picked up
-// too. Watch returns as soon as the watch is established (or fails); the
+// too. Errors the underlying watcher reports while running (e.g. the
+// inotify limit is hit) are passed to onError, which may be nil to ignore
+// them. Watch returns as soon as the watch is established (or fails); the
 // event loop runs in the background.
-func Watch(ctx context.Context, dirs []string, debounce time.Duration, onChange func()) error {
+func Watch(ctx context.Context, dirs []string, debounce time.Duration, onChange func(), onError func(error)) error {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -29,11 +31,11 @@ func Watch(ctx context.Context, dirs []string, debounce time.Duration, onChange 
 		}
 	}
 
-	go run(ctx, fsw, debounce, onChange)
+	go run(ctx, fsw, debounce, onChange, onError)
 	return nil
 }
 
-func run(ctx context.Context, fsw *fsnotify.Watcher, debounce time.Duration, onChange func()) {
+func run(ctx context.Context, fsw *fsnotify.Watcher, debounce time.Duration, onChange func(), onError func(error)) {
 	defer fsw.Close()
 
 	timer := time.NewTimer(debounce)
@@ -63,9 +65,12 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, debounce time.Duration, onC
 		case <-timer.C:
 			armed = false
 			onChange()
-		case _, ok := <-fsw.Errors:
+		case err, ok := <-fsw.Errors:
 			if !ok {
 				return
+			}
+			if onError != nil {
+				onError(err)
 			}
 		}
 	}
