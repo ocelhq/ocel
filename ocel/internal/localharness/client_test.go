@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/internal/manifest"
 	"github.com/ocelhq/ocel/internal/provision"
@@ -14,7 +15,7 @@ import (
 
 func TestClient_FetchProjectConfig_SpeaksHandshakeProtocol(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/project-config", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/dev/project-config", func(w http.ResponseWriter, r *http.Request) {
 		var req projectConfigRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
@@ -58,23 +59,30 @@ func TestClient_FetchProjectConfig_PropagatesNonOKStatus(t *testing.T) {
 	}
 }
 
-func TestClient_Provision_SpeaksHandshakeProtocol(t *testing.T) {
+func TestClient_Provision_SpeaksResolveProtocol(t *testing.T) {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/provision", func(w http.ResponseWriter, r *http.Request) {
-		var req provisionRequest
+	mux.HandleFunc("/api/resources/resolve", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			ProjectID string `json:"projectId"`
+			Resources []struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"resources"`
+		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req.ProjectConfig.ProjectID != "proj_1" {
-			t.Fatalf("ProjectConfig.ProjectID = %q, want %q", req.ProjectConfig.ProjectID, "proj_1")
+		if req.ProjectID != "proj_1" {
+			t.Fatalf("ProjectID = %q, want %q", req.ProjectID, "proj_1")
 		}
 		if len(req.Resources) != 1 || req.Resources[0].Name != "main" || req.Resources[0].Type != "POSTGRES" {
 			t.Fatalf("Resources = %+v", req.Resources)
 		}
-		_ = json.NewEncoder(w).Encode([]provisionedResourceWire{
-			{Name: "main", Type: "POSTGRES", Env: map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"env": map[string]string{
 				"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://x"}`,
-			}},
+			},
+			"expiresAt": time.Now().Add(time.Hour).Format(time.RFC3339),
 		})
 	})
 	ts := httptest.NewServer(mux)
@@ -101,22 +109,44 @@ func TestClient_Provision_PropagatesNonOKStatus(t *testing.T) {
 	defer ts.Close()
 
 	client := NewClient(ts.URL, "tok")
-	_, err := client.Provision(context.Background(), provision.ProjectConfig{ProjectID: "proj_1"}, nil)
+	resources := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+	_, err := client.Provision(context.Background(), provision.ProjectConfig{ProjectID: "proj_1"}, resources)
 	if err == nil {
 		t.Fatal("Provision: expected error, got nil")
+	}
+}
+
+func TestClient_Provision_EmptyResourcesSkipsRequest(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("Provision made an HTTP request for an empty resource list")
+	}))
+	defer ts.Close()
+
+	client := NewClient(ts.URL, "tok")
+	got, err := client.Provision(context.Background(), provision.ProjectConfig{ProjectID: "proj_1"}, nil)
+	if err != nil {
+		t.Fatalf("Provision: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("got = %+v, want empty", got)
 	}
 }
 
 func TestClient_SendsBearerTokenOnBothEndpoints(t *testing.T) {
 	var gotAuth []string
 	mux := http.NewServeMux()
-	mux.HandleFunc("/project-config", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/dev/project-config", func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = append(gotAuth, r.Header.Get("Authorization"))
 		_ = json.NewEncoder(w).Encode(projectConfigResponse{ProjectID: "proj_1"})
 	})
-	mux.HandleFunc("/provision", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/api/resources/resolve", func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = append(gotAuth, r.Header.Get("Authorization"))
-		_ = json.NewEncoder(w).Encode([]provisionedResourceWire{})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"env": map[string]string{
+				"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://x"}`,
+			},
+			"expiresAt": time.Now().Add(time.Hour).Format(time.RFC3339),
+		})
 	})
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
@@ -125,7 +155,8 @@ func TestClient_SendsBearerTokenOnBothEndpoints(t *testing.T) {
 	if _, err := client.FetchProjectConfig(context.Background(), "https://api.example.com", "tok_secret", "proj_1"); err != nil {
 		t.Fatalf("FetchProjectConfig: %v", err)
 	}
-	if _, err := client.Provision(context.Background(), provision.ProjectConfig{ProjectID: "proj_1"}, nil); err != nil {
+	resources := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
+	if _, err := client.Provision(context.Background(), provision.ProjectConfig{ProjectID: "proj_1"}, resources); err != nil {
 		t.Fatalf("Provision: %v", err)
 	}
 

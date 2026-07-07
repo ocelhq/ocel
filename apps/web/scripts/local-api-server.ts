@@ -1,15 +1,18 @@
 // Local-dev-only Bun harness: mounts @repo/api's handlers natively (no
-// adapter, the exact functions Next's route files re-export) alongside two
-// dev-only provisioning-handshake endpoints, so `ocel dev` can fast-start
-// against a real running server instead of deadlocking on `next dev` (see
-// ocelhq-z7j). Not used in production - apps/web still runs on Next there.
+// adapter, the exact functions Next's route files re-export) - including the
+// real POST /api/resources/resolve handler, at the same path prod serves it
+// - alongside one dev-only project-config passthrough, so `ocel dev` can
+// fast-start against a real running server instead of deadlocking on
+// `next dev` (see ocelhq-z7j). Not used in production - apps/web still runs
+// on Next there.
 import {
   authHandler,
   createProject,
   getProjectById,
   listProjects,
+  resolveResources,
 } from "@repo/api";
-import { handleDevProjectConfig, handleDevProvision } from "./dev-handlers";
+import { handleDevProjectConfig } from "./dev-handlers";
 
 export async function handleRequest(request: Request): Promise<Response> {
   const url = new URL(request.url);
@@ -41,12 +44,12 @@ export async function handleRequest(request: Request): Promise<Response> {
     return new Response("Method Not Allowed", { status: 405 });
   }
 
-  if (pathname === "/dev/project-config" && request.method === "POST") {
-    return handleDevProjectConfig(request);
+  if (pathname === "/api/resources/resolve" && request.method === "POST") {
+    return resolveResources(request);
   }
 
-  if (pathname === "/dev/provision" && request.method === "POST") {
-    return handleDevProvision(request);
+  if (pathname === "/dev/project-config" && request.method === "POST") {
+    return handleDevProjectConfig(request);
   }
 
   return new Response("Not found", { status: 404 });

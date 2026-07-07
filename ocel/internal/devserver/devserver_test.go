@@ -2,7 +2,9 @@ package devserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,6 +18,41 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
 )
 
+// newFakeResolveServer serves POST /api/resources/resolve with the same
+// wire contract the real resolve endpoint (and the local dev harness that
+// mounts it verbatim) serves, so tests exercising the default (non-stubbed)
+// provision.Provision don't hit the network.
+func newFakeResolveServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/resources/resolve" {
+			http.NotFound(w, r)
+			return
+		}
+		var req struct {
+			Resources []struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"resources"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		env := make(map[string]string, len(req.Resources))
+		for _, r := range req.Resources {
+			key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", r.Type, r.Name)
+			env[key] = fmt.Sprintf(`{"connectionString":"postgres://resolved/%s"}`, r.Name)
+		}
+
+		json.NewEncoder(w).Encode(map[string]any{
+			"env":       env,
+			"expiresAt": time.Now().Add(time.Hour).Format(time.RFC3339),
+		})
+	}))
+}
+
 func TestDeclare_RejectsUnspecifiedResourceType(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1")
 
@@ -28,7 +65,10 @@ func TestDeclare_RejectsUnspecifiedResourceType(t *testing.T) {
 }
 
 func TestDeclareThenSync_ProvisionsDeclaredResource(t *testing.T) {
-	s := New("https://api.example.com", "tok", "proj_1")
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	s := New(resolveServer.URL, "tok", "proj_1")
 	ts := httptest.NewServer(s.Mux())
 	defer ts.Close()
 
@@ -62,7 +102,10 @@ func TestDeclareThenSync_ProvisionsDeclaredResource(t *testing.T) {
 }
 
 func TestDeclareResetSyncDeclare_SyncOnlySeesResourcesDeclaredAfterReset(t *testing.T) {
-	s := New("https://api.example.com", "tok", "proj_1")
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	s := New(resolveServer.URL, "tok", "proj_1")
 	ts := httptest.NewServer(s.Mux())
 	defer ts.Close()
 

@@ -110,7 +110,7 @@ func runDev(ctx context.Context, cwd string, appArgs []string, useLocalHarness b
 		stopHarness = func() { once.Do(stop) }
 		defer stopHarness()
 
-		client := localharness.NewClient("http://"+addr+"/dev", creds.AccessToken)
+		client := localharness.NewClient("http://"+addr, creds.AccessToken)
 		srvOpts = append(srvOpts, devserver.WithProvisioner(client.FetchProjectConfig, client.Provision))
 	}
 
@@ -126,7 +126,7 @@ func runDev(ctx context.Context, cwd string, appArgs []string, useLocalHarness b
 		if role.Role == election.Follower {
 			return runFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
-		if err := runLeader(ctx, creds, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, errLostElection) {
+		if err := runLeader(ctx, creds, cfg, appArgs, stdout, stderr, stdin, stopHarness, srvOpts...); !errors.Is(err, errLostElection) {
 			return err
 		}
 	}
@@ -140,8 +140,14 @@ var errLostElection = errors.New("another process became leader first")
 // runLeader discovers and syncs resources, pushes the resolved env to any
 // connected followers, and spawns appArgs verbatim with that same
 // environment. It does not start appArgs if auth, discovery, or sync fail.
-func runLeader(ctx context.Context, creds credentials.Credentials, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	srv := devserver.New(creds.APIURL, creds.AccessToken, cfg.ProjectID)
+// srvOpts is forwarded to devserver.New verbatim - in particular the
+// WithProvisioner override runDev builds for --local-harness. stopHarness is
+// called once the initial sync completes, before appArgs starts - the
+// harness (if any) lives only for that handshake; a later watch-triggered
+// re-resolve under --local-harness would still call through to it, but
+// that's outside this hidden flag's scope (dogfooding cold-start only).
+func runLeader(ctx context.Context, creds credentials.Credentials, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader, stopHarness func(), srvOpts ...devserver.Option) error {
+	srv := devserver.New(creds.APIURL, creds.AccessToken, cfg.ProjectID, srvOpts...)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -167,6 +173,7 @@ func runLeader(ctx context.Context, creds credentials.Credentials, cfg *projectc
 		return err
 	}
 	srv.PushEnv(resolved)
+	stopHarness()
 
 	if err := watchAndReResolve(ctx, srv, cfg, devServerAddr, stdout, stderr); err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)

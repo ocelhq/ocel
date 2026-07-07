@@ -46,9 +46,12 @@ func TestRunRun_NoLeader_StandaloneResolvesRunsAndTearsDownWithoutLockfile(t *te
 		t.Skip("uses a POSIX shell fixture command")
 	}
 
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
 	prev := loadCredentials
 	loadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+		return credentials.Credentials{APIURL: resolveServer.URL, AccessToken: "tok"}, nil
 	}
 	defer func() { loadCredentials = prev }()
 
@@ -101,9 +104,12 @@ func TestRunRun_WithRunningLeader_ReusesLeaderEnvAndRunsOnce(t *testing.T) {
 		t.Skip("uses a POSIX shell fixture command")
 	}
 
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
 	prev := loadCredentials
 	loadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+		return credentials.Credentials{APIURL: resolveServer.URL, AccessToken: "tok"}, nil
 	}
 	defer func() { loadCredentials = prev }()
 

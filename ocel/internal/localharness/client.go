@@ -9,14 +9,15 @@ import (
 
 	"github.com/ocelhq/ocel/internal/manifest"
 	"github.com/ocelhq/ocel/internal/provision"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 // Client speaks a harness process's provisioning-handshake HTTP protocol:
-// POST <baseURL>/project-config and POST <baseURL>/provision. Its methods
-// match the fetchProjectConfig/provision shapes devserver.WithProvisioner
-// expects, so a harness can be wired in as a drop-in replacement for the
-// real Ocel API.
+// POST <baseURL>/dev/project-config for the dev-only project-config
+// passthrough, and POST <baseURL>/api/resources/resolve for the real
+// resolve handler the harness mounts verbatim from packages/api. Its
+// methods match the fetchProjectConfig/provision shapes
+// devserver.WithProvisioner expects, so a harness can be wired in as a
+// drop-in replacement for the real Ocel API.
 type Client struct {
 	baseURL string
 	token   string
@@ -54,7 +55,7 @@ func (c *Client) FetchProjectConfig(ctx context.Context, apiURL, token, projectI
 	}
 
 	var resp projectConfigResponse
-	if err := c.post(ctx, "/project-config", body, &resp); err != nil {
+	if err := c.post(ctx, "/dev/project-config", body, &resp); err != nil {
 		return provision.ProjectConfig{}, err
 	}
 
@@ -63,68 +64,18 @@ func (c *Client) FetchProjectConfig(ctx context.Context, apiURL, token, projectI
 		ProjectID: resp.ProjectID,
 		UserID:    resp.UserID,
 		EnvVars:   resp.EnvVars,
+		APIURL:    c.baseURL,
+		Token:     c.token,
 	}, nil
 }
 
-type resourceEntry struct {
-	Name string `json:"name"`
-	Type string `json:"type"`
-}
-
-type provisionRequest struct {
-	ProjectConfig projectConfigResponse `json:"projectConfig"`
-	Resources     []resourceEntry       `json:"resources"`
-}
-
-type provisionedResourceWire struct {
-	Name string            `json:"name"`
-	Type string            `json:"type"`
-	Env  map[string]string `json:"env"`
-}
-
-// Provision implements the same shape as provision.Provision, against the
-// harness process instead of the real Ocel API.
+// Provision implements the same shape as provision.Provision, delegating to
+// provision.Resolve so the harness is called with the exact same
+// POST /api/resources/resolve wire protocol the real Ocel API serves -
+// the harness mounts packages/api's resolveResources handler verbatim at
+// that path, so no separate dev-only wire format is needed here.
 func (c *Client) Provision(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.ProvisionedResource, error) {
-	wireResources := make([]resourceEntry, 0, len(resources))
-	for _, r := range resources {
-		typeName, err := provision.ResourceTypeName(r.Type)
-		if err != nil {
-			return nil, err
-		}
-		wireResources = append(wireResources, resourceEntry{Name: r.Name, Type: typeName})
-	}
-
-	body, err := json.Marshal(provisionRequest{
-		ProjectConfig: projectConfigResponse{
-			OrgID:     cfg.OrgID,
-			ProjectID: cfg.ProjectID,
-			UserID:    cfg.UserID,
-			EnvVars:   cfg.EnvVars,
-		},
-		Resources: wireResources,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("encode provision request: %w", err)
-	}
-
-	var wireResp []provisionedResourceWire
-	if err := c.post(ctx, "/provision", body, &wireResp); err != nil {
-		return nil, err
-	}
-
-	out := make([]provision.ProvisionedResource, 0, len(wireResp))
-	for _, r := range wireResp {
-		typeVal, ok := resourcesv1.ResourceType_value["RESOURCE_TYPE_"+r.Type]
-		if !ok {
-			return nil, fmt.Errorf("provision: unknown resource type %q", r.Type)
-		}
-		out = append(out, provision.ProvisionedResource{
-			Name: r.Name,
-			Type: resourcesv1.ResourceType(typeVal),
-			Env:  r.Env,
-		})
-	}
-	return out, nil
+	return provision.Resolve(ctx, c.http, c.baseURL, c.token, cfg.ProjectID, resources)
 }
 
 func (c *Client) post(ctx context.Context, path string, body []byte, out any) error {

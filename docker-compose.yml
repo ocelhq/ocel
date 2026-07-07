@@ -10,5 +10,22 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
+  # Stands in for the Aurora Serverless v2 cluster resolve provisions
+  # against in prod (see the ocelhq-amu epic). Distinct from the `postgres`
+  # service above, which is apps/web's own control-plane database - resolve
+  # carves per-user role+database pairs out of this one via an admin
+  # connection at OCEL_CLOUD_ADMIN_URL (see apps/web/.env.example).
+  ocel-cloud:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5433:5432"
+    volumes:
+      - ocel_cloud_data:/var/lib/postgresql/data
+
 volumes:
   postgres_data:
+  ocel_cloud_data:
