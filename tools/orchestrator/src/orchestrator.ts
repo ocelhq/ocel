@@ -15,6 +15,7 @@ import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { bdWhere, claimBatch, issueBlockers, issueStatus, revertClaim } from "./bd.ts";
 import { branchNameFor, git, isMergedInto, localBranchExists, remoteBranchExists } from "./git.ts";
 import { gtSubmit, gtSync, gtTrack } from "./gt.ts";
+import type { RunInfra } from "./infra.ts";
 import { setupRunInfra } from "./infra.ts";
 
 const TRUNK_BRANCH = "main";
@@ -42,14 +43,22 @@ function usageError(message: string): never {
 // an earlier supercycle, so its branch is guaranteed to already be tracked.
 function resolveParentBranch(issue: { id: string }, baseBranch: string, repoRoot: string): string {
 	const blockers = issueBlockers(issue.id, repoRoot);
-	let parent = baseBranch;
-	for (const blocker of blockers) {
-		const blockerBranch = branchNameFor(blocker);
-		if (localBranchExists(blockerBranch, repoRoot) && !isMergedInto(blockerBranch, baseBranch, repoRoot)) {
-			parent = blockerBranch;
-		}
-	}
-	return parent;
+	const candidates = blockers
+		.map((blocker) => branchNameFor(blocker))
+		.filter((branch) => localBranchExists(branch, repoRoot) && !isMergedInto(branch, baseBranch, repoRoot));
+
+	if (candidates.length <= 1) return candidates[0] ?? baseBranch;
+
+	// More than one still-unmerged blocker: if they form a single Graphite
+	// stack (each is already merged into one further-along candidate's
+	// branch), stack on the deepest one — it already contains every other
+	// candidate's commits. If they don't form a chain (independent
+	// branches), there's no single correct parent; keep the old last-wins
+	// behavior as a fallback.
+	const deepest = candidates.find((candidate) =>
+		candidates.every((other) => other === candidate || isMergedInto(other, candidate, repoRoot)),
+	);
+	return deepest ?? candidates[candidates.length - 1] ?? baseBranch;
 }
 
 function ensureImageBuilt(repoRoot: string, sandcastleBin: string, log: (msg: string) => void) {
@@ -67,6 +76,18 @@ function ensureImageBuilt(repoRoot: string, sandcastleBin: string, log: (msg: st
 }
 
 async function main() {
+	// Node skips `finally` blocks on SIGINT/SIGTERM (Ctrl+C or a container
+	// stop), which would otherwise leak the run's Docker network and Postgres
+	// sidecar. `infra` is set once setupRunInfra() below returns.
+	let infra: RunInfra | undefined;
+	for (const signal of ["SIGINT", "SIGTERM"] as const) {
+		process.on(signal, () => {
+			console.error(`Received ${signal}, tearing down run infra...`);
+			infra?.teardown();
+			process.exit(1);
+		});
+	}
+
 	const parentId = process.argv[2];
 	if (!parentId) usageError("Missing <parent-issue-id> argument.");
 
@@ -105,7 +126,7 @@ async function main() {
 
 	ensureImageBuilt(repoRoot, sandcastleBin, log);
 
-	const infra = setupRunInfra(runId);
+	infra = setupRunInfra(runId);
 	log(`Run infra ready: network ${infra.networkName}, Postgres sidecar ${infra.postgresContainerName}`);
 
 	// bd resolves this via git's own common-dir logic, so it's correct whether
@@ -225,7 +246,13 @@ async function main() {
 					const prUrl = gtSubmit(branch, repoRoot);
 					log(`[${issue.id}] PR submitted: ${prUrl ?? "(no URL parsed from gt output)"}`);
 				} catch (err) {
-					log(`[${issue.id}] gt track/submit failed: ${(err as Error).message}`);
+					// The implement run already succeeded (bd close + commits landed on
+					// `branch`), so don't let it vanish into a closed issue with no PR:
+					// reopen it the same way a failed implement attempt is reverted, so
+					// a human sees it (and future claims skip it instead of silently
+					// re-running the already-done implement step).
+					log(`[${issue.id}] gt track/submit failed: ${(err as Error).message}. Branch ${branch} has unsubmitted commits — reverting claim for human follow-up.`);
+					revertClaim(issue.id, repoRoot, log);
 				}
 			}
 		}

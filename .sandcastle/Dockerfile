@@ -23,7 +23,27 @@ RUN apt-get update && apt-get install -y \
        ln -s "$lib" "${lib%.72}.74"; \
      done
 
-RUN curl -fsSL https://raw.githubusercontent.com/steveyegge/beads/main/scripts/install.sh | bash
+# Pinned to a specific tagged release instead of the install.sh script on
+# `main`: that script always resolves whatever GitHub currently reports as
+# "latest" release, so even pinning the script's own git ref wouldn't stop
+# the installed `bd` version from drifting between builds. Downloads the
+# same prebuilt, embedded-Dolt-capable release archive install.sh would
+# have fetched (source-building instead would need CGO_ENABLED=1 and a C
+# toolchain this image doesn't have), and checks it against the release's
+# published checksum.
+RUN set -eu; \
+  BEADS_VERSION=1.1.0; \
+  case "$(dpkg --print-architecture)" in \
+    amd64) BEADS_SHA256=b0f3dd607c3fb989ee08d0a6854fba80d0402971eb108f9af6170bc14d491a34 ;; \
+    arm64) BEADS_SHA256=e64eb6f5f998c9eae3ef9ec786f5f1c907ab3ed04fe220ebf265ca9952e21b2f ;; \
+    *) echo "unsupported architecture for beads: $(dpkg --print-architecture)" >&2; exit 1 ;; \
+  esac; \
+  BEADS_ARCHIVE="beads_${BEADS_VERSION}_linux_$(dpkg --print-architecture).tar.gz"; \
+  curl -fsSL -o "/tmp/${BEADS_ARCHIVE}" "https://github.com/gastownhall/beads/releases/download/v${BEADS_VERSION}/${BEADS_ARCHIVE}"; \
+  echo "${BEADS_SHA256}  /tmp/${BEADS_ARCHIVE}" | sha256sum -c -; \
+  tar -C /usr/local/bin -xzf "/tmp/${BEADS_ARCHIVE}" bd; \
+  rm "/tmp/${BEADS_ARCHIVE}"; \
+  ln -s /usr/local/bin/bd /usr/local/bin/beads
 
 RUN corepack enable
 
