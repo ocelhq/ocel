@@ -311,6 +311,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0)
+      pg:
+        specifier: ^8.22.0
+        version: 8.22.0
       uuidv7:
         specifier: ^1.2.1
         version: 1.2.1
@@ -324,9 +327,6 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
-      pg:
-        specifier: ^8.22.0
-        version: 8.22.0
       typescript:
         specifier: ^5
         version: 5.9.3

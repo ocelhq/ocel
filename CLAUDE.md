@@ -104,10 +104,19 @@ pnpm install                 # JS deps (pnpm workspace: apps/*, packages/*, pack
 pnpm gen                     # regenerate proto bindings after editing proto/**
 cd ocel && go build ./...    # build the CLI
 cd ocel && go test ./...     # Go tests
+pnpm --filter ocel build     # build packages/ocel's dist/ - required once before any JS test run
+                              # (packages/resources imports "ocel/postgres", which resolves to dist/)
 cd apps/web && pnpm test     # vitest
 cd apps/web && pnpm lint     # biome check
 docker compose up -d         # local Postgres for apps/web
 ```
+
+**Gotcha:** `@repo/db`'s client dogfoods the ocel SDK itself (`packages/resources` ->
+`postgres("main")`), so importing `@repo/db` outside of `ocel dev` throws unless
+`OCEL_RESOURCE_POSTGRES_main` is set. `packages/api/vitest.config.ts` sets it (and
+`OCEL_CLOUD_ADMIN_URL`) to the same Postgres as `DATABASE_URL` so `pnpm test` there works
+standalone; `apps/web/vitest.config.ts` doesn't yet, so its `scripts/*.test.ts` currently
+only run under a real `ocel dev` session.
 
 ## Architecture Overview
 
