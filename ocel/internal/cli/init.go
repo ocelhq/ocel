@@ -145,9 +145,14 @@ func runInit(ctx context.Context, cwd string, name string, opts initOptions, std
 		// no one there to answer the prompt; a real TTY simply blocks here
 		// until the user responds, and a piped answer (like "n\n" in tests)
 		// is read and honored either way.
+
 		if !scanner.Scan() {
+			if err := scanner.Err(); err != nil {
+				return fmt.Errorf("failed to read input: %w", err)
+			}
 			return errors.New("confirmation required — pass --yes to run non-interactively.")
 		}
+
 		answer := strings.TrimSpace(scanner.Text())
 		if answer == "n" || strings.EqualFold(answer, "no") {
 			fmt.Fprintln(stdout, "Aborted.")
