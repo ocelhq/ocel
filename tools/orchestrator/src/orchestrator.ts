@@ -114,6 +114,14 @@ async function main() {
 	const beadsDir = bdWhere(repoRoot);
 	const beadsMount = { hostPath: beadsDir, sandboxPath: beadsDir };
 
+	// Hazard confirmed by testing: once a branch is gt-tracked, a later `gt
+	// sync` restack can silently drop commits made on it via plain `git
+	// commit` since gt's last look at it (e.g. hand-editing this repo on
+	// `baseBranch` between runs, or in the same checkout the orchestrator
+	// runs from) — the restack replays from gt's cached tip, not live HEAD.
+	// Don't hand-commit to `baseBranch` while a run against it is in
+	// progress; if you must, run `gt track <baseBranch> --force` again
+	// immediately after so gt's cache catches up before the next `gt sync`.
 	gtTrack(baseBranch, TRUNK_BRANCH, repoRoot);
 	log(`Tracked feature branch "${baseBranch}" with Graphite (parent: ${TRUNK_BRANCH})`);
 
