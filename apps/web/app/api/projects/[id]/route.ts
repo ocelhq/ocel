@@ -1,8 +1,8 @@
+import { getSessionUserId, verifyOrganizationMembership } from "@repo/auth";
 import { db } from "@repo/db";
 import { project } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { getSessionUserId, verifyOrganizationMembership } from "@/lib/session";
 
 export async function GET(
   request: Request,

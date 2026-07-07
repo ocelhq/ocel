@@ -1,9 +1,9 @@
+import { getActiveOrganizationSession } from "@repo/auth";
 import { db } from "@repo/db";
 import { project } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { uuidv7 } from "uuidv7";
-import { getActiveOrganizationSession } from "@/lib/session";
 import { createProjectSchema } from "@/lib/validation/project";
 
 function isUniqueConstraintViolation(error: unknown): boolean {

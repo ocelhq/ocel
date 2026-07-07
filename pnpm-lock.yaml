@@ -229,6 +229,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@repo/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@repo/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -299,6 +302,22 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.43)(vite@8.1.3(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
+
+  packages/auth:
+    dependencies:
+      '@repo/db':
+        specifier: workspace:*
+        version: link:../db
+      better-auth:
+        specifier: ^1.6.23
+        version: 1.6.23(@opentelemetry/api@1.9.1)(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0))(next@16.2.10(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.22.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.9(@opentelemetry/api@1.9.1)(@types/node@20.19.43)(vite@8.1.3(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)))
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(@opentelemetry/api@1.9.1)(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0)
+    devDependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.3
 
   packages/db:
     dependencies:
