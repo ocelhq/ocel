@@ -88,3 +88,26 @@ export function issueStatus(issueId: string, repoRoot: string): string | null {
 		return null;
 	}
 }
+
+export interface BdBlocker {
+	id: string;
+	title: string;
+}
+
+// Returns the issues that block `issueId` (its "blocks"-type dependencies —
+// bd's `dependencies` array also includes the parent-epic link, which isn't
+// a blocker and is excluded here). Since `bd ready --claim` only surfaces
+// issues whose blockers are all closed, every entry returned here is already
+// closed by the time an orchestrator run sees it.
+export function issueBlockers(issueId: string, repoRoot: string): BdBlocker[] {
+	const res = bd(["show", issueId, "--json"], repoRoot);
+	if (res.status !== 0) return [];
+	try {
+		const data = JSON.parse(res.stdout);
+		const issue = Array.isArray(data) ? data[0] : data;
+		const deps = (issue?.dependencies ?? []) as Array<{ id: string; title: string; dependency_type: string }>;
+		return deps.filter((d) => d.dependency_type === "blocks").map((d) => ({ id: d.id, title: d.title }));
+	} catch {
+		return [];
+	}
+}
