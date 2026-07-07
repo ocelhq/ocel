@@ -202,7 +202,10 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 	defer stream.Close()
 
 	if !stream.Receive() {
-		return fmt.Errorf("connect to leader: %w", stream.Err())
+		if err := stream.Err(); err != nil {
+			return fmt.Errorf("connect to leader: %w", err)
+		}
+		return errors.New("connect to leader: stream closed before first env push")
 	}
 
 	appCmd := exec.CommandContext(ctx, appArgs[0], appArgs[1:]...)
