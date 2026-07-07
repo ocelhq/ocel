@@ -192,3 +192,4 @@ ocel/tmp/
 .beads-credential-key
 .beads/proxieddb/
 issues.jsonl
+interactions.jsonl
