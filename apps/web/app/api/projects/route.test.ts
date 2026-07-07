@@ -1,7 +1,7 @@
+import { db } from "@repo/db";
+import { project } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { project } from "@/db/schema";
-import { db } from "@/lib/db";
 import { createTestSessionWithOrganization } from "../../../test/auth-harness";
 import { setupTestDatabase } from "../../../test/db";
 import { GET, POST } from "./route";

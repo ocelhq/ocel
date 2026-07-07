@@ -1,7 +1,7 @@
+import * as schema from "@repo/db/schema";
 import { pushSchema } from "drizzle-kit/api";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "@/db/schema";
 
 async function ensureDatabaseExists(connectionString: string) {
   const url = new URL(connectionString);
