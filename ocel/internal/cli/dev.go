@@ -10,12 +10,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/internal/credentials"
 	"github.com/ocelhq/ocel/internal/devserver"
 	"github.com/ocelhq/ocel/internal/discovery"
+	"github.com/ocelhq/ocel/internal/localharness"
 	"github.com/ocelhq/ocel/internal/projectconfig"
 	"github.com/ocelhq/ocel/internal/provision"
 )
@@ -23,6 +25,22 @@ import (
 // loadCredentials is a seam over credentials.Load so tests can simulate an
 // unauthenticated CLI without touching the real keyring/credentials file.
 var loadCredentials = credentials.Load
+
+// startLocalHarness is a seam over localharness.Spawn so tests can back the
+// hidden --local-harness flag with an httptest server instead of a real bun
+// process. It returns the harness's host:port and a stop function.
+var startLocalHarness = func(ctx context.Context, projectDir string) (string, func(), error) {
+	proc, err := localharness.Spawn(ctx, localharness.SpawnConfig{
+		Command: "bun",
+		Args:    []string{"scripts/local-api-server.ts"},
+		Env:     os.Environ(),
+		Dir:     projectDir,
+	})
+	if err != nil {
+		return "", nil, err
+	}
+	return proc.Addr, proc.Stop, nil
+}
 
 // devCmd runs the current Ocel project in development mode.
 var devCmd = &cobra.Command{
@@ -34,14 +52,31 @@ var devCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runDev(cmd.Context(), cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		useLocalHarness, err := cmd.Flags().GetBool("local-harness")
+		if err != nil {
+			return err
+		}
+		return runDev(cmd.Context(), cwd, args, useLocalHarness, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
+}
+
+func init() {
+	// Undocumented dogfooding escape hatch: routes provisioning through a
+	// locally spawned harness (apps/web/scripts/local-api-server.ts) instead
+	// of the control-plane API, which can't be up yet when it is itself the
+	// app being started (see ocelhq-z7j).
+	devCmd.Flags().Bool("local-harness", false, "route provisioning through a locally spawned harness")
+	_ = devCmd.Flags().MarkHidden("local-harness")
 }
 
 // runDev resolves the project config, verifies auth, discovers and syncs
 // resources, and spawns appArgs verbatim with the resolved environment. It
 // does not start appArgs if auth, discovery, or sync fail.
-func runDev(ctx context.Context, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+//
+// With useLocalHarness set, provisioning routes through a locally spawned
+// harness process that lives only for the duration of the sync handshake:
+// it is torn down before appArgs starts.
+func runDev(ctx context.Context, cwd string, appArgs []string, useLocalHarness bool, stdout, stderr io.Writer, stdin io.Reader) error {
 	creds, err := loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
@@ -53,7 +88,22 @@ func runDev(ctx context.Context, cwd string, appArgs []string, stdout, stderr io
 		return err
 	}
 
-	srv := devserver.New(creds.APIURL, creds.AccessToken, cfg.ProjectID)
+	var srvOpts []devserver.Option
+	stopHarness := func() {}
+	if useLocalHarness {
+		addr, stop, err := startLocalHarness(ctx, cfg.Dir)
+		if err != nil {
+			return fmt.Errorf("start local harness: %w", err)
+		}
+		var once sync.Once
+		stopHarness = func() { once.Do(stop) }
+		defer stopHarness()
+
+		client := localharness.NewClient("http://" + addr + "/dev")
+		srvOpts = append(srvOpts, devserver.WithProvisioner(client.FetchProjectConfig, client.Provision))
+	}
+
+	srv := devserver.New(creds.APIURL, creds.AccessToken, cfg.ProjectID, srvOpts...)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -84,6 +134,7 @@ func runDev(ctx context.Context, cwd string, appArgs []string, stdout, stderr io
 	}
 
 	result := <-srv.Sync()
+	stopHarness()
 	if result.Err != nil {
 		return fmt.Errorf("sync failed: %w", result.Err)
 	}
