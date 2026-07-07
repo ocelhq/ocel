@@ -282,6 +282,11 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 	for {
 		select {
 		case err := <-child.done:
+			// A cancelled ctx (e.g. Ctrl+C) kills the child too; don't
+			// report its signal death as an app failure.
+			if ctx.Err() != nil {
+				return nil
+			}
 			return waitExitError(err)
 		case env := <-updates:
 			_ = killProcessGroup(child.cmd)
