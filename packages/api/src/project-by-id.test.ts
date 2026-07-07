@@ -1,9 +1,9 @@
 import { auth } from "@repo/auth/next";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createTestSessionWithOrganization } from "../../../../test/auth-harness";
-import { setupTestDatabase } from "../../../../test/db";
-import { POST as createProject } from "../route";
-import { GET } from "./route";
+import { createTestSessionWithOrganization } from "../test/auth-harness";
+import { setupTestDatabase } from "../test/db";
+import { getProjectById } from "./project-by-id";
+import { createProject } from "./projects";
 
 function getRequest(headers: Headers) {
   return new Request("http://localhost/api/projects/x", {
@@ -30,7 +30,7 @@ async function createProjectFor(
   return response.json();
 }
 
-describe("GET /api/projects/[id]", () => {
+describe("getProjectById", () => {
   beforeAll(async () => {
     await setupTestDatabase();
   });
@@ -41,9 +41,10 @@ describe("GET /api/projects/[id]", () => {
     try {
       const created = await createProjectFor(session, "get-me");
 
-      const response = await GET(getRequest(session.headers), {
-        params: Promise.resolve({ id: created.id }),
-      });
+      const response = await getProjectById(
+        getRequest(session.headers),
+        created.id,
+      );
 
       expect(response.status).toBe(200);
       const body = await response.json();
@@ -73,9 +74,10 @@ describe("GET /api/projects/[id]", () => {
       });
 
       try {
-        const response = await GET(getRequest(session.headers), {
-          params: Promise.resolve({ id: created.id }),
-        });
+        const response = await getProjectById(
+          getRequest(session.headers),
+          created.id,
+        );
 
         expect(response.status).toBe(200);
         const body = await response.json();
@@ -97,9 +99,10 @@ describe("GET /api/projects/[id]", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const response = await GET(getRequest(session.headers), {
-        params: Promise.resolve({ id: "00000000-0000-7000-8000-000000000000" }),
-      });
+      const response = await getProjectById(
+        getRequest(session.headers),
+        "00000000-0000-7000-8000-000000000000",
+      );
 
       expect(response.status).toBe(404);
     } finally {
@@ -114,9 +117,10 @@ describe("GET /api/projects/[id]", () => {
     try {
       const created = await createProjectFor(session, "not-your-org");
 
-      const response = await GET(getRequest(otherSession.headers), {
-        params: Promise.resolve({ id: created.id }),
-      });
+      const response = await getProjectById(
+        getRequest(otherSession.headers),
+        created.id,
+      );
 
       expect(response.status).toBe(404);
     } finally {
@@ -131,9 +135,7 @@ describe("GET /api/projects/[id]", () => {
     try {
       const created = await createProjectFor(session, "unauthed");
 
-      const response = await GET(getRequest(new Headers()), {
-        params: Promise.resolve({ id: created.id }),
-      });
+      const response = await getProjectById(getRequest(new Headers()), created.id);
 
       expect(response.status).toBe(401);
     } finally {

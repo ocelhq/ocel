@@ -41,8 +41,8 @@ export function setupTestDatabase() {
 
       const pool = new Pool({ connectionString });
       try {
-        // Not the app's @/lib/db instance: pushSchema needs a schema-less
-        // PgDatabase generic, which the app's typed db doesn't satisfy.
+        // Not the app's @repo/db instance: pushSchema needs a schema-less
+        // PgDatabase generic, which the typed db doesn't satisfy.
         const pushDb = drizzle(pool);
         const { apply } = await pushSchema(schema, pushDb);
         await apply();
