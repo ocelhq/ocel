@@ -121,7 +121,10 @@ async function main() {
 								imageName: IMAGE_NAME,
 								network: infra.networkName,
 								mounts: [beadsMount],
-								env: { TEST_DATABASE_URL: infra.testDatabaseUrlFor(issue.id) },
+								// bd's discovery walks up from cwd, which inside the sandbox is
+								// the bind-mounted worktree (a different path than repoRoot) —
+								// it never reaches the mounted .beads dir. Point it there directly.
+								env: { BEADS_DIR: beadsMount.sandboxPath, TEST_DATABASE_URL: infra.testDatabaseUrlFor(issue.id) },
 							}),
 							branchStrategy: { type: "branch", branch },
 							promptFile: path.join(repoRoot, ".sandcastle", "implement-prompt.md"),
