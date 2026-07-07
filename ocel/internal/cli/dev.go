@@ -219,7 +219,12 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 		return waitExitError(err)
 	case <-streamDone:
 		_ = killProcessGroup(appCmd)
-		<-childDone
+		err := <-childDone
+		if ctx.Err() != nil {
+			// The stream closed because we are shutting down, not because
+			// the leader went away.
+			return waitExitError(err)
+		}
 		fmt.Fprintln(stderr, "Leader disconnected. Restart `ocel dev` in the leader's terminal, then re-run this command.")
 		return &ExitError{Code: 1}
 	}
