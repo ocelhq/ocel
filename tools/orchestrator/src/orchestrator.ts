@@ -120,7 +120,10 @@ async function main() {
 						result = await sandcastleRun({
 							cwd: repoRoot,
 							name: issue.id,
-							agent: claudeCode("claude-sonnet-4-6"),
+							// We never resume/fork a session, and a transient capture failure
+							// shouldn't revert an otherwise-successful run (bd close + commits
+							// already landed by the time capture happens).
+							agent: claudeCode("claude-sonnet-4-6", { captureSessions: false }),
 							sandbox: docker({
 								imageName: IMAGE_NAME,
 								network: infra.networkName,
