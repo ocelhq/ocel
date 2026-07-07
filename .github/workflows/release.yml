@@ -107,12 +107,24 @@ jobs:
         with:
           go-version-file: ocel/go.mod
 
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
       - name: Read release version
         id: version
-        run: echo "version=$(node -p "require('./packages/ocel/package.json').version")" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./packages/ocel/package.json').version")
+          if [ -z "$version" ] || [ "$version" = "undefined" ]; then
+            echo "::error::Could not resolve version from packages/ocel/package.json" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Build ${{ matrix.goos }}/${{ matrix.goarch }}
-        run: node scripts/build-native.mjs --goos ${{ matrix.goos }} --goarch ${{ matrix.goarch }} --version ${{ steps.version.outputs.version }}
+        run: node scripts/build-native.mjs --goos ${{ matrix.goos }} --goarch ${{ matrix.goarch }} --version "${{ steps.version.outputs.version }}"
 
       - name: Upload ${{ matrix.pkg }} binary
         uses: actions/upload-artifact@v4
