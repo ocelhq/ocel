@@ -228,10 +228,14 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 		srv.ResetManifest()
 		resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, stdout, stderr)
 		if err != nil {
-			fmt.Fprintln(stderr, "re-resolve failed:", err)
+			if ctx.Err() == nil {
+				fmt.Fprintln(stderr, "re-resolve failed:", err)
+			}
 			return
 		}
 		srv.PushEnv(resolved)
+	}, func(err error) {
+		fmt.Fprintln(stderr, "watch error:", err)
 	})
 }
 
