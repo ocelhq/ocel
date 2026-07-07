@@ -180,6 +180,9 @@ vite.config.ts.timestamp-*
 packages/native-lib/*/bin/
 .local/
 
+# scripts/orchestrator.mjs run logs (local bookkeeping, not issue state — issues live in bd)
+.scratch/
+
 # air (ocel/.air.toml) internal log/pid files
 ocel/tmp/
 

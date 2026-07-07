@@ -1,52 +1,30 @@
 #!/usr/bin/env node
-// Selects unblocked issues from a `.scratch/<folder>/issues/` directory and
-// implements them one at a time, each in its own git worktree, via the
-// `claude` CLI. See `.scratch/<folder>/orchestrator-runs/<timestamp>/` for
-// per-run logs after a run.
+// Claims ready-for-agent bd issues under a given parent (epic/PRD) and
+// implements them one batch at a time, each in its own git worktree, via the
+// `claude` CLI. Git worktrees auto-share the main checkout's beads database
+// (git common-dir discovery), so issue state never needs to be ferried in or
+// out — a `bd` command run inside a worktree is visible from the main
+// checkout immediately. See `.scratch/<parent-id>/orchestrator-runs/<timestamp>/`
+// for per-run logs after a run.
 
 import { spawn, spawnSync } from "node:child_process";
-import {
-	appendFileSync,
-	cpSync,
-	existsSync,
-	mkdirSync,
-	readdirSync,
-	readFileSync,
-	rmSync,
-	writeFileSync,
-} from "node:fs";
+import { appendFileSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 // Max issues run concurrently (in separate worktrees) within one supercycle.
 const MAX_ITERATIONS = 3;
-// Safety cap on the number of re-selection batches, in case something keeps
-// re-selecting without making progress.
+// Safety cap on the number of re-claim batches, in case something keeps
+// re-claiming without making progress.
 const MAX_SUPERCYCLES = 20;
 const IMPLEMENT_TIMEOUT_MS = 30 * 60 * 1000;
 const WORKTREE_BASE_DIRNAME = "ocel-orchestrator-worktrees";
-
-const SELECTION_SCHEMA = {
-	type: "object",
-	properties: {
-		issues: {
-			type: "array",
-			items: {
-				type: "object",
-				properties: {
-					id: { type: "string" },
-					title: { type: "string" },
-					branch: { type: "string" },
-				},
-				required: ["id", "title", "branch"],
-			},
-		},
-	},
-	required: ["issues"],
-};
+// Applied to an issue when its implement attempt fails, so future claims in
+// this run skip it instead of retrying it forever.
+const FAILED_LABEL = "orchestrator-failed";
 
 function usageError(message) {
 	console.error(message);
-	console.error("Usage: node scripts/orchestrator.mjs <folder-name>");
+	console.error("Usage: node scripts/orchestrator.mjs <parent-issue-id>");
 	process.exit(1);
 }
 
@@ -56,6 +34,10 @@ function git(args, cwd) {
 		throw new Error(`git ${args.join(" ")} failed: ${res.stderr.trim()}`);
 	}
 	return res.stdout.trim();
+}
+
+function bd(args, cwd) {
+	return spawnSync("bd", args, { cwd, encoding: "utf8" });
 }
 
 function remoteBranchExists(branch, cwd) {
@@ -93,6 +75,8 @@ function listExistingWorktrees(cwd) {
 // worktree directory) — a previous run may have left one behind after a
 // failed implement call, and retrying should resume in it rather than error
 // out because "git worktree add" refuses to recreate an existing branch/path.
+// The worktree automatically shares the main checkout's beads database via
+// git's common-dir discovery — no extra setup needed for `bd` to work in it.
 function ensureWorktree(branch, worktreePath, baseBranch, repoRoot) {
 	const existing = listExistingWorktrees(repoRoot).find((w) => w.branch === branch || w.path === worktreePath);
 	if (existing) {
@@ -108,71 +92,86 @@ function ensureWorktree(branch, worktreePath, baseBranch, repoRoot) {
 	return { worktreePath, reused: false };
 }
 
-function listMarkdownFiles(dir) {
-	if (!existsSync(dir)) return [];
-	return readdirSync(dir, { withFileTypes: true })
-		.filter((e) => e.isFile() && e.name.endsWith(".md"))
-		.map((e) => e.name)
-		.sort();
+function slugify(text) {
+	return text
+		.toLowerCase()
+		.replace(/[^a-z0-9]+/g, "-")
+		.replace(/^-+|-+$/g, "")
+		.slice(0, 50);
 }
 
-function readIssueStatus(filePath) {
-	const content = readFileSync(filePath, "utf8");
-	const match = content.match(/^Status:\s*(.+)$/m);
-	return { content, status: match ? match[1].trim() : null };
+function branchNameFor(issue) {
+	return `ocel/issue-${issue.id}-${slugify(issue.title)}`;
 }
 
-function setIssueStatus(filePath, newStatus) {
-	const { content } = readIssueStatus(filePath);
-	const updated = content.match(/^Status:\s*.+$/m)
-		? content.replace(/^Status:\s*.+$/m, `Status: ${newStatus}`)
-		: content;
-	writeFileSync(filePath, updated);
+// Atomically claims the next unblocked, ready-for-agent bd issue under
+// `parentId` (sets its assignee and status: in_progress), or returns null if
+// none remain. Relies on bd's own blocker-aware ready-work semantics
+// (`bd ready`), so there's no need to re-derive "## Blocked by" relationships
+// ourselves — dependencies are native bd data (`bd dep`).
+function claimNextReadyIssue(parentId, repoRoot) {
+	const res = bd(
+		["ready", "--claim", "--json", "--parent", parentId, "--label", "ready-for-agent", "--exclude-label", FAILED_LABEL],
+		repoRoot,
+	);
+	if (res.status !== 0) {
+		throw new Error(`bd ready --claim failed: ${res.stderr.trim()}`);
+	}
+	let issues;
+	try {
+		issues = JSON.parse(res.stdout);
+	} catch {
+		throw new Error(`bd ready --claim produced non-JSON output: ${res.stdout.slice(0, 2000)}`);
+	}
+	return issues[0] ?? null;
 }
 
-function buildSelectionPrompt(issuesDir, openIssueNames, doneIssueNames, excludeIds) {
-	const issueBlocks = openIssueNames
-		.map((name) => `--- FILE: issues/${name} ---\n${readFileSync(path.join(issuesDir, name), "utf8")}`)
-		.join("\n\n");
+function claimBatch(parentId, repoRoot, maxCount) {
+	const batch = [];
+	for (let i = 0; i < maxCount; i++) {
+		const issue = claimNextReadyIssue(parentId, repoRoot);
+		if (!issue) break;
+		batch.push(issue);
+	}
+	return batch;
+}
 
+// Reverts a failed attempt: reopens the issue, clears its assignee, and
+// labels it so this run's future claims skip it instead of retrying forever.
+function revertClaim(issueId, repoRoot, log) {
+	const res = bd(["update", issueId, "--status=open", "--assignee=", "--add-label", FAILED_LABEL], repoRoot);
+	if (res.status !== 0) {
+		log(`Failed to revert claim on ${issueId}: ${res.stderr.trim()}`);
+	}
+}
+
+// Reads the issue's current status straight from the shared beads database —
+// safe to call from the main checkout even though the implement call ran in
+// a worktree, since both see the same database.
+function issueStatus(issueId, repoRoot) {
+	const res = bd(["show", issueId, "--json"], repoRoot);
+	if (res.status !== 0) return null;
+	try {
+		const data = JSON.parse(res.stdout);
+		const issue = Array.isArray(data) ? data[0] : data;
+		return issue?.status ?? null;
+	} catch {
+		return null;
+	}
+}
+
+function buildImplementPrompt(issueId, branch, baseBranch) {
 	return `# TASK
 
-Analyze the open issues below and determine which are unblocked right now.
+Fix issue ${issueId}
 
-Each issue file has its own "## Blocked by" section listing the issues (by filename) it depends on. Treat that section as authoritative for *which* issues are dependencies. You may note (in prose, not in the JSON output) any additional file/module-overlap conflicts you notice between issues, as a warning only — do not treat those as hard blockers.
-
-An issue is unblocked when every filename listed in its "## Blocked by" section appears in the COMPLETED ISSUES list below, or when it says "None". An open issue file still present in the OPEN ISSUES list is NOT complete, even if it looks nearly done.
-
-Only consider issues whose "Status:" line is exactly "ready-for-agent". Skip anything with needs-triage, needs-info, ready-for-human, wontfix, or in-progress.
-
-Do not include any of these issue ids — they failed earlier in this run and should be skipped: ${excludeIds.length ? excludeIds.join(", ") : "(none)"}
-
-For each unblocked issue, assign a branch name using the format ocel/issue-{slug}, where {slug} is the issue's filename with the .md extension and any leading numeric prefix (e.g. "02-") stripped (e.g. issues/02-create-and-read-back-project.md -> ocel/issue-create-and-read-back-project).
-
-## COMPLETED ISSUES (already in issues/done/)
-${doneIssueNames.length ? doneIssueNames.join("\n") : "(none yet)"}
-
-## OPEN ISSUES
-
-${issueBlocks}
-
-# OUTPUT
-
-Return every currently unblocked issue, each with its filename stem (no .md extension) as "id". If every issue is blocked, return the single highest-priority candidate (fewest / weakest dependencies) as the only entry.`;
-}
-
-function buildImplementPrompt(issueRelPath, branch, baseBranch) {
-	return `# TASK
-
-Fix issue ${issueRelPath}
-
-Pull in the issue from the path provided. If it has a parent PRD (see the "## Parent" section), pull that in too.
+Run \`bd show ${issueId}\` to pull in the issue (title, description, acceptance criteria, notes). If it has a parent epic/PRD (the "parent" field in \`bd show ${issueId} --json\`), run \`bd show <parent-id>\` for that context too.
 
 Only work on the issue specified.
 
-You are already on branch ${branch} in a dedicated worktree. Make commits, run tests, and create a PR against ${baseBranch} (not main). Use the \`gh\` cli, which is installed, to do so.
+You are already on branch ${branch} in a dedicated worktree. This worktree shares the same beads database as the main checkout (git worktrees auto-share bd's database via common-dir discovery), so any \`bd\` command you run here — labels, comments, closing the issue — is visible everywhere else immediately.
 
-Do not stage or commit any changes under \`.scratch/\` — that directory is local bookkeeping ferried in and out of this worktree by the orchestrator, not part of the code change.
+Make commits, run tests, and create a PR against ${baseBranch} (not main). Use the \`gh\` cli, which is installed, to do so.
 
 # CONTEXT
 
@@ -209,57 +208,13 @@ Keep it concise.
 
 # THE ISSUE
 
-If the task is complete, move the issue file to \`issues/done/\`.
+If the task is complete, run \`bd close ${issueId} --reason="<one-line summary>"\`.
 
-If the task is not complete, add a note to the issue file with what was done.
+If the task is not complete, run \`bd comment ${issueId} "<what was done>"\` and leave its status as in_progress.
 
 # FINAL RULES
 
 ONLY WORK ON A SINGLE TASK.`;
-}
-
-function runClaudeSelection(prompt, repoRoot) {
-	const res = spawnSync(
-		"claude",
-		["-p", "--output-format", "json", "--json-schema", JSON.stringify(SELECTION_SCHEMA), "--permission-mode", "bypassPermissions"],
-		{ cwd: repoRoot, input: prompt, encoding: "utf8", maxBuffer: 1024 * 1024 * 100 },
-	);
-	if (res.error) throw new Error(`selection call failed to spawn: ${res.error.message}`);
-	if (res.status !== 0) throw new Error(`selection call exited ${res.status}: ${res.stderr}`);
-
-	let envelope;
-	try {
-		envelope = JSON.parse(res.stdout);
-	} catch {
-		throw new Error(`selection call produced non-JSON output: ${res.stdout.slice(0, 2000)}`);
-	}
-	if (envelope.is_error || envelope.subtype !== "success") {
-		throw new Error(`selection call returned an error result: ${res.stdout.slice(0, 2000)}`);
-	}
-	return { issues: envelope.structured_output?.issues ?? [], raw: res.stdout };
-}
-
-// Copies one issue's result back from a worktree into the main checkout's
-// .scratch tree. Only ever touches the single file for this candidate's id,
-// so it's safe to call concurrently from multiple in-flight agents — each
-// writes to a distinct destination path. Returns true if the issue was moved
-// to issues/done/ inside the worktree (i.e. the agent considers it complete).
-function ferryIssueBack(worktreeScratchDir, scratchDir, issueFileName) {
-	const wtIssuePath = path.join(worktreeScratchDir, "issues", issueFileName);
-	const wtDonePath = path.join(worktreeScratchDir, "issues", "done", issueFileName);
-	const mainIssuePath = path.join(scratchDir, "issues", issueFileName);
-	const mainDonePath = path.join(scratchDir, "issues", "done", issueFileName);
-
-	if (existsSync(wtDonePath)) {
-		mkdirSync(path.dirname(mainDonePath), { recursive: true });
-		cpSync(wtDonePath, mainDonePath);
-		if (existsSync(mainIssuePath)) rmSync(mainIssuePath);
-		return true;
-	}
-	if (existsSync(wtIssuePath)) {
-		cpSync(wtIssuePath, mainIssuePath);
-	}
-	return false;
 }
 
 function truncate(str, n) {
@@ -351,15 +306,15 @@ function runClaudeImplement(prompt, cwd, logFilePath, onProgress) {
 }
 
 async function main() {
-	const folderName = process.argv[2];
-	if (!folderName) usageError("Missing <folder-name> argument.");
+	const parentId = process.argv[2];
+	if (!parentId) usageError("Missing <parent-issue-id> argument.");
 
 	const repoRoot = git(["rev-parse", "--show-toplevel"], process.cwd());
-	const scratchDir = path.join(repoRoot, ".scratch", folderName);
-	const issuesDir = path.join(scratchDir, "issues");
-	const doneDir = path.join(issuesDir, "done");
 
-	if (!existsSync(issuesDir)) usageError(`No issues directory found at ${issuesDir}`);
+	const parentCheck = bd(["show", parentId, "--json"], repoRoot);
+	if (parentCheck.status !== 0) {
+		usageError(`No bd issue found with id "${parentId}". Run 'bd list --type=epic' to find the right id.`);
+	}
 
 	const gitStatus = git(["status", "--porcelain"], repoRoot);
 	if (gitStatus) {
@@ -374,7 +329,7 @@ async function main() {
 	}
 
 	const runTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-	const runDir = path.join(scratchDir, "orchestrator-runs", runTimestamp);
+	const runDir = path.join(repoRoot, ".scratch", parentId, "orchestrator-runs", runTimestamp);
 	mkdirSync(runDir, { recursive: true });
 
 	function log(msg) {
@@ -384,79 +339,50 @@ async function main() {
 	}
 
 	const worktreeBase = path.resolve(repoRoot, "..", WORKTREE_BASE_DIRNAME);
-	const failedIds = new Set();
 
-	log(`Starting orchestrator run for folder "${folderName}" on base branch "${baseBranch}"`);
+	log(`Starting orchestrator run for parent "${parentId}" on base branch "${baseBranch}"`);
 
 	for (let supercycle = 1; supercycle <= MAX_SUPERCYCLES; supercycle++) {
 		log(`--- Supercycle ${supercycle}/${MAX_SUPERCYCLES} ---`);
 
-		const openIssueNames = listMarkdownFiles(issuesDir);
-		const doneIssueNames = listMarkdownFiles(doneDir);
-
-		if (openIssueNames.length === 0) {
-			log("No open issues remain. Stopping.");
-			break;
-		}
-
-		const prompt = buildSelectionPrompt(issuesDir, openIssueNames, doneIssueNames, [...failedIds]);
-
-		let selection;
+		let batch;
 		try {
-			selection = runClaudeSelection(prompt, repoRoot);
+			batch = claimBatch(parentId, repoRoot, MAX_ITERATIONS);
 		} catch (err) {
-			log(`Selection call failed: ${err.message}`);
+			log(`Claiming ready issues failed: ${err.message}`);
 			break;
 		}
-		writeFileSync(path.join(runDir, `selection-${supercycle}.json`), selection.raw);
+		writeFileSync(path.join(runDir, `claimed-${supercycle}.json`), JSON.stringify(batch, null, 2));
 
-		if (selection.issues.length === 0) {
-			log("Selection returned no candidates. Stopping.");
+		if (batch.length === 0) {
+			log("No ready issues remain under this parent. Stopping.");
 			break;
 		}
 
-		const batch = selection.issues.slice(0, MAX_ITERATIONS);
-		log(`Selected ${batch.length} issue(s) to run in parallel this supercycle: ${batch.map((c) => c.id).join(", ")}`);
+		log(`Claimed ${batch.length} issue(s) to run in parallel this supercycle: ${batch.map((c) => c.id).join(", ")}`);
 
-		// Sequential setup: file validation, in-progress marking, and worktree
-		// creation all touch shared git/repo state, so they run one at a time.
-		// Only the (slow) implement calls themselves run concurrently below.
+		// Sequential setup: worktree creation touches shared git repo state, so
+		// it runs one at a time. Only the (slow) implement calls themselves run
+		// concurrently below.
 		const prepared = [];
-		for (const candidate of batch) {
-			const issueFileName = `${candidate.id}.md`;
-			const issueFilePath = path.join(issuesDir, issueFileName);
-
-			if (!existsSync(issueFilePath)) {
-				log(`Selected id "${candidate.id}" does not match an existing open issue file. Skipping.`);
-				failedIds.add(candidate.id);
-				continue;
-			}
-
-			const { status: originalStatus } = readIssueStatus(issueFilePath);
-			setIssueStatus(issueFilePath, "in-progress");
+		for (const issue of batch) {
+			const branch = branchNameFor(issue);
 
 			let worktreePath;
 			try {
-				const desiredPath = path.join(worktreeBase, candidate.branch);
-				const result = ensureWorktree(candidate.branch, desiredPath, baseBranch, repoRoot);
+				const desiredPath = path.join(worktreeBase, branch);
+				const result = ensureWorktree(branch, desiredPath, baseBranch, repoRoot);
 				worktreePath = result.worktreePath;
 				if (result.reused) {
-					log(`[${candidate.id}] Reusing existing branch/worktree at ${worktreePath} (left over from a previous attempt).`);
+					log(`[${issue.id}] Reusing existing branch/worktree at ${worktreePath} (left over from a previous attempt).`);
 				}
 			} catch (err) {
-				log(`Failed to create worktree for "${candidate.branch}": ${err.message}`);
-				setIssueStatus(issueFilePath, originalStatus ?? "ready-for-agent");
-				failedIds.add(candidate.id);
+				log(`Failed to create worktree for "${branch}": ${err.message}`);
+				revertClaim(issue.id, repoRoot, log);
 				continue;
 			}
 
-			// Always refresh .scratch from the main checkout (even when reusing a
-			// worktree) so the agent sees the latest notes/status, e.g. from a
-			// previous failed attempt at this same issue.
-			const worktreeScratchDir = path.join(worktreePath, ".scratch", folderName);
-			cpSync(scratchDir, worktreeScratchDir, { recursive: true });
-
-			prepared.push({ candidate, issueFileName, originalStatus, worktreePath, worktreeScratchDir });
+			prepared.push({ issue, branch, worktreePath });
 		}
 
 		if (prepared.length === 0) {
@@ -465,35 +391,31 @@ async function main() {
 		}
 
 		await Promise.allSettled(
-			prepared.map(async ({ candidate, issueFileName, originalStatus, worktreePath, worktreeScratchDir }) => {
-				const issueRelPath = path.relative(worktreePath, path.join(worktreeScratchDir, "issues", issueFileName));
-				const implementPrompt = buildImplementPrompt(issueRelPath, candidate.branch, baseBranch);
+			prepared.map(async ({ issue, branch, worktreePath }) => {
+				const implementPrompt = buildImplementPrompt(issue.id, branch, baseBranch);
 
-				const implementLogPath = path.join(runDir, `implement-${candidate.id}.log`);
-				log(`[${candidate.id}] Running implement call in ${worktreePath} (timeout ${IMPLEMENT_TIMEOUT_MS / 60000}min)`);
-				log(`[${candidate.id}] Follow along: tail -f ${implementLogPath} for the full raw event stream.`);
+				const implementLogPath = path.join(runDir, `implement-${issue.id}.log`);
+				log(`[${issue.id}] Running implement call in ${worktreePath} (timeout ${IMPLEMENT_TIMEOUT_MS / 60000}min)`);
+				log(`[${issue.id}] Follow along: tail -f ${implementLogPath} for the full raw event stream.`);
 
 				const implementRes = await runClaudeImplement(implementPrompt, worktreePath, implementLogPath, (summary) =>
-					log(`[${candidate.id}] ${summary}`),
+					log(`[${issue.id}] ${summary}`),
 				);
 				if (implementRes.stderr) {
 					appendFileSync(implementLogPath, `\n--- stderr ---\n${implementRes.stderr}\n`);
 				}
 				if (implementRes.finalResult) {
 					log(
-						`[${candidate.id}] Implement result: ${implementRes.finalResult.subtype} (cost $${implementRes.finalResult.total_cost_usd?.toFixed?.(4) ?? "?"})`,
+						`[${issue.id}] Implement result: ${implementRes.finalResult.subtype} (cost $${implementRes.finalResult.total_cost_usd?.toFixed?.(4) ?? "?"})`,
 					);
 				}
 
-				// Ferry only this candidate's own issue file back — safe under
-				// concurrency since every candidate writes to a distinct path.
-				const movedToDone = ferryIssueBack(worktreeScratchDir, scratchDir, issueFileName);
-
 				const timedOut = implementRes.timedOut;
-				const succeeded = !timedOut && !implementRes.error && implementRes.status === 0 && movedToDone;
+				const closed = issueStatus(issue.id, repoRoot) === "closed";
+				const succeeded = !timedOut && !implementRes.error && implementRes.status === 0 && closed;
 
 				if (succeeded) {
-					log(`[${candidate.id}] completed successfully.`);
+					log(`[${issue.id}] completed successfully.`);
 				} else {
 					const reason = timedOut
 						? "timed out"
@@ -501,13 +423,9 @@ async function main() {
 							? `spawn error: ${implementRes.error.message}`
 							: implementRes.status !== 0
 								? `exited with status ${implementRes.status}`
-								: "did not move issue file to issues/done/";
-					log(`[${candidate.id}] did not complete (${reason}). Reverting status, worktree left at ${worktreePath} for inspection.`);
-					const mainIssuePath = path.join(issuesDir, issueFileName);
-					if (existsSync(mainIssuePath)) {
-						setIssueStatus(mainIssuePath, originalStatus ?? "ready-for-agent");
-					}
-					failedIds.add(candidate.id);
+								: "did not close the bd issue";
+					log(`[${issue.id}] did not complete (${reason}). Reverting claim, worktree left at ${worktreePath} for inspection.`);
+					revertClaim(issue.id, repoRoot, log);
 				}
 			}),
 		);
