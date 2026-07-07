@@ -20,11 +20,11 @@ import { setupRunInfra } from "./infra.ts";
 
 const TRUNK_BRANCH = "main";
 
-// Max issues run concurrently (in separate sandboxes) within one supercycle.
-const MAX_ITERATIONS = 3;
-// Safety cap on the number of re-claim batches, in case something keeps
-// re-claiming without making progress.
-const MAX_SUPERCYCLES = 20;
+// Max issues run concurrently (in separate sandboxes) within one wave.
+const MAX_PARALLEL_ISSUES = 3;
+// Safety cap on the number of claim waves (the outer sync/claim/run/submit
+// loop), in case something keeps re-claiming without making progress.
+const MAX_CLAIM_WAVES = 20;
 const IDLE_TIMEOUT_SECONDS = 30 * 60;
 const IMAGE_NAME = "sandcastle:ocelhq";
 
@@ -40,7 +40,7 @@ function usageError(message: string): never {
 // none). `bd ready --claim` only surfaces issues whose blockers are all bd-
 // closed, and — because claiming is sequential while implement runs are the
 // only thing that happens concurrently — a blocker can only be bd-closed by
-// an earlier supercycle, so its branch is guaranteed to already be tracked.
+// an earlier wave, so its branch is guaranteed to already be tracked.
 function resolveParentBranch(issue: { id: string }, baseBranch: string, repoRoot: string): string {
 	const blockers = issueBlockers(issue.id, repoRoot);
 	const candidates = blockers
@@ -147,8 +147,8 @@ async function main() {
 	log(`Tracked feature branch "${baseBranch}" with Graphite (parent: ${TRUNK_BRANCH})`);
 
 	try {
-		for (let supercycle = 1; supercycle <= MAX_SUPERCYCLES; supercycle++) {
-			log(`--- Supercycle ${supercycle}/${MAX_SUPERCYCLES} ---`);
+		for (let wave = 1; wave <= MAX_CLAIM_WAVES; wave++) {
+			log(`--- Wave ${wave}/${MAX_CLAIM_WAVES} ---`);
 
 			try {
 				gtSync(repoRoot);
@@ -159,7 +159,7 @@ async function main() {
 
 			let batch: ReturnType<typeof claimBatch>;
 			try {
-				batch = claimBatch(parentId, repoRoot, MAX_ITERATIONS);
+				batch = claimBatch(parentId, repoRoot, MAX_PARALLEL_ISSUES);
 			} catch (err) {
 				log(`Claiming ready issues failed: ${(err as Error).message}`);
 				break;
@@ -170,7 +170,7 @@ async function main() {
 				break;
 			}
 
-			log(`Claimed ${batch.length} issue(s) to run in parallel this supercycle: ${batch.map((c) => c.id).join(", ")}`);
+			log(`Claimed ${batch.length} issue(s) to run in parallel this wave: ${batch.map((c) => c.id).join(", ")}`);
 
 			// Sandboxed implement runs are the only thing that runs concurrently.
 			// gt track/submit happen afterward, one at a time — gt's local repo

@@ -59,7 +59,7 @@ submits each closed issue's branch with Graphite (`gt`) once the sandbox run fin
 
 - A dependent issue's branch stacks on its last-unmerged bd blocker's branch (real
   Graphite stack); an issue with no unmerged blockers is a sibling off the run's feature
-  branch. `gt sync` runs at each supercycle boundary to restack once a blocker's PR merges.
+  branch. `gt sync` runs at each claim-wave boundary to restack once a blocker's PR merges.
 - Requires a one-time `gt auth` + `gt repo init --trunk main` per machine.
 - **Known hazard:** once the run's feature branch is `gt track`ed, a later `gt sync` can
   silently drop plain `git commit`s made on it since gt's last look (rebases from gt's

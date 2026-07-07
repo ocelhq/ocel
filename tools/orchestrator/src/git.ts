@@ -22,7 +22,7 @@ export function slugify(text: string): string {
 }
 
 export function branchNameFor(issue: { id: string; title: string }): string {
-	return `ocel/issue-${issue.id}-${slugify(issue.title)}`;
+	return `claude/issue-${issue.id}-${slugify(issue.title)}`;
 }
 
 export function localBranchExists(branch: string, cwd: string): boolean {

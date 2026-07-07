@@ -57,9 +57,9 @@ function claimNextReadyIssue(parentId: string, repoRoot: string): BdIssue | null
 	return issues[0] ?? null;
 }
 
-export function claimBatch(parentId: string, repoRoot: string, maxCount: number): BdIssue[] {
+export function claimBatch(parentId: string, repoRoot: string, maxParallelIssues: number): BdIssue[] {
 	const batch: BdIssue[] = [];
-	for (let i = 0; i < maxCount; i++) {
+	for (let i = 0; i < maxParallelIssues; i++) {
 		const issue = claimNextReadyIssue(parentId, repoRoot);
 		if (!issue) break;
 		batch.push(issue);
