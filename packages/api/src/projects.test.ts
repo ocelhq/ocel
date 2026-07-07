@@ -2,9 +2,9 @@ import { db } from "@repo/db";
 import { project } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createTestSessionWithOrganization } from "../../../test/auth-harness";
-import { setupTestDatabase } from "../../../test/db";
-import { GET, POST } from "./route";
+import { createTestSessionWithOrganization } from "../test/auth-harness";
+import { setupTestDatabase } from "../test/db";
+import { createProject, listProjects } from "./projects";
 
 function postRequest(body: unknown, headers: Headers) {
   return new Request("http://localhost/api/projects", {
@@ -30,7 +30,7 @@ describe("POST /api/projects", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const response = await POST(
+      const response = await createProject(
         postRequest(
           { name: "My Project", slug: "my-project", description: "desc" },
           session.headers,
@@ -65,7 +65,7 @@ describe("POST /api/projects", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const response = await POST(
+      const response = await createProject(
         postRequest(
           { name: "My Project", slug: "Not A Slug!" },
           session.headers,
@@ -82,7 +82,7 @@ describe("POST /api/projects", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const response = await POST(
+      const response = await createProject(
         postRequest({ name: "", slug: "my-project" }, session.headers),
       );
 
@@ -96,12 +96,12 @@ describe("POST /api/projects", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const first = await POST(
+      const first = await createProject(
         postRequest({ name: "First", slug: "dup-slug" }, session.headers),
       );
       expect(first.status).toBe(201);
 
-      const second = await POST(
+      const second = await createProject(
         postRequest({ name: "Second", slug: "dup-slug" }, session.headers),
       );
       expect(second.status).toBe(409);
@@ -115,13 +115,13 @@ describe("POST /api/projects", () => {
     const sessionB = await createTestSessionWithOrganization();
 
     try {
-      const responseA = await POST(
+      const responseA = await createProject(
         postRequest(
           { name: "Org A Project", slug: "shared-slug" },
           sessionA.headers,
         ),
       );
-      const responseB = await POST(
+      const responseB = await createProject(
         postRequest(
           { name: "Org B Project", slug: "shared-slug" },
           sessionB.headers,
@@ -137,7 +137,7 @@ describe("POST /api/projects", () => {
   });
 
   it("returns 401 when unauthenticated", async () => {
-    const response = await POST(
+    const response = await createProject(
       postRequest({ name: "My Project", slug: "my-project" }, new Headers()),
     );
 
@@ -155,18 +155,20 @@ describe("GET /api/projects", () => {
     const otherSession = await createTestSessionWithOrganization();
 
     try {
-      await POST(
+      await createProject(
         postRequest({ name: "Alpha", slug: "alpha" }, session.headers),
       );
-      await POST(postRequest({ name: "Beta", slug: "beta" }, session.headers));
-      await POST(
+      await createProject(
+        postRequest({ name: "Beta", slug: "beta" }, session.headers),
+      );
+      await createProject(
         postRequest(
           { name: "Not Mine", slug: "not-mine" },
           otherSession.headers,
         ),
       );
 
-      const response = await GET(getRequest(session.headers));
+      const response = await listProjects(getRequest(session.headers));
 
       expect(response.status).toBe(200);
       const body = await response.json();
@@ -191,7 +193,7 @@ describe("GET /api/projects", () => {
     const session = await createTestSessionWithOrganization();
 
     try {
-      const response = await GET(getRequest(session.headers));
+      const response = await listProjects(getRequest(session.headers));
 
       expect(response.status).toBe(200);
       const body = await response.json();
@@ -202,7 +204,7 @@ describe("GET /api/projects", () => {
   });
 
   it("returns 401 when unauthenticated", async () => {
-    const response = await GET(getRequest(new Headers()));
+    const response = await listProjects(getRequest(new Headers()));
 
     expect(response.status).toBe(401);
   });
