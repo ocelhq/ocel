@@ -40,10 +40,11 @@ repo.
   it (via `ocel/internal/localharness`) so the resolve handshake can run against it and
   tear it down before the app command starts — instead of deadlocking on the control
   plane it is itself starting. The Go CLI's `internal/provision.Provision` calls this
-  same `POST .../api/resources/resolve` contract for real (see `internal/provision.Resolve`,
-  which `internal/localharness.Client` also calls, just against the harness's base URL
-  instead of the real API) — only `FetchProjectConfig` (org/user identity) is still a
-  stub, since no real endpoint for it exists yet either.
+  same `POST .../api/resources/resolve` contract for real (see
+  `internal/provision.CachedResolve`, which `internal/localharness.Client` also calls,
+  just against the harness's base URL instead of the real API — see "CLI resolve cache"
+  above for the on-disk cache both share) — only `FetchProjectConfig` (org/user identity)
+  is still a stub, since no real endpoint for it exists yet either.
 - `proto/` — protobuf source of truth (buf), codegen'd into `ocel/pkg/proto` (Go) and
   `packages/ocel/src/gen` (TS) via `pnpm gen`. Edit `.proto` files, then regenerate —
   never hand-edit generated output.
@@ -102,6 +103,17 @@ the `postgres` service apps/web's own control-plane DB uses. `docker-compose.yml
 `apps/web/.env.example`) is its admin connection string. Both `ocel dev` (which never
 talks to the cloud cluster directly) and prod read this only through the resolve
 endpoint - the CLI just resolves connection strings it's handed back.
+
+**CLI resolve cache:** `ocel dev` caches each project's resolve response at
+`{os.UserConfigDir()}/ocel/resolve-cache/{projectID}.json` (mode 0600, see
+`ocel/internal/resolvecache`), keyed on a hash of the sorted resource definitions plus an
+account fingerprint (resolve base URL + bearer token). `internal/provision.CachedResolve` -
+which both `provision.Provision` (real API) and `internal/localharness.Client.Provision`
+(the `--local-harness` dogfooding path) call instead of `Resolve` directly - reuses the
+cached env and skips the API call when the current defs+account match and the
+server-provided `expiresAt` (see `RESOLVE_TTL_MS` in
+`packages/api/src/routes/resources/resolve/route.ts`) hasn't passed; otherwise it calls
+through and restashes the fresh response.
 
 ## Conventions & Patterns
 

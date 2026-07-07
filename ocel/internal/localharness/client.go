@@ -70,12 +70,13 @@ func (c *Client) FetchProjectConfig(ctx context.Context, apiURL, token, projectI
 }
 
 // Provision implements the same shape as provision.Provision, delegating to
-// provision.Resolve so the harness is called with the exact same
-// POST /api/resources/resolve wire protocol the real Ocel API serves -
-// the harness mounts packages/api's resolveResources handler verbatim at
-// that path, so no separate dev-only wire format is needed here.
+// provision.CachedResolve so the harness is called with the exact same
+// POST /api/resources/resolve wire protocol the real Ocel API serves - the
+// harness mounts packages/api's resolveResources handler verbatim at that
+// path, so no separate dev-only wire format is needed here - and gets the
+// same on-disk resolve cache the real API path does.
 func (c *Client) Provision(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.ProvisionedResource, error) {
-	return provision.Resolve(ctx, c.http, c.baseURL, c.token, cfg.ProjectID, resources)
+	return provision.CachedResolve(ctx, c.http, c.baseURL, c.token, cfg.ProjectID, resources)
 }
 
 func (c *Client) post(ctx context.Context, path string, body []byte, out any) error {

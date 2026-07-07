@@ -6,11 +6,12 @@
 // {apiURL}/api/resources/resolve, the same endpoint
 // packages/api/src/routes/resources/resolve/route.ts serves in prod and the
 // local dev harness mounts verbatim (see internal/localharness.Client,
-// which shares this package's Resolve to speak the identical wire
-// protocol against the harness instead of the real API). Both entry
-// points' signatures are final: the rest of the CLI (see
-// internal/cli.devCmd) depends only on these shapes, so wiring in the real
-// FetchProjectConfig later requires no caller changes.
+// which shares this package's CachedResolve to speak the identical wire
+// protocol against the harness instead of the real API, and get the same
+// on-disk resolve cache for free). Both entry points' signatures are final:
+// the rest of the CLI (see internal/cli.devCmd) depends only on these
+// shapes, so wiring in the real FetchProjectConfig later requires no caller
+// changes.
 package provision
 
 import (
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/ocelhq/ocel/internal/manifest"
+	"github.com/ocelhq/ocel/internal/resolvecache"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -55,6 +57,11 @@ type ProvisionedResource struct {
 // per-instance state to hang one off of.
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
+// openCache opens the on-disk resolve cache CachedResolve reads and writes.
+// A var so tests can point it at a temp directory instead of Open's real
+// user config dir.
+var openCache = resolvecache.Open
+
 // FetchProjectConfig fetches the org/project/user identity and project-level
 // environment for projectID. Stubbed: real implementation will call the
 // Ocel API with apiURL and token for identity; APIURL and Token are real,
@@ -71,9 +78,10 @@ func FetchProjectConfig(_ context.Context, apiURL, token, projectID string) (Pro
 }
 
 // Provision resolves each declared resource to a live connection by calling
-// the resolve endpoint at cfg.APIURL.
+// the resolve endpoint at cfg.APIURL, reusing a cached response when one is
+// available (see CachedResolve).
 func Provision(ctx context.Context, cfg ProjectConfig, resources []manifest.Entry) ([]ProvisionedResource, error) {
-	return Resolve(ctx, httpClient, cfg.APIURL, cfg.Token, cfg.ProjectID, resources)
+	return CachedResolve(ctx, httpClient, cfg.APIURL, cfg.Token, cfg.ProjectID, resources)
 }
 
 type resolveResourceEntry struct {
@@ -88,38 +96,102 @@ type resolveRequestBody struct {
 
 type resolveResponseBody struct {
 	Env       map[string]string `json:"env"`
-	ExpiresAt string             `json:"expiresAt"`
+	ExpiresAt string            `json:"expiresAt"`
 }
 
 // Resolve calls POST {baseURL}/api/resources/resolve - the endpoint
 // packages/api/src/routes/resources/resolve/route.ts serves, whether
 // baseURL is the real Ocel API or a locally spawned harness mounting the
 // same handler - and translates its flat env-map response back into one
-// ProvisionedResource per requested resource. Exported so
-// internal/localharness.Client can reuse this exact wire protocol instead
-// of duplicating it.
+// ProvisionedResource per requested resource. It always calls the API;
+// callers that want the on-disk resolve cache applied should use
+// CachedResolve instead.
 func Resolve(ctx context.Context, client *http.Client, baseURL, token, projectID string, resources []manifest.Entry) ([]ProvisionedResource, error) {
 	if len(resources) == 0 {
 		return []ProvisionedResource{}, nil
 	}
 
-	entries := make([]resolveResourceEntry, 0, len(resources))
+	env, _, err := callResolve(ctx, client, baseURL, token, projectID, resources)
+	if err != nil {
+		return nil, err
+	}
+	return resourcesFromEnv(resources, env)
+}
+
+// CachedResolve wraps Resolve with the on-disk cache in internal/resolvecache:
+// when the sorted resource definitions and an account fingerprint (baseURL +
+// token) match the last cached resolve response for projectID, and its
+// server-provided expiresAt hasn't passed, it reuses that response instead of
+// calling the API. Otherwise it calls Resolve and restashes the fresh
+// response. Provision uses this, and so does internal/localharness.Client,
+// which calls it with the harness's baseURL/token - the same cache applies to
+// both the real API and local-harness modes since both ultimately end up
+// here.
+func CachedResolve(ctx context.Context, client *http.Client, baseURL, token, projectID string, resources []manifest.Entry) ([]ProvisionedResource, error) {
+	if len(resources) == 0 {
+		return []ProvisionedResource{}, nil
+	}
+
+	defs := make([]resolvecache.Def, 0, len(resources))
 	for _, r := range resources {
 		typeName, err := ResourceTypeName(r.Type)
 		if err != nil {
 			return nil, err
+		}
+		defs = append(defs, resolvecache.Def{Name: r.Name, Type: typeName})
+	}
+	defsHash := resolvecache.HashDefs(defs)
+	account := resolvecache.Fingerprint(baseURL, token)
+
+	cache, cacheErr := openCache()
+	if cacheErr == nil {
+		if entry, ok := cache.Load(projectID); ok &&
+			entry.DefsHash == defsHash &&
+			entry.Account == account &&
+			time.Now().Before(entry.ExpiresAt) {
+			return resourcesFromEnv(resources, entry.Env)
+		}
+	}
+
+	env, expiresAt, err := callResolve(ctx, client, baseURL, token, projectID, resources)
+	if err != nil {
+		return nil, err
+	}
+
+	// Caching is best-effort: a cache we can't open or write to shouldn't
+	// fail a resolve that otherwise succeeded.
+	if cacheErr == nil && !expiresAt.IsZero() {
+		_ = cache.Save(projectID, resolvecache.Entry{
+			DefsHash:  defsHash,
+			Account:   account,
+			ExpiresAt: expiresAt,
+			Env:       env,
+		})
+	}
+
+	return resourcesFromEnv(resources, env)
+}
+
+// callResolve performs the POST /api/resources/resolve request and returns
+// its decoded env map and expiry.
+func callResolve(ctx context.Context, client *http.Client, baseURL, token, projectID string, resources []manifest.Entry) (map[string]string, time.Time, error) {
+	entries := make([]resolveResourceEntry, 0, len(resources))
+	for _, r := range resources {
+		typeName, err := ResourceTypeName(r.Type)
+		if err != nil {
+			return nil, time.Time{}, err
 		}
 		entries = append(entries, resolveResourceEntry{Name: r.Name, Type: typeName})
 	}
 
 	body, err := json.Marshal(resolveRequestBody{ProjectID: projectID, Resources: entries})
 	if err != nil {
-		return nil, fmt.Errorf("encode resolve request: %w", err)
+		return nil, time.Time{}, fmt.Errorf("encode resolve request: %w", err)
 	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(baseURL, "/")+"/api/resources/resolve", bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("build resolve request: %w", err)
+		return nil, time.Time{}, fmt.Errorf("build resolve request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
@@ -128,24 +200,38 @@ func Resolve(ctx context.Context, client *http.Client, baseURL, token, projectID
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("resolve resources: %w", err)
+		return nil, time.Time{}, fmt.Errorf("resolve resources: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("resolve resources: unexpected status %d", resp.StatusCode)
+		return nil, time.Time{}, fmt.Errorf("resolve resources: unexpected status %d", resp.StatusCode)
 	}
 
 	var decoded resolveResponseBody
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
-		return nil, fmt.Errorf("decode resolve response: %w", err)
+		return nil, time.Time{}, fmt.Errorf("decode resolve response: %w", err)
 	}
 
+	// A missing/malformed expiresAt just disables caching for this response
+	// (zero time never satisfies CachedResolve's time.Now().Before check);
+	// it shouldn't fail the resolve itself.
+	expiresAt, _ := time.Parse(time.RFC3339, decoded.ExpiresAt)
+
+	return decoded.Env, expiresAt, nil
+}
+
+// resourcesFromEnv translates a flat OCEL_RESOURCE_<TYPE>_<name> -> value env
+// map into one ProvisionedResource per requested resource.
+func resourcesFromEnv(resources []manifest.Entry, env map[string]string) ([]ProvisionedResource, error) {
 	out := make([]ProvisionedResource, 0, len(resources))
 	for _, r := range resources {
-		typeName, _ := ResourceTypeName(r.Type) // already validated above
+		typeName, err := ResourceTypeName(r.Type)
+		if err != nil {
+			return nil, err
+		}
 		key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", typeName, r.Name)
-		value, ok := decoded.Env[key]
+		value, ok := env[key]
 		if !ok {
 			return nil, fmt.Errorf("resolve response missing env for resource %q", r.Name)
 		}
