@@ -162,10 +162,21 @@ func (s *Server) Subscribe(ctx context.Context, _ *devv1.SubscribeRequest, strea
 	}
 }
 
-// Sync returns the channel a single SyncResult is delivered on once /sync
-// has been handled.
+// Sync returns the channel the latest SyncResult is delivered on once /sync
+// has been handled. A result left unconsumed (e.g. discovery failed after
+// /sync was already handled) is replaced by the next sync's result.
 func (s *Server) Sync() <-chan SyncResult {
 	return s.syncCh
+}
+
+// deliverSync publishes res as the latest sync result, evicting an
+// unconsumed prior result so the send never blocks the /sync handler.
+func (s *Server) deliverSync(res SyncResult) {
+	select {
+	case <-s.syncCh:
+	default:
+	}
+	s.syncCh <- res
 }
 
 func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +191,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	cfg, err := s.fetchProjectConfig(ctx, s.apiURL, s.token, s.projectID)
 	if err != nil {
 		err = fmt.Errorf("fetch project config: %w", err)
-		s.syncCh <- SyncResult{Err: err}
+		s.deliverSync(SyncResult{Err: err})
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -188,11 +199,11 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	provisioned, err := s.provision(ctx, cfg, resources)
 	if err != nil {
 		err = fmt.Errorf("provision resources: %w", err)
-		s.syncCh <- SyncResult{Err: err}
+		s.deliverSync(SyncResult{Err: err})
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	s.syncCh <- SyncResult{ProjectConfig: cfg, Resources: provisioned}
+	s.deliverSync(SyncResult{ProjectConfig: cfg, Resources: provisioned})
 	w.WriteHeader(http.StatusOK)
 }
