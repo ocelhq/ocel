@@ -202,7 +202,9 @@ async function main() {
 							}),
 							branchStrategy: { type: "branch", branch, baseBranch: parentBranch },
 							promptFile: path.join(repoRoot, ".sandcastle", "implement-prompt.md"),
-							promptArgs: { ISSUE_ID: issue.id, PARENT_ID: parentId },
+
+							promptArgs: { ISSUE_ID: issue.id, PARENT_ID: parentId, SOURCE_BRANCH: branch },
+
 							maxIterations: 1,
 							idleTimeoutSeconds: IDLE_TIMEOUT_SECONDS,
 							logging: {
