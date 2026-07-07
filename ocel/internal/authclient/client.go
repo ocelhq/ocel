@@ -1,6 +1,7 @@
 // Package authclient is a minimal HTTP client for the subset of Better
 // Auth's REST API the Ocel CLI needs: the device authorization grant
-// (RFC 8628) and session lookups/sign-out via Bearer token.
+// (RFC 8628), session lookups/sign-out via Bearer token, and organization
+// listing/switching (list + set-active).
 package authclient
 
 import (
