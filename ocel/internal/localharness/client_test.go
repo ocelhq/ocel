@@ -32,7 +32,7 @@ func TestClient_FetchProjectConfig_SpeaksHandshakeProtocol(t *testing.T) {
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
-	client := NewClient(ts.URL)
+	client := NewClient(ts.URL, "tok")
 	cfg, err := client.FetchProjectConfig(context.Background(), "https://api.example.com", "tok", "proj_1")
 	if err != nil {
 		t.Fatalf("FetchProjectConfig: %v", err)
@@ -51,7 +51,7 @@ func TestClient_FetchProjectConfig_PropagatesNonOKStatus(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(ts.URL)
+	client := NewClient(ts.URL, "tok")
 	_, err := client.FetchProjectConfig(context.Background(), "https://api.example.com", "tok", "proj_1")
 	if err == nil {
 		t.Fatal("FetchProjectConfig: expected error, got nil")
@@ -80,7 +80,7 @@ func TestClient_Provision_SpeaksHandshakeProtocol(t *testing.T) {
 	ts := httptest.NewServer(mux)
 	defer ts.Close()
 
-	client := NewClient(ts.URL)
+	client := NewClient(ts.URL, "tok")
 	resources := []manifest.Entry{{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES}}
 	got, err := client.Provision(context.Background(), provision.ProjectConfig{ProjectID: "proj_1"}, resources)
 	if err != nil {
@@ -100,9 +100,37 @@ func TestClient_Provision_PropagatesNonOKStatus(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	client := NewClient(ts.URL)
+	client := NewClient(ts.URL, "tok")
 	_, err := client.Provision(context.Background(), provision.ProjectConfig{ProjectID: "proj_1"}, nil)
 	if err == nil {
 		t.Fatal("Provision: expected error, got nil")
+	}
+}
+
+func TestClient_SendsBearerTokenOnBothEndpoints(t *testing.T) {
+	var gotAuth []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/project-config", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = append(gotAuth, r.Header.Get("Authorization"))
+		_ = json.NewEncoder(w).Encode(projectConfigResponse{ProjectID: "proj_1"})
+	})
+	mux.HandleFunc("/provision", func(w http.ResponseWriter, r *http.Request) {
+		gotAuth = append(gotAuth, r.Header.Get("Authorization"))
+		_ = json.NewEncoder(w).Encode([]provisionedResourceWire{})
+	})
+	ts := httptest.NewServer(mux)
+	defer ts.Close()
+
+	client := NewClient(ts.URL, "tok_secret")
+	if _, err := client.FetchProjectConfig(context.Background(), "https://api.example.com", "tok_secret", "proj_1"); err != nil {
+		t.Fatalf("FetchProjectConfig: %v", err)
+	}
+	if _, err := client.Provision(context.Background(), provision.ProjectConfig{ProjectID: "proj_1"}, nil); err != nil {
+		t.Fatalf("Provision: %v", err)
+	}
+
+	want := []string{"Bearer tok_secret", "Bearer tok_secret"}
+	if len(gotAuth) != 2 || gotAuth[0] != want[0] || gotAuth[1] != want[1] {
+		t.Fatalf("Authorization headers = %q, want %q", gotAuth, want)
 	}
 }
