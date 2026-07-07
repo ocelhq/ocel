@@ -99,7 +99,7 @@ func runDev(ctx context.Context, cwd string, appArgs []string, useLocalHarness b
 		stopHarness = func() { once.Do(stop) }
 		defer stopHarness()
 
-		client := localharness.NewClient("http://" + addr + "/dev")
+		client := localharness.NewClient("http://"+addr+"/dev", creds.AccessToken)
 		srvOpts = append(srvOpts, devserver.WithProvisioner(client.FetchProjectConfig, client.Provision))
 	}
 

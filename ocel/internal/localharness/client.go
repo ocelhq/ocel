@@ -19,13 +19,17 @@ import (
 // real Ocel API.
 type Client struct {
 	baseURL string
+	token   string
 	http    *http.Client
 }
 
 // NewClient returns a Client that talks to a harness process reachable at
-// baseURL (e.g. "http://127.0.0.1:PORT").
-func NewClient(baseURL string) *Client {
-	return &Client{baseURL: baseURL, http: http.DefaultClient}
+// baseURL (e.g. "http://127.0.0.1:PORT"). token is sent as an
+// `Authorization: Bearer` header on every request — the harness's dev
+// endpoints authenticate through Better Auth's bearer plugin, exactly like
+// the real API routes they sit next to.
+func NewClient(baseURL, token string) *Client {
+	return &Client{baseURL: baseURL, token: token, http: http.DefaultClient}
 }
 
 type projectConfigRequest struct {
@@ -129,6 +133,9 @@ func (c *Client) post(ctx context.Context, path string, body []byte, out any) er
 		return fmt.Errorf("build request for %s: %w", path, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if c.token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.token)
+	}
 
 	resp, err := c.http.Do(req)
 	if err != nil {
