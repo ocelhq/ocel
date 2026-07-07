@@ -54,6 +54,13 @@ func Bundle(configDir string, files []string) (string, error) {
 		Format:   api.FormatESModule,
 		Outfile:  outfile,
 		Write:    true,
+		// Bundled CJS dependencies (e.g. node-postgres) load node builtins
+		// through require calls esbuild leaves in place; in ESM output those
+		// throw "Dynamic require of ... is not supported" unless a real
+		// createRequire-backed require is in scope.
+		Banner: map[string]string{
+			"js": `import { createRequire as __ocelCreateRequire } from "node:module"; const require = __ocelCreateRequire(import.meta.url);`,
+		},
 	})
 	if len(result.Errors) > 0 {
 		msgs := api.FormatMessages(result.Errors, api.FormatMessagesOptions{Color: false})
