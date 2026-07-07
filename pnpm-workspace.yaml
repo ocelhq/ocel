@@ -9,3 +9,11 @@ allowBuilds:
   sharp: true
 
 linkWorkspacePackages: true
+
+# vitest declares bun-types as an optional peer for its Bun test-runner
+# support. Auto-installing optional peers (pnpm's default) resolves a
+# second drizzle-orm peer variant (built against bun-types) alongside the
+# Node one, and the two are structurally incompatible types even at the
+# same version. Nothing here runs drizzle-orm under Bun, so it's never
+# actually needed.
+autoInstallPeers: false
