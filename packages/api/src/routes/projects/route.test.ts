@@ -2,9 +2,9 @@ import { db } from "@repo/db";
 import { project } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createTestSessionWithOrganization } from "../test/auth-harness";
-import { setupTestDatabase } from "../test/db";
-import { createProject, listProjects } from "./projects";
+import { createTestSessionWithOrganization } from "../../../test/auth-harness";
+import { setupTestDatabase } from "../../../test/db";
+import { createProject, listProjects } from "./route";
 
 function postRequest(body: unknown, headers: Headers) {
   return new Request("http://localhost/api/projects", {
