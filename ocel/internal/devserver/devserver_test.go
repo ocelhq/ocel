@@ -73,6 +73,51 @@ func TestSync_MethodNotAllowedForNonPost(t *testing.T) {
 	}
 }
 
+func TestNew_WithProvisionerOverridesStubImplementations(t *testing.T) {
+	fetchCalled := false
+	provisionCalled := false
+
+	s := New("https://api.example.com", "tok", "proj_1", WithProvisioner(
+		func(_ context.Context, _, _, projectID string) (provision.ProjectConfig, error) {
+			fetchCalled = true
+			return provision.ProjectConfig{ProjectID: projectID, OrgID: "org_custom", UserID: "user_custom"}, nil
+		},
+		func(context.Context, provision.ProjectConfig, []manifest.Entry) ([]provision.ProvisionedResource, error) {
+			provisionCalled = true
+			return []provision.ProvisionedResource{{Name: "custom"}}, nil
+		},
+	))
+
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	resp, err := http.Post(ts.URL+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("POST /sync status = %d, want 200", resp.StatusCode)
+	}
+
+	result := <-s.Sync()
+	if result.Err != nil {
+		t.Fatalf("Sync result error: %v", result.Err)
+	}
+	if !fetchCalled {
+		t.Fatal("WithProvisioner: custom fetchProjectConfig was not called")
+	}
+	if !provisionCalled {
+		t.Fatal("WithProvisioner: custom provision was not called")
+	}
+	if result.ProjectConfig.OrgID != "org_custom" {
+		t.Fatalf("ProjectConfig.OrgID = %q, want %q", result.ProjectConfig.OrgID, "org_custom")
+	}
+	if len(result.Resources) != 1 || result.Resources[0].Name != "custom" {
+		t.Fatalf("Resources = %+v, want one entry named custom", result.Resources)
+	}
+}
+
 func TestSync_PropagatesProvisionError(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1")
 	s.provision = func(context.Context, provision.ProjectConfig, []manifest.Entry) ([]provision.ProvisionedResource, error) {
