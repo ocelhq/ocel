@@ -35,10 +35,26 @@ type Server struct {
 	provision          func(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.ProvisionedResource, error)
 }
 
+// Option configures a Server constructed via New.
+type Option func(*Server)
+
+// WithProvisioner overrides the default stub fetchProjectConfig/provision
+// implementations, e.g. to route provisioning through a local harness
+// instead of the real Ocel API.
+func WithProvisioner(
+	fetchProjectConfig func(ctx context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error),
+	provisionFn func(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.ProvisionedResource, error),
+) Option {
+	return func(s *Server) {
+		s.fetchProjectConfig = fetchProjectConfig
+		s.provision = provisionFn
+	}
+}
+
 // New builds a Server that will authenticate provisioning calls with token
 // against apiURL for projectID.
-func New(apiURL, token, projectID string) *Server {
-	return &Server{
+func New(apiURL, token, projectID string, opts ...Option) *Server {
+	s := &Server{
 		manifest:           manifest.New(),
 		apiURL:             apiURL,
 		token:              token,
@@ -47,6 +63,10 @@ func New(apiURL, token, projectID string) *Server {
 		fetchProjectConfig: provision.FetchProjectConfig,
 		provision:          provision.Provision,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 // Declare implements resourcesv1connect.ResourceServiceHandler, recording

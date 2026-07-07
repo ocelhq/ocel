@@ -54,7 +54,7 @@ func FetchProjectConfig(_ context.Context, _, _, projectID string) (ProjectConfi
 func Provision(_ context.Context, _ ProjectConfig, resources []manifest.Entry) ([]ProvisionedResource, error) {
 	out := make([]ProvisionedResource, 0, len(resources))
 	for _, r := range resources {
-		typeName, err := resourceTypeName(r.Type)
+		typeName, err := ResourceTypeName(r.Type)
 		if err != nil {
 			return nil, err
 		}
@@ -77,10 +77,11 @@ func Provision(_ context.Context, _ ProjectConfig, resources []manifest.Entry) (
 	return out, nil
 }
 
-// resourceTypeName renders a ResourceType as it appears in
+// ResourceTypeName renders a ResourceType as it appears in
 // OCEL_RESOURCE_<TYPE>_<name>, matching the SDK's getConfig (see
-// packages/ocel/src/utils/get-config.ts).
-func resourceTypeName(t resourcesv1.ResourceType) (string, error) {
+// packages/ocel/src/utils/get-config.ts). Exported for reuse by callers that
+// need to speak the same wire format, e.g. internal/localharness.
+func ResourceTypeName(t resourcesv1.ResourceType) (string, error) {
 	if t == resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED {
 		return "", fmt.Errorf("resource has unspecified type")
 	}
