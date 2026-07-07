@@ -25,17 +25,15 @@ export function branchNameFor(issue: { id: string; title: string }): string {
 	return `ocel/issue-${issue.id}-${slugify(issue.title)}`;
 }
 
-// Pushes `branch` and opens a PR against `baseBranch` from the host — the
-// sandbox never holds a GitHub token. Returns the PR URL, or null if `gh`
-// reports the branch has no diff against base (nothing to open a PR for).
-export function pushAndOpenPr(branch: string, baseBranch: string, title: string, body: string, repoRoot: string): string | null {
-	git(["push", "-u", "origin", branch], repoRoot);
-	const res = spawnSync("gh", ["pr", "create", "--base", baseBranch, "--head", branch, "--title", title, "--body", body], {
-		cwd: repoRoot,
-		encoding: "utf8",
-	});
-	if (res.status !== 0) {
-		throw new Error(`gh pr create failed for ${branch}: ${res.stderr.trim()}`);
-	}
-	return res.stdout.trim();
+export function localBranchExists(branch: string, cwd: string): boolean {
+	const res = spawnSync("git", ["rev-parse", "--verify", "--quiet", branch], { cwd, encoding: "utf8" });
+	return res.status === 0;
+}
+
+// True if `branch` is already fully merged into `base` (i.e. base contains
+// every commit on branch) — used to tell an already-landed blocker apart
+// from one whose branch still needs to be the stack parent.
+export function isMergedInto(branch: string, base: string, cwd: string): boolean {
+	const res = spawnSync("git", ["merge-base", "--is-ancestor", branch, base], { cwd, encoding: "utf8" });
+	return res.status === 0;
 }

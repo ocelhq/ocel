@@ -1,18 +1,23 @@
 // Claims ready-for-agent bd issues under a given parent (epic/PRD) and
 // implements them one batch at a time, each in its own Docker sandbox (via
 // sandcastle) on its own branch. Agents never see a GitHub token — once a
-// sandboxed run closes its bd issue, the host pushes the branch and opens
-// the PR. See `.scratch/<parent-id>/orchestrator-runs/<timestamp>/` for
-// per-run logs after a run.
+// sandboxed run closes its bd issue, the host tracks and submits the branch
+// with Graphite: an issue whose bd blockers are still-unmerged branches
+// stacks on the last unmerged blocker's branch; otherwise it's a sibling off
+// the run's feature branch. See
+// `.scratch/<parent-id>/orchestrator-runs/<timestamp>/` for per-run logs.
 
 import { spawnSync } from "node:child_process";
 import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { claudeCode, run as sandcastleRun } from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
-import { bdWhere, claimBatch, issueStatus, revertClaim } from "./bd.ts";
-import { branchNameFor, git, pushAndOpenPr, remoteBranchExists } from "./git.ts";
+import { bdWhere, claimBatch, issueBlockers, issueStatus, revertClaim } from "./bd.ts";
+import { branchNameFor, git, isMergedInto, localBranchExists, remoteBranchExists } from "./git.ts";
+import { gtSubmit, gtSync, gtTrack } from "./gt.ts";
 import { setupRunInfra } from "./infra.ts";
+
+const TRUNK_BRANCH = "main";
 
 // Max issues run concurrently (in separate sandboxes) within one supercycle.
 const MAX_ITERATIONS = 3;
@@ -26,6 +31,25 @@ function usageError(message: string): never {
 	console.error(message);
 	console.error("Usage: pnpm --filter @ocel/orchestrator orchestrate <parent-issue-id>");
 	process.exit(1);
+}
+
+// Picks the branch a new issue branch should stack on: the last of its bd
+// blockers whose branch still exists and isn't merged into `baseBranch` yet,
+// or `baseBranch` itself if every blocker has already landed (or it has
+// none). `bd ready --claim` only surfaces issues whose blockers are all bd-
+// closed, and — because claiming is sequential while implement runs are the
+// only thing that happens concurrently — a blocker can only be bd-closed by
+// an earlier supercycle, so its branch is guaranteed to already be tracked.
+function resolveParentBranch(issue: { id: string }, baseBranch: string, repoRoot: string): string {
+	const blockers = issueBlockers(issue.id, repoRoot);
+	let parent = baseBranch;
+	for (const blocker of blockers) {
+		const blockerBranch = branchNameFor(blocker);
+		if (localBranchExists(blockerBranch, repoRoot) && !isMergedInto(blockerBranch, baseBranch, repoRoot)) {
+			parent = blockerBranch;
+		}
+	}
+	return parent;
 }
 
 function ensureImageBuilt(repoRoot: string, sandcastleBin: string, log: (msg: string) => void) {
@@ -90,9 +114,19 @@ async function main() {
 	const beadsDir = bdWhere(repoRoot);
 	const beadsMount = { hostPath: beadsDir, sandboxPath: beadsDir };
 
+	gtTrack(baseBranch, TRUNK_BRANCH, repoRoot);
+	log(`Tracked feature branch "${baseBranch}" with Graphite (parent: ${TRUNK_BRANCH})`);
+
 	try {
 		for (let supercycle = 1; supercycle <= MAX_SUPERCYCLES; supercycle++) {
 			log(`--- Supercycle ${supercycle}/${MAX_SUPERCYCLES} ---`);
+
+			try {
+				gtSync(repoRoot);
+			} catch (err) {
+				log(`gt sync failed: ${(err as Error).message}. Stopping for manual resolution.`);
+				break;
+			}
 
 			let batch: ReturnType<typeof claimBatch>;
 			try {
@@ -109,11 +143,15 @@ async function main() {
 
 			log(`Claimed ${batch.length} issue(s) to run in parallel this supercycle: ${batch.map((c) => c.id).join(", ")}`);
 
-			await Promise.allSettled(
+			// Sandboxed implement runs are the only thing that runs concurrently.
+			// gt track/submit happen afterward, one at a time — gt's local repo
+			// metadata isn't safe for concurrent writers the way bd's Dolt DB is.
+			const settled = await Promise.allSettled(
 				batch.map(async (issue) => {
 					const branch = branchNameFor(issue);
+					const parentBranch = resolveParentBranch(issue, baseBranch, repoRoot);
 					const logFilePath = path.join(runDir, `implement-${issue.id}.log`);
-					log(`[${issue.id}] Starting sandboxed implement run on branch ${branch}`);
+					log(`[${issue.id}] Starting sandboxed implement run on branch ${branch} (stacked on ${parentBranch})`);
 
 					let result: Awaited<ReturnType<typeof sandcastleRun>>;
 					try {
@@ -133,7 +171,7 @@ async function main() {
 								// it never reaches the mounted .beads dir. Point it there directly.
 								env: { BEADS_DIR: beadsMount.sandboxPath, TEST_DATABASE_URL: infra.testDatabaseUrlFor(issue.id) },
 							}),
-							branchStrategy: { type: "branch", branch },
+							branchStrategy: { type: "branch", branch, baseBranch: parentBranch },
 							promptFile: path.join(repoRoot, ".sandcastle", "implement-prompt.md"),
 							promptArgs: { ISSUE_ID: issue.id, PARENT_ID: parentId },
 							maxIterations: 1,
@@ -150,30 +188,38 @@ async function main() {
 					} catch (err) {
 						log(`[${issue.id}] sandbox run threw: ${(err as Error).message}. Reverting claim.`);
 						revertClaim(issue.id, repoRoot, log);
-						return;
+						return null;
 					}
 
 					const closed = issueStatus(issue.id, repoRoot) === "closed";
 					if (!closed) {
 						log(`[${issue.id}] did not close the bd issue. Reverting claim.`);
 						revertClaim(issue.id, repoRoot, log);
-						return;
+						return null;
 					}
 					if (result.commits.length === 0) {
 						log(`[${issue.id}] closed the issue but made no commits. Reverting claim.`);
 						revertClaim(issue.id, repoRoot, log);
-						return;
+						return null;
 					}
 
-					log(`[${issue.id}] completed with ${result.commits.length} commit(s). Pushing and opening PR...`);
-					try {
-						const prUrl = pushAndOpenPr(branch, baseBranch, `${issue.id}: ${issue.title}`, `Closes ${issue.id}.`, repoRoot);
-						log(`[${issue.id}] PR opened: ${prUrl}`);
-					} catch (err) {
-						log(`[${issue.id}] push/PR failed: ${(err as Error).message}`);
-					}
+					log(`[${issue.id}] completed with ${result.commits.length} commit(s).`);
+					return { issue, branch, parentBranch };
 				}),
 			);
+
+			for (const outcome of settled) {
+				if (outcome.status !== "fulfilled" || outcome.value === null) continue;
+				const { issue, branch, parentBranch } = outcome.value;
+				log(`[${issue.id}] Tracking and submitting branch ${branch} (parent: ${parentBranch})...`);
+				try {
+					gtTrack(branch, parentBranch, repoRoot);
+					const prUrl = gtSubmit(branch, repoRoot);
+					log(`[${issue.id}] PR submitted: ${prUrl ?? "(no URL parsed from gt output)"}`);
+				} catch (err) {
+					log(`[${issue.id}] gt track/submit failed: ${(err as Error).message}`);
+				}
+			}
 		}
 	} finally {
 		infra.teardown();
