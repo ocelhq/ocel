@@ -1,8 +1,8 @@
+import { db } from "@repo/db";
+import { project } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { uuidv7 } from "uuidv7";
-import { project } from "@/db/schema";
-import { db } from "@/lib/db";
 import { getActiveOrganizationSession } from "@/lib/session";
 import { createProjectSchema } from "@/lib/validation/project";
 
@@ -43,7 +43,10 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return NextResponse.json({ error: "Invalid request body" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Invalid request body" },
+      { status: 400 },
+    );
   }
   const parsed = createProjectSchema.safeParse(body);
   if (!parsed.success) {
