@@ -10,7 +10,7 @@ import { appendFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { claudeCode, run as sandcastleRun } from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
-import { claimBatch, issueStatus, revertClaim } from "./bd.ts";
+import { bdWhere, claimBatch, issueStatus, revertClaim } from "./bd.ts";
 import { branchNameFor, git, pushAndOpenPr, remoteBranchExists } from "./git.ts";
 import { setupRunInfra } from "./infra.ts";
 
@@ -84,7 +84,11 @@ async function main() {
 	const infra = setupRunInfra(runId);
 	log(`Run infra ready: network ${infra.networkName}, Postgres sidecar ${infra.postgresContainerName}`);
 
-	const beadsMount = { hostPath: path.join(repoRoot, ".beads"), sandboxPath: path.join(repoRoot, ".beads") };
+	// bd resolves this via git's own common-dir logic, so it's correct whether
+	// the orchestrator runs from the main checkout or a linked worktree — a
+	// worktree's own `.beads/` is just a client stub with no issue data.
+	const beadsDir = bdWhere(repoRoot);
+	const beadsMount = { hostPath: beadsDir, sandboxPath: beadsDir };
 
 	try {
 		for (let supercycle = 1; supercycle <= MAX_SUPERCYCLES; supercycle++) {

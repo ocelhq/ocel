@@ -19,6 +19,24 @@ function bd(args: string[], cwd: string) {
 	return spawnSync("bd", args, { cwd, encoding: "utf8" });
 }
 
+// Resolves the real `.beads` directory bd is using from `cwd` — bd finds
+// this via git's own common-dir resolution, so it correctly points at the
+// main checkout's `.beads` even when `cwd` is a linked worktree (a worktree
+// has its own bare-bones `.beads/` client stub with no issue data of its
+// own, so mounting that into a sandbox instead of this path leaves agents
+// unable to see any issues).
+export function bdWhere(cwd: string): string {
+	const res = bd(["where"], cwd);
+	if (res.status !== 0) {
+		throw new Error(`bd where failed: ${res.stderr.trim()}`);
+	}
+	const beadsDir = res.stdout.trim().split("\n")[0];
+	if (!beadsDir) {
+		throw new Error(`bd where produced no output from ${cwd}`);
+	}
+	return beadsDir;
+}
+
 // Atomically claims the next unblocked, ready-for-agent bd issue under
 // `parentId` (sets its assignee and status: in_progress), or returns null if
 // none remain.
