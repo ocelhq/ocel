@@ -50,7 +50,9 @@ var dialTimeout = 500 * time.Millisecond
 //     becomes Leader. Followers never self-promote; only Elect reclaims.
 //
 // On becoming Leader, the caller is responsible for binding its own
-// listener and recording its address with lockfile.Write.
+// listener and recording its address with lockfile.Create. That create is
+// exclusive: if it fails with os.ErrExist, a concurrent process won the
+// election first, and the caller should re-run Elect to join it.
 func Elect(projectID string) (Result, error) {
 	addr, err := lockfile.Read(projectID)
 	if err != nil {

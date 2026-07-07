@@ -30,8 +30,8 @@ func TestElect_LiveLock_BecomesFollower(t *testing.T) {
 	defer ln.Close()
 
 	addr := ln.Addr().String()
-	if err := lockfile.Write(projectID, addr); err != nil {
-		t.Fatalf("lockfile.Write: %v", err)
+	if err := lockfile.Create(projectID, addr); err != nil {
+		t.Fatalf("lockfile.Create: %v", err)
 	}
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
@@ -62,8 +62,8 @@ func TestElect_DeadLock_ReclaimsAndBecomesLeader(t *testing.T) {
 	addr := ln.Addr().String()
 	ln.Close() // nothing is listening anymore: the lock is dead.
 
-	if err := lockfile.Write(projectID, addr); err != nil {
-		t.Fatalf("lockfile.Write: %v", err)
+	if err := lockfile.Create(projectID, addr); err != nil {
+		t.Fatalf("lockfile.Create: %v", err)
 	}
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
