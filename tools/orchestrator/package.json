@@ -1,0 +1,16 @@
+{
+  "name": "@ocel/orchestrator",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "orchestrate": "tsx src/orchestrator.ts"
+  },
+  "dependencies": {
+    "@ai-hero/sandcastle": "^0.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.2",
+    "typescript": "^6.0.3"
+  }
+}

@@ -1,0 +1,72 @@
+// Thin wrapper around the `bd` (beads) CLI. All calls run against the host's
+// working tree — the sandbox mounts the same `.beads/` directory (see
+// orchestrator.ts), so writes an agent makes inside the container are visible
+// here immediately.
+
+import { spawnSync } from "node:child_process";
+
+// Applied to an issue when its implement attempt fails, so future claims in
+// this run skip it instead of retrying it forever.
+export const FAILED_LABEL = "orchestrator-failed";
+
+export interface BdIssue {
+	id: string;
+	title: string;
+	[key: string]: unknown;
+}
+
+function bd(args: string[], cwd: string) {
+	return spawnSync("bd", args, { cwd, encoding: "utf8" });
+}
+
+// Atomically claims the next unblocked, ready-for-agent bd issue under
+// `parentId` (sets its assignee and status: in_progress), or returns null if
+// none remain.
+function claimNextReadyIssue(parentId: string, repoRoot: string): BdIssue | null {
+	const res = bd(
+		["ready", "--claim", "--json", "--parent", parentId, "--label", "ready-for-agent", "--exclude-label", FAILED_LABEL],
+		repoRoot,
+	);
+	if (res.status !== 0) {
+		throw new Error(`bd ready --claim failed: ${res.stderr.trim()}`);
+	}
+	let issues: BdIssue[];
+	try {
+		issues = JSON.parse(res.stdout);
+	} catch {
+		throw new Error(`bd ready --claim produced non-JSON output: ${res.stdout.slice(0, 2000)}`);
+	}
+	return issues[0] ?? null;
+}
+
+export function claimBatch(parentId: string, repoRoot: string, maxCount: number): BdIssue[] {
+	const batch: BdIssue[] = [];
+	for (let i = 0; i < maxCount; i++) {
+		const issue = claimNextReadyIssue(parentId, repoRoot);
+		if (!issue) break;
+		batch.push(issue);
+	}
+	return batch;
+}
+
+// Reverts a failed attempt: reopens the issue, clears its assignee, and
+// labels it so this run's future claims skip it instead of retrying forever.
+export function revertClaim(issueId: string, repoRoot: string, log: (msg: string) => void) {
+	const res = bd(["update", issueId, "--status=open", "--assignee=", "--add-label", FAILED_LABEL], repoRoot);
+	if (res.status !== 0) {
+		log(`Failed to revert claim on ${issueId}: ${res.stderr.trim()}`);
+	}
+}
+
+// Reads the issue's current status straight from the shared beads database.
+export function issueStatus(issueId: string, repoRoot: string): string | null {
+	const res = bd(["show", issueId, "--json"], repoRoot);
+	if (res.status !== 0) return null;
+	try {
+		const data = JSON.parse(res.stdout);
+		const issue = Array.isArray(data) ? data[0] : data;
+		return issue?.status ?? null;
+	} catch {
+		return null;
+	}
+}
