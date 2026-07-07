@@ -17,6 +17,7 @@
     "pg": "^8.22.0"
   },
   "devDependencies": {
+    "@repo/resources": "workspace:*",
     "@types/pg": "^8.20.0",
     "drizzle-kit": "^0.31.10",
     "typescript": "^5"

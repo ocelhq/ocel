@@ -1,1 +1,3 @@
-export { authHandler as GET, authHandler as POST } from "@repo/api";
+import { auth, toNextJsHandler } from "@repo/auth/next";
+
+export const { GET, POST } = toNextJsHandler(auth);

@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { nextCookies } from "better-auth/next-js";
+import { nextCookies, toNextJsHandler } from "better-auth/next-js";
 import { authConfig } from "./config";
 
 // Next.js-specific instance: identical config to the root `auth`, plus
@@ -13,3 +13,5 @@ export const auth = betterAuth({
 });
 
 export type Session = typeof auth.$Infer.Session;
+
+export { toNextJsHandler };

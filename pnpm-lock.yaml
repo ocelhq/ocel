@@ -362,6 +362,9 @@ importers:
         specifier: ^8.22.0
         version: 8.22.0
     devDependencies:
+      '@repo/resources':
+        specifier: workspace:*
+        version: link:../resources
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0

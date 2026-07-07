@@ -228,6 +228,21 @@ bd prime                # Refresh Beads context
 
 Issues live in the local beads (`bd`) tracker, not GitHub Issues — external PRs are not a triage surface. See `docs/agents/issue-tracker.md`.
 
+### Generating issues from a plan/PRD
+
+When turning a plan or PRD into a batch of bd issues, analyze the resulting set and
+build a dependency graph before filing — don't just create a flat list. For each issue,
+determine whether it blocks or is blocked by any other open issue.
+
+Issue B is blocked by issue A if:
+- B requires code or infrastructure that A introduces
+- B and A modify overlapping files or modules, making concurrent work likely to produce
+  merge conflicts
+- B's requirements depend on a decision or API shape that A will establish
+
+Wire discovered dependencies with `bd dep add <B> <A>` so `bd ready`/`bd blocked` reflect
+them. An issue is unblocked if it has zero blocking dependencies on other open issues.
+
 ### Triage labels
 
 Default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), applied via `bd label add`. See `docs/agents/triage-labels.md`.
