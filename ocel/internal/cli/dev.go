@@ -243,6 +243,11 @@ func runFollower(ctx context.Context, leaderAddr string, appArgs []string, stdou
 		case <-streamDone:
 			_ = killProcessGroup(child.cmd)
 			<-child.done
+			// A cancelled ctx (e.g. Ctrl+C) also ends the stream; only a
+			// disconnect the user didn't initiate warrants the message.
+			if ctx.Err() != nil {
+				return nil
+			}
 			fmt.Fprintln(stderr, "Leader disconnected. Restart `ocel dev` in the leader's terminal, then re-run this command.")
 			return &ExitError{Code: 1}
 		}
