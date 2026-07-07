@@ -109,8 +109,21 @@ docker compose up -d         # local Postgres for apps/web
 - `packages/native-lib` — prebuilt per-platform CLI binaries, wired as `ocel`'s
   `optionalDependencies` (npm's platform-package pattern). No cgo deps, so CI
   cross-compiles all 4 targets from one Linux runner (`scripts/build-native.mjs`).
-- `apps/web` — Next.js control plane: better-auth (email/password, GitHub OAuth,
-  device-authorization + bearer plugins) on Drizzle/Postgres; `/api/projects` routes.
+- `packages/{db,auth,resources,api}` — the control plane's framework-agnostic core,
+  extracted from `apps/web` (epic ocelhq-z7j) so a future framework swap stays cheap:
+  `@repo/db` (Drizzle client + schema), `@repo/auth` (better-auth config —
+  email/password, GitHub OAuth, device-authorization + bearer plugins; import
+  `@repo/auth/next` for the Next-cookies variant), `@repo/resources` (the app's own
+  Ocel resource declarations, e.g. `postgres("main")`), and `@repo/api`
+  (framework-agnostic `Request → Response` route handlers). They all export TS source
+  directly (`"exports": "./src/index.ts"`) — consumers transpile/bundle them.
+- `apps/web` — Next.js control plane, now a thin shell: `app/api/**/route.ts` files
+  just re-export `@repo/api` handlers. `scripts/local-api-server.ts` is a local-dev
+  Bun harness mounting those same handlers plus dev-only
+  `/dev/{project-config,provision}` endpoints; the hidden `ocel dev --local-harness`
+  flag spawns it (via `ocel/internal/localharness`) so the provisioning handshake can
+  resolve against it and tear it down before the app command starts — instead of
+  deadlocking on the control plane it is itself starting.
 - `proto/` — protobuf source of truth (buf), codegen'd into `ocel/pkg/proto` (Go) and
   `packages/ocel/src/gen` (TS) via `pnpm gen`. Edit `.proto` files, then regenerate —
   never hand-edit generated output.
