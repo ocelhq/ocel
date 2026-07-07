@@ -252,13 +252,18 @@ func resolveOrganization(ctx context.Context, client *authclient.Client, accessT
 	}
 	fmt.Fprint(stdout, "Select an organization (number or slug): ")
 
+
 	selection := ""
 	if scanner.Scan() {
 		selection = strings.TrimSpace(scanner.Text())
 	}
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("failed to read input: %w", err)
+	}
 	if selection == "" {
 		return nil, errors.New("no organization selected; rerun `ocel init`.")
 	}
+
 
 	if idx, convErr := strconv.Atoi(selection); convErr == nil {
 		if idx < 1 || idx > len(orgs) {
