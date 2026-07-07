@@ -25,6 +25,23 @@ func TestFetchProjectConfig_ReturnsIdentityForProjectID(t *testing.T) {
 	}
 }
 
+func TestResourceTypeName_RendersCanonicalName(t *testing.T) {
+	got, err := ResourceTypeName(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES)
+	if err != nil {
+		t.Fatalf("ResourceTypeName: %v", err)
+	}
+	if got != "POSTGRES" {
+		t.Fatalf("ResourceTypeName() = %q, want %q", got, "POSTGRES")
+	}
+}
+
+func TestResourceTypeName_RejectsUnspecifiedType(t *testing.T) {
+	_, err := ResourceTypeName(resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED)
+	if err == nil {
+		t.Fatal("ResourceTypeName: expected error for unspecified type, got nil")
+	}
+}
+
 func TestProvision_EmptyManifestYieldsNoResources(t *testing.T) {
 	got, err := Provision(context.Background(), ProjectConfig{ProjectID: "proj_abc"}, nil)
 	if err != nil {
