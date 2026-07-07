@@ -1,12 +1,14 @@
 import { db } from "@repo/db";
 import * as schema from "@repo/db/schema";
-import { betterAuth } from "better-auth";
+import type { BetterAuthOptions } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { nextCookies } from "better-auth/next-js";
 import { bearer, deviceAuthorization, organization } from "better-auth/plugins";
 import { OCEL_CLI_CLIENT_ID } from "./constants";
 
-export const auth = betterAuth({
+// Framework-agnostic Better Auth config shared by the root `auth` instance
+// and the `/next` instance, which appends `nextCookies()` as its last
+// plugin - it must stay mutable-array-free here so `/next` can spread it in.
+export const authConfig = {
   database: drizzleAdapter(db, {
     provider: "pg",
     schema,
@@ -37,8 +39,5 @@ export const auth = betterAuth({
       verificationUri: "/device",
       validateClient: async (clientId) => clientId === OCEL_CLI_CLIENT_ID,
     }),
-    nextCookies(),
   ],
-});
-
-export type Session = typeof auth.$Infer.Session;
+} satisfies BetterAuthOptions;

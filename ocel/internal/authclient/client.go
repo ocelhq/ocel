@@ -15,7 +15,7 @@ import (
 
 // ClientID is the fixed OAuth client identifier the Ocel CLI presents to
 // the device authorization endpoint. The server validates it via
-// deviceAuthorization({ validateClient }) in apps/web/lib/auth.ts.
+// deviceAuthorization({ validateClient }) in packages/auth/src/config.ts.
 const ClientID = "ocel-cli"
 
 // Client talks to a Better Auth server's device authorization + session

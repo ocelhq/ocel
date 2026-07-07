@@ -8,13 +8,14 @@
     "start": "next start",
     "lint": "biome check",
     "format": "biome format --write",
-    "auth:generate": "npx @better-auth/cli@latest generate --output ../../packages/db/src/schema/auth-schema.ts",
+    "auth:generate": "pnpm --filter @repo/auth auth:generate",
     "db:generate": "pnpm --filter @repo/db db:generate",
     "db:push": "pnpm --filter @repo/db db:push",
     "db:studio": "pnpm --filter @repo/db db:studio",
     "test": "vitest run"
   },
   "dependencies": {
+    "@repo/auth": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/resources": "workspace:*",
     "better-auth": "^1.6.23",

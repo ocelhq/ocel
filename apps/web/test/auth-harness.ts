@@ -1,7 +1,7 @@
+import { auth } from "@repo/auth/next";
 import { db } from "@repo/db";
 import { organization, user } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
-import { auth } from "@/lib/auth";
 
 // Mints a real Better-Auth-issued session (via auth.api.signUpEmail) and a
 // real organization (via auth.api.createOrganization) - no mocks. Callers
