@@ -389,7 +389,7 @@ export default {
 
 	leaderDone := make(chan error, 1)
 	go func() {
-		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, false, &leaderStdout, &leaderStderr, strings.NewReader(""))
 	}()
 
 	waitForLockfile(t, projectID)
@@ -404,7 +404,7 @@ export default {
 	followerDone := make(chan error, 1)
 	var followerStdout, followerStderr bytes.Buffer
 	go func() {
-		followerDone <- runDev(followerCtx, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+		followerDone <- runDev(followerCtx, root, followerAppArgs, false, &followerStdout, &followerStderr, strings.NewReader(""))
 	}()
 
 	waitForEnvVar(t, envDumpPath, "OCEL_RESOURCE_POSTGRES_main")

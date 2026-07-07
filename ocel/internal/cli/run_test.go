@@ -124,7 +124,7 @@ export default {
 	leaderDone := make(chan error, 1)
 	var leaderStdout, leaderStderr bytes.Buffer
 	go func() {
-		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, false, &leaderStdout, &leaderStderr, strings.NewReader(""))
 	}()
 
 	waitForLockfile(t, projectID)
@@ -195,7 +195,7 @@ func TestRunRun_WithRunningLeader_DoesNotWaitOnFollowerUpdatesOrDisconnect(t *te
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	if err := lockfile.Write(projectID, listener.Addr().String()); err != nil {
+	if err := lockfile.Create(projectID, listener.Addr().String()); err != nil {
 		t.Fatalf("lockfile.Write: %v", err)
 	}
 
