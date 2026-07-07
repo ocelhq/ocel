@@ -40,14 +40,24 @@ func Read(projectID string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-// Write records addr as the leader address for projectID, replacing any
-// existing lockfile.
-func Write(projectID, addr string) error {
+// Create atomically records addr as the leader address for projectID. If a
+// lockfile already exists — another process won the election concurrently —
+// it fails with an error satisfying errors.Is(err, os.ErrExist) and leaves
+// the existing file untouched.
+func Create(projectID, addr string) error {
 	path, err := Path(projectID)
 	if err != nil {
 		return err
 	}
-	if err := os.WriteFile(path, []byte(addr), 0o600); err != nil {
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+	if err != nil {
+		return fmt.Errorf("create lockfile: %w", err)
+	}
+	if _, err := f.WriteString(addr); err != nil {
+		f.Close()
+		return fmt.Errorf("write lockfile: %w", err)
+	}
+	if err := f.Close(); err != nil {
 		return fmt.Errorf("write lockfile: %w", err)
 	}
 	return nil
