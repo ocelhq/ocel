@@ -3,7 +3,7 @@ import { db } from "@repo/db";
 import { project } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
-import { createProjectSchema } from "./validation/project";
+import { createProjectSchema } from "./validation";
 
 function isUniqueConstraintViolation(error: unknown): boolean {
   if (typeof error !== "object" || error === null) {

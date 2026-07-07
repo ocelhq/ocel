@@ -1,9 +1,9 @@
 import { auth } from "@repo/auth/next";
 import { beforeAll, describe, expect, it } from "vitest";
-import { createTestSessionWithOrganization } from "../test/auth-harness";
-import { setupTestDatabase } from "../test/db";
-import { getProjectById } from "./project-by-id";
-import { createProject } from "./projects";
+import { createTestSessionWithOrganization } from "../../../../test/auth-harness";
+import { setupTestDatabase } from "../../../../test/db";
+import { createProject } from "../route";
+import { getProjectById } from "./route";
 
 function getRequest(headers: Headers) {
   return new Request("http://localhost/api/projects/x", {
