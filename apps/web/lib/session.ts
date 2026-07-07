@@ -1,7 +1,7 @@
+import { db } from "@repo/db";
+import { member } from "@repo/db/schema";
 import { and, eq } from "drizzle-orm";
-import { member } from "@/db/schema";
 import { auth } from "@/lib/auth";
-import { db } from "@/lib/db";
 
 export type ActiveOrganizationSession = {
   userId: string;

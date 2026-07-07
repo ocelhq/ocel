@@ -1,7 +1,7 @@
+import { db } from "@repo/db";
+import { project } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { project } from "@/db/schema";
-import { db } from "@/lib/db";
 import { getSessionUserId, verifyOrganizationMembership } from "@/lib/session";
 
 export async function GET(
