@@ -32,20 +32,26 @@ repo.
   (framework-agnostic `Request → Response` route handlers). They all export TS source
   directly (`"exports": "./src/index.ts"`) — consumers transpile/bundle them.
 - `apps/web` — Next.js control plane, now a thin shell: `app/api/**/route.ts` files
-  just re-export `@repo/api` handlers. `scripts/local-api-server.ts` is a local-dev
-  Bun harness mounting those same handlers plus dev-only
-  `/dev/{project-config,provision}` endpoints; the hidden `ocel dev --local-harness`
-  flag spawns it (via `ocel/internal/localharness`) so the provisioning handshake can
-  resolve against it and tear it down before the app command starts — instead of
-  deadlocking on the control plane it is itself starting.
+  just re-export `@repo/api` handlers, including `resolveResources` at
+  `POST /api/resources/resolve`. `scripts/local-api-server.ts` is a local-dev Bun
+  harness mounting those same handlers — `resolveResources` verbatim at the same path
+  prod serves it — plus a dev-only `POST /dev/project-config` passthrough (there's no
+  real project-identity endpoint yet); the hidden `ocel dev --local-harness` flag spawns
+  it (via `ocel/internal/localharness`) so the resolve handshake can run against it and
+  tear it down before the app command starts — instead of deadlocking on the control
+  plane it is itself starting. The Go CLI's `internal/provision.Provision` calls this
+  same `POST .../api/resources/resolve` contract for real (see `internal/provision.Resolve`,
+  which `internal/localharness.Client` also calls, just against the harness's base URL
+  instead of the real API) — only `FetchProjectConfig` (org/user identity) is still a
+  stub, since no real endpoint for it exists yet either.
 - `proto/` — protobuf source of truth (buf), codegen'd into `ocel/pkg/proto` (Go) and
   `packages/ocel/src/gen` (TS) via `pnpm gen`. Edit `.proto` files, then regenerate —
   never hand-edit generated output.
 
 **Status vs. the product docs:** the `docs` repo describes the target design (e.g. real
 provisioning, monorepo leader/follower dev mode). Several pieces here are still
-stubs with finalized signatures — e.g. `ocel init` and `internal/provision` — built
-ahead of the real backend/API. Check the code, not just the docs, before assuming a
+stubs with finalized signatures — e.g. `ocel init` and `internal/provision.FetchProjectConfig`
+— built ahead of the real backend/API. Check the code, not just the docs, before assuming a
 described behavior is live.
 
 ## Parallel Agent Orchestrator
@@ -79,15 +85,23 @@ pnpm --filter ocel build     # build packages/ocel's dist/ - required once befor
                               # (packages/resources imports "ocel/postgres", which resolves to dist/)
 cd apps/web && pnpm test     # vitest
 cd apps/web && pnpm lint     # biome check
-docker compose up -d         # local Postgres for apps/web
+docker compose up -d         # local Postgres for apps/web, plus the ocel-cloud service below
 ```
 
 **Gotcha:** `@repo/db`'s client dogfoods the ocel SDK itself (`packages/resources` ->
 `postgres("main")`), so importing `@repo/db` outside of `ocel dev` throws unless
-`OCEL_RESOURCE_POSTGRES_main` is set. `packages/api/vitest.config.ts` sets it (and
-`OCEL_CLOUD_ADMIN_URL`) to the same Postgres as `DATABASE_URL` so `pnpm test` there works
-standalone; `apps/web/vitest.config.ts` doesn't yet, so its `scripts/*.test.ts` currently
-only run under a real `ocel dev` session.
+`OCEL_RESOURCE_POSTGRES_main` is set. Both `packages/api/vitest.config.ts` and
+`apps/web/vitest.config.ts` set it (and `OCEL_CLOUD_ADMIN_URL`) to the same Postgres as
+`DATABASE_URL` so `pnpm test` works standalone in either package.
+
+**Local "cloud" cluster:** resolve (`POST /api/resources/resolve`, see
+`packages/api/src/routes/resources/resolve/`) provisions per-user role+database pairs
+against a separate Postgres, standing in for Aurora Serverless v2 in prod - distinct from
+the `postgres` service apps/web's own control-plane DB uses. `docker-compose.yml`'s
+`ocel-cloud` service is that stand-in; `OCEL_CLOUD_ADMIN_URL` (see
+`apps/web/.env.example`) is its admin connection string. Both `ocel dev` (which never
+talks to the cloud cluster directly) and prod read this only through the resolve
+endpoint - the CLI just resolves connection strings it's handed back.
 
 ## Conventions & Patterns
 

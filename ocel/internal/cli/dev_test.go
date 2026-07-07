@@ -82,9 +82,12 @@ func TestRunDev_HappyPath_DiscoversDeclaresSyncsAndSpawnsWithExitCode(t *testing
 		t.Skip("uses a POSIX shell fixture command")
 	}
 
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
 	prev := loadCredentials
 	loadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+		return credentials.Credentials{APIURL: resolveServer.URL, AccessToken: "tok"}, nil
 	}
 	defer func() { loadCredentials = prev }()
 
@@ -192,7 +195,7 @@ globalThis.__ocelRegister.push(
 export {};
 `)
 
-	var configCalls, provisionCalls int
+	var configCalls, resolveCalls int
 	harness := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/dev/project-config":
@@ -203,15 +206,14 @@ export {};
 				"userId":    "user_harness",
 				"envVars":   map[string]string{"FROM_HARNESS": "1"},
 			})
-		case "/dev/provision":
-			provisionCalls++
-			json.NewEncoder(w).Encode([]map[string]any{{
-				"name": "main",
-				"type": "POSTGRES",
+		case "/api/resources/resolve":
+			resolveCalls++
+			json.NewEncoder(w).Encode(map[string]any{
 				"env": map[string]string{
 					"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"postgres://harness"}`,
 				},
-			}})
+				"expiresAt": time.Now().Add(time.Hour).Format(time.RFC3339),
+			})
 		default:
 			http.NotFound(w, r)
 		}
@@ -245,8 +247,8 @@ export {};
 	if spawnedDir != root {
 		t.Errorf("harness spawned in %q, want project dir %q", spawnedDir, root)
 	}
-	if configCalls != 1 || provisionCalls != 1 {
-		t.Errorf("harness calls: project-config=%d provision=%d, want 1 and 1", configCalls, provisionCalls)
+	if configCalls != 1 || resolveCalls != 1 {
+		t.Errorf("harness calls: project-config=%d resolve=%d, want 1 and 1", configCalls, resolveCalls)
 	}
 	if _, err := os.Stat(seenPath); err != nil {
 		t.Errorf("harness was not stopped before the app command started: %v", err)
@@ -270,9 +272,12 @@ func TestRunDev_SecondRunForSameProject_BecomesFollowerAndReceivesPushedEnv(t *t
 		t.Skip("uses a POSIX shell fixture command")
 	}
 
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
 	prev := loadCredentials
 	loadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+		return credentials.Credentials{APIURL: resolveServer.URL, AccessToken: "tok"}, nil
 	}
 	defer func() { loadCredentials = prev }()
 
@@ -362,9 +367,12 @@ func TestRunDev_Leader_FileChangeReResolvesAndPushesUpdatedEnvToFollower(t *test
 	watchDebounce = 20 * time.Millisecond
 	defer func() { watchDebounce = prevDebounce }()
 
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
 	prev := loadCredentials
 	loadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+		return credentials.Credentials{APIURL: resolveServer.URL, AccessToken: "tok"}, nil
 	}
 	defer func() { loadCredentials = prev }()
 
@@ -493,6 +501,43 @@ export default {
 	case <-time.After(5 * time.Second):
 		t.Fatal("follower runDev did not exit after leader disconnect")
 	}
+}
+
+// newFakeResolveServer serves POST /api/resources/resolve with the same
+// wire contract packages/api/src/routes/resources/resolve/route.ts (and the
+// local dev harness that mounts it verbatim) serves: {projectId,
+// resources:[{name,type}]} -> {env, expiresAt}. Backs runDev's default
+// (non-harness) provisioning path in tests that don't care about resolve's
+// own behavior, only that runDev calls it and applies the result.
+func newFakeResolveServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/resources/resolve" {
+			http.NotFound(w, r)
+			return
+		}
+		var req struct {
+			Resources []struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"resources"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+
+		env := make(map[string]string, len(req.Resources))
+		for _, r := range req.Resources {
+			key := fmt.Sprintf("OCEL_RESOURCE_%s_%s", r.Type, r.Name)
+			env[key] = fmt.Sprintf(`{"connectionString":"postgres://resolved/%s"}`, r.Name)
+		}
+
+		json.NewEncoder(w).Encode(map[string]any{
+			"env":       env,
+			"expiresAt": time.Now().Add(time.Hour).Format(time.RFC3339),
+		})
+	}))
 }
 
 // waitForLockfile polls until projectID's leader lockfile exists.
