@@ -107,11 +107,33 @@ func Save(creds Credentials) (Backend, error) {
 	return BackendFile, nil
 }
 
-// Load reads previously stored credentials, checking the OS keyring first
-// and falling back to the local file. It returns ErrNotLoggedIn if neither
-// has anything stored.
+// envAccessToken is the environment variable an out-of-band bearer token can
+// be injected through. envAPIURL optionally pairs the origin that token was
+// issued by. Together they let non-interactive callers (CI, the e2e harness)
+// authenticate the CLI without a device-flow login writing to the keyring or
+// credentials file.
+const (
+	envAccessToken = "OCEL_ACCESS_TOKEN"
+	envAPIURL      = "OCEL_API_URL"
+)
+
+// Load reads previously stored credentials. It first honors an
+// OCEL_ACCESS_TOKEN environment override (taking precedence over any stored
+// credentials, so a headless run can authenticate without touching the
+// keyring/file), then checks the OS keyring, then falls back to the local
+// file. It returns ErrNotLoggedIn if none of these has anything.
 func Load() (Credentials, error) {
 	var creds Credentials
+
+	if token := os.Getenv(envAccessToken); token != "" {
+		// A bare token with no OCEL_API_URL leaves APIURL empty on purpose,
+		// so effectiveAPIURL falls through to its own resolution ($OCEL_API_URL,
+		// then the default origin).
+		return Credentials{
+			AccessToken: token,
+			APIURL:      os.Getenv(envAPIURL),
+		}, nil
+	}
 
 	if secret, err := keyring.Get(service, user); err == nil {
 		if err := json.Unmarshal([]byte(secret), &creds); err != nil {

@@ -1,0 +1,120 @@
+name: E2E
+
+# Slow, service-dependent end-to-end suite: drives the built Go CLI
+# (init -> run -> dev) against a real apps/web control plane and the
+# docker-compose Postgres services. Kept separate from build.yml.
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    env:
+      # Control-plane database (docker-compose `postgres`). Seed writes the
+      # identity here and resolve reads project membership from here, so the
+      # e2e suite and apps/web must share it.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      # @repo/db dogfoods the SDK for its own connection (normally injected by
+      # `ocel dev`); point it at the control-plane DB.
+      OCEL_RESOURCE_POSTGRES_main: '{"connectionString":"postgres://postgres:postgres@localhost:5432/postgres"}'
+      # Provisioning cluster (docker-compose `ocel-cloud`) resolve carves
+      # per-user role+database pairs out of.
+      OCEL_CLOUD_ADMIN_URL: postgres://postgres:postgres@localhost:5433/postgres
+      # Better Auth session signing - seed and apps/web must share it for the
+      # minted bearer token to validate.
+      BETTER_AUTH_SECRET: e2e-test-secret-not-for-production
+      BETTER_AUTH_URL: http://localhost:3000
+      NEXT_PUBLIC_BETTER_AUTH_URL: http://localhost:3000
+      OCEL_API_URL: http://localhost:3000
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build ocel SDK (dist/)
+        run: pnpm --filter ocel build
+
+      - name: Build ocel CLI binary
+        working-directory: cli
+        # Output to cli/dist/ - the CLI's own main package lives at cli/ocel/,
+        # so `-o ocel` would collide with that directory. Matches the harness's
+        # default OCEL_BIN path.
+        run: go build -o dist/ocel ./ocel
+
+      - name: Start Postgres services
+        run: docker compose up -d
+
+      - name: Wait for Postgres to be ready
+        run: |
+          for port in 5432 5433; do
+            echo "Waiting for Postgres on :$port ..."
+            for i in $(seq 1 60); do
+              if pg_isready -h localhost -p $port -U postgres >/dev/null 2>&1; then
+                echo "Postgres on :$port is ready"
+                break
+              fi
+              sleep 1
+              if [ "$i" -eq 60 ]; then
+                echo "Postgres on :$port did not become ready" >&2
+                exit 1
+              fi
+            done
+          done
+
+      - name: Push control-plane schema
+        run: pnpm --filter @repo/db db:push
+
+      - name: Start apps/web (Next dev)
+        run: |
+          pnpm --filter web dev > /tmp/web.log 2>&1 &
+          echo "Waiting for apps/web on :3000 ..."
+          for i in $(seq 1 90); do
+            if curl -s -o /dev/null http://localhost:3000; then
+              echo "apps/web is up"
+              break
+            fi
+            sleep 1
+            if [ "$i" -eq 90 ]; then
+              echo "apps/web did not start; last log:" >&2
+              cat /tmp/web.log >&2
+              exit 1
+            fi
+          done
+
+      - name: Seed identity and export token
+        run: |
+          # The seed prints the bearer token as its last stdout line; take
+          # tail -n1 so any upstream stdout noise (e.g. the SDK's connection
+          # log) can't corrupt the capture. Diagnostics go to stderr.
+          TOKEN=$(pnpm --silent --filter @ocel-tests/e2e seed | tail -n1)
+          if [ -z "$TOKEN" ]; then
+            echo "seed did not print a token" >&2
+            exit 1
+          fi
+          echo "OCEL_ACCESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+
+      - name: Run e2e specs
+        run: pnpm --filter @ocel-tests/e2e test
+
+      - name: Dump apps/web log on failure
+        if: failure()
+        run: cat /tmp/web.log || true
