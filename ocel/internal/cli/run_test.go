@@ -27,7 +27,7 @@ func TestRunRun_NotLoggedIn_ReturnsExitErrorWithLoginInstruction(t *testing.T) {
 	defer func() { loadCredentials = prev }()
 
 	var stderr bytes.Buffer
-	err := runRun(context.Background(), t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+	err := runRun(context.Background(), nil, t.TempDir(), []string{"true"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
 
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) {
@@ -70,7 +70,7 @@ export default {
 	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
 	var stdout, stderr bytes.Buffer
-	err := runRun(context.Background(), root, appCmd, &stdout, &stderr, strings.NewReader(""))
+	err := runRun(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) {
@@ -130,7 +130,7 @@ export default {
 	leaderDone := make(chan error, 1)
 	var leaderStdout, leaderStderr bytes.Buffer
 	go func() {
-		leaderDone <- runDev(leaderCtx, root, []string{"sleep", "10"}, false, &leaderStdout, &leaderStderr, strings.NewReader(""))
+		leaderDone <- runDev(leaderCtx, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 	}()
 
 	waitForLockfile(t, projectID)
@@ -139,7 +139,7 @@ export default {
 	runAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
 	var stdout, stderr bytes.Buffer
-	err := runRun(context.Background(), root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
+	err := runRun(context.Background(), nil, root, runAppArgs, &stdout, &stderr, strings.NewReader(""))
 
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) {
@@ -215,7 +215,7 @@ export default {
 	var stdout, stderr bytes.Buffer
 	done := make(chan error, 1)
 	go func() {
-		done <- runRun(context.Background(), root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
+		done <- runRun(context.Background(), nil, root, []string{"true"}, &stdout, &stderr, strings.NewReader(""))
 	}()
 
 	select {

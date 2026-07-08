@@ -19,9 +19,8 @@ import (
 )
 
 // newFakeResolveServer serves POST /api/resources/resolve with the same
-// wire contract the real resolve endpoint (and the local dev harness that
-// mounts it verbatim) serves, so tests exercising the default (non-stubbed)
-// provision.Provision don't hit the network.
+// wire contract the real resolve endpoint serves, so tests exercising the
+// default (non-stubbed) provision.Provision don't hit the network.
 func newFakeResolveServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -153,51 +152,6 @@ func TestSync_MethodNotAllowedForNonPost(t *testing.T) {
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusMethodNotAllowed {
 		t.Fatalf("GET /sync status = %d, want 405", resp.StatusCode)
-	}
-}
-
-func TestNew_WithProvisionerOverridesStubImplementations(t *testing.T) {
-	fetchCalled := false
-	provisionCalled := false
-
-	s := New("https://api.example.com", "tok", "proj_1", WithProvisioner(
-		func(_ context.Context, _, _, projectID string) (provision.ProjectConfig, error) {
-			fetchCalled = true
-			return provision.ProjectConfig{ProjectID: projectID, OrgID: "org_custom", UserID: "user_custom"}, nil
-		},
-		func(context.Context, provision.ProjectConfig, []manifest.Entry) ([]provision.ProvisionedResource, error) {
-			provisionCalled = true
-			return []provision.ProvisionedResource{{Name: "custom"}}, nil
-		},
-	))
-
-	ts := httptest.NewServer(s.Mux())
-	defer ts.Close()
-
-	resp, err := http.Post(ts.URL+"/sync", "application/octet-stream", nil)
-	if err != nil {
-		t.Fatalf("POST /sync: %v", err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("POST /sync status = %d, want 200", resp.StatusCode)
-	}
-
-	result := <-s.Sync()
-	if result.Err != nil {
-		t.Fatalf("Sync result error: %v", result.Err)
-	}
-	if !fetchCalled {
-		t.Fatal("WithProvisioner: custom fetchProjectConfig was not called")
-	}
-	if !provisionCalled {
-		t.Fatal("WithProvisioner: custom provision was not called")
-	}
-	if result.ProjectConfig.OrgID != "org_custom" {
-		t.Fatalf("ProjectConfig.OrgID = %q, want %q", result.ProjectConfig.OrgID, "org_custom")
-	}
-	if len(result.Resources) != 1 || result.Resources[0].Name != "custom" {
-		t.Fatalf("Resources = %+v, want one entry named custom", result.Resources)
 	}
 }
 

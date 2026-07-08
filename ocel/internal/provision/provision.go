@@ -4,14 +4,11 @@
 // FetchProjectConfig is still stubbed until the real Ocel API exists for
 // project/org identity. Provision is real: it calls POST
 // {apiURL}/api/resources/resolve, the same endpoint
-// packages/api/src/routes/resources/resolve/route.ts serves in prod and the
-// local dev harness mounts verbatim (see internal/localharness.Client,
-// which shares this package's CachedResolve to speak the identical wire
-// protocol against the harness instead of the real API, and get the same
-// on-disk resolve cache for free). Both entry points' signatures are final:
-// the rest of the CLI (see internal/cli.devCmd) depends only on these
-// shapes, so wiring in the real FetchProjectConfig later requires no caller
-// changes.
+// packages/api/src/routes/resources/resolve/route.ts serves in prod, applying
+// the on-disk resolve cache (see CachedResolve). Both entry points'
+// signatures are final: the rest of the CLI (see internal/cli.devCmd) depends
+// only on these shapes, so wiring in the real FetchProjectConfig later
+// requires no caller changes.
 package provision
 
 import (
@@ -53,8 +50,7 @@ type ProvisionedResource struct {
 }
 
 // httpClient is used for every Resolve call. Package-level since Provision
-// (unlike localharness.Client, which owns its own *http.Client) has no
-// per-instance state to hang one off of.
+// has no per-instance state to hang one off of.
 var httpClient = &http.Client{Timeout: 30 * time.Second}
 
 // openCache opens the on-disk resolve cache CachedResolve reads and writes.
@@ -100,12 +96,10 @@ type resolveResponseBody struct {
 }
 
 // Resolve calls POST {baseURL}/api/resources/resolve - the endpoint
-// packages/api/src/routes/resources/resolve/route.ts serves, whether
-// baseURL is the real Ocel API or a locally spawned harness mounting the
-// same handler - and translates its flat env-map response back into one
-// ProvisionedResource per requested resource. It always calls the API;
-// callers that want the on-disk resolve cache applied should use
-// CachedResolve instead.
+// packages/api/src/routes/resources/resolve/route.ts serves - and translates
+// its flat env-map response back into one ProvisionedResource per requested
+// resource. It always calls the API; callers that want the on-disk resolve
+// cache applied should use CachedResolve instead.
 func Resolve(ctx context.Context, client *http.Client, baseURL, token, projectID string, resources []manifest.Entry) ([]ProvisionedResource, error) {
 	if len(resources) == 0 {
 		return []ProvisionedResource{}, nil
@@ -123,10 +117,7 @@ func Resolve(ctx context.Context, client *http.Client, baseURL, token, projectID
 // token) match the last cached resolve response for projectID, and its
 // server-provided expiresAt hasn't passed, it reuses that response instead of
 // calling the API. Otherwise it calls Resolve and restashes the fresh
-// response. Provision uses this, and so does internal/localharness.Client,
-// which calls it with the harness's baseURL/token - the same cache applies to
-// both the real API and local-harness modes since both ultimately end up
-// here.
+// response. Provision uses this.
 func CachedResolve(ctx context.Context, client *http.Client, baseURL, token, projectID string, resources []manifest.Entry) ([]ProvisionedResource, error) {
 	if len(resources) == 0 {
 		return []ProvisionedResource{}, nil
@@ -242,8 +233,7 @@ func resourcesFromEnv(resources []manifest.Entry, env map[string]string) ([]Prov
 
 // ResourceTypeName renders a ResourceType as it appears in
 // OCEL_RESOURCE_<TYPE>_<name>, matching the SDK's getConfig (see
-// packages/ocel/src/utils/get-config.ts). Exported for reuse by callers that
-// need to speak the same wire format, e.g. internal/localharness.
+// packages/ocel/src/utils/get-config.ts).
 func ResourceTypeName(t resourcesv1.ResourceType) (string, error) {
 	if t == resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED {
 		return "", fmt.Errorf("resource has unspecified type")
