@@ -5,6 +5,22 @@ name: E2E
 # docker-compose Postgres services. Kept separate from build.yml.
 on:
   pull_request:
+    # Only run for changes that can affect the CLI↔control-plane flow this
+    # suite exercises - the CLI and SDK, the examples/harness, and the
+    # control-plane packages the resolve/provision/auth path runs through.
+    # Docs, AGENTS.md, and unrelated tooling skip the whole service-heavy job.
+    paths:
+      - "cli/**"
+      - "pkg/proto/**"
+      - "packages/ocel/**"
+      - "packages/resources/**"
+      - "packages/api/**"
+      - "packages/auth/**"
+      - "packages/db/**"
+      - "apps/web/**"
+      - "examples/**"
+      - "tests/e2e/**"
+      - ".github/workflows/e2e.yml"
   workflow_dispatch:
 
 jobs:
