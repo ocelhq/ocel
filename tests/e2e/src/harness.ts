@@ -153,6 +153,9 @@ export async function runMigrate(
 
 export type DevHandle = {
   child: ChildProcess;
+  // Everything the CLI/app has written to stdout+stderr so far, so a crash
+  // can be reported with its own diagnostics.
+  output: () => string;
   stop: () => Promise<void>;
 };
 
@@ -165,13 +168,15 @@ export function startDev(spec: ExampleSpec, token: string): DevHandle {
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
   });
-  // Surface app/CLI output under the test for debugging.
-  child.stdout?.on("data", (d) =>
-    process.stderr.write(`[${spec.framework} dev] ${d}`),
-  );
-  child.stderr?.on("data", (d) =>
-    process.stderr.write(`[${spec.framework} dev] ${d}`),
-  );
+  // Surface app/CLI output under the test for debugging, and retain it so an
+  // early crash can be reported with the process's own output.
+  let captured = "";
+  const onData = (d: Buffer) => {
+    captured += d.toString();
+    process.stderr.write(`[${spec.framework} dev] ${d}`);
+  };
+  child.stdout?.on("data", onData);
+  child.stderr?.on("data", onData);
 
   const stop = async () => {
     if (child.pid && child.exitCode === null) {
@@ -190,17 +195,30 @@ export function startDev(spec: ExampleSpec, token: string): DevHandle {
     }
   };
 
-  return { child, stop };
+  return { child, output: () => captured, stop };
 }
 
-// Polls the readiness probe until it returns 200 or the timeout elapses.
+// Polls the readiness probe until it returns 200 or the timeout elapses. If
+// the dev process exits before then (auth failure, port conflict, bad
+// config), it fails fast with the process's exit code and output rather than
+// waiting out the full timeout.
 export async function waitForHealth(
   spec: ExampleSpec,
+  dev: DevHandle,
   timeoutMs = 90_000,
 ): Promise<void> {
   const url = `http://localhost:${spec.port}${spec.healthPath}`;
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    if (dev.child.exitCode !== null || dev.child.signalCode !== null) {
+      const how =
+        dev.child.exitCode !== null
+          ? `code ${dev.child.exitCode}`
+          : `signal ${dev.child.signalCode}`;
+      throw new Error(
+        `ocel dev for ${spec.framework} exited early (${how}) before ${url} became ready:\n${dev.output()}`,
+      );
+    }
     try {
       const res = await fetch(url);
       if (res.ok) {

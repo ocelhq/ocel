@@ -30,7 +30,7 @@ export function describeExample(spec: ExampleSpec) {
       await runInit(spec, token, runId);
       await runMigrate(spec, token);
       dev = startDev(spec, token);
-      await waitForHealth(spec);
+      await waitForHealth(spec, dev);
     }, 180_000);
 
     afterAll(async () => {
