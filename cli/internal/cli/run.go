@@ -11,10 +11,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/internal/credentials"
-	"github.com/ocelhq/ocel/internal/devserver"
-	"github.com/ocelhq/ocel/internal/election"
-	"github.com/ocelhq/ocel/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/election"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 )

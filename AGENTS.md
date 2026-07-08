@@ -13,12 +13,16 @@ repo.
 
 ## Architecture Overview
 
-- `ocel/` — Go CLI (cobra: `login`/`logout`/`dev`/`init`). `login` runs RFC 8628
+- `cli/` — Go CLI (cobra: `login`/`logout`/`dev`/`init`). The Go module is rooted at the
+  repo (`go.mod` at the top; `module github.com/ocelhq/ocel`), with the `main` package at
+  `cli/ocel/` and CLI-only packages under `cli/internal/*`. Installs as
+  `go install github.com/ocelhq/ocel/cli/ocel@latest` (leaf `ocel` → binary `ocel`).
+  `login` runs RFC 8628
   device-authorization against the control plane. `dev` resolves project config, starts
   a local dev server, bundles the app's `ocel/` resource declarations with esbuild and
   runs them in Node to discover what's declared, provisions those resources, then execs
   the app command with the resolved env injected. A root persistent `--api-url` flag
-  (in `internal/cli/root.go`) selects the control-plane origin; `effectiveAPIURL`
+  (in `cli/internal/cli/root.go`) selects the control-plane origin; `effectiveAPIURL`
   resolves it in decreasing precedence: explicit `--api-url` > persisted `creds.APIURL` >
   `$OCEL_API_URL` > (`$OCEL_DEV` set ? `http://localhost:3000` : `https://ocel.app`). The
   default now points at production, so local-dev login needs `OCEL_DEV=1` (or an explicit
@@ -50,7 +54,8 @@ repo.
   real (see `internal/provision.CachedResolve` and "CLI resolve cache" above) — only
   `FetchProjectConfig` (org/user identity) is still a stub, since no real endpoint for it
   exists yet either.
-- `proto/` — protobuf source of truth (buf), codegen'd into `ocel/pkg/proto` (Go) and
+- `proto/` — protobuf source of truth (buf), codegen'd into `pkg/proto` (Go, shared by
+  the CLI and the future Go SDK) and
   `packages/ocel/src/gen` (TS) via `pnpm gen`. Edit `.proto` files, then regenerate —
   never hand-edit generated output.
 
@@ -85,8 +90,8 @@ submits each closed issue's branch with Graphite (`gt`) once the sandbox run fin
 ```bash
 pnpm install                 # JS deps (pnpm workspace: apps/*, packages/*, packages/native-lib/*)
 pnpm gen                     # regenerate proto bindings after editing proto/**
-cd ocel && go build ./...    # build the CLI
-cd ocel && go test ./...     # Go tests
+go build ./...               # build the CLI (from repo root)
+go test ./...                # Go tests
 pnpm --filter ocel build     # build packages/ocel's dist/ - required once before any JS test run
                               # (packages/resources imports "ocel/postgres", which resolves to dist/)
 cd apps/web && pnpm test     # vitest
@@ -111,7 +116,7 @@ endpoint - the CLI just resolves connection strings it's handed back.
 
 **CLI resolve cache:** `ocel dev` caches each project's resolve response at
 `{os.UserConfigDir()}/ocel/resolve-cache/{projectID}.json` (mode 0600, see
-`ocel/internal/resolvecache`), keyed on a hash of the sorted resource definitions plus an
+`cli/internal/resolvecache`), keyed on a hash of the sorted resource definitions plus an
 account fingerprint (resolve base URL + bearer token). `internal/provision.CachedResolve` -
 which `provision.Provision` calls instead of `Resolve` directly - reuses the
 cached env and skips the API call when the current defs+account match and the
@@ -121,7 +126,8 @@ through and restashes the fresh response.
 
 ## Conventions & Patterns
 
-- Go workspace (`go.work`) covers `./ocel` only; JS side is the pnpm workspace.
+- The Go side is a single module rooted at the repo (`go.mod` at the top, no `go.work`);
+  JS side is the pnpm workspace.
 - Versioning goes through Changesets (`.changeset/`); `pnpm ci:version` is run by the
   release workflow, not by hand.
 - When wiring backend-dependent Go code ahead of the real backend/API, stub it with

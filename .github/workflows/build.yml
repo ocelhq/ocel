@@ -25,13 +25,12 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: ocel/go.mod
+          go-version-file: go.mod
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: go build (ocel)
-        working-directory: ocel
         run: go build ./...
 
       - name: pnpm --filter ocel build (tsc)

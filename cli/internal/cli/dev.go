@@ -14,14 +14,14 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/internal/credentials"
-	"github.com/ocelhq/ocel/internal/devserver"
-	"github.com/ocelhq/ocel/internal/discovery"
-	"github.com/ocelhq/ocel/internal/election"
-	"github.com/ocelhq/ocel/internal/lockfile"
-	"github.com/ocelhq/ocel/internal/projectconfig"
-	"github.com/ocelhq/ocel/internal/provision"
-	"github.com/ocelhq/ocel/internal/watcher"
+	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
+	"github.com/ocelhq/ocel/cli/internal/election"
+	"github.com/ocelhq/ocel/cli/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/watcher"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 )

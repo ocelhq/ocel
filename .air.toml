@@ -15,7 +15,7 @@ root = "."
 tmp_dir = "tmp"
 
 [build]
-cmd = "node ../scripts/build-native.mjs --host"
+cmd = "node scripts/build-native.mjs --host"
 entrypoint = ["true"]
 include_ext = ["go"]
 exclude_dir = ["tmp"]
