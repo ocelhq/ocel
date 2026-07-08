@@ -13,10 +13,10 @@ repo.
 
 ## Architecture Overview
 
-- `cli/` — Go CLI (cobra: `login`/`logout`/`dev`/`init`). The Go module is rooted at the
-  repo (`go.mod` at the top; `module github.com/ocelhq/ocel`), with the `main` package at
-  `cli/ocel/` and CLI-only packages under `cli/internal/*`. Installs as
-  `go install github.com/ocelhq/ocel/cli/ocel@latest` (leaf `ocel` → binary `ocel`).
+- `cli/` — Go CLI (cobra: `login`/`logout`/`dev`/`init`), its own module
+  `github.com/ocelhq/ocel/cli` (`cli/go.mod`) — there is no module at the repo root. The
+  `main` package is at `cli/ocel/` and CLI-only packages under `cli/internal/*`; installs
+  as `go install github.com/ocelhq/ocel/cli/ocel@latest` (leaf `ocel` → binary `ocel`).
   `login` runs RFC 8628
   device-authorization against the control plane. `dev` resolves project config, starts
   a local dev server, bundles the app's `ocel/` resource declarations with esbuild and
@@ -90,8 +90,8 @@ submits each closed issue's branch with Graphite (`gt`) once the sandbox run fin
 ```bash
 pnpm install                 # JS deps (pnpm workspace: apps/*, packages/*, packages/native-lib/*)
 pnpm gen                     # regenerate proto bindings after editing proto/**
-go build ./...               # build the CLI (from repo root)
-go test ./...                # Go tests
+cd cli && go build ./...     # build the CLI (each Go module builds from its own dir;
+cd cli && go test ./...      #   go.work ties them together — no module at the repo root)
 pnpm --filter ocel build     # build packages/ocel's dist/ - required once before any JS test run
                               # (packages/resources imports "ocel/postgres", which resolves to dist/)
 cd apps/web && pnpm test     # vitest
@@ -126,8 +126,15 @@ through and restashes the fresh response.
 
 ## Conventions & Patterns
 
-- The Go side is a single module rooted at the repo (`go.mod` at the top, no `go.work`);
-  JS side is the pnpm workspace.
+- The Go side is a multi-module monorepo with **no root module**: `cli/` (the CLI),
+  `pkg/proto` (lean shared protobuf/connect bindings), `sdk`, and `cloud/*` provider
+  binaries are each their own module, tied together for local dev by the root `go.work`.
+  Each keeps an isolated dependency graph so heavy CLI/provider deps never reach SDK
+  consumers. `pkg/proto` has no published module tag yet, so every consuming module pins
+  it with a `replace => <rel>/pkg/proto` in its own `go.mod` (without it, `go mod tidy`
+  mis-resolves the path to whatever module historically contained it); swap those for a
+  real `require github.com/ocelhq/ocel/pkg/proto vX.Y.Z` once proto is tagged. JS side is
+  the pnpm workspace.
 - Versioning goes through Changesets (`.changeset/`); `pnpm ci:version` is run by the
   release workflow, not by hand.
 - When wiring backend-dependent Go code ahead of the real backend/API, stub it with
