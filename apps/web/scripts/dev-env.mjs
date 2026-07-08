@@ -27,10 +27,10 @@ const child = spawn("next", ["dev", ...extraArgs], {
   env: process.env,
 });
 
-// Forward termination signals so Ctrl+C stops `next dev` cleanly.
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => child.kill(signal));
-}
+// Forward SIGTERM so process managers / `kill` can stop `next dev`.
+// SIGINT (Ctrl+C) is already delivered by the OS to the whole process
+// group, so forwarding it would send a second SIGINT to the child.
+process.on("SIGTERM", () => child.kill("SIGTERM"));
 
 child.on("exit", (code, signal) => {
   if (signal) {
