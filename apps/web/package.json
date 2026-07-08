@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "node --env-file=.env.local scripts/dev-env.mjs",
+    "dev": "node --env-file-if-exists=.env.local scripts/dev-env.mjs",
     "dev:ocel": "ocel dev -- next dev",
     "build": "next build",
     "start": "next start",
