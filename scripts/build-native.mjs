@@ -17,7 +17,7 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
-const GO_MODULE_DIR = REPO_ROOT;
+const GO_MODULE_DIR = join(REPO_ROOT, "cli");
 const VERSION_LDFLAG_PKG = "github.com/ocelhq/ocel/cli/internal/cli";
 
 // Single source of truth for the platform matrix already encoded in
@@ -105,7 +105,7 @@ function main() {
   if (args.version) {
     buildArgs.push("-ldflags", `-X ${VERSION_LDFLAG_PKG}.version=${args.version}`);
   }
-  buildArgs.push("./cli/ocel");
+  buildArgs.push("./ocel");
 
   const result = spawnSync("go", buildArgs, {
     cwd: GO_MODULE_DIR,

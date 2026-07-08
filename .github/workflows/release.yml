@@ -105,7 +105,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: go.mod
+          go-version-file: cli/go.mod
 
       - name: Setup Node
         uses: actions/setup-node@v4

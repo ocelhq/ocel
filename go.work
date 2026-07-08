@@ -1,0 +1,21 @@
+// Local development workspace for the Ocel multi-module monorepo.
+//
+// There is no module at the repo root — each unit is its own module so their
+// dependency graphs stay isolated:
+//   ./cli        -> github.com/ocelhq/ocel/cli        (the CLI; heavy deps)
+//   ./pkg/proto  -> github.com/ocelhq/ocel/pkg/proto  (lean shared bindings)
+//   ./sdk        -> github.com/ocelhq/ocel/sdk        (lean public SDK)
+//   ./cloud/aws  -> github.com/ocelhq/ocel/cloud/aws  (provider binary; heavy AWS SDK)
+//
+// This file is dev-only and never published. Each consuming module pins the
+// shared proto module to the local checkout via a `replace` in its own go.mod
+// (proto has no published tag yet); this workspace just lets you build/edit all
+// modules together. Released consumers use pinned require versions instead.
+go 1.25.3
+
+use (
+	./cli
+	./pkg/proto
+	./sdk
+	./cloud/aws
+)

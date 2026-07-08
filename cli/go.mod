@@ -1,4 +1,4 @@
-module github.com/ocelhq/ocel
+module github.com/ocelhq/ocel/cli
 
 go 1.25.3
 
@@ -28,6 +28,7 @@ require (
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
+	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/spf13/afero v1.14.0 // indirect
@@ -44,3 +45,5 @@ tool (
 	github.com/air-verse/air
 	google.golang.org/protobuf/cmd/protoc-gen-go
 )
+
+replace github.com/ocelhq/ocel/pkg/proto => ../pkg/proto
