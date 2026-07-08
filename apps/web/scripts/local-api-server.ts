@@ -12,48 +12,29 @@ import {
   listProjects,
   resolveResources,
 } from "@repo/api";
+import { Hono } from "hono";
 import { handleDevProjectConfig } from "./dev-handlers";
 
-export async function handleRequest(request: Request): Promise<Response> {
-  const url = new URL(request.url);
-  const { pathname } = url;
+const app = new Hono();
 
-  if (pathname === "/health") {
-    return new Response("ok", { status: 200 });
-  }
+app.get("/health", (c) => c.text("ok", 200));
 
-  if (pathname.startsWith("/api/auth/")) {
-    return authHandler(request);
-  }
+app.on(["GET", "POST", "PUT", "DELETE", "PATCH"], "/api/auth/*", (c) =>
+  authHandler(c.req.raw),
+);
 
-  if (pathname === "/api/projects") {
-    if (request.method === "GET") {
-      return listProjects(request);
-    }
-    if (request.method === "POST") {
-      return createProject(request);
-    }
-    return new Response("Method Not Allowed", { status: 405 });
-  }
+app.get("/api/projects", (c) => listProjects(c.req.raw));
+app.post("/api/projects", (c) => createProject(c.req.raw));
 
-  const projectByIdMatch = pathname.match(/^\/api\/projects\/([^/]+)$/);
-  if (projectByIdMatch) {
-    if (request.method === "GET") {
-      return getProjectById(request, decodeURIComponent(projectByIdMatch[1]));
-    }
-    return new Response("Method Not Allowed", { status: 405 });
-  }
+app.get("/api/projects/:id", (c) =>
+  getProjectById(c.req.raw, c.req.param("id")),
+);
 
-  if (pathname === "/api/resources/resolve" && request.method === "POST") {
-    return resolveResources(request);
-  }
+app.post("/api/resources/resolve", (c) => resolveResources(c.req.raw));
 
-  if (pathname === "/dev/project-config" && request.method === "POST") {
-    return handleDevProjectConfig(request);
-  }
+app.post("/dev/project-config", (c) => handleDevProjectConfig(c.req.raw));
 
-  return new Response("Not found", { status: 404 });
-}
+export const handleRequest = app.fetch;
 
 // PORT is how internal/localharness.Spawn hands this process its listening
 // port on the Go CLI side.
