@@ -1,7 +1,9 @@
 import { Postgres, type PostgresConfig } from "./pg";
 import { Pool } from "pg";
 
-export function postgres(id: string, config?: PostgresConfig): Pool {
+type PgReturn = Pool & { connectionString: string };
+
+export function postgres(id: string, config?: PostgresConfig): PgReturn {
   const pg = new Postgres(id, config);
 
   // During discovery, declaration files are imported only so the Postgres
@@ -10,7 +12,7 @@ export function postgres(id: string, config?: PostgresConfig): Pool {
   // provisioning happens after discovery — so hand back a placeholder that
   // fails loudly if anything actually touches it in this phase.
   if (process.env.OCEL_PHASE === "discovery") {
-    return new Proxy({} as Pool, {
+    return new Proxy({} as PgReturn, {
       get(_target, prop) {
         throw new Error(
           `'postgres("${id}")' cannot be used during discovery: tried to access '${String(prop)}' before the resource was provisioned`,
@@ -25,5 +27,7 @@ export function postgres(id: string, config?: PostgresConfig): Pool {
     connectionString,
   });
 
-  return client;
+  return Object.assign(client, {
+    connectionString,
+  });
 }
