@@ -3,6 +3,8 @@ packages:
   - packages/*
   - packages/native-lib/*
   - tools/*
+  - examples/*
+  - tests/*
 
 allowBuilds:
   '@bufbuild/buf': true

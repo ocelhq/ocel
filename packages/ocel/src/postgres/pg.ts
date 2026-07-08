@@ -36,8 +36,6 @@ export class Postgres implements Component {
       connectionString: z.string(),
     });
 
-    console.log({ config });
-
     const opts = schema.safeParse(config);
     if (!opts.success) {
       throw new Error(
