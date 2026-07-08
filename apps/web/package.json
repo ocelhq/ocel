@@ -3,7 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "ocel dev -- next dev",
+    "dev": "node --env-file=.env.local scripts/dev-env.mjs",
+    "dev:ocel": "ocel dev -- next dev",
     "build": "next build",
     "start": "next start",
     "lint": "biome check",
@@ -35,7 +36,6 @@
     "babel-plugin-react-compiler": "1.0.0",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
-    "hono": "~4.11.1",
     "pg": "^8.22.0",
     "tailwindcss": "^4",
     "typescript": "^5",

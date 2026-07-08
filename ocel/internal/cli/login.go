@@ -17,12 +17,10 @@ import (
 	"github.com/ocelhq/ocel/internal/credentials"
 )
 
-// defaultAPIURL is used when neither --api-url nor OCEL_API_URL is set.
-// There is no deployed production Ocel server yet, so this points at the
-// local dev server started by `pnpm --filter web dev`.
-const defaultAPIURL = "http://localhost:3000"
+// defaultAPIURL is the production Ocel API origin, used when neither
+// --api-url, OCEL_API_URL, nor OCEL_DEV selects another target.
+const defaultAPIURL = "https://ocel.app"
 
-var loginAPIURL string
 var loginForce bool
 
 var loginCmd = &cobra.Command{
@@ -36,22 +34,29 @@ var loginCmd = &cobra.Command{
 }
 
 func init() {
-	loginCmd.Flags().StringVar(&loginAPIURL, "api-url", resolveAPIURL(), "Base URL of the Ocel server")
 	loginCmd.Flags().BoolVar(&loginForce, "force", false, "Re-authenticate even if already logged in")
 }
 
-// resolveAPIURL determines the default --api-url value: the OCEL_API_URL
-// env var if set, otherwise defaultAPIURL.
+// resolveAPIURL determines the default API origin when no --api-url flag and
+// no persisted credentials select one: OCEL_API_URL if set, else
+// http://localhost:3000 when OCEL_DEV is set (local development), else the
+// production defaultAPIURL.
 func resolveAPIURL() string {
 	if v := strings.TrimSpace(os.Getenv("OCEL_API_URL")); v != "" {
 		return v
+	}
+	if os.Getenv("OCEL_DEV") != "" {
+		return "http://localhost:3000"
 	}
 	return defaultAPIURL
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
 	out := cmd.OutOrStdout()
-	apiURL := strings.TrimRight(loginAPIURL, "/")
+	// No credentials exist yet at login time, so the credentials branch of
+	// effectiveAPIURL is naturally empty: an explicit --api-url wins,
+	// otherwise the resolved default is used.
+	apiURL := strings.TrimRight(effectiveAPIURL(cmd, ""), "/")
 
 	if !loginForce {
 		if existing, err := credentials.Load(); err == nil {

@@ -30,7 +30,7 @@ var runCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		return runRun(cmd.Context(), cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runRun(cmd.Context(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
@@ -38,8 +38,10 @@ var runCmd = &cobra.Command{
 // running leader's resolved env as a one-shot follower, or performs a
 // standalone ephemeral resolution when no leader exists, before running
 // appArgs once and returning with its exit code. Unlike `ocel dev`, it never
-// watches for file changes and never writes a leader lockfile.
-func runRun(ctx context.Context, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+// watches for file changes and never writes a leader lockfile. cmd carries
+// the root --api-url flag so an explicit override wins over the persisted
+// credentials' API URL (see effectiveAPIURL); it may be nil in tests.
+func runRun(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	creds, err := loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
@@ -59,7 +61,7 @@ func runRun(ctx context.Context, cwd string, appArgs []string, stdout, stderr io
 	if role.Role == election.Follower {
 		return runOnceAsFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 	}
-	return runStandalone(ctx, creds, cfg, appArgs, stdout, stderr, stdin)
+	return runStandalone(ctx, creds, effectiveAPIURL(cmd, creds.APIURL), cfg, appArgs, stdout, stderr, stdin)
 }
 
 // runOnceAsFollower connects to the leader at leaderAddr, takes the first
@@ -86,8 +88,10 @@ func runOnceAsFollower(ctx context.Context, leaderAddr string, appArgs []string,
 // for its own discovery + sync, injects the resolved env, runs appArgs once,
 // and tears the server down before returning. It never writes a lockfile, so
 // it never advertises itself as a leader to other ocel dev/run processes.
-func runStandalone(ctx context.Context, creds credentials.Credentials, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	srv := devserver.New(creds.APIURL, creds.AccessToken, cfg.ProjectID)
+// apiURL is the resolved Ocel API origin provisioning is authenticated
+// against (see effectiveAPIURL).
+func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	srv := devserver.New(apiURL, creds.AccessToken, cfg.ProjectID)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

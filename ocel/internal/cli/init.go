@@ -47,11 +47,10 @@ var initCmd = &cobra.Command{
 		}
 
 		opts := initOpts
-		if !cmd.Flags().Changed("api-url") {
-			if creds, err := loadCredentials(); err == nil && creds.APIURL != "" {
-				opts.apiURL = creds.APIURL
-			}
-		}
+		// An explicit --api-url wins; otherwise fall back to the persisted
+		// credentials' API URL, then the resolved default (effectiveAPIURL).
+		creds, _ := loadCredentials()
+		opts.apiURL = effectiveAPIURL(cmd, creds.APIURL)
 
 		return runInit(cmd.Context(), cwd, name, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
@@ -60,7 +59,6 @@ var initCmd = &cobra.Command{
 func init() {
 	initCmd.Flags().BoolVarP(&initOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
 	initCmd.Flags().StringVar(&initOpts.org, "org", "", "Select an organization by slug, bypassing the interactive picker")
-	initCmd.Flags().StringVar(&initOpts.apiURL, "api-url", resolveAPIURL(), "Base URL of the Ocel server")
 }
 
 // nonSlugChars matches runs of characters not allowed in a slug, per the

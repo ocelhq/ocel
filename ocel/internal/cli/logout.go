@@ -34,11 +34,12 @@ func runLogout(cmd *cobra.Command, args []string) error {
 
 	// Best-effort server-side revocation. Local credentials are cleared
 	// regardless of whether this succeeds, so a stale/unreachable server
-	// never prevents the user from logging out locally.
-	if creds.APIURL != "" {
+	// never prevents the user from logging out locally. An explicit
+	// --api-url overrides the persisted credentials' API URL.
+	if apiURL := effectiveAPIURL(cmd, creds.APIURL); apiURL != "" {
 		ctx, cancel := context.WithTimeout(cmd.Context(), 10*time.Second)
 		defer cancel()
-		client := authclient.New(creds.APIURL)
+		client := authclient.New(apiURL)
 		if err := client.SignOut(ctx, creds.AccessToken); err != nil {
 			fmt.Fprintf(out, "Warning: could not revoke the session on the server (%v). Continuing with local logout.\n", err)
 		}

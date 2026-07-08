@@ -17,7 +17,12 @@ repo.
   device-authorization against the control plane. `dev` resolves project config, starts
   a local dev server, bundles the app's `ocel/` resource declarations with esbuild and
   runs them in Node to discover what's declared, provisions those resources, then execs
-  the app command with the resolved env injected.
+  the app command with the resolved env injected. A root persistent `--api-url` flag
+  (in `internal/cli/root.go`) selects the control-plane origin; `effectiveAPIURL`
+  resolves it in decreasing precedence: explicit `--api-url` > persisted `creds.APIURL` >
+  `$OCEL_API_URL` > (`$OCEL_DEV` set ? `http://localhost:3000` : `https://ocel.app`). The
+  default now points at production, so local-dev login needs `OCEL_DEV=1` (or an explicit
+  `--api-url http://localhost:3000`).
 - `packages/ocel` — the TS SDK (`ocel`, `ocel/postgres`) apps import to declare
   resources; talks to the CLI's local dev server during `ocel dev`.
 - `packages/native-lib` — prebuilt per-platform CLI binaries, wired as `ocel`'s
@@ -33,18 +38,18 @@ repo.
   directly (`"exports": "./src/index.ts"`) — consumers transpile/bundle them.
 - `apps/web` — Next.js control plane, now a thin shell: `app/api/**/route.ts` files
   just re-export `@repo/api` handlers, including `resolveResources` at
-  `POST /api/resources/resolve`. `scripts/local-api-server.ts` is a local-dev Bun
-  harness mounting those same handlers — `resolveResources` verbatim at the same path
-  prod serves it — plus a dev-only `POST /dev/project-config` passthrough (there's no
-  real project-identity endpoint yet); the hidden `ocel dev --local-harness` flag spawns
-  it (via `ocel/internal/localharness`) so the resolve handshake can run against it and
-  tear it down before the app command starts — instead of deadlocking on the control
-  plane it is itself starting. The Go CLI's `internal/provision.Provision` calls this
-  same `POST .../api/resources/resolve` contract for real (see
-  `internal/provision.CachedResolve`, which `internal/localharness.Client` also calls,
-  just against the harness's base URL instead of the real API — see "CLI resolve cache"
-  above for the on-disk cache both share) — only `FetchProjectConfig` (org/user identity)
-  is still a stub, since no real endpoint for it exists yet either.
+  `POST /api/resources/resolve`. It has two dev commands. `pnpm dev` is the daily
+  driver: `scripts/dev-env.mjs` (plain Node) sets `OCEL_RESOURCE_POSTGRES_main` to
+  `{"connectionString": DATABASE_URL}` — apps/web's `postgres("main")` is just its own
+  control-plane DB, so the SDK's one-env-var-per-resource contract is satisfiable by
+  direct injection — then runs `next dev`. No CLI, API, or provisioning handshake, so
+  apps/web never has to reach back into an API it is itself starting. `pnpm dev:ocel`
+  (`ocel dev -- next dev`) is the real path for when a live API exists; it needs login
+  plus a running API and is non-functional until that backend lands. The Go CLI's
+  `internal/provision.Provision` calls the `POST .../api/resources/resolve` contract for
+  real (see `internal/provision.CachedResolve` and "CLI resolve cache" above) — only
+  `FetchProjectConfig` (org/user identity) is still a stub, since no real endpoint for it
+  exists yet either.
 - `proto/` — protobuf source of truth (buf), codegen'd into `ocel/pkg/proto` (Go) and
   `packages/ocel/src/gen` (TS) via `pnpm gen`. Edit `.proto` files, then regenerate —
   never hand-edit generated output.
@@ -108,8 +113,7 @@ endpoint - the CLI just resolves connection strings it's handed back.
 `{os.UserConfigDir()}/ocel/resolve-cache/{projectID}.json` (mode 0600, see
 `ocel/internal/resolvecache`), keyed on a hash of the sorted resource definitions plus an
 account fingerprint (resolve base URL + bearer token). `internal/provision.CachedResolve` -
-which both `provision.Provision` (real API) and `internal/localharness.Client.Provision`
-(the `--local-harness` dogfooding path) call instead of `Resolve` directly - reuses the
+which `provision.Provision` calls instead of `Resolve` directly - reuses the
 cached env and skips the API call when the current defs+account match and the
 server-provided `expiresAt` (see `RESOLVE_TTL_MS` in
 `packages/api/src/routes/resources/resolve/route.ts`) hasn't passed; otherwise it calls

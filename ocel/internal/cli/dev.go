@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -19,7 +18,6 @@ import (
 	"github.com/ocelhq/ocel/internal/devserver"
 	"github.com/ocelhq/ocel/internal/discovery"
 	"github.com/ocelhq/ocel/internal/election"
-	"github.com/ocelhq/ocel/internal/localharness"
 	"github.com/ocelhq/ocel/internal/lockfile"
 	"github.com/ocelhq/ocel/internal/projectconfig"
 	"github.com/ocelhq/ocel/internal/provision"
@@ -31,22 +29,6 @@ import (
 // loadCredentials is a seam over credentials.Load so tests can simulate an
 // unauthenticated CLI without touching the real keyring/credentials file.
 var loadCredentials = credentials.Load
-
-// startLocalHarness is a seam over localharness.Spawn so tests can back the
-// hidden --local-harness flag with an httptest server instead of a real bun
-// process. It returns the harness's host:port and a stop function.
-var startLocalHarness = func(ctx context.Context, projectDir string) (string, func(), error) {
-	proc, err := localharness.Spawn(ctx, localharness.SpawnConfig{
-		Command: "bun",
-		Args:    []string{"scripts/local-api-server.ts"},
-		Env:     os.Environ(),
-		Dir:     projectDir,
-	})
-	if err != nil {
-		return "", nil, err
-	}
-	return proc.Addr, proc.Stop, nil
-}
 
 // watchDebounce is the quiet period the leader's file watcher waits for
 // after the last change under discovery.paths before re-resolving. It's a
@@ -63,31 +45,16 @@ var devCmd = &cobra.Command{
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
-		useLocalHarness, err := cmd.Flags().GetBool("local-harness")
-		if err != nil {
-			return err
-		}
-		return runDev(cmd.Context(), cwd, args, useLocalHarness, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runDev(cmd.Context(), cmd, cwd, args, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
-}
-
-func init() {
-	// Undocumented dogfooding escape hatch: routes provisioning through a
-	// locally spawned harness (apps/web/scripts/local-api-server.ts) instead
-	// of the control-plane API, which can't be up yet when it is itself the
-	// app being started (see ocelhq-z7j).
-	devCmd.Flags().Bool("local-harness", false, "route provisioning through a locally spawned harness")
-	_ = devCmd.Flags().MarkHidden("local-harness")
 }
 
 // runDev resolves the project config, verifies auth, discovers and syncs
 // resources, and spawns appArgs verbatim with the resolved environment. It
-// does not start appArgs if auth, discovery, or sync fail.
-//
-// With useLocalHarness set, provisioning routes through a locally spawned
-// harness process that lives only for the duration of the sync handshake:
-// it is torn down before appArgs starts.
-func runDev(ctx context.Context, cwd string, appArgs []string, useLocalHarness bool, stdout, stderr io.Writer, stdin io.Reader) error {
+// does not start appArgs if auth, discovery, or sync fail. cmd carries the
+// root --api-url flag so an explicit override wins over the persisted
+// credentials' API URL (see effectiveAPIURL); it may be nil in tests.
+func runDev(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	creds, err := loadCredentials()
 	if err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
@@ -99,20 +66,7 @@ func runDev(ctx context.Context, cwd string, appArgs []string, useLocalHarness b
 		return err
 	}
 
-	var srvOpts []devserver.Option
-	stopHarness := func() {}
-	if useLocalHarness {
-		addr, stop, err := startLocalHarness(ctx, cfg.Dir)
-		if err != nil {
-			return fmt.Errorf("start local harness: %w", err)
-		}
-		var once sync.Once
-		stopHarness = func() { once.Do(stop) }
-		defer stopHarness()
-
-		client := localharness.NewClient("http://"+addr, creds.AccessToken)
-		srvOpts = append(srvOpts, devserver.WithProvisioner(client.FetchProjectConfig, client.Provision))
-	}
+	apiURL := effectiveAPIURL(cmd, creds.APIURL)
 
 	// A concurrent `ocel dev` can create the lockfile between our Elect and
 	// runLeader's exclusive lockfile.Create; on that loss, re-elect to join
@@ -126,7 +80,7 @@ func runDev(ctx context.Context, cwd string, appArgs []string, useLocalHarness b
 		if role.Role == election.Follower {
 			return runFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
-		if err := runLeader(ctx, creds, cfg, appArgs, stdout, stderr, stdin, stopHarness, srvOpts...); !errors.Is(err, errLostElection) {
+		if err := runLeader(ctx, creds, apiURL, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, errLostElection) {
 			return err
 		}
 	}
@@ -140,14 +94,10 @@ var errLostElection = errors.New("another process became leader first")
 // runLeader discovers and syncs resources, pushes the resolved env to any
 // connected followers, and spawns appArgs verbatim with that same
 // environment. It does not start appArgs if auth, discovery, or sync fail.
-// srvOpts is forwarded to devserver.New verbatim - in particular the
-// WithProvisioner override runDev builds for --local-harness. stopHarness is
-// called once the initial sync completes, before appArgs starts - the
-// harness (if any) lives only for that handshake; a later watch-triggered
-// re-resolve under --local-harness would still call through to it, but
-// that's outside this hidden flag's scope (dogfooding cold-start only).
-func runLeader(ctx context.Context, creds credentials.Credentials, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader, stopHarness func(), srvOpts ...devserver.Option) error {
-	srv := devserver.New(creds.APIURL, creds.AccessToken, cfg.ProjectID, srvOpts...)
+// apiURL is the resolved Ocel API origin provisioning is authenticated
+// against (see effectiveAPIURL).
+func runLeader(ctx context.Context, creds credentials.Credentials, apiURL string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	srv := devserver.New(apiURL, creds.AccessToken, cfg.ProjectID)
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -173,7 +123,6 @@ func runLeader(ctx context.Context, creds credentials.Credentials, cfg *projectc
 		return err
 	}
 	srv.PushEnv(resolved)
-	stopHarness()
 
 	if err := watchAndReResolve(ctx, srv, cfg, devServerAddr, stdout, stderr); err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
