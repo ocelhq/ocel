@@ -15,7 +15,7 @@ go 1.25.3
 
 use (
 	./cli
+	./cloud/aws
 	./pkg/proto
 	./sdk
-	./cloud/aws
 )
