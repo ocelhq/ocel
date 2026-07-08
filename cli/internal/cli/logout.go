@@ -8,8 +8,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/internal/authclient"
-	"github.com/ocelhq/ocel/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/authclient"
+	"github.com/ocelhq/ocel/cli/internal/credentials"
 )
 
 var logoutCmd = &cobra.Command{

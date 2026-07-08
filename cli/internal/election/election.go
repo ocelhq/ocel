@@ -9,7 +9,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/ocelhq/ocel/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/lockfile"
 )
 
 // Role is the outcome of Elect for the current process.

@@ -11,8 +11,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	"github.com/ocelhq/ocel/internal/manifest"
-	"github.com/ocelhq/ocel/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/manifest"
+	"github.com/ocelhq/ocel/cli/internal/provision"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"

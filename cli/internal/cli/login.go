@@ -13,8 +13,8 @@ import (
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/internal/authclient"
-	"github.com/ocelhq/ocel/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/authclient"
+	"github.com/ocelhq/ocel/cli/internal/credentials"
 )
 
 // defaultAPIURL is the production Ocel API origin, used when neither

@@ -3,7 +3,7 @@
 //
 // This is the single implementation of the Node platform/arch <-> Go
 // GOOS/GOARCH mapping and the `go build` invocation itself, reused by both
-// local dev (`ocel/.air.toml` via `--host`) and CI (`release.yml`'s
+// local dev (`.air.toml` via `--host`) and CI (`release.yml`'s
 // build-binaries matrix via explicit `--goos`/`--goarch`).
 //
 // Usage:
@@ -17,8 +17,8 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
-const GO_MODULE_DIR = join(REPO_ROOT, "ocel");
-const VERSION_LDFLAG_PKG = "github.com/ocelhq/ocel/internal/cli";
+const GO_MODULE_DIR = REPO_ROOT;
+const VERSION_LDFLAG_PKG = "github.com/ocelhq/ocel/cli/internal/cli";
 
 // Single source of truth for the platform matrix already encoded in
 // `packages/ocel/package.json`'s `optionalDependencies`. Node's
@@ -105,7 +105,7 @@ function main() {
   if (args.version) {
     buildArgs.push("-ldflags", `-X ${VERSION_LDFLAG_PKG}.version=${args.version}`);
   }
-  buildArgs.push("./cmd/ocel");
+  buildArgs.push("./cli/ocel");
 
   const result = spawnSync("go", buildArgs, {
     cwd: GO_MODULE_DIR,

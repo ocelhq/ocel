@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ocelhq/ocel/internal/manifest"
-	"github.com/ocelhq/ocel/internal/resolvecache"
+	"github.com/ocelhq/ocel/cli/internal/manifest"
+	"github.com/ocelhq/ocel/cli/internal/resolvecache"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 

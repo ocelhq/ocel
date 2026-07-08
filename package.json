@@ -3,7 +3,7 @@
   "description": "Ocel monorepo",
   "scripts": {
     "gen": "buf generate --template buf.gen.go.yaml && pnpm buf generate --template buf.gen.ts.yaml",
-    "dev:cli": "cd ocel && go tool air",
+    "dev:cli": "go tool air",
     "ci:version": "changeset version && pnpm install --lockfile-only"
   },
   "license": "MIT",

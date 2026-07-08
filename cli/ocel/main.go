@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ocelhq/ocel/internal/cli"
+	"github.com/ocelhq/ocel/cli/internal/cli"
 )
 
 func main() {

@@ -7,7 +7,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// version is set at build time via -ldflags "-X github.com/ocelhq/ocel/internal/cli.version=...".
+// version is set at build time via -ldflags "-X github.com/ocelhq/ocel/cli/internal/cli.version=...".
 var version = "dev"
 
 // apiURLFlag is bound to the root persistent --api-url flag, shared by every

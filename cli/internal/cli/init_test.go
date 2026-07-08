@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/credentials"
 )
 
 func TestSlugify(t *testing.T) {

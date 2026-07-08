@@ -17,8 +17,8 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/internal/authclient"
-	"github.com/ocelhq/ocel/internal/projectclient"
+	"github.com/ocelhq/ocel/cli/internal/authclient"
+	"github.com/ocelhq/ocel/cli/internal/projectclient"
 )
 
 // initOptions holds the flags accepted by `ocel init`.

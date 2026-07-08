@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/ocelhq/ocel/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/lockfile"
 )
 
 func TestElect_NoLockfile_BecomesLeader(t *testing.T) {

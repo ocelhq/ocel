@@ -17,10 +17,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ocelhq/ocel/internal/credentials"
-	"github.com/ocelhq/ocel/internal/devserver"
-	"github.com/ocelhq/ocel/internal/lockfile"
-	"github.com/ocelhq/ocel/internal/provision"
+	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/provision"
 )
 
 func TestMergeEnv_Precedence(t *testing.T) {
