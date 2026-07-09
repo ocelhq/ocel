@@ -2,7 +2,7 @@
   "name": "ocel",
   "version": "0.0.1-alpha.0",
   "type": "module",
-  "description": "The power of AWS with the DX of Vercel",
+  "description": "ocel sdk turns cloud infrastructure into function calls",
   "bin": {
     "ocel": "./bin/run.js"
   },

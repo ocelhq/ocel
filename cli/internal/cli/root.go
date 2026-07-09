@@ -19,7 +19,7 @@ var apiURLFlag string
 var rootCmd = &cobra.Command{
 	Use:           "ocel",
 	Short:         "Ocel CLI",
-	Long:          "Ocel CLI\n\nThe power of AWS with the DX of Vercel.",
+	Long:          "Ocel CLI\n\nocel deploys apps to your own cloud",
 	Version:       version,
 	SilenceUsage:  true,
 	SilenceErrors: true,

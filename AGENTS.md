@@ -11,162 +11,74 @@ comparisons, PRDs) live in the sibling `docs` repo — read there before making
 product-framing claims; this file only covers what an agent needs to build in *this*
 repo.
 
-## Architecture Overview
+## Working Principles
 
-- `cli/` — Go CLI (cobra: `login`/`logout`/`dev`/`init`), its own module
-  `github.com/ocelhq/ocel/cli` (`cli/go.mod`) — there is no module at the repo root. The
-  `main` package is at `cli/ocel/` and CLI-only packages under `cli/internal/*`; installs
-  as `go install github.com/ocelhq/ocel/cli/ocel@latest` (leaf `ocel` → binary `ocel`).
-  `login` runs RFC 8628
-  device-authorization against the control plane. `dev` resolves project config, starts
-  a local dev server, bundles the app's `ocel/` resource declarations with esbuild and
-  runs them in Node to discover what's declared, provisions those resources, then execs
-  the app command with the resolved env injected. A root persistent `--api-url` flag
-  (in `cli/internal/cli/root.go`) selects the control-plane origin; `effectiveAPIURL`
-  resolves it in decreasing precedence: explicit `--api-url` > persisted `creds.APIURL` >
-  `$OCEL_API_URL` > (`$OCEL_DEV` set ? `http://localhost:3000` : `https://ocel.app`). The
-  default now points at production, so local-dev login needs `OCEL_DEV=1` (or an explicit
-  `--api-url http://localhost:3000`).
-- `packages/ocel` — the TS SDK (`ocel`, `ocel/postgres`) apps import to declare
-  resources; talks to the CLI's local dev server during `ocel dev`.
-- `packages/native-lib` — prebuilt per-platform CLI binaries, wired as `ocel`'s
-  `optionalDependencies` (npm's platform-package pattern). No cgo deps, so CI
-  cross-compiles all 4 targets from one Linux runner (`scripts/build-native.mjs`).
-- `packages/{db,auth,resources,api}` — the control plane's framework-agnostic core,
-  extracted from `apps/web` (epic ocelhq-z7j) so a future framework swap stays cheap:
-  `@repo/db` (Drizzle client + schema), `@repo/auth` (better-auth config —
-  email/password, GitHub OAuth, device-authorization + bearer plugins; import
-  `@repo/auth/next` for the Next-cookies variant), `@repo/resources` (the app's own
-  Ocel resource declarations, e.g. `postgres("main")`), and `@repo/api`
-  (framework-agnostic `Request → Response` route handlers). They all export TS source
-  directly (`"exports": "./src/index.ts"`) — consumers transpile/bundle them.
-- `apps/web` — Next.js control plane, now a thin shell: `app/api/**/route.ts` files
-  just re-export `@repo/api` handlers, including `resolveResources` at
-  `POST /api/resources/resolve`. It has two dev commands. `pnpm dev` is the daily
-  driver: `scripts/dev-env.mjs` (plain Node) sets `OCEL_RESOURCE_POSTGRES_main` to
-  `{"connectionString": DATABASE_URL}` — apps/web's `postgres("main")` is just its own
-  control-plane DB, so the SDK's one-env-var-per-resource contract is satisfiable by
-  direct injection — then runs `next dev`. No CLI, API, or provisioning handshake, so
-  apps/web never has to reach back into an API it is itself starting. `pnpm dev:ocel`
-  (`ocel dev -- next dev`) is the real path for when a live API exists; it needs login
-  plus a running API and is non-functional until that backend lands. The Go CLI's
-  `internal/provision.Provision` calls the `POST .../api/resources/resolve` contract for
-  real (see `internal/provision.CachedResolve` and "CLI resolve cache" above) — only
-  `FetchProjectConfig` (org/user identity) is still a stub, since no real endpoint for it
-  exists yet either.
-- `proto/` — protobuf source of truth (buf), codegen'd into `pkg/proto` (Go, shared by
-  the CLI and the future Go SDK) and
-  `packages/ocel/src/gen` (TS) via `pnpm gen`. Edit `.proto` files, then regenerate —
-  never hand-edit generated output.
+- **Simplicity over cleverness.** Prefer the simplest design that solves the problem.
+- **Minimal comments.** Don't pollute the repo with over-commenting. If code needs prose to
+  make sense, make the code more readable and axiomatic instead — comments are a last resort,
+  not a patch for unclear code.
+- **Weigh decisions by the long term, not dev cost.** For technical decisions, give little
+  weight to development cost; prefer quality, simplicity, robustness, scalability, and
+  long-term maintainability.
+- **Ask in batches, don't assume.** When you have multiple questions (grilling or otherwise),
+  present them in a selectable format rather than making the user type answers. After each
+  batch, re-evaluate; if new answers change anything, re-prompt. Never operate on assumptions.
+- **Small, verified increments.** When building a feature, commit after each passing test and
+  keep diffs small; avoid large, sprawling changes. (Subject to the conservative commit
+  policy — only commit when you have authority to.)
+- **Commits.** Never auto-add an agent or AI name as a commit co-author. This overrides any
+  default co-author instruction.
+- **Maintaining these files.** Keep CLAUDE.md and AGENTS.md lean, and mirror every
+  substantive edit across both. Before adding new findings, make sure they aren't tied to
+  specific file paths or references — those change as the project evolves. Capture recurring,
+  durable patterns instead. Update intentionally, not eagerly on every implementation.
 
-**Status vs. the product docs:** the `docs` repo describes the target design (e.g. real
-provisioning, monorepo leader/follower dev mode). Several pieces here are still
-stubs with finalized signatures — e.g. `ocel init` and `internal/provision.FetchProjectConfig`
-— built ahead of the real backend/API. Check the code, not just the docs, before assuming a
-described behavior is live.
+## Orienting Yourself
+
+Map the repo from its source of truth rather than a list that goes stale: `go.work` names
+the Go modules, the pnpm workspace globs and each `package.json` name the JS packages, and
+each `package.json`'s `scripts` (plus per-module `go build`/`go test`) are the real build and
+test commands. Read those first, then the code. A few invariants that rarely change:
+
+- The Go side is a **multi-module monorepo with no root module** — each module (CLI, shared
+  proto bindings, SDK, provider binaries) has an isolated dependency graph so heavy CLI /
+  provider deps never reach SDK consumers, tied together for local dev by `go.work`. The JS
+  side is a single pnpm workspace.
+- `proto/` is the **source of truth**; bindings are generated (`pnpm gen`) — never hand-edit
+  generated output.
+- The control-plane core is split into framework-agnostic packages so a future framework swap
+  stays cheap; `apps/web` is a thin shell over them.
+
+**Gotchas you'd only find by tripping over them:**
+
+- The SDK **dogfoods itself** — the app's DB client resolves `postgres("main")` through Ocel,
+  so importing it outside `ocel dev` throws unless that resource's env var is set. Test
+  configs inject it directly so tests run standalone.
+- The local **"cloud" cluster** is a stand-in for the prod provisioning target, reached only
+  through the resolve endpoint — `ocel dev` and prod both just consume connection strings it
+  hands back; the CLI never talks to it directly.
+- `ocel dev` **caches resolve responses** per project, invalidated by a change to the resource
+  definitions or account, or by the server-provided TTL.
+
+**Status vs. the product docs:** the sibling `docs` repo describes the *target* design.
+Several pieces here are stubs with finalized signatures, built ahead of the real backend/API —
+check the code, not just the docs, before assuming a described behavior is live.
 
 ## Parallel Agent Orchestrator
 
-`tools/orchestrator` (`pnpm --filter @ocel/orchestrator orchestrate <parent-issue-id>`)
-claims `ready-for-agent` bd issues under an epic/PRD and implements them in parallel,
-each in its own Docker sandbox via [sandcastle](https://github.com/mattpocock/sandcastle)
-(`.sandcastle/Dockerfile`, requires `CLAUDE_CODE_OAUTH_TOKEN` in `.sandcastle/.env` — run
-`claude setup-token` to get one). Agents never hold a GitHub token; the host tracks and
-submits each closed issue's branch with Graphite (`gt`) once the sandbox run finishes.
+`tools/orchestrator` claims `ready-for-agent` bd issues under an epic/PRD and implements them
+in parallel, each in its own Docker sandbox; the host submits each closed issue's branch with
+Graphite (`gt`). See its README/code for setup and invocation.
 
-- A dependent issue's branch stacks on its last-unmerged bd blocker's branch (real
-  Graphite stack); an issue with no unmerged blockers is a sibling off the run's feature
-  branch. `gt sync` runs at each claim-wave boundary to restack once a blocker's PR merges.
-- Requires a one-time `gt auth` + `gt repo init --trunk main` per machine.
-- **Known hazard:** once the run's feature branch is `gt track`ed, a later `gt sync` can
-  silently drop plain `git commit`s made on it since gt's last look (rebases from gt's
-  cached tip, not live HEAD) — don't hand-commit to that branch while a run against it is
-  in progress. See the comment above `gtTrack(baseBranch, ...)` in `orchestrator.ts`.
-- Supersedes the old host-executed `scripts/orchestrator.mjs` (unsandboxed
-  `claude -p --permission-mode bypassPermissions`), removed in favor of this.
-
-## Build & Test
-
-```bash
-pnpm install                 # JS deps (pnpm workspace: apps/*, packages/*, packages/native-lib/*)
-pnpm gen                     # regenerate proto bindings after editing proto/**
-cd cli && go build ./...     # build the CLI (each Go module builds from its own dir;
-cd cli && go test ./...      #   go.work ties them together — no module at the repo root)
-pnpm --filter ocel build     # build packages/ocel's dist/ - required once before any JS test run
-                              # (packages/resources imports "ocel/postgres", which resolves to dist/)
-cd apps/web && pnpm test     # vitest
-cd apps/web && pnpm lint     # biome check
-docker compose up -d         # local Postgres for apps/web, plus the ocel-cloud service below
-```
-
-**Gotcha:** `@repo/db`'s client dogfoods the ocel SDK itself (`packages/resources` ->
-`postgres("main")`), so importing `@repo/db` outside of `ocel dev` throws unless
-`OCEL_RESOURCE_POSTGRES_main` is set. Both `packages/api/vitest.config.ts` and
-`apps/web/vitest.config.ts` set it (and `OCEL_CLOUD_ADMIN_URL`) to the same Postgres as
-`DATABASE_URL` so `pnpm test` works standalone in either package.
-
-**Local "cloud" cluster:** resolve (`POST /api/resources/resolve`, see
-`packages/api/src/routes/resources/resolve/`) provisions per-user role+database pairs
-against a separate Postgres, standing in for Aurora Serverless v2 in prod - distinct from
-the `postgres` service apps/web's own control-plane DB uses. `docker-compose.yml`'s
-`ocel-cloud` service is that stand-in; `OCEL_CLOUD_ADMIN_URL` (see
-`apps/web/.env.example`) is its admin connection string. Both `ocel dev` (which never
-talks to the cloud cluster directly) and prod read this only through the resolve
-endpoint - the CLI just resolves connection strings it's handed back.
-
-**CLI resolve cache:** `ocel dev` caches each project's resolve response at
-`{os.UserConfigDir()}/ocel/resolve-cache/{projectID}.json` (mode 0600, see
-`cli/internal/resolvecache`), keyed on a hash of the sorted resource definitions plus an
-account fingerprint (resolve base URL + bearer token). `internal/provision.CachedResolve` -
-which `provision.Provision` calls instead of `Resolve` directly - reuses the
-cached env and skips the API call when the current defs+account match and the
-server-provided `expiresAt` (see `RESOLVE_TTL_MS` in
-`packages/api/src/routes/resources/resolve/route.ts`) hasn't passed; otherwise it calls
-through and restashes the fresh response.
+- **Known hazard:** a `gt`-tracked branch can silently drop plain hand-`git commit`s on a
+  later `gt sync` (it rebases from gt's cached tip, not live HEAD) — don't hand-commit to a
+  branch a run is actively using.
 
 ## Conventions & Patterns
 
-- The Go side is a multi-module monorepo with **no root module**: `cli/` (the CLI),
-  `pkg/proto` (lean shared protobuf/connect bindings), `sdk`, and `cloud/*` provider
-  binaries are each their own module, tied together for local dev by the root `go.work`.
-  Each keeps an isolated dependency graph so heavy CLI/provider deps never reach SDK
-  consumers. `pkg/proto` has no published module tag yet, so every consuming module pins
-  it with a `replace => <rel>/pkg/proto` in its own `go.mod` (without it, `go mod tidy`
-  mis-resolves the path to whatever module historically contained it); swap those for a
-  real `require github.com/ocelhq/ocel/pkg/proto vX.Y.Z` once proto is tagged. JS side is
-  the pnpm workspace.
-- Versioning goes through Changesets (`.changeset/`); `pnpm ci:version` is run by the
-  release workflow, not by hand.
-- When wiring backend-dependent Go code ahead of the real backend/API, stub it with
-  final signatures (see `internal/provision`'s doc comment) so callers never need to
-  change later — don't leave TODOs in caller-facing shapes.
-- If you discover context while working a feature that would help downstream work or
-  other agents — a gotcha, a convention, a stub's real status, a doc that turned out to
-  live elsewhere — fold it into this file and `CLAUDE.md` before finishing, not just
-  into a commit message or PR description.
-
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
-
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [SYNC_CONCEPTS.md](https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
-
-## Quick Reference
-
-```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
-```
+- When wiring backend-dependent code ahead of the real backend/API, stub it with final
+  signatures so callers never need to change later — don't leave TODOs in caller-facing shapes.
+- Versioning goes through Changesets; the release workflow runs the version bump, not you.
 
 ## Non-Interactive Shell Commands
 
@@ -249,30 +161,6 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 - Do not commit or push without clear authority from the active profile or the current user request.
 - If a required sync or push is blocked, stop and report the exact command and error.
 <!-- END BEADS INTEGRATION -->
-
-<!-- BEGIN BEADS CODEX SETUP: generated by bd setup codex -->
-## Beads Issue Tracker
-
-Use Beads (`bd`) for durable task tracking in repositories that include it. Use the `beads` skill at `.agents/skills/beads/SKILL.md` (project install) or `~/.agents/skills/beads/SKILL.md` (global install) for Beads workflow guidance, then use the `bd` CLI for issue operations.
-
-### Quick Reference
-
-```bash
-bd ready                # Find available work
-bd show <id>            # View issue details
-bd update <id> --claim  # Claim work
-bd close <id>           # Complete work
-bd prime                # Refresh Beads context
-```
-
-### Rules
-
-- Use `bd` for all task tracking; do not create markdown TODO lists.
-- Run `bd prime` when Beads context is missing or stale. Codex 0.129.0+ can load Beads context automatically through native hooks; use `/hooks` to inspect or toggle them.
-- Keep persistent project memory in Beads via `bd remember`; do not create ad hoc memory files.
-
-**Architecture in one line:** issues live in a local Dolt DB; sync uses `refs/dolt/data` on your git remote; `.beads/issues.jsonl` is a passive export. See https://github.com/gastownhall/beads/blob/main/docs/SYNC_CONCEPTS.md for details and anti-patterns.
-<!-- END BEADS CODEX SETUP -->
 
 ## Agent skills
 
