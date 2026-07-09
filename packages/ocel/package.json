@@ -13,7 +13,7 @@
     "README.md"
   ],
   "exports": {
-    ".": {
+    "./config": {
       "import": "./dist/config.js",
       "types": "./dist/config.d.ts"
     },
