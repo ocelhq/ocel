@@ -67,8 +67,10 @@ check the code, not just the docs, before assuming a described behavior is live.
 ## Parallel Agent Orchestrator
 
 `tools/orchestrator` claims `ready-for-agent` bd issues under an epic/PRD and implements them
-in parallel, each in its own Docker sandbox; the host submits each closed issue's branch with
-Graphite (`gt`). See its README/code for setup and invocation.
+in parallel, each in its own Docker sandbox; per wave, the host delegates the final Graphite
+work (track each closed issue's branch onto its parent and submit the stack) to a host-side
+model call that handles any restack/rebase the submit needs. See its README/code for setup
+and invocation.
 
 - **Known hazard:** a `gt`-tracked branch can silently drop plain hand-`git commit`s on a
   later `gt sync` (it rebases from gt's cached tip, not live HEAD) — don't hand-commit to a
