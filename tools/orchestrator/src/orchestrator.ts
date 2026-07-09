@@ -1,10 +1,12 @@
 // Claims ready-for-agent bd issues under a given parent (epic/PRD) and
 // implements them one batch at a time, each in its own Docker sandbox (via
 // sandcastle) on its own branch. Agents never see a GitHub token — once a
-// sandboxed run closes its bd issue, the host tracks and submits the branch
-// with Graphite: an issue whose bd blockers are still-unmerged branches
-// stacks on the last unmerged blocker's branch; otherwise it's a sibling off
-// the run's feature branch. See
+// wave's sandboxed runs close their bd issues, the host delegates the final
+// Graphite work (track each branch onto its parent and submit the stack) to a
+// host-side model call, which handles any restack/rebase the submit needs (see
+// submit.ts). An issue whose bd blockers are still-unmerged branches stacks on
+// the last unmerged blocker's branch; otherwise it's a sibling off the run's
+// feature branch. See
 // `.scratch/<parent-id>/orchestrator-runs/<timestamp>/` for per-run logs.
 
 import { spawnSync } from "node:child_process";
@@ -14,9 +16,10 @@ import { claudeCode, run as sandcastleRun } from "@ai-hero/sandcastle";
 import { docker } from "@ai-hero/sandcastle/sandboxes/docker";
 import { bdWhere, claimBatch, issueBlockers, issueStatus, revertClaim } from "./bd.ts";
 import { branchNameFor, git, isMergedInto, localBranchExists, remoteBranchExists } from "./git.ts";
-import { gtSubmit, gtSync, gtTrack } from "./gt.ts";
+import { gtSync, gtTrack } from "./gt.ts";
 import type { RunInfra } from "./infra.ts";
 import { setupRunInfra } from "./infra.ts";
+import { submitWaveWithModel, type WaveOutcome } from "./submit.ts";
 
 const TRUNK_BRANCH = "main";
 
@@ -239,24 +242,18 @@ async function main() {
 				}),
 			);
 
+			// Track/submit each successful branch onto its stack. gt's fixed
+			// track→submit sequence is fragile (a stacked branch may need a
+			// restack/rebase before `gt submit` takes), so instead of hand-coding
+			// each error path we delegate the whole wave to a host-side model call
+			// that runs the same steps and works around whatever it hits. It
+			// reopens branches it can't submit itself; the host only reverts the
+			// wave if the model call never ran (see submitWaveWithModel).
+			const waveOutcomes: WaveOutcome[] = [];
 			for (const outcome of settled) {
-				if (outcome.status !== "fulfilled" || outcome.value === null) continue;
-				const { issue, branch, parentBranch } = outcome.value;
-				log(`[${issue.id}] Tracking and submitting branch ${branch} (parent: ${parentBranch})...`);
-				try {
-					gtTrack(branch, parentBranch, repoRoot);
-					const prUrl = gtSubmit(branch, repoRoot);
-					log(`[${issue.id}] PR submitted: ${prUrl ?? "(no URL parsed from gt output)"}`);
-				} catch (err) {
-					// The implement run already succeeded (bd close + commits landed on
-					// `branch`), so don't let it vanish into a closed issue with no PR:
-					// reopen it the same way a failed implement attempt is reverted, so
-					// a human sees it (and future claims skip it instead of silently
-					// re-running the already-done implement step).
-					log(`[${issue.id}] gt track/submit failed: ${(err as Error).message}. Branch ${branch} has unsubmitted commits — reverting claim for human follow-up.`);
-					revertClaim(issue.id, repoRoot, log);
-				}
+				if (outcome.status === "fulfilled" && outcome.value !== null) waveOutcomes.push(outcome.value);
 			}
+			await submitWaveWithModel(waveOutcomes, repoRoot, runDir, wave, log);
 		}
 	} finally {
 		infra.teardown();
