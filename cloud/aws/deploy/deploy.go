@@ -41,6 +41,17 @@ type Config struct {
 	StackName   string // "<project_id>-<env>"
 	Pulumi      auto.PulumiCommand
 	Secrets     SecretsReader
+
+	// SessionTable is the account-global upload-sessions table bootstrap
+	// provisions; a bucket's runtime and listener roles are scoped to it.
+	SessionTable string
+	// SessionTableARN is that table's ARN, used to scope the bucket IAM grants.
+	SessionTableARN string
+	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
+	// deploys. Packaging it (building + zipping the handler binary) rides the
+	// provider's distribution workflow, which is deferred with provider publish;
+	// it is threaded here so the deploy path is complete once that lands.
+	ListenerCodePath string
 }
 
 // Run provisions every resource in manifest against AWS and returns the
@@ -66,12 +77,15 @@ func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progres
 			return fmt.Errorf("look up default VPC subnets: %w", err)
 		}
 		for _, r := range manifest.GetResources() {
-			pg := r.GetPostgres()
-			if pg == nil {
-				continue
-			}
-			if err := registerPostgres(pctx, r.GetLogicalName(), translatePostgres(pg), vpc.Id, vpc.CidrBlock, subnets.Ids); err != nil {
-				return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
+			switch {
+			case r.GetPostgres() != nil:
+				if err := registerPostgres(pctx, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids); err != nil {
+					return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
+				}
+			case r.GetBucket() != nil:
+				if err := registerBucket(pctx, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.SessionTable, cfg.SessionTableARN, cfg.ListenerCodePath); err != nil {
+					return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
+				}
 			}
 		}
 		return nil
@@ -113,7 +127,7 @@ func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progres
 func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *providerv1.Manifest, outputs auto.OutputMap) ([]*providerv1.ResourceOutput, error) {
 	var result []*providerv1.ResourceOutput
 	for _, r := range manifest.GetResources() {
-		if r.GetPostgres() == nil {
+		if r.GetPostgres() == nil && r.GetBucket() == nil {
 			continue
 		}
 		name := r.GetLogicalName()
@@ -125,7 +139,16 @@ func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *provid
 		if !ok {
 			return nil, fmt.Errorf("output for %s is not a map", name)
 		}
-		out, err := collectPostgresOutput(ctx, secrets, name, fields)
+		var (
+			out *providerv1.ResourceOutput
+			err error
+		)
+		switch {
+		case r.GetPostgres() != nil:
+			out, err = collectPostgresOutput(ctx, secrets, name, fields)
+		case r.GetBucket() != nil:
+			out, err = collectBucketOutput(name, fields)
+		}
 		if err != nil {
 			return nil, err
 		}

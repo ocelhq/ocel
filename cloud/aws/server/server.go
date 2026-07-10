@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 
 	connect "connectrpc.com/connect"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
@@ -111,14 +113,31 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 		logf(resourceSummary(r))
 	}
 
+	// A bucket resource scopes its IAM grants to the account-global sessions
+	// table, so resolve that table's ARN (account + region) up front.
+	var sessionTableARN string
+	if manifestHasBucket(manifest) {
+		if deployed.SessionTable == "" {
+			return nil, fmt.Errorf("account bootstrap is present but its sessions table is missing; re-run `ocel bootstrap`")
+		}
+		account, err := accountID(ctx, sts.NewFromConfig(awscfg))
+		if err != nil {
+			return nil, err
+		}
+		sessionTableARN = fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.SessionTable)
+	}
+
 	return deploy.Run(ctx, deploy.Config{
-		Region:      awscfg.Region,
-		BackendURL:  "s3://" + deployed.StateBucket,
-		Passphrase:  passphrase,
-		ProjectName: pulumiProjectName,
-		StackName:   manifest.GetProjectId() + "-" + deployEnv,
-		Pulumi:      pulumiCmd,
-		Secrets:     secretsmanager.NewFromConfig(awscfg),
+		Region:           awscfg.Region,
+		BackendURL:       "s3://" + deployed.StateBucket,
+		Passphrase:       passphrase,
+		ProjectName:      pulumiProjectName,
+		StackName:        manifest.GetProjectId() + "-" + deployEnv,
+		Pulumi:           pulumiCmd,
+		Secrets:          secretsmanager.NewFromConfig(awscfg),
+		SessionTable:     deployed.SessionTable,
+		SessionTableARN:  sessionTableARN,
+		ListenerCodePath: listenerCodePath,
 	}, manifest, progress, logf)
 }
 
@@ -158,6 +177,40 @@ func (s *Server) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest
 	return stream.Send(resultEvent(true, "", nil))
 }
 
+// listenerCodePathEnvVar names the built listener-Lambda handler archive the
+// bucket deploy path uploads. It is set by the provider's distribution workflow
+// (which packages the handler binary alongside the provider) — deferred with
+// provider publish; empty until then, which is fine while prod is not made live.
+const listenerCodePathEnvVar = "OCEL_LISTENER_CODE_PATH"
+
+// listenerCodePath returns the configured listener archive path, or "" when
+// distribution has not wired one yet.
+var listenerCodePath = os.Getenv(listenerCodePathEnvVar)
+
+// STSAPI is the read subset of the STS client the bucket deploy path uses to
+// resolve the account id for the sessions-table ARN.
+type STSAPI interface {
+	GetCallerIdentity(ctx context.Context, in *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error)
+}
+
+func accountID(ctx context.Context, api STSAPI) (string, error) {
+	out, err := api.GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{})
+	if err != nil {
+		return "", fmt.Errorf("resolve AWS account id: %w", err)
+	}
+	return aws.ToString(out.Account), nil
+}
+
+// manifestHasBucket reports whether any resource in the manifest is a bucket.
+func manifestHasBucket(m *providerv1.Manifest) bool {
+	for _, r := range m.GetResources() {
+		if r.GetBucket() != nil {
+			return true
+		}
+	}
+	return false
+}
+
 // loadAWS resolves AWS configuration from the standard default chain,
 // overriding the region only when one was supplied in the provider options.
 func loadAWS(ctx context.Context, region string) (aws.Config, error) {
@@ -176,6 +229,8 @@ func resourceSummary(r *providerv1.ManifestResource) string {
 	switch cfg := r.GetConfig().(type) {
 	case *providerv1.ManifestResource_Postgres:
 		return fmt.Sprintf("%s: postgres version=%s", r.GetLogicalName(), cfg.Postgres.GetVersion())
+	case *providerv1.ManifestResource_Bucket:
+		return fmt.Sprintf("%s: bucket allowed_origins=%v", r.GetLogicalName(), cfg.Bucket.GetAllowedOrigins())
 	default:
 		return fmt.Sprintf("%s: received config", r.GetLogicalName())
 	}
