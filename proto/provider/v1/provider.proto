@@ -41,6 +41,15 @@ import "resources/v1/resources.proto";
 //     providerv1.ParseReadinessLine in contract.go.
 service ProviderService {
     rpc Deploy(DeployRequest) returns (stream DeployEvent);
+
+    // Bootstrap provisions the account-global, non-project-specific
+    // resources a provider needs before any deploy can run (for the AWS
+    // provider: the S3 bucket that holds Pulumi state, and a Pulumi
+    // passphrase). It is a one-time-per-account action, re-run only when the
+    // bootstrapped resources change. It reuses the DeployEvent stream:
+    // progress/log events, then a terminal ResultEvent. Bootstrap carries no
+    // outputs on its result.
+    rpc Bootstrap(BootstrapRequest) returns (stream DeployEvent);
 }
 
 // Manifest is the versioned, deterministic artifact the CLI builds from a
@@ -85,6 +94,20 @@ message DeployRequest {
   string protocol_version = 3;
 }
 
+// BootstrapRequest is the request for ProviderService.Bootstrap. Bootstrap
+// is account-global, so it carries no manifest and no project id: only the
+// provider's opaque options and the pinned protocol version.
+message BootstrapRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+}
+
 // DeployEvent is a single item on the Deploy response stream: either
 // progress/log output, or - always the final event - the terminal outcome.
 message DeployEvent {
@@ -110,4 +133,36 @@ message LogEvent {
 message ResultEvent {
   bool success = 1;
   string error = 2; // populated when success is false
+
+  // outputs are the connection details the provider produced for the whole
+  // stack, one entry per provisioned resource, keyed by logical_name. Empty
+  // on failure, and always empty for Bootstrap. The CLI collects these; the
+  // SDK is their eventual consumer.
+  repeated ResourceOutput outputs = 3;
+}
+
+// ResourceOutput pairs a resource's logical name with its typed connection
+// output. The oneof mirrors ManifestResource.config so a resource type's
+// output schema is single-sourced alongside its config.
+message ResourceOutput {
+  // logical_name matches the ManifestResource.logical_name this output was
+  // produced for.
+  string logical_name = 1;
+
+  oneof output {
+    PostgresOutput postgres = 2;
+  }
+}
+
+// PostgresOutput is the discrete connection detail for a provisioned
+// postgres resource. Callers compose a connection URL from these parts.
+message PostgresOutput {
+  string host = 1;
+  int32 port = 2;
+  string database = 3;
+  string username = 4;
+  // password is sensitive: debug_redact keeps it out of protobuf debug
+  // rendering. It is still carried on the wire over the private,
+  // token-authenticated CLI<->provider channel.
+  string password = 5 [debug_redact = true];
 }

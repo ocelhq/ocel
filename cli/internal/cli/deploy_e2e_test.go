@@ -1,3 +1,15 @@
+//go:build awslive
+
+// This end-to-end test drives `ocel deploy` against the REAL built cloud/aws
+// provider, which now performs real provisioning (Aurora Serverless v2, S3,
+// CloudFormation). It must never run in CI — a successful deploy creates real
+// billable AWS infrastructure — so it is gated behind the `awslive` build tag
+// and run manually against a disposable account:
+//
+//	go test -tags awslive ./cli/internal/cli -run E2E
+//
+// In default CI the CLI<->provider chain is covered instead by the fake
+// provider in deploy_fakeprovider_test.go (TestRunDeploy_HappyPath).
 package cli
 
 import (
@@ -110,7 +122,7 @@ postgres("main", { version: "15" });
 		t.Fatalf("mkdir %s: %v", binDir, err)
 	}
 	binPath = filepath.Join(binDir, "aws")
-	build := exec.Command("go", "build", "-o", binPath, "github.com/ocelhq/ocel/cloud/aws")
+	build := exec.Command("go", "build", "-o", binPath, "github.com/ocelhq/ocel/cloud/aws/cmd/aws")
 	build.Dir = repoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build cloud/aws: %v\n%s", err, out)

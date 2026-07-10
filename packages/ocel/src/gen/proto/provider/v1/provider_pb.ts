@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file provider/v1/provider.proto.
  */
 export const file_provider_v1_provider: GenFile = /*@__PURE__*/
-  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIpgBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIAEIICgZjb25maWciYwoNRGVwbG95UmVxdWVzdBInCghtYW5pZmVzdBgBIAEoCzIVLnByb3ZpZGVyLnYxLk1hbmlmZXN0Eg8KB29wdGlvbnMYAiABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoCSKYAQoLRGVwbG95RXZlbnQSLgoIcHJvZ3Jlc3MYASABKAsyGi5wcm92aWRlci52MS5Qcm9ncmVzc0V2ZW50SAASJAoDbG9nGAIgASgLMhUucHJvdmlkZXIudjEuTG9nRXZlbnRIABIqCgZyZXN1bHQYAyABKAsyGC5wcm92aWRlci52MS5SZXN1bHRFdmVudEgAQgcKBWV2ZW50IiAKDVByb2dyZXNzRXZlbnQSDwoHbWVzc2FnZRgBIAEoCSIbCghMb2dFdmVudBIPCgdtZXNzYWdlGAEgASgJIi0KC1Jlc3VsdEV2ZW50Eg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkyUwoPUHJvdmlkZXJTZXJ2aWNlEkAKBkRlcGxveRIaLnByb3ZpZGVyLnYxLkRlcGxveVJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABQjlaN2dpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL3Byb3ZpZGVyL3YxO3Byb3ZpZGVydjFiBnByb3RvMw", [file_resources_v1_resources]);
+  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIpgBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIAEIICgZjb25maWciYwoNRGVwbG95UmVxdWVzdBInCghtYW5pZmVzdBgBIAEoCzIVLnByb3ZpZGVyLnYxLk1hbmlmZXN0Eg8KB29wdGlvbnMYAiABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoCSI9ChBCb290c3RyYXBSZXF1ZXN0Eg8KB29wdGlvbnMYASABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgCIAEoCSKYAQoLRGVwbG95RXZlbnQSLgoIcHJvZ3Jlc3MYASABKAsyGi5wcm92aWRlci52MS5Qcm9ncmVzc0V2ZW50SAASJAoDbG9nGAIgASgLMhUucHJvdmlkZXIudjEuTG9nRXZlbnRIABIqCgZyZXN1bHQYAyABKAsyGC5wcm92aWRlci52MS5SZXN1bHRFdmVudEgAQgcKBWV2ZW50IiAKDVByb2dyZXNzRXZlbnQSDwoHbWVzc2FnZRgBIAEoCSIbCghMb2dFdmVudBIPCgdtZXNzYWdlGAEgASgJIlsKC1Jlc3VsdEV2ZW50Eg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkSLAoHb3V0cHV0cxgDIAMoCzIbLnByb3ZpZGVyLnYxLlJlc291cmNlT3V0cHV0ImEKDlJlc291cmNlT3V0cHV0EhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIvCghwb3N0Z3JlcxgCIAEoCzIbLnByb3ZpZGVyLnYxLlBvc3RncmVzT3V0cHV0SABCCAoGb3V0cHV0ImcKDlBvc3RncmVzT3V0cHV0EgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBMpsBCg9Qcm92aWRlclNlcnZpY2USQAoGRGVwbG95EhoucHJvdmlkZXIudjEuRGVwbG95UmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAESRgoJQm9vdHN0cmFwEh0ucHJvdmlkZXIudjEuQm9vdHN0cmFwUmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAFCOVo3Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vcHJvdmlkZXIvdjE7cHJvdmlkZXJ2MWIGcHJvdG8z", [file_resources_v1_resources]);
 
 /**
  * Manifest is the versioned, deterministic artifact the CLI builds from a
@@ -128,6 +128,39 @@ export const DeployRequestSchema: GenMessage<DeployRequest> = /*@__PURE__*/
   messageDesc(file_provider_v1_provider, 2);
 
 /**
+ * BootstrapRequest is the request for ProviderService.Bootstrap. Bootstrap
+ * is account-global, so it carries no manifest and no project id: only the
+ * provider's opaque options and the pinned protocol version.
+ *
+ * @generated from message provider.v1.BootstrapRequest
+ */
+export type BootstrapRequest = Message<"provider.v1.BootstrapRequest"> & {
+  /**
+   * options is always UTF-8 JSON bytes: `{}` when the provider was given no
+   * options, never absent and never an empty string. The CLI never inspects
+   * this field; only the provider unmarshals it.
+   *
+   * @generated from field: bytes options = 1;
+   */
+  options: Uint8Array;
+
+  /**
+   * protocol_version pins the wire contract so a provider can reject a
+   * request it can't speak.
+   *
+   * @generated from field: string protocol_version = 2;
+   */
+  protocolVersion: string;
+};
+
+/**
+ * Describes the message provider.v1.BootstrapRequest.
+ * Use `create(BootstrapRequestSchema)` to create a new message.
+ */
+export const BootstrapRequestSchema: GenMessage<BootstrapRequest> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 3);
+
+/**
  * DeployEvent is a single item on the Deploy response stream: either
  * progress/log output, or - always the final event - the terminal outcome.
  *
@@ -163,7 +196,7 @@ export type DeployEvent = Message<"provider.v1.DeployEvent"> & {
  * Use `create(DeployEventSchema)` to create a new message.
  */
 export const DeployEventSchema: GenMessage<DeployEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 3);
+  messageDesc(file_provider_v1_provider, 4);
 
 /**
  * ProgressEvent reports a discrete, human-readable step of deploy progress.
@@ -182,7 +215,7 @@ export type ProgressEvent = Message<"provider.v1.ProgressEvent"> & {
  * Use `create(ProgressEventSchema)` to create a new message.
  */
 export const ProgressEventSchema: GenMessage<ProgressEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 4);
+  messageDesc(file_provider_v1_provider, 5);
 
 /**
  * LogEvent carries diagnostic output that isn't a discrete progress step.
@@ -201,7 +234,7 @@ export type LogEvent = Message<"provider.v1.LogEvent"> & {
  * Use `create(LogEventSchema)` to create a new message.
  */
 export const LogEventSchema: GenMessage<LogEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 5);
+  messageDesc(file_provider_v1_provider, 6);
 
 /**
  * ResultEvent is always the last event on the stream: success, or failure
@@ -221,6 +254,16 @@ export type ResultEvent = Message<"provider.v1.ResultEvent"> & {
    * @generated from field: string error = 2;
    */
   error: string;
+
+  /**
+   * outputs are the connection details the provider produced for the whole
+   * stack, one entry per provisioned resource, keyed by logical_name. Empty
+   * on failure, and always empty for Bootstrap. The CLI collects these; the
+   * SDK is their eventual consumer.
+   *
+   * @generated from field: repeated provider.v1.ResourceOutput outputs = 3;
+   */
+  outputs: ResourceOutput[];
 };
 
 /**
@@ -228,7 +271,86 @@ export type ResultEvent = Message<"provider.v1.ResultEvent"> & {
  * Use `create(ResultEventSchema)` to create a new message.
  */
 export const ResultEventSchema: GenMessage<ResultEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 6);
+  messageDesc(file_provider_v1_provider, 7);
+
+/**
+ * ResourceOutput pairs a resource's logical name with its typed connection
+ * output. The oneof mirrors ManifestResource.config so a resource type's
+ * output schema is single-sourced alongside its config.
+ *
+ * @generated from message provider.v1.ResourceOutput
+ */
+export type ResourceOutput = Message<"provider.v1.ResourceOutput"> & {
+  /**
+   * logical_name matches the ManifestResource.logical_name this output was
+   * produced for.
+   *
+   * @generated from field: string logical_name = 1;
+   */
+  logicalName: string;
+
+  /**
+   * @generated from oneof provider.v1.ResourceOutput.output
+   */
+  output: {
+    /**
+     * @generated from field: provider.v1.PostgresOutput postgres = 2;
+     */
+    value: PostgresOutput;
+    case: "postgres";
+  } | { case: undefined; value?: undefined };
+};
+
+/**
+ * Describes the message provider.v1.ResourceOutput.
+ * Use `create(ResourceOutputSchema)` to create a new message.
+ */
+export const ResourceOutputSchema: GenMessage<ResourceOutput> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 8);
+
+/**
+ * PostgresOutput is the discrete connection detail for a provisioned
+ * postgres resource. Callers compose a connection URL from these parts.
+ *
+ * @generated from message provider.v1.PostgresOutput
+ */
+export type PostgresOutput = Message<"provider.v1.PostgresOutput"> & {
+  /**
+   * @generated from field: string host = 1;
+   */
+  host: string;
+
+  /**
+   * @generated from field: int32 port = 2;
+   */
+  port: number;
+
+  /**
+   * @generated from field: string database = 3;
+   */
+  database: string;
+
+  /**
+   * @generated from field: string username = 4;
+   */
+  username: string;
+
+  /**
+   * password is sensitive: debug_redact keeps it out of protobuf debug
+   * rendering. It is still carried on the wire over the private,
+   * token-authenticated CLI<->provider channel.
+   *
+   * @generated from field: string password = 5;
+   */
+  password: string;
+};
+
+/**
+ * Describes the message provider.v1.PostgresOutput.
+ * Use `create(PostgresOutputSchema)` to create a new message.
+ */
+export const PostgresOutputSchema: GenMessage<PostgresOutput> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 9);
 
 /**
  * ProviderService is served by a provider binary (e.g. the AWS provider,
@@ -275,6 +397,22 @@ export const ProviderService: GenService<{
   deploy: {
     methodKind: "server_streaming";
     input: typeof DeployRequestSchema;
+    output: typeof DeployEventSchema;
+  },
+  /**
+   * Bootstrap provisions the account-global, non-project-specific
+   * resources a provider needs before any deploy can run (for the AWS
+   * provider: the S3 bucket that holds Pulumi state, and a Pulumi
+   * passphrase). It is a one-time-per-account action, re-run only when the
+   * bootstrapped resources change. It reuses the DeployEvent stream:
+   * progress/log events, then a terminal ResultEvent. Bootstrap carries no
+   * outputs on its result.
+   *
+   * @generated from rpc provider.v1.ProviderService.Bootstrap
+   */
+  bootstrap: {
+    methodKind: "server_streaming";
+    input: typeof BootstrapRequestSchema;
     output: typeof DeployEventSchema;
   },
 }> = /*@__PURE__*/

@@ -1,0 +1,229 @@
+// Package server implements the AWS provider's ProviderService: it drives
+// real provisioning (Deploy) and account bootstrap (Bootstrap) behind the T2
+// provider protocol. It delegates resource translation to the deploy
+// package, account-global setup to the bootstrap package, and the Pulumi
+// runtime to pulumirt, so this package stays a thin protocol adapter.
+package server
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+
+	connect "connectrpc.com/connect"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
+	"github.com/aws/aws-sdk-go-v2/service/ssm"
+
+	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
+	"github.com/ocelhq/ocel/cloud/aws/deploy"
+	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
+	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+)
+
+// deployEnv is the environment segment of a project's Pulumi stack name. It
+// is a constant this slice (stacks are "<project_id>-prod"); multi-env is
+// reserved for later.
+const deployEnv = "prod"
+
+// pulumiProjectName is the fixed Pulumi project all Ocel stacks live under.
+const pulumiProjectName = "ocel"
+
+// Server implements providerv1connect.ProviderServiceHandler.
+type Server struct{}
+
+// options is the provider's opaque per-invocation options, decoded from the
+// request's options JSON. Region is optional: when empty, AWS's own
+// resolution (AWS_REGION / shared config) applies.
+type options struct {
+	Region string `json:"region"`
+}
+
+func parseOptions(raw []byte) (options, error) {
+	var o options
+	if len(raw) == 0 {
+		return o, nil
+	}
+	if err := json.Unmarshal(raw, &o); err != nil {
+		return o, fmt.Errorf("parse provider options: %w", err)
+	}
+	return o, nil
+}
+
+// Deploy provisions the manifest's resources and streams progress, ending in
+// a terminal ResultEvent that carries the whole-stack connection outputs. A
+// malformed manifest is rejected up front as an InvalidArgument error;
+// provisioning failures arrive as a terminal ResultEvent with success=false.
+func (s *Server) Deploy(ctx context.Context, req *providerv1.DeployRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+	manifest := req.GetManifest()
+	if err := validateManifest(manifest); err != nil {
+		return connect.NewError(connect.CodeInvalidArgument, err)
+	}
+	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
+	logf := func(m string) { _ = stream.Send(logEvent(m)) }
+
+	outputs, err := s.runDeploy(ctx, req, manifest, progress, logf)
+	if err != nil {
+		return stream.Send(resultEvent(false, err.Error(), nil))
+	}
+	return stream.Send(resultEvent(true, "", outputs))
+}
+
+func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, manifest *providerv1.Manifest, progress, logf func(string)) ([]*providerv1.ResourceOutput, error) {
+	opts, err := parseOptions(req.GetOptions())
+	if err != nil {
+		return nil, err
+	}
+	awscfg, err := loadAWS(ctx, opts.Region)
+	if err != nil {
+		return nil, err
+	}
+	cfn := cloudformation.NewFromConfig(awscfg)
+	ssmClient := ssm.NewFromConfig(awscfg)
+
+	progress("Checking account bootstrap")
+	deployed, err := bootstrap.CheckDeployed(ctx, cfn)
+	if err != nil {
+		return nil, err
+	}
+	if err := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion).Explain(); err != nil {
+		return nil, err
+	}
+
+	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
+	if err != nil {
+		return nil, err
+	}
+
+	pulumiCmd, err := pulumirt.Ensure(ctx, progress)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, r := range manifest.GetResources() {
+		logf(resourceSummary(r))
+	}
+
+	return deploy.Run(ctx, deploy.Config{
+		Region:      awscfg.Region,
+		BackendURL:  "s3://" + deployed.StateBucket,
+		Passphrase:  passphrase,
+		ProjectName: pulumiProjectName,
+		StackName:   manifest.GetProjectId() + "-" + deployEnv,
+		Pulumi:      pulumiCmd,
+		Secrets:     secretsmanager.NewFromConfig(awscfg),
+	}, manifest, progress, logf)
+}
+
+// Bootstrap creates the account-global resources the provider needs and
+// streams progress, ending in a terminal ResultEvent. Bootstrap carries no
+// outputs.
+func (s *Server) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
+	logf := func(m string) { _ = stream.Send(logEvent(m)) }
+
+	opts, err := parseOptions(req.GetOptions())
+	if err != nil {
+		return stream.Send(resultEvent(false, err.Error(), nil))
+	}
+	awscfg, err := loadAWS(ctx, opts.Region)
+	if err != nil {
+		return stream.Send(resultEvent(false, err.Error(), nil))
+	}
+	cfn := cloudformation.NewFromConfig(awscfg)
+	ssmClient := ssm.NewFromConfig(awscfg)
+
+	// The version gate runs on every invocation, bootstrap included. Here a
+	// missing or older bootstrap is expected — it's exactly what this call
+	// creates or upgrades — so only a bootstrap NEWER than this provider
+	// understands is fatal (upgrade the CLI rather than downgrade the account).
+	deployed, err := bootstrap.CheckDeployed(ctx, cfn)
+	if err != nil {
+		return stream.Send(resultEvent(false, err.Error(), nil))
+	}
+	if bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion) == bootstrap.NeedsCLIUpgrade {
+		return stream.Send(resultEvent(false, bootstrap.NeedsCLIUpgrade.Explain().Error(), nil))
+	}
+
+	if err := bootstrap.Run(ctx, cfn, ssmClient, progress, logf); err != nil {
+		return stream.Send(resultEvent(false, err.Error(), nil))
+	}
+	return stream.Send(resultEvent(true, "", nil))
+}
+
+// loadAWS resolves AWS configuration from the standard default chain,
+// overriding the region only when one was supplied in the provider options.
+func loadAWS(ctx context.Context, region string) (aws.Config, error) {
+	var loadOpts []func(*awsconfig.LoadOptions) error
+	if region != "" {
+		loadOpts = append(loadOpts, awsconfig.WithRegion(region))
+	}
+	return awsconfig.LoadDefaultConfig(ctx, loadOpts...)
+}
+
+// resourceSummary renders the typed config the provider decoded for a
+// manifest resource, e.g. "postgres_main: postgres version=15". Emitted as a
+// log line so a caller driving the real binary can observe the exact typed
+// value that reached the provider.
+func resourceSummary(r *providerv1.ManifestResource) string {
+	switch cfg := r.GetConfig().(type) {
+	case *providerv1.ManifestResource_Postgres:
+		return fmt.Sprintf("%s: postgres version=%s", r.GetLogicalName(), cfg.Postgres.GetVersion())
+	default:
+		return fmt.Sprintf("%s: received config", r.GetLogicalName())
+	}
+}
+
+func progressEvent(message string) *providerv1.DeployEvent {
+	return &providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: message}},
+	}
+}
+
+func logEvent(message string) *providerv1.DeployEvent {
+	return &providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Log{Log: &providerv1.LogEvent{Message: message}},
+	}
+}
+
+func resultEvent(success bool, errMsg string, outputs []*providerv1.ResourceOutput) *providerv1.DeployEvent {
+	return &providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{
+			Success: success,
+			Error:   errMsg,
+			Outputs: outputs,
+		}},
+	}
+}
+
+// validateManifest reports whether manifest is well-formed enough for the
+// provider to act on: a schema version and project id are set, and every
+// resource entry carries a logical name, a typed resource identifier, and a
+// typed config.
+func validateManifest(m *providerv1.Manifest) error {
+	if m == nil {
+		return fmt.Errorf("manifest is required")
+	}
+	if m.GetSchemaVersion() == "" {
+		return fmt.Errorf("manifest.schema_version is required")
+	}
+	if m.GetProjectId() == "" {
+		return fmt.Errorf("manifest.project_id is required")
+	}
+	for i, r := range m.GetResources() {
+		if r.GetLogicalName() == "" {
+			return fmt.Errorf("manifest.resources[%d]: logical_name is required", i)
+		}
+		if r.GetResource() == nil || r.GetResource().GetType() == resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED {
+			return fmt.Errorf("manifest.resources[%d] (%s): a valid resource type is required", i, r.GetLogicalName())
+		}
+		if r.GetConfig() == nil {
+			return fmt.Errorf("manifest.resources[%d] (%s): typed config is required", i, r.GetLogicalName())
+		}
+	}
+	return nil
+}

@@ -35,11 +35,22 @@ const (
 const (
 	// ProviderServiceDeployProcedure is the fully-qualified name of the ProviderService's Deploy RPC.
 	ProviderServiceDeployProcedure = "/provider.v1.ProviderService/Deploy"
+	// ProviderServiceBootstrapProcedure is the fully-qualified name of the ProviderService's Bootstrap
+	// RPC.
+	ProviderServiceBootstrapProcedure = "/provider.v1.ProviderService/Bootstrap"
 )
 
 // ProviderServiceClient is a client for the provider.v1.ProviderService service.
 type ProviderServiceClient interface {
 	Deploy(context.Context, *v1.DeployRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	// Bootstrap provisions the account-global, non-project-specific
+	// resources a provider needs before any deploy can run (for the AWS
+	// provider: the S3 bucket that holds Pulumi state, and a Pulumi
+	// passphrase). It is a one-time-per-account action, re-run only when the
+	// bootstrapped resources change. It reuses the DeployEvent stream:
+	// progress/log events, then a terminal ResultEvent. Bootstrap carries no
+	// outputs on its result.
+	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.v1.ProviderService service. By
@@ -59,12 +70,19 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("Deploy")),
 			connect.WithClientOptions(opts...),
 		),
+		bootstrap: connect.NewClient[v1.BootstrapRequest, v1.DeployEvent](
+			httpClient,
+			baseURL+ProviderServiceBootstrapProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // providerServiceClient implements ProviderServiceClient.
 type providerServiceClient struct {
-	deploy *connect.Client[v1.DeployRequest, v1.DeployEvent]
+	deploy    *connect.Client[v1.DeployRequest, v1.DeployEvent]
+	bootstrap *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
 }
 
 // Deploy calls provider.v1.ProviderService.Deploy.
@@ -72,9 +90,22 @@ func (c *providerServiceClient) Deploy(ctx context.Context, req *v1.DeployReques
 	return c.deploy.CallServerStream(ctx, connect.NewRequest(req))
 }
 
+// Bootstrap calls provider.v1.ProviderService.Bootstrap.
+func (c *providerServiceClient) Bootstrap(ctx context.Context, req *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+	return c.bootstrap.CallServerStream(ctx, connect.NewRequest(req))
+}
+
 // ProviderServiceHandler is an implementation of the provider.v1.ProviderService service.
 type ProviderServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
+	// Bootstrap provisions the account-global, non-project-specific
+	// resources a provider needs before any deploy can run (for the AWS
+	// provider: the S3 bucket that holds Pulumi state, and a Pulumi
+	// passphrase). It is a one-time-per-account action, re-run only when the
+	// bootstrapped resources change. It reuses the DeployEvent stream:
+	// progress/log events, then a terminal ResultEvent. Bootstrap carries no
+	// outputs on its result.
+	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -90,10 +121,18 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("Deploy")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServiceBootstrapHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceBootstrapProcedure,
+		svc.Bootstrap,
+		connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderServiceDeployProcedure:
 			providerServiceDeployHandler.ServeHTTP(w, r)
+		case ProviderServiceBootstrapProcedure:
+			providerServiceBootstrapHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -105,4 +144,8 @@ type UnimplementedProviderServiceHandler struct{}
 
 func (UnimplementedProviderServiceHandler) Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.v1.ProviderService.Deploy is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.v1.ProviderService.Bootstrap is not implemented"))
 }

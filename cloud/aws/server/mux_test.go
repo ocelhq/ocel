@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"context"
@@ -40,12 +40,12 @@ func (a authHeaderInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 	return next
 }
 
-// newTestClient starts an httptest server over newMux(testToken) and returns
+// newTestClient starts an httptest server over NewMux(testToken) and returns
 // a client. When token is non-empty, every call presents it as the
 // Authorization header; an empty token presents no header at all.
 func newTestClient(t *testing.T, token string) providerv1connect.ProviderServiceClient {
 	t.Helper()
-	srv := httptest.NewServer(newMux(testToken))
+	srv := httptest.NewServer(NewMux(testToken))
 	t.Cleanup(srv.Close)
 
 	var opts []connect.ClientOption
@@ -93,35 +93,12 @@ func TestDeploy_RejectsWrongToken(t *testing.T) {
 	}
 }
 
-func TestDeploy_StreamsProgressThenSuccess(t *testing.T) {
-	client := newTestClient(t, testToken)
-
-	stream, err := client.Deploy(context.Background(), &providerv1.DeployRequest{Manifest: wellFormedManifest()})
-	if err != nil {
-		t.Fatalf("Deploy() error = %v", err)
-	}
-	events, err := drainStream(stream)
-	if err != nil {
-		t.Fatalf("Deploy() stream error = %v", err)
-	}
-
-	if len(events) < 2 {
-		t.Fatalf("got %d events, want at least 2 (progress + terminal result)", len(events))
-	}
-	for _, e := range events[:len(events)-1] {
-		if e.GetProgress() == nil && e.GetLog() == nil {
-			t.Fatalf("non-terminal event %+v is neither progress nor log", e)
-		}
-	}
-	last := events[len(events)-1]
-	result := last.GetResult()
-	if result == nil {
-		t.Fatalf("last event %+v is not a ResultEvent", last)
-	}
-	if !result.GetSuccess() {
-		t.Fatalf("ResultEvent.Success = false, want true; error = %q", result.GetError())
-	}
-}
+// The happy-path "streams progress then success" assertion moved to the
+// opt-in, build-tagged real e2e (deploy_e2e_test in the CLI, //go:build
+// awslive): a successful Deploy now provisions real Aurora/S3/CFN, which
+// must never run in CI. The pre-provision behaviour a unit test can pin —
+// token auth and manifest validation, both of which reject before any AWS
+// call — is covered by the tests around this one.
 
 func TestDeploy_MalformedManifestFailsBeforeStreaming(t *testing.T) {
 	client := newTestClient(t, testToken)

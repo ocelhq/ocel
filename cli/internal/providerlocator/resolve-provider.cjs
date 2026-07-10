@@ -28,8 +28,8 @@ if (!packageName.startsWith(providerPrefix)) {
   process.exit(1);
 }
 // The binary inside each platform package is named after the provider
-// itself (e.g. "aws"), matching how `go install .../cloud/aws` names it —
-// not the descriptor's own package name.
+// itself (e.g. "aws"), matching how `go build .../cloud/aws/cmd/aws` names
+// it (after the entrypoint dir) — not the descriptor's own package name.
 const binaryName = packageName.slice(providerPrefix.length);
 
 const { platform, arch } = process;
