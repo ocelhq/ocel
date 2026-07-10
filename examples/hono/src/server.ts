@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { pg } from "../ocel/index";
+import { createRouteHandler } from "ocel/blob/hono";
+import { pg, uploads } from "../ocel/index";
 
 // postgres("main") is resolved from the environment `ocel dev` injects, so the
 // server never sees a connection string of its own.
@@ -51,6 +52,17 @@ app.delete("/todos/:id", async (c) => {
     return c.json({ error: "not found" }, 404);
   }
   return c.body(null, 204);
+});
+
+// The upload surface for the `uploads` bucket (?op=presign|callback|poll),
+// mounted for both methods at this exact path.
+app.on(["GET", "POST"], "/api/upload", createRouteHandler(uploads));
+
+app.get("/documents", async (c) => {
+  const { rows } = await pg.query(
+    "SELECT id, key, name, mime_type, size, owner_id FROM documents ORDER BY id",
+  );
+  return c.json(rows);
 });
 
 serve({ fetch: app.fetch, port: PORT }, () => {
