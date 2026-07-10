@@ -17,12 +17,10 @@ const verifyUploadSchema = z.object({
 });
 
 // POST /api/blob/verify. Backs runtime.v1.RuntimeService.VerifyUploadSignature:
-// the env-blind route (running in the user's app) calls this via the dev shim
-// to check a completion callback's signature. It re-derives
-// HMAC(session_secret, canonical({ sessionId, file })), constant-time compares,
-// and returns the session's stored metadata verbatim on success. The secret
-// never leaves here; an unknown session or bad signature returns { valid:false }
-// (a 200, not an error - the RPC is a boolean verdict, not a lookup).
+// re-derives the per-session HMAC over the completion callback and constant-time
+// compares, returning the stored metadata verbatim on success. The secret never
+// leaves here. An unknown session or bad signature returns { valid:false } as a
+// 200, not an error - the RPC is a boolean verdict, not a lookup.
 export async function verifyUploadSignature(
   request: Request,
 ): Promise<Response> {

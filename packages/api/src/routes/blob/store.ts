@@ -14,8 +14,8 @@ const PRESIGN_TTL_S = 60 * 60;
 const SESSION_TAG_KEY = "sessionId";
 
 // Dev/MinIO-oriented defaults so presign generation (pure signing) works with
-// zero config; overridable by env for a real MinIO/S3 target. The container
-// itself is added in T4 - generating a presigned URL does not require it.
+// zero config; overridable by env for a real MinIO/S3 target. Presigning is
+// pure signing and needs no reachable store.
 function blobConfig() {
   return {
     endpoint: process.env.OCEL_BLOB_ENDPOINT ?? "http://localhost:9000",
@@ -53,12 +53,15 @@ export interface PresignPutArgs {
   contentType: string;
   contentLength: number;
   sessionId: string;
+  contentDisposition?: string;
 }
 
 // Mints a presigned PUT URL that binds Content-Length (exact) and Content-Type
 // as signed conditions and a signed x-amz-tagging = sessionId, so a client that
 // lies about size/type or alters the tag fails the store's signature check -
-// limits are store-enforced, not just SDK-checked.
+// limits are store-enforced, not just SDK-checked. When contentDisposition is
+// set it is signed too, so the client must send it and the store persists it as
+// object metadata tamper-resistantly.
 export async function presignPut(args: PresignPutArgs): Promise<string> {
   const config = blobConfig();
   const command = new PutObjectCommand({
@@ -66,18 +69,22 @@ export async function presignPut(args: PresignPutArgs): Promise<string> {
     Key: args.key,
     ContentType: args.contentType,
     ContentLength: args.contentLength,
+    ContentDisposition: args.contentDisposition || undefined,
     Tagging: `${SESSION_TAG_KEY}=${args.sessionId}`,
   });
 
+  const signableHeaders = new Set(["content-length", "content-type"]);
+  if (args.contentDisposition) signableHeaders.add("content-disposition");
+
   return getSignedUrl(s3Client(), command, {
     expiresIn: PRESIGN_TTL_S,
-    // content-length and content-type are signed as sent headers (a browser
-    // PUT of a File sends both), so the store enforces the exact size/type. The
-    // session tag hoists into the SigV4-signed query string instead of a signed
-    // header: it stays cryptographically bound (a client can't alter it without
-    // breaking the signature) while a real browser-style PUT - which won't send
-    // an arbitrary x-amz-tagging header - still succeeds.
-    signableHeaders: new Set(["content-length", "content-type"]),
+    // content-length and content-type (and content-disposition, when set) are
+    // signed as sent headers - a browser PUT sends them - so the store enforces
+    // the exact size/type and binds the disposition onto the object. The session
+    // tag hoists into the SigV4-signed query string instead of a signed header:
+    // it stays cryptographically bound while a real browser-style PUT - which
+    // won't send an arbitrary x-amz-tagging header - still succeeds.
+    signableHeaders,
   });
 }
 

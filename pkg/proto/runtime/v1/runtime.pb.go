@@ -150,12 +150,17 @@ func (x *PresignFile) GetMimeType() string {
 // with the request. url is the presigned PUT the browser writes to; key and
 // name echo the file this target was minted for.
 type PresignedTarget struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Url           string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
-	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Url   string                 `protobuf:"bytes,1,opt,name=url,proto3" json:"url,omitempty"`
+	Key   string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Name  string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`
+	// content_disposition, when non-empty, is a header the client MUST send on
+	// the PUT: the presigned URL signs it, so it is bound onto the stored object
+	// as its Content-Disposition and cannot be tampered with. Empty means no
+	// Content-Disposition is set on the object.
+	ContentDisposition string `protobuf:"bytes,4,opt,name=content_disposition,json=contentDisposition,proto3" json:"content_disposition,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *PresignedTarget) Reset() {
@@ -205,6 +210,13 @@ func (x *PresignedTarget) GetKey() string {
 func (x *PresignedTarget) GetName() string {
 	if x != nil {
 		return x.Name
+	}
+	return ""
+}
+
+func (x *PresignedTarget) GetContentDisposition() string {
+	if x != nil {
+		return x.ContentDisposition
 	}
 	return ""
 }
@@ -641,11 +653,12 @@ const file_runtime_v1_runtime_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
 	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x1b\n" +
-	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"I\n" +
+	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"z\n" +
 	"\x0fPresignedTarget\x12\x10\n" +
 	"\x03url\x18\x01 \x01(\tR\x03url\x12\x10\n" +
 	"\x03key\x18\x02 \x01(\tR\x03key\x12\x12\n" +
-	"\x04name\x18\x03 \x01(\tR\x04name\"f\n" +
+	"\x04name\x18\x03 \x01(\tR\x04name\x12/\n" +
+	"\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\"f\n" +
 	"\rCompletedFile\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +

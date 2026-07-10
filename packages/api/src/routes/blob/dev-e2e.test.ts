@@ -1,3 +1,4 @@
+import { HeadObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { execFileSync, spawn, type ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -171,6 +172,7 @@ describe("ocel/blob dev e2e (MinIO)", () => {
             {
               accept: ["image/png"],
               path: { prefix: "avatars/" },
+              contentDisposition: "inline",
               onUploadComplete: async ({ file }) => {
                 completedPaths.push(file.path);
               },
@@ -280,6 +282,26 @@ describe("ocel/blob dev e2e (MinIO)", () => {
       expect(completedPaths).toEqual([landedKey]);
       // Client learned the server-decided outcome by polling.
       expect(clientCompleted).toEqual([landedKey]);
+
+      // The uploader's contentDisposition is bound onto the stored object: the
+      // presign signs it, the client sends it on the PUT, so MinIO persists it
+      // as object metadata (US-12).
+      const s3 = new S3Client({
+        region: process.env.OCEL_BLOB_REGION ?? "us-east-1",
+        endpoint: process.env.OCEL_BLOB_ENDPOINT ?? "http://localhost:9000",
+        forcePathStyle: true,
+        credentials: {
+          accessKeyId: process.env.OCEL_BLOB_ACCESS_KEY_ID ?? "minioadmin",
+          secretAccessKey: process.env.OCEL_BLOB_SECRET_ACCESS_KEY ?? "minioadmin",
+        },
+      });
+      const head = await s3.send(
+        new HeadObjectCommand({
+          Bucket: process.env.OCEL_BLOB_BUCKET ?? "ocel-dev",
+          Key: landedKey,
+        }),
+      );
+      expect(head.ContentDisposition).toBe("inline");
     },
     60_000,
   );

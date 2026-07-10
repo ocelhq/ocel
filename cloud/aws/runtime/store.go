@@ -37,10 +37,7 @@ type sessionFile struct {
 // is session_id (no sort key); expires_at is the table's TTL attribute (epoch
 // seconds) so DynamoDB reaps orphaned sessions. The secret never leaves this
 // item — VerifyUploadSignature re-derives the HMAC store-side and returns only
-// the metadata.
-//
-// T7 provisions a table with exactly this shape: partition key session_id (S),
-// TTL attribute expires_at (N).
+// the metadata. The provisioned table must match this shape exactly.
 type session struct {
 	SessionID          string        `dynamodbav:"session_id"`
 	Secret             string        `dynamodbav:"secret"`

@@ -54,6 +54,12 @@ message PresignedTarget {
   string url = 1;
   string key = 2;
   string name = 3;
+
+  // content_disposition, when non-empty, is a header the client MUST send on
+  // the PUT: the presigned URL signs it, so it is bound onto the stored object
+  // as its Content-Disposition and cannot be tampered with. Empty means no
+  // Content-Disposition is set on the object.
+  string content_disposition = 4;
 }
 
 // CompletedFile is the file identity carried by the completion callback and

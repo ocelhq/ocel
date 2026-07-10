@@ -140,11 +140,10 @@ func TestLocate_ErrorWhenNodeNotOnPath(t *testing.T) {
 }
 
 // TestLocate_FindsRealBuiltCloudAWSBinary is the standalone packaging smoke
-// test: it builds the actual cloud/aws provider binary (T7) and confirms
-// Locate finds it via the same @ocel/provider-aws-<platform>-<arch>
-// convention the real npm packages use — independent of the CLI's spawn
-// wiring (ocelhq-x53.10) or the full e2e run (ocelhq-x53.11), so a
-// packaging bug surfaces here.
+// test: it builds the actual cloud/aws provider binary and confirms Locate
+// finds it via the same @ocel/provider-aws-<platform>-<arch> convention the
+// real npm packages use — independent of the CLI's spawn wiring or the full
+// e2e run, so a packaging bug surfaces here.
 func TestLocate_FindsRealBuiltCloudAWSBinary(t *testing.T) {
 	requireNode(t)
 	if _, err := exec.LookPath("go"); err != nil {

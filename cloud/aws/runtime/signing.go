@@ -24,11 +24,9 @@ type SignedFile struct {
 	MimeType string
 }
 
-// canonicalFile fixes the field order the HMAC covers. Never reorder: the
-// detector (which signs) and VerifyUploadSignature (which re-derives) must
-// serialize byte-identically. This mirrors the dev signer's
-// canonicalUploadPayload (packages/api/src/routes/blob/signing.ts) so the two
-// implementations agree on the canonical bytes.
+// canonicalFile fixes the field order the HMAC covers. Never reorder: signing
+// and verification must serialize byte-identically, and this must match the dev
+// signer's canonicalUploadPayload (packages/api/src/routes/blob/signing.ts).
 type canonicalFile struct {
 	Key      string `json:"key"`
 	Name     string `json:"name"`
@@ -48,10 +46,9 @@ func CanonicalUploadPayload(sessionID string, file SignedFile) []byte {
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
 	// JSON.stringify does not escape <, >, or &; disable Go's HTML escaping so
-	// the canonical bytes match exactly for keys/names containing those runes.
+	// keys/names containing those runes produce identical bytes.
 	enc.SetEscapeHTML(false)
-	// Encode cannot fail for these plain string/int fields; the error is
-	// unreachable and deliberately dropped.
+	// Encode cannot fail for these plain string/int fields.
 	_ = enc.Encode(canonicalPayload{
 		SessionID: sessionID,
 		File: canonicalFile{

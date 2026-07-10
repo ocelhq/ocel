@@ -31,7 +31,7 @@ func TestRuntimePresignUpload_ForwardsToOcelAPI(t *testing.T) {
 		json.NewEncoder(w).Encode(presignResponseBody{
 			SessionID: "sess_123",
 			Files: []presignedTarget{
-				{URL: "http://minio.local/put", Key: "org/proj/user/a.png", Name: "a.png"},
+				{URL: "http://minio.local/put", Key: "org/proj/user/a.png", Name: "a.png", ContentDisposition: "inline"},
 			},
 		})
 	}))
@@ -82,6 +82,9 @@ func TestRuntimePresignUpload_ForwardsToOcelAPI(t *testing.T) {
 	}
 	if len(resp.GetFiles()) != 1 || resp.GetFiles()[0].GetUrl() != "http://minio.local/put" || resp.GetFiles()[0].GetKey() != "org/proj/user/a.png" {
 		t.Fatalf("targets = %+v, want the API response verbatim", resp.GetFiles())
+	}
+	if resp.GetFiles()[0].GetContentDisposition() != "inline" {
+		t.Fatalf("target contentDisposition = %q, want inline", resp.GetFiles()[0].GetContentDisposition())
 	}
 }
 

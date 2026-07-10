@@ -19,7 +19,7 @@ import (
 // no cloud mechanics itself: on PresignUpload it forwards to the Ocel API's
 // presign endpoint (authenticated with the leader's user token + projectID),
 // honoring the invariant that the CLI never talks to the cloud store directly.
-// The real T2 SDK dials this over Connect at the injected dev server address.
+// The SDK dials this over Connect at the injected dev server address.
 type runtimeShim struct {
 	apiURL     string
 	token      string
@@ -57,9 +57,10 @@ type presignRequestBody struct {
 }
 
 type presignedTarget struct {
-	URL  string `json:"url"`
-	Key  string `json:"key"`
-	Name string `json:"name"`
+	URL                string `json:"url"`
+	Key                string `json:"key"`
+	Name               string `json:"name"`
+	ContentDisposition string `json:"contentDisposition"`
 }
 
 type presignResponseBody struct {
@@ -117,7 +118,7 @@ func (s *runtimeShim) PresignUpload(ctx context.Context, req *runtimev1.PresignU
 
 	targets := make([]*runtimev1.PresignedTarget, 0, len(decoded.Files))
 	for _, t := range decoded.Files {
-		targets = append(targets, &runtimev1.PresignedTarget{Url: t.URL, Key: t.Key, Name: t.Name})
+		targets = append(targets, &runtimev1.PresignedTarget{Url: t.URL, Key: t.Key, Name: t.Name, ContentDisposition: t.ContentDisposition})
 	}
 
 	return &runtimev1.PresignUploadResponse{SessionId: decoded.SessionID, Files: targets}, nil

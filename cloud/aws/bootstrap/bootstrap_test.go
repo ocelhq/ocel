@@ -47,8 +47,8 @@ func parseTemplate(t *testing.T) parsedTemplate {
 }
 
 // TestStackTemplate_SessionsTable asserts the bootstrap template provisions the
-// account-global sessions table with exactly the schema the runtime (T6)
-// expects: partition key session_id (S), no sort key, and a TTL on expires_at.
+// account-global sessions table with exactly the schema the runtime expects:
+// partition key session_id (S), no sort key, and a TTL on expires_at.
 func TestStackTemplate_SessionsTable(t *testing.T) {
 	tmpl := parseTemplate(t)
 
@@ -99,7 +99,7 @@ func (s stubDescriber) DescribeStacks(context.Context, *cloudformation.DescribeS
 }
 
 // TestCheckDeployed_ParsesOutputs proves the discovery path surfaces the
-// session table name (and state bucket + version) T8 depends on.
+// session table name, state bucket, and version that later deploys depend on.
 func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{

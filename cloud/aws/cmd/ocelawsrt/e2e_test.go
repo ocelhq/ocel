@@ -122,7 +122,7 @@ func TestRuntimeDirectDial(t *testing.T) {
 		}
 	}
 
-	// The pending session landed in DynamoDB with the schema T7 provisions.
+	// The pending session landed in DynamoDB with the provisioned table schema.
 	item := getSession(t, ctx, ddb, table, resp.GetSessionId())
 	if item["secret"] == nil || avS(item["secret"]) == "" {
 		t.Fatal("session must persist a minted secret")

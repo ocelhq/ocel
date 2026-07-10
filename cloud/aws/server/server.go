@@ -1,5 +1,5 @@
 // Package server implements the AWS provider's ProviderService: it drives
-// real provisioning (Deploy) and account bootstrap (Bootstrap) behind the T2
+// real provisioning (Deploy) and account bootstrap (Bootstrap) behind the
 // provider protocol. It delegates resource translation to the deploy
 // package, account-global setup to the bootstrap package, and the Pulumi
 // runtime to pulumirt, so this package stays a thin protocol adapter.

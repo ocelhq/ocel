@@ -18,8 +18,7 @@ import (
 // the in-memory fake cannot: only a live engine validates the actual
 // UpdateExpression / ConditionExpression the listener relies on for idempotency.
 //
-// It self-skips when dynamodb-local is unreachable (mirrors the T6 direct-dial
-// gate). Run it with:
+// It self-skips when dynamodb-local is unreachable. Run it with:
 //
 //	docker compose up -d dynamodb
 //	go test ./cloud/aws/runtime -run TestMarkSucceeded_RealDDBIsAtomicAndIdempotent
