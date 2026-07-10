@@ -110,6 +110,12 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL string
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
+	// The dev completion-detection loop runs for the dev server's lifetime,
+	// sweeping the store for landed uploads and firing each app's op=callback.
+	go srv.RunDetector(ctx, func(err error) {
+		fmt.Fprintln(stderr, "upload detection:", err)
+	})
+
 	if err := lockfile.Create(cfg.ProjectID, addr); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return errLostElection

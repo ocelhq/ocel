@@ -4,20 +4,13 @@ import { db } from "@repo/db";
 import { project, uploadSession } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
 import { uuidv7 } from "uuidv7";
+import type { SessionFile } from "../session";
 import { presignPut } from "../store";
 import { presignUploadSchema } from "./validation";
 
 // Session lives strictly longer than the presigned PUT validity (see store.ts)
 // so the expiry sweep never races a still-live URL.
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
-
-interface FileState {
-  key: string;
-  name: string;
-  size: number;
-  mimeType: string;
-  state: "pending";
-}
 
 // POST /api/blob/presign. The dev RuntimeService shim forwards PresignUpload
 // here with the leader's user token + projectId; prod reaches the equivalent
@@ -74,7 +67,7 @@ export async function presignUpload(request: Request): Promise<Response> {
   const secret = randomBytes(32).toString("base64url");
 
   const targets: { url: string; key: string; name: string }[] = [];
-  const fileStates: FileState[] = [];
+  const fileStates: SessionFile[] = [];
   for (const file of files) {
     const key = prefix + file.key;
     const url = await presignPut({

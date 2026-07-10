@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -93,14 +94,11 @@ func (s *runtimeShim) PresignUpload(ctx context.Context, req *runtimev1.PresignU
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("encode presign request: %w", err))
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.apiURL, "/")+"/api/blob/presign", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, s.apiEndpoint("/api/blob/presign"), bytes.NewReader(body))
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build presign request: %w", err))
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	if s.token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+s.token)
-	}
+	s.authorize(httpReq)
 
 	resp, err := s.httpClient.Do(httpReq)
 	if err != nil {
@@ -125,15 +123,130 @@ func (s *runtimeShim) PresignUpload(ctx context.Context, req *runtimev1.PresignU
 	return &runtimev1.PresignUploadResponse{SessionId: decoded.SessionID, Files: targets}, nil
 }
 
-// VerifyUploadSignature is deferred to T4 (dev completion detection). Left
-// unimplemented so a caller reaching it in this slice fails loudly rather than
-// silently mis-verifying.
-func (s *runtimeShim) VerifyUploadSignature(context.Context, *runtimev1.VerifyUploadSignatureRequest) (*runtimev1.VerifyUploadSignatureResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("runtime.v1.RuntimeService.VerifyUploadSignature is deferred to ocel/blob T4"))
+// signedCompletion is the {sessionId, signature, file} payload a completion
+// callback carries and VerifyUploadSignature checks - the request body for both
+// the app route's op=callback and the Ocel API's /api/blob/verify.
+type signedCompletion struct {
+	SessionID string        `json:"sessionId"`
+	Signature string        `json:"signature"`
+	File      completedFile `json:"file"`
 }
 
-// GetUploadStatus is deferred to T4 (dev completion detection), for the same
-// reason as VerifyUploadSignature.
-func (s *runtimeShim) GetUploadStatus(context.Context, *runtimev1.GetUploadStatusRequest) (*runtimev1.GetUploadStatusResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, fmt.Errorf("runtime.v1.RuntimeService.GetUploadStatus is deferred to ocel/blob T4"))
+type completedFile struct {
+	Key      string `json:"key"`
+	Name     string `json:"name"`
+	Size     int64  `json:"size"`
+	MimeType string `json:"mimeType"`
+}
+
+// verifyResponseBody mirrors POST /api/blob/verify's response. Metadata is
+// JSON-base64 on the wire; the API returns the session's verbatim stored
+// metadata bytes, which decode straight into the proto's bytes field.
+type verifyResponseBody struct {
+	Valid    bool   `json:"valid"`
+	Metadata []byte `json:"metadata"`
+}
+
+// VerifyUploadSignature forwards the route's completion-signature check to the
+// Ocel API, which re-derives the per-session HMAC and constant-time compares.
+// The secret never leaves the API; on a valid signature the stored metadata
+// rides back here and out to the env-blind route.
+func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *runtimev1.VerifyUploadSignatureRequest) (*runtimev1.VerifyUploadSignatureResponse, error) {
+	f := req.GetFile()
+	body, err := json.Marshal(signedCompletion{
+		SessionID: req.GetSessionId(),
+		Signature: req.GetSignature(),
+		File: completedFile{
+			Key:      f.GetKey(),
+			Name:     f.GetName(),
+			Size:     f.GetSize(),
+			MimeType: f.GetMimeType(),
+		},
+	})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("encode verify request: %w", err))
+	}
+
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, s.apiEndpoint("/api/blob/verify"), bytes.NewReader(body))
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build verify request: %w", err))
+	}
+	s.authorize(httpReq)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("verify upload signature: %w", err))
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("verify upload signature: unexpected status %d", resp.StatusCode))
+	}
+
+	var decoded verifyResponseBody
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode verify response: %w", err))
+	}
+	return &runtimev1.VerifyUploadSignatureResponse{Valid: decoded.Valid, Metadata: decoded.Metadata}, nil
+}
+
+type statusResponseBody struct {
+	State string `json:"state"`
+	Error string `json:"error"`
+}
+
+// GetUploadStatus forwards op=poll to the Ocel API, which reads the shared
+// store and aggregates the per-file states into one session state.
+func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *runtimev1.GetUploadStatusRequest) (*runtimev1.GetUploadStatusResponse, error) {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.apiEndpoint("/api/blob/status")+"?sessionId="+url.QueryEscape(req.GetSessionId()), nil)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build status request: %w", err))
+	}
+	s.authorize(httpReq)
+
+	resp, err := s.httpClient.Do(httpReq)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("get upload status: %w", err))
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("get upload status: unexpected status %d", resp.StatusCode))
+	}
+
+	var decoded statusResponseBody
+	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode status response: %w", err))
+	}
+	return &runtimev1.GetUploadStatusResponse{State: uploadStateFromString(decoded.State), Error: decoded.Error}, nil
+}
+
+func uploadStateFromString(s string) runtimev1.UploadState {
+	switch s {
+	case "succeeded":
+		return runtimev1.UploadState_UPLOAD_STATE_SUCCEEDED
+	case "expired":
+		return runtimev1.UploadState_UPLOAD_STATE_EXPIRED
+	case "pending":
+		return runtimev1.UploadState_UPLOAD_STATE_PENDING
+	default:
+		return runtimev1.UploadState_UPLOAD_STATE_UNSPECIFIED
+	}
+}
+
+// apiEndpoint joins the configured Ocel API base URL with an absolute path.
+func (s *runtimeShim) apiEndpoint(path string) string {
+	return endpoint(s.apiURL, path)
+}
+
+// endpoint joins a base URL (trailing slash trimmed) with an absolute path.
+func endpoint(base, path string) string {
+	return strings.TrimRight(base, "/") + path
+}
+
+// authorize sets the JSON content type and the leader's bearer token on an
+// Ocel API request.
+func (s *runtimeShim) authorize(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	if s.token != "" {
+		req.Header.Set("Authorization", "Bearer "+s.token)
+	}
 }

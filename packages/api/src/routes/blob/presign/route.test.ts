@@ -90,8 +90,12 @@ describe("POST /api/blob/presign", () => {
       const signed = url.searchParams.get("X-Amz-SignedHeaders") ?? "";
       expect(signed).toContain("content-length");
       expect(signed).toContain("content-type");
-      // The session tag stays a signed header so its value is bound.
-      expect(signed).toContain("x-amz-tagging");
+      // The session tag rides in the SigV4-signed query string (bound, but not
+      // a sent header, so a browser-style PUT that won't send x-amz-tagging
+      // still succeeds).
+      expect(url.searchParams.get("x-amz-tagging")).toBe(
+        `sessionId=${sessionId}`,
+      );
 
       // A pending session persisted with the secret, callbackBaseUrl, verbatim
       // metadata, and the prefixed per-file state.

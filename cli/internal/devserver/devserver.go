@@ -41,6 +41,7 @@ type Server struct {
 	projectID     string
 	devServerAddr string
 	runtime       *runtimeShim
+	detector      *detector
 	syncCh        chan SyncResult
 
 	fetchProjectConfig func(ctx context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error)
@@ -64,11 +65,22 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 		projectID:          projectID,
 		devServerAddr:      devServerAddr,
 		runtime:            newRuntimeShim(apiURL, token, projectID),
+		detector:           newDetector(apiURL, token, projectID),
 		syncCh:             make(chan SyncResult, 1),
 		fetchProjectConfig: provision.FetchProjectConfig,
 		provision:          provision.Provision,
 		subscribers:        make(map[chan *devv1.EnvUpdate]struct{}),
 	}
+}
+
+// RunDetector runs the client-independent completion loop until ctx is done:
+// each tick asks the Ocel API to detect this project's landed objects (which
+// performs the atomic pending -> succeeded transition) and delivers each
+// newly-succeeded file to its app route as op=callback. It blocks, so callers
+// run it in its own goroutine tied to the dev server's lifetime. Sweep errors
+// are reported via reportErr and never stop the loop.
+func (s *Server) RunDetector(ctx context.Context, reportErr func(error)) {
+	s.detector.run(ctx, reportErr)
 }
 
 // Declare implements resourcesv1connect.ResourceServiceHandler, recording

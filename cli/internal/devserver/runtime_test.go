@@ -107,19 +107,93 @@ func TestRuntimePresignUpload_PropagatesAPIError(t *testing.T) {
 	}
 }
 
-// TestVerifyAndStatus_DeferredToT4 documents that the read-only completion
-// RPCs are not yet implemented in this slice.
-func TestVerifyAndStatus_DeferredToT4(t *testing.T) {
-	s := New("http://api.local", "tok", "proj_1", "http://127.0.0.1:0")
+// TestRuntimeVerifyUploadSignature_ForwardsToOcelAPI proves the shim forwards
+// VerifyUploadSignature to POST /api/blob/verify (with the leader token) and
+// returns the API's verdict + verbatim metadata bytes to the route.
+func TestRuntimeVerifyUploadSignature_ForwardsToOcelAPI(t *testing.T) {
+	var gotAuth, gotPath string
+	var gotBody signedCompletion
+	rawMetadata := []byte(`{"uploader":"avatar","metadata":{"userId":"u1"}}`)
+
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth, gotPath = r.Header.Get("Authorization"), r.URL.Path
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		// The API renders the stored metadata (base64) into the JSON []byte
+		// field; encoding/json base64-encodes rawMetadata for us here.
+		json.NewEncoder(w).Encode(verifyResponseBody{Valid: true, Metadata: rawMetadata})
+	}))
+	defer api.Close()
+
+	s := New(api.URL, "leader-tok", "proj_1", "http://127.0.0.1:0")
 	ts := httptest.NewServer(s.Mux())
 	defer ts.Close()
 
 	client := runtimev1connect.NewRuntimeServiceClient(http.DefaultClient, ts.URL)
+	resp, err := client.VerifyUploadSignature(context.Background(), &runtimev1.VerifyUploadSignatureRequest{
+		SessionId: "sess_1",
+		Signature: "sig",
+		File:      &runtimev1.CompletedFile{Key: "org/proj/user/a.png", Name: "a.png", Size: 3, MimeType: "image/png"},
+	})
+	if err != nil {
+		t.Fatalf("VerifyUploadSignature: %v", err)
+	}
+	if gotPath != "/api/blob/verify" || gotAuth != "Bearer leader-tok" {
+		t.Fatalf("forwarded path/auth = %q/%q", gotPath, gotAuth)
+	}
+	if gotBody.SessionID != "sess_1" || gotBody.Signature != "sig" || gotBody.File.Key != "org/proj/user/a.png" {
+		t.Fatalf("forwarded body = %+v", gotBody)
+	}
+	if !resp.GetValid() || string(resp.GetMetadata()) != string(rawMetadata) {
+		t.Fatalf("resp = valid:%v metadata:%q, want valid + verbatim bytes", resp.GetValid(), resp.GetMetadata())
+	}
+}
 
-	if _, err := client.VerifyUploadSignature(context.Background(), &runtimev1.VerifyUploadSignatureRequest{SessionId: "s"}); connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Fatalf("VerifyUploadSignature error code = %v, want Unimplemented", connect.CodeOf(err))
+// TestRuntimeGetUploadStatus_ForwardsToOcelAPI proves the shim forwards
+// GetUploadStatus to GET /api/blob/status?sessionId=... and maps the API's
+// string state onto the proto enum.
+func TestRuntimeGetUploadStatus_ForwardsToOcelAPI(t *testing.T) {
+	var gotPath, gotQuery string
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath, gotQuery = r.URL.Path, r.URL.Query().Get("sessionId")
+		json.NewEncoder(w).Encode(statusResponseBody{State: "succeeded"})
+	}))
+	defer api.Close()
+
+	s := New(api.URL, "tok", "proj_1", "http://127.0.0.1:0")
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := runtimev1connect.NewRuntimeServiceClient(http.DefaultClient, ts.URL)
+	resp, err := client.GetUploadStatus(context.Background(), &runtimev1.GetUploadStatusRequest{SessionId: "sess_9"})
+	if err != nil {
+		t.Fatalf("GetUploadStatus: %v", err)
 	}
-	if _, err := client.GetUploadStatus(context.Background(), &runtimev1.GetUploadStatusRequest{SessionId: "s"}); connect.CodeOf(err) != connect.CodeUnimplemented {
-		t.Fatalf("GetUploadStatus error code = %v, want Unimplemented", connect.CodeOf(err))
+	if gotPath != "/api/blob/status" || gotQuery != "sess_9" {
+		t.Fatalf("forwarded path/query = %q/%q", gotPath, gotQuery)
 	}
+	if resp.GetState() != runtimev1.UploadState_UPLOAD_STATE_SUCCEEDED {
+		t.Fatalf("state = %v, want SUCCEEDED", resp.GetState())
+	}
+}
+
+// TestRuntimeVerifyUploadSignature_PropagatesAPIError surfaces a non-200 as a
+// Connect error rather than a bogus verdict.
+func TestRuntimeVerifyUploadSignature_PropagatesAPIError(t *testing.T) {
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		http.Error(w, "boom", http.StatusInternalServerError)
+	}))
+	defer api.Close()
+
+	s := New(api.URL, "tok", "proj_1", "http://127.0.0.1:0")
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := runtimev1connect.NewRuntimeServiceClient(http.DefaultClient, ts.URL)
+	_, err := client.VerifyUploadSignature(context.Background(), &runtimev1.VerifyUploadSignatureRequest{
+		SessionId: "s", File: &runtimev1.CompletedFile{Key: "k"},
+	})
+	if err == nil {
+		t.Fatal("expected error on API 500, got nil")
+	}
+	_ = connect.CodeOf(err)
 }
