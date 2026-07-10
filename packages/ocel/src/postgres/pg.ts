@@ -20,7 +20,10 @@ export class Postgres implements Component {
       defer(
         rpc.resource.declare({
           resource: { name: id, type: this.type },
-          config: { case: "postgres", value: { version: "17" } },
+          config: {
+            case: "postgres",
+            value: { version: config?.version ?? "17" },
+          },
         }),
       );
     }

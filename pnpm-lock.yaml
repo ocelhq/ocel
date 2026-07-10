@@ -509,6 +509,12 @@ importers:
       typescript:
         specifier: ^5.9.3
         version: 5.9.3
+      vite:
+        specifier: ^8.1.3
+        version: 8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
     optionalDependencies:
       '@ocel/darwin-arm64':
         specifier: workspace:^
@@ -4175,7 +4181,6 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
-    optional: true
 
   '@vitest/pretty-format@4.1.9':
     dependencies:
@@ -5283,7 +5288,6 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
       tsx: 4.23.0
-    optional: true
 
   vitest@4.1.9(@types/node@20.19.43)(vite@8.1.3(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)):
     dependencies:
@@ -5338,7 +5342,6 @@ snapshots:
       '@types/node': 24.13.2
     transitivePeerDependencies:
       - msw
-    optional: true
 
   which@2.0.2:
     dependencies:
