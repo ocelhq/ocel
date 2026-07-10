@@ -9,7 +9,8 @@ import "fmt"
 // imperative steps around it) change in a way that older/newer providers
 // can't tolerate. The bootstrap CloudFormation stack records the version it
 // deployed as its BootstrapVersion output; every invocation compares the two.
-const RequiredBootstrapVersion = 1
+// Version 2 added the account-global DynamoDB sessions table.
+const RequiredBootstrapVersion = 2
 
 // Compatibility is the outcome of comparing the deployed bootstrap version
 // against the version a provider requires.

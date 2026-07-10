@@ -1,7 +1,8 @@
 // Package bootstrap provisions and inspects the account-global resources the
 // Ocel AWS provider needs before any deploy can run: an S3 bucket for Pulumi
-// state (via CloudFormation) and a Pulumi passphrase (an SSM SecureString
-// minted imperatively, because CloudFormation cannot create SecureStrings).
+// state and a DynamoDB table for upload sessions (both via CloudFormation),
+// and a Pulumi passphrase (an SSM SecureString minted imperatively, because
+// CloudFormation cannot create SecureStrings).
 // The bootstrapped resources carry a monotonic integer version so every
 // invocation can gate on compatibility (see version.go).
 package bootstrap
@@ -32,15 +33,17 @@ const (
 	// passphrase.
 	PassphraseParamName = "/ocel/pulumi/passphrase"
 
-	outputStateBucket = "StateBucketName"
-	outputVersion     = "BootstrapVersion"
+	outputStateBucket  = "StateBucketName"
+	outputSessionTable = "SessionTableName"
+	outputVersion      = "BootstrapVersion"
 )
 
 // Deployed describes the bootstrap state discovered in an account.
 type Deployed struct {
-	Present     bool
-	Version     int
-	StateBucket string
+	Present      bool
+	Version      int
+	StateBucket  string
+	SessionTable string
 }
 
 // CFNDescriber is the read subset of the CloudFormation client used to
@@ -73,6 +76,8 @@ func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
 		switch aws.ToString(o.OutputKey) {
 		case outputStateBucket:
 			d.StateBucket = aws.ToString(o.OutputValue)
+		case outputSessionTable:
+			d.SessionTable = aws.ToString(o.OutputValue)
 		case outputVersion:
 
 			var err error
@@ -96,7 +101,7 @@ func Run(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, prog
 		}
 	}
 
-	report(progress, "Ensuring Pulumi state bucket (CloudFormation)")
+	report(progress, "Ensuring Pulumi state bucket and sessions table (CloudFormation)")
 	if err := upsertStack(ctx, cfn); err != nil {
 		return err
 	}
@@ -225,14 +230,30 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+  SessionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
 Outputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
   %s:
+    Description: DynamoDB table holding account-global upload sessions.
+    Value: !Ref SessionsTable
+  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
-`, outputStateBucket, outputVersion, RequiredBootstrapVersion)
+`, outputStateBucket, outputSessionTable, outputVersion, RequiredBootstrapVersion)
 }
 
 // CloudFormation surfaces both "stack does not exist" and the no-op update as
