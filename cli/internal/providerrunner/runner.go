@@ -232,6 +232,11 @@ func (r *Runner) Ready(ctx context.Context) error {
 	case addr := <-r.readyCh:
 		return r.dial(addr)
 	case <-r.done:
+		select {
+		case addr := <-r.readyCh:
+			return r.dial(addr)
+		default:
+		}
 		r.stderrMu.Lock()
 		stderr := r.stderrBuf.String()
 		r.stderrMu.Unlock()
