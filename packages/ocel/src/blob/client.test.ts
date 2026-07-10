@@ -84,6 +84,30 @@ describe("createUploadClient", () => {
     expect(pollCalls.length).toBe(3);
   });
 
+  it("throws immediately when a presigned PUT returns non-2xx (no polling)", async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (url.includes("op=presign")) {
+        return jsonRes({
+          sessionId: "sess-1",
+          files: [
+            { url: "https://store/put/a", key: "avatars/a.jpg", name: "a.jpg" },
+          ],
+        });
+      }
+      if (url === "https://store/put/a") return jsonRes({}, false, 403);
+      return jsonRes({});
+    });
+    const client = createUploadClient<TestBucket>({
+      url: "https://app/api/upload",
+      pollIntervalMs: 1,
+      fetch,
+    });
+    await expect(
+      client.upload("avatar", { files: [file], input: { userId: "u1" } }),
+    ).rejects.toThrow("upload PUT failed (403)");
+    expect(fetch.mock.calls.some((c) => c[0].includes("op=poll"))).toBe(false);
+  });
+
   it("calls onError and throws when the upload expires", async () => {
     const fetch = fakeFetch(["expired"]);
     const client = createUploadClient<TestBucket>({

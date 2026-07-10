@@ -136,6 +136,10 @@ export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>
             method: "PUT",
             body: args.files[i],
             headers,
+          }).then((res) => {
+            if (!res.ok) {
+              throw new Error(`upload PUT failed (${res.status})`);
+            }
           });
         }),
       );

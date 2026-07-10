@@ -1,4 +1,4 @@
-import { getSessionUserId, verifyOrganizationMembership } from "@repo/auth";
+import { getSessionUserId } from "@repo/auth";
 import { db } from "@repo/db";
 import { uploadSession } from "@repo/db/schema";
 import { eq } from "drizzle-orm";
@@ -25,10 +25,10 @@ export async function uploadStatus(request: Request): Promise<Response> {
     .from(uploadSession)
     .where(eq(uploadSession.id, sessionId));
 
-  // Same 404 whether the session doesn't exist or the caller isn't a member of
-  // its org - never leaking another tenant's session state to an authenticated
-  // stranger (mirrors presign/detect).
-  if (!row || !(await verifyOrganizationMembership(userId, row.organizationId))) {
+  // Scope to the session's owner, not just its org: the same 404 whether the
+  // session doesn't exist or belongs to another user, so an org member who
+  // learns a sessionId can't poll someone else's upload (mirrors detect).
+  if (!row || row.userId !== userId) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
 
