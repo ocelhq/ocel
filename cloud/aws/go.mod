@@ -10,7 +10,10 @@ module github.com/ocelhq/ocel/cloud/aws
 
 go 1.25.3
 
-require github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
+require (
+	connectrpc.com/connect v1.20.0
+	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
+)
 
 require google.golang.org/protobuf v1.36.11 // indirect
 
