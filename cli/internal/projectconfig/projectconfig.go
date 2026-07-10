@@ -113,9 +113,11 @@ func Resolve(startDir string) (*Config, error) {
 	var provider *ProviderDescriptor
 	if raw.Provider != nil {
 		options := raw.Provider.Options
-		if len(options) == 0 {
+
+		if len(options) == 0 || string(options) == "null" {
 			options = json.RawMessage("{}")
 		}
+
 		provider = &ProviderDescriptor{Package: raw.Provider.Package, Options: options}
 	}
 
