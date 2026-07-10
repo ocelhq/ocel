@@ -4,7 +4,7 @@
 
 import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
-import type { PostgresConfig, ResourceIdentifier } from "../../resources/v1/resources_pb";
+import type { BucketConfig, PostgresConfig, ResourceIdentifier } from "../../resources/v1/resources_pb";
 import { file_resources_v1_resources } from "../../resources/v1/resources_pb";
 import type { Message } from "@bufbuild/protobuf";
 
@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file provider/v1/provider.proto.
  */
 export const file_provider_v1_provider: GenFile = /*@__PURE__*/
-  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIpgBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIAEIICgZjb25maWciYwoNRGVwbG95UmVxdWVzdBInCghtYW5pZmVzdBgBIAEoCzIVLnByb3ZpZGVyLnYxLk1hbmlmZXN0Eg8KB29wdGlvbnMYAiABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoCSI9ChBCb290c3RyYXBSZXF1ZXN0Eg8KB29wdGlvbnMYASABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgCIAEoCSKYAQoLRGVwbG95RXZlbnQSLgoIcHJvZ3Jlc3MYASABKAsyGi5wcm92aWRlci52MS5Qcm9ncmVzc0V2ZW50SAASJAoDbG9nGAIgASgLMhUucHJvdmlkZXIudjEuTG9nRXZlbnRIABIqCgZyZXN1bHQYAyABKAsyGC5wcm92aWRlci52MS5SZXN1bHRFdmVudEgAQgcKBWV2ZW50IiAKDVByb2dyZXNzRXZlbnQSDwoHbWVzc2FnZRgBIAEoCSIbCghMb2dFdmVudBIPCgdtZXNzYWdlGAEgASgJIlsKC1Jlc3VsdEV2ZW50Eg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkSLAoHb3V0cHV0cxgDIAMoCzIbLnByb3ZpZGVyLnYxLlJlc291cmNlT3V0cHV0ImEKDlJlc291cmNlT3V0cHV0EhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIvCghwb3N0Z3JlcxgCIAEoCzIbLnByb3ZpZGVyLnYxLlBvc3RncmVzT3V0cHV0SABCCAoGb3V0cHV0ImcKDlBvc3RncmVzT3V0cHV0EgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBMpsBCg9Qcm92aWRlclNlcnZpY2USQAoGRGVwbG95EhoucHJvdmlkZXIudjEuRGVwbG95UmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAESRgoJQm9vdHN0cmFwEh0ucHJvdmlkZXIudjEuQm9vdHN0cmFwUmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAFCOVo3Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vcHJvdmlkZXIvdjE7cHJvdmlkZXJ2MWIGcHJvdG8z", [file_resources_v1_resources]);
+  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIsYBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYBCABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnImMKDURlcGxveVJlcXVlc3QSJwoIbWFuaWZlc3QYASABKAsyFS5wcm92aWRlci52MS5NYW5pZmVzdBIPCgdvcHRpb25zGAIgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAyABKAkiPQoQQm9vdHN0cmFwUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkimAEKC0RlcGxveUV2ZW50Ei4KCHByb2dyZXNzGAEgASgLMhoucHJvdmlkZXIudjEuUHJvZ3Jlc3NFdmVudEgAEiQKA2xvZxgCIAEoCzIVLnByb3ZpZGVyLnYxLkxvZ0V2ZW50SAASKgoGcmVzdWx0GAMgASgLMhgucHJvdmlkZXIudjEuUmVzdWx0RXZlbnRIAEIHCgVldmVudCIgCg1Qcm9ncmVzc0V2ZW50Eg8KB21lc3NhZ2UYASABKAkiGwoITG9nRXZlbnQSDwoHbWVzc2FnZRgBIAEoCSJbCgtSZXN1bHRFdmVudBIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJEiwKB291dHB1dHMYAyADKAsyGy5wcm92aWRlci52MS5SZXNvdXJjZU91dHB1dCKOAQoOUmVzb3VyY2VPdXRwdXQSFAoMbG9naWNhbF9uYW1lGAEgASgJEi8KCHBvc3RncmVzGAIgASgLMhsucHJvdmlkZXIudjEuUG9zdGdyZXNPdXRwdXRIABIrCgZidWNrZXQYAyABKAsyGS5wcm92aWRlci52MS5CdWNrZXRPdXRwdXRIAEIICgZvdXRwdXQiZwoOUG9zdGdyZXNPdXRwdXQSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhAKCGRhdGFiYXNlGAMgASgJEhAKCHVzZXJuYW1lGAQgASgJEhUKCHBhc3N3b3JkGAUgASgJQgOAAQEiLwoMQnVja2V0T3V0cHV0Eg8KB2FkZHJlc3MYASABKAkSDgoGYnVja2V0GAIgASgJMpsBCg9Qcm92aWRlclNlcnZpY2USQAoGRGVwbG95EhoucHJvdmlkZXIudjEuRGVwbG95UmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAESRgoJQm9vdHN0cmFwEh0ucHJvdmlkZXIudjEuQm9vdHN0cmFwUmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAFCOVo3Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vcHJvdmlkZXIvdjE7cHJvdmlkZXJ2MWIGcHJvdG8z", [file_resources_v1_resources]);
 
 /**
  * Manifest is the versioned, deterministic artifact the CLI builds from a
@@ -80,6 +80,12 @@ export type ManifestResource = Message<"provider.v1.ManifestResource"> & {
      */
     value: PostgresConfig;
     case: "postgres";
+  } | {
+    /**
+     * @generated from field: resources.v1.BucketConfig bucket = 4;
+     */
+    value: BucketConfig;
+    case: "bucket";
   } | { case: undefined; value?: undefined };
 };
 
@@ -298,6 +304,12 @@ export type ResourceOutput = Message<"provider.v1.ResourceOutput"> & {
      */
     value: PostgresOutput;
     case: "postgres";
+  } | {
+    /**
+     * @generated from field: provider.v1.BucketOutput bucket = 3;
+     */
+    value: BucketOutput;
+    case: "bucket";
   } | { case: undefined; value?: undefined };
 };
 
@@ -351,6 +363,34 @@ export type PostgresOutput = Message<"provider.v1.PostgresOutput"> & {
  */
 export const PostgresOutputSchema: GenMessage<PostgresOutput> = /*@__PURE__*/
   messageDesc(file_provider_v1_provider, 9);
+
+/**
+ * BucketOutput is the discrete connection detail for a provisioned bucket
+ * resource. It carries what the app needs to construct a runtime client and
+ * address the bucket: the RuntimeService endpoint (address) and the bucket
+ * binding. Together these match the OCEL_RESOURCE_BUCKET_<id> env payload
+ * ({ address, bucket }) the SDK reads.
+ *
+ * @generated from message provider.v1.BucketOutput
+ */
+export type BucketOutput = Message<"provider.v1.BucketOutput"> & {
+  /**
+   * @generated from field: string address = 1;
+   */
+  address: string;
+
+  /**
+   * @generated from field: string bucket = 2;
+   */
+  bucket: string;
+};
+
+/**
+ * Describes the message provider.v1.BucketOutput.
+ * Use `create(BucketOutputSchema)` to create a new message.
+ */
+export const BucketOutputSchema: GenMessage<BucketOutput> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 10);
 
 /**
  * ProviderService is served by a provider binary (e.g. the AWS provider,

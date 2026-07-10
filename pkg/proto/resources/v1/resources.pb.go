@@ -26,6 +26,7 @@ type ResourceType int32
 const (
 	ResourceType_RESOURCE_TYPE_UNSPECIFIED ResourceType = 0
 	ResourceType_RESOURCE_TYPE_POSTGRES    ResourceType = 1
+	ResourceType_RESOURCE_TYPE_BUCKET      ResourceType = 2
 )
 
 // Enum value maps for ResourceType.
@@ -33,10 +34,12 @@ var (
 	ResourceType_name = map[int32]string{
 		0: "RESOURCE_TYPE_UNSPECIFIED",
 		1: "RESOURCE_TYPE_POSTGRES",
+		2: "RESOURCE_TYPE_BUCKET",
 	}
 	ResourceType_value = map[string]int32{
 		"RESOURCE_TYPE_UNSPECIFIED": 0,
 		"RESOURCE_TYPE_POSTGRES":    1,
+		"RESOURCE_TYPE_BUCKET":      2,
 	}
 )
 
@@ -161,6 +164,7 @@ type DeclareRequest struct {
 	// Types that are valid to be assigned to Config:
 	//
 	//	*DeclareRequest_Postgres
+	//	*DeclareRequest_Bucket
 	Config        isDeclareRequest_Config `protobuf_oneof:"config"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -219,6 +223,15 @@ func (x *DeclareRequest) GetPostgres() *PostgresConfig {
 	return nil
 }
 
+func (x *DeclareRequest) GetBucket() *BucketConfig {
+	if x != nil {
+		if x, ok := x.Config.(*DeclareRequest_Bucket); ok {
+			return x.Bucket
+		}
+	}
+	return nil
+}
+
 type isDeclareRequest_Config interface {
 	isDeclareRequest_Config()
 }
@@ -227,7 +240,13 @@ type DeclareRequest_Postgres struct {
 	Postgres *PostgresConfig `protobuf:"bytes,2,opt,name=postgres,proto3,oneof"`
 }
 
+type DeclareRequest_Bucket struct {
+	Bucket *BucketConfig `protobuf:"bytes,3,opt,name=bucket,proto3,oneof"`
+}
+
 func (*DeclareRequest_Postgres) isDeclareRequest_Config() {}
+
+func (*DeclareRequest_Bucket) isDeclareRequest_Config() {}
 
 // config messages
 type PostgresConfig struct {
@@ -274,6 +293,50 @@ func (x *PostgresConfig) GetVersion() string {
 	return ""
 }
 
+type BucketConfig struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	AllowedOrigins []string               `protobuf:"bytes,1,rep,name=allowed_origins,json=allowedOrigins,proto3" json:"allowed_origins,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *BucketConfig) Reset() {
+	*x = BucketConfig{}
+	mi := &file_resources_v1_resources_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BucketConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BucketConfig) ProtoMessage() {}
+
+func (x *BucketConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_resources_v1_resources_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BucketConfig.ProtoReflect.Descriptor instead.
+func (*BucketConfig) Descriptor() ([]byte, []int) {
+	return file_resources_v1_resources_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *BucketConfig) GetAllowedOrigins() []string {
+	if x != nil {
+		return x.AllowedOrigins
+	}
+	return nil
+}
+
 var File_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_resources_v1_resources_proto_rawDesc = "" +
@@ -282,16 +345,20 @@ const file_resources_v1_resources_proto_rawDesc = "" +
 	"\x12ResourceIdentifier\x12.\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1a.resources.v1.ResourceTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
-	"\x0fDeclareResponse\"\x94\x01\n" +
+	"\x0fDeclareResponse\"\xca\x01\n" +
 	"\x0eDeclareRequest\x12<\n" +
 	"\bresource\x18\x01 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
-	"\bpostgres\x18\x02 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgresB\b\n" +
+	"\bpostgres\x18\x02 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgres\x124\n" +
+	"\x06bucket\x18\x03 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucketB\b\n" +
 	"\x06config\"*\n" +
 	"\x0ePostgresConfig\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\tR\aversion*I\n" +
+	"\aversion\x18\x01 \x01(\tR\aversion\"7\n" +
+	"\fBucketConfig\x12'\n" +
+	"\x0fallowed_origins\x18\x01 \x03(\tR\x0eallowedOrigins*c\n" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
-	"\x16RESOURCE_TYPE_POSTGRES\x10\x012Y\n" +
+	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
+	"\x14RESOURCE_TYPE_BUCKET\x10\x022Y\n" +
 	"\x0fResourceService\x12F\n" +
 	"\aDeclare\x12\x1c.resources.v1.DeclareRequest\x1a\x1d.resources.v1.DeclareResponseB;Z9github.com/ocelhq/ocel/pkg/proto/resources/v1;resourcesv1b\x06proto3"
 
@@ -308,25 +375,27 @@ func file_resources_v1_resources_proto_rawDescGZIP() []byte {
 }
 
 var file_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_resources_v1_resources_proto_goTypes = []any{
 	(ResourceType)(0),          // 0: resources.v1.ResourceType
 	(*ResourceIdentifier)(nil), // 1: resources.v1.ResourceIdentifier
 	(*DeclareResponse)(nil),    // 2: resources.v1.DeclareResponse
 	(*DeclareRequest)(nil),     // 3: resources.v1.DeclareRequest
 	(*PostgresConfig)(nil),     // 4: resources.v1.PostgresConfig
+	(*BucketConfig)(nil),       // 5: resources.v1.BucketConfig
 }
 var file_resources_v1_resources_proto_depIdxs = []int32{
 	0, // 0: resources.v1.ResourceIdentifier.type:type_name -> resources.v1.ResourceType
 	1, // 1: resources.v1.DeclareRequest.resource:type_name -> resources.v1.ResourceIdentifier
 	4, // 2: resources.v1.DeclareRequest.postgres:type_name -> resources.v1.PostgresConfig
-	3, // 3: resources.v1.ResourceService.Declare:input_type -> resources.v1.DeclareRequest
-	2, // 4: resources.v1.ResourceService.Declare:output_type -> resources.v1.DeclareResponse
-	4, // [4:5] is the sub-list for method output_type
-	3, // [3:4] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	5, // 3: resources.v1.DeclareRequest.bucket:type_name -> resources.v1.BucketConfig
+	3, // 4: resources.v1.ResourceService.Declare:input_type -> resources.v1.DeclareRequest
+	2, // 5: resources.v1.ResourceService.Declare:output_type -> resources.v1.DeclareResponse
+	5, // [5:6] is the sub-list for method output_type
+	4, // [4:5] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_resources_v1_resources_proto_init() }
@@ -336,6 +405,7 @@ func file_resources_v1_resources_proto_init() {
 	}
 	file_resources_v1_resources_proto_msgTypes[2].OneofWrappers = []any{
 		(*DeclareRequest_Postgres)(nil),
+		(*DeclareRequest_Bucket)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -343,7 +413,7 @@ func file_resources_v1_resources_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_resources_v1_resources_proto_rawDesc), len(file_resources_v1_resources_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   4,
+			NumMessages:   5,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

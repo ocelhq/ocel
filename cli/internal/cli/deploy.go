@@ -201,6 +201,7 @@ func toDeclarations(resources []declare.Resource) []manifestbuilder.Declaration 
 			Type:     r.Type,
 			ID:       r.Name,
 			Postgres: r.Postgres,
+			Bucket:   r.Bucket,
 		}
 	}
 	return decls

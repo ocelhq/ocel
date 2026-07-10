@@ -19,6 +19,7 @@ type Resource struct {
 	Name     string
 	Type     resourcesv1.ResourceType
 	Postgres *resourcesv1.PostgresConfig
+	Bucket   *resourcesv1.BucketConfig
 }
 
 // Parse validates req and returns the resource record it declares.
@@ -32,5 +33,6 @@ func Parse(req *resourcesv1.DeclareRequest) (Resource, error) {
 		Name:     id.GetName(),
 		Type:     id.GetType(),
 		Postgres: req.GetPostgres(),
+		Bucket:   req.GetBucket(),
 	}, nil
 }

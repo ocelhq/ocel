@@ -10,6 +10,7 @@ service ResourceService {
 enum ResourceType {
     RESOURCE_TYPE_UNSPECIFIED = 0;
     RESOURCE_TYPE_POSTGRES = 1;
+    RESOURCE_TYPE_BUCKET = 2;
 }
 
 message ResourceIdentifier {
@@ -25,10 +26,15 @@ message DeclareRequest {
 
   oneof config {
     PostgresConfig postgres = 2;
+    BucketConfig bucket = 3;
   }
 }
 
 // config messages
 message PostgresConfig {
   string version = 1;
+}
+
+message BucketConfig {
+  repeated string allowed_origins = 1;
 }

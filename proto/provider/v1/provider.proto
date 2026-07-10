@@ -76,6 +76,7 @@ message ManifestResource {
 
   oneof config {
     resources.v1.PostgresConfig postgres = 3;
+    resources.v1.BucketConfig bucket = 4;
   }
 }
 
@@ -151,6 +152,7 @@ message ResourceOutput {
 
   oneof output {
     PostgresOutput postgres = 2;
+    BucketOutput bucket = 3;
   }
 }
 
@@ -165,4 +167,14 @@ message PostgresOutput {
   // rendering. It is still carried on the wire over the private,
   // token-authenticated CLI<->provider channel.
   string password = 5 [debug_redact = true];
+}
+
+// BucketOutput is the discrete connection detail for a provisioned bucket
+// resource. It carries what the app needs to construct a runtime client and
+// address the bucket: the RuntimeService endpoint (address) and the bucket
+// binding. Together these match the OCEL_RESOURCE_BUCKET_<id> env payload
+// ({ address, bucket }) the SDK reads.
+message BucketOutput {
+  string address = 1;
+  string bucket = 2;
 }

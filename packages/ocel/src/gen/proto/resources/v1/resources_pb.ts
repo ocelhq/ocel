@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file resources/v1/resources.proto.
  */
 export const file_resources_v1_resources: GenFile = /*@__PURE__*/
-  fileDesc("ChxyZXNvdXJjZXMvdjEvcmVzb3VyY2VzLnByb3RvEgxyZXNvdXJjZXMudjEiTAoSUmVzb3VyY2VJZGVudGlmaWVyEigKBHR5cGUYASABKA4yGi5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIoABCg5EZWNsYXJlUmVxdWVzdBIyCghyZXNvdXJjZRgBIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAiABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIAEIICgZjb25maWciIQoOUG9zdGdyZXNDb25maWcSDwoHdmVyc2lvbhgBIAEoCSpJCgxSZXNvdXJjZVR5cGUSHQoZUkVTT1VSQ0VfVFlQRV9VTlNQRUNJRklFRBAAEhoKFlJFU09VUkNFX1RZUEVfUE9TVEdSRVMQATJZCg9SZXNvdXJjZVNlcnZpY2USRgoHRGVjbGFyZRIcLnJlc291cmNlcy52MS5EZWNsYXJlUmVxdWVzdBodLnJlc291cmNlcy52MS5EZWNsYXJlUmVzcG9uc2VCO1o5Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vcmVzb3VyY2VzL3YxO3Jlc291cmNlc3YxYgZwcm90bzM");
+  fileDesc("ChxyZXNvdXJjZXMvdjEvcmVzb3VyY2VzLnByb3RvEgxyZXNvdXJjZXMudjEiTAoSUmVzb3VyY2VJZGVudGlmaWVyEigKBHR5cGUYASABKA4yGi5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIq4BCg5EZWNsYXJlUmVxdWVzdBIyCghyZXNvdXJjZRgBIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAiABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYAyABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIiEKDlBvc3RncmVzQ29uZmlnEg8KB3ZlcnNpb24YASABKAkiJwoMQnVja2V0Q29uZmlnEhcKD2FsbG93ZWRfb3JpZ2lucxgBIAMoCSpjCgxSZXNvdXJjZVR5cGUSHQoZUkVTT1VSQ0VfVFlQRV9VTlNQRUNJRklFRBAAEhoKFlJFU09VUkNFX1RZUEVfUE9TVEdSRVMQARIYChRSRVNPVVJDRV9UWVBFX0JVQ0tFVBACMlkKD1Jlc291cmNlU2VydmljZRJGCgdEZWNsYXJlEhwucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXF1ZXN0Gh0ucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXNwb25zZUI7WjlnaXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw");
 
 /**
  * @generated from message resources.v1.ResourceIdentifier
@@ -65,6 +65,12 @@ export type DeclareRequest = Message<"resources.v1.DeclareRequest"> & {
      */
     value: PostgresConfig;
     case: "postgres";
+  } | {
+    /**
+     * @generated from field: resources.v1.BucketConfig bucket = 3;
+     */
+    value: BucketConfig;
+    case: "bucket";
   } | { case: undefined; value?: undefined };
 };
 
@@ -95,6 +101,23 @@ export const PostgresConfigSchema: GenMessage<PostgresConfig> = /*@__PURE__*/
   messageDesc(file_resources_v1_resources, 3);
 
 /**
+ * @generated from message resources.v1.BucketConfig
+ */
+export type BucketConfig = Message<"resources.v1.BucketConfig"> & {
+  /**
+   * @generated from field: repeated string allowed_origins = 1;
+   */
+  allowedOrigins: string[];
+};
+
+/**
+ * Describes the message resources.v1.BucketConfig.
+ * Use `create(BucketConfigSchema)` to create a new message.
+ */
+export const BucketConfigSchema: GenMessage<BucketConfig> = /*@__PURE__*/
+  messageDesc(file_resources_v1_resources, 4);
+
+/**
  * @generated from enum resources.v1.ResourceType
  */
 export enum ResourceType {
@@ -107,6 +130,11 @@ export enum ResourceType {
    * @generated from enum value: RESOURCE_TYPE_POSTGRES = 1;
    */
   POSTGRES = 1,
+
+  /**
+   * @generated from enum value: RESOURCE_TYPE_BUCKET = 2;
+   */
+  BUCKET = 2,
 }
 
 /**

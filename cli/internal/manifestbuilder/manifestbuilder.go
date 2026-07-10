@@ -26,6 +26,7 @@ type Declaration struct {
 	Type     resourcesv1.ResourceType
 	ID       string
 	Postgres *resourcesv1.PostgresConfig
+	Bucket   *resourcesv1.BucketConfig
 	Source   string
 }
 
@@ -58,6 +59,7 @@ func sourceOrUnknown(source string) string {
 // single place a new resource type's token is defined.
 var typeTokens = map[resourcesv1.ResourceType]string{
 	resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES: "postgres",
+	resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET:   "bucket",
 }
 
 func typeToken(t resourcesv1.ResourceType) (string, error) {
@@ -133,6 +135,9 @@ func Build(projectID string, declarations []Declaration) (*providerv1.Manifest, 
 		}
 		if d.Postgres != nil {
 			resource.Config = &providerv1.ManifestResource_Postgres{Postgres: d.Postgres}
+		}
+		if d.Bucket != nil {
+			resource.Config = &providerv1.ManifestResource_Bucket{Bucket: d.Bucket}
 		}
 		resources = append(resources, resource)
 	}
