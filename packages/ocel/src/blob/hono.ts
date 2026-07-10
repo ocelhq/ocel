@@ -19,31 +19,33 @@ export type {
 } from "./types";
 
 /**
- * The Hono binding of `uploader`. The route hands `middleware` Hono's
- * underlying Web `Request` (`c.req.raw`); this only narrows the request type.
+ * The Hono binding of `uploader`. The route hands `middleware` the Hono
+ * `Context`, so it can read headers, cookies, and `c.var`; this only narrows
+ * the request type.
  */
 export function uploader<
   TInput extends z.ZodType | undefined = undefined,
   TMetadata = unknown,
 >(
-  auth: UploaderAuth<Request, TInput, TMetadata>,
+  auth: UploaderAuth<Context, TInput, TMetadata>,
   upload?: UploaderUpload<TMetadata>,
-): Uploader<ParsedInput<TInput>, TMetadata, Request> {
-  return coreUploader<TInput, TMetadata, Request>(auth, upload);
+): Uploader<ParsedInput<TInput>, TMetadata, Context> {
+  return coreUploader<TInput, TMetadata, Context>(auth, upload);
 }
 
 export type HonoRouteHandler = (c: Context) => Promise<Response>;
 
 /**
  * The Hono binding of `createRouteHandler`. Returns a single handler covering
- * both methods — mount it with `app.on(["GET", "POST"], path, handler)`. It
- * unwraps Hono's Web `Request` from the context and returns the core `Response`
- * for Hono to send verbatim.
+ * both methods — mount it with `app.on(["GET", "POST"], path, handler)`. The
+ * core reads the URL and body from Hono's underlying Web `Request` (`c.req.raw`)
+ * while `middleware` receives the full `Context`; the core `Response` is sent
+ * verbatim.
  */
 export function createRouteHandler(
   bucket: Bucket,
   options?: RouteOptions,
 ): HonoRouteHandler {
   const { GET, POST } = coreCreateRouteHandler(bucket, options);
-  return (c) => (c.req.method === "GET" ? GET(c.req.raw) : POST(c.req.raw));
+  return (c) => (c.req.method === "GET" ? GET(c.req.raw) : POST(c.req.raw, c));
 }
