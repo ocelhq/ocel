@@ -93,3 +93,16 @@ func TestValidateManifest_EmptyResourcesOK(t *testing.T) {
 		t.Fatalf("validateManifest() error = %v, want nil for a manifest with no resources", err)
 	}
 }
+
+func TestResourceSummary_PostgresIncludesTypedVersion(t *testing.T) {
+	m := wellFormedManifest()
+	m.Resources[0].Config = &providerv1.ManifestResource_Postgres{
+		Postgres: &resourcesv1.PostgresConfig{Version: "15"},
+	}
+
+	got := resourceSummary(m.Resources[0])
+	want := "postgres_main: postgres version=15"
+	if got != want {
+		t.Fatalf("resourceSummary() = %q, want %q", got, want)
+	}
+}

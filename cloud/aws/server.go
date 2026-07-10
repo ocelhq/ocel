@@ -22,11 +22,14 @@ func (s *Server) Deploy(_ context.Context, req *providerv1.DeployRequest, stream
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	events := []*providerv1.DeployEvent{
-		progressEvent("validated manifest"),
+	events := []*providerv1.DeployEvent{progressEvent("validated manifest")}
+	for _, r := range manifest.GetResources() {
+		events = append(events, logEvent(resourceSummary(r)))
+	}
+	events = append(events,
 		progressEvent(fmt.Sprintf("stubbed provisioning of %d resource(s)", len(manifest.GetResources()))),
 		resultEvent(true, ""),
-	}
+	)
 	for _, event := range events {
 		if err := stream.Send(event); err != nil {
 			return err
@@ -35,9 +38,29 @@ func (s *Server) Deploy(_ context.Context, req *providerv1.DeployRequest, stream
 	return nil
 }
 
+// resourceSummary renders the typed config the (stubbed) provider decoded
+// for a manifest resource, e.g. "postgres_main: postgres version=15". This
+// is diagnostic log output only — it exists so a caller driving the real
+// binary can observe, from the outside, that a typed value (not just "a
+// well-formed manifest") actually reached the provider.
+func resourceSummary(r *providerv1.ManifestResource) string {
+	switch cfg := r.GetConfig().(type) {
+	case *providerv1.ManifestResource_Postgres:
+		return fmt.Sprintf("%s: postgres version=%s", r.GetLogicalName(), cfg.Postgres.GetVersion())
+	default:
+		return fmt.Sprintf("%s: received config", r.GetLogicalName())
+	}
+}
+
 func progressEvent(message string) *providerv1.DeployEvent {
 	return &providerv1.DeployEvent{
 		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: message}},
+	}
+}
+
+func logEvent(message string) *providerv1.DeployEvent {
+	return &providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Log{Log: &providerv1.LogEvent{Message: message}},
 	}
 }
 
