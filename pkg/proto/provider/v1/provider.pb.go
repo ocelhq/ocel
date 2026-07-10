@@ -101,6 +101,7 @@ type ManifestResource struct {
 	// Types that are valid to be assigned to Config:
 	//
 	//	*ManifestResource_Postgres
+	//	*ManifestResource_Bucket
 	Config        isManifestResource_Config `protobuf_oneof:"config"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -166,6 +167,15 @@ func (x *ManifestResource) GetPostgres() *v1.PostgresConfig {
 	return nil
 }
 
+func (x *ManifestResource) GetBucket() *v1.BucketConfig {
+	if x != nil {
+		if x, ok := x.Config.(*ManifestResource_Bucket); ok {
+			return x.Bucket
+		}
+	}
+	return nil
+}
+
 type isManifestResource_Config interface {
 	isManifestResource_Config()
 }
@@ -174,7 +184,13 @@ type ManifestResource_Postgres struct {
 	Postgres *v1.PostgresConfig `protobuf:"bytes,3,opt,name=postgres,proto3,oneof"`
 }
 
+type ManifestResource_Bucket struct {
+	Bucket *v1.BucketConfig `protobuf:"bytes,4,opt,name=bucket,proto3,oneof"`
+}
+
 func (*ManifestResource_Postgres) isManifestResource_Config() {}
+
+func (*ManifestResource_Bucket) isManifestResource_Config() {}
 
 // DeployRequest is the sole request this slice: the manifest to provision
 // against, plus the provider's own opaque options.
@@ -570,6 +586,7 @@ type ResourceOutput struct {
 	// Types that are valid to be assigned to Output:
 	//
 	//	*ResourceOutput_Postgres
+	//	*ResourceOutput_Bucket
 	Output        isResourceOutput_Output `protobuf_oneof:"output"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -628,6 +645,15 @@ func (x *ResourceOutput) GetPostgres() *PostgresOutput {
 	return nil
 }
 
+func (x *ResourceOutput) GetBucket() *BucketOutput {
+	if x != nil {
+		if x, ok := x.Output.(*ResourceOutput_Bucket); ok {
+			return x.Bucket
+		}
+	}
+	return nil
+}
+
 type isResourceOutput_Output interface {
 	isResourceOutput_Output()
 }
@@ -636,7 +662,13 @@ type ResourceOutput_Postgres struct {
 	Postgres *PostgresOutput `protobuf:"bytes,2,opt,name=postgres,proto3,oneof"`
 }
 
+type ResourceOutput_Bucket struct {
+	Bucket *BucketOutput `protobuf:"bytes,3,opt,name=bucket,proto3,oneof"`
+}
+
 func (*ResourceOutput_Postgres) isResourceOutput_Output() {}
+
+func (*ResourceOutput_Bucket) isResourceOutput_Output() {}
 
 // PostgresOutput is the discrete connection detail for a provisioned
 // postgres resource. Callers compose a connection URL from these parts.
@@ -719,6 +751,63 @@ func (x *PostgresOutput) GetPassword() string {
 	return ""
 }
 
+// BucketOutput is the discrete connection detail for a provisioned bucket
+// resource. It carries what the app needs to construct a runtime client and
+// address the bucket: the RuntimeService endpoint (address) and the bucket
+// binding. Together these match the OCEL_RESOURCE_BUCKET_<id> env payload
+// ({ address, bucket }) the SDK reads.
+type BucketOutput struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Address       string                 `protobuf:"bytes,1,opt,name=address,proto3" json:"address,omitempty"`
+	Bucket        string                 `protobuf:"bytes,2,opt,name=bucket,proto3" json:"bucket,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BucketOutput) Reset() {
+	*x = BucketOutput{}
+	mi := &file_provider_v1_provider_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BucketOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BucketOutput) ProtoMessage() {}
+
+func (x *BucketOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BucketOutput.ProtoReflect.Descriptor instead.
+func (*BucketOutput) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *BucketOutput) GetAddress() string {
+	if x != nil {
+		return x.Address
+	}
+	return ""
+}
+
+func (x *BucketOutput) GetBucket() string {
+	if x != nil {
+		return x.Bucket
+	}
+	return ""
+}
+
 var File_provider_v1_provider_proto protoreflect.FileDescriptor
 
 const file_provider_v1_provider_proto_rawDesc = "" +
@@ -728,11 +817,12 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12;\n" +
-	"\tresources\x18\x03 \x03(\v2\x1d.provider.v1.ManifestResourceR\tresources\"\xb9\x01\n" +
+	"\tresources\x18\x03 \x03(\v2\x1d.provider.v1.ManifestResourceR\tresources\"\xef\x01\n" +
 	"\x10ManifestResource\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12<\n" +
 	"\bresource\x18\x02 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
-	"\bpostgres\x18\x03 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgresB\b\n" +
+	"\bpostgres\x18\x03 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgres\x124\n" +
+	"\x06bucket\x18\x04 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucketB\b\n" +
 	"\x06config\"\x87\x01\n" +
 	"\rDeployRequest\x121\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x15.provider.v1.ManifestR\bmanifest\x12\x18\n" +
@@ -753,17 +843,21 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x125\n" +
-	"\aoutputs\x18\x03 \x03(\v2\x1b.provider.v1.ResourceOutputR\aoutputs\"x\n" +
+	"\aoutputs\x18\x03 \x03(\v2\x1b.provider.v1.ResourceOutputR\aoutputs\"\xad\x01\n" +
 	"\x0eResourceOutput\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x129\n" +
-	"\bpostgres\x18\x02 \x01(\v2\x1b.provider.v1.PostgresOutputH\x00R\bpostgresB\b\n" +
+	"\bpostgres\x18\x02 \x01(\v2\x1b.provider.v1.PostgresOutputH\x00R\bpostgres\x123\n" +
+	"\x06bucket\x18\x03 \x01(\v2\x19.provider.v1.BucketOutputH\x00R\x06bucketB\b\n" +
 	"\x06output\"\x91\x01\n" +
 	"\x0ePostgresOutput\x12\x12\n" +
 	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
 	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
 	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1a\n" +
 	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
-	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword2\x9b\x01\n" +
+	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"@\n" +
+	"\fBucketOutput\x12\x18\n" +
+	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x16\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket2\x9b\x01\n" +
 	"\x0fProviderService\x12@\n" +
 	"\x06Deploy\x12\x1a.provider.v1.DeployRequest\x1a\x18.provider.v1.DeployEvent0\x01\x12F\n" +
 	"\tBootstrap\x12\x1d.provider.v1.BootstrapRequest\x1a\x18.provider.v1.DeployEvent0\x01B9Z7github.com/ocelhq/ocel/pkg/proto/provider/v1;providerv1b\x06proto3"
@@ -780,7 +874,7 @@ func file_provider_v1_provider_proto_rawDescGZIP() []byte {
 	return file_provider_v1_provider_proto_rawDescData
 }
 
-var file_provider_v1_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_provider_v1_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
 var file_provider_v1_provider_proto_goTypes = []any{
 	(*Manifest)(nil),              // 0: provider.v1.Manifest
 	(*ManifestResource)(nil),      // 1: provider.v1.ManifestResource
@@ -792,28 +886,32 @@ var file_provider_v1_provider_proto_goTypes = []any{
 	(*ResultEvent)(nil),           // 7: provider.v1.ResultEvent
 	(*ResourceOutput)(nil),        // 8: provider.v1.ResourceOutput
 	(*PostgresOutput)(nil),        // 9: provider.v1.PostgresOutput
-	(*v1.ResourceIdentifier)(nil), // 10: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),     // 11: resources.v1.PostgresConfig
+	(*BucketOutput)(nil),          // 10: provider.v1.BucketOutput
+	(*v1.ResourceIdentifier)(nil), // 11: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),     // 12: resources.v1.PostgresConfig
+	(*v1.BucketConfig)(nil),       // 13: resources.v1.BucketConfig
 }
 var file_provider_v1_provider_proto_depIdxs = []int32{
 	1,  // 0: provider.v1.Manifest.resources:type_name -> provider.v1.ManifestResource
-	10, // 1: provider.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	11, // 2: provider.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	0,  // 3: provider.v1.DeployRequest.manifest:type_name -> provider.v1.Manifest
-	5,  // 4: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
-	6,  // 5: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
-	7,  // 6: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
-	8,  // 7: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
-	9,  // 8: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
-	2,  // 9: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
-	3,  // 10: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
-	4,  // 11: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
-	4,  // 12: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
-	11, // [11:13] is the sub-list for method output_type
-	9,  // [9:11] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	11, // 1: provider.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	12, // 2: provider.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	13, // 3: provider.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	0,  // 4: provider.v1.DeployRequest.manifest:type_name -> provider.v1.Manifest
+	5,  // 5: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
+	6,  // 6: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
+	7,  // 7: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
+	8,  // 8: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
+	9,  // 9: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
+	10, // 10: provider.v1.ResourceOutput.bucket:type_name -> provider.v1.BucketOutput
+	2,  // 11: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
+	3,  // 12: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
+	4,  // 13: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
+	4,  // 14: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
+	13, // [13:15] is the sub-list for method output_type
+	11, // [11:13] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_provider_v1_provider_proto_init() }
@@ -823,6 +921,7 @@ func file_provider_v1_provider_proto_init() {
 	}
 	file_provider_v1_provider_proto_msgTypes[1].OneofWrappers = []any{
 		(*ManifestResource_Postgres)(nil),
+		(*ManifestResource_Bucket)(nil),
 	}
 	file_provider_v1_provider_proto_msgTypes[4].OneofWrappers = []any{
 		(*DeployEvent_Progress)(nil),
@@ -831,6 +930,7 @@ func file_provider_v1_provider_proto_init() {
 	}
 	file_provider_v1_provider_proto_msgTypes[8].OneofWrappers = []any{
 		(*ResourceOutput_Postgres)(nil),
+		(*ResourceOutput_Bucket)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -838,7 +938,7 @@ func file_provider_v1_provider_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_v1_provider_proto_rawDesc), len(file_provider_v1_provider_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   10,
+			NumMessages:   11,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

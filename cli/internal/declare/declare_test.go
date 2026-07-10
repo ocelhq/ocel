@@ -50,6 +50,19 @@ func TestParse_CarriesTypedPostgresConfig(t *testing.T) {
 	}
 }
 
+func TestParse_CarriesTypedBucketConfig(t *testing.T) {
+	res, err := Parse(&resourcesv1.DeclareRequest{
+		Resource: &resourcesv1.ResourceIdentifier{Name: "storage", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET},
+		Config:   &resourcesv1.DeclareRequest_Bucket{Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}},
+	})
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if res.Bucket == nil || len(res.Bucket.GetAllowedOrigins()) != 1 || res.Bucket.GetAllowedOrigins()[0] != "https://app.example.com" {
+		t.Fatalf("Bucket = %+v, want allowed_origins [https://app.example.com]", res.Bucket)
+	}
+}
+
 func TestParse_NoConfigLeavesPostgresNil(t *testing.T) {
 	res, err := Parse(&resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},

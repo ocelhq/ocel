@@ -8,6 +8,9 @@ const resourceToString = (t: ResourceType) => {
     case ResourceType.POSTGRES: {
       return "POSTGRES";
     }
+    case ResourceType.BUCKET: {
+      return "BUCKET";
+    }
     default:
       throw new Error("Unknown resource type");
   }

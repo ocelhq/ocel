@@ -166,6 +166,30 @@ func TestBuild_TypedConfigRoundTripsAsOneof(t *testing.T) {
 	}
 }
 
+func TestBuild_BucketConfigRoundTripsAsOneof(t *testing.T) {
+	manifest, err := Build("proj_1", []Declaration{
+		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(manifest.GetResources()) != 1 {
+		t.Fatalf("got %d resources, want 1", len(manifest.GetResources()))
+	}
+
+	resource := manifest.GetResources()[0]
+	if resource.GetLogicalName() != "bucket_storage" {
+		t.Fatalf("logical_name = %q, want %q", resource.GetLogicalName(), "bucket_storage")
+	}
+	bucket := resource.GetBucket()
+	if bucket == nil {
+		t.Fatalf("resource.GetBucket() = nil, want typed BucketConfig")
+	}
+	if got := bucket.GetAllowedOrigins(); len(got) != 1 || got[0] != "https://app.example.com" {
+		t.Fatalf("bucket.AllowedOrigins = %v, want [https://app.example.com]", got)
+	}
+}
+
 func TestBuild_DuplicateTypeAndID_NamesBothDeclarationsAndSources(t *testing.T) {
 	_, err := Build("proj_1", []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/db.ts:5"},
