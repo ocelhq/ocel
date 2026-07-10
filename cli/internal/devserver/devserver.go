@@ -11,6 +11,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
@@ -64,11 +65,12 @@ func New(apiURL, token, projectID string) *Server {
 // Declare implements resourcesv1connect.ResourceServiceHandler, recording
 // the declared resource into the manifest.
 func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*resourcesv1.DeclareResponse, error) {
-	if req.Resource.Type == resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED {
-		return nil, fmt.Errorf("unsupported resource type: %v", req.Resource.Type)
+	res, err := declare.Parse(req)
+	if err != nil {
+		return nil, err
 	}
 
-	s.manifest.Add(manifest.Entry{Name: req.Resource.Name, Type: req.Resource.Type})
+	s.manifest.Add(manifest.Entry{Name: res.Name, Type: res.Type})
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
