@@ -33,5 +33,8 @@ export async function uploadStatus(request: Request): Promise<Response> {
   }
 
   const state = aggregateState(row.files as SessionFile[]);
-  return Response.json({ state }, { status: 200 });
+  // An expired session is a non-completion; surface a terminal error so the
+  // client's poll loop fires its error callback (never onClientUploadComplete).
+  const error = state === "expired" ? "upload expired" : undefined;
+  return Response.json({ state, error }, { status: 200 });
 }
