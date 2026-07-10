@@ -26,14 +26,12 @@ import (
 )
 
 // TestRunDeploy_E2E_RealBuiltStubProvider drives `ocel deploy` end to end
-// against the REAL, BUILT cloud/aws provider binary (T7) — not the
-// re-exec'd fake TestRunDeploy_HappyPath uses — proving the full discover
-// -> collect -> build manifest -> locate -> spawn -> ready -> deploy ->
-// stream -> teardown chain against an actual provider process, with the
-// resource declared through the real "ocel/postgres" SDK import (T6's
-// version-pass-through fix), not a hand-rolled fetch. This is the only test
-// that exercises every piece together (ocelhq-x53.11 PRD, "End-to-end"
-// testing decision).
+// against the REAL, BUILT cloud/aws provider binary — not the re-exec'd fake
+// TestRunDeploy_HappyPath uses — proving the full discover -> collect ->
+// build manifest -> locate -> spawn -> ready -> deploy -> stream -> teardown
+// chain against an actual provider process, with the resource declared
+// through the real "ocel/postgres" SDK import, not a hand-rolled fetch. This
+// is the only test that exercises every piece together.
 func TestRunDeploy_E2E_RealBuiltStubProvider(t *testing.T) {
 	root, binPath := setUpRealProviderFixture(t)
 

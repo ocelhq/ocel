@@ -24,8 +24,8 @@ const (
 	sessionTTL = 2 * time.Hour
 
 	// sessionTagKey is the object-tag key the presigned PUT binds. The prod
-	// listener (T8) reads this tag off the landed object to resolve its session
-	// — collision-safe, unlike keying by the object key.
+	// completion listener reads this tag off the landed object to resolve its
+	// session — collision-safe, unlike keying by the object key.
 	sessionTagKey = "sessionId"
 )
 
@@ -96,7 +96,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *runtimev1.PresignUploa
 	targets := make([]*runtimev1.PresignedTarget, len(req.GetFiles()))
 
 	for i, f := range req.GetFiles() {
-		url, err := s.presignPut(ctx, f.GetKey(), f.GetMimeType(), f.GetSize(), sessionID)
+		url, err := s.presignPut(ctx, f.GetKey(), f.GetMimeType(), f.GetSize(), sessionID, req.GetContentDisposition())
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("presign %q: %w", f.GetKey(), err))
 		}
@@ -108,9 +108,10 @@ func (s *Service) PresignUpload(ctx context.Context, req *runtimev1.PresignUploa
 			State:    statePending,
 		}
 		targets[i] = &runtimev1.PresignedTarget{
-			Url:  url,
-			Key:  f.GetKey(),
-			Name: f.GetName(),
+			Url:                url,
+			Key:                f.GetKey(),
+			Name:               f.GetName(),
+			ContentDisposition: req.GetContentDisposition(),
 		}
 	}
 
@@ -137,14 +138,20 @@ func (s *Service) PresignUpload(ctx context.Context, req *runtimev1.PresignUploa
 // the session id, so a client cannot exceed declared limits or alter the tag
 // without breaking the signature. The user's key is used as-is: prod has no
 // tenancy prefix (the env owns its bucket).
-func (s *Service) presignPut(ctx context.Context, key, contentType string, size int64, sessionID string) (string, error) {
-	req, err := s.presigner.PresignPutObject(ctx, &s3.PutObjectInput{
+func (s *Service) presignPut(ctx context.Context, key, contentType string, size int64, sessionID, contentDisposition string) (string, error) {
+	in := &s3.PutObjectInput{
 		Bucket:        aws.String(s.bucket),
 		Key:           aws.String(key),
 		ContentType:   aws.String(contentType),
 		ContentLength: aws.Int64(size),
 		Tagging:       aws.String(sessionTagKey + "=" + sessionID),
-	}, func(o *s3.PresignOptions) {
+	}
+	// When set, sign Content-Disposition so the client must send it and S3 binds
+	// it onto the stored object as tamper-resistant metadata.
+	if contentDisposition != "" {
+		in.ContentDisposition = aws.String(contentDisposition)
+	}
+	req, err := s.presigner.PresignPutObject(ctx, in, func(o *s3.PresignOptions) {
 		o.Expires = presignTTL
 	})
 	if err != nil {

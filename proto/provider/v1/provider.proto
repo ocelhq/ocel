@@ -13,8 +13,8 @@ import "resources/v1/resources.proto";
 //
 // This file, together with pkg/proto/provider/v1/contract.go, is the single
 // source for the three CLI<->provider contracts every provider must speak.
-// Consumers (T7 the provider server, T8 the CLI-side runner) implement
-// against these, they do not redefine them:
+// Consumers (the provider server and the CLI-side runner) implement against
+// these, they do not redefine them:
 //
 //  1. Manifest shape - see Manifest/ManifestResource below. Config schema is
 //     single-sourced with resources.v1 (declare), never re-specified here.

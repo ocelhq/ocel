@@ -173,7 +173,12 @@ async function handlePresign(
 
   return json({
     sessionId: res.sessionId,
-    files: res.files.map((t) => ({ url: t.url, key: t.key, name: t.name })),
+    files: res.files.map((t) => ({
+      url: t.url,
+      key: t.key,
+      name: t.name,
+      contentDisposition: t.contentDisposition || undefined,
+    })),
   });
 }
 

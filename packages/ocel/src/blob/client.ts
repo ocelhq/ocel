@@ -54,7 +54,12 @@ export interface UploadCallbacks {
 
 interface PresignResponse {
   sessionId: string;
-  files: { url: string; key: string; name: string }[];
+  files: {
+    url: string;
+    key: string;
+    name: string;
+    contentDisposition?: string;
+  }[];
 }
 
 interface PollResponse {
@@ -120,9 +125,19 @@ export function createUploadClient<B extends Bucket<Record<string, AnyUploader>>
       const presign = (await presignRes.json()) as PresignResponse;
 
       await Promise.all(
-        presign.files.map((target, i) =>
-          fetchImpl(target.url, { method: "PUT", body: args.files[i] }),
-        ),
+        presign.files.map((target, i) => {
+          // Content-Type rides implicitly from the File body; Content-Disposition
+          // must be sent explicitly so the signed presigned PUT binds it onto the
+          // stored object.
+          const headers = target.contentDisposition
+            ? { "content-disposition": target.contentDisposition }
+            : undefined;
+          return fetchImpl(target.url, {
+            method: "PUT",
+            body: args.files[i],
+            headers,
+          });
+        }),
       );
 
       const status = await pollUntilTerminal(

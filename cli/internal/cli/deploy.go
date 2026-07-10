@@ -69,9 +69,9 @@ func init() {
 // configured, malformed or missing config — is returned before anything is
 // spawned.
 //
-// Deploy makes no call to the Ocel API this slice: the project id comes
-// from the resolved config, and the manifest is built entirely locally
-// (see the ocelhq-x53 PRD's "Login gate only" decision).
+// Deploy makes no call to the Ocel API: the project id comes from the
+// resolved config, and the manifest is built entirely locally. Login is only
+// gated to confirm the user is authenticated.
 func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if _, err := loadCredentials(); err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
@@ -118,7 +118,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 
 		// The provider reports the whole stack's connection outputs on the
 		// terminal ResultEvent. We collect them here; the CLI does not consume
-		// them yet (see the ocelhq-c4d spec's outputs decision).
+		// them yet.
 		var stackOutputs []*providerv1.ResourceOutput
 		onEvent := func(ev *providerv1.DeployEvent) {
 			streamDeployEvent(stdout, ev)

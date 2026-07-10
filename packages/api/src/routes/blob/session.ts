@@ -1,6 +1,6 @@
 // The lifecycle state of one file within an upload session. Mirrors the proto
 // UploadState set; "pending" is the initial write, the detector transitions to
-// "succeeded", and the expiry sweep (T5) transitions to "expired".
+// "succeeded", and the expiry sweep transitions to "expired".
 export type FileState = "pending" | "succeeded" | "expired";
 
 // One file's persisted record inside a session's `files` jsonb array. key is

@@ -66,7 +66,12 @@ export async function presignUpload(request: Request): Promise<Response> {
   const sessionId = uuidv7();
   const secret = randomBytes(32).toString("base64url");
 
-  const targets: { url: string; key: string; name: string }[] = [];
+  const targets: {
+    url: string;
+    key: string;
+    name: string;
+    contentDisposition?: string;
+  }[] = [];
   const fileStates: SessionFile[] = [];
   for (const file of files) {
     const key = prefix + file.key;
@@ -75,8 +80,14 @@ export async function presignUpload(request: Request): Promise<Response> {
       contentType: file.mimeType,
       contentLength: file.size,
       sessionId,
+      contentDisposition,
     });
-    targets.push({ url, key, name: file.name });
+    targets.push({
+      url,
+      key,
+      name: file.name,
+      contentDisposition: contentDisposition || undefined,
+    });
     fileStates.push({
       key,
       name: file.name,

@@ -68,16 +68,13 @@ export async function expireOverdueSessions(
 }
 
 // POST /api/blob/detect. The CLI dev server's detection loop calls this per
-// tick with its projectId; the loop cannot touch the store itself (the CLI
-// never talks to the cloud store directly), so the store work lives here. This
-// endpoint owns the detector half of the completion architecture: it HEADs
-// MinIO for each pending file of the caller's own sessions in the project,
-// performs the atomic idempotent pending -> succeeded transition, signs the
-// completion with the session secret, and returns the newly-succeeded files.
-// The caller then POSTs each as op=callback to its callbackBaseUrl (which in
-// real `ocel dev` is the app on the developer's local machine, unreachable
-// from a managed API - hence the CLI, not this endpoint, delivers the
-// callback).
+// tick; the store work lives here because the CLI never talks to the cloud
+// store directly. It HEADs MinIO for each pending file of the caller's own
+// sessions in the project, does the atomic idempotent pending -> succeeded
+// transition, signs each completion with the session secret, and returns the
+// newly-succeeded files. The CLI (not this endpoint) then POSTs each as
+// op=callback: the callback target is the developer's local app, unreachable
+// from a managed API.
 export async function detectUploads(request: Request): Promise<Response> {
   const userId = await getSessionUserId(request.headers);
   if (!userId) {

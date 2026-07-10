@@ -88,13 +88,10 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 		AllowedOrigins: origins,
 		CORS: corsRule{
 			AllowedOrigins: origins,
-			// The browser PUTs bytes directly to the presigned URL; the preflight
-			// OPTIONS is what this answers. PUT is the whole upload path this slice.
 			AllowedMethods: []string{"PUT"},
-			// The presigned PUT carries Content-Type, Content-Length and the signed
-			// x-amz-tagging header; allow any request header so the browser's
-			// preflight for those never fails. ETag is exposed so the client can
-			// read the stored object's ETag off the PUT response.
+			// Allow any request header so the browser preflight for the presigned
+			// PUT's signed headers never fails; expose ETag so the client can read
+			// the stored object's ETag off the PUT response.
 			AllowedHeaders: []string{"*"},
 			ExposeHeaders:  []string{"ETag"},
 			MaxAgeSeconds:  bucketCORSMaxAgeSeconds,
@@ -302,11 +299,11 @@ func joinArn(arn pulumi.StringOutput, suffix string) pulumi.StringInput {
 
 // collectBucketOutput builds the BucketOutput for a provisioned bucket. bucket
 // is the real S3 bucket name from the stack; address is the runtime endpoint the
-// app dials. address is a deferred placeholder this slice: its live value is the
-// local socket the membrane serves RuntimeService on, and the membrane's
-// launch/address-injection is explicitly out of scope here (see the epic's
-// "Out of Scope: the membrane"). It is populated coherently so the env payload
-// shape ({address, bucket}) is complete, and re-pointed when the membrane lands.
+// app dials. address is a deferred placeholder: its live value is the local
+// socket the membrane serves RuntimeService on, and the membrane's
+// launch/address-injection lands separately. It is populated coherently so the
+// env payload shape ({address, bucket}) is complete, and re-pointed when the
+// membrane lands.
 func collectBucketOutput(name string, fields map[string]interface{}) (*providerv1.ResourceOutput, error) {
 	bucket, err := requireStringField(fields, name, outputKeyBucket)
 	if err != nil {

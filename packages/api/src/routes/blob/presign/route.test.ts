@@ -90,6 +90,10 @@ describe("POST /api/blob/presign", () => {
       const signed = url.searchParams.get("X-Amz-SignedHeaders") ?? "";
       expect(signed).toContain("content-length");
       expect(signed).toContain("content-type");
+      // contentDisposition is signed (so the store binds it onto the object) and
+      // echoed on the target so the client sends it on the PUT.
+      expect(signed).toContain("content-disposition");
+      expect(target.contentDisposition).toBe("inline");
       // The session tag rides in the SigV4-signed query string (bound, but not
       // a sent header, so a browser-style PUT that won't send x-amz-tagging
       // still succeeds).
