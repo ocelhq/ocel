@@ -41,6 +41,32 @@ async function transitionPendingToSucceeded(
   return (result.rowCount ?? 0) > 0;
 }
 
+// Transition still-pending files of the caller's overdue sessions to expired.
+// The CASE flips only 'pending' elements, so a 'succeeded' file is never
+// downgraded; the pending-file row guard makes re-runs no-ops. ORDINALITY
+// preserves file index positions, which are load-bearing elsewhere.
+export async function expireOverdueSessions(
+  projectId: string,
+  userId: string,
+): Promise<void> {
+  await db.execute(sql`
+    UPDATE upload_session
+    SET files = (
+      SELECT jsonb_agg(
+        CASE WHEN elem ->> 'state' = 'pending'
+             THEN jsonb_set(elem, '{state}', '"expired"')
+             ELSE elem END
+        ORDER BY ord
+      )
+      FROM jsonb_array_elements(files) WITH ORDINALITY AS t(elem, ord)
+    )
+    WHERE project_id = ${projectId}
+      AND user_id = ${userId}
+      AND expires_at <= now()
+      AND files @> '[{"state":"pending"}]'::jsonb
+  `);
+}
+
 // POST /api/blob/detect. The CLI dev server's detection loop calls this per
 // tick with its projectId; the loop cannot touch the store itself (the CLI
 // never talks to the cloud store directly), so the store work lives here. This
@@ -87,6 +113,10 @@ export async function detectUploads(request: Request): Promise<Response> {
   if (!isMember) {
     return Response.json({ error: "Not found" }, { status: 404 });
   }
+
+  // Expire overdue sessions in the same pass; completion below only sweeps live
+  // sessions, so the two transitions never touch the same file.
+  await expireOverdueSessions(projectId, userId);
 
   // Scope to the caller's own live sessions in this project: each developer's
   // `ocel dev` sweeps only its own sessions, so a completion callback is only

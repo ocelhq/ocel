@@ -113,7 +113,9 @@ describe("GET /api/blob/status", () => {
       const sessionId = await seedSession(session, "status-expired");
       await setFileStates(sessionId, ["succeeded", "expired"]);
       const res = await uploadStatus(statusRequest(sessionId, session.headers));
-      expect((await res.json()).state).toBe("expired");
+      const body = await res.json();
+      expect(body.state).toBe("expired");
+      expect(body.error).toBe("upload expired");
     } finally {
       await session.cleanup();
     }
