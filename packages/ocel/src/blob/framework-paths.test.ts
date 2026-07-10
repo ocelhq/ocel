@@ -11,6 +11,7 @@ vi.mock("../utils/rpc", () => ({
 const { bucket } = await import("./bucket");
 import { createRouteHandler as honoRouteHandler, uploader as honoUploader } from "./hono";
 import { createRouteHandler as expressRouteHandler } from "./express";
+import { decodeMetadata } from "./metadata";
 import { uploader } from "./uploader";
 import type { RuntimeContext } from "./runtime-context";
 import type { RuntimeServiceClient } from "./runtime-client";
@@ -64,13 +65,43 @@ describe("hono path", () => {
     expect(req.callbackBaseUrl).toBe("http://localhost/api/upload");
   });
 
-  it("typed uploader narrows middleware's req to a Web Request", () => {
-    // Compile-time intent: `req` is a Web Request here. Runtime just asserts it builds.
+  it("typed uploader narrows middleware's req to the Hono Context", () => {
+    // Compile-time intent: `req` is a Hono Context here, so context accessors
+    // like c.req.header / c.get are available. Runtime just asserts it builds.
     const up = honoUploader(
-      { middleware: ({ req }) => ({ ua: req.headers.get("user-agent") }) },
+      { middleware: ({ req }) => ({ ua: req.req.header("user-agent") }) },
       {},
     );
     expect(up.upload).toBeDefined();
+  });
+
+  it("hands the Hono Context to middleware at runtime", async () => {
+    const { ctx, presignUpload } = fakeContext();
+    // middleware reads a header off the Context - only possible if the route
+    // passes `c` (not the raw Request) as its `req`.
+    const ctxBucket = bucket("ctx-storage", {
+      uploaders: {
+        avatar: honoUploader(
+          { middleware: ({ req }) => ({ user: req.req.header("x-user") }) },
+          { path: { prefix: "avatars/" } },
+        ),
+      },
+    });
+    const app = new Hono();
+    app.on(["GET", "POST"], "/api/upload", honoRouteHandler(ctxBucket, { runtime: ctx }));
+
+    const res = await app.request("/api/upload?op=presign", {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-user": "alice" },
+      body: JSON.stringify({
+        uploader: "avatar",
+        files: [{ name: "photo.jpg", size: 10, mimeType: "image/jpeg" }],
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const upstream = presignUpload.mock.calls[0]![0] as { metadata: Uint8Array };
+    expect(decodeMetadata(upstream.metadata).metadata).toEqual({ user: "alice" });
   });
 });
 

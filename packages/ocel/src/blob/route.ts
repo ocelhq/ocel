@@ -185,6 +185,7 @@ async function handlePresign(
   bucket: Bucket,
   ctx: RuntimeContext,
   req: RouteRequest,
+  middlewareReq: unknown,
 ) {
   const parsed = presignBody.safeParse(await requestJson(req));
   if (!parsed.success) return json({ error: "invalid presign request" }, 400);
@@ -203,7 +204,7 @@ async function handlePresign(
 
   let metadata: unknown;
   try {
-    metadata = await up.auth.middleware({ req, input });
+    metadata = await up.auth.middleware({ req: middlewareReq, input });
   } catch (err) {
     return json({ error: errorMessage(err, "unauthorized") }, 401);
   }
@@ -308,7 +309,13 @@ function errorMessage(err: unknown, fallback: string): string {
  */
 export interface RouteHandlers {
   GET: (req: RouteRequest) => Promise<Response>;
-  POST: (req: RouteRequest) => Promise<Response>;
+  /**
+   * `middlewareReq` is what uploader `middleware` receives as its `req`; it
+   * defaults to `req`. A framework path passes its richer request object here
+   * (e.g. Hono's `Context`) while the core still reads the URL and body from
+   * the transport `req`.
+   */
+  POST: (req: RouteRequest, middlewareReq?: unknown) => Promise<Response>;
 }
 
 export function createRouteHandler(
@@ -318,9 +325,11 @@ export function createRouteHandler(
   let ctx = options.runtime;
   const getCtx = () => (ctx ??= resolveRuntimeContext(bucket));
 
-  async function POST(req: RouteRequest) {
+  async function POST(req: RouteRequest, middlewareReq?: unknown) {
     const op = opOf(req);
-    if (op === "presign") return handlePresign(bucket, getCtx(), req);
+    if (op === "presign") {
+      return handlePresign(bucket, getCtx(), req, middlewareReq ?? req);
+    }
     if (op === "callback") return handleCallback(bucket, getCtx(), req);
     return json({ error: `unknown op '${op}'` }, 400);
   }
