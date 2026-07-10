@@ -13,6 +13,12 @@
   "dependencies": {
     "ocel": "workspace:^"
   },
+  "optionalDependencies": {
+    "@ocel/provider-aws-darwin-arm64": "workspace:^",
+    "@ocel/provider-aws-darwin-x64": "workspace:^",
+    "@ocel/provider-aws-linux-x64": "workspace:^",
+    "@ocel/provider-aws-win32-x64": "workspace:^"
+  },
   "devDependencies": {
     "typescript": "^5.9.3",
     "vite": "^8.1.3",

@@ -1,0 +1,19 @@
+{
+  "name": "@ocel/provider-aws-linux-x64",
+  "version": "0.0.1-alpha.0",
+  "description": "Ocel AWS provider prebuilt binary for linux-x64",
+  "os": [
+    "linux"
+  ],
+  "cpu": [
+    "x64"
+  ],
+  "files": [
+    "bin"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}
