@@ -1,0 +1,123 @@
+syntax = "proto3";
+package runtime.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/runtime/v1;runtimev1";
+
+// RuntimeService owns the cloud mechanics of ocel/blob uploads - minting
+// presigned targets, persisting a pending session, verifying the completion
+// signature, and reporting status - behind one language-neutral contract so
+// every SDK (JS, Python, Go) reuses one implementation. The SDK owns app
+// semantics (middleware, accept/limits, user key-generation); this service
+// owns nothing but store-side mechanics. All RPCs are addressed over Connect
+// to an injected address; the SDK never branches on prod/dev.
+service RuntimeService {
+  // PresignUpload writes the pending session and mints the presigned PUT
+  // targets. The response's targets are index-aligned with the request's
+  // files.
+  rpc PresignUpload(PresignUploadRequest) returns (PresignUploadResponse);
+
+  // VerifyUploadSignature re-derives the per-session HMAC over the signed
+  // payload and constant-time compares it. It is read-only: on a valid
+  // signature it returns the stored metadata so the route need never hold the
+  // session secret. The secret never leaves the store.
+  rpc VerifyUploadSignature(VerifyUploadSignatureRequest) returns (VerifyUploadSignatureResponse);
+
+  // GetUploadStatus reads the shared store and reports a session's state. It
+  // is read-only and drives op=poll; reading the shared store keeps it
+  // correct across app instances.
+  rpc GetUploadStatus(GetUploadStatusRequest) returns (GetUploadStatusResponse);
+}
+
+// UploadState is the lifecycle of an upload session as recorded in the shared
+// store.
+enum UploadState {
+  UPLOAD_STATE_UNSPECIFIED = 0;
+  UPLOAD_STATE_PENDING = 1;
+  UPLOAD_STATE_SUCCEEDED = 2;
+  UPLOAD_STATE_EXPIRED = 3;
+}
+
+// PresignFile is one file the client intends to upload, as reported at presign
+// time. key is user-produced (the SDK computes it from the uploader's path
+// config); name/size/mime_type describe the file.
+message PresignFile {
+  string key = 1;
+  string name = 2;
+  int64 size = 3;
+  string mime_type = 4;
+}
+
+// PresignedTarget is the minted destination for one PresignFile, index-aligned
+// with the request. url is the presigned PUT the browser writes to; key and
+// name echo the file this target was minted for.
+message PresignedTarget {
+  string url = 1;
+  string key = 2;
+  string name = 3;
+}
+
+// CompletedFile is the file identity carried by the completion callback and
+// signed by the detector. It is passed verbatim to VerifyUploadSignature as
+// the payload the signature covers.
+message CompletedFile {
+  string key = 1;
+  string name = 2;
+  int64 size = 3;
+  string mime_type = 4;
+}
+
+message PresignUploadRequest {
+  string bucket = 1;
+  repeated PresignFile files = 2;
+
+  // metadata is opaque, SDK-encoded bytes (the uploader middleware's return)
+  // persisted on the session and handed back on VerifyUploadSignature. This
+  // service never inspects it.
+  bytes metadata = 3;
+
+  string content_disposition = 4;
+
+  // callback_base_url is captured from the incoming presign request and
+  // persisted on the session; the detector later uses it to address the
+  // route's op=callback. Load-bearing downstream - never omit.
+  string callback_base_url = 5;
+}
+
+message PresignUploadResponse {
+  string session_id = 1;
+
+  // files are the presigned targets, index-aligned with
+  // PresignUploadRequest.files.
+  repeated PresignedTarget files = 2;
+}
+
+message VerifyUploadSignatureRequest {
+  string session_id = 1;
+
+  // signature is HMAC(session_secret, canonical({session_id, file})) computed
+  // by the detector. The secret itself never appears in this contract.
+  string signature = 2;
+
+  // file is the signed payload, passed verbatim.
+  CompletedFile file = 3;
+}
+
+message VerifyUploadSignatureResponse {
+  bool valid = 1;
+
+  // metadata is the session's stored, opaque metadata bytes, present only when
+  // valid is true.
+  bytes metadata = 2;
+}
+
+message GetUploadStatusRequest {
+  string session_id = 1;
+}
+
+message GetUploadStatusResponse {
+  UploadState state = 1;
+
+  // error is populated when the session carries a failure detail; empty
+  // otherwise.
+  string error = 2;
+}
