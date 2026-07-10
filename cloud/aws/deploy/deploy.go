@@ -70,7 +70,7 @@ func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progres
 			if pg == nil {
 				continue
 			}
-			if err := registerPostgres(pctx, r.GetLogicalName(), translatePostgres(pg), vpc.Id, subnets.Ids); err != nil {
+			if err := registerPostgres(pctx, r.GetLogicalName(), translatePostgres(pg), vpc.Id, vpc.CidrBlock, subnets.Ids); err != nil {
 				return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
 			}
 		}
@@ -98,6 +98,7 @@ func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progres
 		upOpts = append(upOpts, optup.ProgressStreams(logWriter))
 	}
 	res, err := stack.Up(ctx, upOpts...)
+	logWriter.Flush() // emit any final, un-newline-terminated engine line
 	if err != nil {
 		return nil, fmt.Errorf("provision stack %s: %w", cfg.StackName, err)
 	}
@@ -134,10 +135,22 @@ func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *provid
 }
 
 func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name string, fields map[string]interface{}) (*providerv1.ResourceOutput, error) {
-	host, _ := fields[outputKeyHost].(string)
-	database, _ := fields[outputKeyDatabase].(string)
-	username, _ := fields[outputKeyUsername].(string)
-	secretARN, _ := fields[outputKeySecretARN].(string)
+	host, err := requireStringField(fields, name, outputKeyHost)
+	if err != nil {
+		return nil, err
+	}
+	database, err := requireStringField(fields, name, outputKeyDatabase)
+	if err != nil {
+		return nil, err
+	}
+	username, err := requireStringField(fields, name, outputKeyUsername)
+	if err != nil {
+		return nil, err
+	}
+	secretARN, err := requireStringField(fields, name, outputKeySecretARN)
+	if err != nil {
+		return nil, err
+	}
 
 	port := postgresPort
 	if p, ok := fields[outputKeyPort].(float64); ok {
@@ -161,6 +174,18 @@ func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name stri
 			},
 		},
 	}, nil
+}
+
+// requireStringField reads key from a resource's raw output map, erroring if
+// it is absent, not a string, or empty — so a mistyped or missing connection
+// field surfaces as a deploy failure rather than a misleading success with an
+// unusable connection.
+func requireStringField(fields map[string]interface{}, name, key string) (string, error) {
+	v, ok := fields[key].(string)
+	if !ok || v == "" {
+		return "", fmt.Errorf("output %q for %s is missing or not a non-empty string", key, name)
+	}
+	return v, nil
 }
 
 // resolveManagedPassword reads the RDS-managed master-user secret and returns

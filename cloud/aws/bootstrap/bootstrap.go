@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+	smithy "github.com/aws/smithy-go"
 )
 
 const (
@@ -228,16 +229,25 @@ Outputs:
 `, outputStateBucket, outputVersion, RequiredBootstrapVersion)
 }
 
+// CloudFormation surfaces both "stack does not exist" and the no-op update as
+// a generic ValidationError with no dedicated SDK error type, so these are
+// classified by the typed API error code plus its message (the code alone is
+// too broad — it covers many unrelated validation failures).
+
 func isStackNotFound(err error) bool {
-	var apiErr interface{ ErrorMessage() string }
-	if errors.As(err, &apiErr) && strings.Contains(apiErr.ErrorMessage(), "does not exist") {
-		return true
-	}
-	return strings.Contains(err.Error(), "does not exist")
+	return isValidationErrorContaining(err, "does not exist")
 }
 
 func isNoUpdates(err error) bool {
-	return strings.Contains(err.Error(), "No updates are to be performed")
+	return isValidationErrorContaining(err, "No updates are to be performed")
+}
+
+func isValidationErrorContaining(err error, substr string) bool {
+	var apiErr smithy.APIError
+	if !errors.As(err, &apiErr) {
+		return false
+	}
+	return apiErr.ErrorCode() == "ValidationError" && strings.Contains(apiErr.ErrorMessage(), substr)
 }
 
 // stackWaitTimeout bounds CloudFormation create/update waits.

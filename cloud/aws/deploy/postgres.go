@@ -72,16 +72,27 @@ func translatePostgres(cfg *resourcesv1.PostgresConfig) postgresArgs {
 // registerPostgres declares the Aurora Serverless v2 cluster (plus its subnet
 // group, security group, and serverless instance) for one postgres resource
 // inside a Pulumi program, and exports the resource's connection outputs
-// under logicalName. vpcID and subnetIDs identify the default VPC the cluster
-// lands in. The exported map carries the discrete connection parts plus the
-// RDS-managed master-password secret ARN, which the caller resolves to a
-// plaintext password after the stack settles (see collectPostgresOutput).
-func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs, vpcID string, subnetIDs []string) error {
+// under logicalName. vpcID/vpcCIDR/subnetIDs identify the default VPC the
+// cluster lands in. The exported map carries the discrete connection parts
+// plus the RDS-managed master-password secret ARN, which the caller resolves
+// to a plaintext password after the stack settles (see collectPostgresOutput).
+func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) error {
 	sg, err := ec2.NewSecurityGroup(ctx, logicalName+"-sg", &ec2.SecurityGroupArgs{
 		Description: pulumi.String("Ocel-managed security group for " + logicalName),
 		VpcId:       pulumi.String(vpcID),
-		// No ingress rules: the cluster is private (publiclyAccessible=false).
-		// Allow all egress so the DB can reach AWS services it needs.
+		// The cluster is private (publiclyAccessible=false). Allow the Postgres
+		// port only from within the VPC — that's where the deployed app runs —
+		// and never from the public internet. Egress is open so the DB can
+		// reach AWS services it needs.
+		Ingress: ec2.SecurityGroupIngressArray{
+			&ec2.SecurityGroupIngressArgs{
+				Protocol:    pulumi.String("tcp"),
+				FromPort:    pulumi.Int(args.Port),
+				ToPort:      pulumi.Int(args.Port),
+				CidrBlocks:  pulumi.StringArray{pulumi.String(vpcCIDR)},
+				Description: pulumi.String("Postgres access from within the VPC"),
+			},
+		},
 		Egress: ec2.SecurityGroupEgressArray{
 			&ec2.SecurityGroupEgressArgs{
 				Protocol:   pulumi.String("-1"),
