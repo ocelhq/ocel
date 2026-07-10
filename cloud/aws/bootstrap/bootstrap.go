@@ -74,7 +74,13 @@ func CheckDeployed(ctx context.Context, api CFNDescriber) (Deployed, error) {
 		case outputStateBucket:
 			d.StateBucket = aws.ToString(o.OutputValue)
 		case outputVersion:
-			d.Version, _ = strconv.Atoi(aws.ToString(o.OutputValue))
+
+			var err error
+			d.Version, err = strconv.Atoi(aws.ToString(o.OutputValue))
+			if err != nil {
+				return Deployed{}, fmt.Errorf("invalid bootstrap version %q: %w", aws.ToString(o.OutputValue), err)
+			}
+
 		}
 	}
 	return d, nil
