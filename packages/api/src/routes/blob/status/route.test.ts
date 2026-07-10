@@ -134,6 +134,26 @@ describe("GET /api/blob/status", () => {
     }
   });
 
+  it("404s a session owned by another user in the caller's own org (owner-scoped, not org-scoped)", async () => {
+    const owner = await createTestSessionWithOrganization();
+    const other = await createTestSessionWithOrganization();
+    try {
+      const sessionId = await seedSession(owner, "status-same-org-nonowner");
+      // Reassign the row to another user while keeping the caller's org: an org
+      // member who isn't the owner must still get 404 (this leaked when the
+      // guard checked org membership instead of ownership).
+      await db
+        .update(uploadSession)
+        .set({ userId: other.user.id })
+        .where(eq(uploadSession.id, sessionId));
+      const res = await uploadStatus(statusRequest(sessionId, owner.headers));
+      expect(res.status).toBe(404);
+    } finally {
+      await owner.cleanup();
+      await other.cleanup();
+    }
+  });
+
   it("404s an unknown session", async () => {
     const session = await createTestSessionWithOrganization();
     try {

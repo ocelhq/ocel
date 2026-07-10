@@ -128,6 +128,35 @@ describe("POST /api/blob/detect (MinIO)", () => {
     }
   });
 
+  it("completes only the session whose tag matches the landed object when two sessions share a key", async () => {
+    const session = await createTestSessionWithOrganization();
+    try {
+      const { id: projectId } = await createProjectFor(session, "detect-collision");
+      // Same user + project + key (randomSuffix off): both sessions presign the
+      // identical object key, but only the one the client actually uploads
+      // through owns the landed object (via its sessionId tag).
+      const a = await presign(session, projectId);
+      const b = await presign(session, projectId);
+      expect(a.key).toBe(b.key);
+      await fetch(b.url, {
+        method: "PUT",
+        body: Buffer.from("bytes"),
+        headers: { "content-type": "image/png" },
+      });
+
+      const body = await (
+        await detectUploads(detectRequest(projectId, session.headers))
+      ).json();
+      expect(body.completions).toHaveLength(1);
+      expect(body.completions[0].sessionId).toBe(b.sessionId);
+      expect((await fileState(b.sessionId, 0)).state).toBe("succeeded");
+      // Session A must NOT be falsely completed by B's object.
+      expect((await fileState(a.sessionId, 0)).state).toBe("pending");
+    } finally {
+      await session.cleanup();
+    }
+  });
+
   it("emits no duplicate under overlapping concurrent sweeps", async () => {
     const session = await createTestSessionWithOrganization();
     try {

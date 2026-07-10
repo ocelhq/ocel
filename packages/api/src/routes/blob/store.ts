@@ -1,5 +1,5 @@
 import {
-  HeadObjectCommand,
+  GetObjectTaggingCommand,
   PutObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
@@ -30,22 +30,20 @@ export function storeBucket(): string {
   return blobConfig().bucket;
 }
 
-let cachedClient: S3Client | undefined;
-
+// Built per call, not cached: it's pure credential assembly (no I/O), so a dev
+// env change to OCEL_BLOB_* takes effect immediately, and a module loaded
+// before env is populated can't pin the placeholder defaults.
 function s3Client(): S3Client {
-  if (!cachedClient) {
-    const config = blobConfig();
-    cachedClient = new S3Client({
-      region: config.region,
-      endpoint: config.endpoint,
-      forcePathStyle: true,
-      credentials: {
-        accessKeyId: config.accessKeyId,
-        secretAccessKey: config.secretAccessKey,
-      },
-    });
-  }
-  return cachedClient;
+  const config = blobConfig();
+  return new S3Client({
+    region: config.region,
+    endpoint: config.endpoint,
+    forcePathStyle: true,
+    credentials: {
+      accessKeyId: config.accessKeyId,
+      secretAccessKey: config.secretAccessKey,
+    },
+  });
 }
 
 export interface PresignPutArgs {
@@ -88,20 +86,25 @@ export async function presignPut(args: PresignPutArgs): Promise<string> {
   });
 }
 
-// Reports whether an object exists at key in the store bucket. The detector
-// HEADs each pending file's key to decide whether the bytes have landed; a
-// missing object is the common (still-uploading) case, not an error.
-export async function objectExists(key: string): Promise<boolean> {
+// Returns the sessionId tag of the object at key, or undefined if no object has
+// landed there yet. The detector reads the tag - not just existence - so it
+// only completes a session when the landed object actually belongs to it: with
+// randomSuffix off, two sessions can share a key, and the tag is what keeps
+// completion collision-safe (mirroring the prod listener's GetObjectTagging).
+export async function objectSessionTag(
+  key: string,
+): Promise<string | undefined> {
   try {
-    await s3Client().send(
-      new HeadObjectCommand({ Bucket: blobConfig().bucket, Key: key }),
+    const { TagSet } = await s3Client().send(
+      new GetObjectTaggingCommand({ Bucket: blobConfig().bucket, Key: key }),
     );
-    return true;
+    return TagSet?.find((t) => t.Key === SESSION_TAG_KEY)?.Value;
   } catch (err) {
     const status = (err as { $metadata?: { httpStatusCode?: number } })
       .$metadata?.httpStatusCode;
-    if (status === 404 || (err as { name?: string }).name === "NotFound") {
-      return false;
+    const name = (err as { name?: string }).name;
+    if (status === 404 || name === "NotFound" || name === "NoSuchKey") {
+      return undefined;
     }
     throw err;
   }

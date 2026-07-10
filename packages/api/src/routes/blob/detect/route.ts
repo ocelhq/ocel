@@ -5,7 +5,7 @@ import { and, eq, gt, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { SessionFile } from "../session";
 import { signUpload } from "../signing";
-import { objectExists } from "../store";
+import { objectSessionTag } from "../store";
 
 const detectSchema = z.object({
   projectId: z.string().min(1),
@@ -135,7 +135,10 @@ export async function detectUploads(request: Request): Promise<Response> {
     for (let idx = 0; idx < files.length; idx++) {
       const file = files[idx];
       if (file.state !== "pending") continue;
-      if (!(await objectExists(file.key))) continue;
+      // Match the landed object's sessionId tag, not just its existence: with
+      // randomSuffix off two sessions can share a key, and the tag is what
+      // attributes the object to the session that actually produced it.
+      if ((await objectSessionTag(file.key)) !== session.id) continue;
 
       const transitioned = await transitionPendingToSucceeded(
         session.id,
