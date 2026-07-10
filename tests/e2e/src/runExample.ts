@@ -110,21 +110,21 @@ export function describeExample(spec: ExampleSpec) {
         return;
       }
 
-      const spec_ = spec.blob;
+      const blobSpec = spec.blob;
       const client = createUploadClient<Bucket<Record<string, AnyUploader>>>({
-        url: `${base(spec)}${spec_.uploadPath}`,
+        url: `${base(spec)}${blobSpec.uploadPath}`,
         pollIntervalMs: 250,
         maxPollMs: 20_000,
       });
 
-      const file = new File([Buffer.from("example-bytes")], spec_.file.name, {
-        type: spec_.file.type,
+      const file = new File([Buffer.from("example-bytes")], blobSpec.file.name, {
+        type: blobSpec.file.type,
       });
 
       const clientKeys: string[] = [];
       const result = await client.upload(
-        spec_.uploaderName,
-        { files: [file], input: spec_.input },
+        blobSpec.uploaderName,
+        { files: [file], input: blobSpec.input },
         {
           onClientUploadComplete: ({ files }) => {
             clientKeys.push(...files.map((f) => f.key));
@@ -137,12 +137,12 @@ export function describeExample(spec: ExampleSpec) {
       // prefix/path-fn and the file name.
       expect(result.files).toHaveLength(1);
       const key = result.files[0]!.key;
-      for (const part of spec_.expectedKeyIncludes) expect(key).toContain(part);
+      for (const part of blobSpec.expectedKeyIncludes) expect(key).toContain(part);
       expect(clientKeys).toEqual([key]);
 
       // onUploadComplete wrote the row; the app's list route surfaces it.
       const row = await poll(async () => {
-        const res = await fetch(`${base(spec)}${spec_.documentsPath}`);
+        const res = await fetch(`${base(spec)}${blobSpec.documentsPath}`);
         if (!res.ok) return undefined;
         const docs = (await res.json()) as Array<{
           key: string;
@@ -154,9 +154,9 @@ export function describeExample(spec: ExampleSpec) {
       });
 
       expect(row).toBeDefined();
-      expect(row!.name).toBe(spec_.file.name);
-      expect(row!.mime_type).toBe(spec_.file.type);
-      expect(row!.owner_id).toBe(spec_.expectedOwnerId);
+      expect(row!.name).toBe(blobSpec.file.name);
+      expect(row!.mime_type).toBe(blobSpec.file.type);
+      expect(row!.owner_id).toBe(blobSpec.expectedOwnerId);
     }, 60_000);
   });
 }
