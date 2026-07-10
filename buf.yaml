@@ -5,6 +5,10 @@ modules:
 lint:
   use:
     - STANDARD
+  except:
+    # Streaming RPCs here return a named stream of events (EnvUpdate,
+    # DeployEvent), not a single "response" — RPCNameResponse doesn't fit.
+    - RPC_RESPONSE_STANDARD_NAME
 breaking:
   use:
     - FILE

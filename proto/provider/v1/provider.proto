@@ -1,0 +1,113 @@
+syntax = "proto3";
+package provider.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/v1;providerv1";
+
+import "resources/v1/resources.proto";
+
+// ProviderService is served by a provider binary (e.g. the AWS provider,
+// cloud/aws) and driven by the CLI over a private local channel (Unix
+// domain socket, or loopback TCP where Unix sockets aren't viable). Exactly
+// one RPC this slice: methods arrive with the milestones that need them,
+// not ahead of them.
+//
+// This file, together with pkg/proto/provider/v1/contract.go, is the single
+// source for the three CLI<->provider contracts every provider must speak.
+// Consumers (T7 the provider server, T8 the CLI-side runner) implement
+// against these, they do not redefine them:
+//
+//  1. Manifest shape - see Manifest/ManifestResource below. Config schema is
+//     single-sourced with resources.v1 (declare), never re-specified here.
+//  2. ProviderService.Deploy - the one RPC, its request/event shapes, and the
+//     options encoding (see DeployRequest.options).
+//  3. Session token handshake - the CLI generates a per-session token,
+//     passes it to the spawned provider process via the
+//     providerv1.SessionTokenEnvVar environment variable, and presents it on
+//     every RPC call as an `Authorization: Bearer <token>` header (the same
+//     scheme this repo already uses for API auth). The provider verifies
+//     that header against its own env-provided token on every call, for
+//     both the Unix-socket and loopback-TCP transports; a missing or
+//     mismatched token is rejected. See providerv1.FormatAuthHeader /
+//     providerv1.ParseAuthHeader in contract.go.
+//  4. Readiness sentinel - once the provider has bound its listener, it
+//     prints exactly one line to stdout: the literal prefix
+//     "OCEL_PROVIDER_READY", a single space separator, then the address:
+//     `unix:<absolute-socket-path>` for a Unix domain socket, or
+//     `tcp:127.0.0.1:<port>` for the loopback TCP fallback (never 0.0.0.0;
+//     loopback TCP is a weaker isolation posture than the Unix socket and
+//     must be revisited before providers handle real cloud credentials).
+//     Any other stdout/stderr, before or after that line, is diagnostic log
+//     output, not protocol. See providerv1.FormatReadinessLine /
+//     providerv1.ParseReadinessLine in contract.go.
+service ProviderService {
+    rpc Deploy(DeployRequest) returns (stream DeployEvent);
+}
+
+// Manifest is the versioned, deterministic artifact the CLI builds from a
+// project's discovered resources and hands to a provider.
+message Manifest {
+  // schema_version lets a provider reject a manifest shape it doesn't
+  // understand, e.g. "provider.v1".
+  string schema_version = 1;
+  string project_id = 2;
+  repeated ManifestResource resources = 3;
+}
+
+// ManifestResource pairs a resource's identity with its typed configuration.
+// The config oneof reuses resources.v1's typed config messages so a
+// resource's config schema is single-sourced across declare and manifest.
+message ManifestResource {
+  // logical_name = <type>_<id>, where type is the resource type's canonical
+  // lowercase token (e.g. "postgres") and id is the user's chosen resource
+  // key. Normalized to lowercase alphanumeric plus underscore. Deterministic:
+  // identical declarations always produce the same logical_name, independent
+  // of declaration order.
+  string logical_name = 1;
+  resources.v1.ResourceIdentifier resource = 2;
+
+  oneof config {
+    resources.v1.PostgresConfig postgres = 3;
+  }
+}
+
+// DeployRequest is the sole request this slice: the manifest to provision
+// against, plus the provider's own opaque options.
+message DeployRequest {
+  Manifest manifest = 1;
+
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 2;
+
+  // protocol_version pins the DeployRequest/DeployEvent wire contract so a
+  // provider can reject a request it can't speak.
+  string protocol_version = 3;
+}
+
+// DeployEvent is a single item on the Deploy response stream: either
+// progress/log output, or - always the final event - the terminal outcome.
+message DeployEvent {
+  oneof event {
+    ProgressEvent progress = 1;
+    LogEvent log = 2;
+    ResultEvent result = 3;
+  }
+}
+
+// ProgressEvent reports a discrete, human-readable step of deploy progress.
+message ProgressEvent {
+  string message = 1;
+}
+
+// LogEvent carries diagnostic output that isn't a discrete progress step.
+message LogEvent {
+  string message = 1;
+}
+
+// ResultEvent is always the last event on the stream: success, or failure
+// with an explanatory error.
+message ResultEvent {
+  bool success = 1;
+  string error = 2; // populated when success is false
+}
