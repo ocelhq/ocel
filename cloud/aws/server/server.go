@@ -93,6 +93,9 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 	if err := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion).Explain(); err != nil {
 		return nil, err
 	}
+	if deployed.StateBucket == "" {
+		return nil, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `ocel bootstrap`")
+	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
