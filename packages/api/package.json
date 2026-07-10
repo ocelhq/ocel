@@ -10,6 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1083.0",
+    "@aws-sdk/s3-request-presigner": "^3.1083.0",
     "@repo/auth": "workspace:*",
     "@repo/db": "workspace:*",
     "drizzle-orm": "^0.45.2",

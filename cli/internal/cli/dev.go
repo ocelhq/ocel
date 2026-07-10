@@ -97,17 +97,19 @@ var errLostElection = errors.New("another process became leader first")
 // apiURL is the resolved Ocel API origin provisioning is authenticated
 // against (see effectiveAPIURL).
 func runLeader(ctx context.Context, creds credentials.Credentials, apiURL string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	srv := devserver.New(apiURL, creds.AccessToken, cfg.ProjectID)
-
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("start dev server: %w", err)
 	}
+
+	addr := listener.Addr().String()
+	devServerAddr := "http://" + addr
+
+	srv := devserver.New(apiURL, creds.AccessToken, cfg.ProjectID, devServerAddr)
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	addr := listener.Addr().String()
 	if err := lockfile.Create(cfg.ProjectID, addr); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return errLostElection
@@ -115,8 +117,6 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL string
 		return fmt.Errorf("write leader lockfile: %w", err)
 	}
 	defer lockfile.Remove(cfg.ProjectID)
-
-	devServerAddr := "http://" + addr
 
 	resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, stdout, stderr)
 	if err != nil {
