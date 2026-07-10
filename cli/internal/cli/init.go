@@ -189,7 +189,7 @@ func runInit(ctx context.Context, cwd string, name string, opts initOptions, std
 	}
 	fmt.Fprintf(stdout, "✓ Created project (id: %s)\n", project.ID)
 
-	configContent := fmt.Sprintf("import { defineConfig } from \"ocel\";\n\nexport default defineConfig({\n  projectId: %q,\n});\n", project.ID)
+	configContent := fmt.Sprintf("import { defineConfig } from \"ocel/config\";\n\nexport default defineConfig({\n  projectId: %q,\n});\n", project.ID)
 	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		return fmt.Errorf("created project (id: %s) but failed to write ocel.config.ts: %w", project.ID, err)
 	}
