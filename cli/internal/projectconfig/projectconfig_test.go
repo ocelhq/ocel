@@ -149,6 +149,92 @@ export default {
 	}
 }
 
+func TestResolve_ParsesProviderDescriptor(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  provider: { package: "@ocel/provider-aws", options: { region: "us-east-1" } },
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.Provider == nil {
+		t.Fatal("Provider = nil, want a descriptor")
+	}
+	if cfg.Provider.Package != "@ocel/provider-aws" {
+		t.Fatalf("Provider.Package = %q, want %q", cfg.Provider.Package, "@ocel/provider-aws")
+	}
+	if got, want := string(cfg.Provider.Options), `{"region":"us-east-1"}`; got != want {
+		t.Fatalf("Provider.Options = %s, want %s", got, want)
+	}
+}
+
+func TestResolve_ProviderOptionsDefaultToEmptyObject(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  provider: { package: "@ocel/provider-aws" },
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got, want := string(cfg.Provider.Options), `{}`; got != want {
+		t.Fatalf("Provider.Options = %s, want %s", got, want)
+	}
+}
+
+func TestResolve_ProviderAbsentByDefault(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.Provider != nil {
+		t.Fatalf("Provider = %+v, want nil", cfg.Provider)
+	}
+}
+
+func TestConfig_RequireProvider_ErrorWhenAbsent(t *testing.T) {
+	cfg := &Config{}
+
+	_, err := cfg.RequireProvider()
+	if err == nil {
+		t.Fatal("RequireProvider: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "no provider configured") {
+		t.Fatalf("err = %q, want it to mention %q", err.Error(), "no provider configured")
+	}
+	if !strings.Contains(err.Error(), "awsProvider") {
+		t.Fatalf("err = %q, want it to mention %q", err.Error(), "awsProvider")
+	}
+}
+
+func TestConfig_RequireProvider_ReturnsDescriptorWhenPresent(t *testing.T) {
+	cfg := &Config{Provider: &ProviderDescriptor{Package: "@ocel/provider-aws", Options: []byte(`{}`)}}
+
+	provider, err := cfg.RequireProvider()
+	if err != nil {
+		t.Fatalf("RequireProvider: %v", err)
+	}
+	if provider.Package != "@ocel/provider-aws" {
+		t.Fatalf("Package = %q, want %q", provider.Package, "@ocel/provider-aws")
+	}
+}
+
 func TestResolve_WritesBuildArtifactsUnderOcelDir(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
