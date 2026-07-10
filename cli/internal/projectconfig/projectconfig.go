@@ -32,14 +32,38 @@ type Discovery struct {
 	Paths []string
 }
 
+// ProviderDescriptor identifies the deploy target a config's `provider`
+// field names — e.g. `provider: awsProvider({...})` in ocel.config.ts,
+// exported by packages like @ocel/provider-aws (see
+// packages/provider-aws/src/index.ts). Package is used to locate the
+// provider's binary; Options is forwarded to it opaquely (the CLI never
+// inspects it) and is always well-formed JSON, `{}` when the user passed
+// none.
+type ProviderDescriptor struct {
+	Package string
+	Options json.RawMessage
+}
+
 // Config is the resolved, defaulted project configuration read from
 // ocel.config.ts.
 type Config struct {
 	ProjectID string
 	Discovery Discovery
+	// Provider is nil when the config has no `provider` field configured.
+	Provider *ProviderDescriptor
 	// Dir is the directory containing the resolved ocel.config.ts.
 	// discovery.paths are relative to it.
 	Dir string
+}
+
+// RequireProvider returns c.Provider, or a clear error naming what to add to
+// ocel.config.ts if it's absent. Callers (e.g. `ocel deploy`) should call
+// this before spawning anything provider-related.
+func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
+	if c.Provider == nil {
+		return nil, fmt.Errorf("no provider configured in %s — add `provider: awsProvider({...})` (from @ocel/provider-aws) to your config", ConfigFileName)
+	}
+	return c.Provider, nil
 }
 
 // rawConfig mirrors the JSON shape emitted by executing the user's bundled
@@ -49,6 +73,10 @@ type rawConfig struct {
 	Discovery struct {
 		Paths []string `json:"paths"`
 	} `json:"discovery"`
+	Provider *struct {
+		Package string          `json:"package"`
+		Options json.RawMessage `json:"options"`
+	} `json:"provider"`
 }
 
 // Resolve walks up from startDir to find the nearest ancestor
@@ -82,9 +110,19 @@ func Resolve(startDir string) (*Config, error) {
 		paths = defaultDiscoveryPaths
 	}
 
+	var provider *ProviderDescriptor
+	if raw.Provider != nil {
+		options := raw.Provider.Options
+		if len(options) == 0 {
+			options = json.RawMessage("{}")
+		}
+		provider = &ProviderDescriptor{Package: raw.Provider.Package, Options: options}
+	}
+
 	return &Config{
 		ProjectID: raw.ProjectID,
 		Discovery: Discovery{Paths: paths},
+		Provider:  provider,
 		Dir:       filepath.Dir(configPath),
 	}, nil
 }
