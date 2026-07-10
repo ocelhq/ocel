@@ -1,0 +1,22 @@
+{
+  "schema_version": "provider.v1",
+  "project_id": "proj_1",
+  "resources": [
+    {
+      "logical_name": "postgres_analytics",
+      "type": "RESOURCE_TYPE_POSTGRES",
+      "id": "analytics",
+      "postgres": {
+        "version": "16"
+      }
+    },
+    {
+      "logical_name": "postgres_main",
+      "type": "RESOURCE_TYPE_POSTGRES",
+      "id": "main",
+      "postgres": {
+        "version": "17"
+      }
+    }
+  ]
+}
