@@ -9,7 +9,8 @@
   },
   "dependencies": {
     "@repo/auth": "workspace:*",
-    "@repo/db": "workspace:*"
+    "@repo/db": "workspace:*",
+    "ocel": "workspace:^"
   },
   "devDependencies": {
     "@types/node": "^20",

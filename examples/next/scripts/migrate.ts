@@ -10,8 +10,19 @@ async function main() {
       done  BOOLEAN NOT NULL DEFAULT false
     )
   `);
+  await pg.query(`
+    CREATE TABLE IF NOT EXISTS documents (
+      id         SERIAL      PRIMARY KEY,
+      key        TEXT        NOT NULL,
+      name       TEXT        NOT NULL,
+      mime_type  TEXT        NOT NULL,
+      size       BIGINT      NOT NULL,
+      owner_id   TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
   await pg.end();
-  console.log("migrated: todos table ready");
+  console.log("migrated: todos + documents tables ready");
 }
 
 main().catch((err) => {

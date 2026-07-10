@@ -10,6 +10,7 @@ export {
   type RuntimeContext,
 } from "./runtime-context";
 export type {
+  AnyUploader,
   BlobRequest,
   CompletedFile,
   FileInfo,

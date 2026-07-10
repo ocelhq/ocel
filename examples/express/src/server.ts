@@ -1,5 +1,6 @@
 import express from "express";
-import { pg } from "../ocel/index";
+import { createRouteHandler } from "ocel/blob/express";
+import { pg, uploads } from "../ocel/index";
 
 // postgres("main") is resolved from the environment `ocel dev` injects, so the
 // server never sees a connection string of its own.
@@ -54,6 +55,17 @@ app.delete("/todos/:id", async (req, res) => {
     return;
   }
   res.status(204).end();
+});
+
+// The upload surface for the `uploads` bucket (?op=presign|callback|poll),
+// mounted for every method at this exact path.
+app.all("/api/upload", createRouteHandler(uploads));
+
+app.get("/documents", async (_req, res) => {
+  const { rows } = await pg.query(
+    "SELECT id, key, name, mime_type, size, owner_id FROM documents ORDER BY id",
+  );
+  res.json(rows);
 });
 
 app.listen(PORT, () => {

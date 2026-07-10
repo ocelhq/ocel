@@ -29,6 +29,24 @@ const placeholderConfig = `import { defineConfig } from "ocel/config";
 export default defineConfig({ projectId: "placeholder" });
 `;
 
+/** The blob upload scenario each example wires up, driven by the e2e. */
+export type BlobSpec = {
+  /** Route the SDK upload client hits (?op=presign|callback|poll). */
+  uploadPath: string;
+  /** GET list route exposing the documents table. */
+  documentsPath: string;
+  /** The uploader declared on the example's bucket. */
+  uploaderName: string;
+  /** The `input` the uploader's middleware validates. */
+  input: Record<string, unknown>;
+  /** A real file the client PUTs to storage. */
+  file: { name: string; type: string };
+  /** Substrings the landed object key must contain (prefix/path-fn + name). */
+  expectedKeyIncludes: string[];
+  /** The owner_id onUploadComplete should persist (threaded from input). */
+  expectedOwnerId: string;
+};
+
 export type ExampleSpec = {
   framework: "next" | "express" | "hono";
   dir: string;
@@ -41,7 +59,23 @@ export type ExampleSpec = {
   migrateCmd: string[];
   /** Command (argv) `ocel dev --` executes to start the server. */
   startCmd: string[];
+  /** The blob upload scenario, distinct per example. */
+  blob: BlobSpec;
 };
+
+// The dev object store the whole upload flow lands bytes in. Present in the
+// root docker-compose; the blob e2e self-skips when it isn't reachable.
+export const blobEndpoint =
+  process.env.OCEL_BLOB_ENDPOINT ?? "http://localhost:9000";
+
+export async function minioReachable(): Promise<boolean> {
+  try {
+    const res = await fetch(`${blobEndpoint}/minio/health/live`);
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
 
 // Distinct ports so the three specs can run their dev servers in parallel.
 export const examples: Record<ExampleSpec["framework"], ExampleSpec> = {
@@ -53,6 +87,15 @@ export const examples: Record<ExampleSpec["framework"], ExampleSpec> = {
     todosPath: "/api/todos",
     migrateCmd: ["pnpm", "migrate"],
     startCmd: ["pnpm", "start"],
+    blob: {
+      uploadPath: "/api/upload",
+      documentsPath: "/api/documents",
+      uploaderName: "avatar",
+      input: { userId: "user-1" },
+      file: { name: "me.png", type: "image/png" },
+      expectedKeyIncludes: ["avatars/", "me.png"],
+      expectedOwnerId: "user-1",
+    },
   },
   express: {
     framework: "express",
@@ -62,6 +105,15 @@ export const examples: Record<ExampleSpec["framework"], ExampleSpec> = {
     todosPath: "/todos",
     migrateCmd: ["pnpm", "migrate"],
     startCmd: ["pnpm", "start"],
+    blob: {
+      uploadPath: "/api/upload",
+      documentsPath: "/documents",
+      uploaderName: "document",
+      input: { ownerId: "owner-1" },
+      file: { name: "report.pdf", type: "application/pdf" },
+      expectedKeyIncludes: ["documents/", "report.pdf"],
+      expectedOwnerId: "owner-1",
+    },
   },
   hono: {
     framework: "hono",
@@ -71,6 +123,15 @@ export const examples: Record<ExampleSpec["framework"], ExampleSpec> = {
     todosPath: "/todos",
     migrateCmd: ["pnpm", "migrate"],
     startCmd: ["pnpm", "start"],
+    blob: {
+      uploadPath: "/api/upload",
+      documentsPath: "/documents",
+      uploaderName: "attachment",
+      input: { threadId: "thread-1" },
+      file: { name: "note.png", type: "image/png" },
+      expectedKeyIncludes: ["threads/thread-1/", "note.png"],
+      expectedOwnerId: "thread-1",
+    },
   },
 };
 

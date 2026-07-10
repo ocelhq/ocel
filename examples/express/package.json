@@ -11,7 +11,8 @@
   "dependencies": {
     "express": "~5.0.0",
     "ocel": "workspace:^",
-    "pg": "^8.22.0"
+    "pg": "^8.22.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/express": "~5.0.0",

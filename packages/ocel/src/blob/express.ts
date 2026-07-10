@@ -48,10 +48,11 @@ async function sendResponse(
 
 /**
  * The Express binding of `createRouteHandler`. Returns a `RequestHandler` for
- * both methods — mount it with `app.use(path, handler)`. The core reads the
- * Express `Request` directly (path + Host rebuild the URL; a body already
- * parsed by `express.json()` is read from `req.body`), and its `Response` is
- * written back onto the Express `Response`.
+ * both methods — mount it at an exact path with `app.all(path, handler)` (or
+ * `app.use(path, handler)`). The core reads the Express `Request` directly
+ * (path + Host rebuild the URL; a body already parsed by `express.json()` is
+ * read from `req.body`), and its `Response` is written back onto the Express
+ * `Response`.
  */
 export function createRouteHandler(
   bucket: Bucket,
@@ -59,6 +60,9 @@ export function createRouteHandler(
 ): RequestHandler {
   const { GET, POST } = coreCreateRouteHandler(bucket, options);
   return (req, res, next) => {
+    // `app.use(path, ...)` strips the mount prefix from req.url; originalUrl
+    // keeps the full path the core needs to derive the callback base URL.
+    if (req.originalUrl) req.url = req.originalUrl;
     const handler = req.method === "GET" ? GET : POST;
     handler(req)
       .then((webRes) => sendResponse(res, webRes))
