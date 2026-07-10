@@ -65,11 +65,11 @@ describe("hono path", () => {
     expect(req.callbackBaseUrl).toBe("http://localhost/api/upload");
   });
 
-  it("typed uploader narrows middleware's req to the Hono Context", () => {
-    // Compile-time intent: `req` is a Hono Context here, so context accessors
-    // like c.req.header / c.get are available. Runtime just asserts it builds.
+  it("gives middleware the Hono Context as `c`", () => {
+    // Compile-time intent: `c` is a Hono Context, so context accessors like
+    // c.req.header / c.get are available. Runtime just asserts it builds.
     const up = honoUploader(
-      { middleware: ({ req }) => ({ ua: req.req.header("user-agent") }) },
+      { middleware: ({ c }) => ({ ua: c.req.header("user-agent") }) },
       {},
     );
     expect(up.upload).toBeDefined();
@@ -78,11 +78,11 @@ describe("hono path", () => {
   it("hands the Hono Context to middleware at runtime", async () => {
     const { ctx, presignUpload } = fakeContext();
     // middleware reads a header off the Context - only possible if the route
-    // passes `c` (not the raw Request) as its `req`.
+    // passes `c` (not the raw Request) as its middleware arg.
     const ctxBucket = bucket("ctx-storage", {
       uploaders: {
         avatar: honoUploader(
-          { middleware: ({ req }) => ({ user: req.req.header("x-user") }) },
+          { middleware: ({ c }) => ({ user: c.req.header("x-user") }) },
           { path: { prefix: "avatars/" } },
         ),
       },
