@@ -61,6 +61,7 @@ var errSessionNotFound = errors.New("session not found")
 type ddbAPI interface {
 	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
+	UpdateItem(context.Context, *dynamodb.UpdateItemInput, ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
 }
 
 // sessionStore persists and reads upload sessions in a single DynamoDB table.
@@ -102,6 +103,39 @@ func (s *sessionStore) get(ctx context.Context, sessionID string) (session, erro
 		return session{}, fmt.Errorf("unmarshal session: %w", err)
 	}
 	return sess, nil
+}
+
+// markSucceeded atomically transitions the file at index idx of sessionID from
+// pending to succeeded, guarded on it still being pending. This conditional
+// UpdateItem is the single point of idempotency for prod completion: duplicate
+// S3 deliveries race on the item, and only the delivery that observes state =
+// pending at write time transitions and reports transitioned = true. A guard
+// failure (already non-pending) is not an error — it returns transitioned =
+// false so the caller no-ops without firing the route callback. Mirrors the dev
+// detector's guarded UPDATE (packages/api/src/routes/blob/detect/route.ts).
+func (s *sessionStore) markSucceeded(ctx context.Context, sessionID string, idx int) (bool, error) {
+	expr := fmt.Sprintf("files[%d].#st", idx)
+	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName: aws.String(s.table),
+		Key: map[string]ddbtypes.AttributeValue{
+			"session_id": &ddbtypes.AttributeValueMemberS{Value: sessionID},
+		},
+		UpdateExpression:         aws.String("SET " + expr + " = :succeeded"),
+		ConditionExpression:      aws.String(expr + " = :pending"),
+		ExpressionAttributeNames: map[string]string{"#st": "state"},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":succeeded": &ddbtypes.AttributeValueMemberS{Value: string(stateSucceeded)},
+			":pending":   &ddbtypes.AttributeValueMemberS{Value: string(statePending)},
+		},
+	})
+	if err != nil {
+		var ccf *ddbtypes.ConditionalCheckFailedException
+		if errors.As(err, &ccf) {
+			return false, nil
+		}
+		return false, fmt.Errorf("transition session %s file %d: %w", sessionID, idx, err)
+	}
+	return true, nil
 }
 
 // aggregateState collapses per-file states into the session-level state op=poll

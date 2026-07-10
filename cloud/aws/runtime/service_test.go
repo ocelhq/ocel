@@ -2,7 +2,9 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -42,6 +44,37 @@ func (f *fakeDDB) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...fun
 		return &dynamodb.GetItemOutput{}, nil
 	}
 	return &dynamodb.GetItemOutput{Item: item}, nil
+}
+
+// updateFileIdxRe extracts the file index from the store's per-file transition
+// UpdateExpression ("SET files[<idx>].#st = :succeeded").
+var updateFileIdxRe = regexp.MustCompile(`files\[(\d+)\]`)
+
+// UpdateItem models exactly the store's guarded pending->succeeded transition:
+// it flips files[idx].state to succeeded only when it is currently pending,
+// returning a ConditionalCheckFailedException otherwise. That reproduces
+// DynamoDB's atomic conditional write, which is the listener's idempotency
+// guarantee under duplicate S3 deliveries.
+func (f *fakeDDB) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
+	item, ok := f.items[avString(in.Key["session_id"])]
+	if !ok {
+		return nil, &ddbtypes.ConditionalCheckFailedException{}
+	}
+	m := updateFileIdxRe.FindStringSubmatch(aws.ToString(in.UpdateExpression))
+	if m == nil {
+		return nil, fmt.Errorf("fakeDDB: unsupported UpdateExpression %q", aws.ToString(in.UpdateExpression))
+	}
+	idx, _ := strconv.Atoi(m[1])
+	files, ok := item["files"].(*ddbtypes.AttributeValueMemberL)
+	if !ok || idx >= len(files.Value) {
+		return nil, &ddbtypes.ConditionalCheckFailedException{}
+	}
+	fileM := files.Value[idx].(*ddbtypes.AttributeValueMemberM).Value
+	if avString(fileM["state"]) != string(statePending) {
+		return nil, &ddbtypes.ConditionalCheckFailedException{}
+	}
+	fileM["state"] = &ddbtypes.AttributeValueMemberS{Value: string(stateSucceeded)}
+	return &dynamodb.UpdateItemOutput{}, nil
 }
 
 // fakePresigner returns a deterministic URL that encodes the inputs the test
