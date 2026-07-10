@@ -1,0 +1,19 @@
+{
+  "name": "@ocel/provider-aws-darwin-arm64",
+  "version": "0.0.1-alpha.0",
+  "description": "Ocel AWS provider prebuilt binary for darwin-arm64",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "bin"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  }
+}

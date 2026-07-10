@@ -476,6 +476,14 @@ importers:
 
   packages/native-lib/cli-win32-x64: {}
 
+  packages/native-lib/provider-aws-darwin-arm64: {}
+
+  packages/native-lib/provider-aws-darwin-x64: {}
+
+  packages/native-lib/provider-aws-linux-x64: {}
+
+  packages/native-lib/provider-aws-win32-x64: {}
+
   packages/ocel:
     dependencies:
       '@connectrpc/connect':
@@ -544,6 +552,19 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
+    optionalDependencies:
+      '@ocel/provider-aws-darwin-arm64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-aws-darwin-arm64
+      '@ocel/provider-aws-darwin-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-aws-darwin-x64
+      '@ocel/provider-aws-linux-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-aws-linux-x64
+      '@ocel/provider-aws-win32-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-aws-win32-x64
 
   packages/resources:
     dependencies:
