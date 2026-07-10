@@ -108,6 +108,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *providerv1.D
 	})
 }
 
+// Bootstrap satisfies the ProviderService handler interface. This fake exists
+// to exercise the deploy path; the bootstrap path has its own coverage.
+func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("fake provider does not implement Bootstrap"))
+}
+
 // validateFixtureManifest confirms the manifest built by runDeploy matches
 // what TestRunDeploy_HappyPath's fixture declares: a single postgres
 // resource named "main" with its typed config intact.

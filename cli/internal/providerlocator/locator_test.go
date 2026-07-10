@@ -165,7 +165,7 @@ func TestLocate_FindsRealBuiltCloudAWSBinary(t *testing.T) {
 	}
 	outPath := filepath.Join(binDir, binaryName)
 
-	build := exec.Command("go", "build", "-o", outPath, "github.com/ocelhq/ocel/cloud/aws")
+	build := exec.Command("go", "build", "-o", outPath, "github.com/ocelhq/ocel/cloud/aws/cmd/aws")
 	build.Dir = repoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build cloud/aws: %v\n%s", err, out)

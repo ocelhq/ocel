@@ -109,3 +109,31 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *providerv1.DeployR
 		})
 	}
 }
+
+// Bootstrap mirrors Deploy's auth check and terminal-result behaviour so the
+// runner's Bootstrap driver can be exercised the same way. Deploy and
+// Bootstrap share one event stream by contract.
+func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+	info, _ := connect.CallInfoForHandlerContext(ctx)
+	var authHeader string
+	if info != nil {
+		authHeader = info.RequestHeader().Get("Authorization")
+	}
+	if token, ok := providerv1.ParseAuthHeader(authHeader); !ok || token != s.token {
+		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
+	}
+
+	if err := stream.Send(&providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "bootstrapping"}},
+	}); err != nil {
+		return err
+	}
+	if s.mode == "fail" {
+		return stream.Send(&providerv1.DeployEvent{
+			Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: false, Error: "simulated bootstrap failure"}},
+		})
+	}
+	return stream.Send(&providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: true}},
+	})
+}

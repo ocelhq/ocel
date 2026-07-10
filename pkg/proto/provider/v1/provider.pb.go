@@ -243,6 +243,66 @@ func (x *DeployRequest) GetProtocolVersion() string {
 	return ""
 }
 
+// BootstrapRequest is the request for ProviderService.Bootstrap. Bootstrap
+// is account-global, so it carries no manifest and no project id: only the
+// provider's opaque options and the pinned protocol version.
+type BootstrapRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
+	// options, never absent and never an empty string. The CLI never inspects
+	// this field; only the provider unmarshals it.
+	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	// protocol_version pins the wire contract so a provider can reject a
+	// request it can't speak.
+	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *BootstrapRequest) Reset() {
+	*x = BootstrapRequest{}
+	mi := &file_provider_v1_provider_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BootstrapRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BootstrapRequest) ProtoMessage() {}
+
+func (x *BootstrapRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BootstrapRequest.ProtoReflect.Descriptor instead.
+func (*BootstrapRequest) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *BootstrapRequest) GetOptions() []byte {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *BootstrapRequest) GetProtocolVersion() string {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return ""
+}
+
 // DeployEvent is a single item on the Deploy response stream: either
 // progress/log output, or - always the final event - the terminal outcome.
 type DeployEvent struct {
@@ -259,7 +319,7 @@ type DeployEvent struct {
 
 func (x *DeployEvent) Reset() {
 	*x = DeployEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[3]
+	mi := &file_provider_v1_provider_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -271,7 +331,7 @@ func (x *DeployEvent) String() string {
 func (*DeployEvent) ProtoMessage() {}
 
 func (x *DeployEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[3]
+	mi := &file_provider_v1_provider_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -284,7 +344,7 @@ func (x *DeployEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployEvent.ProtoReflect.Descriptor instead.
 func (*DeployEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{3}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DeployEvent) GetEvent() isDeployEvent_Event {
@@ -353,7 +413,7 @@ type ProgressEvent struct {
 
 func (x *ProgressEvent) Reset() {
 	*x = ProgressEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[4]
+	mi := &file_provider_v1_provider_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -365,7 +425,7 @@ func (x *ProgressEvent) String() string {
 func (*ProgressEvent) ProtoMessage() {}
 
 func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[4]
+	mi := &file_provider_v1_provider_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -378,7 +438,7 @@ func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProgressEvent.ProtoReflect.Descriptor instead.
 func (*ProgressEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{4}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ProgressEvent) GetMessage() string {
@@ -398,7 +458,7 @@ type LogEvent struct {
 
 func (x *LogEvent) Reset() {
 	*x = LogEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[5]
+	mi := &file_provider_v1_provider_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -410,7 +470,7 @@ func (x *LogEvent) String() string {
 func (*LogEvent) ProtoMessage() {}
 
 func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[5]
+	mi := &file_provider_v1_provider_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -423,7 +483,7 @@ func (x *LogEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
 func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{5}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *LogEvent) GetMessage() string {
@@ -436,16 +496,21 @@ func (x *LogEvent) GetMessage() string {
 // ResultEvent is always the last event on the stream: success, or failure
 // with an explanatory error.
 type ResultEvent struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Error         string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"` // populated when success is false
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Success bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
+	Error   string                 `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"` // populated when success is false
+	// outputs are the connection details the provider produced for the whole
+	// stack, one entry per provisioned resource, keyed by logical_name. Empty
+	// on failure, and always empty for Bootstrap. The CLI collects these; the
+	// SDK is their eventual consumer.
+	Outputs       []*ResourceOutput `protobuf:"bytes,3,rep,name=outputs,proto3" json:"outputs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ResultEvent) Reset() {
 	*x = ResultEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[6]
+	mi := &file_provider_v1_provider_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -457,7 +522,7 @@ func (x *ResultEvent) String() string {
 func (*ResultEvent) ProtoMessage() {}
 
 func (x *ResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[6]
+	mi := &file_provider_v1_provider_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -470,7 +535,7 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
 func (*ResultEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{6}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ResultEvent) GetSuccess() bool {
@@ -483,6 +548,173 @@ func (x *ResultEvent) GetSuccess() bool {
 func (x *ResultEvent) GetError() string {
 	if x != nil {
 		return x.Error
+	}
+	return ""
+}
+
+func (x *ResultEvent) GetOutputs() []*ResourceOutput {
+	if x != nil {
+		return x.Outputs
+	}
+	return nil
+}
+
+// ResourceOutput pairs a resource's logical name with its typed connection
+// output. The oneof mirrors ManifestResource.config so a resource type's
+// output schema is single-sourced alongside its config.
+type ResourceOutput struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// logical_name matches the ManifestResource.logical_name this output was
+	// produced for.
+	LogicalName string `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
+	// Types that are valid to be assigned to Output:
+	//
+	//	*ResourceOutput_Postgres
+	Output        isResourceOutput_Output `protobuf_oneof:"output"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResourceOutput) Reset() {
+	*x = ResourceOutput{}
+	mi := &file_provider_v1_provider_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResourceOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResourceOutput) ProtoMessage() {}
+
+func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResourceOutput.ProtoReflect.Descriptor instead.
+func (*ResourceOutput) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ResourceOutput) GetLogicalName() string {
+	if x != nil {
+		return x.LogicalName
+	}
+	return ""
+}
+
+func (x *ResourceOutput) GetOutput() isResourceOutput_Output {
+	if x != nil {
+		return x.Output
+	}
+	return nil
+}
+
+func (x *ResourceOutput) GetPostgres() *PostgresOutput {
+	if x != nil {
+		if x, ok := x.Output.(*ResourceOutput_Postgres); ok {
+			return x.Postgres
+		}
+	}
+	return nil
+}
+
+type isResourceOutput_Output interface {
+	isResourceOutput_Output()
+}
+
+type ResourceOutput_Postgres struct {
+	Postgres *PostgresOutput `protobuf:"bytes,2,opt,name=postgres,proto3,oneof"`
+}
+
+func (*ResourceOutput_Postgres) isResourceOutput_Output() {}
+
+// PostgresOutput is the discrete connection detail for a provisioned
+// postgres resource. Callers compose a connection URL from these parts.
+type PostgresOutput struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	Host     string                 `protobuf:"bytes,1,opt,name=host,proto3" json:"host,omitempty"`
+	Port     int32                  `protobuf:"varint,2,opt,name=port,proto3" json:"port,omitempty"`
+	Database string                 `protobuf:"bytes,3,opt,name=database,proto3" json:"database,omitempty"`
+	Username string                 `protobuf:"bytes,4,opt,name=username,proto3" json:"username,omitempty"`
+	// password is sensitive: debug_redact keeps it out of protobuf debug
+	// rendering. It is still carried on the wire over the private,
+	// token-authenticated CLI<->provider channel.
+	Password      string `protobuf:"bytes,5,opt,name=password,proto3" json:"password,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PostgresOutput) Reset() {
+	*x = PostgresOutput{}
+	mi := &file_provider_v1_provider_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PostgresOutput) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PostgresOutput) ProtoMessage() {}
+
+func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PostgresOutput.ProtoReflect.Descriptor instead.
+func (*PostgresOutput) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *PostgresOutput) GetHost() string {
+	if x != nil {
+		return x.Host
+	}
+	return ""
+}
+
+func (x *PostgresOutput) GetPort() int32 {
+	if x != nil {
+		return x.Port
+	}
+	return 0
+}
+
+func (x *PostgresOutput) GetDatabase() string {
+	if x != nil {
+		return x.Database
+	}
+	return ""
+}
+
+func (x *PostgresOutput) GetUsername() string {
+	if x != nil {
+		return x.Username
+	}
+	return ""
+}
+
+func (x *PostgresOutput) GetPassword() string {
+	if x != nil {
+		return x.Password
 	}
 	return ""
 }
@@ -505,7 +737,10 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\rDeployRequest\x121\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x15.provider.v1.ManifestR\bmanifest\x12\x18\n" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\"\xaf\x01\n" +
+	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\"W\n" +
+	"\x10BootstrapRequest\x12\x18\n" +
+	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\"\xaf\x01\n" +
 	"\vDeployEvent\x128\n" +
 	"\bprogress\x18\x01 \x01(\v2\x1a.provider.v1.ProgressEventH\x00R\bprogress\x12)\n" +
 	"\x03log\x18\x02 \x01(\v2\x15.provider.v1.LogEventH\x00R\x03log\x122\n" +
@@ -514,12 +749,24 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\rProgressEvent\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\"$\n" +
 	"\bLogEvent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"=\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"t\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
-	"\x05error\x18\x02 \x01(\tR\x05error2S\n" +
+	"\x05error\x18\x02 \x01(\tR\x05error\x125\n" +
+	"\aoutputs\x18\x03 \x03(\v2\x1b.provider.v1.ResourceOutputR\aoutputs\"x\n" +
+	"\x0eResourceOutput\x12!\n" +
+	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x129\n" +
+	"\bpostgres\x18\x02 \x01(\v2\x1b.provider.v1.PostgresOutputH\x00R\bpostgresB\b\n" +
+	"\x06output\"\x91\x01\n" +
+	"\x0ePostgresOutput\x12\x12\n" +
+	"\x04host\x18\x01 \x01(\tR\x04host\x12\x12\n" +
+	"\x04port\x18\x02 \x01(\x05R\x04port\x12\x1a\n" +
+	"\bdatabase\x18\x03 \x01(\tR\bdatabase\x12\x1a\n" +
+	"\busername\x18\x04 \x01(\tR\busername\x12\x1f\n" +
+	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword2\x9b\x01\n" +
 	"\x0fProviderService\x12@\n" +
-	"\x06Deploy\x12\x1a.provider.v1.DeployRequest\x1a\x18.provider.v1.DeployEvent0\x01B9Z7github.com/ocelhq/ocel/pkg/proto/provider/v1;providerv1b\x06proto3"
+	"\x06Deploy\x12\x1a.provider.v1.DeployRequest\x1a\x18.provider.v1.DeployEvent0\x01\x12F\n" +
+	"\tBootstrap\x12\x1d.provider.v1.BootstrapRequest\x1a\x18.provider.v1.DeployEvent0\x01B9Z7github.com/ocelhq/ocel/pkg/proto/provider/v1;providerv1b\x06proto3"
 
 var (
 	file_provider_v1_provider_proto_rawDescOnce sync.Once
@@ -533,33 +780,40 @@ func file_provider_v1_provider_proto_rawDescGZIP() []byte {
 	return file_provider_v1_provider_proto_rawDescData
 }
 
-var file_provider_v1_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_provider_v1_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_provider_v1_provider_proto_goTypes = []any{
 	(*Manifest)(nil),              // 0: provider.v1.Manifest
 	(*ManifestResource)(nil),      // 1: provider.v1.ManifestResource
 	(*DeployRequest)(nil),         // 2: provider.v1.DeployRequest
-	(*DeployEvent)(nil),           // 3: provider.v1.DeployEvent
-	(*ProgressEvent)(nil),         // 4: provider.v1.ProgressEvent
-	(*LogEvent)(nil),              // 5: provider.v1.LogEvent
-	(*ResultEvent)(nil),           // 6: provider.v1.ResultEvent
-	(*v1.ResourceIdentifier)(nil), // 7: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),     // 8: resources.v1.PostgresConfig
+	(*BootstrapRequest)(nil),      // 3: provider.v1.BootstrapRequest
+	(*DeployEvent)(nil),           // 4: provider.v1.DeployEvent
+	(*ProgressEvent)(nil),         // 5: provider.v1.ProgressEvent
+	(*LogEvent)(nil),              // 6: provider.v1.LogEvent
+	(*ResultEvent)(nil),           // 7: provider.v1.ResultEvent
+	(*ResourceOutput)(nil),        // 8: provider.v1.ResourceOutput
+	(*PostgresOutput)(nil),        // 9: provider.v1.PostgresOutput
+	(*v1.ResourceIdentifier)(nil), // 10: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),     // 11: resources.v1.PostgresConfig
 }
 var file_provider_v1_provider_proto_depIdxs = []int32{
-	1, // 0: provider.v1.Manifest.resources:type_name -> provider.v1.ManifestResource
-	7, // 1: provider.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	8, // 2: provider.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	0, // 3: provider.v1.DeployRequest.manifest:type_name -> provider.v1.Manifest
-	4, // 4: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
-	5, // 5: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
-	6, // 6: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
-	2, // 7: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
-	3, // 8: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
-	8, // [8:9] is the sub-list for method output_type
-	7, // [7:8] is the sub-list for method input_type
-	7, // [7:7] is the sub-list for extension type_name
-	7, // [7:7] is the sub-list for extension extendee
-	0, // [0:7] is the sub-list for field type_name
+	1,  // 0: provider.v1.Manifest.resources:type_name -> provider.v1.ManifestResource
+	10, // 1: provider.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	11, // 2: provider.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	0,  // 3: provider.v1.DeployRequest.manifest:type_name -> provider.v1.Manifest
+	5,  // 4: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
+	6,  // 5: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
+	7,  // 6: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
+	8,  // 7: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
+	9,  // 8: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
+	2,  // 9: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
+	3,  // 10: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
+	4,  // 11: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
+	4,  // 12: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
+	11, // [11:13] is the sub-list for method output_type
+	9,  // [9:11] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_provider_v1_provider_proto_init() }
@@ -570,10 +824,13 @@ func file_provider_v1_provider_proto_init() {
 	file_provider_v1_provider_proto_msgTypes[1].OneofWrappers = []any{
 		(*ManifestResource_Postgres)(nil),
 	}
-	file_provider_v1_provider_proto_msgTypes[3].OneofWrappers = []any{
+	file_provider_v1_provider_proto_msgTypes[4].OneofWrappers = []any{
 		(*DeployEvent_Progress)(nil),
 		(*DeployEvent_Log)(nil),
 		(*DeployEvent_Result)(nil),
+	}
+	file_provider_v1_provider_proto_msgTypes[8].OneofWrappers = []any{
+		(*ResourceOutput_Postgres)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -581,7 +838,7 @@ func file_provider_v1_provider_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_v1_provider_proto_rawDesc), len(file_provider_v1_provider_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   7,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

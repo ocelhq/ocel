@@ -11,7 +11,7 @@
 // shared proto module to the local checkout via a `replace` in its own go.mod
 // (proto has no published tag yet); this workspace just lets you build/edit all
 // modules together. Released consumers use pinned require versions instead.
-go 1.25.3
+go 1.25.11
 
 use (
 	./cli

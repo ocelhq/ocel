@@ -109,6 +109,39 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		return err
 	}
 
+	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		req := &providerv1.DeployRequest{
+			Manifest:        manifest,
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+		}
+
+		// The provider reports the whole stack's connection outputs on the
+		// terminal ResultEvent. We collect them here; the CLI does not consume
+		// them yet (see the ocelhq-c4d spec's outputs decision).
+		var stackOutputs []*providerv1.ResourceOutput
+		onEvent := func(ev *providerv1.DeployEvent) {
+			streamDeployEvent(stdout, ev)
+			if res := ev.GetResult(); res != nil {
+				stackOutputs = res.GetOutputs()
+			}
+		}
+		if err := runner.Deploy(ctx, req, onEvent); err != nil {
+			return err
+		}
+		_ = stackOutputs
+
+		fmt.Fprintln(stdout, "✓ Deploy succeeded.")
+		return nil
+	})
+}
+
+// runProviderSession locates and spawns the project's configured provider,
+// waits for it to signal readiness, hands the ready runner to drive, and
+// tears the provider down afterward. It centralises the spawn/ready/teardown
+// plumbing that `ocel deploy` and `ocel bootstrap` share; only the RPC each
+// drives differs.
+func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor, stdout, stderr io.Writer, drive func(*providerrunner.Runner) error) error {
 	binPath, err := locateProviderBinary(cfg.Dir, provider.Package)
 	if err != nil {
 		return fmt.Errorf("locate provider binary: %w", err)
@@ -128,26 +161,21 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 	if err := runner.Ready(ctx); err != nil {
 		return err
 	}
-
-	req := &providerv1.DeployRequest{
-		Manifest:        manifest,
-		Options:         []byte(provider.Options),
-		ProtocolVersion: manifestbuilder.SchemaVersion,
-	}
-	if err := runner.Deploy(ctx, req, func(ev *providerv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
-		return err
-	}
-
-	fmt.Fprintln(stdout, "✓ Deploy succeeded.")
-	return nil
+	return drive(runner)
 }
 
 // confirmDeploy prints the "Deploy <project> with <provider>? [y/N]" prompt
-// and reads a single line from stdin, defaulting to No on anything but an
-// explicit y/yes answer — including no answer at all (e.g. a closed
-// stdin), so an interrupted or empty read never accidentally deploys.
+// and returns the user's yes/no answer (see confirmYN).
 func confirmDeploy(projectID, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	fmt.Fprintf(stdout, "Deploy %s with %s? [y/N] ", projectID, providerPackage)
+	return confirmYN(fmt.Sprintf("Deploy %s with %s?", projectID, providerPackage), stdout, stdin)
+}
+
+// confirmYN prints "<prompt> [y/N] " and reads a single line from stdin,
+// defaulting to No on anything but an explicit y/yes answer — including no
+// answer at all (e.g. a closed stdin), so an interrupted or empty read never
+// accidentally proceeds.
+func confirmYN(prompt string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	fmt.Fprintf(stdout, "%s [y/N] ", prompt)
 
 	scanner := bufio.NewScanner(stdin)
 	if !scanner.Scan() {

@@ -194,6 +194,55 @@ func TestDeploy_TerminalFailure(t *testing.T) {
 	}
 }
 
+func TestBootstrap_Success(t *testing.T) {
+	ctx := context.Background()
+	r, sockPath := spawnFake(t, ctx, "success", Config{})
+
+	if err := r.Ready(ctx); err != nil {
+		t.Fatalf("Ready() error = %v, want nil", err)
+	}
+
+	var events []*providerv1.DeployEvent
+	err := r.Bootstrap(ctx, &providerv1.BootstrapRequest{
+		Options:         []byte("{}"),
+		ProtocolVersion: "provider.v1",
+	}, func(ev *providerv1.DeployEvent) { events = append(events, ev) })
+	if err != nil {
+		t.Fatalf("Bootstrap() error = %v, want nil", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("got %d events, want 2 (progress, result)", len(events))
+	}
+	if result := events[1].GetResult(); result == nil || !result.GetSuccess() {
+		t.Errorf("events[1] = %v, want a successful ResultEvent", events[1])
+	}
+
+	if err := r.Close(); err != nil {
+		t.Fatalf("Close() error = %v", err)
+	}
+	assertProcessGone(t, r)
+	assertNoStaleSocket(t, sockPath)
+}
+
+func TestBootstrap_TerminalFailure(t *testing.T) {
+	ctx := context.Background()
+	r, _ := spawnFake(t, ctx, "fail", Config{})
+
+	if err := r.Ready(ctx); err != nil {
+		t.Fatalf("Ready() error = %v, want nil", err)
+	}
+
+	err := r.Bootstrap(ctx, &providerv1.BootstrapRequest{Options: []byte("{}")}, nil)
+
+	var failErr *DeployFailedError
+	if !errors.As(err, &failErr) {
+		t.Fatalf("Bootstrap() error = %v (%T), want *DeployFailedError", err, err)
+	}
+	if failErr.Message != "simulated bootstrap failure" {
+		t.Errorf("DeployFailedError.Message = %q, want %q", failErr.Message, "simulated bootstrap failure")
+	}
+}
+
 func TestClose_NoOrphanOnCancel(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	r, sockPath := spawnFake(t, ctx, "success", Config{})

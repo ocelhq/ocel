@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"net/http"
@@ -8,9 +8,9 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
 )
 
-// newMux wires ProviderService behind an interceptor that enforces token as
+// NewMux wires ProviderService behind an interceptor that enforces token as
 // the per-session token every call must present (see newAuthInterceptor).
-func newMux(token string) *http.ServeMux {
+func NewMux(token string) *http.ServeMux {
 	mux := http.NewServeMux()
 	path, handler := providerv1connect.NewProviderServiceHandler(
 		&Server{},

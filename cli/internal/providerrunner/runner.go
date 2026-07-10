@@ -286,10 +286,31 @@ func (r *Runner) Deploy(ctx context.Context, req *providerv1.DeployRequest, onEv
 	if r.client == nil {
 		return errors.New("providerrunner: Deploy called before a successful Ready")
 	}
-
 	stream, err := r.client.Deploy(ctx, req)
-	if err != nil {
-		return fmt.Errorf("providerrunner: call Deploy: %w", err)
+	return r.driveStream("Deploy", stream, err, onEvent)
+}
+
+// Bootstrap calls the provider's Bootstrap RPC and streams DeployEvents to
+// onEvent (which may be nil) as they arrive, including the terminal event.
+// Its result semantics match Deploy: nil on ResultEvent{Success: true}, a
+// *DeployFailedError on failure, or a connection error. Bootstrap and Deploy
+// share one event stream by contract, so they share the same driver. Ready
+// must have succeeded first.
+func (r *Runner) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, onEvent func(*providerv1.DeployEvent)) error {
+	if r.client == nil {
+		return errors.New("providerrunner: Bootstrap called before a successful Ready")
+	}
+	stream, err := r.client.Bootstrap(ctx, req)
+	return r.driveStream("Bootstrap", stream, err, onEvent)
+}
+
+// driveStream consumes a provider event stream to its terminal ResultEvent,
+// forwarding every event to onEvent. rpc names the call for error messages.
+// It is shared by Deploy and Bootstrap, which speak the same DeployEvent
+// stream by contract.
+func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[providerv1.DeployEvent], callErr error, onEvent func(*providerv1.DeployEvent)) error {
+	if callErr != nil {
+		return fmt.Errorf("providerrunner: call %s: %w", rpc, callErr)
 	}
 	defer stream.Close()
 
@@ -309,7 +330,7 @@ func (r *Runner) Deploy(ctx context.Context, req *providerv1.DeployRequest, onEv
 	if err := stream.Err(); err != nil {
 		return fmt.Errorf("providerrunner: provider connection lost: %w", err)
 	}
-	return errors.New("providerrunner: provider closed the deploy stream without a result")
+	return fmt.Errorf("providerrunner: provider closed the %s stream without a result", rpc)
 }
 
 // Close tears down the provider process — SIGTERM, ~5s grace, then SIGKILL
