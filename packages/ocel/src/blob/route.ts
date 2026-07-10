@@ -206,6 +206,11 @@ async function handleCallback(
 
   const envelope = decodeMetadata(verify.metadata);
   const up = bucket.uploaders[envelope.uploader];
+  // The uploader can vanish between presign and callback (e.g. renamed during
+  // an `ocel dev` hot-reload). Fail loudly instead of a silent no-op 200, so
+  // the detector surfaces it rather than marking the callback delivered.
+  if (!up) return json({ error: `unknown uploader "${envelope.uploader}"` }, 404);
+
   const completed: CompletedFile = {
     key: file.key,
     name: file.name,
@@ -213,7 +218,7 @@ async function handleCallback(
     mimeType: file.mimeType,
     path: file.key,
   };
-  await up?.upload.onUploadComplete?.({
+  await up.upload.onUploadComplete?.({
     metadata: envelope.metadata,
     file: completed,
   });

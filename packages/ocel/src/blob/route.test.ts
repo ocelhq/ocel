@@ -274,6 +274,25 @@ describe("op=callback", () => {
     });
   });
 
+  it("returns 404 (not a silent 200) when the uploader no longer exists", async () => {
+    // e.g. the uploader was renamed during an `ocel dev` hot-reload between
+    // presign and callback: fail loudly so the detector surfaces it.
+    const { ctx } = fakeContext({
+      verifyUploadSignature: vi.fn(async () => ({
+        valid: true,
+        metadata: encodeMetadata({ uploader: "gone", metadata: {} }),
+      })),
+    });
+    const { POST } = createRouteHandler(storage, { runtime: ctx });
+
+    const res = await POST(
+      makeReq(callbackUrl, { sessionId: "sess-1", signature: "sig", file }),
+    );
+
+    expect(res.status).toBe(404);
+    expect(onUploadComplete).not.toHaveBeenCalled();
+  });
+
   it("rejects with 401 and skips onUploadComplete on an invalid signature", async () => {
     const { ctx } = fakeContext({
       verifyUploadSignature: vi.fn(async () => ({ valid: false, metadata: new Uint8Array() })),
