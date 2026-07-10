@@ -22,6 +22,7 @@
   "devDependencies": {
     "@types/pg": "^8.20.0",
     "drizzle-kit": "^0.31.10",
+    "ocel": "workspace:*",
     "typescript": "^5",
     "vite": "^8.1.3",
     "vitest": "^4.1.9"

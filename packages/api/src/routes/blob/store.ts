@@ -1,4 +1,8 @@
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 // The presigned PUT is valid for 1h; the session TTL is strictly greater (see
@@ -67,11 +71,31 @@ export async function presignPut(args: PresignPutArgs): Promise<string> {
 
   return getSignedUrl(s3Client(), command, {
     expiresIn: PRESIGN_TTL_S,
-    // Force these into the signed set rather than let them hoist to the query,
-    // so Content-Length, Content-Type, and the session tag are all bound.
-    // content-length also has no request body at signing time, so it must be
-    // added explicitly.
+    // content-length and content-type are signed as sent headers (a browser
+    // PUT of a File sends both), so the store enforces the exact size/type. The
+    // session tag hoists into the SigV4-signed query string instead of a signed
+    // header: it stays cryptographically bound (a client can't alter it without
+    // breaking the signature) while a real browser-style PUT - which won't send
+    // an arbitrary x-amz-tagging header - still succeeds.
     signableHeaders: new Set(["content-length", "content-type"]),
-    unhoistableHeaders: new Set(["x-amz-tagging"]),
   });
+}
+
+// Reports whether an object exists at key in the store bucket. The detector
+// HEADs each pending file's key to decide whether the bytes have landed; a
+// missing object is the common (still-uploading) case, not an error.
+export async function objectExists(key: string): Promise<boolean> {
+  try {
+    await s3Client().send(
+      new HeadObjectCommand({ Bucket: blobConfig().bucket, Key: key }),
+    );
+    return true;
+  } catch (err) {
+    const status = (err as { $metadata?: { httpStatusCode?: number } })
+      .$metadata?.httpStatusCode;
+    if (status === 404 || (err as { name?: string }).name === "NotFound") {
+      return false;
+    }
+    throw err;
+  }
 }

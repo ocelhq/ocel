@@ -426,6 +426,9 @@ importers:
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
+      ocel:
+        specifier: workspace:*
+        version: link:../ocel
       typescript:
         specifier: ^5
         version: 5.9.3
