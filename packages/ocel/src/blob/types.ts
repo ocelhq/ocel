@@ -58,7 +58,7 @@ export type PathFn<TMetadata> = (ctx: {
 export type PathConfig<TMetadata> = StructuredPath | PathFn<TMetadata>;
 
 export interface UploaderAuth<
-  TReq extends BlobRequest,
+  TReq,
   TInput extends z.ZodType | undefined,
   TMetadata,
 > {
@@ -84,7 +84,7 @@ export interface UploaderUpload<TMetadata> {
 export interface Uploader<
   TInputParsed = unknown,
   TMetadata = unknown,
-  TReq extends BlobRequest = BlobRequest,
+  TReq = BlobRequest,
 > {
   readonly auth: UploaderAuth<TReq, z.ZodType | undefined, TMetadata>;
   readonly upload: UploaderUpload<TMetadata>;

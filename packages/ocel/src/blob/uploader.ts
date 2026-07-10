@@ -17,7 +17,7 @@ import type {
 export function uploader<
   TInput extends z.ZodType | undefined = undefined,
   TMetadata = unknown,
-  TReq extends BlobRequest = BlobRequest,
+  TReq = BlobRequest,
 >(
   auth: UploaderAuth<TReq, TInput, TMetadata>,
   upload: UploaderUpload<TMetadata> = {},

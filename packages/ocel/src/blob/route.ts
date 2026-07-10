@@ -1,3 +1,4 @@
+import type { IncomingMessage } from "node:http";
 import { z } from "zod";
 import { UploadState } from "../gen/proto/runtime/v1/runtime_pb";
 import type { Bucket } from "./bucket";
@@ -15,6 +16,61 @@ import type {
   LimitValue,
   UploadStatusState,
 } from "./types";
+
+/**
+ * The requests the core route accepts: a Web Fetch `Request`/`NextRequest`
+ * (via `BlobRequest`) or a Node `IncomingMessage`. Framework paths narrow this
+ * to their own request type; the core normalizes either shape so a bare Node
+ * http server works with no framework path at all.
+ */
+export type RouteRequest = BlobRequest | IncomingMessage;
+
+function isWebRequest(req: RouteRequest): req is BlobRequest {
+  return typeof (req as BlobRequest).json === "function";
+}
+
+function headerOf(req: RouteRequest, name: string): string | null {
+  const headers = req.headers as
+    | { get(name: string): string | null }
+    | Record<string, string | string[] | undefined>;
+  if (typeof (headers as { get?: unknown }).get === "function") {
+    return (headers as { get(n: string): string | null }).get(name);
+  }
+  const value = (headers as Record<string, string | string[] | undefined>)[
+    name.toLowerCase()
+  ];
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
+/**
+ * The request's absolute URL. A Web `Request` already carries one; a Node
+ * `IncomingMessage` only carries the path, so it's rebuilt from the forwarded
+ * protocol (or http) and the Host header.
+ */
+function requestUrl(req: RouteRequest): string {
+  const raw = req.url ?? "/";
+  if (/^https?:\/\//i.test(raw)) return raw;
+  const proto = headerOf(req, "x-forwarded-proto") ?? "http";
+  const host = headerOf(req, "host") ?? "localhost";
+  return `${proto}://${host}${raw}`;
+}
+
+/**
+ * The parsed JSON body. Web requests expose `json()`. A Node request is read
+ * from its stream, unless a body parser (e.g. `express.json()`) already drained
+ * it and left the parsed value on `req.body`.
+ */
+async function requestJson(req: RouteRequest): Promise<unknown> {
+  if (isWebRequest(req)) return req.json();
+  const node = req as IncomingMessage & { body?: unknown; readableEnded?: boolean };
+  if (node.body !== undefined) return node.body;
+  if (node.readableEnded || node.complete) return {};
+  const chunks: Buffer[] = [];
+  for await (const chunk of node) chunks.push(chunk as Buffer);
+  const text = Buffer.concat(chunks).toString("utf8");
+  return text ? JSON.parse(text) : {};
+}
 
 export interface RouteOptions {
   /**
@@ -105,13 +161,13 @@ function validateFiles(
  * The route's own URL without its query string. The detector later appends
  * `?op=callback` to reach this same route.
  */
-function deriveCallbackBaseUrl(req: BlobRequest): string {
-  const u = new URL(req.url);
+function deriveCallbackBaseUrl(req: RouteRequest): string {
+  const u = new URL(requestUrl(req));
   return `${u.origin}${u.pathname}`;
 }
 
-function opOf(req: BlobRequest): string | null {
-  return new URL(req.url).searchParams.get("op");
+function opOf(req: RouteRequest): string | null {
+  return new URL(requestUrl(req)).searchParams.get("op");
 }
 
 function stateToString(state: UploadState): UploadStatusState {
@@ -128,9 +184,9 @@ function stateToString(state: UploadState): UploadStatusState {
 async function handlePresign(
   bucket: Bucket,
   ctx: RuntimeContext,
-  req: BlobRequest,
+  req: RouteRequest,
 ) {
-  const parsed = presignBody.safeParse(await req.json());
+  const parsed = presignBody.safeParse(await requestJson(req));
   if (!parsed.success) return json({ error: "invalid presign request" }, 400);
 
   const up = bucket.uploaders[parsed.data.uploader];
@@ -185,9 +241,9 @@ async function handlePresign(
 async function handleCallback(
   bucket: Bucket,
   ctx: RuntimeContext,
-  req: BlobRequest,
+  req: RouteRequest,
 ) {
-  const parsed = callbackBody.safeParse(await req.json());
+  const parsed = callbackBody.safeParse(await requestJson(req));
   if (!parsed.success) return json({ error: "invalid callback request" }, 400);
 
   const { sessionId, signature, file } = parsed.data;
@@ -228,9 +284,9 @@ async function handleCallback(
 
 async function handlePoll(
   ctx: RuntimeContext,
-  req: BlobRequest,
+  req: RouteRequest,
 ) {
-  const sessionId = new URL(req.url).searchParams.get("sessionId");
+  const sessionId = new URL(requestUrl(req)).searchParams.get("sessionId");
   if (!sessionId) return json({ error: "missing sessionId" }, 400);
 
   const res = await ctx.client.getUploadStatus({ sessionId });
@@ -251,8 +307,8 @@ function errorMessage(err: unknown, fallback: string): string {
  * status polls.
  */
 export interface RouteHandlers {
-  GET: (req: BlobRequest) => Promise<Response>;
-  POST: (req: BlobRequest) => Promise<Response>;
+  GET: (req: RouteRequest) => Promise<Response>;
+  POST: (req: RouteRequest) => Promise<Response>;
 }
 
 export function createRouteHandler(
@@ -262,14 +318,14 @@ export function createRouteHandler(
   let ctx = options.runtime;
   const getCtx = () => (ctx ??= resolveRuntimeContext(bucket));
 
-  async function POST(req: BlobRequest) {
+  async function POST(req: RouteRequest) {
     const op = opOf(req);
     if (op === "presign") return handlePresign(bucket, getCtx(), req);
     if (op === "callback") return handleCallback(bucket, getCtx(), req);
     return json({ error: `unknown op '${op}'` }, 400);
   }
 
-  async function GET(req: BlobRequest) {
+  async function GET(req: RouteRequest) {
     const op = opOf(req);
     if (op === "poll") return handlePoll(getCtx(), req);
     return json({ error: `unknown op '${op}'` }, 400);

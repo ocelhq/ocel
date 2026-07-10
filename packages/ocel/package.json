@@ -29,6 +29,14 @@
       "import": "./dist/blob/next.js",
       "types": "./dist/blob/next.d.ts"
     },
+    "./blob/hono": {
+      "import": "./dist/blob/hono.js",
+      "types": "./dist/blob/hono.d.ts"
+    },
+    "./blob/express": {
+      "import": "./dist/blob/express.js",
+      "types": "./dist/blob/express.d.ts"
+    },
     "./blob/client": {
       "import": "./dist/blob/client.js",
       "types": "./dist/blob/client.d.ts"
