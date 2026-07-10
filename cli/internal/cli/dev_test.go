@@ -327,7 +327,7 @@ func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZer
 	projectID := "proj_" + t.Name()
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
-	srv := devserver.New("https://api.example.com", "tok", projectID)
+	srv := devserver.New("https://api.example.com", "tok", projectID, "http://127.0.0.1:0")
 	srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"conn"}`})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

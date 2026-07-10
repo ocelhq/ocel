@@ -91,17 +91,17 @@ func runOnceAsFollower(ctx context.Context, leaderAddr string, appArgs []string,
 // apiURL is the resolved Ocel API origin provisioning is authenticated
 // against (see effectiveAPIURL).
 func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	srv := devserver.New(apiURL, creds.AccessToken, cfg.ProjectID)
-
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("start dev server: %w", err)
 	}
+
+	devServerAddr := "http://" + listener.Addr().String()
+
+	srv := devserver.New(apiURL, creds.AccessToken, cfg.ProjectID, devServerAddr)
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
-
-	devServerAddr := "http://" + listener.Addr().String()
 
 	resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, stdout, stderr)
 	if err != nil {
