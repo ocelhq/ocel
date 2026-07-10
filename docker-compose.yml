@@ -63,6 +63,17 @@ services:
       mc mb --ignore-existing local/ocel-dev
       "
 
+  # Stands in for the account-global DynamoDB sessions table the prod runtime
+  # (cloud/aws runtime) persists upload sessions to, and that ocel bootstrap
+  # provisions in prod (see ocelhq-lo1, T7). Only the runtime direct-dial
+  # integration test uses it; it self-skips when this is not running.
+  dynamodb:
+    image: amazon/dynamodb-local
+    restart: unless-stopped
+    command: ["-jar", "DynamoDBLocal.jar", "-inMemory", "-sharedDb"]
+    ports:
+      - "8000:8000"
+
 volumes:
   postgres_data:
   ocel_cloud_data:

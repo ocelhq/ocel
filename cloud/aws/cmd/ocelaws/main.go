@@ -1,4 +1,4 @@
-// Command aws is the Ocel AWS provider binary. It speaks the T2 provider
+// Command ocelaws is the Ocel AWS provider binary. It speaks the T2 provider
 // protocol (pkg/proto/provider/v1): it binds a private local channel, prints
 // the readiness sentinel once bound, verifies the per-session token on every
 // call, and serves ProviderService (Deploy + Bootstrap). The provisioning

@@ -197,7 +197,7 @@ func TestRunDeploy_ConfirmSkippedWhenStdinNotATTY_ProceedsWithoutPrompting(t *te
 // and an ocel/main.ts discovery script declaring a single postgres resource
 // "main") and a fake provider binary resolvable via the real
 // providerlocator convention (a symlink to this re-exec'd test binary under
-// node_modules/@ocel/provider-aws-<platform>-<arch>/bin/aws). It logs the
+// node_modules/@ocel/provider-aws-<platform>-<arch>/bin/ocelaws). It logs the
 // caller in, shortens the readiness timeout, and restores every package-level
 // seam it touches via t.Cleanup. It returns the project root and the Unix
 // socket path the fake provider will bind, for post-teardown assertions.
@@ -250,7 +250,7 @@ export {};
 	if err != nil {
 		t.Fatalf("resolve test binary path: %v", err)
 	}
-	if err := os.Symlink(testBinary, filepath.Join(binDir, "aws")); err != nil {
+	if err := os.Symlink(testBinary, filepath.Join(binDir, "ocelaws")); err != nil {
 		t.Fatalf("symlink fake provider binary: %v", err)
 	}
 

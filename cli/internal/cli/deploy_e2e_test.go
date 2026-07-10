@@ -121,8 +121,8 @@ postgres("main", { version: "15" });
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", binDir, err)
 	}
-	binPath = filepath.Join(binDir, "aws")
-	build := exec.Command("go", "build", "-o", binPath, "github.com/ocelhq/ocel/cloud/aws/cmd/aws")
+	binPath = filepath.Join(binDir, "ocelaws")
+	build := exec.Command("go", "build", "-o", binPath, "github.com/ocelhq/ocel/cloud/aws/cmd/ocelaws")
 	build.Dir = repoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build cloud/aws: %v\n%s", err, out)

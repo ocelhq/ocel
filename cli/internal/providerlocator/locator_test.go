@@ -71,7 +71,7 @@ func TestLocate_ResolvesInstalledPlatformBinary(t *testing.T) {
 
 	projectDir := t.TempDir()
 	platformPkg := "@ocel/provider-aws-" + suffix
-	want := writeFakeBinary(t, projectDir, platformPkg, "aws")
+	want := writeFakeBinary(t, projectDir, platformPkg, "ocelaws")
 
 	got, err := Locate(projectDir, "@ocel/provider-aws")
 	if err != nil {
@@ -91,7 +91,7 @@ func TestLocate_ResolvesThroughSymlinkedPackage(t *testing.T) {
 	// must resolve through that exactly as it would a flat npm layout.
 	store := t.TempDir()
 	platformPkg := "@ocel/provider-aws-" + suffix
-	want := writeFakeBinary(t, store, platformPkg, "aws")
+	want := writeFakeBinary(t, store, platformPkg, "ocelaws")
 
 	projectDir := t.TempDir()
 	scopeDir := filepath.Join(projectDir, "node_modules", "@ocel")
@@ -159,13 +159,13 @@ func TestLocate_FindsRealBuiltCloudAWSBinary(t *testing.T) {
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir %s: %v", binDir, err)
 	}
-	binaryName := "aws"
+	binaryName := "ocelaws"
 	if runtime.GOOS == "windows" {
-		binaryName = "aws.exe"
+		binaryName = "ocelaws.exe"
 	}
 	outPath := filepath.Join(binDir, binaryName)
 
-	build := exec.Command("go", "build", "-o", outPath, "github.com/ocelhq/ocel/cloud/aws/cmd/aws")
+	build := exec.Command("go", "build", "-o", outPath, "github.com/ocelhq/ocel/cloud/aws/cmd/ocelaws")
 	build.Dir = repoRoot
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build cloud/aws: %v\n%s", err, out)
