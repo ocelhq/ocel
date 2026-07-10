@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
 )
