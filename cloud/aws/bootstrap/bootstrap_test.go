@@ -99,7 +99,8 @@ func (s stubDescriber) DescribeStacks(context.Context, *cloudformation.DescribeS
 }
 
 // TestCheckDeployed_ParsesOutputs proves the discovery path surfaces the
-// session table name, state bucket, and version that later deploys depend on.
+// session table name, state bucket, version, and class marker that later
+// deploys and the class guard depend on.
 func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{
@@ -107,6 +108,7 @@ func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 				{OutputKey: aws.String(outputStateBucket), OutputValue: aws.String("bucket-123")},
 				{OutputKey: aws.String(outputSessionTable), OutputValue: aws.String("sessions-abc")},
 				{OutputKey: aws.String(outputVersion), OutputValue: aws.String("2")},
+				{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassProduction)},
 			},
 		}},
 	}}
@@ -115,8 +117,41 @@ func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckDeployed: %v", err)
 	}
-	want := Deployed{Present: true, Version: 2, StateBucket: "bucket-123", SessionTable: "sessions-abc"}
+	want := Deployed{Present: true, Version: 2, StateBucket: "bucket-123", SessionTable: "sessions-abc", Class: ClassProduction}
 	if got != want {
 		t.Errorf("CheckDeployed = %+v, want %+v", got, want)
+	}
+}
+
+// TestCheckDeployed_ReadsPreviewClassMarker proves the class stamped on a
+// substrate is read back, so the class guard can verify a command acts on the
+// right one.
+func TestCheckDeployed_ReadsPreviewClassMarker(t *testing.T) {
+	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
+		Stacks: []cfntypes.Stack{{
+			Outputs: []cfntypes.Output{
+				{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassPreview)},
+			},
+		}},
+	}}
+
+	got, err := CheckDeployed(context.Background(), api)
+	if err != nil {
+		t.Fatalf("CheckDeployed: %v", err)
+	}
+	if !got.Present || got.Class != ClassPreview {
+		t.Errorf("CheckDeployed = %+v, want Present with Class %q", got, ClassPreview)
+	}
+}
+
+// TestPreviewStackTemplate_StampsPreviewClass proves the preview template stamps
+// the preview class marker so CheckDeployedPreview surfaces it.
+func TestPreviewStackTemplate_StampsPreviewClass(t *testing.T) {
+	var tmpl parsedTemplate
+	if err := yaml.Unmarshal([]byte(previewStackTemplate()), &tmpl); err != nil {
+		t.Fatalf("preview template is not valid YAML: %v", err)
+	}
+	if got := tmpl.Outputs[outputInfraClass].Value; got != ClassPreview {
+		t.Errorf("%s output = %q, want %q", outputInfraClass, got, ClassPreview)
 	}
 }

@@ -599,8 +599,12 @@ type DestroyRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// project_id scopes the teardown to one project. The Pulumi state backend is
+	// account-global, so identity alone is ambiguous across projects; the
+	// provider addresses the exact per-project stack with it.
+	ProjectId     string `protobuf:"bytes,4,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DestroyRequest) Reset() {
@@ -654,6 +658,13 @@ func (x *DestroyRequest) GetProtocolVersion() string {
 	return ""
 }
 
+func (x *DestroyRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
 // ListEnvironmentsRequest is the request for ProviderService.ListEnvironments.
 // It is account/substrate-scoped, so it carries no manifest and no identity:
 // only the provider's opaque options and the pinned protocol version.
@@ -666,8 +677,12 @@ type ListEnvironmentsRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// project_id scopes the listing to one project. The Pulumi state backend is
+	// account-global, so the provider filters to this project's preview stacks
+	// rather than every project's in the account.
+	ProjectId     string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ListEnvironmentsRequest) Reset() {
@@ -710,6 +725,13 @@ func (x *ListEnvironmentsRequest) GetOptions() []byte {
 func (x *ListEnvironmentsRequest) GetProtocolVersion() string {
 	if x != nil {
 		return x.ProtocolVersion
+	}
+	return ""
+}
+
+func (x *ListEnvironmentsRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
 	}
 	return ""
 }
@@ -1491,14 +1513,18 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\x10BootstrapRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x124\n" +
-	"\x05class\x18\x03 \x01(\x0e2\x1e.provider.v1.Environment.ClassR\x05class\"\x91\x01\n" +
+	"\x05class\x18\x03 \x01(\x0e2\x1e.provider.v1.Environment.ClassR\x05class\"\xb0\x01\n" +
 	"\x0eDestroyRequest\x12:\n" +
 	"\venvironment\x18\x01 \x01(\v2\x18.provider.v1.EnvironmentR\venvironment\x12\x18\n" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\"^\n" +
+	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x04 \x01(\tR\tprojectId\"}\n" +
 	"\x17ListEnvironmentsRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\"_\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x03 \x01(\tR\tprojectId\"_\n" +
 	"\x18ListEnvironmentsResponse\x12C\n" +
 	"\fenvironments\x18\x01 \x03(\v2\x1f.provider.v1.PreviewEnvironmentR\fenvironments\"\xc6\x01\n" +
 	"\x12PreviewEnvironment\x12\x1a\n" +

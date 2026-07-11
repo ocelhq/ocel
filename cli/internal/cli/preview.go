@@ -235,6 +235,7 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 			Environment:     env,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
+			ProjectId:       cfg.ProjectID,
 		}
 		if err := runner.Destroy(ctx, req, func(ev *providerv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
 			return err
@@ -265,6 +266,7 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 		resp, err := runner.ListEnvironments(ctx, &providerv1.ListEnvironmentsRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
+			ProjectId:       cfg.ProjectID,
 		})
 		if err != nil {
 			return err

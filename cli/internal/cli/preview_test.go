@@ -127,7 +127,7 @@ func TestRunPreviewRm_Ephemeral_DestroysCurrentBranchWithoutPrompting(t *testing
 	}
 
 	out := stdout.String()
-	if !strings.Contains(out, "DESTROY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
+	if !strings.Contains(out, "DESTROY project=proj_deploy_happy class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
 		t.Errorf("stdout = %q, want the ephemeral Destroy echo for the current branch", out)
 	}
 	if strings.Contains(out, "[y/N]") {
@@ -154,7 +154,7 @@ func TestRunPreviewRm_Ref_DestroysExplicitRef(t *testing.T) {
 		t.Fatalf("runPreviewRm err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	if !strings.Contains(stdout.String(), "DESTROY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
+	if !strings.Contains(stdout.String(), "DESTROY project=proj_deploy_happy class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key) {
 		t.Errorf("stdout = %q, want the Destroy echo for the explicit ref", stdout.String())
 	}
 }
@@ -171,7 +171,7 @@ func TestRunPreviewRm_PersistentWithYes_DestroysWithoutPrompting(t *testing.T) {
 	}
 
 	out := stdout.String()
-	if !strings.Contains(out, "DESTROY class=CLASS_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging source=IDENTITY_SOURCE_DECLARED") {
+	if !strings.Contains(out, "DESTROY project=proj_deploy_happy class=CLASS_PREVIEW lifecycle=LIFECYCLE_PERSISTENT identity=staging source=IDENTITY_SOURCE_DECLARED") {
 		t.Errorf("stdout = %q, want the persistent Destroy echo", out)
 	}
 	if strings.Contains(out, "[y/N]") {
@@ -223,6 +223,8 @@ func TestRunPreviewLs_RendersEnvironments(t *testing.T) {
 	for _, sub := range []string{
 		"feature_login_ab12cd34", "ephemeral", "pr-7",
 		"staging", "persistent", "—",
+		// The fake echoes the project_id the CLI scoped the listing to.
+		"project:proj_deploy_happy",
 	} {
 		if !strings.Contains(out, sub) {
 			t.Errorf("stdout = %q, want it to contain %q", out, sub)
