@@ -875,8 +875,15 @@ type PreflightRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// required_class is the environment class the calling command needs
+	// (production for `ocel deploy`, preview for `ocel preview`). The provider
+	// reports the state of that class's substrate, so an account with both
+	// substrates gates each command against the right one; when the required
+	// substrate is absent but the other exists, the provider reports the other
+	// so the caller's class guard still fires an informative mismatch.
+	RequiredClass Environment_Class `protobuf:"varint,3,opt,name=required_class,json=requiredClass,proto3,enum=provider.v1.Environment_Class" json:"required_class,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreflightRequest) Reset() {
@@ -921,6 +928,13 @@ func (x *PreflightRequest) GetProtocolVersion() string {
 		return x.ProtocolVersion
 	}
 	return ""
+}
+
+func (x *PreflightRequest) GetRequiredClass() Environment_Class {
+	if x != nil {
+		return x.RequiredClass
+	}
+	return Environment_CLASS_UNSPECIFIED
 }
 
 // PreflightResponse tells the CLI what the provider's ambient account/profile
@@ -1534,10 +1548,11 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"W\n" +
+	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\x9e\x01\n" +
 	"\x10PreflightRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\"\x8b\x01\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12E\n" +
+	"\x0erequired_class\x18\x03 \x01(\x0e2\x1e.provider.v1.Environment.ClassR\rrequiredClass\"\x8b\x01\n" +
 	"\x11PreflightResponse\x12?\n" +
 	"\vinfra_class\x18\x01 \x01(\x0e2\x1e.provider.v1.Environment.ClassR\n" +
 	"infraClass\x125\n" +
@@ -1630,28 +1645,29 @@ var file_provider_v1_provider_proto_depIdxs = []int32{
 	3,  // 10: provider.v1.DestroyRequest.environment:type_name -> provider.v1.Environment
 	11, // 11: provider.v1.ListEnvironmentsResponse.environments:type_name -> provider.v1.PreviewEnvironment
 	1,  // 12: provider.v1.PreviewEnvironment.lifecycle:type_name -> provider.v1.Environment.Lifecycle
-	0,  // 13: provider.v1.PreflightResponse.infra_class:type_name -> provider.v1.Environment.Class
-	15, // 14: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
-	16, // 15: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
-	17, // 16: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
-	18, // 17: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
-	19, // 18: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
-	20, // 19: provider.v1.ResourceOutput.bucket:type_name -> provider.v1.BucketOutput
-	6,  // 20: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
-	7,  // 21: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
-	8,  // 22: provider.v1.ProviderService.Destroy:input_type -> provider.v1.DestroyRequest
-	9,  // 23: provider.v1.ProviderService.ListEnvironments:input_type -> provider.v1.ListEnvironmentsRequest
-	12, // 24: provider.v1.ProviderService.Preflight:input_type -> provider.v1.PreflightRequest
-	14, // 25: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
-	14, // 26: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
-	14, // 27: provider.v1.ProviderService.Destroy:output_type -> provider.v1.DeployEvent
-	10, // 28: provider.v1.ProviderService.ListEnvironments:output_type -> provider.v1.ListEnvironmentsResponse
-	13, // 29: provider.v1.ProviderService.Preflight:output_type -> provider.v1.PreflightResponse
-	25, // [25:30] is the sub-list for method output_type
-	20, // [20:25] is the sub-list for method input_type
-	20, // [20:20] is the sub-list for extension type_name
-	20, // [20:20] is the sub-list for extension extendee
-	0,  // [0:20] is the sub-list for field type_name
+	0,  // 13: provider.v1.PreflightRequest.required_class:type_name -> provider.v1.Environment.Class
+	0,  // 14: provider.v1.PreflightResponse.infra_class:type_name -> provider.v1.Environment.Class
+	15, // 15: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
+	16, // 16: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
+	17, // 17: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
+	18, // 18: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
+	19, // 19: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
+	20, // 20: provider.v1.ResourceOutput.bucket:type_name -> provider.v1.BucketOutput
+	6,  // 21: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
+	7,  // 22: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
+	8,  // 23: provider.v1.ProviderService.Destroy:input_type -> provider.v1.DestroyRequest
+	9,  // 24: provider.v1.ProviderService.ListEnvironments:input_type -> provider.v1.ListEnvironmentsRequest
+	12, // 25: provider.v1.ProviderService.Preflight:input_type -> provider.v1.PreflightRequest
+	14, // 26: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
+	14, // 27: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
+	14, // 28: provider.v1.ProviderService.Destroy:output_type -> provider.v1.DeployEvent
+	10, // 29: provider.v1.ProviderService.ListEnvironments:output_type -> provider.v1.ListEnvironmentsResponse
+	13, // 30: provider.v1.ProviderService.Preflight:output_type -> provider.v1.PreflightResponse
+	26, // [26:31] is the sub-list for method output_type
+	21, // [21:26] is the sub-list for method input_type
+	21, // [21:21] is the sub-list for extension type_name
+	21, // [21:21] is the sub-list for extension extendee
+	0,  // [0:21] is the sub-list for field type_name
 }
 
 func init() { file_provider_v1_provider_proto_init() }

@@ -366,6 +366,7 @@ func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider
 	resp, err := runner.Preflight(ctx, &providerv1.PreflightRequest{
 		Options:         []byte(provider.Options),
 		ProtocolVersion: manifestbuilder.SchemaVersion,
+		RequiredClass:   required,
 	})
 	if err != nil {
 		return err

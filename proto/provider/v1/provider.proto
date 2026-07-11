@@ -261,6 +261,14 @@ message PreflightRequest {
   // protocol_version pins the wire contract so a provider can reject a
   // request it can't speak.
   string protocol_version = 2;
+
+  // required_class is the environment class the calling command needs
+  // (production for `ocel deploy`, preview for `ocel preview`). The provider
+  // reports the state of that class's substrate, so an account with both
+  // substrates gates each command against the right one; when the required
+  // substrate is absent but the other exists, the provider reports the other
+  // so the caller's class guard still fires an informative mismatch.
+  Environment.Class required_class = 3;
 }
 
 // PreflightResponse tells the CLI what the provider's ambient account/profile
