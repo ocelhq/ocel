@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"encoding/json"
-	"reflect"
 	"testing"
 
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
@@ -38,31 +37,6 @@ func TestFunctionEnvKey_UsesCanonicalTypeTokenAndUserID(t *testing.T) {
 	}
 	if got := functionEnvKey(resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, "uploads"); got != "OCEL_RESOURCE_BUCKET_uploads" {
 		t.Errorf("functionEnvKey(bucket, uploads) = %q, want OCEL_RESOURCE_BUCKET_uploads", got)
-	}
-}
-
-// The env injected onto every function mirrors `ocel dev`: one
-// OCEL_RESOURCE_<TYPE>_<id> key per manifest resource, keyed by the resource's
-// user id (resource.Name), not its logical_name.
-func TestResourceEnvKeys_FullSetKeyedByUserID(t *testing.T) {
-	manifest := &providerv1.Manifest{
-		Resources: []*providerv1.ManifestResource{
-			{
-				LogicalName: "postgres_main",
-				Resource:    &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
-				Config:      &providerv1.ManifestResource_Postgres{Postgres: &resourcesv1.PostgresConfig{}},
-			},
-			{
-				LogicalName: "bucket_uploads",
-				Resource:    &resourcesv1.ResourceIdentifier{Name: "uploads", Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET},
-				Config:      &providerv1.ManifestResource_Bucket{Bucket: &resourcesv1.BucketConfig{}},
-			},
-		},
-	}
-	got := resourceEnvKeys(manifest)
-	want := []string{"OCEL_RESOURCE_POSTGRES_main", "OCEL_RESOURCE_BUCKET_uploads"}
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("resourceEnvKeys() = %v, want %v", got, want)
 	}
 }
 

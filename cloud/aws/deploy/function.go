@@ -39,8 +39,8 @@ type functionArgs struct {
 }
 
 // translateFunction lowers a ManifestFunction into the concrete Lambda
-// arguments the provider provisions. It is pure. Empty runtime/handler fall
-// back to the pinned Node defaults.
+// arguments the provider provisions. Empty runtime/handler fall back to the
+// pinned Node defaults.
 func translateFunction(fn *providerv1.ManifestFunction) functionArgs {
 	runtime := defaultFunctionRuntime
 	if r := fn.GetRuntime(); r != "" {
@@ -56,7 +56,7 @@ func translateFunction(fn *providerv1.ManifestFunction) functionArgs {
 // functionEnvKey is the environment variable a resource is injected onto every
 // function under: OCEL_RESOURCE_<TYPE>_<id>, where <TYPE> is the resource
 // type's canonical uppercase token and <id> is the resource's user id. It
-// matches exactly what the SDK reads (get-config.ts). It is pure.
+// matches exactly what the SDK reads (get-config.ts).
 func functionEnvKey(rt resourcesv1.ResourceType, id string) string {
 	return fmt.Sprintf("OCEL_RESOURCE_%s_%s", resourceTypeToken(rt), id)
 }
@@ -74,20 +74,8 @@ func resourceTypeToken(rt resourcesv1.ResourceType) string {
 	}
 }
 
-// resourceEnvKeys is the full set of OCEL_RESOURCE_<TYPE>_<id> keys injected
-// onto every function, one per manifest resource in declaration order. It is
-// pure. Values are resolved from each resource's provisioned outputs (see
-// registerPostgres/registerBucket); this is only the key set.
-func resourceEnvKeys(manifest *providerv1.Manifest) []string {
-	keys := make([]string, 0, len(manifest.GetResources()))
-	for _, r := range manifest.GetResources() {
-		keys = append(keys, functionEnvKey(r.GetResource().GetType(), r.GetResource().GetName()))
-	}
-	return keys
-}
-
 // postgresEnvPayload is the OCEL_RESOURCE_POSTGRES_<id> value the SDK reads
-// (pg.ts): a JSON object carrying the connection string. It is pure.
+// (pg.ts): a JSON object carrying the connection string.
 func postgresEnvPayload(username, password, host string, port int, database string) string {
 	conn := fmt.Sprintf("postgres://%s:%s@%s:%d/%s", username, password, host, port, database)
 	b, _ := json.Marshal(map[string]string{"connectionString": conn})
@@ -96,7 +84,7 @@ func postgresEnvPayload(username, password, host string, port int, database stri
 
 // bucketEnvPayload is the OCEL_RESOURCE_BUCKET_<id> value the SDK reads
 // (bucket.ts): a JSON object pointing at the RuntimeService endpoint (address)
-// and the provisioned bucket binding. It is pure.
+// and the provisioned bucket binding.
 func bucketEnvPayload(address, bucket string) string {
 	b, _ := json.Marshal(map[string]string{"address": address, "bucket": bucket})
 	return string(b)
@@ -105,13 +93,12 @@ func bucketEnvPayload(address, bucket string) string {
 // artifactArchivePath resolves a ManifestFunction.artifact_path (relative to
 // the project's .ocel/output) against the deploy's artifact root, giving the
 // absolute path to the `.func` directory Pulumi archives into the Lambda zip.
-// It is pure.
 func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
 }
 
 // collectFunctionOutput builds the ResourceOutput reporting a realized
-// function's web-facing URL, keyed by the function's logical_name. It is pure.
+// function's web-facing URL, keyed by the function's logical_name.
 func collectFunctionOutput(logicalName, url string) *providerv1.ResourceOutput {
 	return &providerv1.ResourceOutput{
 		LogicalName: logicalName,
