@@ -44,6 +44,22 @@ type ProviderDescriptor struct {
 	Options json.RawMessage
 }
 
+// App is a resolved, defaulted application declared in ocel.config.ts.
+type App struct {
+	Name string
+	// Path is the app's directory, relative to the config dir.
+	Path string
+	// Framework is the app's web framework; only "express" is supported
+	// this iteration.
+	Framework string
+	// Entrypoint is an optional override relative to Path.
+	Entrypoint string
+	// Compute is Ocel-internal: it defaults to "serverless" during
+	// normalization, is never user-settable, and is never serialized onto
+	// the manifest wire.
+	Compute string
+}
+
 // Config is the resolved, defaulted project configuration read from
 // ocel.config.ts.
 type Config struct {
@@ -51,6 +67,8 @@ type Config struct {
 	Discovery Discovery
 	// Provider is nil when the config has no `provider` field configured.
 	Provider *ProviderDescriptor
+	// Apps holds the normalized applications declared in the config.
+	Apps []App
 	// Dir is the directory containing the resolved ocel.config.ts.
 	// discovery.paths are relative to it.
 	Dir string
@@ -77,7 +95,20 @@ type rawConfig struct {
 		Package string          `json:"package"`
 		Options json.RawMessage `json:"options"`
 	} `json:"provider"`
+	Apps []struct {
+		Name       string `json:"name"`
+		Path       string `json:"path"`
+		Framework  string `json:"framework"`
+		Entrypoint string `json:"entrypoint"`
+	} `json:"apps"`
 }
+
+// defaultCompute is the Ocel-internal compute target applied to every app
+// during normalization. It is not user-settable.
+const defaultCompute = "serverless"
+
+// supportedFramework is the only web framework accepted this iteration.
+const supportedFramework = "express"
 
 // Resolve walks up from startDir to find the nearest ancestor
 // ocel.config.ts, bundles and executes it, and returns its parsed,
@@ -121,12 +152,57 @@ func Resolve(startDir string) (*Config, error) {
 		provider = &ProviderDescriptor{Package: raw.Provider.Package, Options: options}
 	}
 
+	apps, err := normalizeApps(raw)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", configPath, err)
+	}
+
 	return &Config{
 		ProjectID: raw.ProjectID,
 		Discovery: Discovery{Paths: paths},
 		Provider:  provider,
+		Apps:      apps,
 		Dir:       filepath.Dir(configPath),
 	}, nil
+}
+
+// normalizeApps validates the raw apps and applies internal defaults. It is
+// framework-agnostic structural work only: it checks names, paths, and the
+// supported framework, and sets the Ocel-internal compute target. It does not
+// resolve entrypoint candidates or embed any framework-specific knowledge.
+func normalizeApps(raw rawConfig) ([]App, error) {
+	if len(raw.Apps) == 0 {
+		return nil, nil
+	}
+
+	apps := make([]App, 0, len(raw.Apps))
+	seen := make(map[string]bool, len(raw.Apps))
+	for _, a := range raw.Apps {
+		if a.Name == "" {
+			return nil, fmt.Errorf("app is missing required \"name\"")
+		}
+		if seen[a.Name] {
+			return nil, fmt.Errorf("duplicate app name %q — app names must be unique", a.Name)
+		}
+		seen[a.Name] = true
+
+		if a.Path == "" {
+			return nil, fmt.Errorf("app %q is missing required \"path\"", a.Name)
+		}
+		if a.Framework != supportedFramework {
+			return nil, fmt.Errorf("app %q has unsupported framework %q — only %q is supported", a.Name, a.Framework, supportedFramework)
+		}
+
+		apps = append(apps, App{
+			Name:       a.Name,
+			Path:       a.Path,
+			Framework:  a.Framework,
+			Entrypoint: a.Entrypoint,
+			Compute:    defaultCompute,
+		})
+	}
+
+	return apps, nil
 }
 
 // buildAndRun bundles configPath (and a small wrapper that JSON-serializes

@@ -235,6 +235,147 @@ func TestConfig_RequireProvider_ReturnsDescriptorWhenPresent(t *testing.T) {
 	}
 }
 
+func TestResolve_ParsesApps(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  apps: [
+    { name: "api", path: "services/api", framework: "express", entrypoint: "src/main.ts" },
+    { name: "web", path: "services/web", framework: "express" },
+  ],
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(cfg.Apps) != 2 {
+		t.Fatalf("Apps = %v, want 2 entries", cfg.Apps)
+	}
+
+	api := cfg.Apps[0]
+	if api.Name != "api" || api.Path != "services/api" || api.Framework != "express" || api.Entrypoint != "src/main.ts" {
+		t.Fatalf("Apps[0] = %+v, unexpected fields", api)
+	}
+
+	web := cfg.Apps[1]
+	if web.Name != "web" || web.Path != "services/web" || web.Framework != "express" || web.Entrypoint != "" {
+		t.Fatalf("Apps[1] = %+v, unexpected fields", web)
+	}
+}
+
+func TestResolve_AppsAbsentByDefault(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(cfg.Apps) != 0 {
+		t.Fatalf("Apps = %v, want empty", cfg.Apps)
+	}
+}
+
+func TestResolve_AppComputeDefaultsToServerless(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  apps: [{ name: "api", path: "services/api", framework: "express" }],
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.Apps[0].Compute != "serverless" {
+		t.Fatalf("Apps[0].Compute = %q, want %q", cfg.Apps[0].Compute, "serverless")
+	}
+}
+
+func TestResolve_AppComputeNotSettableViaConfig(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  apps: [{ name: "api", path: "services/api", framework: "express", compute: "vm" }],
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.Apps[0].Compute != "serverless" {
+		t.Fatalf("Apps[0].Compute = %q, want %q — compute must not be user-settable", cfg.Apps[0].Compute, "serverless")
+	}
+}
+
+func TestResolve_AppNonExpressFrameworkErrors(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  apps: [{ name: "api", path: "services/api", framework: "fastify" }],
+};
+`)
+
+	_, err := Resolve(root)
+	if err == nil {
+		t.Fatal("Resolve: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "fastify") {
+		t.Fatalf("err = %q, want it to name the bad framework %q", err.Error(), "fastify")
+	}
+}
+
+func TestResolve_AppDuplicateNamesError(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  apps: [
+    { name: "api", path: "services/api", framework: "express" },
+    { name: "api", path: "services/other", framework: "express" },
+  ],
+};
+`)
+
+	_, err := Resolve(root)
+	if err == nil {
+		t.Fatal("Resolve: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "api") {
+		t.Fatalf("err = %q, want it to name the duplicate %q", err.Error(), "api")
+	}
+}
+
+func TestResolve_AppMissingPathErrors(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  apps: [{ name: "api", framework: "express" }],
+};
+`)
+
+	_, err := Resolve(root)
+	if err == nil {
+		t.Fatal("Resolve: expected error, got nil")
+	}
+	if !strings.Contains(err.Error(), "path") {
+		t.Fatalf("err = %q, want it to mention missing %q", err.Error(), "path")
+	}
+}
+
 func TestResolve_WritesBuildArtifactsUnderOcelDir(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
