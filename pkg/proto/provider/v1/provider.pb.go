@@ -277,6 +277,7 @@ type Manifest struct {
 	SchemaVersion string              `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
 	ProjectId     string              `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Resources     []*ManifestResource `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
+	Functions     []*ManifestFunction `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -332,6 +333,94 @@ func (x *Manifest) GetResources() []*ManifestResource {
 	return nil
 }
 
+func (x *Manifest) GetFunctions() []*ManifestFunction {
+	if x != nil {
+		return x.Functions
+	}
+	return nil
+}
+
+// ManifestFunction is a deployable function unit. Being listed in
+// Manifest.functions implies serverless compute, and an express framework
+// implies web-facing — so there is deliberately no compute or trigger field.
+type ManifestFunction struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// logical_name is the app name normalized by the same rule as
+	// ManifestResource.logical_name. Deterministic across declaration order.
+	LogicalName   string `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
+	Runtime       string `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Handler       string `protobuf:"bytes,3,opt,name=handler,proto3" json:"handler,omitempty"`
+	ArtifactPath  string `protobuf:"bytes,4,opt,name=artifact_path,json=artifactPath,proto3" json:"artifact_path,omitempty"`
+	Framework     string `protobuf:"bytes,5,opt,name=framework,proto3" json:"framework,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManifestFunction) Reset() {
+	*x = ManifestFunction{}
+	mi := &file_provider_v1_provider_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManifestFunction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManifestFunction) ProtoMessage() {}
+
+func (x *ManifestFunction) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManifestFunction.ProtoReflect.Descriptor instead.
+func (*ManifestFunction) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ManifestFunction) GetLogicalName() string {
+	if x != nil {
+		return x.LogicalName
+	}
+	return ""
+}
+
+func (x *ManifestFunction) GetRuntime() string {
+	if x != nil {
+		return x.Runtime
+	}
+	return ""
+}
+
+func (x *ManifestFunction) GetHandler() string {
+	if x != nil {
+		return x.Handler
+	}
+	return ""
+}
+
+func (x *ManifestFunction) GetArtifactPath() string {
+	if x != nil {
+		return x.ArtifactPath
+	}
+	return ""
+}
+
+func (x *ManifestFunction) GetFramework() string {
+	if x != nil {
+		return x.Framework
+	}
+	return ""
+}
+
 // ManifestResource pairs a resource's identity with its typed configuration.
 // The config oneof reuses resources.v1's typed config messages so a
 // resource's config schema is single-sourced across declare and manifest.
@@ -355,7 +444,7 @@ type ManifestResource struct {
 
 func (x *ManifestResource) Reset() {
 	*x = ManifestResource{}
-	mi := &file_provider_v1_provider_proto_msgTypes[2]
+	mi := &file_provider_v1_provider_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -367,7 +456,7 @@ func (x *ManifestResource) String() string {
 func (*ManifestResource) ProtoMessage() {}
 
 func (x *ManifestResource) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[2]
+	mi := &file_provider_v1_provider_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -380,7 +469,7 @@ func (x *ManifestResource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManifestResource.ProtoReflect.Descriptor instead.
 func (*ManifestResource) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{2}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ManifestResource) GetLogicalName() string {
@@ -459,7 +548,7 @@ type DeployRequest struct {
 
 func (x *DeployRequest) Reset() {
 	*x = DeployRequest{}
-	mi := &file_provider_v1_provider_proto_msgTypes[3]
+	mi := &file_provider_v1_provider_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -471,7 +560,7 @@ func (x *DeployRequest) String() string {
 func (*DeployRequest) ProtoMessage() {}
 
 func (x *DeployRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[3]
+	mi := &file_provider_v1_provider_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -484,7 +573,7 @@ func (x *DeployRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployRequest.ProtoReflect.Descriptor instead.
 func (*DeployRequest) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{3}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DeployRequest) GetManifest() *Manifest {
@@ -537,7 +626,7 @@ type BootstrapRequest struct {
 
 func (x *BootstrapRequest) Reset() {
 	*x = BootstrapRequest{}
-	mi := &file_provider_v1_provider_proto_msgTypes[4]
+	mi := &file_provider_v1_provider_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -549,7 +638,7 @@ func (x *BootstrapRequest) String() string {
 func (*BootstrapRequest) ProtoMessage() {}
 
 func (x *BootstrapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[4]
+	mi := &file_provider_v1_provider_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -562,7 +651,7 @@ func (x *BootstrapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapRequest.ProtoReflect.Descriptor instead.
 func (*BootstrapRequest) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{4}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *BootstrapRequest) GetOptions() []byte {
@@ -609,7 +698,7 @@ type DestroyRequest struct {
 
 func (x *DestroyRequest) Reset() {
 	*x = DestroyRequest{}
-	mi := &file_provider_v1_provider_proto_msgTypes[5]
+	mi := &file_provider_v1_provider_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -621,7 +710,7 @@ func (x *DestroyRequest) String() string {
 func (*DestroyRequest) ProtoMessage() {}
 
 func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[5]
+	mi := &file_provider_v1_provider_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -634,7 +723,7 @@ func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DestroyRequest.ProtoReflect.Descriptor instead.
 func (*DestroyRequest) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{5}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *DestroyRequest) GetEnvironment() *Environment {
@@ -687,7 +776,7 @@ type ListEnvironmentsRequest struct {
 
 func (x *ListEnvironmentsRequest) Reset() {
 	*x = ListEnvironmentsRequest{}
-	mi := &file_provider_v1_provider_proto_msgTypes[6]
+	mi := &file_provider_v1_provider_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -699,7 +788,7 @@ func (x *ListEnvironmentsRequest) String() string {
 func (*ListEnvironmentsRequest) ProtoMessage() {}
 
 func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[6]
+	mi := &file_provider_v1_provider_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -712,7 +801,7 @@ func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentsRequest.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentsRequest) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{6}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ListEnvironmentsRequest) GetOptions() []byte {
@@ -747,7 +836,7 @@ type ListEnvironmentsResponse struct {
 
 func (x *ListEnvironmentsResponse) Reset() {
 	*x = ListEnvironmentsResponse{}
-	mi := &file_provider_v1_provider_proto_msgTypes[7]
+	mi := &file_provider_v1_provider_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -759,7 +848,7 @@ func (x *ListEnvironmentsResponse) String() string {
 func (*ListEnvironmentsResponse) ProtoMessage() {}
 
 func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[7]
+	mi := &file_provider_v1_provider_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -772,7 +861,7 @@ func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentsResponse.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentsResponse) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{7}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListEnvironmentsResponse) GetEnvironments() []*PreviewEnvironment {
@@ -800,7 +889,7 @@ type PreviewEnvironment struct {
 
 func (x *PreviewEnvironment) Reset() {
 	*x = PreviewEnvironment{}
-	mi := &file_provider_v1_provider_proto_msgTypes[8]
+	mi := &file_provider_v1_provider_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -812,7 +901,7 @@ func (x *PreviewEnvironment) String() string {
 func (*PreviewEnvironment) ProtoMessage() {}
 
 func (x *PreviewEnvironment) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[8]
+	mi := &file_provider_v1_provider_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -825,7 +914,7 @@ func (x *PreviewEnvironment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewEnvironment.ProtoReflect.Descriptor instead.
 func (*PreviewEnvironment) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{8}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *PreviewEnvironment) GetIdentity() string {
@@ -888,7 +977,7 @@ type PreflightRequest struct {
 
 func (x *PreflightRequest) Reset() {
 	*x = PreflightRequest{}
-	mi := &file_provider_v1_provider_proto_msgTypes[9]
+	mi := &file_provider_v1_provider_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -900,7 +989,7 @@ func (x *PreflightRequest) String() string {
 func (*PreflightRequest) ProtoMessage() {}
 
 func (x *PreflightRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[9]
+	mi := &file_provider_v1_provider_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -913,7 +1002,7 @@ func (x *PreflightRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreflightRequest.ProtoReflect.Descriptor instead.
 func (*PreflightRequest) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{9}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PreflightRequest) GetOptions() []byte {
@@ -953,7 +1042,7 @@ type PreflightResponse struct {
 
 func (x *PreflightResponse) Reset() {
 	*x = PreflightResponse{}
-	mi := &file_provider_v1_provider_proto_msgTypes[10]
+	mi := &file_provider_v1_provider_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -965,7 +1054,7 @@ func (x *PreflightResponse) String() string {
 func (*PreflightResponse) ProtoMessage() {}
 
 func (x *PreflightResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[10]
+	mi := &file_provider_v1_provider_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -978,7 +1067,7 @@ func (x *PreflightResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreflightResponse.ProtoReflect.Descriptor instead.
 func (*PreflightResponse) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{10}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PreflightResponse) GetInfraClass() Environment_Class {
@@ -1011,7 +1100,7 @@ type DeployEvent struct {
 
 func (x *DeployEvent) Reset() {
 	*x = DeployEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[11]
+	mi := &file_provider_v1_provider_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1023,7 +1112,7 @@ func (x *DeployEvent) String() string {
 func (*DeployEvent) ProtoMessage() {}
 
 func (x *DeployEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[11]
+	mi := &file_provider_v1_provider_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1036,7 +1125,7 @@ func (x *DeployEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployEvent.ProtoReflect.Descriptor instead.
 func (*DeployEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{11}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DeployEvent) GetEvent() isDeployEvent_Event {
@@ -1105,7 +1194,7 @@ type ProgressEvent struct {
 
 func (x *ProgressEvent) Reset() {
 	*x = ProgressEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[12]
+	mi := &file_provider_v1_provider_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1117,7 +1206,7 @@ func (x *ProgressEvent) String() string {
 func (*ProgressEvent) ProtoMessage() {}
 
 func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[12]
+	mi := &file_provider_v1_provider_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1130,7 +1219,7 @@ func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProgressEvent.ProtoReflect.Descriptor instead.
 func (*ProgressEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{12}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ProgressEvent) GetMessage() string {
@@ -1150,7 +1239,7 @@ type LogEvent struct {
 
 func (x *LogEvent) Reset() {
 	*x = LogEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[13]
+	mi := &file_provider_v1_provider_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1162,7 +1251,7 @@ func (x *LogEvent) String() string {
 func (*LogEvent) ProtoMessage() {}
 
 func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[13]
+	mi := &file_provider_v1_provider_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1175,7 +1264,7 @@ func (x *LogEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
 func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{13}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *LogEvent) GetMessage() string {
@@ -1202,7 +1291,7 @@ type ResultEvent struct {
 
 func (x *ResultEvent) Reset() {
 	*x = ResultEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[14]
+	mi := &file_provider_v1_provider_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1214,7 +1303,7 @@ func (x *ResultEvent) String() string {
 func (*ResultEvent) ProtoMessage() {}
 
 func (x *ResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[14]
+	mi := &file_provider_v1_provider_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1227,7 +1316,7 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
 func (*ResultEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{14}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ResultEvent) GetSuccess() bool {
@@ -1270,7 +1359,7 @@ type ResourceOutput struct {
 
 func (x *ResourceOutput) Reset() {
 	*x = ResourceOutput{}
-	mi := &file_provider_v1_provider_proto_msgTypes[15]
+	mi := &file_provider_v1_provider_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1282,7 +1371,7 @@ func (x *ResourceOutput) String() string {
 func (*ResourceOutput) ProtoMessage() {}
 
 func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[15]
+	mi := &file_provider_v1_provider_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1295,7 +1384,7 @@ func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceOutput.ProtoReflect.Descriptor instead.
 func (*ResourceOutput) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{15}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ResourceOutput) GetLogicalName() string {
@@ -1364,7 +1453,7 @@ type PostgresOutput struct {
 
 func (x *PostgresOutput) Reset() {
 	*x = PostgresOutput{}
-	mi := &file_provider_v1_provider_proto_msgTypes[16]
+	mi := &file_provider_v1_provider_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1376,7 +1465,7 @@ func (x *PostgresOutput) String() string {
 func (*PostgresOutput) ProtoMessage() {}
 
 func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[16]
+	mi := &file_provider_v1_provider_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1389,7 +1478,7 @@ func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostgresOutput.ProtoReflect.Descriptor instead.
 func (*PostgresOutput) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{16}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *PostgresOutput) GetHost() string {
@@ -1442,7 +1531,7 @@ type BucketOutput struct {
 
 func (x *BucketOutput) Reset() {
 	*x = BucketOutput{}
-	mi := &file_provider_v1_provider_proto_msgTypes[17]
+	mi := &file_provider_v1_provider_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1454,7 +1543,7 @@ func (x *BucketOutput) String() string {
 func (*BucketOutput) ProtoMessage() {}
 
 func (x *BucketOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[17]
+	mi := &file_provider_v1_provider_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1467,7 +1556,7 @@ func (x *BucketOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketOutput.ProtoReflect.Descriptor instead.
 func (*BucketOutput) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{17}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *BucketOutput) GetAddress() string {
@@ -1507,12 +1596,19 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\x0eIdentitySource\x12\x1f\n" +
 	"\x1bIDENTITY_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13IDENTITY_SOURCE_GIT\x10\x01\x12\x1c\n" +
-	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\x8d\x01\n" +
+	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\xca\x01\n" +
 	"\bManifest\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12;\n" +
-	"\tresources\x18\x03 \x03(\v2\x1d.provider.v1.ManifestResourceR\tresources\"\xef\x01\n" +
+	"\tresources\x18\x03 \x03(\v2\x1d.provider.v1.ManifestResourceR\tresources\x12;\n" +
+	"\tfunctions\x18\x04 \x03(\v2\x1d.provider.v1.ManifestFunctionR\tfunctions\"\xac\x01\n" +
+	"\x10ManifestFunction\x12!\n" +
+	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12\x18\n" +
+	"\aruntime\x18\x02 \x01(\tR\aruntime\x12\x18\n" +
+	"\ahandler\x18\x03 \x01(\tR\ahandler\x12#\n" +
+	"\rartifact_path\x18\x04 \x01(\tR\fartifactPath\x12\x1c\n" +
+	"\tframework\x18\x05 \x01(\tR\tframework\"\xef\x01\n" +
 	"\x10ManifestResource\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12<\n" +
 	"\bresource\x18\x02 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
@@ -1604,70 +1700,72 @@ func file_provider_v1_provider_proto_rawDescGZIP() []byte {
 }
 
 var file_provider_v1_provider_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_provider_v1_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
+var file_provider_v1_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
 var file_provider_v1_provider_proto_goTypes = []any{
 	(Environment_Class)(0),           // 0: provider.v1.Environment.Class
 	(Environment_Lifecycle)(0),       // 1: provider.v1.Environment.Lifecycle
 	(Environment_IdentitySource)(0),  // 2: provider.v1.Environment.IdentitySource
 	(*Environment)(nil),              // 3: provider.v1.Environment
 	(*Manifest)(nil),                 // 4: provider.v1.Manifest
-	(*ManifestResource)(nil),         // 5: provider.v1.ManifestResource
-	(*DeployRequest)(nil),            // 6: provider.v1.DeployRequest
-	(*BootstrapRequest)(nil),         // 7: provider.v1.BootstrapRequest
-	(*DestroyRequest)(nil),           // 8: provider.v1.DestroyRequest
-	(*ListEnvironmentsRequest)(nil),  // 9: provider.v1.ListEnvironmentsRequest
-	(*ListEnvironmentsResponse)(nil), // 10: provider.v1.ListEnvironmentsResponse
-	(*PreviewEnvironment)(nil),       // 11: provider.v1.PreviewEnvironment
-	(*PreflightRequest)(nil),         // 12: provider.v1.PreflightRequest
-	(*PreflightResponse)(nil),        // 13: provider.v1.PreflightResponse
-	(*DeployEvent)(nil),              // 14: provider.v1.DeployEvent
-	(*ProgressEvent)(nil),            // 15: provider.v1.ProgressEvent
-	(*LogEvent)(nil),                 // 16: provider.v1.LogEvent
-	(*ResultEvent)(nil),              // 17: provider.v1.ResultEvent
-	(*ResourceOutput)(nil),           // 18: provider.v1.ResourceOutput
-	(*PostgresOutput)(nil),           // 19: provider.v1.PostgresOutput
-	(*BucketOutput)(nil),             // 20: provider.v1.BucketOutput
-	(*v1.ResourceIdentifier)(nil),    // 21: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),        // 22: resources.v1.PostgresConfig
-	(*v1.BucketConfig)(nil),          // 23: resources.v1.BucketConfig
+	(*ManifestFunction)(nil),         // 5: provider.v1.ManifestFunction
+	(*ManifestResource)(nil),         // 6: provider.v1.ManifestResource
+	(*DeployRequest)(nil),            // 7: provider.v1.DeployRequest
+	(*BootstrapRequest)(nil),         // 8: provider.v1.BootstrapRequest
+	(*DestroyRequest)(nil),           // 9: provider.v1.DestroyRequest
+	(*ListEnvironmentsRequest)(nil),  // 10: provider.v1.ListEnvironmentsRequest
+	(*ListEnvironmentsResponse)(nil), // 11: provider.v1.ListEnvironmentsResponse
+	(*PreviewEnvironment)(nil),       // 12: provider.v1.PreviewEnvironment
+	(*PreflightRequest)(nil),         // 13: provider.v1.PreflightRequest
+	(*PreflightResponse)(nil),        // 14: provider.v1.PreflightResponse
+	(*DeployEvent)(nil),              // 15: provider.v1.DeployEvent
+	(*ProgressEvent)(nil),            // 16: provider.v1.ProgressEvent
+	(*LogEvent)(nil),                 // 17: provider.v1.LogEvent
+	(*ResultEvent)(nil),              // 18: provider.v1.ResultEvent
+	(*ResourceOutput)(nil),           // 19: provider.v1.ResourceOutput
+	(*PostgresOutput)(nil),           // 20: provider.v1.PostgresOutput
+	(*BucketOutput)(nil),             // 21: provider.v1.BucketOutput
+	(*v1.ResourceIdentifier)(nil),    // 22: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),        // 23: resources.v1.PostgresConfig
+	(*v1.BucketConfig)(nil),          // 24: resources.v1.BucketConfig
 }
 var file_provider_v1_provider_proto_depIdxs = []int32{
 	0,  // 0: provider.v1.Environment.class:type_name -> provider.v1.Environment.Class
 	1,  // 1: provider.v1.Environment.lifecycle:type_name -> provider.v1.Environment.Lifecycle
 	2,  // 2: provider.v1.Environment.identity_source:type_name -> provider.v1.Environment.IdentitySource
-	5,  // 3: provider.v1.Manifest.resources:type_name -> provider.v1.ManifestResource
-	21, // 4: provider.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	22, // 5: provider.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	23, // 6: provider.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
-	4,  // 7: provider.v1.DeployRequest.manifest:type_name -> provider.v1.Manifest
-	3,  // 8: provider.v1.DeployRequest.environment:type_name -> provider.v1.Environment
-	0,  // 9: provider.v1.BootstrapRequest.class:type_name -> provider.v1.Environment.Class
-	3,  // 10: provider.v1.DestroyRequest.environment:type_name -> provider.v1.Environment
-	11, // 11: provider.v1.ListEnvironmentsResponse.environments:type_name -> provider.v1.PreviewEnvironment
-	1,  // 12: provider.v1.PreviewEnvironment.lifecycle:type_name -> provider.v1.Environment.Lifecycle
-	0,  // 13: provider.v1.PreflightRequest.required_class:type_name -> provider.v1.Environment.Class
-	0,  // 14: provider.v1.PreflightResponse.infra_class:type_name -> provider.v1.Environment.Class
-	15, // 15: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
-	16, // 16: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
-	17, // 17: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
-	18, // 18: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
-	19, // 19: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
-	20, // 20: provider.v1.ResourceOutput.bucket:type_name -> provider.v1.BucketOutput
-	6,  // 21: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
-	7,  // 22: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
-	8,  // 23: provider.v1.ProviderService.Destroy:input_type -> provider.v1.DestroyRequest
-	9,  // 24: provider.v1.ProviderService.ListEnvironments:input_type -> provider.v1.ListEnvironmentsRequest
-	12, // 25: provider.v1.ProviderService.Preflight:input_type -> provider.v1.PreflightRequest
-	14, // 26: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
-	14, // 27: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
-	14, // 28: provider.v1.ProviderService.Destroy:output_type -> provider.v1.DeployEvent
-	10, // 29: provider.v1.ProviderService.ListEnvironments:output_type -> provider.v1.ListEnvironmentsResponse
-	13, // 30: provider.v1.ProviderService.Preflight:output_type -> provider.v1.PreflightResponse
-	26, // [26:31] is the sub-list for method output_type
-	21, // [21:26] is the sub-list for method input_type
-	21, // [21:21] is the sub-list for extension type_name
-	21, // [21:21] is the sub-list for extension extendee
-	0,  // [0:21] is the sub-list for field type_name
+	6,  // 3: provider.v1.Manifest.resources:type_name -> provider.v1.ManifestResource
+	5,  // 4: provider.v1.Manifest.functions:type_name -> provider.v1.ManifestFunction
+	22, // 5: provider.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	23, // 6: provider.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	24, // 7: provider.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	4,  // 8: provider.v1.DeployRequest.manifest:type_name -> provider.v1.Manifest
+	3,  // 9: provider.v1.DeployRequest.environment:type_name -> provider.v1.Environment
+	0,  // 10: provider.v1.BootstrapRequest.class:type_name -> provider.v1.Environment.Class
+	3,  // 11: provider.v1.DestroyRequest.environment:type_name -> provider.v1.Environment
+	12, // 12: provider.v1.ListEnvironmentsResponse.environments:type_name -> provider.v1.PreviewEnvironment
+	1,  // 13: provider.v1.PreviewEnvironment.lifecycle:type_name -> provider.v1.Environment.Lifecycle
+	0,  // 14: provider.v1.PreflightRequest.required_class:type_name -> provider.v1.Environment.Class
+	0,  // 15: provider.v1.PreflightResponse.infra_class:type_name -> provider.v1.Environment.Class
+	16, // 16: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
+	17, // 17: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
+	18, // 18: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
+	19, // 19: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
+	20, // 20: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
+	21, // 21: provider.v1.ResourceOutput.bucket:type_name -> provider.v1.BucketOutput
+	7,  // 22: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
+	8,  // 23: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
+	9,  // 24: provider.v1.ProviderService.Destroy:input_type -> provider.v1.DestroyRequest
+	10, // 25: provider.v1.ProviderService.ListEnvironments:input_type -> provider.v1.ListEnvironmentsRequest
+	13, // 26: provider.v1.ProviderService.Preflight:input_type -> provider.v1.PreflightRequest
+	15, // 27: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
+	15, // 28: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
+	15, // 29: provider.v1.ProviderService.Destroy:output_type -> provider.v1.DeployEvent
+	11, // 30: provider.v1.ProviderService.ListEnvironments:output_type -> provider.v1.ListEnvironmentsResponse
+	14, // 31: provider.v1.ProviderService.Preflight:output_type -> provider.v1.PreflightResponse
+	27, // [27:32] is the sub-list for method output_type
+	22, // [22:27] is the sub-list for method input_type
+	22, // [22:22] is the sub-list for extension type_name
+	22, // [22:22] is the sub-list for extension extendee
+	0,  // [0:22] is the sub-list for field type_name
 }
 
 func init() { file_provider_v1_provider_proto_init() }
@@ -1675,16 +1773,16 @@ func file_provider_v1_provider_proto_init() {
 	if File_provider_v1_provider_proto != nil {
 		return
 	}
-	file_provider_v1_provider_proto_msgTypes[2].OneofWrappers = []any{
+	file_provider_v1_provider_proto_msgTypes[3].OneofWrappers = []any{
 		(*ManifestResource_Postgres)(nil),
 		(*ManifestResource_Bucket)(nil),
 	}
-	file_provider_v1_provider_proto_msgTypes[11].OneofWrappers = []any{
+	file_provider_v1_provider_proto_msgTypes[12].OneofWrappers = []any{
 		(*DeployEvent_Progress)(nil),
 		(*DeployEvent_Log)(nil),
 		(*DeployEvent_Result)(nil),
 	}
-	file_provider_v1_provider_proto_msgTypes[15].OneofWrappers = []any{
+	file_provider_v1_provider_proto_msgTypes[16].OneofWrappers = []any{
 		(*ResourceOutput_Postgres)(nil),
 		(*ResourceOutput_Bucket)(nil),
 	}
@@ -1694,7 +1792,7 @@ func file_provider_v1_provider_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_v1_provider_proto_rawDesc), len(file_provider_v1_provider_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   18,
+			NumMessages:   19,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

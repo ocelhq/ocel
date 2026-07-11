@@ -30,6 +30,17 @@ type Declaration struct {
 	Source   string
 }
 
+// Function is a single collected function unit: the pure input to Build for
+// Manifest.functions. Name is the app name, normalized into the function's
+// logical_name by the same rule as a resource's.
+type Function struct {
+	Name         string
+	Runtime      string
+	Handler      string
+	ArtifactPath string
+	Framework    string
+}
+
 // DuplicateError is returned by Build when two declarations resolve to the
 // same type+id. It names both offending declarations and their source
 // locations, rather than a bare "duplicate key".
@@ -97,7 +108,7 @@ func normalizeLogicalName(s string) string {
 // existing entry's logical name. Two declarations sharing the same
 // (type, id) are a hard error naming both declarations and their source
 // locations.
-func Build(projectID string, declarations []Declaration) (*providerv1.Manifest, error) {
+func Build(projectID string, declarations []Declaration, functions []Function) (*providerv1.Manifest, error) {
 	type identity struct {
 		typ resourcesv1.ResourceType
 		id  string
@@ -146,9 +157,24 @@ func Build(projectID string, declarations []Declaration) (*providerv1.Manifest, 
 		return resources[i].LogicalName < resources[j].LogicalName
 	})
 
+	manifestFunctions := make([]*providerv1.ManifestFunction, 0, len(functions))
+	for _, f := range functions {
+		manifestFunctions = append(manifestFunctions, &providerv1.ManifestFunction{
+			LogicalName:  normalizeLogicalName(f.Name),
+			Runtime:      f.Runtime,
+			Handler:      f.Handler,
+			ArtifactPath: f.ArtifactPath,
+			Framework:    f.Framework,
+		})
+	}
+	sort.Slice(manifestFunctions, func(i, j int) bool {
+		return manifestFunctions[i].LogicalName < manifestFunctions[j].LogicalName
+	})
+
 	return &providerv1.Manifest{
 		SchemaVersion: SchemaVersion,
 		ProjectId:     projectID,
 		Resources:     resources,
+		Functions:     manifestFunctions,
 	}, nil
 }

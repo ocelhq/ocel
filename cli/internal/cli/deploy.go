@@ -104,7 +104,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		return err
 	}
 
-	manifest, err := manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources))
+	manifest, err := manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources), nil)
 	if err != nil {
 		return err
 	}
