@@ -68,18 +68,28 @@ func TestPreflightResponse(t *testing.T) {
 
 	cases := []struct {
 		name          string
+		required      providerv1.Environment_Class
 		preview, prod bootstrap.Deployed
 		wantClass     providerv1.Environment_Class
 		wantPresent   bool
 	}{
-		{"preview substrate wins", preview, production, providerv1.Environment_CLASS_PREVIEW, true},
-		{"preview substrate present alone", preview, absent, providerv1.Environment_CLASS_PREVIEW, true},
-		{"production-only reports production", absent, production, providerv1.Environment_CLASS_PRODUCTION, true},
-		{"empty account reports absent", absent, absent, providerv1.Environment_CLASS_UNSPECIFIED, false},
+		// Both substrates present: each command gates against its own class,
+		// never a spurious mismatch (the bug this scoping fixes).
+		{"deploy with both reports production", providerv1.Environment_CLASS_PRODUCTION, preview, production, providerv1.Environment_CLASS_PRODUCTION, true},
+		{"preview with both reports preview", providerv1.Environment_CLASS_PREVIEW, preview, production, providerv1.Environment_CLASS_PREVIEW, true},
+		// Required substrate present alone.
+		{"preview required, preview present", providerv1.Environment_CLASS_PREVIEW, preview, absent, providerv1.Environment_CLASS_PREVIEW, true},
+		{"production required, production present", providerv1.Environment_CLASS_PRODUCTION, absent, production, providerv1.Environment_CLASS_PRODUCTION, true},
+		// Wrong account: required absent, the other present -> report the other
+		// so the caller's guard fires an informative mismatch.
+		{"deploy in a preview-only account reports preview", providerv1.Environment_CLASS_PRODUCTION, preview, absent, providerv1.Environment_CLASS_PREVIEW, true},
+		{"preview in a production-only account reports production", providerv1.Environment_CLASS_PREVIEW, absent, production, providerv1.Environment_CLASS_PRODUCTION, true},
+		// Empty account.
+		{"empty account reports absent", providerv1.Environment_CLASS_PREVIEW, absent, absent, providerv1.Environment_CLASS_UNSPECIFIED, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := preflightResponse(tc.preview, tc.prod)
+			got := preflightResponse(tc.required, tc.preview, tc.prod)
 			if got.GetInfraClass() != tc.wantClass || got.GetInfrastructurePresent() != tc.wantPresent {
 				t.Errorf("preflightResponse() = {class=%v present=%v}, want {class=%v present=%v}",
 					got.GetInfraClass(), got.GetInfrastructurePresent(), tc.wantClass, tc.wantPresent)

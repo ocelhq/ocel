@@ -42,19 +42,25 @@ func (s *Server) Preflight(ctx context.Context, req *providerv1.PreflightRequest
 	if err != nil {
 		return nil, err
 	}
-	return preflightResponse(preview, production), nil
+	return preflightResponse(req.GetRequiredClass(), preview, production), nil
 }
 
-// preflightResponse maps the discovered substrates to a PreflightResponse. It
-// is pure. Preflight backs preview commands, so the preview substrate wins when
-// present; a production-only account is reported as production so the class
-// guard refuses with a concrete mismatch; an empty account is reported absent.
-func preflightResponse(preview, production bootstrap.Deployed) *providerv1.PreflightResponse {
+// preflightResponse maps the discovered substrates to a PreflightResponse for
+// the class the caller requires. It is pure. The substrate matching required
+// wins when present, so an account with both substrates gates each command
+// against the right one; when the required substrate is absent but the other
+// exists, the other is reported so the caller's class guard fires an
+// informative mismatch; an empty account is reported absent.
+func preflightResponse(required providerv1.Environment_Class, preview, production bootstrap.Deployed) *providerv1.PreflightResponse {
+	wanted, other := production, preview
+	if required == providerv1.Environment_CLASS_PREVIEW {
+		wanted, other = preview, production
+	}
 	switch {
-	case preview.Present:
-		return &providerv1.PreflightResponse{InfraClass: classToEnum(preview.Class), InfrastructurePresent: true}
-	case production.Present:
-		return &providerv1.PreflightResponse{InfraClass: classToEnum(production.Class), InfrastructurePresent: true}
+	case wanted.Present:
+		return &providerv1.PreflightResponse{InfraClass: classToEnum(wanted.Class), InfrastructurePresent: true}
+	case other.Present:
+		return &providerv1.PreflightResponse{InfraClass: classToEnum(other.Class), InfrastructurePresent: true}
 	default:
 		return &providerv1.PreflightResponse{InfraClass: providerv1.Environment_CLASS_UNSPECIFIED, InfrastructurePresent: false}
 	}
