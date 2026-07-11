@@ -109,11 +109,21 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		return err
 	}
 
+	env := &providerv1.Environment{
+		Class:     providerv1.Environment_CLASS_PRODUCTION,
+		Lifecycle: providerv1.Environment_LIFECYCLE_UNSPECIFIED,
+	}
+
 	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, runner, provider, providerv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
+			return err
+		}
+
 		req := &providerv1.DeployRequest{
 			Manifest:        manifest,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Environment:     env,
 		}
 
 		// The provider reports the whole stack's connection outputs on the

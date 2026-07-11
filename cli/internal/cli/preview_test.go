@@ -34,7 +34,7 @@ func TestRunPreviewUp_Ephemeral_SendsPreviewEphemeralEnvironment(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	if err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr); err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -60,7 +60,7 @@ func TestRunPreviewUp_PersistentNamed_SendsPersistentDeclaredEnvironment(t *test
 	t.Setenv(fakeInfraPresentEnvVar, "1")
 
 	var stdout, stderr bytes.Buffer
-	if err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &stdout, &stderr); err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -79,7 +79,7 @@ func TestRunPreviewUp_RefusesOnClassMismatch_NoDeploy(t *testing.T) {
 	t.Setenv(fakeInfraPresentEnvVar, "1")
 
 	var stdout, stderr bytes.Buffer
-	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("runPreviewUp err = nil, want a class-mismatch error")
 	}
@@ -98,7 +98,7 @@ func TestRunPreviewUp_RefusesWhenInfraAbsent_NoDeploy(t *testing.T) {
 	t.Setenv(fakeInfraPresentEnvVar, "0")
 
 	var stdout, stderr bytes.Buffer
-	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr)
 	if err == nil {
 		t.Fatal("runPreviewUp err = nil, want a missing-infrastructure error")
 	}
@@ -242,7 +242,7 @@ func TestRunPreviewUp_NotLoggedIn_ReturnsExitErrorWithLoginInstruction(t *testin
 	defer func() { loadCredentials = prev }()
 
 	var stderr bytes.Buffer
-	err := runPreviewUp(context.Background(), t.TempDir(), previewUpOptions{}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+	err := runPreviewUp(context.Background(), t.TempDir(), previewUpOptions{}, &bytes.Buffer{}, &stderr)
 
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) {
@@ -263,7 +263,7 @@ export default {
 };
 `)
 
-	err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+	err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil {
 		t.Fatal("runPreviewUp err = nil, want error")
 	}

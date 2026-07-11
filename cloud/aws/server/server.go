@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"time"
 
 	connect "connectrpc.com/connect"
 
@@ -154,7 +155,24 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 		ListenerCodePath: listenerCodePath,
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),
+		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
 	}, manifest, progress, logf)
+}
+
+// previewTTL is how long an ephemeral preview lives before it is considered
+// expired — surfaced by `ocel preview ls` and, later, reaped. Ephemeral
+// previews are cheap and recoverable, so a week balances "still there when I
+// come back to the PR" against "cleaned up before it leaks".
+const previewTTL = 7 * 24 * time.Hour
+
+// previewExpiry returns the epoch-seconds expiry to stamp on a deploy: now +
+// previewTTL for an ephemeral preview, 0 (no expiry) for every other lifecycle.
+// It is pure.
+func previewExpiry(lifecycle providerv1.Environment_Lifecycle, now time.Time) int64 {
+	if lifecycle != providerv1.Environment_LIFECYCLE_EPHEMERAL {
+		return 0
+	}
+	return now.Add(previewTTL).Unix()
 }
 
 // Bootstrap creates the account-global resources the provider needs and

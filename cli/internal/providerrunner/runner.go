@@ -347,8 +347,8 @@ func (r *Runner) Preflight(ctx context.Context, req *providerv1.PreflightRequest
 
 // driveStream consumes a provider event stream to its terminal ResultEvent,
 // forwarding every event to onEvent. rpc names the call for error messages.
-// It is shared by Deploy and Bootstrap, which speak the same DeployEvent
-// stream by contract.
+// It is shared by Deploy, Bootstrap, and Destroy, which speak the same
+// DeployEvent stream by contract.
 func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[providerv1.DeployEvent], callErr error, onEvent func(*providerv1.DeployEvent)) error {
 	if callErr != nil {
 		return fmt.Errorf("providerrunner: call %s: %w", rpc, callErr)
