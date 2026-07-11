@@ -1,8 +1,9 @@
+import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, buildApps } from "./build";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -174,5 +175,62 @@ describe("buildApps", () => {
     await buildApps([{ name: "new", cwd: fixtureDir }], { outDir });
     expect(existsSync(path.join(outDir, "functions", "new.func"))).toBe(true);
     expect(existsSync(path.join(outDir, "functions", "old.func"))).toBe(false);
+  });
+});
+
+// The embedded bundle is copied into a USER project's `.ocel/` and run with the
+// user's node, where dev tools like esbuild/sucrase are not installed. It must
+// therefore carry zero external runtime deps.
+describe("embedded bundle self-containment", () => {
+  const packageDir = path.resolve(here, "..");
+  const bundle = path.join(packageDir, "dist", "node-builder.mjs");
+
+  beforeAll(() => {
+    execFileSync("node", ["build.mjs"], { cwd: packageDir, stdio: "inherit" });
+  }, 120_000);
+
+  it("has no bare imports of build-time-only deps", () => {
+    const text = readFileSync(bundle, "utf8");
+    for (const dep of ["esbuild", "sucrase", "serverless-http"]) {
+      const bare = new RegExp(
+        `(?:from|import|require)\\s*\\(?\\s*["']${dep}["']`,
+      );
+      expect(text, `bundle must not carry a bare "${dep}" runtime import`).not.toMatch(bare);
+    }
+  });
+
+  it("builds a valid, invocable .func when run outside the repo (no esbuild)", async () => {
+    // Copy only the single .mjs to an isolated dir: nothing here resolves
+    // esbuild/sucrase, reproducing a real user project + `ocel deploy`.
+    const isoDir = mkdtempSync(path.join(tmpdir(), "nb-iso-"));
+    dirs.push(isoDir);
+    const isoBundle = path.join(isoDir, "node-builder.mjs");
+    cpSync(bundle, isoBundle);
+
+    const outDir = path.join(isoDir, "out");
+    const request = JSON.stringify({ outDir, apps: [{ name: "api", cwd: fixtureDir }] });
+    const stdout = execFileSync("node", [isoBundle, request], {
+      cwd: isoDir,
+      encoding: "utf8",
+    });
+
+    const summary = JSON.parse(stdout.trim().split("\n").pop() as string);
+    expect(summary.functions[0].name).toBe("api");
+
+    const funcDir = path.join(outDir, "functions", "api.func");
+    const { handler } = await import(path.join(funcDir, "index.mjs"));
+    const res = await handler(
+      {
+        version: "2.0",
+        rawPath: "/hello/deployed",
+        rawQueryString: "",
+        headers: { host: "example.com" },
+        requestContext: { http: { method: "GET", path: "/hello/deployed" } },
+        isBase64Encoded: false,
+      },
+      {},
+    );
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ message: "hello, deployed" });
   });
 });
