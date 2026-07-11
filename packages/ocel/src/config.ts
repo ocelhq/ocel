@@ -7,12 +7,23 @@ export interface ProviderDescriptor {
   options: unknown;
 }
 
+// AppConfig declares an application Ocel builds and deploys. `framework` is
+// restricted to the frameworks Ocel supports this iteration; `entrypoint` is
+// an optional override relative to `path`.
+export interface AppConfig {
+  name: string;
+  path: string;
+  framework: "express";
+  entrypoint?: string;
+}
+
 export interface OcelConfig {
   projectId: string;
   discovery?: {
     paths?: string[];
   };
   provider?: ProviderDescriptor;
+  apps?: AppConfig[];
 }
 
 export function defineConfig(config: OcelConfig): OcelConfig {
