@@ -63,6 +63,14 @@ service ProviderService {
     // about from its own authoritative state, one entry per environment. It
     // backs `ocel preview ls`.
     rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
+
+    // Preflight reports what the provider's ambient account/profile points at:
+    // the class the pointed-at infrastructure is stamped with, and whether that
+    // infrastructure exists yet. The CLI calls it before a preview or deploy to
+    // refuse fast and locally when the infrastructure is missing or is the
+    // wrong class, before anything is provisioned. It is authoritative: the
+    // provider enforces the same class match itself.
+    rpc Preflight(PreflightRequest) returns (PreflightResponse);
 }
 
 // Environment is the fully resolved target a provisioning verb acts on. The
@@ -173,6 +181,11 @@ message BootstrapRequest {
   // protocol_version pins the wire contract so a provider can reject a
   // request it can't speak.
   string protocol_version = 2;
+
+  // class is the infrastructure the provider stands up and stamps: PRODUCTION
+  // for `ocel bootstrap`, PREVIEW for `ocel bootstrap --preview`. The two
+  // classes have independent lifecycles.
+  Environment.Class class = 3;
 }
 
 // DestroyRequest is the request for ProviderService.Destroy. It carries the
@@ -224,6 +237,32 @@ message PreviewEnvironment {
   // created_at and expires_at are epoch seconds, 0 when unknown.
   int64 created_at = 4;
   int64 expires_at = 5;
+}
+
+// PreflightRequest is the request for ProviderService.Preflight. Like
+// Bootstrap it is account/profile-scoped, carrying only the provider's opaque
+// options and the pinned protocol version.
+message PreflightRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+}
+
+// PreflightResponse tells the CLI what the provider's ambient account/profile
+// points at, so the CLI can refuse before provisioning.
+message PreflightResponse {
+  // infra_class is the class the pointed-at infrastructure is stamped with, or
+  // CLASS_UNSPECIFIED when no Ocel infrastructure is present.
+  Environment.Class infra_class = 1;
+
+  // infrastructure_present is false when the infrastructure the command needs
+  // has not been bootstrapped yet.
+  bool infrastructure_present = 2;
 }
 
 // DeployEvent is a single item on the Deploy response stream: either
