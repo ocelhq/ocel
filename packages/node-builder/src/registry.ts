@@ -15,38 +15,14 @@ export interface Framework {
   shim: (entryJs: string) => string;
 }
 
-const expressShim = (entryJs: string) => `import http from "node:http";
-import serverless from "serverless-http";
+import bundledExpressShim from "./shim/express.bundled";
 
-// Intercept listen() so importing the user app captures its server instead of
-// binding a port; the request listener on that server is the framework app.
-let captured;
-const originalListen = http.Server.prototype.listen;
-http.Server.prototype.listen = function listen(...args) {
-  captured = this;
-  const cb = args.find((a) => typeof a === "function");
-  if (cb) process.nextTick(() => cb());
-  return this;
-};
+const ENTRY_PLACEHOLDER = "__OCEL_ENTRY_PLACEHOLDER__";
 
-// A non-literal specifier keeps esbuild from bundling the user tree: only the
-// adapter shim + its npm deps are inlined; user code stays a separate import.
-const entry = new URL(${JSON.stringify("./" + entryJs)}, import.meta.url);
-await import(entry.href);
-
-http.Server.prototype.listen = originalListen;
-
-if (!captured) {
-  throw new Error(
-    "node-builder: entrypoint imported without starting an HTTP server via listen()",
-  );
-}
-
-const app = captured.listeners("request")[0] ?? captured;
-const wrapped = serverless(app);
-
-export const handler = (event, context) => wrapped(event, context);
-`;
+// The shim is pre-bundled at build time (adapter + serverless-http inlined);
+// here we only stamp in the resolved entrypoint path. No bundler at runtime.
+const expressShim = (entryJs: string) =>
+  bundledExpressShim.replaceAll(ENTRY_PLACEHOLDER, `./${entryJs}`);
 
 export const express: Framework = {
   name: "express",

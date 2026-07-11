@@ -1,39 +1,12 @@
 import { existsSync, statSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { nodeFileTrace } from "@vercel/nft";
-import { build as esbuildBuild, transform } from "esbuild";
+import { transform } from "sucrase";
 import { resolveFramework, type Framework } from "./registry";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
-
-// Resolve adapter deps (serverless-http) relative to the builder itself, so the
-// shim bundle finds them regardless of the app's own dependency tree.
-const ADAPTER_RESOLVE_DIR = path.dirname(fileURLToPath(import.meta.url));
-
-const REQUIRE_BANNER =
-  "import { createRequire as __nbCreateRequire } from 'node:module';\n" +
-  "const require = __nbCreateRequire(import.meta.url);";
-
-/**
- * Bundle the handler shim so its adapter deps (serverless-http) are inlined and
- * travel inside the artifact. The user entrypoint is loaded via a non-literal
- * dynamic import, so esbuild leaves the traced, un-bundled user tree alone.
- */
-async function bundleShim(shimSource: string): Promise<string> {
-  const result = await esbuildBuild({
-    stdin: { contents: shimSource, resolveDir: ADAPTER_RESOLVE_DIR, loader: "js", sourcefile: "index.mjs" },
-    bundle: true,
-    format: "esm",
-    platform: "node",
-    target: "node20",
-    write: false,
-    banner: { js: REQUIRE_BANNER },
-  });
-  return result.outputFiles[0]!.text;
-}
 
 function resolveEntrypoint(input: AppInput, fw: Framework): string {
   if (input.entrypoint) {
@@ -103,13 +76,12 @@ async function emitFile(absPath: string, dest: string): Promise<void> {
   await mkdir(path.dirname(dest), { recursive: true });
   if (isUserSource(absPath)) {
     const source = await readFile(absPath, "utf8");
-    const loader = path.extname(absPath) === ".tsx" ? "tsx" : "ts";
-    const { code } = await transform(source, {
-      loader,
-      format: "esm",
-      target: "node20",
-      sourcefile: path.basename(absPath),
-    });
+    // Per-file, no bundling: strip types, preserve ESM import/export specifiers
+    // (sucrase does not rewrite import paths). Pure JS, so it bundles into the
+    // embedded builder with no native binary.
+    const transforms: ("typescript" | "jsx")[] =
+      path.extname(absPath) === ".tsx" ? ["typescript", "jsx"] : ["typescript"];
+    const { code } = transform(source, { transforms });
     await writeFile(toOutExt(dest), code);
   } else {
     await copyFile(absPath, dest);
@@ -136,8 +108,7 @@ export async function buildApp(
   }
 
   const entryDest = toOutExt(destFor(entrypoint, input.cwd));
-  const shim = await bundleShim(fw.shim(entryDest.split(path.sep).join("/")));
-  await writeFile(path.join(funcDir, "index.mjs"), shim);
+  await writeFile(path.join(funcDir, "index.mjs"), fw.shim(entryDest.split(path.sep).join("/")));
   await writeFile(
     path.join(funcDir, "meta.json"),
     `${JSON.stringify({ runtime: fw.runtime, handler: "index.handler", framework: fw.name }, null, 2)}\n`,
