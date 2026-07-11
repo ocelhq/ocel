@@ -202,6 +202,11 @@ message DestroyRequest {
   // protocol_version pins the wire contract so a provider can reject a
   // request it can't speak.
   string protocol_version = 3;
+
+  // project_id scopes the teardown to one project. The Pulumi state backend is
+  // account-global, so identity alone is ambiguous across projects; the
+  // provider addresses the exact per-project stack with it.
+  string project_id = 4;
 }
 
 // ListEnvironmentsRequest is the request for ProviderService.ListEnvironments.
@@ -216,6 +221,11 @@ message ListEnvironmentsRequest {
   // protocol_version pins the wire contract so a provider can reject a
   // request it can't speak.
   string protocol_version = 2;
+
+  // project_id scopes the listing to one project. The Pulumi state backend is
+  // account-global, so the provider filters to this project's preview stacks
+  // rather than every project's in the account.
+  string project_id = 3;
 }
 
 // ListEnvironmentsResponse is the reply from ProviderService.ListEnvironments:

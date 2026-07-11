@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 // SecretsReader is the subset of the AWS Secrets Manager client the deploy
@@ -52,6 +53,20 @@ type Config struct {
 	// provider's distribution workflow, which is deferred with provider publish;
 	// it is threaded here so the deploy path is complete once that lands.
 	ListenerCodePath string
+
+	// Lifecycle is the environment lifecycle this deploy realizes under; it
+	// selects each resource's realization (see realizationFor). Unspecified for
+	// production and persistent previews, LIFECYCLE_EPHEMERAL for ephemeral
+	// previews.
+	Lifecycle providerv1.Environment_Lifecycle
+	// Identity is the environment identity, used to name an ephemeral preview's
+	// logical database slices. Empty for production.
+	Identity string
+	// SharedClusterEndpoint and SharedClusterSecretARN address the shared
+	// preview cluster an ephemeral postgres slice is carved from (from the
+	// preview bootstrap outputs). Empty outside ephemeral previews.
+	SharedClusterEndpoint  string
+	SharedClusterSecretARN string
 }
 
 // Run provisions every resource in manifest against AWS and returns the
@@ -79,6 +94,16 @@ func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progres
 		for _, r := range manifest.GetResources() {
 			switch {
 			case r.GetPostgres() != nil:
+				if realizationFor(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, cfg.Lifecycle) == RealizationLogicalSlice {
+					if err := registerPostgresLogicalSlice(pctx, r.GetLogicalName(), postgresSliceArgs{
+						DatabaseName:    sliceDatabaseName(cfg.Identity, r.GetLogicalName()),
+						ClusterEndpoint: cfg.SharedClusterEndpoint,
+						AdminSecretARN:  cfg.SharedClusterSecretARN,
+					}); err != nil {
+						return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
+					}
+					break
+				}
 				if err := registerPostgres(pctx, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids); err != nil {
 					return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
 				}

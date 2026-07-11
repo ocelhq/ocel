@@ -24,24 +24,31 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// deployEnv is the environment segment of a project's Pulumi stack name. It
-// is a constant this slice (stacks are "<project_id>-prod"); multi-env is
-// reserved for later.
+// deployEnv is the environment segment of a production project's Pulumi stack
+// name (stacks are "<project_id>-prod").
 const deployEnv = "prod"
 
 // pulumiProjectName is the fixed Pulumi project all Ocel stacks live under.
 const pulumiProjectName = "ocel"
 
-// Server implements providerv1connect.ProviderServiceHandler. It embeds the
-// generated Unimplemented handler so RPCs this slice does not yet serve
-// (Destroy, ListEnvironments) return CodeUnimplemented rather than blocking
-// compilation.
-type Server struct {
-	providerv1connect.UnimplementedProviderServiceHandler
+// Server implements providerv1connect.ProviderServiceHandler. It serves every
+// RPC in the contract, so it no longer embeds the generated Unimplemented
+// handler.
+type Server struct{}
+
+// stackName derives the Pulumi stack name for a deploy/destroy from the project
+// and the resolved environment. It is pure. A production, unspecified, or nil
+// environment keeps the historical "<projectID>-prod"; a preview environment is
+// isolated into its own "<projectID>-preview-<identity>" stack (identity is
+// already substrate-safe from the CLI).
+func stackName(projectID string, env *providerv1.Environment) string {
+	if env.GetClass() == providerv1.Environment_CLASS_PREVIEW {
+		return projectID + "-preview-" + env.GetIdentity()
+	}
+	return projectID + "-" + deployEnv
 }
 
 // options is the provider's opaque per-invocation options, decoded from the
@@ -133,17 +140,20 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 		sessionTableARN = fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.SessionTable)
 	}
 
+	env := req.GetEnvironment()
 	return deploy.Run(ctx, deploy.Config{
 		Region:           awscfg.Region,
 		BackendURL:       "s3://" + deployed.StateBucket,
 		Passphrase:       passphrase,
 		ProjectName:      pulumiProjectName,
-		StackName:        manifest.GetProjectId() + "-" + deployEnv,
+		StackName:        stackName(manifest.GetProjectId(), env),
 		Pulumi:           pulumiCmd,
 		Secrets:          secretsmanager.NewFromConfig(awscfg),
 		SessionTable:     deployed.SessionTable,
 		SessionTableARN:  sessionTableARN,
 		ListenerCodePath: listenerCodePath,
+		Lifecycle:        env.GetLifecycle(),
+		Identity:         env.GetIdentity(),
 	}, manifest, progress, logf)
 }
 
@@ -165,11 +175,14 @@ func (s *Server) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
 
+	preview := req.GetClass() == providerv1.Environment_CLASS_PREVIEW
+
 	// The version gate runs on every invocation, bootstrap included. Here a
 	// missing or older bootstrap is expected — it's exactly what this call
 	// creates or upgrades — so only a bootstrap NEWER than this provider
 	// understands is fatal (upgrade the CLI rather than downgrade the account).
-	deployed, err := bootstrap.CheckDeployed(ctx, cfn)
+	// Each substrate has its own stack, so the gate reads the one being acted on.
+	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
 		return stream.Send(resultEvent(false, err.Error(), nil))
 	}
@@ -177,10 +190,23 @@ func (s *Server) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest
 		return stream.Send(resultEvent(false, bootstrap.NeedsCLIUpgrade.Explain().Error(), nil))
 	}
 
-	if err := bootstrap.Run(ctx, cfn, ssmClient, progress, logf); err != nil {
+	run := bootstrap.Run
+	if preview {
+		run = bootstrap.RunPreview
+	}
+	if err := run(ctx, cfn, ssmClient, progress, logf); err != nil {
 		return stream.Send(resultEvent(false, err.Error(), nil))
 	}
 	return stream.Send(resultEvent(true, "", nil))
+}
+
+// checkBootstrap reads the deployed state of the substrate a command acts on:
+// the preview infrastructure when preview is true, else the production one.
+func checkBootstrap(ctx context.Context, api bootstrap.CFNDescriber, preview bool) (bootstrap.Deployed, error) {
+	if preview {
+		return bootstrap.CheckDeployedPreview(ctx, api)
+	}
+	return bootstrap.CheckDeployed(ctx, api)
 }
 
 // listenerCodePathEnvVar names the built listener-Lambda handler archive the
