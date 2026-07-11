@@ -2,9 +2,24 @@ import { execFileSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, buildApps } from "./build";
+
+// Invoke a built handler in a REAL Node ESM process. vitest's own `await import`
+// goes through Vite's bundler-style resolver, which resolves extensionless
+// imports and would mask the raw-Node ERR_MODULE_NOT_FOUND we must guard.
+function invokeInNode(indexMjs: string, event: unknown): { statusCode: number; body: string } {
+  const script =
+    `const { handler } = await import(${JSON.stringify(pathToFileURL(indexMjs).href)});\n` +
+    `const res = await handler(${JSON.stringify(event)}, {});\n` +
+    // Sentinels isolate the result from the app's own stdout (e.g. its listen log).
+    `process.stdout.write("__RES__" + JSON.stringify(res) + "__END__");`;
+  const out = execFileSync("node", ["--input-type=module", "-e", script], { encoding: "utf8" });
+  const match = out.match(/__RES__([\s\S]*)__END__/);
+  if (!match) throw new Error(`no handler result in output:\n${out}`);
+  return JSON.parse(match[1] as string);
+}
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDir = path.resolve(here, "../test/fixtures/express-app");
@@ -63,6 +78,34 @@ describe("buildApp", () => {
     expect(server).toContain("./greeting.js");
     // express itself was traced into the artifact, not merged into server.js.
     expect(existsSync(path.join(funcDir, "node_modules", "express"))).toBe(true);
+  });
+
+  it("rewrites extensionless relative specifiers, leaving bare/extensioned alone", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
+
+    const server = readFileSync(
+      path.join(outDir, "functions", "api.func", "src", "server.js"),
+      "utf8",
+    );
+    // Extensionless relative file import -> gains the emitted extension.
+    expect(server).toContain('"./lib/db.js"');
+    expect(server).not.toMatch(/["']\.\/lib\/db["']/);
+    // Extensionless relative directory import -> resolves to its index file.
+    expect(server).toContain('"./config/index.js"');
+    expect(server).not.toMatch(/["']\.\/config["']/);
+    // Bare/package specifier untouched.
+    expect(server).toContain('from "express"');
+    // Already-extensioned relative specifier untouched.
+    expect(server).toContain('"./greeting.js"');
+
+    // A nested user module keeps its already-extensioned relative import as-is.
+    const db = readFileSync(
+      path.join(outDir, "functions", "api.func", "src", "lib", "db.js"),
+      "utf8",
+    );
+    expect(db).toContain('"../greeting.js"');
   });
 
   it("emits an invocable handler that answers a Lambda Function URL (v2) event", async () => {
@@ -191,7 +234,7 @@ describe("embedded bundle self-containment", () => {
 
   it("has no bare imports of build-time-only deps", () => {
     const text = readFileSync(bundle, "utf8");
-    for (const dep of ["esbuild", "sucrase", "serverless-http"]) {
+    for (const dep of ["esbuild", "sucrase", "serverless-http", "es-module-lexer"]) {
       const bare = new RegExp(
         `(?:from|import|require)\\s*\\(?\\s*["']${dep}["']`,
       );
@@ -218,19 +261,18 @@ describe("embedded bundle self-containment", () => {
     expect(summary.functions[0].name).toBe("api");
 
     const funcDir = path.join(outDir, "functions", "api.func");
-    const { handler } = await import(path.join(funcDir, "index.mjs"));
-    const res = await handler(
-      {
-        version: "2.0",
-        rawPath: "/hello/deployed",
-        rawQueryString: "",
-        headers: { host: "example.com" },
-        requestContext: { http: { method: "GET", path: "/hello/deployed" } },
-        isBase64Encoded: false,
-      },
-      {},
-    );
+    // Hit the route whose handler transitively uses an extensionless relative
+    // import (server.js -> ./lib/db.js -> ../greeting.js): fails with
+    // ERR_MODULE_NOT_FOUND under raw Node unless the specifiers were rewritten.
+    const res = invokeInNode(path.join(funcDir, "index.mjs"), {
+      version: "2.0",
+      rawPath: "/render/deployed",
+      rawQueryString: "",
+      headers: { host: "example.com" },
+      requestContext: { http: { method: "GET", path: "/render/deployed" } },
+      isBase64Encoded: false,
+    });
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ message: "hello, deployed" });
+    expect(JSON.parse(res.body)).toEqual({ message: "HELLO, DEPLOYED", banner: "fixture" });
   });
 });

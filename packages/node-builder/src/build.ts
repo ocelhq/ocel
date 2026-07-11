@@ -2,11 +2,14 @@ import { existsSync, statSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
+import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import { transform } from "sucrase";
 import { resolveFramework, type Framework } from "./registry";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
+// Source extensions a relative specifier may resolve to, tried in this order.
+const RESOLVE_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
 function resolveEntrypoint(input: AppInput, fw: Framework): string {
   if (input.entrypoint) {
@@ -52,6 +55,56 @@ function isUserSource(absPath: string): boolean {
   return !absPath.includes(`${path.sep}node_modules${path.sep}`) && TS_EXT.has(path.extname(absPath));
 }
 
+/** The emitted extension for a source extension, matching `toOutExt`. */
+function emittedExt(sourceExt: string): string {
+  return path.extname(toOutExt(`f${sourceExt}`)) || sourceExt;
+}
+
+/**
+ * Rewrite an extensionless relative specifier to point at the file this build
+ * actually emits. TS allows `./x` and `../dir`; raw Node ESM rejects both.
+ * Returns the rewritten specifier, or undefined to leave it untouched.
+ */
+function rewriteSpecifier(spec: string, sourceDir: string): string | undefined {
+  if (!spec.startsWith("./") && !spec.startsWith("../")) return undefined;
+  if (/\.(js|mjs|cjs)$/.test(spec)) return undefined;
+
+  const resolved = path.resolve(sourceDir, spec);
+  for (const ext of RESOLVE_EXT) {
+    if (existsSync(resolved + ext)) return spec + emittedExt(ext);
+  }
+  if (existsSync(resolved) && statSync(resolved).isDirectory()) {
+    for (const ext of RESOLVE_EXT) {
+      if (existsSync(path.join(resolved, `index${ext}`))) {
+        return `${spec.replace(/\/$/, "")}/index${emittedExt(ext)}`;
+      }
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Add extensions to extensionless relative specifiers in transpiled user code,
+ * so the un-bundled module tree resolves under raw Node ESM. Bare/package
+ * specifiers are left untouched. Applied to the sucrase output, whose
+ * specifiers are byte-for-byte the source's.
+ */
+async function rewriteRelativeImports(code: string, sourceDir: string): Promise<string> {
+  await lexerInit;
+  const [imports] = parseImports(code);
+  let out = code;
+  for (let i = imports.length - 1; i >= 0; i--) {
+    const imp = imports[i]!;
+    const spec = imp.n;
+    if (!spec || out.slice(imp.s, imp.e) !== spec) continue;
+    const rewritten = rewriteSpecifier(spec, sourceDir);
+    if (rewritten && rewritten !== spec) {
+      out = out.slice(0, imp.s) + rewritten + out.slice(imp.e);
+    }
+  }
+  return out;
+}
+
 /**
  * nft only emits files under its `base`, so `base` must enclose the app's
  * resolvable `node_modules` — which, in a hoisted monorepo, lives at the repo
@@ -82,7 +135,8 @@ async function emitFile(absPath: string, dest: string): Promise<void> {
     const transforms: ("typescript" | "jsx")[] =
       path.extname(absPath) === ".tsx" ? ["typescript", "jsx"] : ["typescript"];
     const { code } = transform(source, { transforms });
-    await writeFile(toOutExt(dest), code);
+    const rewritten = await rewriteRelativeImports(code, path.dirname(absPath));
+    await writeFile(toOutExt(dest), rewritten);
   } else {
     await copyFile(absPath, dest);
   }
