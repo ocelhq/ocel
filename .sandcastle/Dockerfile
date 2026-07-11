@@ -8,8 +8,8 @@ RUN apt-get update && apt-get install -y \
   ca-certificates \
   && rm -rf /var/lib/apt/lists/*
 
-# Install Go toolchain (pinned to ocel/go.mod's `go 1.25.3`)
-RUN curl -fsSL https://go.dev/dl/go1.25.3.linux-$(dpkg --print-architecture).tar.gz \
+# Install Go toolchain (pinned to ocel/go.mod's `go 1.25.11`)
+RUN curl -fsSL https://go.dev/dl/go1.25.11.linux-$(dpkg --print-architecture).tar.gz \
   | tar -C /usr/local -xz
 ENV PATH="/usr/local/go/bin:$PATH"
 

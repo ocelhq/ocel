@@ -229,6 +229,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@ocel/provider-aws':
+        specifier: workspace:^
+        version: link:../../packages/provider-aws
       '@repo/api':
         specifier: workspace:*
         version: link:../../packages/api

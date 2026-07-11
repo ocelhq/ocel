@@ -12,7 +12,7 @@
 // tagged. The root go.work also wires this for multi-module dev.
 module github.com/ocelhq/ocel/sdk
 
-go 1.25.3
+go 1.25.11
 
 require github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
 
