@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	connect "connectrpc.com/connect"
@@ -162,6 +163,7 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 		SessionTable:     deployed.SessionTable,
 		SessionTableARN:  sessionTableARN,
 		ListenerCodePath: listenerCodePath,
+		ArtifactRoot:     artifactRoot(),
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),
 		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
@@ -245,6 +247,23 @@ const listenerCodePathEnvVar = "OCEL_LISTENER_CODE_PATH"
 // listenerCodePath returns the configured listener archive path, or "" when
 // distribution has not wired one yet.
 var listenerCodePath = os.Getenv(listenerCodePathEnvVar)
+
+// artifactRootDirName is the project-relative directory a ManifestFunction's
+// artifact_path is rooted at: the app builder writes each `.func` under
+// <project>/.ocel/output, and artifact_path is relative to it.
+const artifactRootDirName = ".ocel/output"
+
+// artifactRoot is the absolute directory function artifacts resolve against.
+// The CLI spawns the provider from the project root, so the project's
+// .ocel/output lives under the working directory; a failure to read it yields
+// the relative path, still valid from that same working directory.
+func artifactRoot() string {
+	wd, err := os.Getwd()
+	if err != nil {
+		return artifactRootDirName
+	}
+	return filepath.Join(wd, artifactRootDirName)
+}
 
 // STSAPI is the read subset of the STS client the bucket deploy path uses to
 // resolve the account id for the sessions-table ARN.

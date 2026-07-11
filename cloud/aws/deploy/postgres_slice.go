@@ -49,7 +49,7 @@ func sliceDatabaseName(identity, logicalName string) string {
 // registration lands here once the preview cluster is real. Until then a
 // preview-ephemeral deploy is only exercised by an opt-in run against live
 // preview infrastructure.
-func registerPostgresLogicalSlice(ctx *pulumi.Context, logicalName string, args postgresSliceArgs) error {
+func registerPostgresLogicalSlice(ctx *pulumi.Context, logicalName string, args postgresSliceArgs) (pulumi.StringOutput, error) {
 	ctx.Export(logicalName, pulumi.Map{
 		outputKeyHost:      pulumi.String(args.ClusterEndpoint),
 		outputKeyPort:      pulumi.Int(postgresPort),
@@ -57,5 +57,6 @@ func registerPostgresLogicalSlice(ctx *pulumi.Context, logicalName string, args 
 		outputKeyUsername:  pulumi.String(postgresMasterUsername),
 		outputKeySecretARN: pulumi.String(args.AdminSecretARN),
 	})
-	return nil
+
+	return postgresEnvValue(ctx, pulumi.String(postgresMasterUsername), pulumi.String(args.ClusterEndpoint), pulumi.Int(postgresPort), args.DatabaseName, pulumi.String(args.AdminSecretARN)), nil
 }

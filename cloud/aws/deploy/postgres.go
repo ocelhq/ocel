@@ -76,7 +76,7 @@ func translatePostgres(cfg *resourcesv1.PostgresConfig) postgresArgs {
 // cluster lands in. The exported map carries the discrete connection parts
 // plus the RDS-managed master-password secret ARN, which the caller resolves
 // to a plaintext password after the stack settles (see collectPostgresOutput).
-func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) error {
+func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs, vpcID, vpcCIDR string, subnetIDs []string) (pulumi.StringOutput, error) {
 	sg, err := ec2.NewSecurityGroup(ctx, logicalName+"-sg", &ec2.SecurityGroupArgs{
 		Description: pulumi.String("Ocel-managed security group for " + logicalName),
 		VpcId:       pulumi.String(vpcID),
@@ -103,14 +103,14 @@ func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs
 		},
 	})
 	if err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	subnetGroup, err := rds.NewSubnetGroup(ctx, logicalName+"-subnets", &rds.SubnetGroupArgs{
 		SubnetIds: pulumi.ToStringArray(subnetIDs),
 	})
 	if err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	cluster, err := rds.NewCluster(ctx, logicalName, &rds.ClusterArgs{
@@ -130,7 +130,7 @@ func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs
 		},
 	})
 	if err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	_, err = rds.NewClusterInstance(ctx, logicalName+"-instance", &rds.ClusterInstanceArgs{
@@ -141,17 +141,19 @@ func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs
 		PubliclyAccessible: pulumi.Bool(args.PubliclyAccessible),
 	})
 	if err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
+	secretARN := cluster.MasterUserSecrets.Index(pulumi.Int(0)).SecretArn()
 	ctx.Export(logicalName, pulumi.Map{
 		outputKeyHost:      cluster.Endpoint,
 		outputKeyPort:      cluster.Port,
 		outputKeyDatabase:  pulumi.String(args.DatabaseName),
 		outputKeyUsername:  cluster.MasterUsername,
-		outputKeySecretARN: cluster.MasterUserSecrets.Index(pulumi.Int(0)).SecretArn(),
+		outputKeySecretARN: secretARN,
 	})
-	return nil
+
+	return postgresEnvValue(ctx, cluster.MasterUsername, cluster.Endpoint, cluster.Port, args.DatabaseName, secretARN.Elem()), nil
 }
 
 // Keys of the per-resource output map exported by registerPostgres and read

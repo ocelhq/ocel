@@ -116,10 +116,10 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 // bootstrap provisions; listenerCodePath is the built listener handler archive
 // (its packaging via provider distribution is deferred — see deploy.Config).
 // The bucket name is exported under logicalName for collectBucketOutput.
-func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, sessionTableName, sessionTableARN, listenerCodePath string) error {
+func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, sessionTableName, sessionTableARN, listenerCodePath string) (pulumi.StringOutput, error) {
 	bucket, err := s3.NewBucketV2(ctx, logicalName, &s3.BucketV2Args{})
 	if err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	// Private: block every form of public access. Bytes reach the bucket only
@@ -131,7 +131,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 		IgnorePublicAcls:      pulumi.Bool(true),
 		RestrictPublicBuckets: pulumi.Bool(true),
 	}); err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	if _, err := s3.NewBucketCorsConfigurationV2(ctx, logicalName+"-cors", &s3.BucketCorsConfigurationV2Args{
@@ -146,7 +146,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 			},
 		},
 	}); err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	// The runtime process (membrane-launched app runtime) role: presign PUTs and
@@ -155,7 +155,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 		"s3":       {Actions: args.RuntimeS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
 		"sessions": {Actions: args.RuntimeSessionActions, Resources: []pulumi.StringInput{pulumi.String(sessionTableARN)}},
 	}); err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	// The listener Lambda's role: read object tags and perform the guarded
@@ -165,13 +165,13 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 		"sessions": {Actions: args.ListenerSessionActions, Resources: []pulumi.StringInput{pulumi.String(sessionTableARN)}},
 	})
 	if err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 	if _, err := iam.NewRolePolicyAttachment(ctx, logicalName+"-listener-logs", &iam.RolePolicyAttachmentArgs{
 		Role:      listenerRole.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 	}); err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	listener, err := lambda.NewFunction(ctx, logicalName+"-listener", &lambda.FunctionArgs{
@@ -188,7 +188,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 		},
 	})
 	if err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	// Let S3 invoke the listener before wiring the notification, else the
@@ -200,7 +200,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 		SourceArn: bucket.Arn,
 	})
 	if err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	if _, err := s3.NewBucketNotification(ctx, logicalName+"-notify", &s3.BucketNotificationArgs{
@@ -212,11 +212,12 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 			},
 		},
 	}, pulumi.DependsOn([]pulumi.Resource{perm})); err != nil {
-		return err
+		return pulumi.StringOutput{}, err
 	}
 
 	ctx.Export(logicalName, pulumi.Map{outputKeyBucket: bucket.Bucket})
-	return nil
+
+	return bucketEnvValue(bucket.Bucket), nil
 }
 
 // policyStatement is one inline IAM policy statement: a set of actions on a set
