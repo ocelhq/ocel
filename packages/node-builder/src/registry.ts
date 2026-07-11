@@ -29,7 +29,10 @@ http.Server.prototype.listen = function listen(...args) {
   return this;
 };
 
-await import(${JSON.stringify("./" + entryJs)});
+// A non-literal specifier keeps esbuild from bundling the user tree: only the
+// adapter shim + its npm deps are inlined; user code stays a separate import.
+const entry = new URL(${JSON.stringify("./" + entryJs)}, import.meta.url);
+await import(entry.href);
 
 http.Server.prototype.listen = originalListen;
 

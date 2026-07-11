@@ -1,12 +1,39 @@
 import { existsSync, statSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { nodeFileTrace } from "@vercel/nft";
-import { transform } from "esbuild";
+import { build as esbuildBuild, transform } from "esbuild";
 import { resolveFramework, type Framework } from "./registry";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
+
+// Resolve adapter deps (serverless-http) relative to the builder itself, so the
+// shim bundle finds them regardless of the app's own dependency tree.
+const ADAPTER_RESOLVE_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+const REQUIRE_BANNER =
+  "import { createRequire as __nbCreateRequire } from 'node:module';\n" +
+  "const require = __nbCreateRequire(import.meta.url);";
+
+/**
+ * Bundle the handler shim so its adapter deps (serverless-http) are inlined and
+ * travel inside the artifact. The user entrypoint is loaded via a non-literal
+ * dynamic import, so esbuild leaves the traced, un-bundled user tree alone.
+ */
+async function bundleShim(shimSource: string): Promise<string> {
+  const result = await esbuildBuild({
+    stdin: { contents: shimSource, resolveDir: ADAPTER_RESOLVE_DIR, loader: "js", sourcefile: "index.mjs" },
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node20",
+    write: false,
+    banner: { js: REQUIRE_BANNER },
+  });
+  return result.outputFiles[0]!.text;
+}
 
 function resolveEntrypoint(input: AppInput, fw: Framework): string {
   if (input.entrypoint) {
@@ -109,7 +136,8 @@ export async function buildApp(
   }
 
   const entryDest = toOutExt(destFor(entrypoint, input.cwd));
-  await writeFile(path.join(funcDir, "index.mjs"), fw.shim(entryDest.split(path.sep).join("/")));
+  const shim = await bundleShim(fw.shim(entryDest.split(path.sep).join("/")));
+  await writeFile(path.join(funcDir, "index.mjs"), shim);
   await writeFile(
     path.join(funcDir, "meta.json"),
     `${JSON.stringify({ runtime: fw.runtime, handler: "index.handler", framework: fw.name }, null, 2)}\n`,
@@ -129,6 +157,9 @@ export async function buildApps(
   inputs: AppInput[],
   options: BuildOptions,
 ): Promise<FunctionSummary[]> {
+  // Clear the whole output once per run so a .func from an app that's no longer
+  // in `inputs` doesn't linger; per-app builds only touch their own dir after.
+  await rm(path.join(options.outDir, "functions"), { recursive: true, force: true });
   const summaries: FunctionSummary[] = [];
   for (const input of inputs) {
     summaries.push(await buildApp(input, options));
