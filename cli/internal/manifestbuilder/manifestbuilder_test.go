@@ -12,6 +12,7 @@ import (
 )
 
 const goldenPath = "testdata/golden_manifest.json"
+const functionsGoldenPath = "testdata/golden_manifest_functions.json"
 
 // protojson deliberately injects random whitespace into its output (see
 // google.golang.org/protobuf/internal/encoding/json's detrand use) to stop
@@ -23,6 +24,15 @@ type goldenManifest struct {
 	SchemaVersion string           `json:"schema_version"`
 	ProjectID     string           `json:"project_id"`
 	Resources     []goldenResource `json:"resources"`
+	Functions     []goldenFunction `json:"functions,omitempty"`
+}
+
+type goldenFunction struct {
+	LogicalName  string `json:"logical_name"`
+	Runtime      string `json:"runtime"`
+	Handler      string `json:"handler"`
+	ArtifactPath string `json:"artifact_path"`
+	Framework    string `json:"framework"`
 }
 
 type goldenResource struct {
@@ -49,6 +59,15 @@ func toGolden(m *providerv1.Manifest) goldenManifest {
 		}
 		g.Resources = append(g.Resources, gr)
 	}
+	for _, f := range m.GetFunctions() {
+		g.Functions = append(g.Functions, goldenFunction{
+			LogicalName:  f.GetLogicalName(),
+			Runtime:      f.GetRuntime(),
+			Handler:      f.GetHandler(),
+			ArtifactPath: f.GetArtifactPath(),
+			Framework:    f.GetFramework(),
+		})
+	}
 	return g
 }
 
@@ -68,12 +87,19 @@ func synthDeclarations() []Declaration {
 	}
 }
 
+func synthFunctions() []Function {
+	return []Function{
+		{Name: "Web API", Runtime: "nodejs20.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
+		{Name: "worker", Runtime: "nodejs20.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
+	}
+}
+
 func TestBuild_GoldenFile_DeterministicOutput(t *testing.T) {
-	first, err := Build("proj_1", synthDeclarations())
+	first, err := Build("proj_1", synthDeclarations(), nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	second, err := Build("proj_1", synthDeclarations())
+	second, err := Build("proj_1", synthDeclarations(), nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -95,13 +121,13 @@ func TestBuild_GoldenFile_DeterministicOutput(t *testing.T) {
 
 func TestBuild_ReorderInvariance(t *testing.T) {
 	declarations := synthDeclarations()
-	inOrder, err := Build("proj_1", declarations)
+	inOrder, err := Build("proj_1", declarations, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
 	reversed := []Declaration{declarations[1], declarations[0]}
-	reorderedManifest, err := Build("proj_1", reversed)
+	reorderedManifest, err := Build("proj_1", reversed, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -113,7 +139,7 @@ func TestBuild_ReorderInvariance(t *testing.T) {
 
 func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 	base := synthDeclarations()
-	before, err := Build("proj_1", base)
+	before, err := Build("proj_1", base, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -125,7 +151,7 @@ func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 	withExtra := append(append([]Declaration{}, base...), Declaration{
 		Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "billing", Source: "app/billing.ts:2",
 	})
-	after, err := Build("proj_1", withExtra)
+	after, err := Build("proj_1", withExtra, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -148,7 +174,7 @@ func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 func TestBuild_TypedConfigRoundTripsAsOneof(t *testing.T) {
 	manifest, err := Build("proj_1", []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -169,7 +195,7 @@ func TestBuild_TypedConfigRoundTripsAsOneof(t *testing.T) {
 func TestBuild_BucketConfigRoundTripsAsOneof(t *testing.T) {
 	manifest, err := Build("proj_1", []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -194,7 +220,7 @@ func TestBuild_DuplicateTypeAndID_NamesBothDeclarationsAndSources(t *testing.T) 
 	_, err := Build("proj_1", []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/db.ts:5"},
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/other.ts:12"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("Build: expected duplicate error, got nil")
 	}
@@ -221,7 +247,7 @@ func TestBuild_DuplicateTypeAndID_NamesBothDeclarationsAndSources(t *testing.T) 
 func TestBuild_UnsupportedResourceType(t *testing.T) {
 	_, err := Build("proj_1", []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, ID: "main"},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("Build: expected error for unsupported resource type, got nil")
 	}
@@ -230,7 +256,7 @@ func TestBuild_UnsupportedResourceType(t *testing.T) {
 func TestBuild_EmptyID(t *testing.T) {
 	_, err := Build("proj_1", []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: ""},
-	})
+	}, nil)
 	if err == nil {
 		t.Fatal("Build: expected error for empty id, got nil")
 	}
@@ -250,5 +276,63 @@ func TestNormalizeLogicalName(t *testing.T) {
 		if got := normalizeLogicalName(c.in); got != c.want {
 			t.Errorf("normalizeLogicalName(%q) = %q, want %q", c.in, got, c.want)
 		}
+	}
+}
+
+func TestBuild_FunctionsGoldenFile_DeterministicOutput(t *testing.T) {
+	first, err := Build("proj_1", synthDeclarations(), synthFunctions())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	second, err := Build("proj_1", synthDeclarations(), synthFunctions())
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	firstJSON := marshal(t, first)
+	secondJSON := marshal(t, second)
+	if !bytes.Equal(firstJSON, secondJSON) {
+		t.Fatalf("Build is not deterministic:\nfirst:\n%s\nsecond:\n%s", firstJSON, secondJSON)
+	}
+
+	golden, err := os.ReadFile(functionsGoldenPath)
+	if err != nil {
+		t.Fatalf("read golden file: %v", err)
+	}
+	if !bytes.Equal(firstJSON, golden) {
+		t.Fatalf("Build output does not match golden file %s:\ngot:\n%s\nwant:\n%s", functionsGoldenPath, firstJSON, golden)
+	}
+}
+
+func TestBuild_FunctionsReorderInvariance(t *testing.T) {
+	functions := synthFunctions()
+	inOrder, err := Build("proj_1", nil, functions)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	reversed := []Function{functions[1], functions[0]}
+	reordered, err := Build("proj_1", nil, reversed)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	if !bytes.Equal(marshal(t, inOrder), marshal(t, reordered)) {
+		t.Fatalf("reordering functions changed manifest output")
+	}
+}
+
+func TestBuild_FunctionLogicalNameNormalized(t *testing.T) {
+	manifest, err := Build("proj_1", nil, []Function{
+		{Name: "Web API", Runtime: "nodejs20.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if len(manifest.GetFunctions()) != 1 {
+		t.Fatalf("got %d functions, want 1", len(manifest.GetFunctions()))
+	}
+	if got := manifest.GetFunctions()[0].GetLogicalName(); got != "web_api" {
+		t.Fatalf("logical_name = %q, want %q", got, "web_api")
 	}
 }

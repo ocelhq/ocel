@@ -130,6 +130,20 @@ message Manifest {
   string schema_version = 1;
   string project_id = 2;
   repeated ManifestResource resources = 3;
+  repeated ManifestFunction functions = 4;
+}
+
+// ManifestFunction is a deployable function unit. Being listed in
+// Manifest.functions implies serverless compute, and an express framework
+// implies web-facing — so there is deliberately no compute or trigger field.
+message ManifestFunction {
+  // logical_name is the app name normalized by the same rule as
+  // ManifestResource.logical_name. Deterministic across declaration order.
+  string logical_name = 1;
+  string runtime = 2;
+  string handler = 3;
+  string artifact_path = 4;
+  string framework = 5;
 }
 
 // ManifestResource pairs a resource's identity with its typed configuration.

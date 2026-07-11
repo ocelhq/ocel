@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file provider/v1/provider.proto.
  */
 export const file_provider_v1_provider: GenFile = /*@__PURE__*/
-  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEi+wMKC0Vudmlyb25tZW50Ei0KBWNsYXNzGAEgASgOMh4ucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuQ2xhc3MSNQoJbGlmZWN5Y2xlGAIgASgOMiIucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEhAKCGlkZW50aXR5GAMgASgJEkAKD2lkZW50aXR5X3NvdXJjZRgEIAEoDjInLnByb3ZpZGVyLnYxLkVudmlyb25tZW50LklkZW50aXR5U291cmNlEg0KBWxhYmVsGAUgASgJIl4KBUNsYXNzEhUKEUNMQVNTX1VOU1BFQ0lGSUVEEAASFQoRQ0xBU1NfREVWRUxPUE1FTlQQARIRCg1DTEFTU19QUkVWSUVXEAISFAoQQ0xBU1NfUFJPRFVDVElPThADIlkKCUxpZmVjeWNsZRIZChVMSUZFQ1lDTEVfVU5TUEVDSUZJRUQQABIXChNMSUZFQ1lDTEVfRVBIRU1FUkFMEAESGAoUTElGRUNZQ0xFX1BFUlNJU1RFTlQQAiJoCg5JZGVudGl0eVNvdXJjZRIfChtJREVOVElUWV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIXChNJREVOVElUWV9TT1VSQ0VfR0lUEAESHAoYSURFTlRJVFlfU09VUkNFX0RFQ0xBUkVEEAIiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIsYBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYBCABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIpIBCg1EZXBsb3lSZXF1ZXN0EicKCG1hbmlmZXN0GAEgASgLMhUucHJvdmlkZXIudjEuTWFuaWZlc3QSDwoHb3B0aW9ucxgCIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgJEi0KC2Vudmlyb25tZW50GAQgASgLMhgucHJvdmlkZXIudjEuRW52aXJvbm1lbnQibAoQQm9vdHN0cmFwUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSLQoFY2xhc3MYAyABKA4yHi5wcm92aWRlci52MS5FbnZpcm9ubWVudC5DbGFzcyJ+Cg5EZXN0cm95UmVxdWVzdBItCgtlbnZpcm9ubWVudBgBIAEoCzIYLnByb3ZpZGVyLnYxLkVudmlyb25tZW50Eg8KB29wdGlvbnMYAiABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoCRISCgpwcm9qZWN0X2lkGAQgASgJIlgKF0xpc3RFbnZpcm9ubWVudHNSZXF1ZXN0Eg8KB29wdGlvbnMYASABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJIlEKGExpc3RFbnZpcm9ubWVudHNSZXNwb25zZRI1CgxlbnZpcm9ubWVudHMYASADKAsyHy5wcm92aWRlci52MS5QcmV2aWV3RW52aXJvbm1lbnQilAEKElByZXZpZXdFbnZpcm9ubWVudBIQCghpZGVudGl0eRgBIAEoCRI1CglsaWZlY3ljbGUYAiABKA4yIi5wcm92aWRlci52MS5FbnZpcm9ubWVudC5MaWZlY3ljbGUSDQoFbGFiZWwYAyABKAkSEgoKY3JlYXRlZF9hdBgEIAEoAxISCgpleHBpcmVzX2F0GAUgASgDInUKEFByZWZsaWdodFJlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJEjYKDnJlcXVpcmVkX2NsYXNzGAMgASgOMh4ucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuQ2xhc3MiaAoRUHJlZmxpZ2h0UmVzcG9uc2USMwoLaW5mcmFfY2xhc3MYASABKA4yHi5wcm92aWRlci52MS5FbnZpcm9ubWVudC5DbGFzcxIeChZpbmZyYXN0cnVjdHVyZV9wcmVzZW50GAIgASgIIpgBCgtEZXBsb3lFdmVudBIuCghwcm9ncmVzcxgBIAEoCzIaLnByb3ZpZGVyLnYxLlByb2dyZXNzRXZlbnRIABIkCgNsb2cYAiABKAsyFS5wcm92aWRlci52MS5Mb2dFdmVudEgAEioKBnJlc3VsdBgDIAEoCzIYLnByb3ZpZGVyLnYxLlJlc3VsdEV2ZW50SABCBwoFZXZlbnQiIAoNUHJvZ3Jlc3NFdmVudBIPCgdtZXNzYWdlGAEgASgJIhsKCExvZ0V2ZW50Eg8KB21lc3NhZ2UYASABKAkiWwoLUmVzdWx0RXZlbnQSDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCRIsCgdvdXRwdXRzGAMgAygLMhsucHJvdmlkZXIudjEuUmVzb3VyY2VPdXRwdXQijgEKDlJlc291cmNlT3V0cHV0EhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIvCghwb3N0Z3JlcxgCIAEoCzIbLnByb3ZpZGVyLnYxLlBvc3RncmVzT3V0cHV0SAASKwoGYnVja2V0GAMgASgLMhkucHJvdmlkZXIudjEuQnVja2V0T3V0cHV0SABCCAoGb3V0cHV0ImcKDlBvc3RncmVzT3V0cHV0EgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBIi8KDEJ1Y2tldE91dHB1dBIPCgdhZGRyZXNzGAEgASgJEg4KBmJ1Y2tldBgCIAEoCTKMAwoPUHJvdmlkZXJTZXJ2aWNlEkAKBkRlcGxveRIaLnByb3ZpZGVyLnYxLkRlcGxveVJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEkYKCUJvb3RzdHJhcBIdLnByb3ZpZGVyLnYxLkJvb3RzdHJhcFJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEkIKB0Rlc3Ryb3kSGy5wcm92aWRlci52MS5EZXN0cm95UmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAESXwoQTGlzdEVudmlyb25tZW50cxIkLnByb3ZpZGVyLnYxLkxpc3RFbnZpcm9ubWVudHNSZXF1ZXN0GiUucHJvdmlkZXIudjEuTGlzdEVudmlyb25tZW50c1Jlc3BvbnNlEkoKCVByZWZsaWdodBIdLnByb3ZpZGVyLnYxLlByZWZsaWdodFJlcXVlc3QaHi5wcm92aWRlci52MS5QcmVmbGlnaHRSZXNwb25zZUI5WjdnaXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9wcm92aWRlci92MTtwcm92aWRlcnYxYgZwcm90bzM", [file_resources_v1_resources]);
+  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEi+wMKC0Vudmlyb25tZW50Ei0KBWNsYXNzGAEgASgOMh4ucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuQ2xhc3MSNQoJbGlmZWN5Y2xlGAIgASgOMiIucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEhAKCGlkZW50aXR5GAMgASgJEkAKD2lkZW50aXR5X3NvdXJjZRgEIAEoDjInLnByb3ZpZGVyLnYxLkVudmlyb25tZW50LklkZW50aXR5U291cmNlEg0KBWxhYmVsGAUgASgJIl4KBUNsYXNzEhUKEUNMQVNTX1VOU1BFQ0lGSUVEEAASFQoRQ0xBU1NfREVWRUxPUE1FTlQQARIRCg1DTEFTU19QUkVWSUVXEAISFAoQQ0xBU1NfUFJPRFVDVElPThADIlkKCUxpZmVjeWNsZRIZChVMSUZFQ1lDTEVfVU5TUEVDSUZJRUQQABIXChNMSUZFQ1lDTEVfRVBIRU1FUkFMEAESGAoUTElGRUNZQ0xFX1BFUlNJU1RFTlQQAiJoCg5JZGVudGl0eVNvdXJjZRIfChtJREVOVElUWV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIXChNJREVOVElUWV9TT1VSQ0VfR0lUEAESHAoYSURFTlRJVFlfU09VUkNFX0RFQ0xBUkVEEAIimgEKCE1hbmlmZXN0EhYKDnNjaGVtYV92ZXJzaW9uGAEgASgJEhIKCnByb2plY3RfaWQYAiABKAkSMAoJcmVzb3VyY2VzGAMgAygLMh0ucHJvdmlkZXIudjEuTWFuaWZlc3RSZXNvdXJjZRIwCglmdW5jdGlvbnMYBCADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdEZ1bmN0aW9uInQKEE1hbmlmZXN0RnVuY3Rpb24SFAoMbG9naWNhbF9uYW1lGAEgASgJEg8KB3J1bnRpbWUYAiABKAkSDwoHaGFuZGxlchgDIAEoCRIVCg1hcnRpZmFjdF9wYXRoGAQgASgJEhEKCWZyYW1ld29yaxgFIAEoCSLGAQoQTWFuaWZlc3RSZXNvdXJjZRIUCgxsb2dpY2FsX25hbWUYASABKAkSMgoIcmVzb3VyY2UYAiABKAsyIC5yZXNvdXJjZXMudjEuUmVzb3VyY2VJZGVudGlmaWVyEjAKCHBvc3RncmVzGAMgASgLMhwucmVzb3VyY2VzLnYxLlBvc3RncmVzQ29uZmlnSAASLAoGYnVja2V0GAQgASgLMhoucmVzb3VyY2VzLnYxLkJ1Y2tldENvbmZpZ0gAQggKBmNvbmZpZyKSAQoNRGVwbG95UmVxdWVzdBInCghtYW5pZmVzdBgBIAEoCzIVLnByb3ZpZGVyLnYxLk1hbmlmZXN0Eg8KB29wdGlvbnMYAiABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoCRItCgtlbnZpcm9ubWVudBgEIAEoCzIYLnByb3ZpZGVyLnYxLkVudmlyb25tZW50ImwKEEJvb3RzdHJhcFJlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJEi0KBWNsYXNzGAMgASgOMh4ucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuQ2xhc3MifgoORGVzdHJveVJlcXVlc3QSLQoLZW52aXJvbm1lbnQYASABKAsyGC5wcm92aWRlci52MS5FbnZpcm9ubWVudBIPCgdvcHRpb25zGAIgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAyABKAkSEgoKcHJvamVjdF9pZBgEIAEoCSJYChdMaXN0RW52aXJvbm1lbnRzUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCSJRChhMaXN0RW52aXJvbm1lbnRzUmVzcG9uc2USNQoMZW52aXJvbm1lbnRzGAEgAygLMh8ucHJvdmlkZXIudjEuUHJldmlld0Vudmlyb25tZW50IpQBChJQcmV2aWV3RW52aXJvbm1lbnQSEAoIaWRlbnRpdHkYASABKAkSNQoJbGlmZWN5Y2xlGAIgASgOMiIucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEg0KBWxhYmVsGAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAMSEgoKZXhwaXJlc19hdBgFIAEoAyJ1ChBQcmVmbGlnaHRSZXF1ZXN0Eg8KB29wdGlvbnMYASABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgCIAEoCRI2Cg5yZXF1aXJlZF9jbGFzcxgDIAEoDjIeLnByb3ZpZGVyLnYxLkVudmlyb25tZW50LkNsYXNzImgKEVByZWZsaWdodFJlc3BvbnNlEjMKC2luZnJhX2NsYXNzGAEgASgOMh4ucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuQ2xhc3MSHgoWaW5mcmFzdHJ1Y3R1cmVfcHJlc2VudBgCIAEoCCKYAQoLRGVwbG95RXZlbnQSLgoIcHJvZ3Jlc3MYASABKAsyGi5wcm92aWRlci52MS5Qcm9ncmVzc0V2ZW50SAASJAoDbG9nGAIgASgLMhUucHJvdmlkZXIudjEuTG9nRXZlbnRIABIqCgZyZXN1bHQYAyABKAsyGC5wcm92aWRlci52MS5SZXN1bHRFdmVudEgAQgcKBWV2ZW50IiAKDVByb2dyZXNzRXZlbnQSDwoHbWVzc2FnZRgBIAEoCSIbCghMb2dFdmVudBIPCgdtZXNzYWdlGAEgASgJIlsKC1Jlc3VsdEV2ZW50Eg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkSLAoHb3V0cHV0cxgDIAMoCzIbLnByb3ZpZGVyLnYxLlJlc291cmNlT3V0cHV0Io4BCg5SZXNvdXJjZU91dHB1dBIUCgxsb2dpY2FsX25hbWUYASABKAkSLwoIcG9zdGdyZXMYAiABKAsyGy5wcm92aWRlci52MS5Qb3N0Z3Jlc091dHB1dEgAEisKBmJ1Y2tldBgDIAEoCzIZLnByb3ZpZGVyLnYxLkJ1Y2tldE91dHB1dEgAQggKBm91dHB1dCJnCg5Qb3N0Z3Jlc091dHB1dBIMCgRob3N0GAEgASgJEgwKBHBvcnQYAiABKAUSEAoIZGF0YWJhc2UYAyABKAkSEAoIdXNlcm5hbWUYBCABKAkSFQoIcGFzc3dvcmQYBSABKAlCA4ABASIvCgxCdWNrZXRPdXRwdXQSDwoHYWRkcmVzcxgBIAEoCRIOCgZidWNrZXQYAiABKAkyjAMKD1Byb3ZpZGVyU2VydmljZRJACgZEZXBsb3kSGi5wcm92aWRlci52MS5EZXBsb3lSZXF1ZXN0GhgucHJvdmlkZXIudjEuRGVwbG95RXZlbnQwARJGCglCb290c3RyYXASHS5wcm92aWRlci52MS5Cb290c3RyYXBSZXF1ZXN0GhgucHJvdmlkZXIudjEuRGVwbG95RXZlbnQwARJCCgdEZXN0cm95EhsucHJvdmlkZXIudjEuRGVzdHJveVJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEl8KEExpc3RFbnZpcm9ubWVudHMSJC5wcm92aWRlci52MS5MaXN0RW52aXJvbm1lbnRzUmVxdWVzdBolLnByb3ZpZGVyLnYxLkxpc3RFbnZpcm9ubWVudHNSZXNwb25zZRJKCglQcmVmbGlnaHQSHS5wcm92aWRlci52MS5QcmVmbGlnaHRSZXF1ZXN0Gh4ucHJvdmlkZXIudjEuUHJlZmxpZ2h0UmVzcG9uc2VCOVo3Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vcHJvdmlkZXIvdjE7cHJvdmlkZXJ2MWIGcHJvdG8z", [file_resources_v1_resources]);
 
 /**
  * Environment is the fully resolved target a provisioning verb acts on. The
@@ -184,6 +184,11 @@ export type Manifest = Message<"provider.v1.Manifest"> & {
    * @generated from field: repeated provider.v1.ManifestResource resources = 3;
    */
   resources: ManifestResource[];
+
+  /**
+   * @generated from field: repeated provider.v1.ManifestFunction functions = 4;
+   */
+  functions: ManifestFunction[];
 };
 
 /**
@@ -192,6 +197,50 @@ export type Manifest = Message<"provider.v1.Manifest"> & {
  */
 export const ManifestSchema: GenMessage<Manifest> = /*@__PURE__*/
   messageDesc(file_provider_v1_provider, 1);
+
+/**
+ * ManifestFunction is a deployable function unit. Being listed in
+ * Manifest.functions implies serverless compute, and an express framework
+ * implies web-facing — so there is deliberately no compute or trigger field.
+ *
+ * @generated from message provider.v1.ManifestFunction
+ */
+export type ManifestFunction = Message<"provider.v1.ManifestFunction"> & {
+  /**
+   * logical_name is the app name normalized by the same rule as
+   * ManifestResource.logical_name. Deterministic across declaration order.
+   *
+   * @generated from field: string logical_name = 1;
+   */
+  logicalName: string;
+
+  /**
+   * @generated from field: string runtime = 2;
+   */
+  runtime: string;
+
+  /**
+   * @generated from field: string handler = 3;
+   */
+  handler: string;
+
+  /**
+   * @generated from field: string artifact_path = 4;
+   */
+  artifactPath: string;
+
+  /**
+   * @generated from field: string framework = 5;
+   */
+  framework: string;
+};
+
+/**
+ * Describes the message provider.v1.ManifestFunction.
+ * Use `create(ManifestFunctionSchema)` to create a new message.
+ */
+export const ManifestFunctionSchema: GenMessage<ManifestFunction> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 2);
 
 /**
  * ManifestResource pairs a resource's identity with its typed configuration.
@@ -240,7 +289,7 @@ export type ManifestResource = Message<"provider.v1.ManifestResource"> & {
  * Use `create(ManifestResourceSchema)` to create a new message.
  */
 export const ManifestResourceSchema: GenMessage<ManifestResource> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 2);
+  messageDesc(file_provider_v1_provider, 3);
 
 /**
  * DeployRequest is the sole request this slice: the manifest to provision
@@ -285,7 +334,7 @@ export type DeployRequest = Message<"provider.v1.DeployRequest"> & {
  * Use `create(DeployRequestSchema)` to create a new message.
  */
 export const DeployRequestSchema: GenMessage<DeployRequest> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 3);
+  messageDesc(file_provider_v1_provider, 4);
 
 /**
  * BootstrapRequest is the request for ProviderService.Bootstrap. Bootstrap
@@ -327,7 +376,7 @@ export type BootstrapRequest = Message<"provider.v1.BootstrapRequest"> & {
  * Use `create(BootstrapRequestSchema)` to create a new message.
  */
 export const BootstrapRequestSchema: GenMessage<BootstrapRequest> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 4);
+  messageDesc(file_provider_v1_provider, 5);
 
 /**
  * DestroyRequest is the request for ProviderService.Destroy. It carries the
@@ -374,7 +423,7 @@ export type DestroyRequest = Message<"provider.v1.DestroyRequest"> & {
  * Use `create(DestroyRequestSchema)` to create a new message.
  */
 export const DestroyRequestSchema: GenMessage<DestroyRequest> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 5);
+  messageDesc(file_provider_v1_provider, 6);
 
 /**
  * ListEnvironmentsRequest is the request for ProviderService.ListEnvironments.
@@ -416,7 +465,7 @@ export type ListEnvironmentsRequest = Message<"provider.v1.ListEnvironmentsReque
  * Use `create(ListEnvironmentsRequestSchema)` to create a new message.
  */
 export const ListEnvironmentsRequestSchema: GenMessage<ListEnvironmentsRequest> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 6);
+  messageDesc(file_provider_v1_provider, 7);
 
 /**
  * ListEnvironmentsResponse is the reply from ProviderService.ListEnvironments:
@@ -436,7 +485,7 @@ export type ListEnvironmentsResponse = Message<"provider.v1.ListEnvironmentsResp
  * Use `create(ListEnvironmentsResponseSchema)` to create a new message.
  */
 export const ListEnvironmentsResponseSchema: GenMessage<ListEnvironmentsResponse> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 7);
+  messageDesc(file_provider_v1_provider, 8);
 
 /**
  * PreviewEnvironment is a single enumerated preview environment, carrying just
@@ -481,7 +530,7 @@ export type PreviewEnvironment = Message<"provider.v1.PreviewEnvironment"> & {
  * Use `create(PreviewEnvironmentSchema)` to create a new message.
  */
 export const PreviewEnvironmentSchema: GenMessage<PreviewEnvironment> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 8);
+  messageDesc(file_provider_v1_provider, 9);
 
 /**
  * PreflightRequest is the request for ProviderService.Preflight. Like
@@ -526,7 +575,7 @@ export type PreflightRequest = Message<"provider.v1.PreflightRequest"> & {
  * Use `create(PreflightRequestSchema)` to create a new message.
  */
 export const PreflightRequestSchema: GenMessage<PreflightRequest> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 9);
+  messageDesc(file_provider_v1_provider, 10);
 
 /**
  * PreflightResponse tells the CLI what the provider's ambient account/profile
@@ -557,7 +606,7 @@ export type PreflightResponse = Message<"provider.v1.PreflightResponse"> & {
  * Use `create(PreflightResponseSchema)` to create a new message.
  */
 export const PreflightResponseSchema: GenMessage<PreflightResponse> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 10);
+  messageDesc(file_provider_v1_provider, 11);
 
 /**
  * DeployEvent is a single item on the Deploy response stream: either
@@ -595,7 +644,7 @@ export type DeployEvent = Message<"provider.v1.DeployEvent"> & {
  * Use `create(DeployEventSchema)` to create a new message.
  */
 export const DeployEventSchema: GenMessage<DeployEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 11);
+  messageDesc(file_provider_v1_provider, 12);
 
 /**
  * ProgressEvent reports a discrete, human-readable step of deploy progress.
@@ -614,7 +663,7 @@ export type ProgressEvent = Message<"provider.v1.ProgressEvent"> & {
  * Use `create(ProgressEventSchema)` to create a new message.
  */
 export const ProgressEventSchema: GenMessage<ProgressEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 12);
+  messageDesc(file_provider_v1_provider, 13);
 
 /**
  * LogEvent carries diagnostic output that isn't a discrete progress step.
@@ -633,7 +682,7 @@ export type LogEvent = Message<"provider.v1.LogEvent"> & {
  * Use `create(LogEventSchema)` to create a new message.
  */
 export const LogEventSchema: GenMessage<LogEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 13);
+  messageDesc(file_provider_v1_provider, 14);
 
 /**
  * ResultEvent is always the last event on the stream: success, or failure
@@ -670,7 +719,7 @@ export type ResultEvent = Message<"provider.v1.ResultEvent"> & {
  * Use `create(ResultEventSchema)` to create a new message.
  */
 export const ResultEventSchema: GenMessage<ResultEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 14);
+  messageDesc(file_provider_v1_provider, 15);
 
 /**
  * ResourceOutput pairs a resource's logical name with its typed connection
@@ -711,7 +760,7 @@ export type ResourceOutput = Message<"provider.v1.ResourceOutput"> & {
  * Use `create(ResourceOutputSchema)` to create a new message.
  */
 export const ResourceOutputSchema: GenMessage<ResourceOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 15);
+  messageDesc(file_provider_v1_provider, 16);
 
 /**
  * PostgresOutput is the discrete connection detail for a provisioned
@@ -755,7 +804,7 @@ export type PostgresOutput = Message<"provider.v1.PostgresOutput"> & {
  * Use `create(PostgresOutputSchema)` to create a new message.
  */
 export const PostgresOutputSchema: GenMessage<PostgresOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 16);
+  messageDesc(file_provider_v1_provider, 17);
 
 /**
  * BucketOutput is the discrete connection detail for a provisioned bucket
@@ -783,7 +832,7 @@ export type BucketOutput = Message<"provider.v1.BucketOutput"> & {
  * Use `create(BucketOutputSchema)` to create a new message.
  */
 export const BucketOutputSchema: GenMessage<BucketOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 17);
+  messageDesc(file_provider_v1_provider, 18);
 
 /**
  * ProviderService is served by a provider binary (e.g. the AWS provider,

@@ -157,7 +157,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 	if err != nil {
 		return err
 	}
-	manifest, err := manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources))
+	manifest, err := manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources), nil)
 	if err != nil {
 		return err
 	}
