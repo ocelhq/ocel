@@ -310,6 +310,9 @@ func resolveUpEnvironment(cwd, name string) (*providerv1.Environment, error) {
 // --name targets a persistent preview; --ref targets an explicit ref's
 // ephemeral preview; bare targets the current branch's ephemeral preview.
 func resolveRmEnvironment(cwd string, opts previewRmOptions) (*providerv1.Environment, error) {
+	if opts.name != "" && opts.ref != "" {
+		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to address a persistent or ephemeral preview")
+	}
 	if opts.name != "" {
 		return &providerv1.Environment{
 			Class:          providerv1.Environment_CLASS_PREVIEW,

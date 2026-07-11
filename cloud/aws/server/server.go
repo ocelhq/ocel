@@ -101,8 +101,18 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
 
+	env := req.GetEnvironment()
+	preview := env.GetClass() == providerv1.Environment_CLASS_PREVIEW
+	bootstrapCmd := "ocel bootstrap"
+	if preview {
+		bootstrapCmd = "ocel bootstrap --preview"
+	}
+
+	// A preview deploy must read (and write) the preview substrate's Pulumi
+	// backend, not production's — otherwise `ocel preview rm`/`ls`, which
+	// resolve the preview backend, never see what up just created.
 	progress("Checking account bootstrap")
-	deployed, err := bootstrap.CheckDeployed(ctx, cfn)
+	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
 		return nil, err
 	}
@@ -110,7 +120,7 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 		return nil, err
 	}
 	if deployed.StateBucket == "" {
-		return nil, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `ocel bootstrap`")
+		return nil, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
@@ -132,7 +142,7 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 	var sessionTableARN string
 	if manifestHasBucket(manifest) {
 		if deployed.SessionTable == "" {
-			return nil, fmt.Errorf("account bootstrap is present but its sessions table is missing; re-run `ocel bootstrap`")
+			return nil, fmt.Errorf("account bootstrap is present but its sessions table is missing; re-run `%s`", bootstrapCmd)
 		}
 		account, err := accountID(ctx, sts.NewFromConfig(awscfg))
 		if err != nil {
@@ -141,7 +151,6 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 		sessionTableARN = fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.SessionTable)
 	}
 
-	env := req.GetEnvironment()
 	return deploy.Run(ctx, deploy.Config{
 		Region:           awscfg.Region,
 		BackendURL:       "s3://" + deployed.StateBucket,

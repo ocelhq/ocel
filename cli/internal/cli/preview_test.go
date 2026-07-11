@@ -159,6 +159,16 @@ func TestRunPreviewRm_Ref_DestroysExplicitRef(t *testing.T) {
 	}
 }
 
+func TestResolveRmEnvironment_NameAndRefAreMutuallyExclusive(t *testing.T) {
+	_, err := resolveRmEnvironment("", previewRmOptions{name: "staging", ref: "release/v2"})
+	if err == nil {
+		t.Fatal("resolveRmEnvironment(name+ref) err = nil, want a mutual-exclusion error")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("err = %v, want it to explain --name and --ref are mutually exclusive", err)
+	}
+}
+
 func TestRunPreviewRm_PersistentWithYes_DestroysWithoutPrompting(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	stubGit(t, "feature/login", "")
