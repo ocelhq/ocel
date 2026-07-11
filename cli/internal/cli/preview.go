@@ -431,6 +431,10 @@ func printResourceOutputs(stdout io.Writer, outputs []*providerv1.ResourceOutput
 		}
 		if b := o.GetBucket(); b != nil {
 			fmt.Fprintf(stdout, "  %s: bucket %s at %s\n", o.GetLogicalName(), b.GetBucket(), b.GetAddress())
+			continue
+		}
+		if f := o.GetFunction(); f != nil {
+			fmt.Fprintf(stdout, "  %s: %s\n", o.GetLogicalName(), f.GetUrl())
 		}
 	}
 }

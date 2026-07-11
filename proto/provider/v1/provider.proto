@@ -341,6 +341,7 @@ message ResourceOutput {
   oneof output {
     PostgresOutput postgres = 2;
     BucketOutput bucket = 3;
+    FunctionOutput function = 4;
   }
 }
 
@@ -365,4 +366,12 @@ message PostgresOutput {
 message BucketOutput {
   string address = 1;
   string bucket = 2;
+}
+
+// FunctionOutput is the connection detail for a realized function: its
+// web-facing URL. Keyed by the function's logical_name, the CLI prints it
+// alongside the resource outputs so a deploy surfaces where each function is
+// reachable.
+message FunctionOutput {
+  string url = 1;
 }

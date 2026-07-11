@@ -54,6 +54,12 @@ type Config struct {
 	// it is threaded here so the deploy path is complete once that lands.
 	ListenerCodePath string
 
+	// ArtifactRoot is the absolute path a ManifestFunction's artifact_path is
+	// resolved against — the project's .ocel/output directory. Each function's
+	// `.func` artifact lives under it; the provider archives that directory into
+	// the Lambda deployment package.
+	ArtifactRoot string
+
 	// Lifecycle is the environment lifecycle this deploy realizes under; it
 	// selects each resource's realization (see realizationFor). Unspecified for
 	// production and persistent previews, LIFECYCLE_EPHEMERAL for ephemeral
@@ -96,26 +102,42 @@ func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progres
 		if err != nil {
 			return fmt.Errorf("look up default VPC subnets: %w", err)
 		}
+		// Every function is injected with every resource's connection payload
+		// (OCEL_RESOURCE_<TYPE>_<id>), mirroring how `ocel dev` injects all
+		// resources. Resources are realized first so their outputs are available
+		// to wire onto each function's env.
+		env := pulumi.StringMap{}
 		for _, r := range manifest.GetResources() {
+			var (
+				value pulumi.StringOutput
+				err   error
+			)
 			switch {
 			case r.GetPostgres() != nil:
 				if realizationFor(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, cfg.Lifecycle) == RealizationLogicalSlice {
-					if err := registerPostgresLogicalSlice(pctx, r.GetLogicalName(), postgresSliceArgs{
+					value, err = registerPostgresLogicalSlice(pctx, r.GetLogicalName(), postgresSliceArgs{
 						DatabaseName:    sliceDatabaseName(cfg.Identity, r.GetLogicalName()),
 						ClusterEndpoint: cfg.SharedClusterEndpoint,
 						AdminSecretARN:  cfg.SharedClusterSecretARN,
-					}); err != nil {
-						return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
-					}
+					})
 					break
 				}
-				if err := registerPostgres(pctx, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids); err != nil {
-					return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
-				}
+				value, err = registerPostgres(pctx, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				if err := registerBucket(pctx, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.SessionTable, cfg.SessionTableARN, cfg.ListenerCodePath); err != nil {
-					return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
-				}
+				value, err = registerBucket(pctx, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.SessionTable, cfg.SessionTableARN, cfg.ListenerCodePath)
+			default:
+				continue
+			}
+			if err != nil {
+				return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
+			}
+			env[functionEnvKey(r.GetResource().GetType(), r.GetResource().GetName())] = value
+		}
+
+		for _, fn := range manifest.GetFunctions() {
+			archive := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
+			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), archive, env); err != nil {
+				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}
 		return nil
@@ -207,6 +229,22 @@ func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *provid
 			return nil, err
 		}
 		result = append(result, out)
+	}
+	for _, fn := range manifest.GetFunctions() {
+		name := fn.GetLogicalName()
+		raw, ok := outputs[name]
+		if !ok {
+			return nil, fmt.Errorf("stack produced no output for %s", name)
+		}
+		fields, ok := raw.Value.(map[string]interface{})
+		if !ok {
+			return nil, fmt.Errorf("output for %s is not a map", name)
+		}
+		url, err := requireStringField(fields, name, outputKeyFunctionURL)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, collectFunctionOutput(name, url))
 	}
 	return result, nil
 }
