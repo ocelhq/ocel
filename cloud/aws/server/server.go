@@ -24,6 +24,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -35,8 +36,13 @@ const deployEnv = "prod"
 // pulumiProjectName is the fixed Pulumi project all Ocel stacks live under.
 const pulumiProjectName = "ocel"
 
-// Server implements providerv1connect.ProviderServiceHandler.
-type Server struct{}
+// Server implements providerv1connect.ProviderServiceHandler. It embeds the
+// generated Unimplemented handler so RPCs this slice does not yet serve
+// (Destroy, ListEnvironments) return CodeUnimplemented rather than blocking
+// compilation.
+type Server struct {
+	providerv1connect.UnimplementedProviderServiceHandler
+}
 
 // options is the provider's opaque per-invocation options, decoded from the
 // request's options JSON. Region is optional: when empty, AWS's own

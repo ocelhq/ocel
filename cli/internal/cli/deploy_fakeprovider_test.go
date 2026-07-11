@@ -72,6 +72,7 @@ func runDeployFakeProvider() int {
 // deployFakeProviderServer implements providerv1connect.ProviderServiceHandler
 // for TestRunDeploy_HappyPath.
 type deployFakeProviderServer struct {
+	providerv1connect.UnimplementedProviderServiceHandler
 	token string
 	mode  string
 }

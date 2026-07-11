@@ -38,6 +38,11 @@ const (
 	// ProviderServiceBootstrapProcedure is the fully-qualified name of the ProviderService's Bootstrap
 	// RPC.
 	ProviderServiceBootstrapProcedure = "/provider.v1.ProviderService/Bootstrap"
+	// ProviderServiceDestroyProcedure is the fully-qualified name of the ProviderService's Destroy RPC.
+	ProviderServiceDestroyProcedure = "/provider.v1.ProviderService/Destroy"
+	// ProviderServiceListEnvironmentsProcedure is the fully-qualified name of the ProviderService's
+	// ListEnvironments RPC.
+	ProviderServiceListEnvironmentsProcedure = "/provider.v1.ProviderService/ListEnvironments"
 )
 
 // ProviderServiceClient is a client for the provider.v1.ProviderService service.
@@ -51,6 +56,17 @@ type ProviderServiceClient interface {
 	// progress/log events, then a terminal ResultEvent. Bootstrap carries no
 	// outputs on its result.
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	// Destroy tears down the environment addressed by DestroyRequest.environment.
+	// It is the inverse of Deploy and reuses the same DeployEvent stream:
+	// progress/log events, then a terminal ResultEvent (which carries no
+	// outputs). The provider selects exactly the environment named by the
+	// Environment block; the CLI never asks it to reverse-engineer how the
+	// teardown was invoked.
+	Destroy(context.Context, *v1.DestroyRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	// ListEnvironments enumerates the preview environments the provider knows
+	// about from its own authoritative state, one entry per environment. It
+	// backs `ocel preview ls`.
+	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.v1.ProviderService service. By
@@ -76,13 +92,27 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
 			connect.WithClientOptions(opts...),
 		),
+		destroy: connect.NewClient[v1.DestroyRequest, v1.DeployEvent](
+			httpClient,
+			baseURL+ProviderServiceDestroyProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Destroy")),
+			connect.WithClientOptions(opts...),
+		),
+		listEnvironments: connect.NewClient[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse](
+			httpClient,
+			baseURL+ProviderServiceListEnvironmentsProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("ListEnvironments")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // providerServiceClient implements ProviderServiceClient.
 type providerServiceClient struct {
-	deploy    *connect.Client[v1.DeployRequest, v1.DeployEvent]
-	bootstrap *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
+	deploy           *connect.Client[v1.DeployRequest, v1.DeployEvent]
+	bootstrap        *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
+	destroy          *connect.Client[v1.DestroyRequest, v1.DeployEvent]
+	listEnvironments *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
 }
 
 // Deploy calls provider.v1.ProviderService.Deploy.
@@ -93,6 +123,20 @@ func (c *providerServiceClient) Deploy(ctx context.Context, req *v1.DeployReques
 // Bootstrap calls provider.v1.ProviderService.Bootstrap.
 func (c *providerServiceClient) Bootstrap(ctx context.Context, req *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
 	return c.bootstrap.CallServerStream(ctx, connect.NewRequest(req))
+}
+
+// Destroy calls provider.v1.ProviderService.Destroy.
+func (c *providerServiceClient) Destroy(ctx context.Context, req *v1.DestroyRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+	return c.destroy.CallServerStream(ctx, connect.NewRequest(req))
+}
+
+// ListEnvironments calls provider.v1.ProviderService.ListEnvironments.
+func (c *providerServiceClient) ListEnvironments(ctx context.Context, req *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
+	response, err := c.listEnvironments.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
 }
 
 // ProviderServiceHandler is an implementation of the provider.v1.ProviderService service.
@@ -106,6 +150,17 @@ type ProviderServiceHandler interface {
 	// progress/log events, then a terminal ResultEvent. Bootstrap carries no
 	// outputs on its result.
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error
+	// Destroy tears down the environment addressed by DestroyRequest.environment.
+	// It is the inverse of Deploy and reuses the same DeployEvent stream:
+	// progress/log events, then a terminal ResultEvent (which carries no
+	// outputs). The provider selects exactly the environment named by the
+	// Environment block; the CLI never asks it to reverse-engineer how the
+	// teardown was invoked.
+	Destroy(context.Context, *v1.DestroyRequest, *connect.ServerStream[v1.DeployEvent]) error
+	// ListEnvironments enumerates the preview environments the provider knows
+	// about from its own authoritative state, one entry per environment. It
+	// backs `ocel preview ls`.
+	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -127,12 +182,28 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("Bootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServiceDestroyHandler := connect.NewServerStreamHandlerSimple(
+		ProviderServiceDestroyProcedure,
+		svc.Destroy,
+		connect.WithSchema(providerServiceMethods.ByName("Destroy")),
+		connect.WithHandlerOptions(opts...),
+	)
+	providerServiceListEnvironmentsHandler := connect.NewUnaryHandlerSimple(
+		ProviderServiceListEnvironmentsProcedure,
+		svc.ListEnvironments,
+		connect.WithSchema(providerServiceMethods.ByName("ListEnvironments")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderServiceDeployProcedure:
 			providerServiceDeployHandler.ServeHTTP(w, r)
 		case ProviderServiceBootstrapProcedure:
 			providerServiceBootstrapHandler.ServeHTTP(w, r)
+		case ProviderServiceDestroyProcedure:
+			providerServiceDestroyHandler.ServeHTTP(w, r)
+		case ProviderServiceListEnvironmentsProcedure:
+			providerServiceListEnvironmentsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -148,4 +219,12 @@ func (UnimplementedProviderServiceHandler) Deploy(context.Context, *v1.DeployReq
 
 func (UnimplementedProviderServiceHandler) Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.v1.ProviderService.Bootstrap is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) Destroy(context.Context, *v1.DestroyRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("provider.v1.ProviderService.Destroy is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.v1.ProviderService.ListEnvironments is not implemented"))
 }

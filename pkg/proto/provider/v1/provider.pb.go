@@ -22,6 +22,252 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// Class is the environment class a command acts under. It selects which
+// substrate the provider realizes against and gates the class guard.
+type Environment_Class int32
+
+const (
+	Environment_CLASS_UNSPECIFIED Environment_Class = 0
+	Environment_CLASS_DEVELOPMENT Environment_Class = 1
+	Environment_CLASS_PREVIEW     Environment_Class = 2
+	Environment_CLASS_PRODUCTION  Environment_Class = 3
+)
+
+// Enum value maps for Environment_Class.
+var (
+	Environment_Class_name = map[int32]string{
+		0: "CLASS_UNSPECIFIED",
+		1: "CLASS_DEVELOPMENT",
+		2: "CLASS_PREVIEW",
+		3: "CLASS_PRODUCTION",
+	}
+	Environment_Class_value = map[string]int32{
+		"CLASS_UNSPECIFIED": 0,
+		"CLASS_DEVELOPMENT": 1,
+		"CLASS_PREVIEW":     2,
+		"CLASS_PRODUCTION":  3,
+	}
+)
+
+func (x Environment_Class) Enum() *Environment_Class {
+	p := new(Environment_Class)
+	*p = x
+	return p
+}
+
+func (x Environment_Class) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Environment_Class) Descriptor() protoreflect.EnumDescriptor {
+	return file_provider_v1_provider_proto_enumTypes[0].Descriptor()
+}
+
+func (Environment_Class) Type() protoreflect.EnumType {
+	return &file_provider_v1_provider_proto_enumTypes[0]
+}
+
+func (x Environment_Class) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Environment_Class.Descriptor instead.
+func (Environment_Class) EnumDescriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{0, 0}
+}
+
+// Lifecycle distinguishes the two preview lifecycles. It is meaningful only
+// for class=PREVIEW and is LIFECYCLE_UNSPECIFIED for every other class.
+type Environment_Lifecycle int32
+
+const (
+	Environment_LIFECYCLE_UNSPECIFIED Environment_Lifecycle = 0
+	Environment_LIFECYCLE_EPHEMERAL   Environment_Lifecycle = 1
+	Environment_LIFECYCLE_PERSISTENT  Environment_Lifecycle = 2
+)
+
+// Enum value maps for Environment_Lifecycle.
+var (
+	Environment_Lifecycle_name = map[int32]string{
+		0: "LIFECYCLE_UNSPECIFIED",
+		1: "LIFECYCLE_EPHEMERAL",
+		2: "LIFECYCLE_PERSISTENT",
+	}
+	Environment_Lifecycle_value = map[string]int32{
+		"LIFECYCLE_UNSPECIFIED": 0,
+		"LIFECYCLE_EPHEMERAL":   1,
+		"LIFECYCLE_PERSISTENT":  2,
+	}
+)
+
+func (x Environment_Lifecycle) Enum() *Environment_Lifecycle {
+	p := new(Environment_Lifecycle)
+	*p = x
+	return p
+}
+
+func (x Environment_Lifecycle) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Environment_Lifecycle) Descriptor() protoreflect.EnumDescriptor {
+	return file_provider_v1_provider_proto_enumTypes[1].Descriptor()
+}
+
+func (Environment_Lifecycle) Type() protoreflect.EnumType {
+	return &file_provider_v1_provider_proto_enumTypes[1]
+}
+
+func (x Environment_Lifecycle) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Environment_Lifecycle.Descriptor instead.
+func (Environment_Lifecycle) EnumDescriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{0, 1}
+}
+
+// IdentitySource records how identity was derived: from the git branch/ref
+// (ephemeral previews) or explicitly declared by the user (persistent
+// previews named with --name).
+type Environment_IdentitySource int32
+
+const (
+	Environment_IDENTITY_SOURCE_UNSPECIFIED Environment_IdentitySource = 0
+	Environment_IDENTITY_SOURCE_GIT         Environment_IdentitySource = 1
+	Environment_IDENTITY_SOURCE_DECLARED    Environment_IdentitySource = 2
+)
+
+// Enum value maps for Environment_IdentitySource.
+var (
+	Environment_IdentitySource_name = map[int32]string{
+		0: "IDENTITY_SOURCE_UNSPECIFIED",
+		1: "IDENTITY_SOURCE_GIT",
+		2: "IDENTITY_SOURCE_DECLARED",
+	}
+	Environment_IdentitySource_value = map[string]int32{
+		"IDENTITY_SOURCE_UNSPECIFIED": 0,
+		"IDENTITY_SOURCE_GIT":         1,
+		"IDENTITY_SOURCE_DECLARED":    2,
+	}
+)
+
+func (x Environment_IdentitySource) Enum() *Environment_IdentitySource {
+	p := new(Environment_IdentitySource)
+	*p = x
+	return p
+}
+
+func (x Environment_IdentitySource) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (Environment_IdentitySource) Descriptor() protoreflect.EnumDescriptor {
+	return file_provider_v1_provider_proto_enumTypes[2].Descriptor()
+}
+
+func (Environment_IdentitySource) Type() protoreflect.EnumType {
+	return &file_provider_v1_provider_proto_enumTypes[2]
+}
+
+func (x Environment_IdentitySource) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use Environment_IdentitySource.Descriptor instead.
+func (Environment_IdentitySource) EnumDescriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{0, 2}
+}
+
+// Environment is the fully resolved target a provisioning verb acts on. The
+// CLI normalizes every invocation into one of these before spawning the
+// provider, so the provider branches only on this data and never inspects how
+// the command was called. `ocel deploy` and `ocel preview` drive the same
+// Deploy RPC and diverge only by the Environment they send: deploy sends
+// class=PRODUCTION with lifecycle unspecified; an ephemeral preview sends
+// class=PREVIEW, lifecycle=EPHEMERAL; a persistent (named) preview sends
+// class=PREVIEW, lifecycle=PERSISTENT.
+type Environment struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Class     Environment_Class      `protobuf:"varint,1,opt,name=class,proto3,enum=provider.v1.Environment_Class" json:"class,omitempty"`
+	Lifecycle Environment_Lifecycle  `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=provider.v1.Environment_Lifecycle" json:"lifecycle,omitempty"`
+	// identity is the canonical, substrate-safe key for this environment: a
+	// valid Postgres identifier and stack-name token. It is stable across
+	// re-runs, so re-running a preview updates the same environment in place.
+	Identity       string                     `protobuf:"bytes,3,opt,name=identity,proto3" json:"identity,omitempty"`
+	IdentitySource Environment_IdentitySource `protobuf:"varint,4,opt,name=identity_source,json=identitySource,proto3,enum=provider.v1.Environment_IdentitySource" json:"identity_source,omitempty"`
+	// label is an optional display label (e.g. the PR number) surfaced by
+	// `ocel preview ls`. It is never part of identity and may be empty.
+	Label         string `protobuf:"bytes,5,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Environment) Reset() {
+	*x = Environment{}
+	mi := &file_provider_v1_provider_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Environment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Environment) ProtoMessage() {}
+
+func (x *Environment) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Environment.ProtoReflect.Descriptor instead.
+func (*Environment) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *Environment) GetClass() Environment_Class {
+	if x != nil {
+		return x.Class
+	}
+	return Environment_CLASS_UNSPECIFIED
+}
+
+func (x *Environment) GetLifecycle() Environment_Lifecycle {
+	if x != nil {
+		return x.Lifecycle
+	}
+	return Environment_LIFECYCLE_UNSPECIFIED
+}
+
+func (x *Environment) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
+}
+
+func (x *Environment) GetIdentitySource() Environment_IdentitySource {
+	if x != nil {
+		return x.IdentitySource
+	}
+	return Environment_IDENTITY_SOURCE_UNSPECIFIED
+}
+
+func (x *Environment) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
 // Manifest is the versioned, deterministic artifact the CLI builds from a
 // project's discovered resources and hands to a provider.
 type Manifest struct {
@@ -37,7 +283,7 @@ type Manifest struct {
 
 func (x *Manifest) Reset() {
 	*x = Manifest{}
-	mi := &file_provider_v1_provider_proto_msgTypes[0]
+	mi := &file_provider_v1_provider_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -49,7 +295,7 @@ func (x *Manifest) String() string {
 func (*Manifest) ProtoMessage() {}
 
 func (x *Manifest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[0]
+	mi := &file_provider_v1_provider_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62,7 +308,7 @@ func (x *Manifest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Manifest.ProtoReflect.Descriptor instead.
 func (*Manifest) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{0}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Manifest) GetSchemaVersion() string {
@@ -109,7 +355,7 @@ type ManifestResource struct {
 
 func (x *ManifestResource) Reset() {
 	*x = ManifestResource{}
-	mi := &file_provider_v1_provider_proto_msgTypes[1]
+	mi := &file_provider_v1_provider_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -121,7 +367,7 @@ func (x *ManifestResource) String() string {
 func (*ManifestResource) ProtoMessage() {}
 
 func (x *ManifestResource) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[1]
+	mi := &file_provider_v1_provider_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -134,7 +380,7 @@ func (x *ManifestResource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManifestResource.ProtoReflect.Descriptor instead.
 func (*ManifestResource) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{1}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *ManifestResource) GetLogicalName() string {
@@ -204,13 +450,16 @@ type DeployRequest struct {
 	// protocol_version pins the DeployRequest/DeployEvent wire contract so a
 	// provider can reject a request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// environment is the fully resolved target this deploy acts on. `ocel
+	// deploy` and `ocel preview` both drive this RPC and diverge only here.
+	Environment   *Environment `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeployRequest) Reset() {
 	*x = DeployRequest{}
-	mi := &file_provider_v1_provider_proto_msgTypes[2]
+	mi := &file_provider_v1_provider_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -222,7 +471,7 @@ func (x *DeployRequest) String() string {
 func (*DeployRequest) ProtoMessage() {}
 
 func (x *DeployRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[2]
+	mi := &file_provider_v1_provider_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -235,7 +484,7 @@ func (x *DeployRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployRequest.ProtoReflect.Descriptor instead.
 func (*DeployRequest) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{2}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *DeployRequest) GetManifest() *Manifest {
@@ -259,6 +508,13 @@ func (x *DeployRequest) GetProtocolVersion() string {
 	return ""
 }
 
+func (x *DeployRequest) GetEnvironment() *Environment {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
+}
+
 // BootstrapRequest is the request for ProviderService.Bootstrap. Bootstrap
 // is account-global, so it carries no manifest and no project id: only the
 // provider's opaque options and the pinned protocol version.
@@ -277,7 +533,7 @@ type BootstrapRequest struct {
 
 func (x *BootstrapRequest) Reset() {
 	*x = BootstrapRequest{}
-	mi := &file_provider_v1_provider_proto_msgTypes[3]
+	mi := &file_provider_v1_provider_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -289,7 +545,7 @@ func (x *BootstrapRequest) String() string {
 func (*BootstrapRequest) ProtoMessage() {}
 
 func (x *BootstrapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[3]
+	mi := &file_provider_v1_provider_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -302,7 +558,7 @@ func (x *BootstrapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapRequest.ProtoReflect.Descriptor instead.
 func (*BootstrapRequest) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{3}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *BootstrapRequest) GetOptions() []byte {
@@ -317,6 +573,261 @@ func (x *BootstrapRequest) GetProtocolVersion() string {
 		return x.ProtocolVersion
 	}
 	return ""
+}
+
+// DestroyRequest is the request for ProviderService.Destroy. It carries the
+// full Environment block as its addressing so the provider tears down exactly
+// the right environment.
+type DestroyRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	Environment *Environment           `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
+	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
+	// options, never absent and never an empty string. The CLI never inspects
+	// this field; only the provider unmarshals it.
+	Options []byte `protobuf:"bytes,2,opt,name=options,proto3" json:"options,omitempty"`
+	// protocol_version pins the wire contract so a provider can reject a
+	// request it can't speak.
+	ProtocolVersion string `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *DestroyRequest) Reset() {
+	*x = DestroyRequest{}
+	mi := &file_provider_v1_provider_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DestroyRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DestroyRequest) ProtoMessage() {}
+
+func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DestroyRequest.ProtoReflect.Descriptor instead.
+func (*DestroyRequest) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *DestroyRequest) GetEnvironment() *Environment {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
+}
+
+func (x *DestroyRequest) GetOptions() []byte {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *DestroyRequest) GetProtocolVersion() string {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return ""
+}
+
+// ListEnvironmentsRequest is the request for ProviderService.ListEnvironments.
+// It is account/substrate-scoped, so it carries no manifest and no identity:
+// only the provider's opaque options and the pinned protocol version.
+type ListEnvironmentsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
+	// options, never absent and never an empty string. The CLI never inspects
+	// this field; only the provider unmarshals it.
+	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	// protocol_version pins the wire contract so a provider can reject a
+	// request it can't speak.
+	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ListEnvironmentsRequest) Reset() {
+	*x = ListEnvironmentsRequest{}
+	mi := &file_provider_v1_provider_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEnvironmentsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEnvironmentsRequest) ProtoMessage() {}
+
+func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEnvironmentsRequest.ProtoReflect.Descriptor instead.
+func (*ListEnvironmentsRequest) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ListEnvironmentsRequest) GetOptions() []byte {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *ListEnvironmentsRequest) GetProtocolVersion() string {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return ""
+}
+
+// ListEnvironmentsResponse is the reply from ProviderService.ListEnvironments:
+// one PreviewEnvironment per preview environment the provider knows about.
+type ListEnvironmentsResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Environments  []*PreviewEnvironment  `protobuf:"bytes,1,rep,name=environments,proto3" json:"environments,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListEnvironmentsResponse) Reset() {
+	*x = ListEnvironmentsResponse{}
+	mi := &file_provider_v1_provider_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListEnvironmentsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListEnvironmentsResponse) ProtoMessage() {}
+
+func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListEnvironmentsResponse.ProtoReflect.Descriptor instead.
+func (*ListEnvironmentsResponse) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *ListEnvironmentsResponse) GetEnvironments() []*PreviewEnvironment {
+	if x != nil {
+		return x.Environments
+	}
+	return nil
+}
+
+// PreviewEnvironment is a single enumerated preview environment, carrying just
+// what `ocel preview ls` renders: identity, lifecycle, the optional PR label,
+// and age/expiry metadata.
+type PreviewEnvironment struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Identity  string                 `protobuf:"bytes,1,opt,name=identity,proto3" json:"identity,omitempty"`
+	Lifecycle Environment_Lifecycle  `protobuf:"varint,2,opt,name=lifecycle,proto3,enum=provider.v1.Environment_Lifecycle" json:"lifecycle,omitempty"`
+	// label is the optional display label (e.g. the PR number). May be empty.
+	Label string `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	// created_at and expires_at are epoch seconds, 0 when unknown.
+	CreatedAt     int64 `protobuf:"varint,4,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	ExpiresAt     int64 `protobuf:"varint,5,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PreviewEnvironment) Reset() {
+	*x = PreviewEnvironment{}
+	mi := &file_provider_v1_provider_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PreviewEnvironment) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PreviewEnvironment) ProtoMessage() {}
+
+func (x *PreviewEnvironment) ProtoReflect() protoreflect.Message {
+	mi := &file_provider_v1_provider_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PreviewEnvironment.ProtoReflect.Descriptor instead.
+func (*PreviewEnvironment) Descriptor() ([]byte, []int) {
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *PreviewEnvironment) GetIdentity() string {
+	if x != nil {
+		return x.Identity
+	}
+	return ""
+}
+
+func (x *PreviewEnvironment) GetLifecycle() Environment_Lifecycle {
+	if x != nil {
+		return x.Lifecycle
+	}
+	return Environment_LIFECYCLE_UNSPECIFIED
+}
+
+func (x *PreviewEnvironment) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *PreviewEnvironment) GetCreatedAt() int64 {
+	if x != nil {
+		return x.CreatedAt
+	}
+	return 0
+}
+
+func (x *PreviewEnvironment) GetExpiresAt() int64 {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return 0
 }
 
 // DeployEvent is a single item on the Deploy response stream: either
@@ -335,7 +846,7 @@ type DeployEvent struct {
 
 func (x *DeployEvent) Reset() {
 	*x = DeployEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[4]
+	mi := &file_provider_v1_provider_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -347,7 +858,7 @@ func (x *DeployEvent) String() string {
 func (*DeployEvent) ProtoMessage() {}
 
 func (x *DeployEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[4]
+	mi := &file_provider_v1_provider_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -360,7 +871,7 @@ func (x *DeployEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployEvent.ProtoReflect.Descriptor instead.
 func (*DeployEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{4}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *DeployEvent) GetEvent() isDeployEvent_Event {
@@ -429,7 +940,7 @@ type ProgressEvent struct {
 
 func (x *ProgressEvent) Reset() {
 	*x = ProgressEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[5]
+	mi := &file_provider_v1_provider_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -441,7 +952,7 @@ func (x *ProgressEvent) String() string {
 func (*ProgressEvent) ProtoMessage() {}
 
 func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[5]
+	mi := &file_provider_v1_provider_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -454,7 +965,7 @@ func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProgressEvent.ProtoReflect.Descriptor instead.
 func (*ProgressEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{5}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ProgressEvent) GetMessage() string {
@@ -474,7 +985,7 @@ type LogEvent struct {
 
 func (x *LogEvent) Reset() {
 	*x = LogEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[6]
+	mi := &file_provider_v1_provider_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -486,7 +997,7 @@ func (x *LogEvent) String() string {
 func (*LogEvent) ProtoMessage() {}
 
 func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[6]
+	mi := &file_provider_v1_provider_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -499,7 +1010,7 @@ func (x *LogEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
 func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{6}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *LogEvent) GetMessage() string {
@@ -526,7 +1037,7 @@ type ResultEvent struct {
 
 func (x *ResultEvent) Reset() {
 	*x = ResultEvent{}
-	mi := &file_provider_v1_provider_proto_msgTypes[7]
+	mi := &file_provider_v1_provider_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -538,7 +1049,7 @@ func (x *ResultEvent) String() string {
 func (*ResultEvent) ProtoMessage() {}
 
 func (x *ResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[7]
+	mi := &file_provider_v1_provider_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -551,7 +1062,7 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
 func (*ResultEvent) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{7}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *ResultEvent) GetSuccess() bool {
@@ -594,7 +1105,7 @@ type ResourceOutput struct {
 
 func (x *ResourceOutput) Reset() {
 	*x = ResourceOutput{}
-	mi := &file_provider_v1_provider_proto_msgTypes[8]
+	mi := &file_provider_v1_provider_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -606,7 +1117,7 @@ func (x *ResourceOutput) String() string {
 func (*ResourceOutput) ProtoMessage() {}
 
 func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[8]
+	mi := &file_provider_v1_provider_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -619,7 +1130,7 @@ func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceOutput.ProtoReflect.Descriptor instead.
 func (*ResourceOutput) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{8}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *ResourceOutput) GetLogicalName() string {
@@ -688,7 +1199,7 @@ type PostgresOutput struct {
 
 func (x *PostgresOutput) Reset() {
 	*x = PostgresOutput{}
-	mi := &file_provider_v1_provider_proto_msgTypes[9]
+	mi := &file_provider_v1_provider_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -700,7 +1211,7 @@ func (x *PostgresOutput) String() string {
 func (*PostgresOutput) ProtoMessage() {}
 
 func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[9]
+	mi := &file_provider_v1_provider_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -713,7 +1224,7 @@ func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostgresOutput.ProtoReflect.Descriptor instead.
 func (*PostgresOutput) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{9}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *PostgresOutput) GetHost() string {
@@ -766,7 +1277,7 @@ type BucketOutput struct {
 
 func (x *BucketOutput) Reset() {
 	*x = BucketOutput{}
-	mi := &file_provider_v1_provider_proto_msgTypes[10]
+	mi := &file_provider_v1_provider_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -778,7 +1289,7 @@ func (x *BucketOutput) String() string {
 func (*BucketOutput) ProtoMessage() {}
 
 func (x *BucketOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_provider_v1_provider_proto_msgTypes[10]
+	mi := &file_provider_v1_provider_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -791,7 +1302,7 @@ func (x *BucketOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketOutput.ProtoReflect.Descriptor instead.
 func (*BucketOutput) Descriptor() ([]byte, []int) {
-	return file_provider_v1_provider_proto_rawDescGZIP(), []int{10}
+	return file_provider_v1_provider_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *BucketOutput) GetAddress() string {
@@ -812,7 +1323,26 @@ var File_provider_v1_provider_proto protoreflect.FileDescriptor
 
 const file_provider_v1_provider_proto_rawDesc = "" +
 	"\n" +
-	"\x1aprovider/v1/provider.proto\x12\vprovider.v1\x1a\x1cresources/v1/resources.proto\"\x8d\x01\n" +
+	"\x1aprovider/v1/provider.proto\x12\vprovider.v1\x1a\x1cresources/v1/resources.proto\"\xae\x04\n" +
+	"\vEnvironment\x124\n" +
+	"\x05class\x18\x01 \x01(\x0e2\x1e.provider.v1.Environment.ClassR\x05class\x12@\n" +
+	"\tlifecycle\x18\x02 \x01(\x0e2\".provider.v1.Environment.LifecycleR\tlifecycle\x12\x1a\n" +
+	"\bidentity\x18\x03 \x01(\tR\bidentity\x12P\n" +
+	"\x0fidentity_source\x18\x04 \x01(\x0e2'.provider.v1.Environment.IdentitySourceR\x0eidentitySource\x12\x14\n" +
+	"\x05label\x18\x05 \x01(\tR\x05label\"^\n" +
+	"\x05Class\x12\x15\n" +
+	"\x11CLASS_UNSPECIFIED\x10\x00\x12\x15\n" +
+	"\x11CLASS_DEVELOPMENT\x10\x01\x12\x11\n" +
+	"\rCLASS_PREVIEW\x10\x02\x12\x14\n" +
+	"\x10CLASS_PRODUCTION\x10\x03\"Y\n" +
+	"\tLifecycle\x12\x19\n" +
+	"\x15LIFECYCLE_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13LIFECYCLE_EPHEMERAL\x10\x01\x12\x18\n" +
+	"\x14LIFECYCLE_PERSISTENT\x10\x02\"h\n" +
+	"\x0eIdentitySource\x12\x1f\n" +
+	"\x1bIDENTITY_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
+	"\x13IDENTITY_SOURCE_GIT\x10\x01\x12\x1c\n" +
+	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\x8d\x01\n" +
 	"\bManifest\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1d\n" +
 	"\n" +
@@ -823,14 +1353,32 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\bresource\x18\x02 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
 	"\bpostgres\x18\x03 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgres\x124\n" +
 	"\x06bucket\x18\x04 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucketB\b\n" +
-	"\x06config\"\x87\x01\n" +
+	"\x06config\"\xc3\x01\n" +
 	"\rDeployRequest\x121\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x15.provider.v1.ManifestR\bmanifest\x12\x18\n" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\"W\n" +
+	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12:\n" +
+	"\venvironment\x18\x04 \x01(\v2\x18.provider.v1.EnvironmentR\venvironment\"W\n" +
 	"\x10BootstrapRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\"\xaf\x01\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\"\x91\x01\n" +
+	"\x0eDestroyRequest\x12:\n" +
+	"\venvironment\x18\x01 \x01(\v2\x18.provider.v1.EnvironmentR\venvironment\x12\x18\n" +
+	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
+	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\"^\n" +
+	"\x17ListEnvironmentsRequest\x12\x18\n" +
+	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\"_\n" +
+	"\x18ListEnvironmentsResponse\x12C\n" +
+	"\fenvironments\x18\x01 \x03(\v2\x1f.provider.v1.PreviewEnvironmentR\fenvironments\"\xc6\x01\n" +
+	"\x12PreviewEnvironment\x12\x1a\n" +
+	"\bidentity\x18\x01 \x01(\tR\bidentity\x12@\n" +
+	"\tlifecycle\x18\x02 \x01(\x0e2\".provider.v1.Environment.LifecycleR\tlifecycle\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x1d\n" +
+	"\n" +
+	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\xaf\x01\n" +
 	"\vDeployEvent\x128\n" +
 	"\bprogress\x18\x01 \x01(\v2\x1a.provider.v1.ProgressEventH\x00R\bprogress\x12)\n" +
 	"\x03log\x18\x02 \x01(\v2\x15.provider.v1.LogEventH\x00R\x03log\x122\n" +
@@ -857,10 +1405,12 @@ const file_provider_v1_provider_proto_rawDesc = "" +
 	"\bpassword\x18\x05 \x01(\tB\x03\x80\x01\x01R\bpassword\"@\n" +
 	"\fBucketOutput\x12\x18\n" +
 	"\aaddress\x18\x01 \x01(\tR\aaddress\x12\x16\n" +
-	"\x06bucket\x18\x02 \x01(\tR\x06bucket2\x9b\x01\n" +
+	"\x06bucket\x18\x02 \x01(\tR\x06bucket2\xc0\x02\n" +
 	"\x0fProviderService\x12@\n" +
 	"\x06Deploy\x12\x1a.provider.v1.DeployRequest\x1a\x18.provider.v1.DeployEvent0\x01\x12F\n" +
-	"\tBootstrap\x12\x1d.provider.v1.BootstrapRequest\x1a\x18.provider.v1.DeployEvent0\x01B9Z7github.com/ocelhq/ocel/pkg/proto/provider/v1;providerv1b\x06proto3"
+	"\tBootstrap\x12\x1d.provider.v1.BootstrapRequest\x1a\x18.provider.v1.DeployEvent0\x01\x12B\n" +
+	"\aDestroy\x12\x1b.provider.v1.DestroyRequest\x1a\x18.provider.v1.DeployEvent0\x01\x12_\n" +
+	"\x10ListEnvironments\x12$.provider.v1.ListEnvironmentsRequest\x1a%.provider.v1.ListEnvironmentsResponseB9Z7github.com/ocelhq/ocel/pkg/proto/provider/v1;providerv1b\x06proto3"
 
 var (
 	file_provider_v1_provider_proto_rawDescOnce sync.Once
@@ -874,44 +1424,64 @@ func file_provider_v1_provider_proto_rawDescGZIP() []byte {
 	return file_provider_v1_provider_proto_rawDescData
 }
 
-var file_provider_v1_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_provider_v1_provider_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_provider_v1_provider_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
 var file_provider_v1_provider_proto_goTypes = []any{
-	(*Manifest)(nil),              // 0: provider.v1.Manifest
-	(*ManifestResource)(nil),      // 1: provider.v1.ManifestResource
-	(*DeployRequest)(nil),         // 2: provider.v1.DeployRequest
-	(*BootstrapRequest)(nil),      // 3: provider.v1.BootstrapRequest
-	(*DeployEvent)(nil),           // 4: provider.v1.DeployEvent
-	(*ProgressEvent)(nil),         // 5: provider.v1.ProgressEvent
-	(*LogEvent)(nil),              // 6: provider.v1.LogEvent
-	(*ResultEvent)(nil),           // 7: provider.v1.ResultEvent
-	(*ResourceOutput)(nil),        // 8: provider.v1.ResourceOutput
-	(*PostgresOutput)(nil),        // 9: provider.v1.PostgresOutput
-	(*BucketOutput)(nil),          // 10: provider.v1.BucketOutput
-	(*v1.ResourceIdentifier)(nil), // 11: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),     // 12: resources.v1.PostgresConfig
-	(*v1.BucketConfig)(nil),       // 13: resources.v1.BucketConfig
+	(Environment_Class)(0),           // 0: provider.v1.Environment.Class
+	(Environment_Lifecycle)(0),       // 1: provider.v1.Environment.Lifecycle
+	(Environment_IdentitySource)(0),  // 2: provider.v1.Environment.IdentitySource
+	(*Environment)(nil),              // 3: provider.v1.Environment
+	(*Manifest)(nil),                 // 4: provider.v1.Manifest
+	(*ManifestResource)(nil),         // 5: provider.v1.ManifestResource
+	(*DeployRequest)(nil),            // 6: provider.v1.DeployRequest
+	(*BootstrapRequest)(nil),         // 7: provider.v1.BootstrapRequest
+	(*DestroyRequest)(nil),           // 8: provider.v1.DestroyRequest
+	(*ListEnvironmentsRequest)(nil),  // 9: provider.v1.ListEnvironmentsRequest
+	(*ListEnvironmentsResponse)(nil), // 10: provider.v1.ListEnvironmentsResponse
+	(*PreviewEnvironment)(nil),       // 11: provider.v1.PreviewEnvironment
+	(*DeployEvent)(nil),              // 12: provider.v1.DeployEvent
+	(*ProgressEvent)(nil),            // 13: provider.v1.ProgressEvent
+	(*LogEvent)(nil),                 // 14: provider.v1.LogEvent
+	(*ResultEvent)(nil),              // 15: provider.v1.ResultEvent
+	(*ResourceOutput)(nil),           // 16: provider.v1.ResourceOutput
+	(*PostgresOutput)(nil),           // 17: provider.v1.PostgresOutput
+	(*BucketOutput)(nil),             // 18: provider.v1.BucketOutput
+	(*v1.ResourceIdentifier)(nil),    // 19: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),        // 20: resources.v1.PostgresConfig
+	(*v1.BucketConfig)(nil),          // 21: resources.v1.BucketConfig
 }
 var file_provider_v1_provider_proto_depIdxs = []int32{
-	1,  // 0: provider.v1.Manifest.resources:type_name -> provider.v1.ManifestResource
-	11, // 1: provider.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	12, // 2: provider.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	13, // 3: provider.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
-	0,  // 4: provider.v1.DeployRequest.manifest:type_name -> provider.v1.Manifest
-	5,  // 5: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
-	6,  // 6: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
-	7,  // 7: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
-	8,  // 8: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
-	9,  // 9: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
-	10, // 10: provider.v1.ResourceOutput.bucket:type_name -> provider.v1.BucketOutput
-	2,  // 11: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
-	3,  // 12: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
-	4,  // 13: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
-	4,  // 14: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
-	13, // [13:15] is the sub-list for method output_type
-	11, // [11:13] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	0,  // 0: provider.v1.Environment.class:type_name -> provider.v1.Environment.Class
+	1,  // 1: provider.v1.Environment.lifecycle:type_name -> provider.v1.Environment.Lifecycle
+	2,  // 2: provider.v1.Environment.identity_source:type_name -> provider.v1.Environment.IdentitySource
+	5,  // 3: provider.v1.Manifest.resources:type_name -> provider.v1.ManifestResource
+	19, // 4: provider.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	20, // 5: provider.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	21, // 6: provider.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	4,  // 7: provider.v1.DeployRequest.manifest:type_name -> provider.v1.Manifest
+	3,  // 8: provider.v1.DeployRequest.environment:type_name -> provider.v1.Environment
+	3,  // 9: provider.v1.DestroyRequest.environment:type_name -> provider.v1.Environment
+	11, // 10: provider.v1.ListEnvironmentsResponse.environments:type_name -> provider.v1.PreviewEnvironment
+	1,  // 11: provider.v1.PreviewEnvironment.lifecycle:type_name -> provider.v1.Environment.Lifecycle
+	13, // 12: provider.v1.DeployEvent.progress:type_name -> provider.v1.ProgressEvent
+	14, // 13: provider.v1.DeployEvent.log:type_name -> provider.v1.LogEvent
+	15, // 14: provider.v1.DeployEvent.result:type_name -> provider.v1.ResultEvent
+	16, // 15: provider.v1.ResultEvent.outputs:type_name -> provider.v1.ResourceOutput
+	17, // 16: provider.v1.ResourceOutput.postgres:type_name -> provider.v1.PostgresOutput
+	18, // 17: provider.v1.ResourceOutput.bucket:type_name -> provider.v1.BucketOutput
+	6,  // 18: provider.v1.ProviderService.Deploy:input_type -> provider.v1.DeployRequest
+	7,  // 19: provider.v1.ProviderService.Bootstrap:input_type -> provider.v1.BootstrapRequest
+	8,  // 20: provider.v1.ProviderService.Destroy:input_type -> provider.v1.DestroyRequest
+	9,  // 21: provider.v1.ProviderService.ListEnvironments:input_type -> provider.v1.ListEnvironmentsRequest
+	12, // 22: provider.v1.ProviderService.Deploy:output_type -> provider.v1.DeployEvent
+	12, // 23: provider.v1.ProviderService.Bootstrap:output_type -> provider.v1.DeployEvent
+	12, // 24: provider.v1.ProviderService.Destroy:output_type -> provider.v1.DeployEvent
+	10, // 25: provider.v1.ProviderService.ListEnvironments:output_type -> provider.v1.ListEnvironmentsResponse
+	22, // [22:26] is the sub-list for method output_type
+	18, // [18:22] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_provider_v1_provider_proto_init() }
@@ -919,16 +1489,16 @@ func file_provider_v1_provider_proto_init() {
 	if File_provider_v1_provider_proto != nil {
 		return
 	}
-	file_provider_v1_provider_proto_msgTypes[1].OneofWrappers = []any{
+	file_provider_v1_provider_proto_msgTypes[2].OneofWrappers = []any{
 		(*ManifestResource_Postgres)(nil),
 		(*ManifestResource_Bucket)(nil),
 	}
-	file_provider_v1_provider_proto_msgTypes[4].OneofWrappers = []any{
+	file_provider_v1_provider_proto_msgTypes[9].OneofWrappers = []any{
 		(*DeployEvent_Progress)(nil),
 		(*DeployEvent_Log)(nil),
 		(*DeployEvent_Result)(nil),
 	}
-	file_provider_v1_provider_proto_msgTypes[8].OneofWrappers = []any{
+	file_provider_v1_provider_proto_msgTypes[13].OneofWrappers = []any{
 		(*ResourceOutput_Postgres)(nil),
 		(*ResourceOutput_Bucket)(nil),
 	}
@@ -937,13 +1507,14 @@ func file_provider_v1_provider_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_provider_v1_provider_proto_rawDesc), len(file_provider_v1_provider_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   11,
+			NumEnums:      3,
+			NumMessages:   16,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_provider_v1_provider_proto_goTypes,
 		DependencyIndexes: file_provider_v1_provider_proto_depIdxs,
+		EnumInfos:         file_provider_v1_provider_proto_enumTypes,
 		MessageInfos:      file_provider_v1_provider_proto_msgTypes,
 	}.Build()
 	File_provider_v1_provider_proto = out.File
