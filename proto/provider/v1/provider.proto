@@ -50,6 +50,68 @@ service ProviderService {
     // progress/log events, then a terminal ResultEvent. Bootstrap carries no
     // outputs on its result.
     rpc Bootstrap(BootstrapRequest) returns (stream DeployEvent);
+
+    // Destroy tears down the environment addressed by DestroyRequest.environment.
+    // It is the inverse of Deploy and reuses the same DeployEvent stream:
+    // progress/log events, then a terminal ResultEvent (which carries no
+    // outputs). The provider selects exactly the environment named by the
+    // Environment block; the CLI never asks it to reverse-engineer how the
+    // teardown was invoked.
+    rpc Destroy(DestroyRequest) returns (stream DeployEvent);
+
+    // ListEnvironments enumerates the preview environments the provider knows
+    // about from its own authoritative state, one entry per environment. It
+    // backs `ocel preview ls`.
+    rpc ListEnvironments(ListEnvironmentsRequest) returns (ListEnvironmentsResponse);
+}
+
+// Environment is the fully resolved target a provisioning verb acts on. The
+// CLI normalizes every invocation into one of these before spawning the
+// provider, so the provider branches only on this data and never inspects how
+// the command was called. `ocel deploy` and `ocel preview` drive the same
+// Deploy RPC and diverge only by the Environment they send: deploy sends
+// class=PRODUCTION with lifecycle unspecified; an ephemeral preview sends
+// class=PREVIEW, lifecycle=EPHEMERAL; a persistent (named) preview sends
+// class=PREVIEW, lifecycle=PERSISTENT.
+message Environment {
+  // Class is the environment class a command acts under. It selects which
+  // substrate the provider realizes against and gates the class guard.
+  enum Class {
+    CLASS_UNSPECIFIED = 0;
+    CLASS_DEVELOPMENT = 1;
+    CLASS_PREVIEW = 2;
+    CLASS_PRODUCTION = 3;
+  }
+
+  // Lifecycle distinguishes the two preview lifecycles. It is meaningful only
+  // for class=PREVIEW and is LIFECYCLE_UNSPECIFIED for every other class.
+  enum Lifecycle {
+    LIFECYCLE_UNSPECIFIED = 0;
+    LIFECYCLE_EPHEMERAL = 1;
+    LIFECYCLE_PERSISTENT = 2;
+  }
+
+  // IdentitySource records how identity was derived: from the git branch/ref
+  // (ephemeral previews) or explicitly declared by the user (persistent
+  // previews named with --name).
+  enum IdentitySource {
+    IDENTITY_SOURCE_UNSPECIFIED = 0;
+    IDENTITY_SOURCE_GIT = 1;
+    IDENTITY_SOURCE_DECLARED = 2;
+  }
+
+  Class class = 1;
+  Lifecycle lifecycle = 2;
+
+  // identity is the canonical, substrate-safe key for this environment: a
+  // valid Postgres identifier and stack-name token. It is stable across
+  // re-runs, so re-running a preview updates the same environment in place.
+  string identity = 3;
+  IdentitySource identity_source = 4;
+
+  // label is an optional display label (e.g. the PR number) surfaced by
+  // `ocel preview ls`. It is never part of identity and may be empty.
+  string label = 5;
 }
 
 // Manifest is the versioned, deterministic artifact the CLI builds from a
@@ -93,6 +155,10 @@ message DeployRequest {
   // protocol_version pins the DeployRequest/DeployEvent wire contract so a
   // provider can reject a request it can't speak.
   string protocol_version = 3;
+
+  // environment is the fully resolved target this deploy acts on. `ocel
+  // deploy` and `ocel preview` both drive this RPC and diverge only here.
+  Environment environment = 4;
 }
 
 // BootstrapRequest is the request for ProviderService.Bootstrap. Bootstrap
@@ -107,6 +173,57 @@ message BootstrapRequest {
   // protocol_version pins the wire contract so a provider can reject a
   // request it can't speak.
   string protocol_version = 2;
+}
+
+// DestroyRequest is the request for ProviderService.Destroy. It carries the
+// full Environment block as its addressing so the provider tears down exactly
+// the right environment.
+message DestroyRequest {
+  Environment environment = 1;
+
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 2;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 3;
+}
+
+// ListEnvironmentsRequest is the request for ProviderService.ListEnvironments.
+// It is account/substrate-scoped, so it carries no manifest and no identity:
+// only the provider's opaque options and the pinned protocol version.
+message ListEnvironmentsRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+}
+
+// ListEnvironmentsResponse is the reply from ProviderService.ListEnvironments:
+// one PreviewEnvironment per preview environment the provider knows about.
+message ListEnvironmentsResponse {
+  repeated PreviewEnvironment environments = 1;
+}
+
+// PreviewEnvironment is a single enumerated preview environment, carrying just
+// what `ocel preview ls` renders: identity, lifecycle, the optional PR label,
+// and age/expiry metadata.
+message PreviewEnvironment {
+  string identity = 1;
+  Environment.Lifecycle lifecycle = 2;
+
+  // label is the optional display label (e.g. the PR number). May be empty.
+  string label = 3;
+
+  // created_at and expires_at are epoch seconds, 0 when unknown.
+  int64 created_at = 4;
+  int64 expires_at = 5;
 }
 
 // DeployEvent is a single item on the Deploy response stream: either

@@ -2,8 +2,8 @@
 // @generated from file provider/v1/provider.proto (package provider.v1, syntax proto3)
 /* eslint-disable */
 
-import type { GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { BucketConfig, PostgresConfig, ResourceIdentifier } from "../../resources/v1/resources_pb";
 import { file_resources_v1_resources } from "../../resources/v1/resources_pb";
 import type { Message } from "@bufbuild/protobuf";
@@ -12,7 +12,153 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file provider/v1/provider.proto.
  */
 export const file_provider_v1_provider: GenFile = /*@__PURE__*/
-  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIsYBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYBCABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnImMKDURlcGxveVJlcXVlc3QSJwoIbWFuaWZlc3QYASABKAsyFS5wcm92aWRlci52MS5NYW5pZmVzdBIPCgdvcHRpb25zGAIgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAyABKAkiPQoQQm9vdHN0cmFwUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkimAEKC0RlcGxveUV2ZW50Ei4KCHByb2dyZXNzGAEgASgLMhoucHJvdmlkZXIudjEuUHJvZ3Jlc3NFdmVudEgAEiQKA2xvZxgCIAEoCzIVLnByb3ZpZGVyLnYxLkxvZ0V2ZW50SAASKgoGcmVzdWx0GAMgASgLMhgucHJvdmlkZXIudjEuUmVzdWx0RXZlbnRIAEIHCgVldmVudCIgCg1Qcm9ncmVzc0V2ZW50Eg8KB21lc3NhZ2UYASABKAkiGwoITG9nRXZlbnQSDwoHbWVzc2FnZRgBIAEoCSJbCgtSZXN1bHRFdmVudBIPCgdzdWNjZXNzGAEgASgIEg0KBWVycm9yGAIgASgJEiwKB291dHB1dHMYAyADKAsyGy5wcm92aWRlci52MS5SZXNvdXJjZU91dHB1dCKOAQoOUmVzb3VyY2VPdXRwdXQSFAoMbG9naWNhbF9uYW1lGAEgASgJEi8KCHBvc3RncmVzGAIgASgLMhsucHJvdmlkZXIudjEuUG9zdGdyZXNPdXRwdXRIABIrCgZidWNrZXQYAyABKAsyGS5wcm92aWRlci52MS5CdWNrZXRPdXRwdXRIAEIICgZvdXRwdXQiZwoOUG9zdGdyZXNPdXRwdXQSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhAKCGRhdGFiYXNlGAMgASgJEhAKCHVzZXJuYW1lGAQgASgJEhUKCHBhc3N3b3JkGAUgASgJQgOAAQEiLwoMQnVja2V0T3V0cHV0Eg8KB2FkZHJlc3MYASABKAkSDgoGYnVja2V0GAIgASgJMpsBCg9Qcm92aWRlclNlcnZpY2USQAoGRGVwbG95EhoucHJvdmlkZXIudjEuRGVwbG95UmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAESRgoJQm9vdHN0cmFwEh0ucHJvdmlkZXIudjEuQm9vdHN0cmFwUmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAFCOVo3Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vcHJvdmlkZXIvdjE7cHJvdmlkZXJ2MWIGcHJvdG8z", [file_resources_v1_resources]);
+  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEi+wMKC0Vudmlyb25tZW50Ei0KBWNsYXNzGAEgASgOMh4ucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuQ2xhc3MSNQoJbGlmZWN5Y2xlGAIgASgOMiIucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEhAKCGlkZW50aXR5GAMgASgJEkAKD2lkZW50aXR5X3NvdXJjZRgEIAEoDjInLnByb3ZpZGVyLnYxLkVudmlyb25tZW50LklkZW50aXR5U291cmNlEg0KBWxhYmVsGAUgASgJIl4KBUNsYXNzEhUKEUNMQVNTX1VOU1BFQ0lGSUVEEAASFQoRQ0xBU1NfREVWRUxPUE1FTlQQARIRCg1DTEFTU19QUkVWSUVXEAISFAoQQ0xBU1NfUFJPRFVDVElPThADIlkKCUxpZmVjeWNsZRIZChVMSUZFQ1lDTEVfVU5TUEVDSUZJRUQQABIXChNMSUZFQ1lDTEVfRVBIRU1FUkFMEAESGAoUTElGRUNZQ0xFX1BFUlNJU1RFTlQQAiJoCg5JZGVudGl0eVNvdXJjZRIfChtJREVOVElUWV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIXChNJREVOVElUWV9TT1VSQ0VfR0lUEAESHAoYSURFTlRJVFlfU09VUkNFX0RFQ0xBUkVEEAIiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIsYBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYBCABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIpIBCg1EZXBsb3lSZXF1ZXN0EicKCG1hbmlmZXN0GAEgASgLMhUucHJvdmlkZXIudjEuTWFuaWZlc3QSDwoHb3B0aW9ucxgCIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgJEi0KC2Vudmlyb25tZW50GAQgASgLMhgucHJvdmlkZXIudjEuRW52aXJvbm1lbnQiPQoQQm9vdHN0cmFwUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkiagoORGVzdHJveVJlcXVlc3QSLQoLZW52aXJvbm1lbnQYASABKAsyGC5wcm92aWRlci52MS5FbnZpcm9ubWVudBIPCgdvcHRpb25zGAIgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAyABKAkiRAoXTGlzdEVudmlyb25tZW50c1JlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJIlEKGExpc3RFbnZpcm9ubWVudHNSZXNwb25zZRI1CgxlbnZpcm9ubWVudHMYASADKAsyHy5wcm92aWRlci52MS5QcmV2aWV3RW52aXJvbm1lbnQilAEKElByZXZpZXdFbnZpcm9ubWVudBIQCghpZGVudGl0eRgBIAEoCRI1CglsaWZlY3ljbGUYAiABKA4yIi5wcm92aWRlci52MS5FbnZpcm9ubWVudC5MaWZlY3ljbGUSDQoFbGFiZWwYAyABKAkSEgoKY3JlYXRlZF9hdBgEIAEoAxISCgpleHBpcmVzX2F0GAUgASgDIpgBCgtEZXBsb3lFdmVudBIuCghwcm9ncmVzcxgBIAEoCzIaLnByb3ZpZGVyLnYxLlByb2dyZXNzRXZlbnRIABIkCgNsb2cYAiABKAsyFS5wcm92aWRlci52MS5Mb2dFdmVudEgAEioKBnJlc3VsdBgDIAEoCzIYLnByb3ZpZGVyLnYxLlJlc3VsdEV2ZW50SABCBwoFZXZlbnQiIAoNUHJvZ3Jlc3NFdmVudBIPCgdtZXNzYWdlGAEgASgJIhsKCExvZ0V2ZW50Eg8KB21lc3NhZ2UYASABKAkiWwoLUmVzdWx0RXZlbnQSDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCRIsCgdvdXRwdXRzGAMgAygLMhsucHJvdmlkZXIudjEuUmVzb3VyY2VPdXRwdXQijgEKDlJlc291cmNlT3V0cHV0EhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIvCghwb3N0Z3JlcxgCIAEoCzIbLnByb3ZpZGVyLnYxLlBvc3RncmVzT3V0cHV0SAASKwoGYnVja2V0GAMgASgLMhkucHJvdmlkZXIudjEuQnVja2V0T3V0cHV0SABCCAoGb3V0cHV0ImcKDlBvc3RncmVzT3V0cHV0EgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBIi8KDEJ1Y2tldE91dHB1dBIPCgdhZGRyZXNzGAEgASgJEg4KBmJ1Y2tldBgCIAEoCTLAAgoPUHJvdmlkZXJTZXJ2aWNlEkAKBkRlcGxveRIaLnByb3ZpZGVyLnYxLkRlcGxveVJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEkYKCUJvb3RzdHJhcBIdLnByb3ZpZGVyLnYxLkJvb3RzdHJhcFJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEkIKB0Rlc3Ryb3kSGy5wcm92aWRlci52MS5EZXN0cm95UmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAESXwoQTGlzdEVudmlyb25tZW50cxIkLnByb3ZpZGVyLnYxLkxpc3RFbnZpcm9ubWVudHNSZXF1ZXN0GiUucHJvdmlkZXIudjEuTGlzdEVudmlyb25tZW50c1Jlc3BvbnNlQjlaN2dpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL3Byb3ZpZGVyL3YxO3Byb3ZpZGVydjFiBnByb3RvMw", [file_resources_v1_resources]);
+
+/**
+ * Environment is the fully resolved target a provisioning verb acts on. The
+ * CLI normalizes every invocation into one of these before spawning the
+ * provider, so the provider branches only on this data and never inspects how
+ * the command was called. `ocel deploy` and `ocel preview` drive the same
+ * Deploy RPC and diverge only by the Environment they send: deploy sends
+ * class=PRODUCTION with lifecycle unspecified; an ephemeral preview sends
+ * class=PREVIEW, lifecycle=EPHEMERAL; a persistent (named) preview sends
+ * class=PREVIEW, lifecycle=PERSISTENT.
+ *
+ * @generated from message provider.v1.Environment
+ */
+export type Environment = Message<"provider.v1.Environment"> & {
+  /**
+   * @generated from field: provider.v1.Environment.Class class = 1;
+   */
+  class: Environment_Class;
+
+  /**
+   * @generated from field: provider.v1.Environment.Lifecycle lifecycle = 2;
+   */
+  lifecycle: Environment_Lifecycle;
+
+  /**
+   * identity is the canonical, substrate-safe key for this environment: a
+   * valid Postgres identifier and stack-name token. It is stable across
+   * re-runs, so re-running a preview updates the same environment in place.
+   *
+   * @generated from field: string identity = 3;
+   */
+  identity: string;
+
+  /**
+   * @generated from field: provider.v1.Environment.IdentitySource identity_source = 4;
+   */
+  identitySource: Environment_IdentitySource;
+
+  /**
+   * label is an optional display label (e.g. the PR number) surfaced by
+   * `ocel preview ls`. It is never part of identity and may be empty.
+   *
+   * @generated from field: string label = 5;
+   */
+  label: string;
+};
+
+/**
+ * Describes the message provider.v1.Environment.
+ * Use `create(EnvironmentSchema)` to create a new message.
+ */
+export const EnvironmentSchema: GenMessage<Environment> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 0);
+
+/**
+ * Class is the environment class a command acts under. It selects which
+ * substrate the provider realizes against and gates the class guard.
+ *
+ * @generated from enum provider.v1.Environment.Class
+ */
+export enum Environment_Class {
+  /**
+   * @generated from enum value: CLASS_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: CLASS_DEVELOPMENT = 1;
+   */
+  DEVELOPMENT = 1,
+
+  /**
+   * @generated from enum value: CLASS_PREVIEW = 2;
+   */
+  PREVIEW = 2,
+
+  /**
+   * @generated from enum value: CLASS_PRODUCTION = 3;
+   */
+  PRODUCTION = 3,
+}
+
+/**
+ * Describes the enum provider.v1.Environment.Class.
+ */
+export const Environment_ClassSchema: GenEnum<Environment_Class> = /*@__PURE__*/
+  enumDesc(file_provider_v1_provider, 0, 0);
+
+/**
+ * Lifecycle distinguishes the two preview lifecycles. It is meaningful only
+ * for class=PREVIEW and is LIFECYCLE_UNSPECIFIED for every other class.
+ *
+ * @generated from enum provider.v1.Environment.Lifecycle
+ */
+export enum Environment_Lifecycle {
+  /**
+   * @generated from enum value: LIFECYCLE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: LIFECYCLE_EPHEMERAL = 1;
+   */
+  EPHEMERAL = 1,
+
+  /**
+   * @generated from enum value: LIFECYCLE_PERSISTENT = 2;
+   */
+  PERSISTENT = 2,
+}
+
+/**
+ * Describes the enum provider.v1.Environment.Lifecycle.
+ */
+export const Environment_LifecycleSchema: GenEnum<Environment_Lifecycle> = /*@__PURE__*/
+  enumDesc(file_provider_v1_provider, 0, 1);
+
+/**
+ * IdentitySource records how identity was derived: from the git branch/ref
+ * (ephemeral previews) or explicitly declared by the user (persistent
+ * previews named with --name).
+ *
+ * @generated from enum provider.v1.Environment.IdentitySource
+ */
+export enum Environment_IdentitySource {
+  /**
+   * @generated from enum value: IDENTITY_SOURCE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * @generated from enum value: IDENTITY_SOURCE_GIT = 1;
+   */
+  GIT = 1,
+
+  /**
+   * @generated from enum value: IDENTITY_SOURCE_DECLARED = 2;
+   */
+  DECLARED = 2,
+}
+
+/**
+ * Describes the enum provider.v1.Environment.IdentitySource.
+ */
+export const Environment_IdentitySourceSchema: GenEnum<Environment_IdentitySource> = /*@__PURE__*/
+  enumDesc(file_provider_v1_provider, 0, 2);
 
 /**
  * Manifest is the versioned, deterministic artifact the CLI builds from a
@@ -45,7 +191,7 @@ export type Manifest = Message<"provider.v1.Manifest"> & {
  * Use `create(ManifestSchema)` to create a new message.
  */
 export const ManifestSchema: GenMessage<Manifest> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 0);
+  messageDesc(file_provider_v1_provider, 1);
 
 /**
  * ManifestResource pairs a resource's identity with its typed configuration.
@@ -94,7 +240,7 @@ export type ManifestResource = Message<"provider.v1.ManifestResource"> & {
  * Use `create(ManifestResourceSchema)` to create a new message.
  */
 export const ManifestResourceSchema: GenMessage<ManifestResource> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 1);
+  messageDesc(file_provider_v1_provider, 2);
 
 /**
  * DeployRequest is the sole request this slice: the manifest to provision
@@ -124,6 +270,14 @@ export type DeployRequest = Message<"provider.v1.DeployRequest"> & {
    * @generated from field: string protocol_version = 3;
    */
   protocolVersion: string;
+
+  /**
+   * environment is the fully resolved target this deploy acts on. `ocel
+   * deploy` and `ocel preview` both drive this RPC and diverge only here.
+   *
+   * @generated from field: provider.v1.Environment environment = 4;
+   */
+  environment?: Environment | undefined;
 };
 
 /**
@@ -131,7 +285,7 @@ export type DeployRequest = Message<"provider.v1.DeployRequest"> & {
  * Use `create(DeployRequestSchema)` to create a new message.
  */
 export const DeployRequestSchema: GenMessage<DeployRequest> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 2);
+  messageDesc(file_provider_v1_provider, 3);
 
 /**
  * BootstrapRequest is the request for ProviderService.Bootstrap. Bootstrap
@@ -164,7 +318,143 @@ export type BootstrapRequest = Message<"provider.v1.BootstrapRequest"> & {
  * Use `create(BootstrapRequestSchema)` to create a new message.
  */
 export const BootstrapRequestSchema: GenMessage<BootstrapRequest> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 3);
+  messageDesc(file_provider_v1_provider, 4);
+
+/**
+ * DestroyRequest is the request for ProviderService.Destroy. It carries the
+ * full Environment block as its addressing so the provider tears down exactly
+ * the right environment.
+ *
+ * @generated from message provider.v1.DestroyRequest
+ */
+export type DestroyRequest = Message<"provider.v1.DestroyRequest"> & {
+  /**
+   * @generated from field: provider.v1.Environment environment = 1;
+   */
+  environment?: Environment | undefined;
+
+  /**
+   * options is always UTF-8 JSON bytes: `{}` when the provider was given no
+   * options, never absent and never an empty string. The CLI never inspects
+   * this field; only the provider unmarshals it.
+   *
+   * @generated from field: bytes options = 2;
+   */
+  options: Uint8Array;
+
+  /**
+   * protocol_version pins the wire contract so a provider can reject a
+   * request it can't speak.
+   *
+   * @generated from field: string protocol_version = 3;
+   */
+  protocolVersion: string;
+};
+
+/**
+ * Describes the message provider.v1.DestroyRequest.
+ * Use `create(DestroyRequestSchema)` to create a new message.
+ */
+export const DestroyRequestSchema: GenMessage<DestroyRequest> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 5);
+
+/**
+ * ListEnvironmentsRequest is the request for ProviderService.ListEnvironments.
+ * It is account/substrate-scoped, so it carries no manifest and no identity:
+ * only the provider's opaque options and the pinned protocol version.
+ *
+ * @generated from message provider.v1.ListEnvironmentsRequest
+ */
+export type ListEnvironmentsRequest = Message<"provider.v1.ListEnvironmentsRequest"> & {
+  /**
+   * options is always UTF-8 JSON bytes: `{}` when the provider was given no
+   * options, never absent and never an empty string. The CLI never inspects
+   * this field; only the provider unmarshals it.
+   *
+   * @generated from field: bytes options = 1;
+   */
+  options: Uint8Array;
+
+  /**
+   * protocol_version pins the wire contract so a provider can reject a
+   * request it can't speak.
+   *
+   * @generated from field: string protocol_version = 2;
+   */
+  protocolVersion: string;
+};
+
+/**
+ * Describes the message provider.v1.ListEnvironmentsRequest.
+ * Use `create(ListEnvironmentsRequestSchema)` to create a new message.
+ */
+export const ListEnvironmentsRequestSchema: GenMessage<ListEnvironmentsRequest> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 6);
+
+/**
+ * ListEnvironmentsResponse is the reply from ProviderService.ListEnvironments:
+ * one PreviewEnvironment per preview environment the provider knows about.
+ *
+ * @generated from message provider.v1.ListEnvironmentsResponse
+ */
+export type ListEnvironmentsResponse = Message<"provider.v1.ListEnvironmentsResponse"> & {
+  /**
+   * @generated from field: repeated provider.v1.PreviewEnvironment environments = 1;
+   */
+  environments: PreviewEnvironment[];
+};
+
+/**
+ * Describes the message provider.v1.ListEnvironmentsResponse.
+ * Use `create(ListEnvironmentsResponseSchema)` to create a new message.
+ */
+export const ListEnvironmentsResponseSchema: GenMessage<ListEnvironmentsResponse> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 7);
+
+/**
+ * PreviewEnvironment is a single enumerated preview environment, carrying just
+ * what `ocel preview ls` renders: identity, lifecycle, the optional PR label,
+ * and age/expiry metadata.
+ *
+ * @generated from message provider.v1.PreviewEnvironment
+ */
+export type PreviewEnvironment = Message<"provider.v1.PreviewEnvironment"> & {
+  /**
+   * @generated from field: string identity = 1;
+   */
+  identity: string;
+
+  /**
+   * @generated from field: provider.v1.Environment.Lifecycle lifecycle = 2;
+   */
+  lifecycle: Environment_Lifecycle;
+
+  /**
+   * label is the optional display label (e.g. the PR number). May be empty.
+   *
+   * @generated from field: string label = 3;
+   */
+  label: string;
+
+  /**
+   * created_at and expires_at are epoch seconds, 0 when unknown.
+   *
+   * @generated from field: int64 created_at = 4;
+   */
+  createdAt: bigint;
+
+  /**
+   * @generated from field: int64 expires_at = 5;
+   */
+  expiresAt: bigint;
+};
+
+/**
+ * Describes the message provider.v1.PreviewEnvironment.
+ * Use `create(PreviewEnvironmentSchema)` to create a new message.
+ */
+export const PreviewEnvironmentSchema: GenMessage<PreviewEnvironment> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 8);
 
 /**
  * DeployEvent is a single item on the Deploy response stream: either
@@ -202,7 +492,7 @@ export type DeployEvent = Message<"provider.v1.DeployEvent"> & {
  * Use `create(DeployEventSchema)` to create a new message.
  */
 export const DeployEventSchema: GenMessage<DeployEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 4);
+  messageDesc(file_provider_v1_provider, 9);
 
 /**
  * ProgressEvent reports a discrete, human-readable step of deploy progress.
@@ -221,7 +511,7 @@ export type ProgressEvent = Message<"provider.v1.ProgressEvent"> & {
  * Use `create(ProgressEventSchema)` to create a new message.
  */
 export const ProgressEventSchema: GenMessage<ProgressEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 5);
+  messageDesc(file_provider_v1_provider, 10);
 
 /**
  * LogEvent carries diagnostic output that isn't a discrete progress step.
@@ -240,7 +530,7 @@ export type LogEvent = Message<"provider.v1.LogEvent"> & {
  * Use `create(LogEventSchema)` to create a new message.
  */
 export const LogEventSchema: GenMessage<LogEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 6);
+  messageDesc(file_provider_v1_provider, 11);
 
 /**
  * ResultEvent is always the last event on the stream: success, or failure
@@ -277,7 +567,7 @@ export type ResultEvent = Message<"provider.v1.ResultEvent"> & {
  * Use `create(ResultEventSchema)` to create a new message.
  */
 export const ResultEventSchema: GenMessage<ResultEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 7);
+  messageDesc(file_provider_v1_provider, 12);
 
 /**
  * ResourceOutput pairs a resource's logical name with its typed connection
@@ -318,7 +608,7 @@ export type ResourceOutput = Message<"provider.v1.ResourceOutput"> & {
  * Use `create(ResourceOutputSchema)` to create a new message.
  */
 export const ResourceOutputSchema: GenMessage<ResourceOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 8);
+  messageDesc(file_provider_v1_provider, 13);
 
 /**
  * PostgresOutput is the discrete connection detail for a provisioned
@@ -362,7 +652,7 @@ export type PostgresOutput = Message<"provider.v1.PostgresOutput"> & {
  * Use `create(PostgresOutputSchema)` to create a new message.
  */
 export const PostgresOutputSchema: GenMessage<PostgresOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 9);
+  messageDesc(file_provider_v1_provider, 14);
 
 /**
  * BucketOutput is the discrete connection detail for a provisioned bucket
@@ -390,7 +680,7 @@ export type BucketOutput = Message<"provider.v1.BucketOutput"> & {
  * Use `create(BucketOutputSchema)` to create a new message.
  */
 export const BucketOutputSchema: GenMessage<BucketOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 10);
+  messageDesc(file_provider_v1_provider, 15);
 
 /**
  * ProviderService is served by a provider binary (e.g. the AWS provider,
@@ -454,6 +744,33 @@ export const ProviderService: GenService<{
     methodKind: "server_streaming";
     input: typeof BootstrapRequestSchema;
     output: typeof DeployEventSchema;
+  },
+  /**
+   * Destroy tears down the environment addressed by DestroyRequest.environment.
+   * It is the inverse of Deploy and reuses the same DeployEvent stream:
+   * progress/log events, then a terminal ResultEvent (which carries no
+   * outputs). The provider selects exactly the environment named by the
+   * Environment block; the CLI never asks it to reverse-engineer how the
+   * teardown was invoked.
+   *
+   * @generated from rpc provider.v1.ProviderService.Destroy
+   */
+  destroy: {
+    methodKind: "server_streaming";
+    input: typeof DestroyRequestSchema;
+    output: typeof DeployEventSchema;
+  },
+  /**
+   * ListEnvironments enumerates the preview environments the provider knows
+   * about from its own authoritative state, one entry per environment. It
+   * backs `ocel preview ls`.
+   *
+   * @generated from rpc provider.v1.ProviderService.ListEnvironments
+   */
+  listEnvironments: {
+    methodKind: "unary";
+    input: typeof ListEnvironmentsRequestSchema;
+    output: typeof ListEnvironmentsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_provider_v1_provider, 0);

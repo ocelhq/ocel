@@ -72,6 +72,7 @@ func runFakeProvider() int {
 // fakeProviderServer implements providerv1connect.ProviderServiceHandler
 // for tests, driven entirely by mode.
 type fakeProviderServer struct {
+	providerv1connect.UnimplementedProviderServiceHandler
 	mode  string
 	token string
 }
