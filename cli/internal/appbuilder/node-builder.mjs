@@ -8679,7 +8679,7 @@ var require_bindings = __commonJS({
   "../../node_modules/.pnpm/bindings@1.5.0/node_modules/bindings/bindings.js"(exports2, module2) {
     var fs = __require("fs");
     var path2 = __require("path");
-    var fileURLToPath = require_file_uri_to_path();
+    var fileURLToPath2 = require_file_uri_to_path();
     var join = path2.join;
     var dirname = path2.dirname;
     var exists = fs.accessSync && function(path3) {
@@ -8791,7 +8791,7 @@ var require_bindings = __commonJS({
       Error.stackTraceLimit = origSTL;
       var fileSchema = "file://";
       if (fileName.indexOf(fileSchema) === 0) {
-        fileName = fileURLToPath(fileName);
+        fileName = fileURLToPath2(fileName);
       }
       return fileName;
     };
@@ -31258,7 +31258,8 @@ var import_nft = __toESM(require_out(), 1);
 import { existsSync, statSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { transform } from "esbuild";
+import { fileURLToPath } from "node:url";
+import { build as esbuildBuild, transform } from "esbuild";
 
 // src/registry.ts
 var expressShim = (entryJs) => `import http from "node:http";
@@ -31275,7 +31276,10 @@ http.Server.prototype.listen = function listen(...args) {
   return this;
 };
 
-await import(${JSON.stringify("./" + entryJs)});
+// A non-literal specifier keeps esbuild from bundling the user tree: only the
+// adapter shim + its npm deps are inlined; user code stays a separate import.
+const entry = new URL(${JSON.stringify("./" + entryJs)}, import.meta.url);
+await import(entry.href);
 
 http.Server.prototype.listen = originalListen;
 
@@ -31322,6 +31326,20 @@ function resolveFramework(key) {
 
 // src/build.ts
 var TS_EXT = /* @__PURE__ */ new Set([".ts", ".tsx", ".mts", ".cts"]);
+var ADAPTER_RESOLVE_DIR = path.dirname(fileURLToPath(import.meta.url));
+var REQUIRE_BANNER = "import { createRequire as __nbCreateRequire } from 'node:module';\nconst require = __nbCreateRequire(import.meta.url);";
+async function bundleShim(shimSource) {
+  const result = await esbuildBuild({
+    stdin: { contents: shimSource, resolveDir: ADAPTER_RESOLVE_DIR, loader: "js", sourcefile: "index.mjs" },
+    bundle: true,
+    format: "esm",
+    platform: "node",
+    target: "node20",
+    write: false,
+    banner: { js: REQUIRE_BANNER }
+  });
+  return result.outputFiles[0].text;
+}
 function resolveEntrypoint(input, fw) {
   if (input.entrypoint) {
     const abs = path.resolve(input.cwd, input.entrypoint);
@@ -31398,7 +31416,8 @@ async function buildApp(input, options) {
     await emitFile(abs, path.join(funcDir, destFor(abs, input.cwd)));
   }
   const entryDest = toOutExt(destFor(entrypoint, input.cwd));
-  await writeFile(path.join(funcDir, "index.mjs"), fw.shim(entryDest.split(path.sep).join("/")));
+  const shim = await bundleShim(fw.shim(entryDest.split(path.sep).join("/")));
+  await writeFile(path.join(funcDir, "index.mjs"), shim);
   await writeFile(
     path.join(funcDir, "meta.json"),
     `${JSON.stringify({ runtime: fw.runtime, handler: "index.handler", framework: fw.name }, null, 2)}
@@ -31414,6 +31433,7 @@ async function buildApp(input, options) {
   };
 }
 async function buildApps(inputs, options) {
+  await rm(path.join(options.outDir, "functions"), { recursive: true, force: true });
   const summaries = [];
   for (const input of inputs) {
     summaries.push(await buildApp(input, options));
