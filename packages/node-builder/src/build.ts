@@ -1,4 +1,4 @@
-import { existsSync, statSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
@@ -37,18 +37,68 @@ function toOutExt(rel: string): string {
   return rel;
 }
 
+export interface Placement {
+  /** Destination path relative to the `.func` dir. */
+  dest: string;
+  /** For dependency files, the owning package (root dir + name). */
+  pkg?: { root: string; name: string };
+}
+
+type PkgCache = Map<string, { name: string } | null>;
+
 /**
- * Destination path (relative to the .func dir) for a traced file. Files under
- * the app root keep their relative path; files reached outside it (e.g. a pnpm
- * store) are flattened back under a single `node_modules/`.
+ * The package that owns a file: the nearest ancestor directory with a
+ * `package.json` that declares a `name`. Handles pnpm store paths, scoped
+ * names, and workspace packages (whose real files have no `node_modules/`
+ * segment) uniformly. Results are cached per directory.
  */
-function destFor(absPath: string, base: string): string {
-  const rel = path.relative(base, absPath);
-  if (!rel.startsWith("..")) return rel;
-  const marker = `node_modules${path.sep}`;
-  const idx = absPath.lastIndexOf(marker);
-  if (idx >= 0) return path.join("node_modules", absPath.slice(idx + marker.length));
-  return path.join("_external", path.basename(absPath));
+function findPackage(absFile: string, cache: PkgCache): { root: string; name: string } | undefined {
+  let dir = path.dirname(absFile);
+  while (true) {
+    let entry = cache.get(dir);
+    if (entry === undefined) {
+      entry = null;
+      const pj = path.join(dir, "package.json");
+      if (existsSync(pj)) {
+        try {
+          const name: unknown = JSON.parse(readFileSync(pj, "utf8")).name;
+          if (typeof name === "string" && name.length > 0) entry = { name };
+        } catch {
+          /* malformed package.json — keep walking up */
+        }
+      }
+      cache.set(dir, entry);
+    }
+    if (entry) return { root: dir, name: entry.name };
+    const parent = path.dirname(dir);
+    if (parent === dir) return undefined;
+    dir = parent;
+  }
+}
+
+function isUserFile(absPath: string, cwd: string): boolean {
+  const rel = path.relative(cwd, absPath);
+  return !rel.startsWith("..") && !rel.split(path.sep).includes("node_modules");
+}
+
+/**
+ * Where a traced file lands in the artifact. App files stay at the root
+ * (relative to `cwd`); dependency files are placed by package identity under
+ * `node_modules/<name>/<path-within-package>`, preserving each package's
+ * internal structure so intra-package relative imports still resolve.
+ *
+ * Known limitation: node_modules is flat and single-version — if two versions
+ * of a package are traced they collapse into one. Acceptable for now.
+ */
+export function placeFile(absPath: string, cwd: string, cache: PkgCache = new Map()): Placement {
+  if (isUserFile(absPath, cwd)) {
+    return { dest: path.relative(cwd, absPath) };
+  }
+  const pkg = findPackage(absPath, cache);
+  if (pkg) {
+    return { dest: path.join("node_modules", pkg.name, path.relative(pkg.root, absPath)), pkg };
+  }
+  return { dest: path.join("_external", path.basename(absPath)) };
 }
 
 function isUserSource(absPath: string): boolean {
@@ -128,6 +178,36 @@ function traceBase(cwd: string): string {
   return base;
 }
 
+/**
+ * readFile hook for nft's analysis: nft's parser throws on TS type syntax and
+ * then fails to follow that file's imports, silently under-tracing. Feed it
+ * sucrase-transpiled JS for TS files (types stripped, ESM preserved) so it
+ * parses and follows imports; the resolver still resolves against real files on
+ * disk. The EMIT step still transpiles from source separately.
+ */
+async function traceReadFile(p: string): Promise<Buffer | string | null> {
+  let buf: Buffer;
+  try {
+    buf = await readFile(p);
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EISDIR" || code === "ENOTDIR") return null;
+    throw err;
+  }
+  const ext = path.extname(p);
+  if (TS_EXT.has(ext)) {
+    try {
+      const { code } = transform(buf.toString("utf8"), {
+        transforms: ext === ".tsx" ? ["typescript", "jsx"] : ["typescript"],
+      });
+      return code;
+    } catch {
+      return buf;
+    }
+  }
+  return buf;
+}
+
 async function emitFile(absPath: string, dest: string): Promise<void> {
   // nft lists pnpm's directory symlinks; the real files are traced separately,
   // so skipping directories reconstructs a flat, resolvable node_modules.
@@ -175,13 +255,30 @@ export async function buildApp(
   await mkdir(funcDir, { recursive: true });
 
   const base = traceBase(input.cwd);
-  const { fileList } = await nodeFileTrace([entrypoint], { base });
+  const { fileList } = await nodeFileTrace([entrypoint], { base, readFile: traceReadFile });
+
+  const pkgCache: PkgCache = new Map();
+  const depPackages = new Map<string, string>();
   for (const rel of fileList) {
     const abs = path.resolve(base, rel);
-    await emitFile(abs, path.join(funcDir, destFor(abs, input.cwd)));
+    const placement = placeFile(abs, input.cwd, pkgCache);
+    if (placement.pkg) depPackages.set(placement.pkg.root, placement.pkg.name);
+    await emitFile(abs, path.join(funcDir, placement.dest));
   }
 
-  const entryDest = toOutExt(destFor(entrypoint, input.cwd));
+  // A reconstructed package must carry its package.json so its `exports` map and
+  // `type` resolve (e.g. `import "ocel/blob/express"`). Copy any not already
+  // emitted by the trace.
+  for (const [root, name] of depPackages) {
+    const dest = path.join(funcDir, "node_modules", name, "package.json");
+    const src = path.join(root, "package.json");
+    if (!existsSync(dest) && existsSync(src)) {
+      await mkdir(path.dirname(dest), { recursive: true });
+      await copyFile(src, dest);
+    }
+  }
+
+  const entryDest = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest);
   await writeFile(path.join(funcDir, "index.mjs"), fw.shim(entryDest.split(path.sep).join("/")));
   await writeFile(
     path.join(funcDir, "meta.json"),

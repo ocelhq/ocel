@@ -1,10 +1,20 @@
 import { execFileSync } from "node:child_process";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  cpSync,
+  existsSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp, buildApps } from "./build";
+import { buildApp, buildApps, placeFile } from "./build";
 
 // Invoke a built handler in a REAL Node ESM process. vitest's own `await import`
 // goes through Vite's bundler-style resolver, which resolves extensionless
@@ -21,8 +31,31 @@ function invokeInNode(indexMjs: string, event: unknown): { statusCode: number; b
   return JSON.parse(match[1] as string);
 }
 
+function lambdaEvent(rawPath: string) {
+  return {
+    version: "2.0",
+    rawPath,
+    rawQueryString: "",
+    headers: { host: "example.com" },
+    requestContext: { http: { method: "GET", path: rawPath } },
+    isBase64Encoded: false,
+  };
+}
+
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixtureDir = path.resolve(here, "../test/fixtures/express-app");
+
+// Simulate a pnpm workspace link: `workspace-pkg`'s real files live outside any
+// node_modules and are symlinked into the app's node_modules. Created here (not
+// committed) so nft follows the link to the real, out-of-node_modules location.
+(() => {
+  const link = path.join(fixtureDir, "node_modules", "workspace-pkg");
+  try {
+    lstatSync(link);
+  } catch {
+    symlinkSync(path.join("..", "..", "workspace-pkg"), link, "dir");
+  }
+})();
 
 // Keep build output under the package so Node's upward node_modules lookup can
 // resolve `express` at runtime; `.ocel` is gitignored repo-wide.
@@ -277,19 +310,99 @@ describe("embedded bundle self-containment", () => {
     expect(summary.functions[0].name).toBe("api");
 
     const funcDir = path.join(outDir, "functions", "api.func");
-    // Hit the route whose handler transitively uses an extensionless relative
-    // import (server.js -> ./lib/db.js -> ../greeting.js): fails with
-    // ERR_MODULE_NOT_FOUND under raw Node unless the specifiers were rewritten.
-    const res = invokeInNode(path.join(funcDir, "index.mjs"), {
-      version: "2.0",
-      rawPath: "/render/deployed",
-      rawQueryString: "",
-      headers: { host: "example.com" },
-      requestContext: { http: { method: "GET", path: "/render/deployed" } },
-      isBase64Encoded: false,
-    });
+    // Hit the route whose handler transitively uses extensionless relative
+    // imports AND a typed-file-only dep (server.js -> ./lib/db.js [typed] ->
+    // typed-dep + ../greeting.js; -> fake-dep [./helper.js] + cjs-dep [require]).
+    const res = invokeInNode(path.join(funcDir, "index.mjs"), lambdaEvent("/render/deployed"));
     expect(res.statusCode).toBe(200);
-    // server.js -> ./lib/db.js -> fake-dep (./helper.js) + cjs-dep (require).
-    expect(JSON.parse(res.body)).toEqual({ message: ">[HELLO, DEPLOYED]", banner: "fixture" });
+    expect(JSON.parse(res.body)).toEqual({ message: ">[<HELLO, DEPLOYED>]", banner: "fixture" });
+  });
+
+  it("places workspace/symlinked packages by identity, not in _external (Defect A)", async () => {
+    const isoDir = mkdtempSync(path.join(tmpdir(), "nb-iso-"));
+    dirs.push(isoDir);
+    const isoBundle = path.join(isoDir, "node-builder.mjs");
+    cpSync(bundle, isoBundle);
+
+    const outDir = path.join(isoDir, "out");
+    const request = JSON.stringify({ outDir, apps: [{ name: "api", cwd: fixtureDir }] });
+    execFileSync("node", [isoBundle, request], { cwd: isoDir, encoding: "utf8" });
+
+    const funcDir = path.join(outDir, "functions", "api.func");
+    // The workspace pkg's real files live outside node_modules; they must be
+    // reconstructed under node_modules/<name>, WITH its package.json, not dumped
+    // in _external.
+    expect(existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "dist", "index.js"))).toBe(true);
+    expect(existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "package.json"))).toBe(true);
+    expect(existsSync(path.join(funcDir, "_external"))).toBe(false);
+
+    const res = invokeInNode(path.join(funcDir, "index.mjs"), lambdaEvent("/ws/deployed"));
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ message: "((deployed))" });
+  });
+
+  it("traces deps reached only through typed .ts files (Defect B)", async () => {
+    const isoDir = mkdtempSync(path.join(tmpdir(), "nb-iso-"));
+    dirs.push(isoDir);
+    const isoBundle = path.join(isoDir, "node-builder.mjs");
+    cpSync(bundle, isoBundle);
+
+    const outDir = path.join(isoDir, "out");
+    const request = JSON.stringify({ outDir, apps: [{ name: "api", cwd: fixtureDir }] });
+    execFileSync("node", [isoBundle, request], { cwd: isoDir, encoding: "utf8" });
+
+    const funcDir = path.join(outDir, "functions", "api.func");
+    // typed-dep is imported ONLY from the typed src/lib/db.ts. nft under-traced
+    // it before the readFile transpile hook; it must now be in the artifact.
+    expect(existsSync(path.join(funcDir, "node_modules", "typed-dep", "index.js"))).toBe(true);
+
+    const res = invokeInNode(path.join(funcDir, "index.mjs"), lambdaEvent("/render/typed"));
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ message: ">[<HELLO, TYPED>]", banner: "fixture" });
+  });
+});
+
+describe("placeFile", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "nb-place-"));
+  afterAll(() => rmSync(root, { recursive: true, force: true }));
+
+  function pkg(dir: string, name: string) {
+    mkdirSync(path.join(root, dir), { recursive: true });
+    writeFileSync(path.join(root, dir, "package.json"), JSON.stringify({ name }));
+  }
+
+  const cwd = path.join(root, "app");
+
+  beforeAll(() => {
+    mkdirSync(cwd, { recursive: true });
+    pkg("packages/ocel", "ocel"); // workspace pkg: real files outside node_modules
+    pkg("node_modules/.pnpm/express@5/node_modules/express", "express");
+    pkg("node_modules/.pnpm/connect@1/node_modules/@connectrpc/connect", "@connectrpc/connect");
+  });
+
+  const at = (p: string) => path.join(root, p);
+
+  it("maps a workspace package (no node_modules segment) by identity", () => {
+    expect(placeFile(at("packages/ocel/dist/blob/express.js"), cwd).dest).toBe(
+      path.join("node_modules", "ocel", "dist", "blob", "express.js"),
+    );
+  });
+
+  it("maps a pnpm store path to node_modules/<name>", () => {
+    const abs = at("node_modules/.pnpm/express@5/node_modules/express/lib/router.js");
+    expect(placeFile(abs, cwd).dest).toBe(path.join("node_modules", "express", "lib", "router.js"));
+  });
+
+  it("maps a scoped package name", () => {
+    const abs = at("node_modules/.pnpm/connect@1/node_modules/@connectrpc/connect/dist/i.js");
+    expect(placeFile(abs, cwd).dest).toBe(
+      path.join("node_modules", "@connectrpc", "connect", "dist", "i.js"),
+    );
+  });
+
+  it("keeps a user file under cwd at the artifact root", () => {
+    mkdirSync(path.join(cwd, "src"), { recursive: true });
+    writeFileSync(path.join(cwd, "src", "server.ts"), "");
+    expect(placeFile(path.join(cwd, "src", "server.ts"), cwd).dest).toBe(path.join("src", "server.ts"));
   });
 });
