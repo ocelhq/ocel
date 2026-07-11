@@ -18,7 +18,8 @@ import (
 
 // bootstrapOptions holds the flags accepted by `ocel bootstrap`.
 type bootstrapOptions struct {
-	yes bool
+	yes     bool
+	preview bool
 }
 
 var bootstrapOpts bootstrapOptions
@@ -47,6 +48,7 @@ var bootstrapCmd = &cobra.Command{
 
 func init() {
 	bootstrapCmd.Flags().BoolVarP(&bootstrapOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
+	bootstrapCmd.Flags().BoolVar(&bootstrapOpts.preview, "preview", false, "Stand up the preview infrastructure instead of the production infrastructure")
 }
 
 // runBootstrap resolves the project config, verifies auth, requires a
@@ -69,8 +71,13 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 		return err
 	}
 
+	class := providerv1.Environment_CLASS_PRODUCTION
+	if opts.preview {
+		class = providerv1.Environment_CLASS_PREVIEW
+	}
+
 	if !opts.yes && isReaderTTY(stdin) {
-		proceed, err := confirmBootstrap(provider.Package, stdout, stdin)
+		proceed, err := confirmBootstrap(class, provider.Package, stdout, stdin)
 		if err != nil {
 			return err
 		}
@@ -84,6 +91,7 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 		req := &providerv1.BootstrapRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Class:           class,
 		}
 		if err := runner.Bootstrap(ctx, req, func(ev *providerv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
 			return err
@@ -93,9 +101,13 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 	})
 }
 
-// confirmBootstrap prints the "Bootstrap account-global resources with
-// <provider>? [y/N]" prompt and returns the user's yes/no answer (see
+// confirmBootstrap prints the "Bootstrap <preview|production> infrastructure
+// with <provider>? [y/N]" prompt and returns the user's yes/no answer (see
 // confirmYN in deploy.go).
-func confirmBootstrap(providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	return confirmYN(fmt.Sprintf("Bootstrap account-global resources with %s?", providerPackage), stdout, stdin)
+func confirmBootstrap(class providerv1.Environment_Class, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	infra := "production"
+	if class == providerv1.Environment_CLASS_PREVIEW {
+		infra = "preview"
+	}
+	return confirmYN(fmt.Sprintf("Bootstrap %s infrastructure with %s?", infra, providerPackage), stdout, stdin)
 }

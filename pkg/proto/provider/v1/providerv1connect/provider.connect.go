@@ -43,6 +43,9 @@ const (
 	// ProviderServiceListEnvironmentsProcedure is the fully-qualified name of the ProviderService's
 	// ListEnvironments RPC.
 	ProviderServiceListEnvironmentsProcedure = "/provider.v1.ProviderService/ListEnvironments"
+	// ProviderServicePreflightProcedure is the fully-qualified name of the ProviderService's Preflight
+	// RPC.
+	ProviderServicePreflightProcedure = "/provider.v1.ProviderService/Preflight"
 )
 
 // ProviderServiceClient is a client for the provider.v1.ProviderService service.
@@ -67,6 +70,13 @@ type ProviderServiceClient interface {
 	// about from its own authoritative state, one entry per environment. It
 	// backs `ocel preview ls`.
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
+	// Preflight reports what the provider's ambient account/profile points at:
+	// the class the pointed-at infrastructure is stamped with, and whether that
+	// infrastructure exists yet. The CLI calls it before a preview or deploy to
+	// refuse fast and locally when the infrastructure is missing or is the
+	// wrong class, before anything is provisioned. It is authoritative: the
+	// provider enforces the same class match itself.
+	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 }
 
 // NewProviderServiceClient constructs a client for the provider.v1.ProviderService service. By
@@ -104,6 +114,12 @@ func NewProviderServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(providerServiceMethods.ByName("ListEnvironments")),
 			connect.WithClientOptions(opts...),
 		),
+		preflight: connect.NewClient[v1.PreflightRequest, v1.PreflightResponse](
+			httpClient,
+			baseURL+ProviderServicePreflightProcedure,
+			connect.WithSchema(providerServiceMethods.ByName("Preflight")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -113,6 +129,7 @@ type providerServiceClient struct {
 	bootstrap        *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
 	destroy          *connect.Client[v1.DestroyRequest, v1.DeployEvent]
 	listEnvironments *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
+	preflight        *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
 }
 
 // Deploy calls provider.v1.ProviderService.Deploy.
@@ -133,6 +150,15 @@ func (c *providerServiceClient) Destroy(ctx context.Context, req *v1.DestroyRequ
 // ListEnvironments calls provider.v1.ProviderService.ListEnvironments.
 func (c *providerServiceClient) ListEnvironments(ctx context.Context, req *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
 	response, err := c.listEnvironments.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Preflight calls provider.v1.ProviderService.Preflight.
+func (c *providerServiceClient) Preflight(ctx context.Context, req *v1.PreflightRequest) (*v1.PreflightResponse, error) {
+	response, err := c.preflight.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -161,6 +187,13 @@ type ProviderServiceHandler interface {
 	// about from its own authoritative state, one entry per environment. It
 	// backs `ocel preview ls`.
 	ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error)
+	// Preflight reports what the provider's ambient account/profile points at:
+	// the class the pointed-at infrastructure is stamped with, and whether that
+	// infrastructure exists yet. The CLI calls it before a preview or deploy to
+	// refuse fast and locally when the infrastructure is missing or is the
+	// wrong class, before anything is provisioned. It is authoritative: the
+	// provider enforces the same class match itself.
+	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
 }
 
 // NewProviderServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -194,6 +227,12 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 		connect.WithSchema(providerServiceMethods.ByName("ListEnvironments")),
 		connect.WithHandlerOptions(opts...),
 	)
+	providerServicePreflightHandler := connect.NewUnaryHandlerSimple(
+		ProviderServicePreflightProcedure,
+		svc.Preflight,
+		connect.WithSchema(providerServiceMethods.ByName("Preflight")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/provider.v1.ProviderService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ProviderServiceDeployProcedure:
@@ -204,6 +243,8 @@ func NewProviderServiceHandler(svc ProviderServiceHandler, opts ...connect.Handl
 			providerServiceDestroyHandler.ServeHTTP(w, r)
 		case ProviderServiceListEnvironmentsProcedure:
 			providerServiceListEnvironmentsHandler.ServeHTTP(w, r)
+		case ProviderServicePreflightProcedure:
+			providerServicePreflightHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -227,4 +268,8 @@ func (UnimplementedProviderServiceHandler) Destroy(context.Context, *v1.DestroyR
 
 func (UnimplementedProviderServiceHandler) ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.v1.ProviderService.ListEnvironments is not implemented"))
+}
+
+func (UnimplementedProviderServiceHandler) Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("provider.v1.ProviderService.Preflight is not implemented"))
 }

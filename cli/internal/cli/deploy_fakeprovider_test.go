@@ -30,6 +30,15 @@ const deployFakeProviderSockEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_SOCK"
 // "success" (default) or "fail".
 const deployFakeProviderModeEnvVar = "OCEL_TEST_DEPLOY_FAKE_PROVIDER_MODE"
 
+// fakeInfraClassEnvVar / fakeInfraPresentEnvVar configure the fake provider's
+// Preflight response: the class it reports its account points at ("preview",
+// "production", "development", or "" for unspecified) and whether the
+// infrastructure exists ("0" means absent; anything else means present).
+const (
+	fakeInfraClassEnvVar   = "OCEL_TEST_FAKE_INFRA_CLASS"
+	fakeInfraPresentEnvVar = "OCEL_TEST_FAKE_INFRA_PRESENT"
+)
+
 // runDeployFakeProvider binds a Unix socket, prints the readiness sentinel,
 // and serves ProviderService.Deploy: it rejects a missing/mismatched
 // session token, rejects a manifest that doesn't look like what
@@ -78,19 +87,22 @@ type deployFakeProviderServer struct {
 }
 
 func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *providerv1.DeployRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
-	info, _ := connect.CallInfoForHandlerContext(ctx)
-	var authHeader string
-	if info != nil {
-		authHeader = info.RequestHeader().Get("Authorization")
-	}
-	if token, ok := providerv1.ParseAuthHeader(authHeader); !ok || token != s.token {
-		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
+	if err := s.checkToken(ctx); err != nil {
+		return err
 	}
 
 	if err := validateFixtureManifest(req.GetManifest()); err != nil {
 		return stream.Send(&providerv1.DeployEvent{
 			Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: false, Error: err.Error()}},
 		})
+	}
+
+	// Echo the received Environment so tests can assert what the CLI resolved
+	// and sent, proving `ocel preview`/`ocel deploy` diverge only by it.
+	if err := stream.Send(&providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "DEPLOY " + describeEnv(req.GetEnvironment())}},
+	}); err != nil {
+		return err
 	}
 
 	if err := stream.Send(&providerv1.DeployEvent{
@@ -113,6 +125,89 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *providerv1.D
 // to exercise the deploy path; the bootstrap path has its own coverage.
 func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("fake provider does not implement Bootstrap"))
+}
+
+// Preflight reports the account's stamped class and whether the infrastructure
+// exists, both configured via env so tests can drive the CLI's preflight guard.
+func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *providerv1.PreflightRequest) (*providerv1.PreflightResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	return &providerv1.PreflightResponse{
+		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
+		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
+	}, nil
+}
+
+// Destroy echoes the Environment it was addressed with (so tests can assert the
+// CLI resolved the right teardown target) and streams a terminal success.
+func (s *deployFakeProviderServer) Destroy(ctx context.Context, req *providerv1.DestroyRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+	if err := s.checkToken(ctx); err != nil {
+		return err
+	}
+	if err := stream.Send(&providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "DESTROY " + describeEnv(req.GetEnvironment())}},
+	}); err != nil {
+		return err
+	}
+	return stream.Send(&providerv1.DeployEvent{
+		Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: true}},
+	})
+}
+
+// ListEnvironments returns a canned set of preview environments for `ocel
+// preview ls` to render.
+func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *providerv1.ListEnvironmentsRequest) (*providerv1.ListEnvironmentsResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	return &providerv1.ListEnvironmentsResponse{
+		Environments: []*providerv1.PreviewEnvironment{
+			{
+				Identity:  "feature_login_ab12cd34",
+				Lifecycle: providerv1.Environment_LIFECYCLE_EPHEMERAL,
+				Label:     "pr-7",
+				CreatedAt: 1700000000,
+			},
+			{
+				Identity:  "staging",
+				Lifecycle: providerv1.Environment_LIFECYCLE_PERSISTENT,
+			},
+		},
+	}, nil
+}
+
+// checkToken enforces the session token handshake on a handler call.
+func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
+	info, _ := connect.CallInfoForHandlerContext(ctx)
+	var authHeader string
+	if info != nil {
+		authHeader = info.RequestHeader().Get("Authorization")
+	}
+	if token, ok := providerv1.ParseAuthHeader(authHeader); !ok || token != s.token {
+		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
+	}
+	return nil
+}
+
+// describeEnv renders an Environment into a stable, assertable one-line string.
+func describeEnv(env *providerv1.Environment) string {
+	return fmt.Sprintf("class=%s lifecycle=%s identity=%s source=%s label=%s",
+		env.GetClass(), env.GetLifecycle(), env.GetIdentity(), env.GetIdentitySource(), env.GetLabel())
+}
+
+// parseInfraClass maps the fakeInfraClassEnvVar value to an Environment_Class.
+func parseInfraClass(s string) providerv1.Environment_Class {
+	switch s {
+	case "preview":
+		return providerv1.Environment_CLASS_PREVIEW
+	case "production":
+		return providerv1.Environment_CLASS_PRODUCTION
+	case "development":
+		return providerv1.Environment_CLASS_DEVELOPMENT
+	default:
+		return providerv1.Environment_CLASS_UNSPECIFIED
+	}
 }
 
 // validateFixtureManifest confirms the manifest built by runDeploy matches

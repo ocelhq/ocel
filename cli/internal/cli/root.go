@@ -37,6 +37,7 @@ func init() {
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(deployCmd)
+	rootCmd.AddCommand(previewCmd)
 	rootCmd.AddCommand(bootstrapCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)

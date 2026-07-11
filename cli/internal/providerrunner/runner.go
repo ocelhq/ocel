@@ -304,6 +304,47 @@ func (r *Runner) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest
 	return r.driveStream("Bootstrap", stream, err, onEvent)
 }
 
+// Destroy calls the provider's Destroy RPC and streams DeployEvents to onEvent
+// (which may be nil) as they arrive, including the terminal event. Its result
+// semantics match Deploy: nil on ResultEvent{Success: true}, a
+// *DeployFailedError on failure, or a connection error. Destroy reuses the
+// DeployEvent stream by contract, so it shares the same driver. Ready must
+// have succeeded first.
+func (r *Runner) Destroy(ctx context.Context, req *providerv1.DestroyRequest, onEvent func(*providerv1.DeployEvent)) error {
+	if r.client == nil {
+		return errors.New("providerrunner: Destroy called before a successful Ready")
+	}
+	stream, err := r.client.Destroy(ctx, req)
+	return r.driveStream("Destroy", stream, err, onEvent)
+}
+
+// ListEnvironments calls the provider's unary ListEnvironments RPC and returns
+// the enumerated preview environments. Ready must have succeeded first.
+func (r *Runner) ListEnvironments(ctx context.Context, req *providerv1.ListEnvironmentsRequest) (*providerv1.ListEnvironmentsResponse, error) {
+	if r.client == nil {
+		return nil, errors.New("providerrunner: ListEnvironments called before a successful Ready")
+	}
+	resp, err := r.client.ListEnvironments(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("providerrunner: call ListEnvironments: %w", err)
+	}
+	return resp, nil
+}
+
+// Preflight calls the provider's unary Preflight RPC, reporting what the
+// provider's ambient account/profile points at. Ready must have succeeded
+// first.
+func (r *Runner) Preflight(ctx context.Context, req *providerv1.PreflightRequest) (*providerv1.PreflightResponse, error) {
+	if r.client == nil {
+		return nil, errors.New("providerrunner: Preflight called before a successful Ready")
+	}
+	resp, err := r.client.Preflight(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("providerrunner: call Preflight: %w", err)
+	}
+	return resp, nil
+}
+
 // driveStream consumes a provider event stream to its terminal ResultEvent,
 // forwarding every event to onEvent. rpc names the call for error messages.
 // It is shared by Deploy and Bootstrap, which speak the same DeployEvent

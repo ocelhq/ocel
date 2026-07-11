@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file provider/v1/provider.proto.
  */
 export const file_provider_v1_provider: GenFile = /*@__PURE__*/
-  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEi+wMKC0Vudmlyb25tZW50Ei0KBWNsYXNzGAEgASgOMh4ucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuQ2xhc3MSNQoJbGlmZWN5Y2xlGAIgASgOMiIucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEhAKCGlkZW50aXR5GAMgASgJEkAKD2lkZW50aXR5X3NvdXJjZRgEIAEoDjInLnByb3ZpZGVyLnYxLkVudmlyb25tZW50LklkZW50aXR5U291cmNlEg0KBWxhYmVsGAUgASgJIl4KBUNsYXNzEhUKEUNMQVNTX1VOU1BFQ0lGSUVEEAASFQoRQ0xBU1NfREVWRUxPUE1FTlQQARIRCg1DTEFTU19QUkVWSUVXEAISFAoQQ0xBU1NfUFJPRFVDVElPThADIlkKCUxpZmVjeWNsZRIZChVMSUZFQ1lDTEVfVU5TUEVDSUZJRUQQABIXChNMSUZFQ1lDTEVfRVBIRU1FUkFMEAESGAoUTElGRUNZQ0xFX1BFUlNJU1RFTlQQAiJoCg5JZGVudGl0eVNvdXJjZRIfChtJREVOVElUWV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIXChNJREVOVElUWV9TT1VSQ0VfR0lUEAESHAoYSURFTlRJVFlfU09VUkNFX0RFQ0xBUkVEEAIiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIsYBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYBCABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIpIBCg1EZXBsb3lSZXF1ZXN0EicKCG1hbmlmZXN0GAEgASgLMhUucHJvdmlkZXIudjEuTWFuaWZlc3QSDwoHb3B0aW9ucxgCIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgJEi0KC2Vudmlyb25tZW50GAQgASgLMhgucHJvdmlkZXIudjEuRW52aXJvbm1lbnQiPQoQQm9vdHN0cmFwUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkiagoORGVzdHJveVJlcXVlc3QSLQoLZW52aXJvbm1lbnQYASABKAsyGC5wcm92aWRlci52MS5FbnZpcm9ubWVudBIPCgdvcHRpb25zGAIgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAyABKAkiRAoXTGlzdEVudmlyb25tZW50c1JlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJIlEKGExpc3RFbnZpcm9ubWVudHNSZXNwb25zZRI1CgxlbnZpcm9ubWVudHMYASADKAsyHy5wcm92aWRlci52MS5QcmV2aWV3RW52aXJvbm1lbnQilAEKElByZXZpZXdFbnZpcm9ubWVudBIQCghpZGVudGl0eRgBIAEoCRI1CglsaWZlY3ljbGUYAiABKA4yIi5wcm92aWRlci52MS5FbnZpcm9ubWVudC5MaWZlY3ljbGUSDQoFbGFiZWwYAyABKAkSEgoKY3JlYXRlZF9hdBgEIAEoAxISCgpleHBpcmVzX2F0GAUgASgDIpgBCgtEZXBsb3lFdmVudBIuCghwcm9ncmVzcxgBIAEoCzIaLnByb3ZpZGVyLnYxLlByb2dyZXNzRXZlbnRIABIkCgNsb2cYAiABKAsyFS5wcm92aWRlci52MS5Mb2dFdmVudEgAEioKBnJlc3VsdBgDIAEoCzIYLnByb3ZpZGVyLnYxLlJlc3VsdEV2ZW50SABCBwoFZXZlbnQiIAoNUHJvZ3Jlc3NFdmVudBIPCgdtZXNzYWdlGAEgASgJIhsKCExvZ0V2ZW50Eg8KB21lc3NhZ2UYASABKAkiWwoLUmVzdWx0RXZlbnQSDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCRIsCgdvdXRwdXRzGAMgAygLMhsucHJvdmlkZXIudjEuUmVzb3VyY2VPdXRwdXQijgEKDlJlc291cmNlT3V0cHV0EhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIvCghwb3N0Z3JlcxgCIAEoCzIbLnByb3ZpZGVyLnYxLlBvc3RncmVzT3V0cHV0SAASKwoGYnVja2V0GAMgASgLMhkucHJvdmlkZXIudjEuQnVja2V0T3V0cHV0SABCCAoGb3V0cHV0ImcKDlBvc3RncmVzT3V0cHV0EgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBIi8KDEJ1Y2tldE91dHB1dBIPCgdhZGRyZXNzGAEgASgJEg4KBmJ1Y2tldBgCIAEoCTLAAgoPUHJvdmlkZXJTZXJ2aWNlEkAKBkRlcGxveRIaLnByb3ZpZGVyLnYxLkRlcGxveVJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEkYKCUJvb3RzdHJhcBIdLnByb3ZpZGVyLnYxLkJvb3RzdHJhcFJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEkIKB0Rlc3Ryb3kSGy5wcm92aWRlci52MS5EZXN0cm95UmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAESXwoQTGlzdEVudmlyb25tZW50cxIkLnByb3ZpZGVyLnYxLkxpc3RFbnZpcm9ubWVudHNSZXF1ZXN0GiUucHJvdmlkZXIudjEuTGlzdEVudmlyb25tZW50c1Jlc3BvbnNlQjlaN2dpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL3Byb3ZpZGVyL3YxO3Byb3ZpZGVydjFiBnByb3RvMw", [file_resources_v1_resources]);
+  fileDesc("Chpwcm92aWRlci92MS9wcm92aWRlci5wcm90bxILcHJvdmlkZXIudjEi+wMKC0Vudmlyb25tZW50Ei0KBWNsYXNzGAEgASgOMh4ucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuQ2xhc3MSNQoJbGlmZWN5Y2xlGAIgASgOMiIucHJvdmlkZXIudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEhAKCGlkZW50aXR5GAMgASgJEkAKD2lkZW50aXR5X3NvdXJjZRgEIAEoDjInLnByb3ZpZGVyLnYxLkVudmlyb25tZW50LklkZW50aXR5U291cmNlEg0KBWxhYmVsGAUgASgJIl4KBUNsYXNzEhUKEUNMQVNTX1VOU1BFQ0lGSUVEEAASFQoRQ0xBU1NfREVWRUxPUE1FTlQQARIRCg1DTEFTU19QUkVWSUVXEAISFAoQQ0xBU1NfUFJPRFVDVElPThADIlkKCUxpZmVjeWNsZRIZChVMSUZFQ1lDTEVfVU5TUEVDSUZJRUQQABIXChNMSUZFQ1lDTEVfRVBIRU1FUkFMEAESGAoUTElGRUNZQ0xFX1BFUlNJU1RFTlQQAiJoCg5JZGVudGl0eVNvdXJjZRIfChtJREVOVElUWV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIXChNJREVOVElUWV9TT1VSQ0VfR0lUEAESHAoYSURFTlRJVFlfU09VUkNFX0RFQ0xBUkVEEAIiaAoITWFuaWZlc3QSFgoOc2NoZW1hX3ZlcnNpb24YASABKAkSEgoKcHJvamVjdF9pZBgCIAEoCRIwCglyZXNvdXJjZXMYAyADKAsyHS5wcm92aWRlci52MS5NYW5pZmVzdFJlc291cmNlIsYBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYBCABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIpIBCg1EZXBsb3lSZXF1ZXN0EicKCG1hbmlmZXN0GAEgASgLMhUucHJvdmlkZXIudjEuTWFuaWZlc3QSDwoHb3B0aW9ucxgCIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgJEi0KC2Vudmlyb25tZW50GAQgASgLMhgucHJvdmlkZXIudjEuRW52aXJvbm1lbnQibAoQQm9vdHN0cmFwUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSLQoFY2xhc3MYAyABKA4yHi5wcm92aWRlci52MS5FbnZpcm9ubWVudC5DbGFzcyJqCg5EZXN0cm95UmVxdWVzdBItCgtlbnZpcm9ubWVudBgBIAEoCzIYLnByb3ZpZGVyLnYxLkVudmlyb25tZW50Eg8KB29wdGlvbnMYAiABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoCSJEChdMaXN0RW52aXJvbm1lbnRzUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkiUQoYTGlzdEVudmlyb25tZW50c1Jlc3BvbnNlEjUKDGVudmlyb25tZW50cxgBIAMoCzIfLnByb3ZpZGVyLnYxLlByZXZpZXdFbnZpcm9ubWVudCKUAQoSUHJldmlld0Vudmlyb25tZW50EhAKCGlkZW50aXR5GAEgASgJEjUKCWxpZmVjeWNsZRgCIAEoDjIiLnByb3ZpZGVyLnYxLkVudmlyb25tZW50LkxpZmVjeWNsZRINCgVsYWJlbBgDIAEoCRISCgpjcmVhdGVkX2F0GAQgASgDEhIKCmV4cGlyZXNfYXQYBSABKAMiPQoQUHJlZmxpZ2h0UmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkiaAoRUHJlZmxpZ2h0UmVzcG9uc2USMwoLaW5mcmFfY2xhc3MYASABKA4yHi5wcm92aWRlci52MS5FbnZpcm9ubWVudC5DbGFzcxIeChZpbmZyYXN0cnVjdHVyZV9wcmVzZW50GAIgASgIIpgBCgtEZXBsb3lFdmVudBIuCghwcm9ncmVzcxgBIAEoCzIaLnByb3ZpZGVyLnYxLlByb2dyZXNzRXZlbnRIABIkCgNsb2cYAiABKAsyFS5wcm92aWRlci52MS5Mb2dFdmVudEgAEioKBnJlc3VsdBgDIAEoCzIYLnByb3ZpZGVyLnYxLlJlc3VsdEV2ZW50SABCBwoFZXZlbnQiIAoNUHJvZ3Jlc3NFdmVudBIPCgdtZXNzYWdlGAEgASgJIhsKCExvZ0V2ZW50Eg8KB21lc3NhZ2UYASABKAkiWwoLUmVzdWx0RXZlbnQSDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCRIsCgdvdXRwdXRzGAMgAygLMhsucHJvdmlkZXIudjEuUmVzb3VyY2VPdXRwdXQijgEKDlJlc291cmNlT3V0cHV0EhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIvCghwb3N0Z3JlcxgCIAEoCzIbLnByb3ZpZGVyLnYxLlBvc3RncmVzT3V0cHV0SAASKwoGYnVja2V0GAMgASgLMhkucHJvdmlkZXIudjEuQnVja2V0T3V0cHV0SABCCAoGb3V0cHV0ImcKDlBvc3RncmVzT3V0cHV0EgwKBGhvc3QYASABKAkSDAoEcG9ydBgCIAEoBRIQCghkYXRhYmFzZRgDIAEoCRIQCgh1c2VybmFtZRgEIAEoCRIVCghwYXNzd29yZBgFIAEoCUIDgAEBIi8KDEJ1Y2tldE91dHB1dBIPCgdhZGRyZXNzGAEgASgJEg4KBmJ1Y2tldBgCIAEoCTKMAwoPUHJvdmlkZXJTZXJ2aWNlEkAKBkRlcGxveRIaLnByb3ZpZGVyLnYxLkRlcGxveVJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEkYKCUJvb3RzdHJhcBIdLnByb3ZpZGVyLnYxLkJvb3RzdHJhcFJlcXVlc3QaGC5wcm92aWRlci52MS5EZXBsb3lFdmVudDABEkIKB0Rlc3Ryb3kSGy5wcm92aWRlci52MS5EZXN0cm95UmVxdWVzdBoYLnByb3ZpZGVyLnYxLkRlcGxveUV2ZW50MAESXwoQTGlzdEVudmlyb25tZW50cxIkLnByb3ZpZGVyLnYxLkxpc3RFbnZpcm9ubWVudHNSZXF1ZXN0GiUucHJvdmlkZXIudjEuTGlzdEVudmlyb25tZW50c1Jlc3BvbnNlEkoKCVByZWZsaWdodBIdLnByb3ZpZGVyLnYxLlByZWZsaWdodFJlcXVlc3QaHi5wcm92aWRlci52MS5QcmVmbGlnaHRSZXNwb25zZUI5WjdnaXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9wcm92aWRlci92MTtwcm92aWRlcnYxYgZwcm90bzM", [file_resources_v1_resources]);
 
 /**
  * Environment is the fully resolved target a provisioning verb acts on. The
@@ -311,6 +311,15 @@ export type BootstrapRequest = Message<"provider.v1.BootstrapRequest"> & {
    * @generated from field: string protocol_version = 2;
    */
   protocolVersion: string;
+
+  /**
+   * class is the infrastructure the provider stands up and stamps: PRODUCTION
+   * for `ocel bootstrap`, PREVIEW for `ocel bootstrap --preview`. The two
+   * classes have independent lifecycles.
+   *
+   * @generated from field: provider.v1.Environment.Class class = 3;
+   */
+  class: Environment_Class;
 };
 
 /**
@@ -457,6 +466,70 @@ export const PreviewEnvironmentSchema: GenMessage<PreviewEnvironment> = /*@__PUR
   messageDesc(file_provider_v1_provider, 8);
 
 /**
+ * PreflightRequest is the request for ProviderService.Preflight. Like
+ * Bootstrap it is account/profile-scoped, carrying only the provider's opaque
+ * options and the pinned protocol version.
+ *
+ * @generated from message provider.v1.PreflightRequest
+ */
+export type PreflightRequest = Message<"provider.v1.PreflightRequest"> & {
+  /**
+   * options is always UTF-8 JSON bytes: `{}` when the provider was given no
+   * options, never absent and never an empty string. The CLI never inspects
+   * this field; only the provider unmarshals it.
+   *
+   * @generated from field: bytes options = 1;
+   */
+  options: Uint8Array;
+
+  /**
+   * protocol_version pins the wire contract so a provider can reject a
+   * request it can't speak.
+   *
+   * @generated from field: string protocol_version = 2;
+   */
+  protocolVersion: string;
+};
+
+/**
+ * Describes the message provider.v1.PreflightRequest.
+ * Use `create(PreflightRequestSchema)` to create a new message.
+ */
+export const PreflightRequestSchema: GenMessage<PreflightRequest> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 9);
+
+/**
+ * PreflightResponse tells the CLI what the provider's ambient account/profile
+ * points at, so the CLI can refuse before provisioning.
+ *
+ * @generated from message provider.v1.PreflightResponse
+ */
+export type PreflightResponse = Message<"provider.v1.PreflightResponse"> & {
+  /**
+   * infra_class is the class the pointed-at infrastructure is stamped with, or
+   * CLASS_UNSPECIFIED when no Ocel infrastructure is present.
+   *
+   * @generated from field: provider.v1.Environment.Class infra_class = 1;
+   */
+  infraClass: Environment_Class;
+
+  /**
+   * infrastructure_present is false when the infrastructure the command needs
+   * has not been bootstrapped yet.
+   *
+   * @generated from field: bool infrastructure_present = 2;
+   */
+  infrastructurePresent: boolean;
+};
+
+/**
+ * Describes the message provider.v1.PreflightResponse.
+ * Use `create(PreflightResponseSchema)` to create a new message.
+ */
+export const PreflightResponseSchema: GenMessage<PreflightResponse> = /*@__PURE__*/
+  messageDesc(file_provider_v1_provider, 10);
+
+/**
  * DeployEvent is a single item on the Deploy response stream: either
  * progress/log output, or - always the final event - the terminal outcome.
  *
@@ -492,7 +565,7 @@ export type DeployEvent = Message<"provider.v1.DeployEvent"> & {
  * Use `create(DeployEventSchema)` to create a new message.
  */
 export const DeployEventSchema: GenMessage<DeployEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 9);
+  messageDesc(file_provider_v1_provider, 11);
 
 /**
  * ProgressEvent reports a discrete, human-readable step of deploy progress.
@@ -511,7 +584,7 @@ export type ProgressEvent = Message<"provider.v1.ProgressEvent"> & {
  * Use `create(ProgressEventSchema)` to create a new message.
  */
 export const ProgressEventSchema: GenMessage<ProgressEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 10);
+  messageDesc(file_provider_v1_provider, 12);
 
 /**
  * LogEvent carries diagnostic output that isn't a discrete progress step.
@@ -530,7 +603,7 @@ export type LogEvent = Message<"provider.v1.LogEvent"> & {
  * Use `create(LogEventSchema)` to create a new message.
  */
 export const LogEventSchema: GenMessage<LogEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 11);
+  messageDesc(file_provider_v1_provider, 13);
 
 /**
  * ResultEvent is always the last event on the stream: success, or failure
@@ -567,7 +640,7 @@ export type ResultEvent = Message<"provider.v1.ResultEvent"> & {
  * Use `create(ResultEventSchema)` to create a new message.
  */
 export const ResultEventSchema: GenMessage<ResultEvent> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 12);
+  messageDesc(file_provider_v1_provider, 14);
 
 /**
  * ResourceOutput pairs a resource's logical name with its typed connection
@@ -608,7 +681,7 @@ export type ResourceOutput = Message<"provider.v1.ResourceOutput"> & {
  * Use `create(ResourceOutputSchema)` to create a new message.
  */
 export const ResourceOutputSchema: GenMessage<ResourceOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 13);
+  messageDesc(file_provider_v1_provider, 15);
 
 /**
  * PostgresOutput is the discrete connection detail for a provisioned
@@ -652,7 +725,7 @@ export type PostgresOutput = Message<"provider.v1.PostgresOutput"> & {
  * Use `create(PostgresOutputSchema)` to create a new message.
  */
 export const PostgresOutputSchema: GenMessage<PostgresOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 14);
+  messageDesc(file_provider_v1_provider, 16);
 
 /**
  * BucketOutput is the discrete connection detail for a provisioned bucket
@@ -680,7 +753,7 @@ export type BucketOutput = Message<"provider.v1.BucketOutput"> & {
  * Use `create(BucketOutputSchema)` to create a new message.
  */
 export const BucketOutputSchema: GenMessage<BucketOutput> = /*@__PURE__*/
-  messageDesc(file_provider_v1_provider, 15);
+  messageDesc(file_provider_v1_provider, 17);
 
 /**
  * ProviderService is served by a provider binary (e.g. the AWS provider,
@@ -771,6 +844,21 @@ export const ProviderService: GenService<{
     methodKind: "unary";
     input: typeof ListEnvironmentsRequestSchema;
     output: typeof ListEnvironmentsResponseSchema;
+  },
+  /**
+   * Preflight reports what the provider's ambient account/profile points at:
+   * the class the pointed-at infrastructure is stamped with, and whether that
+   * infrastructure exists yet. The CLI calls it before a preview or deploy to
+   * refuse fast and locally when the infrastructure is missing or is the
+   * wrong class, before anything is provisioned. It is authoritative: the
+   * provider enforces the same class match itself.
+   *
+   * @generated from rpc provider.v1.ProviderService.Preflight
+   */
+  preflight: {
+    methodKind: "unary";
+    input: typeof PreflightRequestSchema;
+    output: typeof PreflightResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_provider_v1_provider, 0);
