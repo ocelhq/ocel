@@ -67,6 +67,11 @@ type Config struct {
 	// preview bootstrap outputs). Empty outside ephemeral previews.
 	SharedClusterEndpoint  string
 	SharedClusterSecretARN string
+
+	// ExpiresAt is the epoch-seconds expiry stamped on an ephemeral preview
+	// stack, so `ocel preview ls` can surface age/expiry and a future reaper can
+	// find orphans. 0 means no expiry (production and persistent previews).
+	ExpiresAt int64
 }
 
 // Run provisions every resource in manifest against AWS and returns the
@@ -130,6 +135,10 @@ func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progres
 		return nil, fmt.Errorf("prepare stack %s: %w", cfg.StackName, err)
 	}
 
+	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
+		return nil, err
+	}
+
 	report(progress, "Provisioning resources (this can take several minutes)")
 	logWriter := lineWriter(log)
 	upOpts := []optup.Option{}
@@ -144,6 +153,26 @@ func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progres
 
 	report(progress, "Collecting outputs")
 	return collectOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
+}
+
+// previewExpiryTagKey is the Pulumi stack tag holding an ephemeral preview's
+// epoch-seconds expiry; ListPreviewStacks reads it back for `ocel preview ls`.
+const previewExpiryTagKey = "ocel:expires_at"
+
+// stampExpiry records expiresAt as a Pulumi stack tag on an ephemeral preview
+// stack, so ls can surface expiry and a future reaper can find orphans. A zero
+// expiresAt (production and persistent previews) is a no-op. The stack-tag write
+// itself needs a live backend, so — like Run's provisioning body — it is the
+// opt-in-e2e seam: the value is computed and threaded here now, and the
+// stack.Workspace() tag write against the live backend lands at the marked line.
+func stampExpiry(ctx context.Context, stack auto.Stack, expiresAt int64) error {
+	if expiresAt == 0 {
+		return nil
+	}
+	// Opt-in-e2e seam: write previewExpiryTagKey=strconv.FormatInt(expiresAt, 10)
+	// via stack.Workspace() against the live Pulumi backend.
+	_ = stack
+	return nil
 }
 
 // collectOutputs turns the stack's raw Pulumi outputs into typed

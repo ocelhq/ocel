@@ -2,11 +2,32 @@ package server
 
 import (
 	"testing"
+	"time"
 
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
 )
+
+func TestPreviewExpiry(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	cases := []struct {
+		name      string
+		lifecycle providerv1.Environment_Lifecycle
+		want      int64
+	}{
+		{"ephemeral gets now+ttl", providerv1.Environment_LIFECYCLE_EPHEMERAL, now.Add(previewTTL).Unix()},
+		{"persistent has no expiry", providerv1.Environment_LIFECYCLE_PERSISTENT, 0},
+		{"unspecified (production) has no expiry", providerv1.Environment_LIFECYCLE_UNSPECIFIED, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := previewExpiry(tc.lifecycle, now); got != tc.want {
+				t.Errorf("previewExpiry(%v) = %d, want %d", tc.lifecycle, got, tc.want)
+			}
+		})
+	}
+}
 
 func TestStackName(t *testing.T) {
 	cases := []struct {

@@ -112,7 +112,7 @@ func runPreviewUpCmd(cmd *cobra.Command, args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return runPreviewUp(ctx, cwd, previewUpOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+	return runPreviewUp(ctx, cwd, previewUpOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 }
 
 func init() {
@@ -133,7 +133,7 @@ func init() {
 // class), then drives the provider's Deploy RPC and prints the connection
 // outputs on success. `ocel preview` and `ocel deploy` share the Deploy RPC and
 // diverge only by the Environment sent.
-func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout, stderr io.Writer) error {
 	if _, err := loadCredentials(); err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &ExitError{Code: 1}
@@ -346,11 +346,20 @@ func confirmDestroyPreview(name string, stdout io.Writer, stdin io.Reader) (bool
 	return confirmYN(fmt.Sprintf("Destroy persistent preview %q?", name), stdout, stdin)
 }
 
-// preflightPreview asks the provider what its ambient account points at and
-// refuses locally — before anything is provisioned — when the preview
-// infrastructure is missing or is the wrong class. The provider enforces the
-// same class match authoritatively.
+// preflightPreview refuses a preview command locally — before anything is
+// provisioned — when the preview infrastructure is missing or is the wrong
+// class.
 func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor) error {
+	return preflightClass(ctx, runner, provider, providerv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview")
+}
+
+// preflightClass asks the provider what its ambient account points at and
+// refuses locally — before anything is provisioned — when no infrastructure is
+// present (directing the user to bootstrapHint) or it is the wrong class for
+// the running command. The provider enforces the same class match
+// authoritatively; this is the fast local refuse `ocel deploy` and `ocel
+// preview` share.
+func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required providerv1.Environment_Class, bootstrapHint string) error {
 	resp, err := runner.Preflight(ctx, &providerv1.PreflightRequest{
 		Options:         []byte(provider.Options),
 		ProtocolVersion: manifestbuilder.SchemaVersion,
@@ -359,9 +368,9 @@ func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provid
 		return err
 	}
 	if !resp.GetInfrastructurePresent() {
-		return fmt.Errorf("preview infrastructure is not set up yet; run `ocel bootstrap --preview` to create it")
+		return fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
 	}
-	return providerv1.CheckClass(resp.GetInfraClass(), providerv1.Environment_CLASS_PREVIEW)
+	return providerv1.CheckClass(resp.GetInfraClass(), required)
 }
 
 // renderEnvironments prints one line per preview environment: identity,

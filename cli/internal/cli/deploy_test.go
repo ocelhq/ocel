@@ -160,11 +160,54 @@ func TestRunDeploy_HappyPath_DiscoversBuildsSpawnsAndDeploysToSuccess(t *testing
 	if !strings.Contains(stdout.String(), "Deploy succeeded") {
 		t.Errorf("stdout = %q, want a terminal success message", stdout.String())
 	}
+	if !strings.Contains(stdout.String(), "DEPLOY class=CLASS_PRODUCTION lifecycle=LIFECYCLE_UNSPECIFIED") {
+		t.Errorf("stdout = %q, want deploy to send a production Environment", stdout.String())
+	}
 	if strings.Contains(stdout.String(), "[y/N]") {
 		t.Errorf("stdout = %q, want the confirm prompt skipped by --yes", stdout.String())
 	}
 
 	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunDeploy_RefusesOnClassMismatch_NoDeploy proves the production class
+// guard (User Story 27): pointed at a preview substrate, `ocel deploy` refuses
+// before provisioning and never drives Deploy.
+func TestRunDeploy_RefusesOnClassMismatch_NoDeploy(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want a class-mismatch error")
+	}
+	if !strings.Contains(err.Error(), "ocel deploy can only run against production infrastructure") {
+		t.Errorf("err = %v, want the concrete class-mismatch message", err)
+	}
+	if strings.Contains(stdout.String(), "DEPLOY ") {
+		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
+	}
+}
+
+// TestRunDeploy_RefusesWhenInfraAbsent_NoDeploy proves `ocel deploy` refuses
+// with a concrete bootstrap hint when no infrastructure is present.
+func TestRunDeploy_RefusesWhenInfraAbsent_NoDeploy(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	t.Setenv(fakeInfraPresentEnvVar, "0")
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want a missing-infrastructure error")
+	}
+	if !strings.Contains(err.Error(), "ocel bootstrap") {
+		t.Errorf("err = %v, want it to direct the user to `ocel bootstrap`", err)
+	}
+	if strings.Contains(stdout.String(), "DEPLOY ") {
+		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
+	}
 }
 
 // TestRunDeploy_ConfirmSkippedWhenStdinNotATTY_ProceedsWithoutPrompting
@@ -257,6 +300,12 @@ export {};
 	sockPath = filepath.Join(t.TempDir(), "deploy-provider.sock")
 	t.Setenv(deployFakeProviderEnvVar, "1")
 	t.Setenv(deployFakeProviderSockEnvVar, sockPath)
+
+	// The deploy path now preflights before provisioning; default the fake to a
+	// present production substrate so the guard passes. Preview tests override
+	// these after calling setUpDeployFixture.
+	t.Setenv(fakeInfraClassEnvVar, "production")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
 
 	return root, sockPath
 }
