@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -94,6 +94,40 @@ describe("buildApp", () => {
     expect(JSON.parse(res.body)).toEqual({ message: "hello, world" });
   });
 
+  it("inlines the adapter deps into index.mjs and is self-contained", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
+
+    const funcDir = path.join(outDir, "functions", "api.func");
+    // serverless-http is bundled into index.mjs, not left as a bare import the
+    // user's app never traced — so the deployed Lambda can actually load it.
+    const shim = readFileSync(path.join(funcDir, "index.mjs"), "utf8");
+    expect(shim).not.toMatch(/from\s+["']serverless-http["']/);
+    expect(shim).not.toMatch(/require\(\s*["']serverless-http["']\s*\)/);
+
+    // Copy the artifact outside the repo (no ancestor node_modules) and invoke
+    // it there: proves every runtime dep travels inside the .func.
+    const isolated = mkdtempSync(path.join(tmpdir(), "nb-func-"));
+    dirs.push(isolated);
+    cpSync(funcDir, isolated, { recursive: true });
+
+    const { handler } = await import(path.join(isolated, "index.mjs"));
+    const res = await handler(
+      {
+        version: "2.0",
+        rawPath: "/hello/isolated",
+        rawQueryString: "",
+        headers: { host: "example.com" },
+        requestContext: { http: { method: "GET", path: "/hello/isolated" } },
+        isBase64Encoded: false,
+      },
+      {},
+    );
+    expect(res.statusCode).toBe(200);
+    expect(JSON.parse(res.body)).toEqual({ message: "hello, isolated" });
+  });
+
   it("throws naming the candidates when no entrypoint resolves", async () => {
     const outDir = freshOut();
     dirs.push(outDir);
@@ -129,5 +163,16 @@ describe("buildApps", () => {
     );
     expect(summaries.map((s) => s.name)).toEqual(["api", "worker"]);
     expect(summaries[1]!.logicalName).toBe("Worker");
+  });
+
+  it("clears orphaned .func dirs from a previous run", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    await buildApps([{ name: "old", cwd: fixtureDir }], { outDir });
+    expect(existsSync(path.join(outDir, "functions", "old.func"))).toBe(true);
+
+    await buildApps([{ name: "new", cwd: fixtureDir }], { outDir });
+    expect(existsSync(path.join(outDir, "functions", "new.func"))).toBe(true);
+    expect(existsSync(path.join(outDir, "functions", "old.func"))).toBe(false);
   });
 });
