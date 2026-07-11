@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,6 +15,8 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -170,6 +173,93 @@ func TestRunDeploy_HappyPath_DiscoversBuildsSpawnsAndDeploysToSuccess(t *testing
 	waitForNoStaleSocket(t, sockPath)
 }
 
+// TestRunDeploy_WithApp_BuildsFunctionsIntoManifest proves an app declared in
+// the config is built into a function and lowered onto the manifest alongside
+// its resources: the fake provider echoes every function it receives, so a
+// manifest missing the function fails this assertion.
+func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	addAppToFixtureConfig(t, root)
+	stubAppFunctions(t, []manifestbuilder.Function{
+		{
+			Name:         "api",
+			Runtime:      "nodejs20.x",
+			Handler:      "index.handler",
+			ArtifactPath: "output/api",
+			Framework:    "express",
+		},
+	})
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "FUNCTION logical_name=api runtime=nodejs20.x handler=index.handler artifact_path=output/api framework=express") {
+		t.Errorf("stdout = %q, want the function to have reached the manifest", out)
+	}
+	if strings.Contains(stderr.String(), "no apps configured") {
+		t.Errorf("stderr = %q, want no no-apps warning when an app is configured", stderr.String())
+	}
+	if !strings.Contains(out, "Deploy succeeded") {
+		t.Errorf("stdout = %q, want a terminal success message", out)
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly proves that with no apps
+// configured, deploy prints a clear warning and still deploys the declared
+// resources (the fake validates the postgres resource, and no function is
+// echoed).
+func TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if !strings.Contains(stderr.String(), "no apps configured; deploying infrastructure only") {
+		t.Errorf("stderr = %q, want the no-apps warning", stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "Deploy succeeded") {
+		t.Errorf("stdout = %q, want resources to still deploy to success", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "FUNCTION ") {
+		t.Errorf("stdout = %q, want no function echoed when no apps are configured", stdout.String())
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunDeploy_AppBuildFailure_AbortsBeforeSpawn proves an app-build failure
+// aborts deploy before any provider is spawned (no Deploy driven).
+func TestRunDeploy_AppBuildFailure_AbortsBeforeSpawn(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	addAppToFixtureConfig(t, root)
+	prev := buildAppFunctions
+	buildAppFunctions = func(context.Context, *projectconfig.Config, io.Writer) ([]manifestbuilder.Function, error) {
+		return nil, errors.New("boom: app build failed")
+	}
+	t.Cleanup(func() { buildAppFunctions = prev })
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want the app-build failure")
+	}
+	if !strings.Contains(err.Error(), "boom: app build failed") {
+		t.Errorf("err = %v, want the app-build failure surfaced", err)
+	}
+	if strings.Contains(stdout.String(), "DEPLOY ") {
+		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
+	}
+}
+
 // TestRunDeploy_RefusesOnClassMismatch_NoDeploy proves the production class
 // guard (User Story 27): pointed at a preview substrate, `ocel deploy` refuses
 // before provisioning and never drives Deploy.
@@ -308,6 +398,32 @@ export {};
 	t.Setenv(fakeInfraPresentEnvVar, "1")
 
 	return root, sockPath
+}
+
+// addAppToFixtureConfig rewrites the fixture's ocel.config.ts to declare one
+// express app, so cfg.Apps is non-empty and the no-apps warning is suppressed.
+// The app's real source is never built: stubAppFunctions injects the functions.
+func addAppToFixtureConfig(t *testing.T, root string) {
+	t.Helper()
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  projectId: "proj_deploy_happy",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  apps: [{ name: "api", path: "apps/api", framework: "express" }],
+};
+`)
+}
+
+// stubAppFunctions points the app-build seam at fixed functions for the
+// duration of a test, so the CLI path is exercised without spawning the
+// embedded node-builder. It mirrors locateProviderBinary/deployReadyTimeout.
+func stubAppFunctions(t *testing.T, functions []manifestbuilder.Function) {
+	t.Helper()
+	prev := buildAppFunctions
+	buildAppFunctions = func(context.Context, *projectconfig.Config, io.Writer) ([]manifestbuilder.Function, error) {
+		return functions, nil
+	}
+	t.Cleanup(func() { buildAppFunctions = prev })
 }
 
 // nodePlatformSuffix mirrors resolve-provider.cjs's platform/arch naming

@@ -13,7 +13,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -153,11 +152,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 		return err
 	}
 
-	resources, err := deploycollector.Collect(ctx, cfg, stdout, stderr)
-	if err != nil {
-		return err
-	}
-	manifest, err := manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources), nil)
+	manifest, err := collectAndBuildManifest(ctx, cfg, stdout, stderr)
 	if err != nil {
 		return err
 	}

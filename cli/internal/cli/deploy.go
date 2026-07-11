@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -31,6 +32,11 @@ var deployReadyTimeout time.Duration
 // locateProviderBinary is a seam over providerlocator.Locate so tests can
 // point `ocel deploy` at a fake provider binary without a real npm install.
 var locateProviderBinary = providerlocator.Locate
+
+// buildAppFunctions is a seam over appbuilder.Build so tests can inject canned
+// functions without spawning the embedded node-builder, mirroring
+// locateProviderBinary.
+var buildAppFunctions = appbuilder.Build
 
 // deployOptions holds the flags accepted by `ocel deploy`.
 type deployOptions struct {
@@ -99,12 +105,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		}
 	}
 
-	resources, err := deploycollector.Collect(ctx, cfg, stdout, stderr)
-	if err != nil {
-		return err
-	}
-
-	manifest, err := manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources), nil)
+	manifest, err := collectAndBuildManifest(ctx, cfg, stdout, stderr)
 	if err != nil {
 		return err
 	}
@@ -139,11 +140,33 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		if err := runner.Deploy(ctx, req, onEvent); err != nil {
 			return err
 		}
-		_ = stackOutputs
 
 		fmt.Fprintln(stdout, "✓ Deploy succeeded.")
+		printResourceOutputs(stdout, stackOutputs)
 		return nil
 	})
+}
+
+// collectAndBuildManifest runs the pre-provision path `ocel deploy` and `ocel
+// preview` share: it collects the declared infrastructure, builds the
+// project's apps into functions, and lowers both into the provider Manifest.
+// When no apps are configured it warns and proceeds infrastructure-only. Any
+// app-build failure aborts here, before any provider is spawned.
+func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) (*providerv1.Manifest, error) {
+	resources, err := deploycollector.Collect(ctx, cfg, stdout, stderr)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(cfg.Apps) == 0 {
+		fmt.Fprintln(stderr, "no apps configured; deploying infrastructure only")
+	}
+	functions, err := buildAppFunctions(ctx, cfg, stderr)
+	if err != nil {
+		return nil, err
+	}
+
+	return manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources), functions)
 }
 
 // runProviderSession locates and spawns the project's configured provider,

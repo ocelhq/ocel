@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 )
 
@@ -48,6 +49,36 @@ func TestRunPreviewUp_Ephemeral_SendsPreviewEphemeralEnvironment(t *testing.T) {
 		if !strings.Contains(out, sub) {
 			t.Errorf("stdout = %q, want it to contain %q", out, sub)
 		}
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest proves `ocel preview`
+// builds apps into the manifest through the same shared path as `ocel deploy`.
+func TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	addAppToFixtureConfig(t, root)
+	stubGit(t, "feature/login", "")
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+	stubAppFunctions(t, []manifestbuilder.Function{
+		{
+			Name:         "api",
+			Runtime:      "nodejs20.x",
+			Handler:      "index.handler",
+			ArtifactPath: "output/api",
+			Framework:    "express",
+		},
+	})
+
+	var stdout, stderr bytes.Buffer
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr); err != nil {
+		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	if !strings.Contains(stdout.String(), "FUNCTION logical_name=api runtime=nodejs20.x handler=index.handler artifact_path=output/api framework=express") {
+		t.Errorf("stdout = %q, want the function to have reached the preview manifest", stdout.String())
 	}
 
 	waitForNoStaleSocket(t, sockPath)

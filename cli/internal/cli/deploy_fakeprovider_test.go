@@ -105,6 +105,16 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *providerv1.D
 		return err
 	}
 
+	// Echo each received function so tests can assert the manifest built by
+	// runDeploy actually carries the apps' functions alongside its resources.
+	for _, f := range req.GetManifest().GetFunctions() {
+		if err := stream.Send(&providerv1.DeployEvent{
+			Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "FUNCTION " + describeFunction(f)}},
+		}); err != nil {
+			return err
+		}
+	}
+
 	if err := stream.Send(&providerv1.DeployEvent{
 		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "provisioning..."}},
 	}); err != nil {
@@ -199,6 +209,13 @@ func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
 func describeEnv(env *providerv1.Environment) string {
 	return fmt.Sprintf("class=%s lifecycle=%s identity=%s source=%s label=%s",
 		env.GetClass(), env.GetLifecycle(), env.GetIdentity(), env.GetIdentitySource(), env.GetLabel())
+}
+
+// describeFunction renders a ManifestFunction into a stable, assertable
+// one-line string carrying every field the manifest should preserve.
+func describeFunction(f *providerv1.ManifestFunction) string {
+	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s framework=%s",
+		f.GetLogicalName(), f.GetRuntime(), f.GetHandler(), f.GetArtifactPath(), f.GetFramework())
 }
 
 // parseInfraClass maps the fakeInfraClassEnvVar value to an Environment_Class.
