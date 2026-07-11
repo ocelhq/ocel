@@ -91,7 +91,13 @@ function rewriteSpecifier(spec: string, sourceDir: string): string | undefined {
  */
 async function rewriteRelativeImports(code: string, sourceDir: string): Promise<string> {
   await lexerInit;
-  const [imports] = parseImports(code);
+  let imports: ReturnType<typeof parseImports>[0];
+  try {
+    [imports] = parseImports(code);
+  } catch {
+    // Not parseable as an ES module (or exotic syntax) — leave it untouched.
+    return code;
+  }
   let out = code;
   for (let i = imports.length - 1; i >= 0; i--) {
     const imp = imports[i]!;
@@ -137,9 +143,23 @@ async function emitFile(absPath: string, dest: string): Promise<void> {
     const { code } = transform(source, { transforms });
     const rewritten = await rewriteRelativeImports(code, path.dirname(absPath));
     await writeFile(toOutExt(dest), rewritten);
-  } else {
-    await copyFile(absPath, dest);
+    return;
   }
+  // Copied deps: many published ESM packages (e.g. the ocel SDK's tsc dist) use
+  // extensionless relative imports that only resolve under a bundler. Rewrite
+  // those too so the un-bundled tree runs under raw Node ESM. CJS files (no
+  // static import/export) are left byte-for-byte — extensionless `require` is
+  // fine. Resolve against the file's ORIGINAL location; targets are already JS.
+  const ext = path.extname(absPath);
+  if (ext === ".js" || ext === ".mjs") {
+    const source = await readFile(absPath, "utf8");
+    const rewritten = await rewriteRelativeImports(source, path.dirname(absPath));
+    if (rewritten !== source) {
+      await writeFile(dest, rewritten);
+      return;
+    }
+  }
+  await copyFile(absPath, dest);
 }
 
 export async function buildApp(

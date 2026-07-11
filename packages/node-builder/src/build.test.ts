@@ -108,6 +108,22 @@ describe("buildApp", () => {
     expect(db).toContain('"../greeting.js"');
   });
 
+  it("rewrites extensionless relative imports in copied ESM deps (ocel-dist class)", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
+    const funcDir = path.join(outDir, "functions", "api.func");
+
+    // Copied ESM dep: its extensionless internal import gains `.js`.
+    const dep = readFileSync(path.join(funcDir, "node_modules", "fake-dep", "index.js"), "utf8");
+    expect(dep).toContain('"./helper.js"');
+    expect(dep).not.toMatch(/["']\.\/helper["']/);
+
+    // Copied CJS dep: `require("./impl")` is left completely untouched.
+    const cjs = readFileSync(path.join(funcDir, "node_modules", "cjs-dep", "index.js"), "utf8");
+    expect(cjs).toContain('require("./impl")');
+  });
+
   it("emits an invocable handler that answers a Lambda Function URL (v2) event", async () => {
     const outDir = freshOut();
     dirs.push(outDir);
@@ -273,6 +289,7 @@ describe("embedded bundle self-containment", () => {
       isBase64Encoded: false,
     });
     expect(res.statusCode).toBe(200);
-    expect(JSON.parse(res.body)).toEqual({ message: "HELLO, DEPLOYED", banner: "fixture" });
+    // server.js -> ./lib/db.js -> fake-dep (./helper.js) + cjs-dep (require).
+    expect(JSON.parse(res.body)).toEqual({ message: ">[HELLO, DEPLOYED]", banner: "fixture" });
   });
 });
