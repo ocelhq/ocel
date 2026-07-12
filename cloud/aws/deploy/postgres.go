@@ -106,14 +106,19 @@ func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs
 		return pulumi.StringOutput{}, err
 	}
 
+	// RDS identifiers (subnet group, cluster, instance) forbid the underscores
+	// the logical name carries, so name each from a safe prefix rather than
+	// Pulumi's autoname.
 	subnetGroup, err := rds.NewSubnetGroup(ctx, logicalName+"-subnets", &rds.SubnetGroupArgs{
-		SubnetIds: pulumi.ToStringArray(subnetIDs),
+		NamePrefix: pulumi.String(physicalNamePrefix(logicalName, "subnets")),
+		SubnetIds:  pulumi.ToStringArray(subnetIDs),
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
 	}
 
 	cluster, err := rds.NewCluster(ctx, logicalName, &rds.ClusterArgs{
+		ClusterIdentifierPrefix:  pulumi.String(physicalNamePrefix(logicalName, "")),
 		Engine:                   pulumi.String(args.Engine),
 		EngineMode:               pulumi.String(args.EngineMode),
 		EngineVersion:            pulumi.String(args.EngineVersion),
@@ -134,6 +139,7 @@ func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs
 	}
 
 	_, err = rds.NewClusterInstance(ctx, logicalName+"-instance", &rds.ClusterInstanceArgs{
+		IdentifierPrefix:   pulumi.String(physicalNamePrefix(logicalName, "instance")),
 		ClusterIdentifier:  cluster.ID(),
 		Engine:             pulumi.String(args.Engine),
 		EngineVersion:      cluster.EngineVersion,
