@@ -38,7 +38,7 @@ export function resolveFramework(key: string | undefined): Framework {
   const fw = frameworks[key ?? "express"];
   if (!fw) {
     throw new Error(
-      `node-builder: unknown framework "${key}"; known: ${Object.keys(frameworks).join(", ")}`,
+      `ocel: unknown framework "${key}"; known: ${Object.keys(frameworks).join(", ")}`,
     );
   }
   return fw;

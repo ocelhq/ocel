@@ -36,7 +36,7 @@ function resolveEntrypoint(input: AppInput, fw: Framework): string {
   if (input.entrypoint) {
     const abs = path.resolve(input.cwd, input.entrypoint);
     if (!existsSync(abs)) {
-      throw new Error(`node-builder: entrypoint "${input.entrypoint}" not found in ${input.cwd}`);
+      throw new Error(`ocel: entrypoint "${input.entrypoint}" not found in ${input.cwd}`);
     }
     return abs;
   }
@@ -45,7 +45,7 @@ function resolveEntrypoint(input: AppInput, fw: Framework): string {
     if (existsSync(abs)) return abs;
   }
   throw new Error(
-    `node-builder: no entrypoint found in ${input.cwd}; tried: ${fw.entrypointCandidates.join(", ")}`,
+    `ocel: no entrypoint found in ${input.cwd}; tried: ${fw.entrypointCandidates.join(", ")}`,
   );
 }
 
@@ -157,7 +157,7 @@ function rewriteSpecifier(spec: string, sourceDir: string): string | undefined {
 /**
  * Add extensions to extensionless relative specifiers in transpiled user code,
  * so the un-bundled module tree resolves under raw Node ESM. Bare/package
- * specifiers are left untouched. Applied to the sucrase output, whose
+ * specifiers are left untouched. Applied to the transpileTs output, whose
  * specifiers are byte-for-byte the source's.
  */
 async function rewriteRelativeImports(code: string, sourceDir: string): Promise<string> {
