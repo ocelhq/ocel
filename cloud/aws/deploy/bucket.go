@@ -117,7 +117,13 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 // (its packaging via provider distribution is deferred — see deploy.Config).
 // The bucket name is exported under logicalName for collectBucketOutput.
 func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, sessionTableName, sessionTableARN, listenerCodePath string) (pulumi.StringOutput, error) {
-	bucket, err := s3.NewBucketV2(ctx, logicalName, &s3.BucketV2Args{})
+	// The logical name is `<type>_<id>` (underscores); S3 bucket names are
+	// DNS-constrained and reject underscores, so name from a safe prefix rather
+	// than Pulumi's autoname. bucket.Bucket still resolves to the generated
+	// physical name for the exported output.
+	bucket, err := s3.NewBucketV2(ctx, logicalName, &s3.BucketV2Args{
+		BucketPrefix: pulumi.String(physicalNamePrefix(logicalName, "")),
+	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
 	}
