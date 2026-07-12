@@ -178,7 +178,7 @@ func TestBuild_Integration(t *testing.T) {
 	want := manifestbuilder.Function{
 		Name:         "api",
 		Runtime:      "nodejs24.x",
-		Handler:      "index.handler",
+		Handler:      "src/server.js",
 		ArtifactPath: "functions/api.func",
 		Framework:    "express",
 	}

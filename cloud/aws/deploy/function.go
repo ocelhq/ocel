@@ -3,6 +3,7 @@ package deploy
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
@@ -15,11 +16,32 @@ import (
 )
 
 // Provider-chosen defaults for a realized function. A ManifestFunction always
-// carries runtime and handler, but an empty value falls back to the pinned
-// Node runtime the app builder emits (an `index.mjs` exporting `handler`).
+// carries a runtime and a handler (the app builder emits both), but an empty
+// value falls back to the pinned Node runtime and the conventional entrypoint.
 const (
 	defaultFunctionRuntime = "nodejs24.x"
-	defaultFunctionHandler = "index.handler"
+
+	// The manifest handler is the user entrypoint's path within the .func (e.g.
+	// `src/server.js`); the nodert runtime imports it via OCEL_HANDLER. This is
+	// the fallback when the manifest omits it.
+	defaultFunctionEntry = "src/server.js"
+
+	// lambdaConfigHandler is the Lambda's own Handler config value. Under the
+	// nodert exec-wrapper runtime the Go bootstrap owns the Runtime API loop, so
+	// this is vestigial — but the managed nodejs runtime still requires a
+	// syntactically valid value.
+	lambdaConfigHandler = "index.handler"
+
+	// execWrapper points the managed runtime at the nodert Go bootstrap shipped
+	// in the membrane layer; it takes over the Runtime API loop.
+	execWrapper = "/opt/ocel/bootstrap"
+
+	// defaultMembraneLayerARN pins the Ocel-owned, publicly-shared membrane
+	// layer version. It is a released-artifact version, bumped only when the
+	// layer is republished (`make publish-layer`); override via
+	// OCEL_MEMBRANE_LAYER_ARN for dev/testing.
+	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:6"
+	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
 	// A function in the manifest is web-facing (an express framework implies
 	// it), so its Function URL is public this iteration — no IAM in front.
@@ -29,6 +51,15 @@ const (
 	// under, read back by collectFunctionOutput.
 	outputKeyFunctionURL = "url"
 )
+
+// membraneLayerARN is the membrane layer version deployed functions attach,
+// taken from OCEL_MEMBRANE_LAYER_ARN when set, else the pinned default.
+func membraneLayerARN() string {
+	if arn := os.Getenv(membraneLayerARNEnv); arn != "" {
+		return arn
+	}
+	return defaultMembraneLayerARN
+}
 
 // functionArgs is the fully-resolved set of arguments a ManifestFunction lowers
 // to, independent of any Pulumi or AWS call. It is the pure output of
@@ -40,13 +71,14 @@ type functionArgs struct {
 
 // translateFunction lowers a ManifestFunction into the concrete Lambda
 // arguments the provider provisions. Empty runtime/handler fall back to the
-// pinned Node defaults.
+// pinned Node defaults. Handler is the user entrypoint path OCEL_HANDLER
+// resolves as /var/task/<handler>.
 func translateFunction(fn *providerv1.ManifestFunction) functionArgs {
 	runtime := defaultFunctionRuntime
 	if r := fn.GetRuntime(); r != "" {
 		runtime = r
 	}
-	handler := defaultFunctionHandler
+	handler := defaultFunctionEntry
 	if h := fn.GetHandler(); h != "" {
 		handler = h
 	}
@@ -125,21 +157,23 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 		return err
 	}
 
-	env["AWS_LAMBDA_EXEC_WRAPPER"] = pulumi.String("/opt/ocel/bootstrap")
-	env["OCEL_HANDLER"] = pulumi.String("/var/task/src/server.js")
+	// The nodert bootstrap (in the membrane layer) takes over as the runtime and
+	// imports the user entrypoint at /var/task/<handler>. The Lambda's own
+	// Handler config is vestigial under this exec wrapper.
+	env["AWS_LAMBDA_EXEC_WRAPPER"] = pulumi.String(execWrapper)
+	env["OCEL_HANDLER"] = pulumi.String("/var/task/" + args.Handler)
 
 	fn, err := lambda.NewFunction(ctx, logicalName, &lambda.FunctionArgs{
 		Runtime: pulumi.String(args.Runtime),
-		Handler: pulumi.String(args.Handler),
+		Handler: pulumi.String(lambdaConfigHandler),
 		Role:    role.Arn,
 		Code:    pulumi.NewFileArchive(archivePath),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},
 
-		// TODO: sourcing this value dynamically
 		Layers: pulumi.StringArray{
-			pulumi.String("arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:4"),
+			pulumi.String(membraneLayerARN()),
 		},
 	})
 	if err != nil {

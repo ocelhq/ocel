@@ -52,7 +52,6 @@ const TARGETS = {
     binaries: [
       { cmd: "./cmd/ocelaws", name: "ocelaws" },
       { cmd: "./cmd/ocelawsrt", name: "ocelawsrt", subdir: "runtime" },
-      { cmd: "./cmd/nodert/bootstrap", name: "bootstrap", subdir: "nodert" },
     ],
   },
 };

@@ -1,28 +1,17 @@
 /**
- * Single registry of framework-specific knowledge: entrypoint candidates,
- * Lambda runtime, and the handler shim. Adding a framework happens here and
- * nowhere else.
+ * Single registry of framework-specific knowledge: entrypoint candidates and
+ * the Lambda runtime. Adding a framework happens here and nowhere else.
+ *
+ * There is no handler shim: the nodert runtime imports the user's transpiled
+ * entrypoint directly (see build.ts), so the framework only needs to describe
+ * where that entrypoint lives and which runtime to run it on.
  */
 export interface Framework {
   name: string;
   runtime: string;
   /** Ordered default entrypoint candidates, relative to the app root. */
   entrypointCandidates: string[];
-  /**
-   * Generate the `index.mjs` handler shim for a resolved entrypoint.
-   * `entryJs` is the transpiled entrypoint path relative to the `.func` dir.
-   */
-  shim: (entryJs: string) => string;
 }
-
-import bundledExpressShim from "./shim/express.bundled";
-
-const ENTRY_PLACEHOLDER = "__OCEL_ENTRY_PLACEHOLDER__";
-
-// The shim is pre-bundled at build time (adapter + serverless-http inlined);
-// here we only stamp in the resolved entrypoint path. No bundler at runtime.
-const expressShim = (entryJs: string) =>
-  bundledExpressShim.replaceAll(ENTRY_PLACEHOLDER, `./${entryJs}`);
 
 export const express: Framework = {
   name: "express",
@@ -41,7 +30,6 @@ export const express: Framework = {
     "app.ts",
     "app.js",
   ],
-  shim: (s) => s,
 };
 
 const frameworks: Record<string, Framework> = { express };
