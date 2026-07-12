@@ -146,6 +146,18 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 		return err
 	}
 
+	// An auth-type NONE Function URL is only publicly invokable with a
+	// resource-based policy granting lambda:InvokeFunctionUrl to everyone;
+	// without it AWS rejects unauthenticated requests.
+	if _, err := lambda.NewPermission(ctx, logicalName+"-url-invoke", &lambda.PermissionArgs{
+		Action:              pulumi.String("lambda:InvokeFunctionUrl"),
+		Function:            fn.Name,
+		Principal:           pulumi.String("*"),
+		FunctionUrlAuthType: pulumi.String(functionURLAuthNone),
+	}); err != nil {
+		return err
+	}
+
 	ctx.Export(logicalName, pulumi.Map{outputKeyFunctionURL: url.FunctionUrl})
 	return nil
 }
