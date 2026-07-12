@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"path/filepath"
 
-	iam "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/iam"
-	lambda "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/lambda"
-	secretsmanager "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/secretsmanager"
+	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
+	secretsmanager "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
@@ -158,15 +158,14 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 	}); err != nil {
 		return err
 	}
-	// The second required grant. Ideally scoped with the
-	// lambda:InvokedViaFunctionUrl condition (so the function is only invokable
-	// via its URL), but that AddPermission parameter is unsupported by
-	// pulumi-aws v6 — it lands in v7. Until the upgrade this grant is
-	// unconditioned; see the InvokedViaFunctionUrl follow-up.
+	// The second required grant, scoped with lambda:InvokedViaFunctionUrl so the
+	// function is only publicly invokable through its URL, not the plain Invoke
+	// API.
 	if _, err := lambda.NewPermission(ctx, logicalName+"-invoke", &lambda.PermissionArgs{
-		Action:    pulumi.String("lambda:InvokeFunction"),
-		Function:  fn.Name,
-		Principal: pulumi.String("*"),
+		Action:                pulumi.String("lambda:InvokeFunction"),
+		Function:              fn.Name,
+		Principal:             pulumi.String("*"),
+		InvokedViaFunctionUrl: pulumi.Bool(true),
 	}); err != nil {
 		return err
 	}

@@ -1,8 +1,8 @@
 package deploy
 
 import (
-	ec2 "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/ec2"
-	rds "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/rds"
+	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
+	rds "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/rds"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -141,7 +141,7 @@ func registerPostgres(ctx *pulumi.Context, logicalName string, args postgresArgs
 	_, err = rds.NewClusterInstance(ctx, logicalName+"-instance", &rds.ClusterInstanceArgs{
 		IdentifierPrefix:   pulumi.String(physicalNamePrefix(logicalName, "instance")),
 		ClusterIdentifier:  cluster.ID(),
-		Engine:             pulumi.String(args.Engine),
+		Engine:             rds.EngineType(args.Engine),
 		EngineVersion:      cluster.EngineVersion,
 		InstanceClass:      pulumi.String(args.InstanceClass),
 		PubliclyAccessible: pulumi.Bool(args.PubliclyAccessible),
