@@ -1,7 +1,10 @@
 import { greeting } from "../greeting.js";
+import { mark } from "typed-dep";
 
-// Relative import WITH extension above stays untouched; this module is reached
-// via an extensionless import from server.ts that must be rewritten.
+// This module HAS type annotations. nft's parser chokes on typed TS, so a dep
+// reached only through this file (`typed-dep`) is missing unless the builder
+// feeds nft transpiled JS for analysis. The `../greeting.js` import (already
+// extensioned) stays untouched.
 export function render(name: string): string {
-  return greeting(name).toUpperCase();
+  return mark(greeting(name).toUpperCase());
 }
