@@ -18,7 +18,7 @@ import (
 // carries runtime and handler, but an empty value falls back to the pinned
 // Node runtime the app builder emits (an `index.mjs` exporting `handler`).
 const (
-	defaultFunctionRuntime = "nodejs20.x"
+	defaultFunctionRuntime = "nodejs24.x"
 	defaultFunctionHandler = "index.handler"
 
 	// A function in the manifest is web-facing (an express framework implies
@@ -125,6 +125,9 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 		return err
 	}
 
+	env["AWS_LAMBDA_EXEC_WRAPPER"] = pulumi.String("/opt/ocel/bootstrap")
+	env["OCEL_HANDLER"] = pulumi.String("/var/task/src/server.js")
+
 	fn, err := lambda.NewFunction(ctx, logicalName, &lambda.FunctionArgs{
 		Runtime: pulumi.String(args.Runtime),
 		Handler: pulumi.String(args.Handler),
@@ -132,6 +135,11 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 		Code:    pulumi.NewFileArchive(archivePath),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
+		},
+
+		// TODO: sourcing this value dynamically
+		Layers: pulumi.StringArray{
+			pulumi.String("arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:4"),
 		},
 	})
 	if err != nil {

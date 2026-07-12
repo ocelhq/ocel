@@ -87,13 +87,13 @@ describe("buildApp", () => {
 
     const meta = JSON.parse(readFileSync(path.join(funcDir, "meta.json"), "utf8"));
     expect(meta).toEqual({
-      runtime: "nodejs20.x",
+      runtime: "nodejs24.x",
       handler: "index.handler",
       framework: "express",
     });
 
     expect(summary.name).toBe("api");
-    expect(summary.runtime).toBe("nodejs20.x");
+    expect(summary.runtime).toBe("nodejs24.x");
     expect(summary.handler).toBe("index.handler");
     expect(summary.framework).toBe("express");
     expect(summary.artifactPath).toBe(path.join("functions", "api.func"));

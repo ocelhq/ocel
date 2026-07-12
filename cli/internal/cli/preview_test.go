@@ -65,7 +65,7 @@ func TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	stubAppFunctions(t, []manifestbuilder.Function{
 		{
 			Name:         "api",
-			Runtime:      "nodejs20.x",
+			Runtime:      "nodejs24.x",
 			Handler:      "index.handler",
 			ArtifactPath: "output/api",
 			Framework:    "express",
@@ -77,7 +77,7 @@ func TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	if !strings.Contains(stdout.String(), "FUNCTION logical_name=api runtime=nodejs20.x handler=index.handler artifact_path=output/api framework=express") {
+	if !strings.Contains(stdout.String(), "FUNCTION logical_name=api runtime=nodejs24.x handler=index.handler artifact_path=output/api framework=express") {
 		t.Errorf("stdout = %q, want the function to have reached the preview manifest", stdout.String())
 	}
 

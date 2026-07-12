@@ -183,7 +183,7 @@ func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	stubAppFunctions(t, []manifestbuilder.Function{
 		{
 			Name:         "api",
-			Runtime:      "nodejs20.x",
+			Runtime:      "nodejs24.x",
 			Handler:      "index.handler",
 			ArtifactPath: "output/api",
 			Framework:    "express",
@@ -197,7 +197,7 @@ func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	}
 
 	out := stdout.String()
-	if !strings.Contains(out, "FUNCTION logical_name=api runtime=nodejs20.x handler=index.handler artifact_path=output/api framework=express") {
+	if !strings.Contains(out, "FUNCTION logical_name=api runtime=nodejs24.x handler=index.handler artifact_path=output/api framework=express") {
 		t.Errorf("stdout = %q, want the function to have reached the manifest", out)
 	}
 	if strings.Contains(stderr.String(), "no apps configured") {

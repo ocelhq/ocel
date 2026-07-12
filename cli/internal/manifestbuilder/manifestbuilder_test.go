@@ -89,8 +89,8 @@ func synthDeclarations() []Declaration {
 
 func synthFunctions() []Function {
 	return []Function{
-		{Name: "Web API", Runtime: "nodejs20.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
-		{Name: "worker", Runtime: "nodejs20.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
+		{Name: "Web API", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
+		{Name: "worker", Runtime: "nodejs24.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
 	}
 }
 
@@ -324,7 +324,7 @@ func TestBuild_FunctionsReorderInvariance(t *testing.T) {
 
 func TestBuild_FunctionLogicalNameNormalized(t *testing.T) {
 	manifest, err := Build("proj_1", nil, []Function{
-		{Name: "Web API", Runtime: "nodejs20.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
+		{Name: "Web API", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
 	})
 	if err != nil {
 		t.Fatalf("Build: %v", err)
