@@ -10,11 +10,11 @@ import (
 
 func TestTranslateFunction_FixedLambdaDefaults(t *testing.T) {
 	got := translateFunction(&providerv1.ManifestFunction{
-		Runtime: "nodejs20.x",
+		Runtime: "nodejs24.x",
 		Handler: "index.handler",
 	})
-	if got.Runtime != "nodejs20.x" {
-		t.Errorf("Runtime = %q, want nodejs20.x", got.Runtime)
+	if got.Runtime != "nodejs24.x" {
+		t.Errorf("Runtime = %q, want nodejs24.x", got.Runtime)
 	}
 	if got.Handler != "index.handler" {
 		t.Errorf("Handler = %q, want index.handler", got.Handler)

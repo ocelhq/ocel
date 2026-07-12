@@ -54913,7 +54913,7 @@ var ENTRY_PLACEHOLDER = "__OCEL_ENTRY_PLACEHOLDER__";
 var expressShim = (entryJs) => express_bundled_default.replaceAll(ENTRY_PLACEHOLDER, `./${entryJs}`);
 var express = {
   name: "express",
-  runtime: "nodejs20.x",
+  runtime: "nodejs24.x",
   entrypointCandidates: [
     "src/server.ts",
     "src/server.js",

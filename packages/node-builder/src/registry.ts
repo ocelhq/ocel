@@ -26,7 +26,7 @@ const expressShim = (entryJs: string) =>
 
 export const express: Framework = {
   name: "express",
-  runtime: "nodejs20.x",
+  runtime: "nodejs24.x",
   entrypointCandidates: [
     "src/server.ts",
     "src/server.js",
@@ -41,7 +41,7 @@ export const express: Framework = {
     "app.ts",
     "app.js",
   ],
-  shim: expressShim,
+  shim: (s) => s,
 };
 
 const frameworks: Record<string, Framework> = { express };

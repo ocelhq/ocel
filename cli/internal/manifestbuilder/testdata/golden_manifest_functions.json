@@ -22,14 +22,14 @@
   "functions": [
     {
       "logical_name": "web_api",
-      "runtime": "nodejs20.x",
+      "runtime": "nodejs24.x",
       "handler": "app/api.ts",
       "artifact_path": "dist/api.zip",
       "framework": "express"
     },
     {
       "logical_name": "worker",
-      "runtime": "nodejs20.x",
+      "runtime": "nodejs24.x",
       "handler": "app/worker.ts",
       "artifact_path": "dist/worker.zip",
       "framework": ""

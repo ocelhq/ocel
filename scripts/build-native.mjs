@@ -52,6 +52,7 @@ const TARGETS = {
     binaries: [
       { cmd: "./cmd/ocelaws", name: "ocelaws" },
       { cmd: "./cmd/ocelawsrt", name: "ocelawsrt", subdir: "runtime" },
+      { cmd: "./cmd/nodert/bootstrap", name: "bootstrap", subdir: "nodert" },
     ],
   },
 };
@@ -61,19 +62,27 @@ const TARGETS = {
 // `process.platform`/`process.arch` values on one side, Go's
 // `GOOS`/`GOARCH` values on the other.
 const PLATFORM_MATRIX = [
-  { nodePlatform: "darwin", nodeArch: "arm64", goos: "darwin", goarch: "arm64" },
+  {
+    nodePlatform: "darwin",
+    nodeArch: "arm64",
+    goos: "darwin",
+    goarch: "arm64",
+  },
   { nodePlatform: "darwin", nodeArch: "x64", goos: "darwin", goarch: "amd64" },
   { nodePlatform: "linux", nodeArch: "x64", goos: "linux", goarch: "amd64" },
   { nodePlatform: "win32", nodeArch: "x64", goos: "windows", goarch: "amd64" },
 ];
 
 function findByGo(goos, goarch) {
-  return PLATFORM_MATRIX.find((entry) => entry.goos === goos && entry.goarch === goarch);
+  return PLATFORM_MATRIX.find(
+    (entry) => entry.goos === goos && entry.goarch === goarch,
+  );
 }
 
 function findByNode(nodePlatform, nodeArch) {
   return PLATFORM_MATRIX.find(
-    (entry) => entry.nodePlatform === nodePlatform && entry.nodeArch === nodeArch,
+    (entry) =>
+      entry.nodePlatform === nodePlatform && entry.nodeArch === nodeArch,
   );
 }
 
@@ -105,7 +114,9 @@ function parseArgs(argv) {
     }
   }
   if (!TARGETS[args.target]) {
-    throw new Error(`Unknown --target: ${args.target} (expected cli or provider)`);
+    throw new Error(
+      `Unknown --target: ${args.target} (expected cli or provider)`,
+    );
   }
   return args;
 }
@@ -114,18 +125,24 @@ function resolveTarget(args) {
   if (args.host) {
     const entry = findByNode(process.platform, process.arch);
     if (!entry) {
-      throw new Error(`Unsupported host platform: ${process.platform}-${process.arch}`);
+      throw new Error(
+        `Unsupported host platform: ${process.platform}-${process.arch}`,
+      );
     }
     return entry;
   }
 
   if (!args.goos || !args.goarch) {
-    throw new Error("Either --host, or both --goos and --goarch, must be provided.");
+    throw new Error(
+      "Either --host, or both --goos and --goarch, must be provided.",
+    );
   }
 
   const entry = findByGo(args.goos, args.goarch);
   if (!entry) {
-    throw new Error(`Unsupported GOOS/GOARCH combination: ${args.goos}/${args.goarch}`);
+    throw new Error(
+      `Unsupported GOOS/GOARCH combination: ${args.goos}/${args.goarch}`,
+    );
   }
   return entry;
 }
@@ -146,7 +163,10 @@ function buildOne(buildTarget, binary, platform, outPath, version) {
 
   const buildArgs = ["build", "-o", outPath];
   if (version) {
-    buildArgs.push("-ldflags", `-X ${buildTarget.versionLdflagPkg}.version=${version}`);
+    buildArgs.push(
+      "-ldflags",
+      `-X ${buildTarget.versionLdflagPkg}.version=${version}`,
+    );
   }
   buildArgs.push(binary.cmd);
 
@@ -183,7 +203,9 @@ function main() {
   // --out overrides the destination, but only for a single-binary target (the
   // CLI); a multi-binary target owns its layout.
   if (args.out && buildTarget.binaries.length > 1) {
-    throw new Error(`--out is not supported for --target ${args.target} (it ships multiple binaries)`);
+    throw new Error(
+      `--out is not supported for --target ${args.target} (it ships multiple binaries)`,
+    );
   }
 
   for (const binary of buildTarget.binaries) {

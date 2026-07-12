@@ -33,7 +33,7 @@ JSON object to stdout:
     {
       "name": "api",
       "logicalName": "Api",
-      "runtime": "nodejs20.x",
+      "runtime": "nodejs24.x",
       "handler": "index.handler",
       "artifactPath": "functions/api.func",
       "framework": "express"

@@ -41,8 +41,8 @@ func TestBuild_BuildsRequestAndParsesFunctions(t *testing.T) {
 			return nil, err
 		}
 		return []byte(`{"functions":[
-			{"name":"api","logicalName":"Api","runtime":"nodejs20.x","handler":"index.handler","artifactPath":"functions/api.func","framework":"express"},
-			{"name":"worker","runtime":"nodejs20.x","handler":"index.handler","artifactPath":"functions/worker.func","framework":"express"}
+			{"name":"api","logicalName":"Api","runtime":"nodejs24.x","handler":"index.handler","artifactPath":"functions/api.func","framework":"express"},
+			{"name":"worker","runtime":"nodejs24.x","handler":"index.handler","artifactPath":"functions/worker.func","framework":"express"}
 		]}` + "\n"), nil
 	})
 
@@ -52,8 +52,8 @@ func TestBuild_BuildsRequestAndParsesFunctions(t *testing.T) {
 	}
 
 	want := []manifestbuilder.Function{
-		{Name: "api", Runtime: "nodejs20.x", Handler: "index.handler", ArtifactPath: "functions/api.func", Framework: "express"},
-		{Name: "worker", Runtime: "nodejs20.x", Handler: "index.handler", ArtifactPath: "functions/worker.func", Framework: "express"},
+		{Name: "api", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/api.func", Framework: "express"},
+		{Name: "worker", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/worker.func", Framework: "express"},
 	}
 	if len(fns) != len(want) {
 		t.Fatalf("Build returned %d functions, want %d: %+v", len(fns), len(want), fns)
@@ -177,7 +177,7 @@ func TestBuild_Integration(t *testing.T) {
 	}
 	want := manifestbuilder.Function{
 		Name:         "api",
-		Runtime:      "nodejs20.x",
+		Runtime:      "nodejs24.x",
 		Handler:      "index.handler",
 		ArtifactPath: "functions/api.func",
 		Framework:    "express",
