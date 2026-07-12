@@ -14,7 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp, buildApps, placeFile } from "./build";
+import { buildApp, buildApps, placeFile } from "./build.js";
 
 // Import a built entrypoint in a REAL Node ESM process and report the type of
 // its default export. This is what the nodert runtime does (OCEL_HANDLER points
@@ -34,7 +34,7 @@ function importEntryInNode(entryMjs: string): { defaultType: string } {
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const fixtureDir = path.resolve(here, "../test/fixtures/express-app");
+const fixtureDir = path.resolve(here, "../../test/fixtures/express-app");
 
 // Simulate a pnpm workspace link: `workspace-pkg`'s real files live outside any
 // node_modules and are symlinked into the app's node_modules. Created here (not
@@ -50,7 +50,7 @@ const fixtureDir = path.resolve(here, "../test/fixtures/express-app");
 
 // Keep build output under the package so Node's upward node_modules lookup can
 // resolve `express` at runtime; `.ocel` is gitignored repo-wide.
-const outRoot = path.resolve(here, "../.ocel");
+const outRoot = path.resolve(here, "../../.ocel");
 
 function freshOut(): string {
   mkdirSync(outRoot, { recursive: true });
@@ -237,64 +237,19 @@ describe("buildApps", () => {
   });
 });
 
-// The embedded bundle is copied into a USER project's `.ocel/` and run with the
-// user's node, where dev tools like esbuild are not installed. It must
-// therefore carry zero external runtime deps (typescript is bundled inline).
-describe("embedded bundle self-containment", () => {
-  const packageDir = path.resolve(here, "..");
-  const bundle = path.join(packageDir, "dist", "node-builder.mjs");
-
-  beforeAll(() => {
-    execFileSync("node", ["build.mjs"], { cwd: packageDir, stdio: "inherit" });
-  }, 120_000);
-
-  it("has no bare imports of build-time-only deps", () => {
-    const text = readFileSync(bundle, "utf8");
-    for (const dep of ["esbuild", "typescript", "es-module-lexer"]) {
-      const bare = new RegExp(
-        `(?:from|import|require)\\s*\\(?\\s*["']${dep}["']`,
-      );
-      expect(text, `bundle must not carry a bare "${dep}" runtime import`).not.toMatch(bare);
-    }
-  });
-
-  it("builds a .func whose entrypoint imports under raw Node outside the repo (no esbuild)", async () => {
-    // Copy only the single .mjs to an isolated dir: nothing here resolves
-    // esbuild/sucrase, reproducing a real user project + `ocel deploy`.
-    const isoDir = mkdtempSync(path.join(tmpdir(), "nb-iso-"));
-    dirs.push(isoDir);
-    const isoBundle = path.join(isoDir, "node-builder.mjs");
-    cpSync(bundle, isoBundle);
-
-    const outDir = path.join(isoDir, "out");
-    const request = JSON.stringify({ outDir, apps: [{ name: "api", cwd: fixtureDir }] });
-    const stdout = execFileSync("node", [isoBundle, request], {
-      cwd: isoDir,
-      encoding: "utf8",
-    });
-
-    const summary = JSON.parse(stdout.trim().split("\n").pop() as string);
-    expect(summary.functions[0].name).toBe("api");
-    expect(summary.functions[0].handler).toBe("src/server.js");
-
-    const funcDir = path.join(outDir, "functions", "api.func");
-    // Importing the entrypoint transitively loads extensionless relative
-    // imports AND a typed-file-only dep (server.js -> ./lib/db.js [typed] ->
-    // typed-dep + ../greeting.js; -> fake-dep [./helper.js] + cjs-dep [require]);
-    // a clean import proves the whole tree resolves under raw Node ESM.
-    const { defaultType } = importEntryInNode(path.join(funcDir, "src", "server.js"));
-    expect(defaultType).toBe("function");
-  });
+// A built `.func` is copied into a real Lambda-style sandbox and run with the
+// user's node — no dev tools, no ancestor node_modules. Every runtime dep must
+// therefore travel inside the artifact and resolve under raw Node ESM.
+describe("self-contained .func artifact", () => {
+  function buildIsolated(): string {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    return outDir;
+  }
 
   it("places workspace/symlinked packages by identity, not in _external (Defect A)", async () => {
-    const isoDir = mkdtempSync(path.join(tmpdir(), "nb-iso-"));
-    dirs.push(isoDir);
-    const isoBundle = path.join(isoDir, "node-builder.mjs");
-    cpSync(bundle, isoBundle);
-
-    const outDir = path.join(isoDir, "out");
-    const request = JSON.stringify({ outDir, apps: [{ name: "api", cwd: fixtureDir }] });
-    execFileSync("node", [isoBundle, request], { cwd: isoDir, encoding: "utf8" });
+    const outDir = buildIsolated();
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
     const funcDir = path.join(outDir, "functions", "api.func");
     // The workspace pkg's real files live outside node_modules; they must be
@@ -304,21 +259,18 @@ describe("embedded bundle self-containment", () => {
     expect(existsSync(path.join(funcDir, "node_modules", "workspace-pkg", "package.json"))).toBe(true);
     expect(existsSync(path.join(funcDir, "_external"))).toBe(false);
 
-    // The entrypoint imports `workspace-pkg` at the top level, so a clean import
-    // proves it was reconstructed where raw Node ESM can resolve it.
-    const { defaultType } = importEntryInNode(path.join(funcDir, "src", "server.js"));
+    // The entrypoint imports `workspace-pkg` at the top level; copy the artifact
+    // outside the repo and import it there, proving it resolves under raw Node.
+    const isolated = mkdtempSync(path.join(tmpdir(), "nb-func-"));
+    dirs.push(isolated);
+    cpSync(funcDir, isolated, { recursive: true });
+    const { defaultType } = importEntryInNode(path.join(isolated, "src", "server.js"));
     expect(defaultType).toBe("function");
   });
 
   it("traces deps reached only through typed .ts files (Defect B)", async () => {
-    const isoDir = mkdtempSync(path.join(tmpdir(), "nb-iso-"));
-    dirs.push(isoDir);
-    const isoBundle = path.join(isoDir, "node-builder.mjs");
-    cpSync(bundle, isoBundle);
-
-    const outDir = path.join(isoDir, "out");
-    const request = JSON.stringify({ outDir, apps: [{ name: "api", cwd: fixtureDir }] });
-    execFileSync("node", [isoBundle, request], { cwd: isoDir, encoding: "utf8" });
+    const outDir = buildIsolated();
+    await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
     const funcDir = path.join(outDir, "functions", "api.func");
     // typed-dep is imported ONLY from the typed src/lib/db.ts. nft under-traced
@@ -326,8 +278,11 @@ describe("embedded bundle self-containment", () => {
     expect(existsSync(path.join(funcDir, "node_modules", "typed-dep", "index.js"))).toBe(true);
 
     // typed-dep is reached only through src/lib/db.ts, imported by the
-    // entrypoint; a clean import proves it was traced into the artifact.
-    const { defaultType } = importEntryInNode(path.join(funcDir, "src", "server.js"));
+    // entrypoint; a clean isolated import proves it traveled into the artifact.
+    const isolated = mkdtempSync(path.join(tmpdir(), "nb-func-"));
+    dirs.push(isolated);
+    cpSync(funcDir, isolated, { recursive: true });
+    const { defaultType } = importEntryInNode(path.join(isolated, "src", "server.js"));
     expect(defaultType).toBe("function");
   });
 });

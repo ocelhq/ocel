@@ -2,8 +2,8 @@
   "compilerOptions": {
     "target": "ESNext",
     "lib": ["ESNext"],
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -11,8 +11,12 @@
     "skipLibCheck": true,
     "noUncheckedIndexedAccess": true,
     "types": ["node"],
-    "noEmit": true
+
+    "rootDir": "./src",
+    "outDir": "dist",
+    "declaration": true,
+    "noEmit": false
   },
   "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "test/fixtures"]
+  "exclude": ["node_modules", "dist", "test", "src/**/*.test.ts"]
 }
