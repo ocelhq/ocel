@@ -416,7 +416,7 @@ export default {
 
 // stubAppFunctions points the app-build seam at fixed functions for the
 // duration of a test, so the CLI path is exercised without spawning the
-// embedded node-builder. It mirrors locateProviderBinary/deployReadyTimeout.
+// node builder. It mirrors locateProviderBinary/deployReadyTimeout.
 func stubAppFunctions(t *testing.T, functions []manifestbuilder.Function) {
 	t.Helper()
 	prev := buildAppFunctions

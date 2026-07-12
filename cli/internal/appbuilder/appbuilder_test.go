@@ -25,6 +25,8 @@ func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath string, requ
 
 func TestBuild_BuildsRequestAndParsesFunctions(t *testing.T) {
 	root := t.TempDir()
+	ocelHome := t.TempDir()
+	t.Setenv("OCEL_HOME", ocelHome)
 	cfg := &projectconfig.Config{
 		Dir: root,
 		Apps: []projectconfig.App{
@@ -83,16 +85,25 @@ func TestBuild_BuildsRequestAndParsesFunctions(t *testing.T) {
 		t.Errorf("app[1].entrypoint = %q, want empty", gotReq.Apps[1].Entrypoint)
 	}
 
-	// The embedded builder bundle must be written under .ocel for node to run.
-	if gotScript != filepath.Join(root, ".ocel", "node-builder.mjs") {
-		t.Errorf("script path = %q, want .ocel/node-builder.mjs under root", gotScript)
+	// The builder entry is resolved from OCEL_HOME, not written under .ocel.
+	if got, want := gotScript, filepath.Join(ocelHome, "dist", "builder", "cli.js"); got != want {
+		t.Errorf("script path = %q, want %q", got, want)
 	}
-	written, err := os.ReadFile(gotScript)
-	if err != nil {
-		t.Fatalf("read written script: %v", err)
+}
+
+func TestBuild_MissingOcelHome(t *testing.T) {
+	t.Setenv("OCEL_HOME", "")
+	cfg := &projectconfig.Config{
+		Dir:  t.TempDir(),
+		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
 	}
-	if !bytes.Equal(written, builderScript) {
-		t.Errorf("written script differs from embedded bundle (%d vs %d bytes)", len(written), len(builderScript))
+
+	_, err := Build(context.Background(), cfg, io.Discard)
+	if err == nil {
+		t.Fatal("Build succeeded with OCEL_HOME unset, want error")
+	}
+	if !strings.Contains(err.Error(), "OCEL_HOME") {
+		t.Errorf("error = %q, want it to mention OCEL_HOME", err)
 	}
 }
 
@@ -112,6 +123,7 @@ func TestBuild_NoApps_ReturnsNil(t *testing.T) {
 }
 
 func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
+	t.Setenv("OCEL_HOME", t.TempDir())
 	cfg := &projectconfig.Config{
 		Dir:  t.TempDir(),
 		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
@@ -131,6 +143,7 @@ func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
 }
 
 func TestBuild_UnparsableOutput_ReturnsError(t *testing.T) {
+	t.Setenv("OCEL_HOME", t.TempDir())
 	cfg := &projectconfig.Config{
 		Dir:  t.TempDir(),
 		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
@@ -145,13 +158,20 @@ func TestBuild_UnparsableOutput_ReturnsError(t *testing.T) {
 	}
 }
 
-// TestBuild_Integration spawns the real embedded bundle with the user's node
-// over the express-app fixture. It is heavy (needs node + the fixture's
-// installed node_modules) so it is skipped under -short.
+// TestBuild_Integration spawns the real node builder (resolved from OCEL_HOME)
+// with the user's node over the express-app fixture. It is heavy (needs node +
+// the fixture's installed node_modules + the ocel package built) so it is
+// skipped under -short.
 func TestBuild_Integration(t *testing.T) {
 	if testing.Short() {
-		t.Skip("integration test: spawns real node over the embedded bundle")
+		t.Skip("integration test: spawns real node over the builder")
 	}
+
+	ocelHome := repoRelPath(t, "packages", "ocel")
+	if _, err := os.Stat(filepath.Join(ocelHome, "dist", "builder", "cli.js")); err != nil {
+		t.Skipf("builder not built: %v; run `pnpm --filter ocel build` first", err)
+	}
+	t.Setenv("OCEL_HOME", ocelHome)
 
 	fixtureRoot := repoRelPath(t, "packages", "ocel", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {

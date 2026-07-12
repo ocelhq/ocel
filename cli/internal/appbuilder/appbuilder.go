@@ -1,14 +1,13 @@
-// Package appbuilder runs the embedded node-builder bundle over a
-// project's normalized apps and returns the functions to feed into the
-// manifest. It mirrors cli/internal/deploycollector: it writes the bundle
-// under the project's .ocel/ dir and spawns it with the user's node, never
+// Package appbuilder runs the node builder that ships with the ocel npm package
+// over a project's normalized apps and returns the functions to feed into the
+// manifest. It resolves the builder entry from OCEL_HOME (the ocel package
+// root, exported by the npm launcher) and spawns it with the user's node, never
 // talking to any provider or the dev server.
 package appbuilder
 
 import (
 	"bytes"
 	"context"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -20,14 +19,6 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
-
-// node-builder.mjs is the committed, self-contained JS builder bundle embedded
-// into the CLI and spawned with the user's node. It is a build artifact — a
-// follow-up slice replaces this embed with the tsc-built builder that now lives
-// in packages/ocel/src/builder.
-//
-//go:embed node-builder.mjs
-var builderScript []byte
 
 // scratchDirName is the Ocel-internal build-artifact folder written next to
 // the resolved config, shared with projectconfig and providerlocator.
@@ -68,24 +59,25 @@ type functionSummary struct {
 // spawning node.
 var builderExec = runNode
 
-// Build writes the embedded node-builder bundle under cfg.Dir/.ocel, spawns it
-// with the user's node over cfg.Apps, and returns the built functions in the
-// shape manifestbuilder.Build consumes. Build progress and any failure output
-// the builder writes to stderr are forwarded to stderr; a non-zero exit is
-// surfaced as an error so callers can abort before spawning a provider.
+// Build resolves the node builder from OCEL_HOME, spawns it with the user's
+// node over cfg.Apps, and returns the built functions in the shape
+// manifestbuilder.Build consumes. Build progress and any failure output the
+// builder writes to stderr are forwarded to stderr; a non-zero exit is surfaced
+// as an error so callers can abort before spawning a provider.
 func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) ([]manifestbuilder.Function, error) {
 	if len(cfg.Apps) == 0 {
 		return nil, nil
 	}
 
+	ocelHome := os.Getenv("OCEL_HOME")
+	if ocelHome == "" {
+		return nil, fmt.Errorf("OCEL_HOME is not set; the ocel CLI must be run through its npm launcher")
+	}
+	scriptPath := filepath.Join(ocelHome, "dist", "builder", "cli.js")
+
 	scratchDir := filepath.Join(cfg.Dir, scratchDirName)
 	if err := os.MkdirAll(scratchDir, 0o755); err != nil {
 		return nil, fmt.Errorf("create %s: %w", scratchDirName, err)
-	}
-
-	scriptPath := filepath.Join(scratchDir, "node-builder.mjs")
-	if err := os.WriteFile(scriptPath, builderScript, 0o644); err != nil {
-		return nil, fmt.Errorf("write node-builder bundle: %w", err)
 	}
 
 	req := builderRequest{
