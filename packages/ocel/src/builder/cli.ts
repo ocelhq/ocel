@@ -2,7 +2,7 @@ import { buildApps } from "./build.js";
 import type { AppInput, BuildOptions } from "./types.js";
 
 /**
- * Runnable entry the CLI bundle exposes. Reads a build request as JSON from
+ * Runnable entry the CLI resolves at ${OCEL_HOME}/dist/builder/cli.js. Reads a build request as JSON from
  * argv[2] or stdin: `{ outDir, apps: AppInput[] }`. Emits the functions[]
  * contract as a single JSON object to stdout: `{ "functions": [...] }`.
  */
