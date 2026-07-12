@@ -1,5 +1,5 @@
-import { bucket, uploader } from "ocel/blob/express";
-import { postgres } from "ocel/postgres";
+import { bucket, uploader } from "@ocel/sdk/blob/express";
+import { postgres } from "@ocel/sdk/postgres";
 import { z } from "zod";
 
 // Declaring a resource *is* the provisioning step: `ocel dev` discovers these

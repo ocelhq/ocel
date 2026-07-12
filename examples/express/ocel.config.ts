@@ -1,4 +1,4 @@
-import { defineConfig } from "ocel/config";
+import { defineConfig } from "@ocel/sdk/config";
 import awsProvider from "@ocel/provider-aws";
 
 // Placeholder committed so the example type-checks and reads as complete.

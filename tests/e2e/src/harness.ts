@@ -20,7 +20,7 @@ export const apiUrl = process.env.OCEL_API_URL ?? "http://localhost:3000";
 
 // The committed placeholder each example's ocel.config.ts is reset to after a
 // run, matching what's checked in.
-const placeholderConfig = `import { defineConfig } from "ocel/config";
+const placeholderConfig = `import { defineConfig } from "@ocel/sdk/config";
 
 
 // Placeholder committed so the example type-checks and reads as complete.

@@ -1,5 +1,5 @@
-import type { AnyUploader, Bucket } from "ocel/blob";
-import { createUploadClient } from "ocel/blob/client";
+import type { AnyUploader, Bucket } from "@ocel/sdk/blob";
+import { createUploadClient } from "@ocel/sdk/blob/client";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import {
   base,

@@ -235,6 +235,9 @@ importers:
       '@ocel/provider-aws':
         specifier: workspace:^
         version: link:../../packages/provider-aws
+      '@ocel/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
       '@repo/api':
         specifier: workspace:*
         version: link:../../packages/api
@@ -253,9 +256,6 @@ importers:
       next:
         specifier: 16.2.10
         version: 16.2.10(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      ocel:
-        specifier: workspace:^
-        version: link:../../packages/ocel
       react:
         specifier: 19.2.4
         version: 19.2.4
@@ -290,6 +290,9 @@ importers:
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0)
+      ocel:
+        specifier: workspace:^
+        version: link:../../packages/ocel
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -311,12 +314,12 @@ importers:
       '@ocel/provider-aws':
         specifier: workspace:^
         version: link:../../packages/provider-aws
+      '@ocel/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
       express:
         specifier: ~5.0.0
         version: 5.0.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../packages/ocel
     devDependencies:
       '@types/express':
         specifier: ~5.0.0
@@ -327,6 +330,9 @@ importers:
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
+      ocel:
+        specifier: workspace:^
+        version: link:../../packages/ocel
       tsx:
         specifier: ^4.19.2
         version: 4.23.0
@@ -339,12 +345,12 @@ importers:
       '@ocel/provider-aws':
         specifier: workspace:^
         version: link:../../packages/provider-aws
+      '@ocel/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
       express:
         specifier: ~5.0.0
         version: 5.0.1
-      ocel:
-        specifier: workspace:^
-        version: link:../../packages/ocel
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -361,6 +367,9 @@ importers:
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
+      ocel:
+        specifier: workspace:^
+        version: link:../../packages/ocel
       tsx:
         specifier: ^4.19.2
         version: 4.23.0
@@ -373,12 +382,12 @@ importers:
       '@hono/node-server':
         specifier: ^1.13.7
         version: 1.19.14(hono@4.11.10)
+      '@ocel/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
       hono:
         specifier: ~4.11.1
         version: 4.11.10
-      ocel:
-        specifier: workspace:^
-        version: link:../../packages/ocel
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -392,6 +401,9 @@ importers:
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
+      ocel:
+        specifier: workspace:^
+        version: link:../../packages/ocel
       tsx:
         specifier: ^4.19.2
         version: 4.23.0
@@ -401,12 +413,12 @@ importers:
 
   examples/next:
     dependencies:
+      '@ocel/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
       next:
         specifier: 16.2.10
         version: 16.2.10(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      ocel:
-        specifier: workspace:^
-        version: link:../../packages/ocel
       pg:
         specifier: ^8.22.0
         version: 8.22.0
@@ -432,6 +444,9 @@ importers:
       '@types/react-dom':
         specifier: ^19
         version: 19.2.3(@types/react@19.2.17)
+      ocel:
+        specifier: workspace:^
+        version: link:../../packages/ocel
       tsx:
         specifier: ^4.19.2
         version: 4.23.0
@@ -466,15 +481,15 @@ importers:
         specifier: ^4.4.3
         version: 4.4.3
     devDependencies:
+      '@ocel/sdk':
+        specifier: workspace:*
+        version: link:../sdk
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
-      ocel:
-        specifier: workspace:*
-        version: link:../ocel
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -568,6 +583,60 @@ importers:
         version: 4.1.9(@types/node@20.19.43)(vite@8.1.3(@types/node@20.19.43)(esbuild@0.24.2)(jiti@2.7.0)(tsx@4.23.0))
 
   packages/ocel:
+    optionalDependencies:
+      '@ocel/darwin-arm64':
+        specifier: workspace:^
+        version: link:../native-lib/cli-darwin-arm64
+      '@ocel/darwin-x64':
+        specifier: workspace:^
+        version: link:../native-lib/cli-darwin-x64
+      '@ocel/linux-x64':
+        specifier: workspace:^
+        version: link:../native-lib/cli-linux-x64
+      '@ocel/win32-x64':
+        specifier: workspace:^
+        version: link:../native-lib/cli-win32-x64
+
+  packages/provider-aws:
+    dependencies:
+      '@ocel/sdk':
+        specifier: workspace:^
+        version: link:../sdk
+    devDependencies:
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vite:
+        specifier: ^8.1.3
+        version: 8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
+    optionalDependencies:
+      '@ocel/provider-aws-darwin-arm64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-aws-darwin-arm64
+      '@ocel/provider-aws-darwin-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-aws-darwin-x64
+      '@ocel/provider-aws-linux-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-aws-linux-x64
+      '@ocel/provider-aws-win32-x64':
+        specifier: workspace:^
+        version: link:../native-lib/provider-aws-win32-x64
+
+  packages/resources:
+    dependencies:
+      '@ocel/sdk':
+        specifier: workspace:^
+        version: link:../sdk
+    devDependencies:
+      typescript:
+        specifier: ^5
+        version: 5.9.3
+
+  packages/sdk:
     dependencies:
       '@connectrpc/connect':
         specifier: ^2.1.2
@@ -609,74 +678,25 @@ importers:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
-    optionalDependencies:
-      '@ocel/darwin-arm64':
-        specifier: workspace:^
-        version: link:../native-lib/cli-darwin-arm64
-      '@ocel/darwin-x64':
-        specifier: workspace:^
-        version: link:../native-lib/cli-darwin-x64
-      '@ocel/linux-x64':
-        specifier: workspace:^
-        version: link:../native-lib/cli-linux-x64
-      '@ocel/win32-x64':
-        specifier: workspace:^
-        version: link:../native-lib/cli-win32-x64
-
-  packages/provider-aws:
-    dependencies:
-      ocel:
-        specifier: workspace:^
-        version: link:../ocel
-    devDependencies:
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vite:
-        specifier: ^8.1.3
-        version: 8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
-      vitest:
-        specifier: ^4.1.9
-        version: 4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
-    optionalDependencies:
-      '@ocel/provider-aws-darwin-arm64':
-        specifier: workspace:^
-        version: link:../native-lib/provider-aws-darwin-arm64
-      '@ocel/provider-aws-darwin-x64':
-        specifier: workspace:^
-        version: link:../native-lib/provider-aws-darwin-x64
-      '@ocel/provider-aws-linux-x64':
-        specifier: workspace:^
-        version: link:../native-lib/provider-aws-linux-x64
-      '@ocel/provider-aws-win32-x64':
-        specifier: workspace:^
-        version: link:../native-lib/provider-aws-win32-x64
-
-  packages/resources:
-    dependencies:
-      ocel:
-        specifier: workspace:^
-        version: link:../ocel
-    devDependencies:
-      typescript:
-        specifier: ^5
-        version: 5.9.3
 
   tests/e2e:
     dependencies:
+      '@ocel/sdk':
+        specifier: workspace:^
+        version: link:../../packages/sdk
       '@repo/auth':
         specifier: workspace:*
         version: link:../../packages/auth
       '@repo/db':
         specifier: workspace:*
         version: link:../../packages/db
-      ocel:
-        specifier: workspace:^
-        version: link:../../packages/ocel
     devDependencies:
       '@types/node':
         specifier: ^20
         version: 20.19.43
+      ocel:
+        specifier: workspace:^
+        version: link:../../packages/ocel
       tsx:
         specifier: ^4.19.2
         version: 4.23.0

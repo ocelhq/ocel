@@ -1,3 +1,3 @@
-import { postgres } from "ocel/postgres";
+import { postgres } from "@ocel/sdk/postgres";
 
 export const pg = postgres("main");

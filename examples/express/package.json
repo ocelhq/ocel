@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
+    "@ocel/sdk": "workspace:^",
     "express": "~5.0.0",
-    "ocel": "workspace:^",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },
@@ -19,6 +19,7 @@
     "@types/express": "~5.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
+    "ocel": "workspace:^",
     "tsx": "^4.19.2",
     "typescript": "^5"
   }

@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { Hono } from "hono";
-import { createRouteHandler } from "ocel/blob/hono";
+import { createRouteHandler } from "@ocel/sdk/blob/hono";
 import { pg, uploads } from "../ocel/index";
 
 // postgres("main") is resolved from the environment `ocel dev` injects, so the

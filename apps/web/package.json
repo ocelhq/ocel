@@ -17,13 +17,13 @@
   },
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
+    "@ocel/sdk": "workspace:^",
     "@repo/api": "workspace:*",
     "@repo/auth": "workspace:*",
     "@repo/db": "workspace:*",
     "@repo/resources": "workspace:*",
     "better-auth": "^1.6.23",
     "next": "16.2.10",
-    "ocel": "workspace:^",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -37,6 +37,7 @@
     "babel-plugin-react-compiler": "1.0.0",
     "drizzle-kit": "^0.31.10",
     "drizzle-orm": "^0.45.2",
+    "ocel": "workspace:^",
     "pg": "^8.22.0",
     "tailwindcss": "^4",
     "typescript": "^5",
