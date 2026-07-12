@@ -38,5 +38,8 @@ jobs:
           github.com/ocelhq/ocel/sdk/...
           github.com/ocelhq/ocel/cloud/aws/...
 
+      - name: pnpm --filter @ocel/sdk build (tsc)
+        run: pnpm --filter @ocel/sdk build
+
       - name: pnpm --filter ocel build (tsc)
         run: pnpm --filter ocel build

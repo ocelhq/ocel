@@ -10,15 +10,16 @@
 LAYER_DIR := dist/layer
 LAYER_ZIP := dist/ocel-membrane-layer.zip
 
-.PHONY: all generate cli provider node-builder proto layer publish-layer clean
+.PHONY: all generate cli provider proto layer publish-layer clean
 
 # ---- Aggregates ----------------------------------------------------------
 
 # Local build of every artifact (no AWS side effects; publish-layer is opt-in).
 all: cli provider layer
 
-# All codegen: proto bindings + the embedded node-builder bundle.
-generate: proto node-builder
+# All codegen: proto bindings. (The node builder ships in the ocel npm package,
+# built via `pnpm --filter ocel build`, not go generate.)
+generate: proto
 
 # ---- Binaries ------------------------------------------------------------
 
@@ -31,11 +32,6 @@ provider:
 	node scripts/build-native.mjs --host --target provider
 
 # ---- Codegen -------------------------------------------------------------
-
-# Rebuild the embedded @ocel/node-builder bundle and copy it into the CLI
-# (runs the //go:generate directive in cli/internal/appbuilder).
-node-builder:
-	cd cli && go generate ./internal/appbuilder/...
 
 # Regenerate proto bindings (Go + TS) from proto/.
 proto:

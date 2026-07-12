@@ -133,7 +133,7 @@ jobs:
           path: packages/native-lib/${{ matrix.pkg }}/bin
 
   # Assembles the 4 cross-compiled binaries into their native packages and
-  # publishes all 5 publishable packages to npm with provenance.
+  # publishes all 6 publishable packages to npm with provenance.
   publish:
     needs: build-binaries
     runs-on: ubuntu-latest
@@ -178,13 +178,16 @@ jobs:
           chmod +x packages/native-lib/cli-darwin-x64/bin/ocel
           chmod +x packages/native-lib/cli-linux-x64/bin/ocel
 
-      - name: Build ocel SDK
+      - name: Build @ocel/sdk
+        run: pnpm --filter @ocel/sdk build
+
+      - name: Build ocel CLI + builder
         run: pnpm --filter ocel build
 
       - name: Publish packages
         run: |
           set -euo pipefail
-          for pkg in ocel native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
+          for pkg in sdk ocel native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
             (cd "packages/$pkg" && pnpm publish --access public --provenance --no-git-checks)
           done
         env:
