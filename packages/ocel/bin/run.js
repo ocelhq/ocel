@@ -1,10 +1,16 @@
 #!/usr/bin/env node
 
-import { join } from "path";
+import { dirname, join } from "path";
+import { fileURLToPath } from "node:url";
 import { createRequire } from "node:module";
 
 const { platform, arch } = process;
 const require = createRequire(import.meta.url);
+
+// The ocel package root: this file lives at <root>/bin/run.js, so root is the
+// parent of bin/. The Go binary reads OCEL_HOME to resolve the node builder at
+// ${OCEL_HOME}/dist/builder/cli.js.
+const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 
 let packageName = "";
 
@@ -31,6 +37,7 @@ try {
   const { spawnSync } = require("child_process");
   const result = spawnSync(binaryPath, process.argv.slice(2), {
     stdio: "inherit",
+    env: { ...process.env, OCEL_HOME: packageRoot },
   });
   process.exit(result.status);
 } catch (e) {
