@@ -3,11 +3,32 @@ import { copyFile, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
-import { transform } from "sucrase";
+import ts from "typescript";
 import { resolveFramework, type Framework } from "./registry";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
+
+/**
+ * Strip TypeScript types while preserving everything else the source wrote:
+ * modern syntax (`?.`, `??`, …) is kept verbatim because we target ESNext — the
+ * Lambda runtime (nodejs24.x) supports it natively, so downleveling it to
+ * helper functions would only obscure the user's code. Import/export specifiers
+ * are left untouched (paths are rewritten separately, per-file, no bundling).
+ * Type-only imports are elided (default, non-verbatim) so no dead ESM import
+ * can throw a link error at runtime.
+ */
+function transpileTs(source: string, ext: string): string {
+  return ts.transpileModule(source, {
+    fileName: `f${ext}`,
+    compilerOptions: {
+      target: ts.ScriptTarget.ESNext,
+      module: ts.ModuleKind.ESNext,
+      isolatedModules: true,
+      jsx: ext === ".tsx" ? ts.JsxEmit.React : ts.JsxEmit.None,
+    },
+  }).outputText;
+}
 // Source extensions a relative specifier may resolve to, tried in this order.
 const RESOLVE_EXT = [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"];
 
@@ -181,9 +202,9 @@ function traceBase(cwd: string): string {
 /**
  * readFile hook for nft's analysis: nft's parser throws on TS type syntax and
  * then fails to follow that file's imports, silently under-tracing. Feed it
- * sucrase-transpiled JS for TS files (types stripped, ESM preserved) so it
- * parses and follows imports; the resolver still resolves against real files on
- * disk. The EMIT step still transpiles from source separately.
+ * type-stripped JS for TS files (ESM preserved) so it parses and follows
+ * imports; the resolver still resolves against real files on disk. The EMIT
+ * step still transpiles from source separately.
  */
 async function traceReadFile(p: string): Promise<Buffer | string | null> {
   let buf: Buffer;
@@ -197,10 +218,7 @@ async function traceReadFile(p: string): Promise<Buffer | string | null> {
   const ext = path.extname(p);
   if (TS_EXT.has(ext)) {
     try {
-      const { code } = transform(buf.toString("utf8"), {
-        transforms: ext === ".tsx" ? ["typescript", "jsx"] : ["typescript"],
-      });
-      return code;
+      return transpileTs(buf.toString("utf8"), ext);
     } catch {
       return buf;
     }
@@ -215,12 +233,9 @@ async function emitFile(absPath: string, dest: string): Promise<void> {
   await mkdir(path.dirname(dest), { recursive: true });
   if (isUserSource(absPath)) {
     const source = await readFile(absPath, "utf8");
-    // Per-file, no bundling: strip types, preserve ESM import/export specifiers
-    // (sucrase does not rewrite import paths). Pure JS, so it bundles into the
-    // embedded builder with no native binary.
-    const transforms: ("typescript" | "jsx")[] =
-      path.extname(absPath) === ".tsx" ? ["typescript", "jsx"] : ["typescript"];
-    const { code } = transform(source, { transforms });
+    // Per-file, no bundling: strip types only, preserving the user's modern
+    // syntax and ESM import/export specifiers (paths rewritten separately).
+    const code = transpileTs(source, path.extname(absPath));
     const rewritten = await rewriteRelativeImports(code, path.dirname(absPath));
     await writeFile(toOutExt(dest), rewritten);
     return;
@@ -278,18 +293,20 @@ export async function buildApp(
     }
   }
 
-  const entryDest = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest);
-  await writeFile(path.join(funcDir, "index.mjs"), fw.shim(entryDest.split(path.sep).join("/")));
+  // The handler is the transpiled entrypoint's path within the `.func` (posix).
+  // The nodert runtime imports it directly (OCEL_HANDLER=/var/task/<handler>);
+  // there is no generated shim.
+  const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest).split(path.sep).join("/");
   await writeFile(
     path.join(funcDir, "meta.json"),
-    `${JSON.stringify({ runtime: fw.runtime, handler: "index.handler", framework: fw.name }, null, 2)}\n`,
+    `${JSON.stringify({ runtime: fw.runtime, handler, framework: fw.name }, null, 2)}\n`,
   );
 
   return {
     name: input.name,
     logicalName: input.logicalName,
     runtime: fw.runtime,
-    handler: "index.handler",
+    handler,
     artifactPath: funcRel,
     framework: fw.name,
   };

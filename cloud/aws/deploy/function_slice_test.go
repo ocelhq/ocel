@@ -8,16 +8,16 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-func TestTranslateFunction_FixedLambdaDefaults(t *testing.T) {
+func TestTranslateFunction_PassesRuntimeAndEntrypoint(t *testing.T) {
 	got := translateFunction(&providerv1.ManifestFunction{
 		Runtime: "nodejs24.x",
-		Handler: "index.handler",
+		Handler: "src/server.js",
 	})
 	if got.Runtime != "nodejs24.x" {
 		t.Errorf("Runtime = %q, want nodejs24.x", got.Runtime)
 	}
-	if got.Handler != "index.handler" {
-		t.Errorf("Handler = %q, want index.handler", got.Handler)
+	if got.Handler != "src/server.js" {
+		t.Errorf("Handler = %q, want src/server.js", got.Handler)
 	}
 }
 
@@ -26,8 +26,19 @@ func TestTranslateFunction_EmptyFallsBackToPinnedDefaults(t *testing.T) {
 	if got.Runtime != defaultFunctionRuntime {
 		t.Errorf("Runtime = %q, want default %q", got.Runtime, defaultFunctionRuntime)
 	}
-	if got.Handler != defaultFunctionHandler {
-		t.Errorf("Handler = %q, want default %q", got.Handler, defaultFunctionHandler)
+	if got.Handler != defaultFunctionEntry {
+		t.Errorf("Handler = %q, want default %q", got.Handler, defaultFunctionEntry)
+	}
+}
+
+func TestMembraneLayerARN_DefaultAndEnvOverride(t *testing.T) {
+	t.Setenv(membraneLayerARNEnv, "")
+	if got := membraneLayerARN(); got != defaultMembraneLayerARN {
+		t.Errorf("membraneLayerARN() = %q, want default %q", got, defaultMembraneLayerARN)
+	}
+	t.Setenv(membraneLayerARNEnv, "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9")
+	if got := membraneLayerARN(); got != "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9" {
+		t.Errorf("membraneLayerARN() = %q, want the env override", got)
 	}
 }
 
