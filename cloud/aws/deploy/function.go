@@ -147,13 +147,26 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 	}
 
 	// An auth-type NONE Function URL is only publicly invokable with a
-	// resource-based policy granting lambda:InvokeFunctionUrl to everyone;
-	// without it AWS rejects unauthenticated requests.
+	// resource-based policy granting public access. As of October 2025 AWS
+	// requires BOTH lambda:InvokeFunctionUrl and lambda:InvokeFunction on the
+	// policy; without both, unauthenticated requests get a 403.
 	if _, err := lambda.NewPermission(ctx, logicalName+"-url-invoke", &lambda.PermissionArgs{
 		Action:              pulumi.String("lambda:InvokeFunctionUrl"),
 		Function:            fn.Name,
 		Principal:           pulumi.String("*"),
 		FunctionUrlAuthType: pulumi.String(functionURLAuthNone),
+	}); err != nil {
+		return err
+	}
+	// The second required grant. Ideally scoped with the
+	// lambda:InvokedViaFunctionUrl condition (so the function is only invokable
+	// via its URL), but that AddPermission parameter is unsupported by
+	// pulumi-aws v6 — it lands in v7. Until the upgrade this grant is
+	// unconditioned; see the InvokedViaFunctionUrl follow-up.
+	if _, err := lambda.NewPermission(ctx, logicalName+"-invoke", &lambda.PermissionArgs{
+		Action:    pulumi.String("lambda:InvokeFunction"),
+		Function:  fn.Name,
+		Principal: pulumi.String("*"),
 	}); err != nil {
 		return err
 	}
