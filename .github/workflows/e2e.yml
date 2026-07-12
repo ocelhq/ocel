@@ -66,8 +66,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build ocel SDK (dist/)
-        run: pnpm --filter ocel build
+      - name: Build @ocel/sdk (dist/)
+        # The control-plane packages (@repo/resources, @repo/db, ...) import
+        # @ocel/sdk via its exports map, which resolves to dist/. Build it so
+        # the seed and resolve paths can load it. ocel's own JS dist (the node
+        # builder) isn't exercised here - e2e drives the compiled Go binary.
+        run: pnpm --filter @ocel/sdk build
 
       - name: Build ocel CLI binary
         working-directory: cli
