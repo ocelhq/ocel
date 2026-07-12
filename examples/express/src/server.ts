@@ -1,5 +1,5 @@
 import express from "express";
-import { createRouteHandler } from "ocel/blob/express";
+import { createRouteHandler } from "@ocel/sdk/blob/express";
 import { pg, uploads } from "../ocel/index";
 
 // postgres("main") is resolved from the environment `ocel dev` injects, so the

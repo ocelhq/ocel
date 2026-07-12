@@ -5,8 +5,8 @@ import { createServer, type Server } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { bucket, createRouteHandler, uploader } from "ocel/blob";
-import { createUploadClient } from "ocel/blob/client";
+import { bucket, createRouteHandler, uploader } from "@ocel/sdk/blob";
+import { createUploadClient } from "@ocel/sdk/blob/client";
 import { z } from "zod";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createTestSessionWithOrganization } from "../../../test/auth-harness";
@@ -112,7 +112,7 @@ async function waitForRigAddr(child: ChildProcess): Promise<string> {
 
 const runIt = (await minioReachable()) && goAvailable() ? it : it.skip;
 
-describe("ocel/blob dev e2e (MinIO)", () => {
+describe("@ocel/sdk/blob dev e2e (MinIO)", () => {
   let session: Awaited<ReturnType<typeof createTestSessionWithOrganization>>;
   let projectId: string;
   let rigBin: string;

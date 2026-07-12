@@ -1,4 +1,4 @@
-import type { ProviderDescriptor } from "ocel/config";
+import type { ProviderDescriptor } from "@ocel/sdk/config";
 
 export type AwsProviderOptions = Record<string, unknown>;
 

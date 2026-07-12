@@ -8,12 +8,13 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@ocel/sdk": "workspace:^",
     "@repo/auth": "workspace:*",
-    "@repo/db": "workspace:*",
-    "ocel": "workspace:^"
+    "@repo/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20",
+    "ocel": "workspace:^",
     "tsx": "^4.19.2",
     "typescript": "^5",
     "vite": "^8.1.3",

@@ -11,7 +11,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "ocel": "workspace:^"
+    "@ocel/sdk": "workspace:^"
   },
   "optionalDependencies": {
     "@ocel/provider-aws-darwin-arm64": "workspace:^",

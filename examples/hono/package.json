@@ -10,14 +10,15 @@
   },
   "dependencies": {
     "@hono/node-server": "^1.13.7",
+    "@ocel/sdk": "workspace:^",
     "hono": "~4.11.1",
-    "ocel": "workspace:^",
     "pg": "^8.22.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
+    "ocel": "workspace:^",
     "tsx": "^4.19.2",
     "typescript": "^5"
   }

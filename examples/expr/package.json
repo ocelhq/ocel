@@ -12,13 +12,14 @@
   "type": "module",
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
-    "express": "~5.0.0",
-    "ocel": "workspace:^"
+    "@ocel/sdk": "workspace:^",
+    "express": "~5.0.0"
   },
   "devDependencies": {
     "@types/express": "~5.0.0",
     "@types/node": "^20",
     "@types/pg": "^8.20.0",
+    "ocel": "workspace:^",
     "tsx": "^4.19.2",
     "typescript": "^5"
   }

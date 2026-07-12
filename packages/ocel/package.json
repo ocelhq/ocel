@@ -2,97 +2,24 @@
   "name": "ocel",
   "version": "0.0.1-alpha.0",
   "type": "module",
-  "description": "ocel sdk turns cloud infrastructure into function calls",
+  "description": "ocel cli — turns cloud infrastructure into function calls",
   "bin": {
     "ocel": "./bin/run.js"
   },
   "files": [
     "bin/",
     "dist/",
-    "src/",
     "README.md"
   ],
-  "exports": {
-    "./config": {
-      "import": "./dist/config.js",
-      "types": "./dist/config.d.ts"
-    },
-    "./postgres": {
-      "import": "./dist/postgres/index.js",
-      "types": "./dist/postgres/index.d.ts"
-    },
-    "./blob": {
-      "import": "./dist/blob/index.js",
-      "types": "./dist/blob/index.d.ts"
-    },
-    "./blob/next": {
-      "import": "./dist/blob/next.js",
-      "types": "./dist/blob/next.d.ts"
-    },
-    "./blob/hono": {
-      "import": "./dist/blob/hono.js",
-      "types": "./dist/blob/hono.d.ts"
-    },
-    "./blob/express": {
-      "import": "./dist/blob/express.js",
-      "types": "./dist/blob/express.d.ts"
-    },
-    "./blob/client": {
-      "import": "./dist/blob/client.js",
-      "types": "./dist/blob/client.d.ts"
-    }
-  },
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run"
+    "build": "true"
   },
   "license": "MIT",
-  "dependencies": {
-    "@connectrpc/connect": "^2.1.2",
-    "@connectrpc/connect-node": "^2.1.2",
-    "zod": "^4.4.3"
-  },
   "optionalDependencies": {
     "@ocel/darwin-arm64": "workspace:^",
     "@ocel/darwin-x64": "workspace:^",
     "@ocel/linux-x64": "workspace:^",
     "@ocel/win32-x64": "workspace:^"
-  },
-  "devDependencies": {
-    "@types/aws-lambda": "^8.10.160",
-    "@types/express": "~5.0.0",
-    "@types/pg": "^8.20.0",
-    "express": "~5.0.0",
-    "hono": "~4.11.1",
-    "next": "16.2.10",
-    "pg": "^8.22.0",
-    "typescript": "^5.9.3",
-    "vite": "^8.1.3",
-    "vitest": "^4.1.9"
-  },
-  "peerDependencies": {
-    "@types/express": ">=5.0.0",
-    "express": ">=5.0.0",
-    "hono": ">=4.11.1",
-    "next": ">=14",
-    "pg": "^8.22.0"
-  },
-  "peerDependenciesMeta": {
-    "hono": {
-      "optional": true
-    },
-    "@types/express": {
-      "optional": true
-    },
-    "express": {
-      "optional": true
-    },
-    "next": {
-      "optional": true
-    },
-    "pg": {
-      "optional": true
-    }
   },
   "publishConfig": {
     "access": "public",
