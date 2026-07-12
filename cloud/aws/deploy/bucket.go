@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"strings"
 
-	iam "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/iam"
-	lambda "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/lambda"
-	s3 "github.com/pulumi/pulumi-aws/sdk/v6/go/aws/s3"
+	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
+	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
+	s3 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
