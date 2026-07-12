@@ -1,4 +1,4 @@
-// Package appbuilder runs the embedded @ocel/node-builder bundle over a
+// Package appbuilder runs the embedded node-builder bundle over a
 // project's normalized apps and returns the functions to feed into the
 // manifest. It mirrors cli/internal/deploycollector: it writes the bundle
 // under the project's .ocel/ dir and spawns it with the user's node, never
@@ -21,12 +21,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-// node-builder.mjs is the self-contained bundle produced by
-// `pnpm --filter @ocel/node-builder build` and copied here by `go generate`
-// (see the directive below). It is a committed build artifact — regenerate it
-// rather than hand-editing.
+// node-builder.mjs is the committed, self-contained JS builder bundle embedded
+// into the CLI and spawned with the user's node. It is a build artifact — a
+// follow-up slice replaces this embed with the tsc-built builder that now lives
+// in packages/ocel/src/builder.
 //
-//go:generate sh -c "pnpm --filter @ocel/node-builder build && cp ../../../packages/node-builder/dist/node-builder.mjs node-builder.mjs"
 //go:embed node-builder.mjs
 var builderScript []byte
 

@@ -1,5 +1,5 @@
-import { buildApps } from "./build";
-import type { AppInput, BuildOptions } from "./types";
+import { buildApps } from "./build.js";
+import type { AppInput, BuildOptions } from "./types.js";
 
 /**
  * Runnable entry the CLI bundle exposes. Reads a build request as JSON from

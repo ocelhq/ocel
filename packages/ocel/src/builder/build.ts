@@ -4,8 +4,8 @@ import path from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import ts from "typescript";
-import { resolveFramework, type Framework } from "./registry";
-import type { AppInput, BuildOptions, FunctionSummary } from "./types";
+import { resolveFramework, type Framework } from "./registry.js";
+import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
 const TS_EXT = new Set([".ts", ".tsx", ".mts", ".cts"]);
 

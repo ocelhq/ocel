@@ -153,7 +153,7 @@ func TestBuild_Integration(t *testing.T) {
 		t.Skip("integration test: spawns real node over the embedded bundle")
 	}
 
-	fixtureRoot := repoRelPath(t, "packages", "node-builder", "test", "fixtures", "express-app")
+	fixtureRoot := repoRelPath(t, "packages", "ocel", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
