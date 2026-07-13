@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
-import { createUploadClient } from "./client";
-import type { Bucket } from "./bucket";
-import type { Uploader } from "./types";
+import { createUploadClient } from "./client.js";
+import type { Bucket } from "./bucket.js";
+import type { Uploader } from "./types.js";
 
 // A structural bucket type is enough to exercise the runtime client; the fake
 // fetch stands in for the route.

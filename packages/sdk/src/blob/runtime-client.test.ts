@@ -1,11 +1,11 @@
 import type { Client } from "@connectrpc/connect";
 import { createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { RuntimeService } from "../gen/proto/runtime/v1/runtime_pb";
+import { RuntimeService } from "../gen/proto/runtime/v1/runtime_pb.js";
 import {
   createRuntimeClient,
   type RuntimeServiceClient,
-} from "./runtime-client";
+} from "./runtime-client.js";
 
 describe("createRuntimeClient", () => {
   it("is typed as the generated RuntimeService client interface", () => {

@@ -1,5 +1,5 @@
 import { type Client, createClient, type Transport } from "@connectrpc/connect";
-import { RuntimeService } from "../gen/proto/runtime/v1/runtime_pb";
+import { RuntimeService } from "../gen/proto/runtime/v1/runtime_pb.js";
 
 /**
  * The generated, fully-typed client for runtime.v1.RuntimeService. This is the

@@ -1,8 +1,8 @@
 import z from "zod";
-import type { Component } from "../utils/component";
-import { defer } from "../utils/defer";
-import { getConfig } from "../utils/get-config";
-import { rpc, ResourceType } from "../utils/rpc";
+import type { Component } from "../utils/component.js";
+import { defer } from "../utils/defer.js";
+import { getConfig } from "../utils/get-config.js";
+import { rpc, ResourceType } from "../utils/rpc.js";
 
 export interface PostgresConfig {
   version?: string;

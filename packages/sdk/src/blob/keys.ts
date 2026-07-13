@@ -1,4 +1,4 @@
-import type { FileInfo, PathConfig } from "./types";
+import type { FileInfo, PathConfig } from "./types.js";
 
 function randomToken(): string {
   return crypto.randomUUID().replace(/-/g, "").slice(0, 8);

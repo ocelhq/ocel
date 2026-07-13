@@ -9,7 +9,10 @@
     "allowSyntheticDefaultImports": true,
     "resolveJsonModule": true,
 
-    // Bundler mode
+    // Relative imports carry explicit .js extensions in source (and
+    // verbatimModuleSyntax emits them unchanged), so dist loads under plain
+    // `node`, not only a bundler. Resolution stays "bundler" because some
+    // optional-peer types (e.g. next/server) don't resolve under nodenext.
     "moduleResolution": "bundler",
     "verbatimModuleSyntax": true,
     "noEmit": false,

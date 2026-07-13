@@ -1,14 +1,14 @@
-export { bucket, Bucket, type BucketOptions } from "./bucket";
-export { uploader } from "./uploader";
+export { bucket, Bucket, type BucketOptions } from "./bucket.js";
+export { uploader } from "./uploader.js";
 export {
   createRouteHandler,
   type RouteHandlers,
   type RouteOptions,
-} from "./route";
+} from "./route.js";
 export {
   resolveRuntimeContext,
   type RuntimeContext,
-} from "./runtime-context";
+} from "./runtime-context.js";
 export type {
   AnyUploader,
   BlobRequest,
@@ -19,4 +19,4 @@ export type {
   Uploader,
   UploaderAuth,
   UploaderUpload,
-} from "./types";
+} from "./types.js";

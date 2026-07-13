@@ -1,4 +1,4 @@
-import { ResourceType } from "./rpc";
+import { ResourceType } from "./rpc.js";
 
 const p = (type: string) => (id: string) =>
   `OCEL_RESOURCE_${type.toUpperCase()}_${id}`;

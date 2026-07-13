@@ -1,4 +1,4 @@
-import { OCEL_DEV_SERVER } from "./constants";
+import { OCEL_DEV_SERVER } from "./constants.js";
 
 declare global {
   var __ocelRegister: Promise<unknown>[];

@@ -4,23 +4,23 @@ import type {
   Response as ExpressResponse,
 } from "express";
 import type { z } from "zod";
-import type { Bucket } from "./bucket";
+import type { Bucket } from "./bucket.js";
 import {
   createRouteHandler as coreCreateRouteHandler,
   type RouteOptions,
-} from "./route";
-import { uploader as coreUploader } from "./uploader";
-import type { ParsedInput, Uploader, UploaderAuth, UploaderUpload } from "./types";
+} from "./route.js";
+import { uploader as coreUploader } from "./uploader.js";
+import type { ParsedInput, Uploader, UploaderAuth, UploaderUpload } from "./types.js";
 
-export { bucket, Bucket, type BucketOptions } from "./bucket";
-export type { RouteOptions } from "./route";
+export { bucket, Bucket, type BucketOptions } from "./bucket.js";
+export type { RouteOptions } from "./route.js";
 export type {
   CompletedFile,
   FileInfo,
   Limits,
   PathConfig,
   Uploader,
-} from "./types";
+} from "./types.js";
 
 /**
  * The Express binding of `uploader`. `middleware` receives the Express

@@ -1,18 +1,18 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { UploadState } from "../gen/proto/runtime/v1/runtime_pb";
+import { UploadState } from "../gen/proto/runtime/v1/runtime_pb.js";
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
   ResourceType: { POSTGRES: 1, BUCKET: 2 },
 }));
 
-const { bucket } = await import("./bucket");
-import { decodeMetadata, encodeMetadata } from "./metadata";
-import { createRouteHandler } from "./route";
-import type { RuntimeContext } from "./runtime-context";
-import type { RuntimeServiceClient } from "./runtime-client";
-import { uploader } from "./uploader";
+const { bucket } = await import("./bucket.js");
+import { decodeMetadata, encodeMetadata } from "./metadata.js";
+import { createRouteHandler } from "./route.js";
+import type { RuntimeContext } from "./runtime-context.js";
+import type { RuntimeServiceClient } from "./runtime-client.js";
+import { uploader } from "./uploader.js";
 
 function makeReq(url: string, body?: unknown) {
   return {

@@ -8,8 +8,8 @@ vi.mock("../utils/rpc", () => ({
   ResourceType: { POSTGRES: 1, BUCKET: 2 },
 }));
 
-const { bucket } = await import("./bucket");
-const { uploader } = await import("./uploader");
+const { bucket } = await import("./bucket.js");
+const { uploader } = await import("./uploader.js");
 
 const avatar = uploader(
   { input: z.object({ userId: z.string() }), middleware: ({ input }) => input },

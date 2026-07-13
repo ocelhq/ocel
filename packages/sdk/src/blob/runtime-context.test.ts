@@ -5,8 +5,8 @@ vi.mock("../utils/rpc", () => ({
   ResourceType: { POSTGRES: 1, BUCKET: 2 },
 }));
 
-const { bucket } = await import("./bucket");
-const { resolveRuntimeContext } = await import("./runtime-context");
+const { bucket } = await import("./bucket.js");
+const { resolveRuntimeContext } = await import("./runtime-context.js");
 
 afterEach(() => {
   delete process.env.OCEL_RESOURCE_BUCKET_storage;
