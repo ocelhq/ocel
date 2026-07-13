@@ -11,7 +11,7 @@ import (
 	secretsmanager "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -73,7 +73,7 @@ type functionArgs struct {
 // arguments the provider provisions. Empty runtime/handler fall back to the
 // pinned Node defaults. Handler is the user entrypoint path OCEL_HANDLER
 // resolves as /var/task/<handler>.
-func translateFunction(fn *providerv1.ManifestFunction) functionArgs {
+func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	runtime := defaultFunctionRuntime
 	if r := fn.GetRuntime(); r != "" {
 		runtime = r
@@ -115,7 +115,7 @@ func postgresEnvPayload(username, password, host string, port int, database stri
 }
 
 // bucketEnvPayload is the OCEL_RESOURCE_BUCKET_<id> value the SDK reads
-// (bucket.ts): a JSON object pointing at the RuntimeService endpoint (address)
+// (bucket.ts): a JSON object pointing at the BucketService endpoint (address)
 // and the provisioned bucket binding.
 func bucketEnvPayload(address, bucket string) string {
 	b, _ := json.Marshal(map[string]string{"address": address, "bucket": bucket})
@@ -131,11 +131,11 @@ func artifactArchivePath(root, artifactPath string) string {
 
 // collectFunctionOutput builds the ResourceOutput reporting a realized
 // function's web-facing URL, keyed by the function's logical_name.
-func collectFunctionOutput(logicalName, url string) *providerv1.ResourceOutput {
-	return &providerv1.ResourceOutput{
+func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutput {
+	return &deploymentsv1.ResourceOutput{
 		LogicalName: logicalName,
-		Output: &providerv1.ResourceOutput_Function{
-			Function: &providerv1.FunctionOutput{Url: url},
+		Output: &deploymentsv1.ResourceOutput_Function{
+			Function: &deploymentsv1.FunctionOutput{Url: url},
 		},
 	}
 }
@@ -238,7 +238,7 @@ func postgresEnvValue(ctx *pulumi.Context, username, host pulumi.StringInput, po
 }
 
 // bucketEnvValue composes the OCEL_RESOURCE_BUCKET_<id> value from a
-// provisioned bucket's name and the RuntimeService endpoint. The address is
+// provisioned bucket's name and the BucketService endpoint. The address is
 // the deferred placeholder the bucket output already uses (see
 // deferredRuntimeAddress) until the membrane lands.
 func bucketEnvValue(bucket pulumi.StringInput) pulumi.StringOutput {

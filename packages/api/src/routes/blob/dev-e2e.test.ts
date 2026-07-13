@@ -181,7 +181,7 @@ describe("@ocel/sdk/blob dev e2e (MinIO)", () => {
         },
       });
 
-      // Start the REAL Go dev server (Connect RuntimeService shim + detector).
+      // Start the REAL Go dev server (Connect BucketService shim + detector).
       // Its Ocel API base URL is this test's in-process HTTP server, reached
       // once we know its port; bind the server first to learn the port.
       const listened = await new Promise<{ srv: Server; port: number }>(

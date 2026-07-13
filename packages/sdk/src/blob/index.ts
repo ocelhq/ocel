@@ -6,9 +6,9 @@ export {
   type RouteOptions,
 } from "./route.js";
 export {
-  resolveRuntimeContext,
-  type RuntimeContext,
-} from "./runtime-context.js";
+  resolveBucketContext,
+  type BucketContext,
+} from "./bucket-context.js";
 export type {
   AnyUploader,
   BlobRequest,

@@ -1,13 +1,13 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
-import { UploadState } from "../gen/proto/runtime/v1/runtime_pb.js";
+import { UploadState } from "../gen/proto/buckets/v1/buckets_pb.js";
 import type { Bucket } from "./bucket.js";
 import { generateKey } from "./keys.js";
 import { decodeMetadata, encodeMetadata } from "./metadata.js";
 import {
-  resolveRuntimeContext,
-  type RuntimeContext,
-} from "./runtime-context.js";
+  resolveBucketContext,
+  type BucketContext,
+} from "./bucket-context.js";
 import type {
   AnyUploader,
   BlobRequest,
@@ -78,7 +78,7 @@ export interface RouteOptions {
    * lazily-resolved context built from the injected OCEL_RESOURCE_BUCKET_<id>
    * address. Injected directly in tests and by the dev bridge.
    */
-  runtime?: RuntimeContext;
+  runtime?: BucketContext;
 }
 
 const presignBody = z.object({
@@ -183,7 +183,7 @@ function stateToString(state: UploadState): UploadStatusState {
 
 async function handlePresign(
   bucket: Bucket,
-  ctx: RuntimeContext,
+  ctx: BucketContext,
   req: RouteRequest,
   middlewareReq: unknown,
 ) {
@@ -241,7 +241,7 @@ async function handlePresign(
 
 async function handleCallback(
   bucket: Bucket,
-  ctx: RuntimeContext,
+  ctx: BucketContext,
   req: RouteRequest,
 ) {
   const parsed = callbackBody.safeParse(await requestJson(req));
@@ -284,7 +284,7 @@ async function handleCallback(
 }
 
 async function handlePoll(
-  ctx: RuntimeContext,
+  ctx: BucketContext,
   req: RouteRequest,
 ) {
   const sessionId = new URL(requestUrl(req)).searchParams.get("sessionId");
@@ -323,7 +323,7 @@ export function createRouteHandler(
   options: RouteOptions = {},
 ): RouteHandlers {
   let ctx = options.runtime;
-  const getCtx = () => (ctx ??= resolveRuntimeContext(bucket));
+  const getCtx = () => (ctx ??= resolveBucketContext(bucket));
 
   async function POST(req: RouteRequest, middlewareReq?: unknown) {
     const op = opOf(req);

@@ -1,7 +1,7 @@
 package deploy
 
 import (
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -24,8 +24,8 @@ const (
 // environment lifecycle. It is pure. Only an ephemeral-preview postgres resource
 // is sliced; everything else — every other type, and anything persistent or
 // unspecified — is realized as real infrastructure.
-func realizationFor(rt resourcesv1.ResourceType, lifecycle providerv1.Environment_Lifecycle) Realization {
-	if rt == resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES && lifecycle == providerv1.Environment_LIFECYCLE_EPHEMERAL {
+func realizationFor(rt resourcesv1.ResourceType, lifecycle deploymentsv1.Environment_Lifecycle) Realization {
+	if rt == resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES && lifecycle == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
 		return RealizationLogicalSlice
 	}
 	return RealizationReal

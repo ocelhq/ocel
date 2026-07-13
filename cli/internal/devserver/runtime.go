@@ -12,10 +12,10 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	runtimev1 "github.com/ocelhq/ocel/pkg/proto/runtime/v1"
+	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
 )
 
-// runtimeShim is the dev implementation of runtime.v1.RuntimeService. It owns
+// runtimeShim is the dev implementation of runtime.v1.BucketService. It owns
 // no cloud mechanics itself: on PresignUpload it forwards to the Ocel API's
 // presign endpoint (authenticated with the leader's user token + projectID),
 // honoring the invariant that the CLI never talks to the cloud store directly.
@@ -72,7 +72,7 @@ type presignResponseBody struct {
 // its response verbatim. The API derives (org, project, user) from the token,
 // prepends the tenancy prefix, persists the pending session, and mints the
 // presigned targets.
-func (s *runtimeShim) PresignUpload(ctx context.Context, req *runtimev1.PresignUploadRequest) (*runtimev1.PresignUploadResponse, error) {
+func (s *runtimeShim) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {
 	files := make([]presignFile, 0, len(req.GetFiles()))
 	for _, f := range req.GetFiles() {
 		files = append(files, presignFile{
@@ -116,12 +116,12 @@ func (s *runtimeShim) PresignUpload(ctx context.Context, req *runtimev1.PresignU
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode presign response: %w", err))
 	}
 
-	targets := make([]*runtimev1.PresignedTarget, 0, len(decoded.Files))
+	targets := make([]*bucketsv1.PresignedTarget, 0, len(decoded.Files))
 	for _, t := range decoded.Files {
-		targets = append(targets, &runtimev1.PresignedTarget{Url: t.URL, Key: t.Key, Name: t.Name, ContentDisposition: t.ContentDisposition})
+		targets = append(targets, &bucketsv1.PresignedTarget{Url: t.URL, Key: t.Key, Name: t.Name, ContentDisposition: t.ContentDisposition})
 	}
 
-	return &runtimev1.PresignUploadResponse{SessionId: decoded.SessionID, Files: targets}, nil
+	return &bucketsv1.PresignUploadResponse{SessionId: decoded.SessionID, Files: targets}, nil
 }
 
 // signedCompletion is the {sessionId, signature, file} payload a completion
@@ -152,7 +152,7 @@ type verifyResponseBody struct {
 // Ocel API, which re-derives the per-session HMAC and constant-time compares.
 // The secret never leaves the API; on a valid signature the stored metadata
 // rides back here and out to the env-blind route.
-func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *runtimev1.VerifyUploadSignatureRequest) (*runtimev1.VerifyUploadSignatureResponse, error) {
+func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *bucketsv1.VerifyUploadSignatureRequest) (*bucketsv1.VerifyUploadSignatureResponse, error) {
 	f := req.GetFile()
 	body, err := json.Marshal(signedCompletion{
 		SessionID: req.GetSessionId(),
@@ -187,7 +187,7 @@ func (s *runtimeShim) VerifyUploadSignature(ctx context.Context, req *runtimev1.
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode verify response: %w", err))
 	}
-	return &runtimev1.VerifyUploadSignatureResponse{Valid: decoded.Valid, Metadata: decoded.Metadata}, nil
+	return &bucketsv1.VerifyUploadSignatureResponse{Valid: decoded.Valid, Metadata: decoded.Metadata}, nil
 }
 
 type statusResponseBody struct {
@@ -197,7 +197,7 @@ type statusResponseBody struct {
 
 // GetUploadStatus forwards op=poll to the Ocel API, which reads the shared
 // store and aggregates the per-file states into one session state.
-func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *runtimev1.GetUploadStatusRequest) (*runtimev1.GetUploadStatusResponse, error) {
+func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *bucketsv1.GetUploadStatusRequest) (*bucketsv1.GetUploadStatusResponse, error) {
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, s.apiEndpoint("/api/blob/status")+"?sessionId="+url.QueryEscape(req.GetSessionId()), nil)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("build status request: %w", err))
@@ -217,19 +217,19 @@ func (s *runtimeShim) GetUploadStatus(ctx context.Context, req *runtimev1.GetUpl
 	if err := json.NewDecoder(resp.Body).Decode(&decoded); err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode status response: %w", err))
 	}
-	return &runtimev1.GetUploadStatusResponse{State: uploadStateFromString(decoded.State), Error: decoded.Error}, nil
+	return &bucketsv1.GetUploadStatusResponse{State: uploadStateFromString(decoded.State), Error: decoded.Error}, nil
 }
 
-func uploadStateFromString(s string) runtimev1.UploadState {
+func uploadStateFromString(s string) bucketsv1.UploadState {
 	switch s {
 	case "succeeded":
-		return runtimev1.UploadState_UPLOAD_STATE_SUCCEEDED
+		return bucketsv1.UploadState_UPLOAD_STATE_SUCCEEDED
 	case "expired":
-		return runtimev1.UploadState_UPLOAD_STATE_EXPIRED
+		return bucketsv1.UploadState_UPLOAD_STATE_EXPIRED
 	case "pending":
-		return runtimev1.UploadState_UPLOAD_STATE_PENDING
+		return bucketsv1.UploadState_UPLOAD_STATE_PENDING
 	default:
-		return runtimev1.UploadState_UPLOAD_STATE_UNSPECIFIED
+		return bucketsv1.UploadState_UPLOAD_STATE_UNSPECIFIED
 	}
 }
 

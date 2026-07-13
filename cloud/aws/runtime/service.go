@@ -13,8 +13,8 @@ import (
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	runtimev1 "github.com/ocelhq/ocel/pkg/proto/runtime/v1"
-	"github.com/ocelhq/ocel/pkg/proto/runtime/v1/runtimev1connect"
+	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
+	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
 // presignTTL is how long a minted PUT URL is valid; sessionTTL is strictly
@@ -35,9 +35,9 @@ type presignAPI interface {
 	PresignPutObject(context.Context, *s3.PutObjectInput, ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
 }
 
-// Service is the production RuntimeService: it mints presigned PUT targets,
+// Service is the production BucketService: it mints presigned PUT targets,
 // persists pending sessions to DynamoDB, verifies completion signatures, and
-// reports status. It implements runtimev1connect.RuntimeServiceHandler.
+// reports status. It implements bucketsv1connect.BucketServiceHandler.
 type Service struct {
 	store     *sessionStore
 	presigner presignAPI
@@ -50,7 +50,7 @@ type Service struct {
 	newSecret func() string
 }
 
-var _ runtimev1connect.RuntimeServiceHandler = (*Service)(nil)
+var _ bucketsv1connect.BucketServiceHandler = (*Service)(nil)
 
 // Config wires a Service to its concrete AWS clients.
 type Config struct {
@@ -83,7 +83,7 @@ func randomHex(n int) string {
 	return hex.EncodeToString(b)
 }
 
-func (s *Service) PresignUpload(ctx context.Context, req *runtimev1.PresignUploadRequest) (*runtimev1.PresignUploadResponse, error) {
+func (s *Service) PresignUpload(ctx context.Context, req *bucketsv1.PresignUploadRequest) (*bucketsv1.PresignUploadResponse, error) {
 	if len(req.GetFiles()) == 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("presign requires at least one file"))
 	}
@@ -93,7 +93,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *runtimev1.PresignUploa
 	now := s.now()
 
 	files := make([]sessionFile, len(req.GetFiles()))
-	targets := make([]*runtimev1.PresignedTarget, len(req.GetFiles()))
+	targets := make([]*bucketsv1.PresignedTarget, len(req.GetFiles()))
 
 	for i, f := range req.GetFiles() {
 		url, err := s.presignPut(ctx, f.GetKey(), f.GetMimeType(), f.GetSize(), sessionID, req.GetContentDisposition())
@@ -107,7 +107,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *runtimev1.PresignUploa
 			MimeType: f.GetMimeType(),
 			State:    statePending,
 		}
-		targets[i] = &runtimev1.PresignedTarget{
+		targets[i] = &bucketsv1.PresignedTarget{
 			Url:                url,
 			Key:                f.GetKey(),
 			Name:               f.GetName(),
@@ -130,7 +130,7 @@ func (s *Service) PresignUpload(ctx context.Context, req *runtimev1.PresignUploa
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	return &runtimev1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
+	return &bucketsv1.PresignUploadResponse{SessionId: sessionID, Files: targets}, nil
 }
 
 // presignPut mints a presigned PUT that binds Content-Length (exact) and
@@ -160,10 +160,10 @@ func (s *Service) presignPut(ctx context.Context, key, contentType string, size 
 	return req.URL, nil
 }
 
-func (s *Service) VerifyUploadSignature(ctx context.Context, req *runtimev1.VerifyUploadSignatureRequest) (*runtimev1.VerifyUploadSignatureResponse, error) {
+func (s *Service) VerifyUploadSignature(ctx context.Context, req *bucketsv1.VerifyUploadSignatureRequest) (*bucketsv1.VerifyUploadSignatureResponse, error) {
 	sess, err := s.store.get(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
-		return &runtimev1.VerifyUploadSignatureResponse{Valid: false}, nil
+		return &bucketsv1.VerifyUploadSignatureResponse{Valid: false}, nil
 	}
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
@@ -177,12 +177,12 @@ func (s *Service) VerifyUploadSignature(ctx context.Context, req *runtimev1.Veri
 		MimeType: f.GetMimeType(),
 	}
 	if !verifyUpload(sess.Secret, req.GetSessionId(), file, req.GetSignature()) {
-		return &runtimev1.VerifyUploadSignatureResponse{Valid: false}, nil
+		return &bucketsv1.VerifyUploadSignatureResponse{Valid: false}, nil
 	}
-	return &runtimev1.VerifyUploadSignatureResponse{Valid: true, Metadata: sess.Metadata}, nil
+	return &bucketsv1.VerifyUploadSignatureResponse{Valid: true, Metadata: sess.Metadata}, nil
 }
 
-func (s *Service) GetUploadStatus(ctx context.Context, req *runtimev1.GetUploadStatusRequest) (*runtimev1.GetUploadStatusResponse, error) {
+func (s *Service) GetUploadStatus(ctx context.Context, req *bucketsv1.GetUploadStatusRequest) (*bucketsv1.GetUploadStatusResponse, error) {
 	sess, err := s.store.get(ctx, req.GetSessionId())
 	if errors.Is(err, errSessionNotFound) {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("session not found"))
@@ -199,22 +199,22 @@ func (s *Service) GetUploadStatus(ctx context.Context, req *runtimev1.GetUploadS
 		state = stateExpired
 	}
 
-	resp := &runtimev1.GetUploadStatusResponse{State: toProtoState(state)}
+	resp := &bucketsv1.GetUploadStatusResponse{State: toProtoState(state)}
 	if state == stateExpired {
 		resp.Error = "upload expired"
 	}
 	return resp, nil
 }
 
-func toProtoState(s fileState) runtimev1.UploadState {
+func toProtoState(s fileState) bucketsv1.UploadState {
 	switch s {
 	case statePending:
-		return runtimev1.UploadState_UPLOAD_STATE_PENDING
+		return bucketsv1.UploadState_UPLOAD_STATE_PENDING
 	case stateSucceeded:
-		return runtimev1.UploadState_UPLOAD_STATE_SUCCEEDED
+		return bucketsv1.UploadState_UPLOAD_STATE_SUCCEEDED
 	case stateExpired:
-		return runtimev1.UploadState_UPLOAD_STATE_EXPIRED
+		return bucketsv1.UploadState_UPLOAD_STATE_EXPIRED
 	default:
-		return runtimev1.UploadState_UPLOAD_STATE_UNSPECIFIED
+		return bucketsv1.UploadState_UPLOAD_STATE_UNSPECIFIED
 	}
 }

@@ -16,7 +16,7 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	runtimev1 "github.com/ocelhq/ocel/pkg/proto/runtime/v1"
+	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
 )
 
 // fakeDDB is an in-memory stand-in for the narrowed DynamoDB API, keyed by the
@@ -105,11 +105,11 @@ func TestPresignUploadWritesSessionAndBindsTag(t *testing.T) {
 	ps := &fakePresigner{}
 	svc := newTestService(ddb, ps)
 
-	resp, err := svc.PresignUpload(context.Background(), &runtimev1.PresignUploadRequest{
+	resp, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
 		Bucket:          "storage",
 		CallbackBaseUrl: "https://app.example/api/blob",
 		Metadata:        []byte(`{"user":"u1"}`),
-		Files: []*runtimev1.PresignFile{
+		Files: []*bucketsv1.PresignFile{
 			{Key: "avatar.png", Name: "avatar.png", Size: 1024, MimeType: "image/png"},
 		},
 	})
@@ -162,10 +162,10 @@ func TestPresignUploadWritesSessionAndBindsTag(t *testing.T) {
 func TestVerifyUploadSignatureAcceptsAndRejects(t *testing.T) {
 	ddb := newFakeDDB()
 	svc := newTestService(ddb, &fakePresigner{})
-	_, err := svc.PresignUpload(context.Background(), &runtimev1.PresignUploadRequest{
+	_, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
 		Bucket:   "storage",
 		Metadata: []byte("meta"),
-		Files:    []*runtimev1.PresignFile{{Key: "k.png", Name: "k.png", Size: 10, MimeType: "image/png"}},
+		Files:    []*bucketsv1.PresignFile{{Key: "k.png", Name: "k.png", Size: 10, MimeType: "image/png"}},
 	})
 	if err != nil {
 		t.Fatalf("PresignUpload: %v", err)
@@ -174,10 +174,10 @@ func TestVerifyUploadSignatureAcceptsAndRejects(t *testing.T) {
 	file := SignedFile{Key: "k.png", Name: "k.png", Size: 10, MimeType: "image/png"}
 	sig := signUpload("test-secret", "sess_fixed", file)
 
-	ok, err := svc.VerifyUploadSignature(context.Background(), &runtimev1.VerifyUploadSignatureRequest{
+	ok, err := svc.VerifyUploadSignature(context.Background(), &bucketsv1.VerifyUploadSignatureRequest{
 		SessionId: "sess_fixed",
 		Signature: sig,
-		File:      &runtimev1.CompletedFile{Key: "k.png", Name: "k.png", Size: 10, MimeType: "image/png"},
+		File:      &bucketsv1.CompletedFile{Key: "k.png", Name: "k.png", Size: 10, MimeType: "image/png"},
 	})
 	if err != nil {
 		t.Fatalf("VerifyUploadSignature: %v", err)
@@ -186,10 +186,10 @@ func TestVerifyUploadSignatureAcceptsAndRejects(t *testing.T) {
 		t.Fatalf("valid signature should return metadata: %+v", ok)
 	}
 
-	bad, err := svc.VerifyUploadSignature(context.Background(), &runtimev1.VerifyUploadSignatureRequest{
+	bad, err := svc.VerifyUploadSignature(context.Background(), &bucketsv1.VerifyUploadSignatureRequest{
 		SessionId: "sess_fixed",
 		Signature: "deadbeef",
-		File:      &runtimev1.CompletedFile{Key: "k.png", Name: "k.png", Size: 10, MimeType: "image/png"},
+		File:      &bucketsv1.CompletedFile{Key: "k.png", Name: "k.png", Size: 10, MimeType: "image/png"},
 	})
 	if err != nil {
 		t.Fatalf("VerifyUploadSignature(bad): %v", err)
@@ -198,10 +198,10 @@ func TestVerifyUploadSignatureAcceptsAndRejects(t *testing.T) {
 		t.Fatalf("forged signature must be rejected without metadata: %+v", bad)
 	}
 
-	missing, err := svc.VerifyUploadSignature(context.Background(), &runtimev1.VerifyUploadSignatureRequest{
+	missing, err := svc.VerifyUploadSignature(context.Background(), &bucketsv1.VerifyUploadSignatureRequest{
 		SessionId: "nope",
 		Signature: sig,
-		File:      &runtimev1.CompletedFile{Key: "k.png"},
+		File:      &bucketsv1.CompletedFile{Key: "k.png"},
 	})
 	if err != nil {
 		t.Fatalf("VerifyUploadSignature(missing): %v", err)
@@ -214,28 +214,28 @@ func TestVerifyUploadSignatureAcceptsAndRejects(t *testing.T) {
 func TestGetUploadStatusPendingAndExpired(t *testing.T) {
 	ddb := newFakeDDB()
 	svc := newTestService(ddb, &fakePresigner{})
-	if _, err := svc.PresignUpload(context.Background(), &runtimev1.PresignUploadRequest{
+	if _, err := svc.PresignUpload(context.Background(), &bucketsv1.PresignUploadRequest{
 		Bucket: "storage",
-		Files:  []*runtimev1.PresignFile{{Key: "k", Name: "k", Size: 1, MimeType: "text/plain"}},
+		Files:  []*bucketsv1.PresignFile{{Key: "k", Name: "k", Size: 1, MimeType: "text/plain"}},
 	}); err != nil {
 		t.Fatalf("PresignUpload: %v", err)
 	}
 
-	st, err := svc.GetUploadStatus(context.Background(), &runtimev1.GetUploadStatusRequest{SessionId: "sess_fixed"})
+	st, err := svc.GetUploadStatus(context.Background(), &bucketsv1.GetUploadStatusRequest{SessionId: "sess_fixed"})
 	if err != nil {
 		t.Fatalf("GetUploadStatus: %v", err)
 	}
-	if st.GetState() != runtimev1.UploadState_UPLOAD_STATE_PENDING {
+	if st.GetState() != bucketsv1.UploadState_UPLOAD_STATE_PENDING {
 		t.Fatalf("state = %v, want PENDING", st.GetState())
 	}
 
 	// Advance the clock past the session TTL: status becomes terminally expired.
 	svc.now = func() time.Time { return time.Unix(1_000_000, 0).Add(3 * time.Hour) }
-	st, err = svc.GetUploadStatus(context.Background(), &runtimev1.GetUploadStatusRequest{SessionId: "sess_fixed"})
+	st, err = svc.GetUploadStatus(context.Background(), &bucketsv1.GetUploadStatusRequest{SessionId: "sess_fixed"})
 	if err != nil {
 		t.Fatalf("GetUploadStatus: %v", err)
 	}
-	if st.GetState() != runtimev1.UploadState_UPLOAD_STATE_EXPIRED || st.GetError() == "" {
+	if st.GetState() != bucketsv1.UploadState_UPLOAD_STATE_EXPIRED || st.GetError() == "" {
 		t.Fatalf("expired session should report EXPIRED with error: %+v", st)
 	}
 }

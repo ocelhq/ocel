@@ -13,7 +13,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	runtimev1 "github.com/ocelhq/ocel/pkg/proto/runtime/v1"
+	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
 )
 
 const (
@@ -267,11 +267,11 @@ func queryOp(t *testing.T, rawURL string) string {
 
 // verifyReq rebuilds the proto VerifyUploadSignature request from a recorded
 // callback body, so the test verifies exactly what the listener put on the wire.
-func verifyReq(sessionID string, c signedCompletion) *runtimev1.VerifyUploadSignatureRequest {
-	return &runtimev1.VerifyUploadSignatureRequest{
+func verifyReq(sessionID string, c signedCompletion) *bucketsv1.VerifyUploadSignatureRequest {
+	return &bucketsv1.VerifyUploadSignatureRequest{
 		SessionId: sessionID,
 		Signature: c.Signature,
-		File: &runtimev1.CompletedFile{
+		File: &bucketsv1.CompletedFile{
 			Key:      c.File.Key,
 			Name:     c.File.Name,
 			Size:     c.File.Size,

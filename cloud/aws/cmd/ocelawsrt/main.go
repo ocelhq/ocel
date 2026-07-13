@@ -1,5 +1,5 @@
 // Command ocelawsrt is the Ocel AWS runtime binary: the production
-// implementation of runtime.v1.RuntimeService (mint presigned PUT targets,
+// implementation of runtime.v1.BucketService (mint presigned PUT targets,
 // persist/verify/read upload sessions in DynamoDB). It ships alongside the
 // provider binary and is later wrapped by the membrane, which supervises it and
 // injects its address into the app env. Nothing in this slice launches it in a

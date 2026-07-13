@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { UploadState } from "../gen/proto/runtime/v1/runtime_pb.js";
+import { UploadState } from "../gen/proto/buckets/v1/buckets_pb.js";
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
@@ -10,8 +10,8 @@ vi.mock("../utils/rpc", () => ({
 const { bucket } = await import("./bucket.js");
 import { decodeMetadata, encodeMetadata } from "./metadata.js";
 import { createRouteHandler } from "./route.js";
-import type { RuntimeContext } from "./runtime-context.js";
-import type { RuntimeServiceClient } from "./runtime-client.js";
+import type { BucketContext } from "./bucket-context.js";
+import type { BucketServiceClient } from "./bucket-client.js";
 import { uploader } from "./uploader.js";
 
 function makeReq(url: string, body?: unknown) {
@@ -41,9 +41,9 @@ function fakeContext(overrides: Partial<Record<string, unknown>> = {}) {
     verifyUploadSignature,
     getUploadStatus,
     ...overrides,
-  } as unknown as RuntimeServiceClient;
+  } as unknown as BucketServiceClient;
 
-  const ctx: RuntimeContext = { client, bucket: "store-bucket" };
+  const ctx: BucketContext = { client, bucket: "store-bucket" };
   return { ctx, presignUpload, verifyUploadSignature, getUploadStatus };
 }
 

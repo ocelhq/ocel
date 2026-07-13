@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { aggregateState, type SessionFile } from "../session";
 
 // GET /api/blob/status?sessionId=... . Backs
-// runtime.v1.RuntimeService.GetUploadStatus, which drives the client's op=poll.
+// buckets.v1.BucketService.GetUploadStatus, which drives the client's op=poll.
 // Reads the shared store (the app DB) - never app-local memory - so status is
 // correct regardless of which instance presigned the session, and aggregates
 // the per-file states into one session-level state.

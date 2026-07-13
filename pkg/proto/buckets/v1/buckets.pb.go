@@ -2,9 +2,9 @@
 // versions:
 // 	protoc-gen-go v1.36.11
 // 	protoc        (unknown)
-// source: runtime/v1/runtime.proto
+// source: buckets/v1/buckets.proto
 
-package runtimev1
+package bucketsv1
 
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
@@ -59,11 +59,11 @@ func (x UploadState) String() string {
 }
 
 func (UploadState) Descriptor() protoreflect.EnumDescriptor {
-	return file_runtime_v1_runtime_proto_enumTypes[0].Descriptor()
+	return file_buckets_v1_buckets_proto_enumTypes[0].Descriptor()
 }
 
 func (UploadState) Type() protoreflect.EnumType {
-	return &file_runtime_v1_runtime_proto_enumTypes[0]
+	return &file_buckets_v1_buckets_proto_enumTypes[0]
 }
 
 func (x UploadState) Number() protoreflect.EnumNumber {
@@ -72,7 +72,7 @@ func (x UploadState) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use UploadState.Descriptor instead.
 func (UploadState) EnumDescriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{0}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{0}
 }
 
 // PresignFile is one file the client intends to upload, as reported at presign
@@ -90,7 +90,7 @@ type PresignFile struct {
 
 func (x *PresignFile) Reset() {
 	*x = PresignFile{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[0]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -102,7 +102,7 @@ func (x *PresignFile) String() string {
 func (*PresignFile) ProtoMessage() {}
 
 func (x *PresignFile) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[0]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -115,7 +115,7 @@ func (x *PresignFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresignFile.ProtoReflect.Descriptor instead.
 func (*PresignFile) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{0}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *PresignFile) GetKey() string {
@@ -165,7 +165,7 @@ type PresignedTarget struct {
 
 func (x *PresignedTarget) Reset() {
 	*x = PresignedTarget{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[1]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -177,7 +177,7 @@ func (x *PresignedTarget) String() string {
 func (*PresignedTarget) ProtoMessage() {}
 
 func (x *PresignedTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[1]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -190,7 +190,7 @@ func (x *PresignedTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresignedTarget.ProtoReflect.Descriptor instead.
 func (*PresignedTarget) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{1}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *PresignedTarget) GetUrl() string {
@@ -236,7 +236,7 @@ type CompletedFile struct {
 
 func (x *CompletedFile) Reset() {
 	*x = CompletedFile{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[2]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -248,7 +248,7 @@ func (x *CompletedFile) String() string {
 func (*CompletedFile) ProtoMessage() {}
 
 func (x *CompletedFile) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[2]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -261,7 +261,7 @@ func (x *CompletedFile) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompletedFile.ProtoReflect.Descriptor instead.
 func (*CompletedFile) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{2}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *CompletedFile) GetKey() string {
@@ -311,7 +311,7 @@ type PresignUploadRequest struct {
 
 func (x *PresignUploadRequest) Reset() {
 	*x = PresignUploadRequest{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[3]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -323,7 +323,7 @@ func (x *PresignUploadRequest) String() string {
 func (*PresignUploadRequest) ProtoMessage() {}
 
 func (x *PresignUploadRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[3]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -336,7 +336,7 @@ func (x *PresignUploadRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresignUploadRequest.ProtoReflect.Descriptor instead.
 func (*PresignUploadRequest) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{3}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *PresignUploadRequest) GetBucket() string {
@@ -386,7 +386,7 @@ type PresignUploadResponse struct {
 
 func (x *PresignUploadResponse) Reset() {
 	*x = PresignUploadResponse{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[4]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -398,7 +398,7 @@ func (x *PresignUploadResponse) String() string {
 func (*PresignUploadResponse) ProtoMessage() {}
 
 func (x *PresignUploadResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[4]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -411,7 +411,7 @@ func (x *PresignUploadResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PresignUploadResponse.ProtoReflect.Descriptor instead.
 func (*PresignUploadResponse) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{4}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *PresignUploadResponse) GetSessionId() string {
@@ -442,7 +442,7 @@ type VerifyUploadSignatureRequest struct {
 
 func (x *VerifyUploadSignatureRequest) Reset() {
 	*x = VerifyUploadSignatureRequest{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[5]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -454,7 +454,7 @@ func (x *VerifyUploadSignatureRequest) String() string {
 func (*VerifyUploadSignatureRequest) ProtoMessage() {}
 
 func (x *VerifyUploadSignatureRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[5]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -467,7 +467,7 @@ func (x *VerifyUploadSignatureRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyUploadSignatureRequest.ProtoReflect.Descriptor instead.
 func (*VerifyUploadSignatureRequest) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{5}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *VerifyUploadSignatureRequest) GetSessionId() string {
@@ -503,7 +503,7 @@ type VerifyUploadSignatureResponse struct {
 
 func (x *VerifyUploadSignatureResponse) Reset() {
 	*x = VerifyUploadSignatureResponse{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[6]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -515,7 +515,7 @@ func (x *VerifyUploadSignatureResponse) String() string {
 func (*VerifyUploadSignatureResponse) ProtoMessage() {}
 
 func (x *VerifyUploadSignatureResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[6]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -528,7 +528,7 @@ func (x *VerifyUploadSignatureResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VerifyUploadSignatureResponse.ProtoReflect.Descriptor instead.
 func (*VerifyUploadSignatureResponse) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{6}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *VerifyUploadSignatureResponse) GetValid() bool {
@@ -554,7 +554,7 @@ type GetUploadStatusRequest struct {
 
 func (x *GetUploadStatusRequest) Reset() {
 	*x = GetUploadStatusRequest{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[7]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -566,7 +566,7 @@ func (x *GetUploadStatusRequest) String() string {
 func (*GetUploadStatusRequest) ProtoMessage() {}
 
 func (x *GetUploadStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[7]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -579,7 +579,7 @@ func (x *GetUploadStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUploadStatusRequest.ProtoReflect.Descriptor instead.
 func (*GetUploadStatusRequest) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{7}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetUploadStatusRequest) GetSessionId() string {
@@ -591,7 +591,7 @@ func (x *GetUploadStatusRequest) GetSessionId() string {
 
 type GetUploadStatusResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	State UploadState            `protobuf:"varint,1,opt,name=state,proto3,enum=runtime.v1.UploadState" json:"state,omitempty"`
+	State UploadState            `protobuf:"varint,1,opt,name=state,proto3,enum=buckets.v1.UploadState" json:"state,omitempty"`
 	// error is populated when the session carries a failure detail; empty
 	// otherwise.
 	Error         string `protobuf:"bytes,2,opt,name=error,proto3" json:"error,omitempty"`
@@ -601,7 +601,7 @@ type GetUploadStatusResponse struct {
 
 func (x *GetUploadStatusResponse) Reset() {
 	*x = GetUploadStatusResponse{}
-	mi := &file_runtime_v1_runtime_proto_msgTypes[8]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -613,7 +613,7 @@ func (x *GetUploadStatusResponse) String() string {
 func (*GetUploadStatusResponse) ProtoMessage() {}
 
 func (x *GetUploadStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_runtime_v1_runtime_proto_msgTypes[8]
+	mi := &file_buckets_v1_buckets_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -626,7 +626,7 @@ func (x *GetUploadStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetUploadStatusResponse.ProtoReflect.Descriptor instead.
 func (*GetUploadStatusResponse) Descriptor() ([]byte, []int) {
-	return file_runtime_v1_runtime_proto_rawDescGZIP(), []int{8}
+	return file_buckets_v1_buckets_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *GetUploadStatusResponse) GetState() UploadState {
@@ -643,12 +643,12 @@ func (x *GetUploadStatusResponse) GetError() string {
 	return ""
 }
 
-var File_runtime_v1_runtime_proto protoreflect.FileDescriptor
+var File_buckets_v1_buckets_proto protoreflect.FileDescriptor
 
-const file_runtime_v1_runtime_proto_rawDesc = "" +
+const file_buckets_v1_buckets_proto_rawDesc = "" +
 	"\n" +
-	"\x18runtime/v1/runtime.proto\x12\n" +
-	"runtime.v1\"d\n" +
+	"\x18buckets/v1/buckets.proto\x12\n" +
+	"buckets.v1\"d\n" +
 	"\vPresignFile\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -666,19 +666,19 @@ const file_runtime_v1_runtime_proto_rawDesc = "" +
 	"\tmime_type\x18\x04 \x01(\tR\bmimeType\"\xd6\x01\n" +
 	"\x14PresignUploadRequest\x12\x16\n" +
 	"\x06bucket\x18\x01 \x01(\tR\x06bucket\x12-\n" +
-	"\x05files\x18\x02 \x03(\v2\x17.runtime.v1.PresignFileR\x05files\x12\x1a\n" +
+	"\x05files\x18\x02 \x03(\v2\x17.buckets.v1.PresignFileR\x05files\x12\x1a\n" +
 	"\bmetadata\x18\x03 \x01(\fR\bmetadata\x12/\n" +
 	"\x13content_disposition\x18\x04 \x01(\tR\x12contentDisposition\x12*\n" +
 	"\x11callback_base_url\x18\x05 \x01(\tR\x0fcallbackBaseUrl\"i\n" +
 	"\x15PresignUploadResponse\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x121\n" +
-	"\x05files\x18\x02 \x03(\v2\x1b.runtime.v1.PresignedTargetR\x05files\"\x8a\x01\n" +
+	"\x05files\x18\x02 \x03(\v2\x1b.buckets.v1.PresignedTargetR\x05files\"\x8a\x01\n" +
 	"\x1cVerifyUploadSignatureRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12-\n" +
-	"\x04file\x18\x03 \x01(\v2\x19.runtime.v1.CompletedFileR\x04file\"Q\n" +
+	"\x04file\x18\x03 \x01(\v2\x19.buckets.v1.CompletedFileR\x04file\"Q\n" +
 	"\x1dVerifyUploadSignatureResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x12\x1a\n" +
 	"\bmetadata\x18\x02 \x01(\fR\bmetadata\"7\n" +
@@ -686,55 +686,55 @@ const file_runtime_v1_runtime_proto_rawDesc = "" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\"^\n" +
 	"\x17GetUploadStatusResponse\x12-\n" +
-	"\x05state\x18\x01 \x01(\x0e2\x17.runtime.v1.UploadStateR\x05state\x12\x14\n" +
+	"\x05state\x18\x01 \x01(\x0e2\x17.buckets.v1.UploadStateR\x05state\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error*{\n" +
 	"\vUploadState\x12\x1c\n" +
 	"\x18UPLOAD_STATE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14UPLOAD_STATE_PENDING\x10\x01\x12\x1a\n" +
 	"\x16UPLOAD_STATE_SUCCEEDED\x10\x02\x12\x18\n" +
-	"\x14UPLOAD_STATE_EXPIRED\x10\x032\xb0\x02\n" +
-	"\x0eRuntimeService\x12T\n" +
-	"\rPresignUpload\x12 .runtime.v1.PresignUploadRequest\x1a!.runtime.v1.PresignUploadResponse\x12l\n" +
-	"\x15VerifyUploadSignature\x12(.runtime.v1.VerifyUploadSignatureRequest\x1a).runtime.v1.VerifyUploadSignatureResponse\x12Z\n" +
-	"\x0fGetUploadStatus\x12\".runtime.v1.GetUploadStatusRequest\x1a#.runtime.v1.GetUploadStatusResponseB7Z5github.com/ocelhq/ocel/pkg/proto/runtime/v1;runtimev1b\x06proto3"
+	"\x14UPLOAD_STATE_EXPIRED\x10\x032\xaf\x02\n" +
+	"\rBucketService\x12T\n" +
+	"\rPresignUpload\x12 .buckets.v1.PresignUploadRequest\x1a!.buckets.v1.PresignUploadResponse\x12l\n" +
+	"\x15VerifyUploadSignature\x12(.buckets.v1.VerifyUploadSignatureRequest\x1a).buckets.v1.VerifyUploadSignatureResponse\x12Z\n" +
+	"\x0fGetUploadStatus\x12\".buckets.v1.GetUploadStatusRequest\x1a#.buckets.v1.GetUploadStatusResponseB7Z5github.com/ocelhq/ocel/pkg/proto/buckets/v1;bucketsv1b\x06proto3"
 
 var (
-	file_runtime_v1_runtime_proto_rawDescOnce sync.Once
-	file_runtime_v1_runtime_proto_rawDescData []byte
+	file_buckets_v1_buckets_proto_rawDescOnce sync.Once
+	file_buckets_v1_buckets_proto_rawDescData []byte
 )
 
-func file_runtime_v1_runtime_proto_rawDescGZIP() []byte {
-	file_runtime_v1_runtime_proto_rawDescOnce.Do(func() {
-		file_runtime_v1_runtime_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_runtime_v1_runtime_proto_rawDesc), len(file_runtime_v1_runtime_proto_rawDesc)))
+func file_buckets_v1_buckets_proto_rawDescGZIP() []byte {
+	file_buckets_v1_buckets_proto_rawDescOnce.Do(func() {
+		file_buckets_v1_buckets_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_buckets_v1_buckets_proto_rawDesc), len(file_buckets_v1_buckets_proto_rawDesc)))
 	})
-	return file_runtime_v1_runtime_proto_rawDescData
+	return file_buckets_v1_buckets_proto_rawDescData
 }
 
-var file_runtime_v1_runtime_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_runtime_v1_runtime_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
-var file_runtime_v1_runtime_proto_goTypes = []any{
-	(UploadState)(0),                      // 0: runtime.v1.UploadState
-	(*PresignFile)(nil),                   // 1: runtime.v1.PresignFile
-	(*PresignedTarget)(nil),               // 2: runtime.v1.PresignedTarget
-	(*CompletedFile)(nil),                 // 3: runtime.v1.CompletedFile
-	(*PresignUploadRequest)(nil),          // 4: runtime.v1.PresignUploadRequest
-	(*PresignUploadResponse)(nil),         // 5: runtime.v1.PresignUploadResponse
-	(*VerifyUploadSignatureRequest)(nil),  // 6: runtime.v1.VerifyUploadSignatureRequest
-	(*VerifyUploadSignatureResponse)(nil), // 7: runtime.v1.VerifyUploadSignatureResponse
-	(*GetUploadStatusRequest)(nil),        // 8: runtime.v1.GetUploadStatusRequest
-	(*GetUploadStatusResponse)(nil),       // 9: runtime.v1.GetUploadStatusResponse
+var file_buckets_v1_buckets_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_buckets_v1_buckets_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
+var file_buckets_v1_buckets_proto_goTypes = []any{
+	(UploadState)(0),                      // 0: buckets.v1.UploadState
+	(*PresignFile)(nil),                   // 1: buckets.v1.PresignFile
+	(*PresignedTarget)(nil),               // 2: buckets.v1.PresignedTarget
+	(*CompletedFile)(nil),                 // 3: buckets.v1.CompletedFile
+	(*PresignUploadRequest)(nil),          // 4: buckets.v1.PresignUploadRequest
+	(*PresignUploadResponse)(nil),         // 5: buckets.v1.PresignUploadResponse
+	(*VerifyUploadSignatureRequest)(nil),  // 6: buckets.v1.VerifyUploadSignatureRequest
+	(*VerifyUploadSignatureResponse)(nil), // 7: buckets.v1.VerifyUploadSignatureResponse
+	(*GetUploadStatusRequest)(nil),        // 8: buckets.v1.GetUploadStatusRequest
+	(*GetUploadStatusResponse)(nil),       // 9: buckets.v1.GetUploadStatusResponse
 }
-var file_runtime_v1_runtime_proto_depIdxs = []int32{
-	1, // 0: runtime.v1.PresignUploadRequest.files:type_name -> runtime.v1.PresignFile
-	2, // 1: runtime.v1.PresignUploadResponse.files:type_name -> runtime.v1.PresignedTarget
-	3, // 2: runtime.v1.VerifyUploadSignatureRequest.file:type_name -> runtime.v1.CompletedFile
-	0, // 3: runtime.v1.GetUploadStatusResponse.state:type_name -> runtime.v1.UploadState
-	4, // 4: runtime.v1.RuntimeService.PresignUpload:input_type -> runtime.v1.PresignUploadRequest
-	6, // 5: runtime.v1.RuntimeService.VerifyUploadSignature:input_type -> runtime.v1.VerifyUploadSignatureRequest
-	8, // 6: runtime.v1.RuntimeService.GetUploadStatus:input_type -> runtime.v1.GetUploadStatusRequest
-	5, // 7: runtime.v1.RuntimeService.PresignUpload:output_type -> runtime.v1.PresignUploadResponse
-	7, // 8: runtime.v1.RuntimeService.VerifyUploadSignature:output_type -> runtime.v1.VerifyUploadSignatureResponse
-	9, // 9: runtime.v1.RuntimeService.GetUploadStatus:output_type -> runtime.v1.GetUploadStatusResponse
+var file_buckets_v1_buckets_proto_depIdxs = []int32{
+	1, // 0: buckets.v1.PresignUploadRequest.files:type_name -> buckets.v1.PresignFile
+	2, // 1: buckets.v1.PresignUploadResponse.files:type_name -> buckets.v1.PresignedTarget
+	3, // 2: buckets.v1.VerifyUploadSignatureRequest.file:type_name -> buckets.v1.CompletedFile
+	0, // 3: buckets.v1.GetUploadStatusResponse.state:type_name -> buckets.v1.UploadState
+	4, // 4: buckets.v1.BucketService.PresignUpload:input_type -> buckets.v1.PresignUploadRequest
+	6, // 5: buckets.v1.BucketService.VerifyUploadSignature:input_type -> buckets.v1.VerifyUploadSignatureRequest
+	8, // 6: buckets.v1.BucketService.GetUploadStatus:input_type -> buckets.v1.GetUploadStatusRequest
+	5, // 7: buckets.v1.BucketService.PresignUpload:output_type -> buckets.v1.PresignUploadResponse
+	7, // 8: buckets.v1.BucketService.VerifyUploadSignature:output_type -> buckets.v1.VerifyUploadSignatureResponse
+	9, // 9: buckets.v1.BucketService.GetUploadStatus:output_type -> buckets.v1.GetUploadStatusResponse
 	7, // [7:10] is the sub-list for method output_type
 	4, // [4:7] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
@@ -742,27 +742,27 @@ var file_runtime_v1_runtime_proto_depIdxs = []int32{
 	0, // [0:4] is the sub-list for field type_name
 }
 
-func init() { file_runtime_v1_runtime_proto_init() }
-func file_runtime_v1_runtime_proto_init() {
-	if File_runtime_v1_runtime_proto != nil {
+func init() { file_buckets_v1_buckets_proto_init() }
+func file_buckets_v1_buckets_proto_init() {
+	if File_buckets_v1_buckets_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_runtime_v1_runtime_proto_rawDesc), len(file_runtime_v1_runtime_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_buckets_v1_buckets_proto_rawDesc), len(file_buckets_v1_buckets_proto_rawDesc)),
 			NumEnums:      1,
 			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
-		GoTypes:           file_runtime_v1_runtime_proto_goTypes,
-		DependencyIndexes: file_runtime_v1_runtime_proto_depIdxs,
-		EnumInfos:         file_runtime_v1_runtime_proto_enumTypes,
-		MessageInfos:      file_runtime_v1_runtime_proto_msgTypes,
+		GoTypes:           file_buckets_v1_buckets_proto_goTypes,
+		DependencyIndexes: file_buckets_v1_buckets_proto_depIdxs,
+		EnumInfos:         file_buckets_v1_buckets_proto_enumTypes,
+		MessageInfos:      file_buckets_v1_buckets_proto_msgTypes,
 	}.Build()
-	File_runtime_v1_runtime_proto = out.File
-	file_runtime_v1_runtime_proto_goTypes = nil
-	file_runtime_v1_runtime_proto_depIdxs = nil
+	File_buckets_v1_buckets_proto = out.File
+	file_buckets_v1_buckets_proto_goTypes = nil
+	file_buckets_v1_buckets_proto_depIdxs = nil
 }

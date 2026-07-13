@@ -3,7 +3,7 @@ package deploy
 import (
 	"testing"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -14,15 +14,15 @@ func TestRealizationFor(t *testing.T) {
 	cases := []struct {
 		name      string
 		rt        resourcesv1.ResourceType
-		lifecycle providerv1.Environment_Lifecycle
+		lifecycle deploymentsv1.Environment_Lifecycle
 		want      Realization
 	}{
-		{"postgres ephemeral is sliced", pg, providerv1.Environment_LIFECYCLE_EPHEMERAL, RealizationLogicalSlice},
-		{"postgres persistent is real", pg, providerv1.Environment_LIFECYCLE_PERSISTENT, RealizationReal},
-		{"postgres unspecified is real", pg, providerv1.Environment_LIFECYCLE_UNSPECIFIED, RealizationReal},
-		{"bucket ephemeral is real", bucket, providerv1.Environment_LIFECYCLE_EPHEMERAL, RealizationReal},
-		{"bucket persistent is real", bucket, providerv1.Environment_LIFECYCLE_PERSISTENT, RealizationReal},
-		{"bucket unspecified is real", bucket, providerv1.Environment_LIFECYCLE_UNSPECIFIED, RealizationReal},
+		{"postgres ephemeral is sliced", pg, deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, RealizationLogicalSlice},
+		{"postgres persistent is real", pg, deploymentsv1.Environment_LIFECYCLE_PERSISTENT, RealizationReal},
+		{"postgres unspecified is real", pg, deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED, RealizationReal},
+		{"bucket ephemeral is real", bucket, deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, RealizationReal},
+		{"bucket persistent is real", bucket, deploymentsv1.Environment_LIFECYCLE_PERSISTENT, RealizationReal},
+		{"bucket unspecified is real", bucket, deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED, RealizationReal},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

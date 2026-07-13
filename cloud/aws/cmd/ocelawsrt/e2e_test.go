@@ -20,12 +20,12 @@ import (
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	runtimev1 "github.com/ocelhq/ocel/pkg/proto/runtime/v1"
-	"github.com/ocelhq/ocel/pkg/proto/runtime/v1/runtimev1connect"
+	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
+	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
 // TestRuntimeDirectDial builds the real ocelawsrt binary, spawns it against a
-// local DynamoDB, dials its RuntimeService over the private socket, and asserts
+// local DynamoDB, dials its BucketService over the private socket, and asserts
 // PresignUpload returns a real presigned PUT (bound content-length/content-type
 // + session tag) and writes a pending session to DynamoDB.
 //
@@ -92,11 +92,11 @@ func TestRuntimeDirectDial(t *testing.T) {
 	addr := readReadiness(t, stdout)
 	client := dialRuntime(t, addr, token)
 
-	resp, err := client.PresignUpload(ctx, &runtimev1.PresignUploadRequest{
+	resp, err := client.PresignUpload(ctx, &bucketsv1.PresignUploadRequest{
 		Bucket:          "storage",
 		CallbackBaseUrl: "https://app.example/api/blob",
 		Metadata:        []byte(`{"user":"u1"}`),
-		Files: []*runtimev1.PresignFile{
+		Files: []*bucketsv1.PresignFile{
 			{Key: "avatars/u1.png", Name: "u1.png", Size: 2048, MimeType: "image/png"},
 		},
 	})
@@ -257,7 +257,7 @@ func readReadiness(t *testing.T, r interface{ Read([]byte) (int, error) }) strin
 	}
 }
 
-func dialRuntime(t *testing.T, addr, token string) runtimev1connect.RuntimeServiceClient {
+func dialRuntime(t *testing.T, addr, token string) bucketsv1connect.BucketServiceClient {
 	t.Helper()
 	network, address, err := channel.ParseAddr(addr)
 	if err != nil {
@@ -271,7 +271,7 @@ func dialRuntime(t *testing.T, addr, token string) runtimev1connect.RuntimeServi
 			},
 		},
 	}
-	return runtimev1connect.NewRuntimeServiceClient(
+	return bucketsv1connect.NewBucketServiceClient(
 		httpClient,
 		"http://runtime",
 		connect.WithInterceptors(&clientAuth{token: token}),

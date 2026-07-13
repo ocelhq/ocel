@@ -1,45 +1,45 @@
 syntax = "proto3";
-package provider.v1;
+package deployments.v1;
 
-option go_package = "github.com/ocelhq/ocel/pkg/proto/provider/v1;providerv1";
+option go_package = "github.com/ocelhq/ocel/pkg/proto/deployments/v1;deploymentsv1";
 
 import "resources/v1/resources.proto";
 
-// ProviderService is served by a provider binary (e.g. the AWS provider,
+// DeploymentService is served by a provider binary (e.g. the AWS provider,
 // cloud/aws) and driven by the CLI over a private local channel (Unix
 // domain socket, or loopback TCP where Unix sockets aren't viable). Exactly
 // one RPC this slice: methods arrive with the milestones that need them,
 // not ahead of them.
 //
-// This file, together with pkg/proto/provider/v1/contract.go, is the single
+// This file, together with pkg/channel, is the single
 // source for the three CLI<->provider contracts every provider must speak.
 // Consumers (the provider server and the CLI-side runner) implement against
 // these, they do not redefine them:
 //
 //  1. Manifest shape - see Manifest/ManifestResource below. Config schema is
 //     single-sourced with resources.v1 (declare), never re-specified here.
-//  2. ProviderService.Deploy - the one RPC, its request/event shapes, and the
+//  2. DeploymentService.Deploy - the one RPC, its request/event shapes, and the
 //     options encoding (see DeployRequest.options).
 //  3. Session token handshake - the CLI generates a per-session token,
 //     passes it to the spawned provider process via the
-//     providerv1.SessionTokenEnvVar environment variable, and presents it on
+//     channel.SessionTokenEnvVar environment variable, and presents it on
 //     every RPC call as an `Authorization: Bearer <token>` header (the same
 //     scheme this repo already uses for API auth). The provider verifies
 //     that header against its own env-provided token on every call, for
 //     both the Unix-socket and loopback-TCP transports; a missing or
-//     mismatched token is rejected. See providerv1.FormatAuthHeader /
-//     providerv1.ParseAuthHeader in contract.go.
+//     mismatched token is rejected. See channel.FormatAuthHeader /
+//     channel.ParseAuthHeader in pkg/channel.
 //  4. Readiness sentinel - once the provider has bound its listener, it
 //     prints exactly one line to stdout: the literal prefix
-//     "OCEL_PROVIDER_READY", a single space separator, then the address:
+//     "OCEL_READY", a single space separator, then the address:
 //     `unix:<absolute-socket-path>` for a Unix domain socket, or
 //     `tcp:127.0.0.1:<port>` for the loopback TCP fallback (never 0.0.0.0;
 //     loopback TCP is a weaker isolation posture than the Unix socket and
 //     must be revisited before providers handle real cloud credentials).
 //     Any other stdout/stderr, before or after that line, is diagnostic log
-//     output, not protocol. See providerv1.FormatReadinessLine /
-//     providerv1.ParseReadinessLine in contract.go.
-service ProviderService {
+//     output, not protocol. See channel.FormatReadinessLine /
+//     channel.ParseReadinessLine in pkg/channel.
+service DeploymentService {
     rpc Deploy(DeployRequest) returns (stream DeployEvent);
 
     // Bootstrap provisions the account-global, non-project-specific
@@ -183,7 +183,7 @@ message DeployRequest {
   Environment environment = 4;
 }
 
-// BootstrapRequest is the request for ProviderService.Bootstrap. Bootstrap
+// BootstrapRequest is the request for DeploymentService.Bootstrap. Bootstrap
 // is account-global, so it carries no manifest and no project id: only the
 // provider's opaque options and the pinned protocol version.
 message BootstrapRequest {
@@ -202,7 +202,7 @@ message BootstrapRequest {
   Environment.Class class = 3;
 }
 
-// DestroyRequest is the request for ProviderService.Destroy. It carries the
+// DestroyRequest is the request for DeploymentService.Destroy. It carries the
 // full Environment block as its addressing so the provider tears down exactly
 // the right environment.
 message DestroyRequest {
@@ -223,7 +223,7 @@ message DestroyRequest {
   string project_id = 4;
 }
 
-// ListEnvironmentsRequest is the request for ProviderService.ListEnvironments.
+// ListEnvironmentsRequest is the request for DeploymentService.ListEnvironments.
 // It is account/substrate-scoped, so it carries no manifest and no identity:
 // only the provider's opaque options and the pinned protocol version.
 message ListEnvironmentsRequest {
@@ -242,7 +242,7 @@ message ListEnvironmentsRequest {
   string project_id = 3;
 }
 
-// ListEnvironmentsResponse is the reply from ProviderService.ListEnvironments:
+// ListEnvironmentsResponse is the reply from DeploymentService.ListEnvironments:
 // one PreviewEnvironment per preview environment the provider knows about.
 message ListEnvironmentsResponse {
   repeated PreviewEnvironment environments = 1;
@@ -263,7 +263,7 @@ message PreviewEnvironment {
   int64 expires_at = 5;
 }
 
-// PreflightRequest is the request for ProviderService.Preflight. Like
+// PreflightRequest is the request for DeploymentService.Preflight. Like
 // Bootstrap it is account/profile-scoped, carrying only the provider's opaque
 // options and the pinned protocol version.
 message PreflightRequest {
@@ -360,7 +360,7 @@ message PostgresOutput {
 
 // BucketOutput is the discrete connection detail for a provisioned bucket
 // resource. It carries what the app needs to construct a runtime client and
-// address the bucket: the RuntimeService endpoint (address) and the bucket
+// address the bucket: the BucketService endpoint (address) and the bucket
 // binding. Together these match the OCEL_RESOURCE_BUCKET_<id> env payload
 // ({ address, bucket }) the SDK reads.
 message BucketOutput {

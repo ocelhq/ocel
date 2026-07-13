@@ -1,4 +1,4 @@
-// Package runtime is the production implementation of runtime.v1.RuntimeService:
+// Package runtime is the production implementation of runtime.v1.BucketService:
 // it mints S3 presigned PUT targets, persists a pending upload session (with a
 // per-session HMAC secret) to DynamoDB, verifies completion signatures, and
 // reports session status. It is the permanent Go implementation of the cloud

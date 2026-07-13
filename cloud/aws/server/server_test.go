@@ -3,22 +3,22 @@ package server
 import (
 	"testing"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-func wellFormedManifest() *providerv1.Manifest {
-	return &providerv1.Manifest{
+func wellFormedManifest() *deploymentsv1.Manifest {
+	return &deploymentsv1.Manifest{
 		SchemaVersion: "provider.v1",
 		ProjectId:     "proj_123",
-		Resources: []*providerv1.ManifestResource{
+		Resources: []*deploymentsv1.ManifestResource{
 			{
 				LogicalName: "postgres_main",
 				Resource: &resourcesv1.ResourceIdentifier{
 					Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES,
 					Name: "main",
 				},
-				Config: &providerv1.ManifestResource_Postgres{
+				Config: &deploymentsv1.ManifestResource_Postgres{
 					Postgres: &resourcesv1.PostgresConfig{Version: "17"},
 				},
 			},
@@ -96,7 +96,7 @@ func TestValidateManifest_EmptyResourcesOK(t *testing.T) {
 
 func TestResourceSummary_PostgresIncludesTypedVersion(t *testing.T) {
 	m := wellFormedManifest()
-	m.Resources[0].Config = &providerv1.ManifestResource_Postgres{
+	m.Resources[0].Config = &deploymentsv1.ManifestResource_Postgres{
 		Postgres: &resourcesv1.PostgresConfig{Version: "15"},
 	}
 

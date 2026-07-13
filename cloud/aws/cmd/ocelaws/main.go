@@ -1,7 +1,7 @@
 // Command ocelaws is the Ocel AWS provider binary. It speaks the provider
-// protocol (pkg/proto/provider/v1): it binds a private local channel, prints
+// protocol (pkg/proto/deployments/v1): it binds a private local channel, prints
 // the readiness sentinel once bound, verifies the per-session token on every
-// call, and serves ProviderService (Deploy + Bootstrap). The provisioning
+// call, and serves DeploymentService (Deploy + Bootstrap). The provisioning
 // logic lives in the sibling deploy/bootstrap/server packages; this
 // entrypoint only wires transport.
 package main

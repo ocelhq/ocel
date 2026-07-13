@@ -12,7 +12,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 // errPreviewInfraMissing is returned when a preview teardown or list is asked
@@ -23,7 +23,7 @@ var errPreviewInfraMissing = errors.New("preview infrastructure is not set up; r
 // class of the infrastructure present and whether any is present, so the CLI
 // can refuse a preview or deploy locally before provisioning. It reads both the
 // preview and production substrates and maps them via preflightResponse.
-func (s *Server) Preflight(ctx context.Context, req *providerv1.PreflightRequest) (*providerv1.PreflightResponse, error) {
+func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -51,37 +51,37 @@ func (s *Server) Preflight(ctx context.Context, req *providerv1.PreflightRequest
 // against the right one; when the required substrate is absent but the other
 // exists, the other is reported so the caller's class guard fires an
 // informative mismatch; an empty account is reported absent.
-func preflightResponse(required providerv1.Environment_Class, preview, production bootstrap.Deployed) *providerv1.PreflightResponse {
+func preflightResponse(required deploymentsv1.Environment_Class, preview, production bootstrap.Deployed) *deploymentsv1.PreflightResponse {
 	wanted, other := production, preview
-	if required == providerv1.Environment_CLASS_PREVIEW {
+	if required == deploymentsv1.Environment_CLASS_PREVIEW {
 		wanted, other = preview, production
 	}
 	switch {
 	case wanted.Present:
-		return &providerv1.PreflightResponse{InfraClass: classToEnum(wanted.Class), InfrastructurePresent: true}
+		return &deploymentsv1.PreflightResponse{InfraClass: classToEnum(wanted.Class), InfrastructurePresent: true}
 	case other.Present:
-		return &providerv1.PreflightResponse{InfraClass: classToEnum(other.Class), InfrastructurePresent: true}
+		return &deploymentsv1.PreflightResponse{InfraClass: classToEnum(other.Class), InfrastructurePresent: true}
 	default:
-		return &providerv1.PreflightResponse{InfraClass: providerv1.Environment_CLASS_UNSPECIFIED, InfrastructurePresent: false}
+		return &deploymentsv1.PreflightResponse{InfraClass: deploymentsv1.Environment_CLASS_UNSPECIFIED, InfrastructurePresent: false}
 	}
 }
 
 // classToEnum maps a bootstrap class marker to the provider contract enum.
-func classToEnum(class string) providerv1.Environment_Class {
+func classToEnum(class string) deploymentsv1.Environment_Class {
 	switch class {
 	case bootstrap.ClassProduction:
-		return providerv1.Environment_CLASS_PRODUCTION
+		return deploymentsv1.Environment_CLASS_PRODUCTION
 	case bootstrap.ClassPreview:
-		return providerv1.Environment_CLASS_PREVIEW
+		return deploymentsv1.Environment_CLASS_PREVIEW
 	default:
-		return providerv1.Environment_CLASS_UNSPECIFIED
+		return deploymentsv1.Environment_CLASS_UNSPECIFIED
 	}
 }
 
 // Destroy tears down the preview environment addressed by req.Environment and
 // streams progress, ending in a terminal ResultEvent. It reuses the DeployEvent
 // stream.
-func (s *Server) Destroy(ctx context.Context, req *providerv1.DestroyRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+func (s *Server) Destroy(ctx context.Context, req *deploymentsv1.DestroyRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
@@ -91,7 +91,7 @@ func (s *Server) Destroy(ctx context.Context, req *providerv1.DestroyRequest, st
 	return stream.Send(resultEvent(true, "", nil))
 }
 
-func (s *Server) runDestroy(ctx context.Context, req *providerv1.DestroyRequest, progress, logf func(string)) error {
+func (s *Server) runDestroy(ctx context.Context, req *deploymentsv1.DestroyRequest, progress, logf func(string)) error {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return err
@@ -134,7 +134,7 @@ func (s *Server) runDestroy(ctx context.Context, req *providerv1.DestroyRequest,
 // ListEnvironments enumerates the preview environments from the preview
 // substrate's Pulumi backend. An account with no preview infrastructure lists
 // nothing rather than erroring.
-func (s *Server) ListEnvironments(ctx context.Context, req *providerv1.ListEnvironmentsRequest) (*providerv1.ListEnvironmentsResponse, error) {
+func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
@@ -151,7 +151,7 @@ func (s *Server) ListEnvironments(ctx context.Context, req *providerv1.ListEnvir
 		return nil, err
 	}
 	if !deployed.Present || deployed.StateBucket == "" {
-		return &providerv1.ListEnvironmentsResponse{}, nil
+		return &deploymentsv1.ListEnvironmentsResponse{}, nil
 	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
@@ -174,15 +174,15 @@ func (s *Server) ListEnvironments(ctx context.Context, req *providerv1.ListEnvir
 	if err != nil {
 		return nil, err
 	}
-	return &providerv1.ListEnvironmentsResponse{Environments: toPreviewEnvironments(stacks)}, nil
+	return &deploymentsv1.ListEnvironmentsResponse{Environments: toPreviewEnvironments(stacks)}, nil
 }
 
 // toPreviewEnvironments maps enumerated preview stacks to the proto reply. It is
 // pure.
-func toPreviewEnvironments(stacks []deploy.PreviewStack) []*providerv1.PreviewEnvironment {
-	out := make([]*providerv1.PreviewEnvironment, 0, len(stacks))
+func toPreviewEnvironments(stacks []deploy.PreviewStack) []*deploymentsv1.PreviewEnvironment {
+	out := make([]*deploymentsv1.PreviewEnvironment, 0, len(stacks))
 	for _, s := range stacks {
-		out = append(out, &providerv1.PreviewEnvironment{
+		out = append(out, &deploymentsv1.PreviewEnvironment{
 			Identity:  s.Identity,
 			Lifecycle: s.Lifecycle,
 			Label:     s.Label,

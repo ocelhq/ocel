@@ -1,7 +1,7 @@
 import { Readable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
-import { UploadState } from "../gen/proto/runtime/v1/runtime_pb.js";
+import { UploadState } from "../gen/proto/buckets/v1/buckets_pb.js";
 
 vi.mock("../utils/rpc", () => ({
   rpc: { resource: { declare: vi.fn(() => Promise.resolve({})) } },
@@ -11,8 +11,8 @@ vi.mock("../utils/rpc", () => ({
 const { bucket } = await import("./bucket.js");
 import { encodeMetadata } from "./metadata.js";
 import { createRouteHandler } from "./route.js";
-import type { RuntimeContext } from "./runtime-context.js";
-import type { RuntimeServiceClient } from "./runtime-client.js";
+import type { BucketContext } from "./bucket-context.js";
+import type { BucketServiceClient } from "./bucket-client.js";
 import { uploader } from "./uploader.js";
 
 function fakeContext(overrides: Partial<Record<string, unknown>> = {}) {
@@ -27,8 +27,8 @@ function fakeContext(overrides: Partial<Record<string, unknown>> = {}) {
     verifyUploadSignature: vi.fn(),
     getUploadStatus: vi.fn(async () => ({ state: UploadState.PENDING, error: "" })),
     ...overrides,
-  } as unknown as RuntimeServiceClient;
-  const ctx: RuntimeContext = { client, bucket: "store-bucket" };
+  } as unknown as BucketServiceClient;
+  const ctx: BucketContext = { client, bucket: "store-bucket" };
   return { ctx, presignUpload };
 }
 
