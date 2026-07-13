@@ -39,10 +39,22 @@ const (
 	// passphrase.
 	PassphraseParamName = "/ocel/pulumi/passphrase"
 
-	outputStateBucket  = "StateBucketName"
-	outputSessionTable = "SessionTableName"
-	outputVersion      = "BootstrapVersion"
-	outputInfraClass   = "InfrastructureClass"
+	outputStateBucket    = "StateBucketName"
+	outputSessionTable   = "SessionTableName"
+	outputArtifactBucket = "ArtifactBucketName"
+	outputVersion        = "BootstrapVersion"
+	outputInfraClass     = "InfrastructureClass"
+
+	// artifactExpirationDays is how long a function deployment artifact lives in
+	// the artifact bucket before the lifecycle rule expires it. It is comfortably
+	// longer than any realistic deploy cadence: the deploy path re-uploads a live
+	// function's artifact (skip-if-exists) on every deploy, so an artifact still
+	// backing a function is always refreshed well before it can age out, and only
+	// genuinely stale versions are reaped.
+	artifactExpirationDays = 30
+	// artifactAbortMultipartDays bounds how long an aborted/incomplete multipart
+	// upload lingers before S3 reclaims its parts.
+	artifactAbortMultipartDays = 7
 )
 
 // Class tags stamped on a bootstrapped substrate, so an invocation can verify
@@ -59,6 +71,9 @@ type Deployed struct {
 	Version      int
 	StateBucket  string
 	SessionTable string
+	// ArtifactBucket is the account-global S3 bucket function deployment
+	// artifacts are uploaded to; the deploy path points Lambda code at it.
+	ArtifactBucket string
 	// Class is the class the substrate was stamped with at bootstrap
 	// (ClassProduction or ClassPreview), or "" for an older bootstrap predating
 	// the marker.
@@ -109,6 +124,8 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 			d.StateBucket = aws.ToString(o.OutputValue)
 		case outputSessionTable:
 			d.SessionTable = aws.ToString(o.OutputValue)
+		case outputArtifactBucket:
+			d.ArtifactBucket = aws.ToString(o.OutputValue)
 		case outputInfraClass:
 			d.Class = aws.ToString(o.OutputValue)
 		case outputVersion:
@@ -328,20 +345,20 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
-Outputs:
+%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
   %s:
     Description: DynamoDB table holding account-global upload sessions.
     Value: !Ref SessionsTable
-  %s:
+%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, outputStateBucket, outputSessionTable, outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
+`, artifactBucketResource(), outputStateBucket, outputSessionTable, artifactBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
@@ -386,20 +403,59 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
-Outputs:
+%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
     Value: !Ref StateBucket
   %s:
     Description: DynamoDB table holding preview upload sessions.
     Value: !Ref SessionsTable
-  %s:
+%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, outputStateBucket, outputSessionTable, outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+`, artifactBucketResource(), outputStateBucket, outputSessionTable, artifactBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+}
+
+// artifactBucketResource renders the ArtifactBucket resource block shared by
+// both substrate templates: the dedicated bucket function deployment artifacts
+// are uploaded to. It carries the same public-access lockdown the state bucket
+// uses, but no versioning (artifacts are content-addressed and immutable) and a
+// lifecycle rule that expires artifacts (and aborts stale multipart uploads) to
+// cap storage cost. The block is a Resources child, so it is emitted before the
+// template's Outputs: line.
+func artifactBucketResource() string {
+	return fmt.Sprintf(`  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: expire-artifacts
+            Status: Enabled
+            ExpirationInDays: %d
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: %d
+`, artifactExpirationDays, artifactAbortMultipartDays)
+}
+
+// artifactBucketOutput renders the ArtifactBucket name output shared by both
+// substrate templates, consumed by the deploy path to address the bucket.
+func artifactBucketOutput() string {
+	return fmt.Sprintf(`  %s:
+    Description: S3 bucket holding function deployment artifacts.
+    Value: !Ref ArtifactBucket
+`, outputArtifactBucket)
 }
 
 // CloudFormation surfaces both "stack does not exist" and the no-op update as

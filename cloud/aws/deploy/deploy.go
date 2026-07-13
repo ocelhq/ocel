@@ -56,9 +56,16 @@ type Config struct {
 
 	// ArtifactRoot is the absolute path a ManifestFunction's artifact_path is
 	// resolved against — the project's .ocel/output directory. Each function's
-	// `.func` artifact lives under it; the provider archives that directory into
-	// the Lambda deployment package.
+	// `.func` artifact lives under it; the provider hashes, zips, and uploads
+	// that directory to the artifact bucket before provisioning.
 	ArtifactRoot string
+	// ArtifactBucket is the account-global S3 bucket (from bootstrap) function
+	// deployment packages are uploaded to; each Lambda's code points at an object
+	// in it rather than an inline archive.
+	ArtifactBucket string
+	// Uploader puts function artifacts into ArtifactBucket. The aws-sdk-go-v2 S3
+	// client satisfies it.
+	Uploader ArtifactUploader
 
 	// Lifecycle is the environment lifecycle this deploy realizes under; it
 	// selects each resource's realization (see realizationFor). Unspecified for
@@ -89,6 +96,14 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 		if f != nil {
 			f(msg)
 		}
+	}
+
+	if len(manifest.GetFunctions()) > 0 {
+		report(progress, "Uploading function artifacts")
+	}
+	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest)
+	if err != nil {
+		return nil, err
 	}
 
 	program := func(pctx *pulumi.Context) error {
@@ -135,8 +150,7 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 		}
 
 		for _, fn := range manifest.GetFunctions() {
-			archive := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
-			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), archive, env); err != nil {
+			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), artifacts[fn.GetLogicalName()], env); err != nil {
 				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}
