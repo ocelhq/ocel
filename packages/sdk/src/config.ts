@@ -13,7 +13,7 @@ export interface ProviderDescriptor {
 export interface AppConfig {
   name: string;
   path: string;
-  framework: "express";
+  framework: "express" | "fastify";
   entrypoint?: string;
 }
 
