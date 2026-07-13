@@ -1,13 +1,13 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
-import { UploadState } from "../gen/proto/runtime/v1/runtime_pb";
-import type { Bucket } from "./bucket";
-import { generateKey } from "./keys";
-import { decodeMetadata, encodeMetadata } from "./metadata";
+import { UploadState } from "../gen/proto/runtime/v1/runtime_pb.js";
+import type { Bucket } from "./bucket.js";
+import { generateKey } from "./keys.js";
+import { decodeMetadata, encodeMetadata } from "./metadata.js";
 import {
   resolveRuntimeContext,
   type RuntimeContext,
-} from "./runtime-context";
+} from "./runtime-context.js";
 import type {
   AnyUploader,
   BlobRequest,
@@ -15,7 +15,7 @@ import type {
   FileInfo,
   LimitValue,
   UploadStatusState,
-} from "./types";
+} from "./types.js";
 
 /**
  * The requests the core route accepts: a Web Fetch `Request`/`NextRequest`

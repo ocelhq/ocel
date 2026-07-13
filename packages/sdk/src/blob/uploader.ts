@@ -5,7 +5,7 @@ import type {
   Uploader,
   UploaderAuth,
   UploaderUpload,
-} from "./types";
+} from "./types.js";
 
 /**
  * Declares a named uploader. `auth` runs first at presign (validate `input`,

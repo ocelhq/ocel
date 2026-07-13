@@ -3,8 +3,8 @@ import { createConnectTransport } from "@connectrpc/connect-node";
 import {
   ResourceService,
   ResourceType,
-} from "../gen/proto/resources/v1/resources_pb";
-import { OCEL_DEV_SERVER } from "./constants";
+} from "../gen/proto/resources/v1/resources_pb.js";
+import { OCEL_DEV_SERVER } from "./constants.js";
 
 const _rpc = () => {
   /**

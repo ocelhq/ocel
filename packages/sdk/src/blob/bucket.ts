@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { defer } from "../utils/defer";
-import { getConfig } from "../utils/get-config";
-import { rpc, ResourceType } from "../utils/rpc";
-import type { AnyUploader } from "./types";
+import { defer } from "../utils/defer.js";
+import { getConfig } from "../utils/get-config.js";
+import { rpc, ResourceType } from "../utils/rpc.js";
+import type { AnyUploader } from "./types.js";
 
 export interface BucketOptions<TUploaders extends Record<string, AnyUploader>> {
   allowedOrigins?: string[];

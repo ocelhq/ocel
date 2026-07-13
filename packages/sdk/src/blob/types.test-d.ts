@@ -1,8 +1,8 @@
 import { expectTypeOf } from "vitest";
 import { z } from "zod";
-import { bucket } from "./bucket";
-import { createUploadClient } from "./client";
-import { uploader } from "./uploader";
+import { bucket } from "./bucket.js";
+import { createUploadClient } from "./client.js";
+import { uploader } from "./uploader.js";
 
 // A bucket with two uploaders: `avatar` takes input, `doc` takes none.
 const avatar = uploader(

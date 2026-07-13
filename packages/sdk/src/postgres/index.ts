@@ -1,4 +1,4 @@
-import { Postgres, type PostgresConfig } from "./pg";
+import { Postgres, type PostgresConfig } from "./pg.js";
 import { Pool } from "pg";
 
 type PgReturn = Pool & { connectionString: string };

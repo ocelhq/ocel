@@ -1,5 +1,5 @@
-import type { Bucket } from "./bucket";
-import type { AnyUploader, Uploader, UploadStatusState } from "./types";
+import type { Bucket } from "./bucket.js";
+import type { AnyUploader, Uploader, UploadStatusState } from "./types.js";
 
 type Uploaders<B> = B extends Bucket<infer U> ? U : never;
 type UploaderName<B> = keyof Uploaders<B> & string;

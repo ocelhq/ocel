@@ -7,7 +7,7 @@ vi.mock("../utils/rpc", () => ({
   ResourceType: { POSTGRES: 1 },
 }));
 
-const { Postgres } = await import("./pg");
+const { Postgres } = await import("./pg.js");
 
 describe("Postgres discovery declare", () => {
   beforeEach(() => {

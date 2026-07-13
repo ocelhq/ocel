@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { getConfig } from "./get-config";
-import { ResourceType } from "./rpc";
+import { getConfig } from "./get-config.js";
+import { ResourceType } from "./rpc.js";
 
 describe("getConfig", () => {
   const keys: string[] = [];

@@ -1,6 +1,6 @@
 import { createConnectTransport } from "@connectrpc/connect-node";
-import type { Bucket } from "./bucket";
-import { createRuntimeClient, type RuntimeServiceClient } from "./runtime-client";
+import type { Bucket } from "./bucket.js";
+import { createRuntimeClient, type RuntimeServiceClient } from "./runtime-client.js";
 
 /**
  * The typed client plus the resolved store bucket name to address. The single

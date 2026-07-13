@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateKey } from "./keys";
+import { generateKey } from "./keys.js";
 
 const file = { name: "photo.jpg", size: 10, mimeType: "image/jpeg" };
 
