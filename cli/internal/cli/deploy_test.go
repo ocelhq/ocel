@@ -383,7 +383,7 @@ export {};
 	if err != nil {
 		t.Fatalf("resolve test binary path: %v", err)
 	}
-	if err := os.Symlink(testBinary, filepath.Join(binDir, "ocelaws")); err != nil {
+	if err := os.Symlink(testBinary, filepath.Join(binDir, "deploy")); err != nil {
 		t.Fatalf("symlink fake provider binary: %v", err)
 	}
 

@@ -34,7 +34,7 @@ func startNode() (*Membrane, error) {
 		return nil, err
 	}
 
-	cmd := exec.Command("/var/lang/bin/node", "/opt/ocel/runtime.mjs")
+	cmd := exec.Command("/var/lang/bin/node", "/opt/ocel/node-entrypoint.mjs")
 	cmd.Env = append(os.Environ(),
 		"OCEL_CONTROL_SOCKET="+sockPath,
 		"OCEL_HANDLER="+os.Getenv("OCEL_HANDLER"), // user's compiled entry

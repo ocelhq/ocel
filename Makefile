@@ -27,7 +27,7 @@ generate: proto
 cli:
 	node scripts/build-native.mjs --host --target cli
 
-# The AWS provider distribution (ocelaws + ocelawsrt) for the host platform.
+# The AWS provider distribution (deploy + runtime) for the host platform.
 provider:
 	node scripts/build-native.mjs --host --target provider
 
@@ -39,15 +39,15 @@ proto:
 
 # ---- Membrane layer ------------------------------------------------------
 
-# Build the nodert bootstrap (linux/amd64) and bundle it with runtime.mjs into
+# Build the lambdanode bootstrap (linux/amd64) and bundle it with node-entrypoint.mjs into
 # the layer zip. No AWS calls — publishing is a separate target.
 layer:
 	mkdir -p $(LAYER_DIR)/ocel
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 	  go build -tags lambda.norpc -ldflags="-s -w" \
-	  -o $(CURDIR)/$(LAYER_DIR)/ocel/bootstrap ./cloud/aws/cmd/nodert/bootstrap
+	  -o $(CURDIR)/$(LAYER_DIR)/ocel/bootstrap ./cloud/aws/cmd/lambdanode/bootstrap
 	chmod +x $(LAYER_DIR)/ocel/bootstrap
-	cp cloud/aws/cmd/nodert/runtime.mjs $(LAYER_DIR)/ocel/runtime.mjs
+	cp cloud/aws/cmd/lambdanode/node-entrypoint.mjs $(LAYER_DIR)/ocel/node-entrypoint.mjs
 	rm -f $(LAYER_ZIP)
 	cd $(LAYER_DIR) && zip -r $(CURDIR)/$(LAYER_ZIP) ocel
 

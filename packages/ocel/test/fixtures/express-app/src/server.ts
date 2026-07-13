@@ -6,8 +6,8 @@ import { stamp } from "fake-dep";
 import cjsDep from "cjs-dep";
 import { label } from "workspace-pkg";
 
-// Mirrors examples: the app exports itself as the default export; the nodert
-// runtime imports it and serves it (no listen() here).
+// Mirrors examples: the app exports itself as the default export; the
+// lambdanode entrypoint imports it and serves it (no listen() here).
 // `./lib/db` and `./config` are extensionless relative imports (legal in TS,
 // rejected by raw Node ESM) that the builder must rewrite; `express` (bare) and
 // `./greeting.js` (already extensioned) must be left untouched. `fake-dep` is a

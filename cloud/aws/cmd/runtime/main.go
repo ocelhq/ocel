@@ -1,9 +1,9 @@
-// Command ocelawsrt is the Ocel AWS runtime binary: the production
-// implementation of buckets.v1.BucketService (mint presigned PUT targets,
-// persist/verify/read upload sessions in DynamoDB). It ships alongside the
-// provider binary and is later wrapped by the membrane, which supervises it and
-// injects its address into the app env. Nothing in this slice launches it in a
-// deployed environment; it is exercised by a direct-dial integration test.
+// Command runtime is the Ocel AWS request-time plane binary: it serves the
+// per-resource services (buckets.v1.BucketService for now — presigned PUT
+// targets, upload-session persist/verify/read in DynamoDB). It ships alongside
+// the deploy binary and is later wrapped by the membrane, which supervises it
+// and injects its address into the app env. Nothing in this slice launches it
+// in a deployed environment; it is exercised by a direct-dial integration test.
 //
 // It reuses the provider's local-channel conventions: it binds a private Unix
 // socket (loopback TCP fallback), prints the OCEL_READY readiness

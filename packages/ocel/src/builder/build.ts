@@ -294,7 +294,7 @@ export async function buildApp(
   }
 
   // The handler is the transpiled entrypoint's path within the `.func` (posix).
-  // The nodert runtime imports it directly (OCEL_HANDLER=/var/task/<handler>);
+  // The lambdanode entrypoint imports it directly (OCEL_HANDLER=/var/task/<handler>);
   // there is no generated shim.
   const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest).split(path.sep).join("/");
   await writeFile(

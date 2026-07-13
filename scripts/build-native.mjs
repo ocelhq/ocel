@@ -9,9 +9,9 @@
 // Two targets share the mapping:
 //   --target cli       (default) the `ocel` CLI -> native-lib/cli-<node>/bin/ocel
 //   --target provider  the AWS provider distribution -> native-lib/
-//                       provider-aws-<node>/bin/{ocelaws, runtime/ocelawsrt}
+//                       provider-aws-<node>/bin/{deploy, runtime}
 // The provider target builds BOTH binaries the provider package ships: the
-// provider itself (cmd/ocelaws) and the runtime (cmd/ocelawsrt). The "ocel"
+// deploy entrypoint (cmd/deploy) and the runtime (cmd/runtime). The "ocel"
 // prefix keeps the shipped provider binary from shadowing the host's real
 // `aws` CLI.
 //
@@ -46,12 +46,12 @@ const TARGETS = {
   provider: {
     goModuleDir: join(REPO_ROOT, "cloud", "aws"),
     pkgPrefix: "provider-aws",
-    // Both cmd/ocelaws and cmd/ocelawsrt are `package main`, so their version
+    // Both cmd/deploy and cmd/runtime are `package main`, so their version
     // string is `-X main.version`.
     versionLdflagPkg: "main",
     binaries: [
-      { cmd: "./cmd/ocelaws", name: "ocelaws" },
-      { cmd: "./cmd/ocelawsrt", name: "ocelawsrt", subdir: "runtime" },
+      { cmd: "./cmd/deploy", name: "deploy" },
+      { cmd: "./cmd/runtime", name: "runtime" },
     ],
   },
 };

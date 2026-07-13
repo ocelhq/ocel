@@ -17,7 +17,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, buildApps, placeFile } from "./build.js";
 
 // Import a built entrypoint in a REAL Node ESM process and report the type of
-// its default export. This is what the nodert runtime does (OCEL_HANDLER points
+// its default export. This is what the lambdanode entrypoint does (OCEL_HANDLER points
 // at this file); a clean import proves the whole traced module tree resolves
 // under raw Node — vitest's own `await import` goes through Vite's bundler-style
 // resolver, which resolves extensionless imports and would mask the raw-Node
@@ -184,7 +184,7 @@ describe("buildApp", () => {
     cpSync(funcDir, isolated, { recursive: true });
 
     const { defaultType } = importEntryInNode(path.join(isolated, "src", "server.js"));
-    // The express app is the default export the nodert runtime serves.
+    // The express app is the default export the lambdanode entrypoint serves.
     expect(defaultType).toBe("function");
   });
 
