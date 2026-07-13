@@ -24,7 +24,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
-// TestRuntimeDirectDial builds the real ocelawsrt binary, spawns it against a
+// TestRuntimeDirectDial builds the real runtime binary, spawns it against a
 // local DynamoDB, dials its BucketService over the private socket, and asserts
 // PresignUpload returns a real presigned PUT (bound content-length/content-type
 // + session tag) and writes a pending session to DynamoDB.
@@ -32,7 +32,7 @@ import (
 // It requires dynamodb-local. Run it with:
 //
 //	docker compose up -d dynamodb
-//	go test ./cloud/aws/cmd/ocelawsrt -run TestRuntimeDirectDial
+//	go test ./cloud/aws/cmd/runtime -run TestRuntimeDirectDial
 //
 // It self-skips when dynamodb-local is not reachable (mirrors the MinIO dev
 // e2e's gate), so default CI without the container is unaffected.
@@ -216,10 +216,10 @@ func buildRuntimeBinary(t *testing.T) string {
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go not found on PATH")
 	}
-	out := filepath.Join(t.TempDir(), "ocelawsrt")
+	out := filepath.Join(t.TempDir(), "runtime")
 	build := exec.Command("go", "build", "-o", out, ".")
 	if b, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("go build ocelawsrt: %v\n%s", err, b)
+		t.Fatalf("go build runtime: %v\n%s", err, b)
 	}
 	return out
 }

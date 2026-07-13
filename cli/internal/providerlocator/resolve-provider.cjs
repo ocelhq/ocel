@@ -27,11 +27,11 @@ if (!packageName.startsWith(providerPrefix)) {
   );
   process.exit(1);
 }
-// The binary inside each platform package is the provider name prefixed with
-// "ocel" (e.g. "@ocel/provider-aws" -> "ocelaws"), matching how
-// `go build .../cloud/aws/cmd/ocelaws` names it. The "ocel" prefix keeps the
-// shipped binary from shadowing a same-named host CLI (e.g. the real `aws`).
-const binaryName = "ocel" + packageName.slice(providerPrefix.length);
+// Every @ocel/provider-* package ships its deployment entrypoint as bin/deploy
+// (matching cloud/aws/cmd/deploy). Naming it "deploy" rather than after the
+// cloud keeps it from shadowing a same-named host CLI (e.g. the real `aws`) and
+// is uniform across providers.
+const binaryName = "deploy";
 
 const { platform, arch } = process;
 

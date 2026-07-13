@@ -1,4 +1,6 @@
-// runtime.mjs
+// node-entrypoint.mjs — the Node-side entrypoint the lambdanode Go bootstrap
+// launches: it loads the user's app, adapts it (Express/handler/fetch), wraps
+// each request in Ocel context, and serves it on an ephemeral loopback port.
 import net from "node:net";
 import http from "node:http";
 import { isAbsolute } from "node:path";

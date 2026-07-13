@@ -2,7 +2,7 @@
  * Single registry of framework-specific knowledge: entrypoint candidates and
  * the Lambda runtime. Adding a framework happens here and nowhere else.
  *
- * There is no handler shim: the nodert runtime imports the user's transpiled
+ * There is no handler shim: the lambdanode entrypoint imports the user's transpiled
  * entrypoint directly (see build.ts), so the framework only needs to describe
  * where that entrypoint lives and which runtime to run it on.
  */

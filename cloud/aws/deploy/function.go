@@ -22,17 +22,17 @@ const (
 	defaultFunctionRuntime = "nodejs24.x"
 
 	// The manifest handler is the user entrypoint's path within the .func (e.g.
-	// `src/server.js`); the nodert runtime imports it via OCEL_HANDLER. This is
+	// `src/server.js`); the lambdanode entrypoint imports it via OCEL_HANDLER. This is
 	// the fallback when the manifest omits it.
 	defaultFunctionEntry = "src/server.js"
 
 	// lambdaConfigHandler is the Lambda's own Handler config value. Under the
-	// nodert exec-wrapper runtime the Go bootstrap owns the Runtime API loop, so
+	// lambdanode exec-wrapper the Go bootstrap owns the Runtime API loop, so
 	// this is vestigial — but the managed nodejs runtime still requires a
 	// syntactically valid value.
 	lambdaConfigHandler = "index.handler"
 
-	// execWrapper points the managed runtime at the nodert Go bootstrap shipped
+	// execWrapper points the managed runtime at the lambdanode Go bootstrap shipped
 	// in the membrane layer; it takes over the Runtime API loop.
 	execWrapper = "/opt/ocel/bootstrap"
 
@@ -157,7 +157,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 		return err
 	}
 
-	// The nodert bootstrap (in the membrane layer) takes over as the runtime and
+	// The lambdanode bootstrap (in the membrane layer) takes over as the runtime and
 	// imports the user entrypoint at /var/task/<handler>. The Lambda's own
 	// Handler config is vestigial under this exec wrapper.
 	env["AWS_LAMBDA_EXEC_WRAPPER"] = pulumi.String(execWrapper)
