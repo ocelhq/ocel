@@ -1,16 +1,16 @@
 syntax = "proto3";
-package runtime.v1;
+package buckets.v1;
 
-option go_package = "github.com/ocelhq/ocel/pkg/proto/runtime/v1;runtimev1";
+option go_package = "github.com/ocelhq/ocel/pkg/proto/buckets/v1;bucketsv1";
 
-// RuntimeService owns the cloud mechanics of ocel/blob uploads - minting
+// BucketService owns the cloud mechanics of ocel/blob uploads - minting
 // presigned targets, persisting a pending session, verifying the completion
 // signature, and reporting status - behind one language-neutral contract so
 // every SDK (JS, Python, Go) reuses one implementation. The SDK owns app
 // semantics (middleware, accept/limits, user key-generation); this service
 // owns nothing but store-side mechanics. All RPCs are addressed over Connect
 // to an injected address; the SDK never branches on prod/dev.
-service RuntimeService {
+service BucketService {
   // PresignUpload writes the pending session and mints the presigned PUT
   // targets. The response's targets are index-aligned with the request's
   // files.

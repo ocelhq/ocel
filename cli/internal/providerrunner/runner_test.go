@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 // spawnFake spawns this test binary re-exec'd as a fake provider in mode,
@@ -44,12 +44,12 @@ func TestHappyPath_ReadyDeploySuccess(t *testing.T) {
 		t.Fatalf("Ready() error = %v, want nil", err)
 	}
 
-	var events []*providerv1.DeployEvent
-	err := r.Deploy(ctx, &providerv1.DeployRequest{
-		Manifest:        &providerv1.Manifest{SchemaVersion: "provider.v1"},
+	var events []*deploymentsv1.DeployEvent
+	err := r.Deploy(ctx, &deploymentsv1.DeployRequest{
+		Manifest:        &deploymentsv1.Manifest{SchemaVersion: "provider.v1"},
 		Options:         []byte("{}"),
 		ProtocolVersion: "provider.v1",
-	}, func(ev *providerv1.DeployEvent) { events = append(events, ev) })
+	}, func(ev *deploymentsv1.DeployEvent) { events = append(events, ev) })
 	if err != nil {
 		t.Fatalf("Deploy() error = %v, want nil", err)
 	}
@@ -140,10 +140,10 @@ func TestDeploy_KilledMidCall(t *testing.T) {
 	var gotFirstEvent atomic.Bool
 	deployErrCh := make(chan error, 1)
 	go func() {
-		deployErrCh <- r.Deploy(ctx, &providerv1.DeployRequest{
-			Manifest: &providerv1.Manifest{SchemaVersion: "provider.v1"},
+		deployErrCh <- r.Deploy(ctx, &deploymentsv1.DeployRequest{
+			Manifest: &deploymentsv1.Manifest{SchemaVersion: "provider.v1"},
 			Options:  []byte("{}"),
-		}, func(ev *providerv1.DeployEvent) { gotFirstEvent.Store(true) })
+		}, func(ev *deploymentsv1.DeployEvent) { gotFirstEvent.Store(true) })
 	}()
 
 	// Wait for the provider to be mid-call, then kill it out from under
@@ -183,7 +183,7 @@ func TestDeploy_TerminalFailure(t *testing.T) {
 		t.Fatalf("Ready() error = %v, want nil", err)
 	}
 
-	err := r.Deploy(ctx, &providerv1.DeployRequest{Manifest: &providerv1.Manifest{}, Options: []byte("{}")}, nil)
+	err := r.Deploy(ctx, &deploymentsv1.DeployRequest{Manifest: &deploymentsv1.Manifest{}, Options: []byte("{}")}, nil)
 
 	var deployErr *DeployFailedError
 	if !errors.As(err, &deployErr) {
@@ -202,11 +202,11 @@ func TestBootstrap_Success(t *testing.T) {
 		t.Fatalf("Ready() error = %v, want nil", err)
 	}
 
-	var events []*providerv1.DeployEvent
-	err := r.Bootstrap(ctx, &providerv1.BootstrapRequest{
+	var events []*deploymentsv1.DeployEvent
+	err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{
 		Options:         []byte("{}"),
 		ProtocolVersion: "provider.v1",
-	}, func(ev *providerv1.DeployEvent) { events = append(events, ev) })
+	}, func(ev *deploymentsv1.DeployEvent) { events = append(events, ev) })
 	if err != nil {
 		t.Fatalf("Bootstrap() error = %v, want nil", err)
 	}
@@ -232,7 +232,7 @@ func TestBootstrap_TerminalFailure(t *testing.T) {
 		t.Fatalf("Ready() error = %v, want nil", err)
 	}
 
-	err := r.Bootstrap(ctx, &providerv1.BootstrapRequest{Options: []byte("{}")}, nil)
+	err := r.Bootstrap(ctx, &deploymentsv1.BootstrapRequest{Options: []byte("{}")}, nil)
 
 	var failErr *DeployFailedError
 	if !errors.As(err, &failErr) {

@@ -1,4 +1,4 @@
-package providerv1
+package deploymentsv1
 
 import (
 	"strings"

@@ -2,7 +2,7 @@
 // binary: spawn it in its own process group, wait for its readiness
 // sentinel (racing it against an early exit and a timeout), dial it, drive
 // its Deploy RPC, and tear it down. It consumes the contracts defined in
-// pkg/proto/provider/v1 (session token, readiness sentinel, Deploy
+// pkg/proto/deployments/v1 (session token, readiness sentinel, Deploy
 // request/stream) — see that package for the protocol itself.
 package providerrunner
 
@@ -26,8 +26,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 )
 
 // DefaultReadyTimeout is how long Ready waits for the readiness sentinel
@@ -127,7 +127,7 @@ type Runner struct {
 	stderrBuf bytes.Buffer
 
 	network, address string
-	client           providerv1connect.ProviderServiceClient
+	client           deploymentsv1connect.DeploymentServiceClient
 
 	closeOnce sync.Once
 }
@@ -269,7 +269,7 @@ func (r *Runner) dial(addr string) error {
 		},
 	}
 
-	r.client = providerv1connect.NewProviderServiceClient(
+	r.client = deploymentsv1connect.NewDeploymentServiceClient(
 		httpClient,
 		"http://provider",
 		connect.WithInterceptors(authInterceptor{token: r.token}),
@@ -283,7 +283,7 @@ func (r *Runner) dial(addr string) error {
 // *DeployFailedError for ResultEvent{Success: false}, or an error
 // describing why the stream ended without a result (e.g. the provider was
 // killed mid-call). Ready must have succeeded first.
-func (r *Runner) Deploy(ctx context.Context, req *providerv1.DeployRequest, onEvent func(*providerv1.DeployEvent)) error {
+func (r *Runner) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
 		return errors.New("providerrunner: Deploy called before a successful Ready")
 	}
@@ -297,7 +297,7 @@ func (r *Runner) Deploy(ctx context.Context, req *providerv1.DeployRequest, onEv
 // *DeployFailedError on failure, or a connection error. Bootstrap and Deploy
 // share one event stream by contract, so they share the same driver. Ready
 // must have succeeded first.
-func (r *Runner) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, onEvent func(*providerv1.DeployEvent)) error {
+func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
 		return errors.New("providerrunner: Bootstrap called before a successful Ready")
 	}
@@ -311,7 +311,7 @@ func (r *Runner) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest
 // *DeployFailedError on failure, or a connection error. Destroy reuses the
 // DeployEvent stream by contract, so it shares the same driver. Ready must
 // have succeeded first.
-func (r *Runner) Destroy(ctx context.Context, req *providerv1.DestroyRequest, onEvent func(*providerv1.DeployEvent)) error {
+func (r *Runner) Destroy(ctx context.Context, req *deploymentsv1.DestroyRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
 		return errors.New("providerrunner: Destroy called before a successful Ready")
 	}
@@ -321,7 +321,7 @@ func (r *Runner) Destroy(ctx context.Context, req *providerv1.DestroyRequest, on
 
 // ListEnvironments calls the provider's unary ListEnvironments RPC and returns
 // the enumerated preview environments. Ready must have succeeded first.
-func (r *Runner) ListEnvironments(ctx context.Context, req *providerv1.ListEnvironmentsRequest) (*providerv1.ListEnvironmentsResponse, error) {
+func (r *Runner) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
 	if r.client == nil {
 		return nil, errors.New("providerrunner: ListEnvironments called before a successful Ready")
 	}
@@ -335,7 +335,7 @@ func (r *Runner) ListEnvironments(ctx context.Context, req *providerv1.ListEnvir
 // Preflight calls the provider's unary Preflight RPC, reporting what the
 // provider's ambient account/profile points at. Ready must have succeeded
 // first.
-func (r *Runner) Preflight(ctx context.Context, req *providerv1.PreflightRequest) (*providerv1.PreflightResponse, error) {
+func (r *Runner) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
 	if r.client == nil {
 		return nil, errors.New("providerrunner: Preflight called before a successful Ready")
 	}
@@ -350,7 +350,7 @@ func (r *Runner) Preflight(ctx context.Context, req *providerv1.PreflightRequest
 // forwarding every event to onEvent. rpc names the call for error messages.
 // It is shared by Deploy, Bootstrap, and Destroy, which speak the same
 // DeployEvent stream by contract.
-func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[providerv1.DeployEvent], callErr error, onEvent func(*providerv1.DeployEvent)) error {
+func (r *Runner) driveStream(rpc string, stream *connect.ServerStreamForClient[deploymentsv1.DeployEvent], callErr error, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if callErr != nil {
 		return fmt.Errorf("providerrunner: call %s: %w", rpc, callErr)
 	}
@@ -488,6 +488,6 @@ func (a authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) c
 }
 
 func (a authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc) connect.StreamingHandlerFunc {
-	// The runner is only ever a client; it never serves ProviderService.
+	// The runner is only ever a client; it never serves DeploymentService.
 	return next
 }

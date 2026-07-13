@@ -12,8 +12,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 )
 
 // fakeProviderModeEnvVar selects the fake provider's behavior, propagated
@@ -53,7 +53,7 @@ func runFakeProvider() int {
 	defer ln.Close()
 
 	mux := http.NewServeMux()
-	path, handler := providerv1connect.NewProviderServiceHandler(&fakeProviderServer{
+	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(&fakeProviderServer{
 		mode:  mode,
 		token: os.Getenv(channel.SessionTokenEnvVar),
 	})
@@ -70,15 +70,15 @@ func runFakeProvider() int {
 	return 0
 }
 
-// fakeProviderServer implements providerv1connect.ProviderServiceHandler
+// fakeProviderServer implements deploymentsv1connect.DeploymentServiceHandler
 // for tests, driven entirely by mode.
 type fakeProviderServer struct {
-	providerv1connect.UnimplementedProviderServiceHandler
+	deploymentsv1connect.UnimplementedDeploymentServiceHandler
 	mode  string
 	token string
 }
 
-func (s *fakeProviderServer) Deploy(ctx context.Context, req *providerv1.DeployRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+func (s *fakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	info, _ := connect.CallInfoForHandlerContext(ctx)
 	var authHeader string
 	if info != nil {
@@ -88,16 +88,16 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *providerv1.DeployR
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
 	}
 
-	if err := stream.Send(&providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "step 1"}},
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "step 1"}},
 	}); err != nil {
 		return err
 	}
 
 	switch s.mode {
 	case "fail":
-		return stream.Send(&providerv1.DeployEvent{
-			Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
 		})
 	case "hang-deploy":
 		// Blocks long enough for the test to kill this process mid-call;
@@ -106,8 +106,8 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *providerv1.DeployR
 		time.Sleep(30 * time.Second)
 		return nil
 	default: // "success"
-		return stream.Send(&providerv1.DeployEvent{
-			Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: true}},
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
 		})
 	}
 }
@@ -115,7 +115,7 @@ func (s *fakeProviderServer) Deploy(ctx context.Context, req *providerv1.DeployR
 // Bootstrap mirrors Deploy's auth check and terminal-result behaviour so the
 // runner's Bootstrap driver can be exercised the same way. Deploy and
 // Bootstrap share one event stream by contract.
-func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	info, _ := connect.CallInfoForHandlerContext(ctx)
 	var authHeader string
 	if info != nil {
@@ -125,17 +125,17 @@ func (s *fakeProviderServer) Bootstrap(ctx context.Context, req *providerv1.Boot
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
 	}
 
-	if err := stream.Send(&providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "bootstrapping"}},
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "bootstrapping"}},
 	}); err != nil {
 		return err
 	}
 	if s.mode == "fail" {
-		return stream.Send(&providerv1.DeployEvent{
-			Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: false, Error: "simulated bootstrap failure"}},
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: "simulated bootstrap failure"}},
 		})
 	}
-	return stream.Send(&providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: true}},
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
 	})
 }

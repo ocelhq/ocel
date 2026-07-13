@@ -9,7 +9,7 @@ import (
 	s3 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/s3"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -307,19 +307,19 @@ func joinArn(arn pulumi.StringOutput, suffix string) pulumi.StringInput {
 // collectBucketOutput builds the BucketOutput for a provisioned bucket. bucket
 // is the real S3 bucket name from the stack; address is the runtime endpoint the
 // app dials. address is a deferred placeholder: its live value is the local
-// socket the membrane serves RuntimeService on, and the membrane's
+// socket the membrane serves BucketService on, and the membrane's
 // launch/address-injection lands separately. It is populated coherently so the
 // env payload shape ({address, bucket}) is complete, and re-pointed when the
 // membrane lands.
-func collectBucketOutput(name string, fields map[string]interface{}) (*providerv1.ResourceOutput, error) {
+func collectBucketOutput(name string, fields map[string]interface{}) (*deploymentsv1.ResourceOutput, error) {
 	bucket, err := requireStringField(fields, name, outputKeyBucket)
 	if err != nil {
 		return nil, err
 	}
-	return &providerv1.ResourceOutput{
+	return &deploymentsv1.ResourceOutput{
 		LogicalName: name,
-		Output: &providerv1.ResourceOutput_Bucket{
-			Bucket: &providerv1.BucketOutput{
+		Output: &deploymentsv1.ResourceOutput_Bucket{
+			Bucket: &deploymentsv1.BucketOutput{
 				Address: deferredRuntimeAddress,
 				Bucket:  bucket,
 			},
@@ -328,7 +328,7 @@ func collectBucketOutput(name string, fields map[string]interface{}) (*providerv
 }
 
 // deferredRuntimeAddress is the placeholder BucketOutput.address until the
-// membrane lands: the membrane spawns the app and serves RuntimeService over
+// membrane lands: the membrane spawns the app and serves BucketService over
 // this local socket, so the SDK's injected OCEL_RESOURCE_BUCKET_<id>.address is
 // this value. It is NOT wired to a running deployment in this slice.
 const deferredRuntimeAddress = "unix:///run/ocel/runtime.sock"

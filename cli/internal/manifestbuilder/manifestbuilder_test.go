@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -46,7 +46,7 @@ type goldenPostgres struct {
 	Version string `json:"version"`
 }
 
-func toGolden(m *providerv1.Manifest) goldenManifest {
+func toGolden(m *deploymentsv1.Manifest) goldenManifest {
 	g := goldenManifest{SchemaVersion: m.GetSchemaVersion(), ProjectID: m.GetProjectId()}
 	for _, r := range m.GetResources() {
 		gr := goldenResource{
@@ -71,7 +71,7 @@ func toGolden(m *providerv1.Manifest) goldenManifest {
 	return g
 }
 
-func marshal(t *testing.T, m *providerv1.Manifest) []byte {
+func marshal(t *testing.T, m *deploymentsv1.Manifest) []byte {
 	t.Helper()
 	out, err := json.MarshalIndent(toGolden(m), "", "  ")
 	if err != nil {

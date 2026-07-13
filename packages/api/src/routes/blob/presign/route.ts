@@ -12,7 +12,7 @@ import { presignUploadSchema } from "./validation";
 // so the expiry sweep never races a still-live URL.
 const SESSION_TTL_MS = 2 * 60 * 60 * 1000;
 
-// POST /api/blob/presign. The dev RuntimeService shim forwards PresignUpload
+// POST /api/blob/presign. The dev BucketService shim forwards PresignUpload
 // here with the leader's user token + projectId; prod reaches the equivalent
 // Go runtime directly. Mirrors resolve/route.ts's auth + identity derivation,
 // then prepends the tenancy prefix, persists a pending session (with a minted

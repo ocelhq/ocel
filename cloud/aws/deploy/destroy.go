@@ -13,7 +13,7 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi/sdk/v3/go/common/workspace"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 // TeardownConfig carries what a Destroy needs to reach and remove one stack:
@@ -77,7 +77,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 // ListPreviewStacks returns and the server maps to a PreviewEnvironment.
 type PreviewStack struct {
 	Identity  string
-	Lifecycle providerv1.Environment_Lifecycle
+	Lifecycle deploymentsv1.Environment_Lifecycle
 	Label     string
 	CreatedAt int64
 	ExpiresAt int64

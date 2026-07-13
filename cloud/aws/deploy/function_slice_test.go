@@ -4,12 +4,12 @@ import (
 	"encoding/json"
 	"testing"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 func TestTranslateFunction_PassesRuntimeAndEntrypoint(t *testing.T) {
-	got := translateFunction(&providerv1.ManifestFunction{
+	got := translateFunction(&deploymentsv1.ManifestFunction{
 		Runtime: "nodejs24.x",
 		Handler: "src/server.js",
 	})
@@ -22,7 +22,7 @@ func TestTranslateFunction_PassesRuntimeAndEntrypoint(t *testing.T) {
 }
 
 func TestTranslateFunction_EmptyFallsBackToPinnedDefaults(t *testing.T) {
-	got := translateFunction(&providerv1.ManifestFunction{})
+	got := translateFunction(&deploymentsv1.ManifestFunction{})
 	if got.Runtime != defaultFunctionRuntime {
 		t.Errorf("Runtime = %q, want default %q", got.Runtime, defaultFunctionRuntime)
 	}
@@ -75,7 +75,7 @@ func TestBucketEnvPayload_MatchesSDKAddressBucketShape(t *testing.T) {
 		t.Fatalf("payload is not valid JSON: %v", err)
 	}
 	if parsed.Address != "unix:///run/ocel/runtime.sock" {
-		t.Errorf("address = %q, want the RuntimeService endpoint", parsed.Address)
+		t.Errorf("address = %q, want the BucketService endpoint", parsed.Address)
 	}
 	if parsed.Bucket != "my-bucket-abc123" {
 		t.Errorf("bucket = %q, want the provisioned bucket binding", parsed.Bucket)

@@ -8,15 +8,15 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	"github.com/ocelhq/ocel/pkg/proto/runtime/v1/runtimev1connect"
+	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
-// NewMux serves RuntimeService behind the same per-session token handshake the
+// NewMux serves BucketService behind the same per-session token handshake the
 // provider uses: every call must carry Authorization: Bearer <token> matching
 // the token the launcher (the membrane, later) passed at startup.
-func NewMux(token string, svc runtimev1connect.RuntimeServiceHandler) *http.ServeMux {
+func NewMux(token string, svc bucketsv1connect.BucketServiceHandler) *http.ServeMux {
 	mux := http.NewServeMux()
-	path, handler := runtimev1connect.NewRuntimeServiceHandler(
+	path, handler := bucketsv1connect.NewBucketServiceHandler(
 		svc,
 		connect.WithInterceptors(newAuthInterceptor(token)),
 	)

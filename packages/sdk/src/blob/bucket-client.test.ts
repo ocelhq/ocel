@@ -1,25 +1,25 @@
 import type { Client } from "@connectrpc/connect";
 import { createRouterTransport } from "@connectrpc/connect";
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { RuntimeService } from "../gen/proto/runtime/v1/runtime_pb.js";
+import { BucketService } from "../gen/proto/buckets/v1/buckets_pb.js";
 import {
-  createRuntimeClient,
-  type RuntimeServiceClient,
-} from "./runtime-client.js";
+  createBucketClient,
+  type BucketServiceClient,
+} from "./bucket-client.js";
 
-describe("createRuntimeClient", () => {
-  it("is typed as the generated RuntimeService client interface", () => {
-    expectTypeOf<RuntimeServiceClient>().toEqualTypeOf<
-      Client<typeof RuntimeService>
+describe("createBucketClient", () => {
+  it("is typed as the generated BucketService client interface", () => {
+    expectTypeOf<BucketServiceClient>().toEqualTypeOf<
+      Client<typeof BucketService>
     >();
-    expectTypeOf(createRuntimeClient).returns.toEqualTypeOf<
-      Client<typeof RuntimeService>
+    expectTypeOf(createBucketClient).returns.toEqualTypeOf<
+      Client<typeof BucketService>
     >();
   });
 
   it("wraps an injected transport, exposing the three RPCs", () => {
     const transport = createRouterTransport(() => {});
-    const client = createRuntimeClient(transport);
+    const client = createBucketClient(transport);
 
     expect(typeof client.presignUpload).toBe("function");
     expect(typeof client.verifyUploadSignature).toBe("function");

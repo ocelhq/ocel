@@ -9,15 +9,15 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 )
 
 const testToken = "test-session-token"
 
 // authHeaderInterceptor is a client-side interceptor standing in for what
 // the CLI does: attach the session token to every call's Authorization
-// header. The generated ProviderServiceClient.Deploy signature takes the
+// header. The generated DeploymentServiceClient.Deploy signature takes the
 // bare request message (no per-call header option), so tests need this to
 // exercise the auth path at all.
 type authHeaderInterceptor struct{ token string }
@@ -44,7 +44,7 @@ func (a authHeaderInterceptor) WrapStreamingHandler(next connect.StreamingHandle
 // newTestClient starts an httptest server over NewMux(testToken) and returns
 // a client. When token is non-empty, every call presents it as the
 // Authorization header; an empty token presents no header at all.
-func newTestClient(t *testing.T, token string) providerv1connect.ProviderServiceClient {
+func newTestClient(t *testing.T, token string) deploymentsv1connect.DeploymentServiceClient {
 	t.Helper()
 	srv := httptest.NewServer(NewMux(testToken))
 	t.Cleanup(srv.Close)
@@ -53,11 +53,11 @@ func newTestClient(t *testing.T, token string) providerv1connect.ProviderService
 	if token != "" {
 		opts = append(opts, connect.WithInterceptors(authHeaderInterceptor{token: token}))
 	}
-	return providerv1connect.NewProviderServiceClient(srv.Client(), srv.URL, opts...)
+	return deploymentsv1connect.NewDeploymentServiceClient(srv.Client(), srv.URL, opts...)
 }
 
-func drainStream(stream *connect.ServerStreamForClient[providerv1.DeployEvent]) ([]*providerv1.DeployEvent, error) {
-	var events []*providerv1.DeployEvent
+func drainStream(stream *connect.ServerStreamForClient[deploymentsv1.DeployEvent]) ([]*deploymentsv1.DeployEvent, error) {
+	var events []*deploymentsv1.DeployEvent
 	for stream.Receive() {
 		events = append(events, stream.Msg())
 	}
@@ -67,7 +67,7 @@ func drainStream(stream *connect.ServerStreamForClient[providerv1.DeployEvent]) 
 func TestDeploy_RejectsMissingToken(t *testing.T) {
 	client := newTestClient(t, "")
 
-	stream, err := client.Deploy(context.Background(), &providerv1.DeployRequest{Manifest: wellFormedManifest()})
+	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: wellFormedManifest()})
 	if err != nil {
 		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
 	}
@@ -82,7 +82,7 @@ func TestDeploy_RejectsMissingToken(t *testing.T) {
 func TestDeploy_RejectsWrongToken(t *testing.T) {
 	client := newTestClient(t, "wrong-token")
 
-	stream, err := client.Deploy(context.Background(), &providerv1.DeployRequest{Manifest: wellFormedManifest()})
+	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: wellFormedManifest()})
 	if err != nil {
 		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
 	}
@@ -104,8 +104,8 @@ func TestDeploy_RejectsWrongToken(t *testing.T) {
 func TestDeploy_MalformedManifestFailsBeforeStreaming(t *testing.T) {
 	client := newTestClient(t, testToken)
 
-	badManifest := &providerv1.Manifest{SchemaVersion: "", ProjectId: "proj_123"}
-	stream, err := client.Deploy(context.Background(), &providerv1.DeployRequest{Manifest: badManifest})
+	badManifest := &deploymentsv1.Manifest{SchemaVersion: "", ProjectId: "proj_123"}
+	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: badManifest})
 	if err != nil {
 		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
 	}
@@ -120,7 +120,7 @@ func TestDeploy_MalformedManifestFailsBeforeStreaming(t *testing.T) {
 func TestDeploy_MissingManifestRejected(t *testing.T) {
 	client := newTestClient(t, testToken)
 
-	stream, err := client.Deploy(context.Background(), &providerv1.DeployRequest{})
+	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{})
 	if err != nil {
 		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)
 	}

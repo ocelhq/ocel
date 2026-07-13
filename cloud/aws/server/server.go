@@ -1,4 +1,4 @@
-// Package server implements the AWS provider's ProviderService: it drives
+// Package server implements the AWS provider's DeploymentService: it drives
 // real provisioning (Deploy) and account bootstrap (Bootstrap) behind the
 // provider protocol. It delegates resource translation to the deploy
 // package, account-global setup to the bootstrap package, and the Pulumi
@@ -25,7 +25,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -36,7 +36,7 @@ const deployEnv = "prod"
 // pulumiProjectName is the fixed Pulumi project all Ocel stacks live under.
 const pulumiProjectName = "ocel"
 
-// Server implements providerv1connect.ProviderServiceHandler. It serves every
+// Server implements deploymentsv1connect.DeploymentServiceHandler. It serves every
 // RPC in the contract, so it no longer embeds the generated Unimplemented
 // handler.
 type Server struct{}
@@ -46,8 +46,8 @@ type Server struct{}
 // environment keeps the historical "<projectID>-prod"; a preview environment is
 // isolated into its own "<projectID>-preview-<identity>" stack (identity is
 // already substrate-safe from the CLI).
-func stackName(projectID string, env *providerv1.Environment) string {
-	if env.GetClass() == providerv1.Environment_CLASS_PREVIEW {
+func stackName(projectID string, env *deploymentsv1.Environment) string {
+	if env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
 		return projectID + "-preview-" + env.GetIdentity()
 	}
 	return projectID + "-" + deployEnv
@@ -75,7 +75,7 @@ func parseOptions(raw []byte) (options, error) {
 // a terminal ResultEvent that carries the whole-stack connection outputs. A
 // malformed manifest is rejected up front as an InvalidArgument error;
 // provisioning failures arrive as a terminal ResultEvent with success=false.
-func (s *Server) Deploy(ctx context.Context, req *providerv1.DeployRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	manifest := req.GetManifest()
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
@@ -90,7 +90,7 @@ func (s *Server) Deploy(ctx context.Context, req *providerv1.DeployRequest, stre
 	return stream.Send(resultEvent(true, "", outputs))
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, manifest *providerv1.Manifest, progress, logf func(string)) ([]*providerv1.ResourceOutput, error) {
+func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress, logf func(string)) ([]*deploymentsv1.ResourceOutput, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return nil, err
@@ -103,7 +103,7 @@ func (s *Server) runDeploy(ctx context.Context, req *providerv1.DeployRequest, m
 	ssmClient := ssm.NewFromConfig(awscfg)
 
 	env := req.GetEnvironment()
-	preview := env.GetClass() == providerv1.Environment_CLASS_PREVIEW
+	preview := env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 	bootstrapCmd := "ocel bootstrap"
 	if preview {
 		bootstrapCmd = "ocel bootstrap --preview"
@@ -179,8 +179,8 @@ const previewTTL = 7 * 24 * time.Hour
 // previewExpiry returns the epoch-seconds expiry to stamp on a deploy: now +
 // previewTTL for an ephemeral preview, 0 (no expiry) for every other lifecycle.
 // It is pure.
-func previewExpiry(lifecycle providerv1.Environment_Lifecycle, now time.Time) int64 {
-	if lifecycle != providerv1.Environment_LIFECYCLE_EPHEMERAL {
+func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time) int64 {
+	if lifecycle != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
 		return 0
 	}
 	return now.Add(previewTTL).Unix()
@@ -189,7 +189,7 @@ func previewExpiry(lifecycle providerv1.Environment_Lifecycle, now time.Time) in
 // Bootstrap creates the account-global resources the provider needs and
 // streams progress, ending in a terminal ResultEvent. Bootstrap carries no
 // outputs.
-func (s *Server) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
@@ -204,7 +204,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
 
-	preview := req.GetClass() == providerv1.Environment_CLASS_PREVIEW
+	preview := req.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 
 	// The version gate runs on every invocation, bootstrap included. Here a
 	// missing or older bootstrap is expected — it's exactly what this call
@@ -280,7 +280,7 @@ func accountID(ctx context.Context, api STSAPI) (string, error) {
 }
 
 // manifestHasBucket reports whether any resource in the manifest is a bucket.
-func manifestHasBucket(m *providerv1.Manifest) bool {
+func manifestHasBucket(m *deploymentsv1.Manifest) bool {
 	for _, r := range m.GetResources() {
 		if r.GetBucket() != nil {
 			return true
@@ -303,32 +303,32 @@ func loadAWS(ctx context.Context, region string) (aws.Config, error) {
 // manifest resource, e.g. "postgres_main: postgres version=15". Emitted as a
 // log line so a caller driving the real binary can observe the exact typed
 // value that reached the provider.
-func resourceSummary(r *providerv1.ManifestResource) string {
+func resourceSummary(r *deploymentsv1.ManifestResource) string {
 	switch cfg := r.GetConfig().(type) {
-	case *providerv1.ManifestResource_Postgres:
+	case *deploymentsv1.ManifestResource_Postgres:
 		return fmt.Sprintf("%s: postgres version=%s", r.GetLogicalName(), cfg.Postgres.GetVersion())
-	case *providerv1.ManifestResource_Bucket:
+	case *deploymentsv1.ManifestResource_Bucket:
 		return fmt.Sprintf("%s: bucket allowed_origins=%v", r.GetLogicalName(), cfg.Bucket.GetAllowedOrigins())
 	default:
 		return fmt.Sprintf("%s: received config", r.GetLogicalName())
 	}
 }
 
-func progressEvent(message string) *providerv1.DeployEvent {
-	return &providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: message}},
+func progressEvent(message string) *deploymentsv1.DeployEvent {
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: message}},
 	}
 }
 
-func logEvent(message string) *providerv1.DeployEvent {
-	return &providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Log{Log: &providerv1.LogEvent{Message: message}},
+func logEvent(message string) *deploymentsv1.DeployEvent {
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Log{Log: &deploymentsv1.LogEvent{Message: message}},
 	}
 }
 
-func resultEvent(success bool, errMsg string, outputs []*providerv1.ResourceOutput) *providerv1.DeployEvent {
-	return &providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{
+func resultEvent(success bool, errMsg string, outputs []*deploymentsv1.ResourceOutput) *deploymentsv1.DeployEvent {
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
 			Success: success,
 			Error:   errMsg,
 			Outputs: outputs,
@@ -340,7 +340,7 @@ func resultEvent(success bool, errMsg string, outputs []*providerv1.ResourceOutp
 // provider to act on: a schema version and project id are set, and every
 // resource entry carries a logical name, a typed resource identifier, and a
 // typed config.
-func validateManifest(m *providerv1.Manifest) error {
+func validateManifest(m *deploymentsv1.Manifest) error {
 	if m == nil {
 		return fmt.Errorf("manifest is required")
 	}

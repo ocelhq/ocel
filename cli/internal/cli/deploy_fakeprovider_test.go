@@ -11,8 +11,8 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/pkg/channel"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
-	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
 )
 
 // deployFakeProviderEnvVar, when set to "1" in a re-exec of this test
@@ -41,7 +41,7 @@ const (
 )
 
 // runDeployFakeProvider binds a Unix socket, prints the readiness sentinel,
-// and serves ProviderService.Deploy: it rejects a missing/mismatched
+// and serves DeploymentService.Deploy: it rejects a missing/mismatched
 // session token, rejects a manifest that doesn't look like what
 // TestRunDeploy_HappyPath's fixture declares (proving the manifest built by
 // runDeploy actually reached the provider), then streams a progress event
@@ -62,7 +62,7 @@ func runDeployFakeProvider() int {
 	defer ln.Close()
 
 	mux := http.NewServeMux()
-	path, handler := providerv1connect.NewProviderServiceHandler(&deployFakeProviderServer{
+	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(&deployFakeProviderServer{
 		token: os.Getenv(channel.SessionTokenEnvVar),
 		mode:  os.Getenv(deployFakeProviderModeEnvVar),
 	})
@@ -79,29 +79,29 @@ func runDeployFakeProvider() int {
 	return 0
 }
 
-// deployFakeProviderServer implements providerv1connect.ProviderServiceHandler
+// deployFakeProviderServer implements deploymentsv1connect.DeploymentServiceHandler
 // for TestRunDeploy_HappyPath.
 type deployFakeProviderServer struct {
-	providerv1connect.UnimplementedProviderServiceHandler
+	deploymentsv1connect.UnimplementedDeploymentServiceHandler
 	token string
 	mode  string
 }
 
-func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *providerv1.DeployRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
 
 	if err := validateFixtureManifest(req.GetManifest()); err != nil {
-		return stream.Send(&providerv1.DeployEvent{
-			Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: false, Error: err.Error()}},
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: err.Error()}},
 		})
 	}
 
 	// Echo the received Environment so tests can assert what the CLI resolved
 	// and sent, proving `ocel preview`/`ocel deploy` diverge only by it.
-	if err := stream.Send(&providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "DEPLOY " + describeEnv(req.GetEnvironment())}},
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DEPLOY " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
 		return err
 	}
@@ -109,42 +109,42 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *providerv1.D
 	// Echo each received function so tests can assert the manifest built by
 	// runDeploy actually carries the apps' functions alongside its resources.
 	for _, f := range req.GetManifest().GetFunctions() {
-		if err := stream.Send(&providerv1.DeployEvent{
-			Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "FUNCTION " + describeFunction(f)}},
+		if err := stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "FUNCTION " + describeFunction(f)}},
 		}); err != nil {
 			return err
 		}
 	}
 
-	if err := stream.Send(&providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "provisioning..."}},
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "provisioning..."}},
 	}); err != nil {
 		return err
 	}
 
 	if s.mode == "fail" {
-		return stream.Send(&providerv1.DeployEvent{
-			Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
+		return stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: "simulated deploy failure"}},
 		})
 	}
-	return stream.Send(&providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: true}},
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
 	})
 }
 
-// Bootstrap satisfies the ProviderService handler interface. This fake exists
+// Bootstrap satisfies the DeploymentService handler interface. This fake exists
 // to exercise the deploy path; the bootstrap path has its own coverage.
-func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *providerv1.BootstrapRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+func (s *deployFakeProviderServer) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	return connect.NewError(connect.CodeUnimplemented, errors.New("fake provider does not implement Bootstrap"))
 }
 
 // Preflight reports the account's stamped class and whether the infrastructure
 // exists, both configured via env so tests can drive the CLI's preflight guard.
-func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *providerv1.PreflightRequest) (*providerv1.PreflightResponse, error) {
+func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	return &providerv1.PreflightResponse{
+	return &deploymentsv1.PreflightResponse{
 		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
 	}, nil
@@ -152,42 +152,42 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *providerv
 
 // Destroy echoes the Environment it was addressed with (so tests can assert the
 // CLI resolved the right teardown target) and streams a terminal success.
-func (s *deployFakeProviderServer) Destroy(ctx context.Context, req *providerv1.DestroyRequest, stream *connect.ServerStream[providerv1.DeployEvent]) error {
+func (s *deployFakeProviderServer) Destroy(ctx context.Context, req *deploymentsv1.DestroyRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}
-	if err := stream.Send(&providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Progress{Progress: &providerv1.ProgressEvent{Message: "DESTROY project=" + req.GetProjectId() + " " + describeEnv(req.GetEnvironment())}},
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY project=" + req.GetProjectId() + " " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
 		return err
 	}
-	return stream.Send(&providerv1.DeployEvent{
-		Event: &providerv1.DeployEvent_Result{Result: &providerv1.ResultEvent{Success: true}},
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
 	})
 }
 
 // ListEnvironments echoes the project_id it was scoped to as a synthetic first
 // entry (so tests can assert the CLI sent it), then returns a canned set of
 // preview environments for `ocel preview ls` to render.
-func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *providerv1.ListEnvironmentsRequest) (*providerv1.ListEnvironmentsResponse, error) {
+func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	return &providerv1.ListEnvironmentsResponse{
-		Environments: []*providerv1.PreviewEnvironment{
+	return &deploymentsv1.ListEnvironmentsResponse{
+		Environments: []*deploymentsv1.PreviewEnvironment{
 			{
 				Identity:  "project:" + req.GetProjectId(),
-				Lifecycle: providerv1.Environment_LIFECYCLE_EPHEMERAL,
+				Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
 			},
 			{
 				Identity:  "feature_login_ab12cd34",
-				Lifecycle: providerv1.Environment_LIFECYCLE_EPHEMERAL,
+				Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
 				Label:     "pr-7",
 				CreatedAt: 1700000000,
 			},
 			{
 				Identity:  "staging",
-				Lifecycle: providerv1.Environment_LIFECYCLE_PERSISTENT,
+				Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
 			},
 		},
 	}, nil
@@ -207,36 +207,36 @@ func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
 }
 
 // describeEnv renders an Environment into a stable, assertable one-line string.
-func describeEnv(env *providerv1.Environment) string {
+func describeEnv(env *deploymentsv1.Environment) string {
 	return fmt.Sprintf("class=%s lifecycle=%s identity=%s source=%s label=%s",
 		env.GetClass(), env.GetLifecycle(), env.GetIdentity(), env.GetIdentitySource(), env.GetLabel())
 }
 
 // describeFunction renders a ManifestFunction into a stable, assertable
 // one-line string carrying every field the manifest should preserve.
-func describeFunction(f *providerv1.ManifestFunction) string {
+func describeFunction(f *deploymentsv1.ManifestFunction) string {
 	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s framework=%s",
 		f.GetLogicalName(), f.GetRuntime(), f.GetHandler(), f.GetArtifactPath(), f.GetFramework())
 }
 
 // parseInfraClass maps the fakeInfraClassEnvVar value to an Environment_Class.
-func parseInfraClass(s string) providerv1.Environment_Class {
+func parseInfraClass(s string) deploymentsv1.Environment_Class {
 	switch s {
 	case "preview":
-		return providerv1.Environment_CLASS_PREVIEW
+		return deploymentsv1.Environment_CLASS_PREVIEW
 	case "production":
-		return providerv1.Environment_CLASS_PRODUCTION
+		return deploymentsv1.Environment_CLASS_PRODUCTION
 	case "development":
-		return providerv1.Environment_CLASS_DEVELOPMENT
+		return deploymentsv1.Environment_CLASS_DEVELOPMENT
 	default:
-		return providerv1.Environment_CLASS_UNSPECIFIED
+		return deploymentsv1.Environment_CLASS_UNSPECIFIED
 	}
 }
 
 // validateFixtureManifest confirms the manifest built by runDeploy matches
 // what TestRunDeploy_HappyPath's fixture declares: a single postgres
 // resource named "main" with its typed config intact.
-func validateFixtureManifest(m *providerv1.Manifest) error {
+func validateFixtureManifest(m *deploymentsv1.Manifest) error {
 	if m.GetSchemaVersion() == "" {
 		return errors.New("manifest missing schema_version")
 	}

@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 // bootstrapOptions holds the flags accepted by `ocel bootstrap`.
@@ -71,9 +71,9 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 		return err
 	}
 
-	class := providerv1.Environment_CLASS_PRODUCTION
+	class := deploymentsv1.Environment_CLASS_PRODUCTION
 	if opts.preview {
-		class = providerv1.Environment_CLASS_PREVIEW
+		class = deploymentsv1.Environment_CLASS_PREVIEW
 	}
 
 	if !opts.yes && isReaderTTY(stdin) {
@@ -88,12 +88,12 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 	}
 
 	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		req := &providerv1.BootstrapRequest{
+		req := &deploymentsv1.BootstrapRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Class:           class,
 		}
-		if err := runner.Bootstrap(ctx, req, func(ev *providerv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
+		if err := runner.Bootstrap(ctx, req, func(ev *deploymentsv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
 			return err
 		}
 		fmt.Fprintln(stdout, "✓ Bootstrap succeeded.")
@@ -104,9 +104,9 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 // confirmBootstrap prints the "Bootstrap <preview|production> infrastructure
 // with <provider>? [y/N]" prompt and returns the user's yes/no answer (see
 // confirmYN in deploy.go).
-func confirmBootstrap(class providerv1.Environment_Class, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
+func confirmBootstrap(class deploymentsv1.Environment_Class, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
 	infra := "production"
-	if class == providerv1.Environment_CLASS_PREVIEW {
+	if class == deploymentsv1.Environment_CLASS_PREVIEW {
 		infra = "preview"
 	}
 	return confirmYN(fmt.Sprintf("Bootstrap %s infrastructure with %s?", infra, providerPackage), stdout, stdin)

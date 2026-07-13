@@ -19,7 +19,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/runtime/v1/runtimev1connect"
+	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
 // SyncResult is delivered on Server.Sync() once a /sync request has been
@@ -56,7 +56,7 @@ type Server struct {
 // against apiURL for projectID. devServerAddr is this dev server's own base
 // URL (e.g. http://127.0.0.1:PORT): it's the injected address every declared
 // bucket's OCEL_RESOURCE_BUCKET_<name> resolves to, and the address the dev
-// RuntimeService is reached at.
+// BucketService is reached at.
 func New(apiURL, token, projectID, devServerAddr string) *Server {
 	return &Server{
 		manifest:           manifest.New(),
@@ -110,7 +110,7 @@ func (s *Server) Mux() *http.ServeMux {
 	mux.Handle(resourcePath, resourceHandler)
 	devPath, devHandler := devv1connect.NewDevServiceHandler(s)
 	mux.Handle(devPath, devHandler)
-	runtimePath, runtimeHandler := runtimev1connect.NewRuntimeServiceHandler(s.runtime)
+	runtimePath, runtimeHandler := bucketsv1connect.NewBucketServiceHandler(s.runtime)
 	mux.Handle(runtimePath, runtimeHandler)
 	mux.HandleFunc("/sync", s.handleSync)
 	return mux
@@ -228,7 +228,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 
 // bucketResources synthesizes the OCEL_RESOURCE_BUCKET_<name> env for each
 // declared bucket: JSON {address, bucket} where address is this dev server
-// (whose RuntimeService the SDK dials) and bucket is the declared logical
+// (whose BucketService the SDK dials) and bucket is the declared logical
 // name. No cloud round-trip - the presign endpoint owns the store mechanics.
 func (s *Server) bucketResources(buckets []manifest.Entry) []provision.ProvisionedResource {
 	out := make([]provision.ProvisionedResource, 0, len(buckets))

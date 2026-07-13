@@ -1,7 +1,7 @@
-// Command blobrig runs the dev RuntimeService + completion-detection loop as a
+// Command blobrig runs the dev BucketService + completion-detection loop as a
 // standalone process, exactly as `ocel dev`'s leader does, but without election,
 // discovery, or spawning an app. It exists so the ocel/blob dev e2e can drive
-// the REAL Go dev server (Connect RuntimeService shim + detector) against a real
+// the REAL Go dev server (Connect BucketService shim + detector) against a real
 // Ocel API and MinIO, using the same SDK code prod will use. It is not part of
 // the shipped `ocel` binary.
 //

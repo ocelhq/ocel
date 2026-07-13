@@ -10,7 +10,7 @@ import (
 	"sort"
 	"strings"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -108,14 +108,14 @@ func normalizeLogicalName(s string) string {
 // existing entry's logical name. Two declarations sharing the same
 // (type, id) are a hard error naming both declarations and their source
 // locations.
-func Build(projectID string, declarations []Declaration, functions []Function) (*providerv1.Manifest, error) {
+func Build(projectID string, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
 	type identity struct {
 		typ resourcesv1.ResourceType
 		id  string
 	}
 	seen := make(map[identity]Declaration, len(declarations))
 
-	resources := make([]*providerv1.ManifestResource, 0, len(declarations))
+	resources := make([]*deploymentsv1.ManifestResource, 0, len(declarations))
 	for _, d := range declarations {
 		if d.ID == "" {
 			return nil, fmt.Errorf("manifestbuilder: declaration has empty resource id")
@@ -137,7 +137,7 @@ func Build(projectID string, declarations []Declaration, functions []Function) (
 		}
 		seen[id] = d
 
-		resource := &providerv1.ManifestResource{
+		resource := &deploymentsv1.ManifestResource{
 			LogicalName: normalizeLogicalName(token + "_" + d.ID),
 			Resource: &resourcesv1.ResourceIdentifier{
 				Type: d.Type,
@@ -145,10 +145,10 @@ func Build(projectID string, declarations []Declaration, functions []Function) (
 			},
 		}
 		if d.Postgres != nil {
-			resource.Config = &providerv1.ManifestResource_Postgres{Postgres: d.Postgres}
+			resource.Config = &deploymentsv1.ManifestResource_Postgres{Postgres: d.Postgres}
 		}
 		if d.Bucket != nil {
-			resource.Config = &providerv1.ManifestResource_Bucket{Bucket: d.Bucket}
+			resource.Config = &deploymentsv1.ManifestResource_Bucket{Bucket: d.Bucket}
 		}
 		resources = append(resources, resource)
 	}
@@ -157,9 +157,9 @@ func Build(projectID string, declarations []Declaration, functions []Function) (
 		return resources[i].LogicalName < resources[j].LogicalName
 	})
 
-	manifestFunctions := make([]*providerv1.ManifestFunction, 0, len(functions))
+	manifestFunctions := make([]*deploymentsv1.ManifestFunction, 0, len(functions))
 	for _, f := range functions {
-		manifestFunctions = append(manifestFunctions, &providerv1.ManifestFunction{
+		manifestFunctions = append(manifestFunctions, &deploymentsv1.ManifestFunction{
 			LogicalName:  normalizeLogicalName(f.Name),
 			Runtime:      f.Runtime,
 			Handler:      f.Handler,
@@ -171,7 +171,7 @@ func Build(projectID string, declarations []Declaration, functions []Function) (
 		return manifestFunctions[i].LogicalName < manifestFunctions[j].LogicalName
 	})
 
-	return &providerv1.Manifest{
+	return &deploymentsv1.Manifest{
 		SchemaVersion: SchemaVersion,
 		ProjectId:     projectID,
 		Resources:     resources,

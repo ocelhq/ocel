@@ -19,7 +19,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
@@ -64,7 +64,7 @@ type Config struct {
 	// selects each resource's realization (see realizationFor). Unspecified for
 	// production and persistent previews, LIFECYCLE_EPHEMERAL for ephemeral
 	// previews.
-	Lifecycle providerv1.Environment_Lifecycle
+	Lifecycle deploymentsv1.Environment_Lifecycle
 	// Identity is the environment identity, used to name an ephemeral preview's
 	// logical database slices. Empty for production.
 	Identity string
@@ -84,7 +84,7 @@ type Config struct {
 // whole-stack connection outputs. progress reports discrete steps and log
 // forwards Pulumi engine output; both may be nil. Run performs the real
 // Pulumi up and is not exercised by unit tests.
-func Run(ctx context.Context, cfg Config, manifest *providerv1.Manifest, progress, log func(string)) ([]*providerv1.ResourceOutput, error) {
+func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
@@ -200,8 +200,8 @@ func stampExpiry(ctx context.Context, stack auto.Stack, expiresAt int64) error {
 // collectOutputs turns the stack's raw Pulumi outputs into typed
 // per-resource ResourceOutputs, resolving each postgres resource's
 // RDS-managed secret to a plaintext password.
-func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *providerv1.Manifest, outputs auto.OutputMap) ([]*providerv1.ResourceOutput, error) {
-	var result []*providerv1.ResourceOutput
+func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *deploymentsv1.Manifest, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, error) {
+	var result []*deploymentsv1.ResourceOutput
 	for _, r := range manifest.GetResources() {
 		if r.GetPostgres() == nil && r.GetBucket() == nil {
 			continue
@@ -216,7 +216,7 @@ func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *provid
 			return nil, fmt.Errorf("output for %s is not a map", name)
 		}
 		var (
-			out *providerv1.ResourceOutput
+			out *deploymentsv1.ResourceOutput
 			err error
 		)
 		switch {
@@ -249,7 +249,7 @@ func collectOutputs(ctx context.Context, secrets SecretsReader, manifest *provid
 	return result, nil
 }
 
-func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name string, fields map[string]interface{}) (*providerv1.ResourceOutput, error) {
+func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name string, fields map[string]interface{}) (*deploymentsv1.ResourceOutput, error) {
 	host, err := requireStringField(fields, name, outputKeyHost)
 	if err != nil {
 		return nil, err
@@ -277,10 +277,10 @@ func collectPostgresOutput(ctx context.Context, secrets SecretsReader, name stri
 		return nil, fmt.Errorf("resolve master password for %s: %w", name, err)
 	}
 
-	return &providerv1.ResourceOutput{
+	return &deploymentsv1.ResourceOutput{
 		LogicalName: name,
-		Output: &providerv1.ResourceOutput_Postgres{
-			Postgres: &providerv1.PostgresOutput{
+		Output: &deploymentsv1.ResourceOutput_Postgres{
+			Postgres: &deploymentsv1.PostgresOutput{
 				Host:     host,
 				Port:     int32(port),
 				Database: database,

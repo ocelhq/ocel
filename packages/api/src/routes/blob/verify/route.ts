@@ -16,7 +16,7 @@ const verifyUploadSchema = z.object({
   }),
 });
 
-// POST /api/blob/verify. Backs runtime.v1.RuntimeService.VerifyUploadSignature:
+// POST /api/blob/verify. Backs buckets.v1.BucketService.VerifyUploadSignature:
 // re-derives the per-session HMAC over the completion callback and constant-time
 // compares, returning the stored metadata verbatim on success. The secret never
 // leaves here. An unknown session or bad signature returns { valid:false } as a

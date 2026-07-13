@@ -20,7 +20,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerlocator"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 // deployReadyTimeout overrides how long `ocel deploy` waits for the spawned
@@ -110,17 +110,17 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		return err
 	}
 
-	env := &providerv1.Environment{
-		Class:     providerv1.Environment_CLASS_PRODUCTION,
-		Lifecycle: providerv1.Environment_LIFECYCLE_UNSPECIFIED,
+	env := &deploymentsv1.Environment{
+		Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
+		Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
 	}
 
 	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, providerv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
+		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
 			return err
 		}
 
-		req := &providerv1.DeployRequest{
+		req := &deploymentsv1.DeployRequest{
 			Manifest:        manifest,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
@@ -130,8 +130,8 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		// The provider reports the whole stack's connection outputs on the
 		// terminal ResultEvent. We collect them here; the CLI does not consume
 		// them yet.
-		var stackOutputs []*providerv1.ResourceOutput
-		onEvent := func(ev *providerv1.DeployEvent) {
+		var stackOutputs []*deploymentsv1.ResourceOutput
+		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			streamDeployEvent(stdout, ev)
 			if res := ev.GetResult(); res != nil {
 				stackOutputs = res.GetOutputs()
@@ -152,7 +152,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 // project's apps into functions, and lowers both into the provider Manifest.
 // When no apps are configured it warns and proceeds infrastructure-only. Any
 // app-build failure aborts here, before any provider is spawned.
-func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) (*providerv1.Manifest, error) {
+func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) (*deploymentsv1.Manifest, error) {
 	resources, err := deploycollector.Collect(ctx, cfg, stdout, stderr)
 	if err != nil {
 		return nil, err
@@ -244,7 +244,7 @@ func toDeclarations(resources []declare.Resource) []manifestbuilder.Declaration 
 // The terminal ResultEvent needs no extra printing here: runner.Deploy
 // already turns a failure result into a *providerrunner.DeployFailedError
 // and a success result into a nil return.
-func streamDeployEvent(stdout io.Writer, ev *providerv1.DeployEvent) {
+func streamDeployEvent(stdout io.Writer, ev *deploymentsv1.DeployEvent) {
 	if p := ev.GetProgress(); p != nil {
 		fmt.Fprintln(stdout, p.GetMessage())
 		return

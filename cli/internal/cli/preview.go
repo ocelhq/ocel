@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 // currentGitBranch resolves the current git branch of dir. A package var so
@@ -162,15 +162,15 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 			return err
 		}
 
-		req := &providerv1.DeployRequest{
+		req := &deploymentsv1.DeployRequest{
 			Manifest:        manifest,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Environment:     env,
 		}
 
-		var stackOutputs []*providerv1.ResourceOutput
-		onEvent := func(ev *providerv1.DeployEvent) {
+		var stackOutputs []*deploymentsv1.ResourceOutput
+		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			streamDeployEvent(stdout, ev)
 			if res := ev.GetResult(); res != nil {
 				stackOutputs = res.GetOutputs()
@@ -209,7 +209,7 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 		return err
 	}
 
-	persistent := env.GetLifecycle() == providerv1.Environment_LIFECYCLE_PERSISTENT
+	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
 	if persistent && !opts.yes && isReaderTTY(stdin) {
 		proceed, err := confirmDestroyPreview(env.GetIdentity(), stdout, stdin)
 		if err != nil {
@@ -226,13 +226,13 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 			return err
 		}
 
-		req := &providerv1.DestroyRequest{
+		req := &deploymentsv1.DestroyRequest{
 			Environment:     env,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			ProjectId:       cfg.ProjectID,
 		}
-		if err := runner.Destroy(ctx, req, func(ev *providerv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
+		if err := runner.Destroy(ctx, req, func(ev *deploymentsv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
 			return err
 		}
 		fmt.Fprintf(stdout, "✓ Preview %s torn down.\n", env.GetIdentity())
@@ -258,7 +258,7 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 	}
 
 	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		resp, err := runner.ListEnvironments(ctx, &providerv1.ListEnvironmentsRequest{
+		resp, err := runner.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			ProjectId:       cfg.ProjectID,
@@ -274,13 +274,13 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 // resolveUpEnvironment builds the Environment `ocel preview up` provisions: a
 // named preview is persistent and declared; an unnamed one is ephemeral, keyed
 // off the current git branch with the PR number carried as a display label.
-func resolveUpEnvironment(cwd, name string) (*providerv1.Environment, error) {
+func resolveUpEnvironment(cwd, name string) (*deploymentsv1.Environment, error) {
 	if name != "" {
-		return &providerv1.Environment{
-			Class:          providerv1.Environment_CLASS_PREVIEW,
-			Lifecycle:      providerv1.Environment_LIFECYCLE_PERSISTENT,
+		return &deploymentsv1.Environment{
+			Class:          deploymentsv1.Environment_CLASS_PREVIEW,
+			Lifecycle:      deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
 			Identity:       name,
-			IdentitySource: providerv1.Environment_IDENTITY_SOURCE_DECLARED,
+			IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_DECLARED,
 		}, nil
 	}
 
@@ -292,11 +292,11 @@ func resolveUpEnvironment(cwd, name string) (*providerv1.Environment, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &providerv1.Environment{
-		Class:          providerv1.Environment_CLASS_PREVIEW,
-		Lifecycle:      providerv1.Environment_LIFECYCLE_EPHEMERAL,
+	return &deploymentsv1.Environment{
+		Class:          deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle:      deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
 		Identity:       id.Key,
-		IdentitySource: providerv1.Environment_IDENTITY_SOURCE_GIT,
+		IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_GIT,
 		Label:          id.Label,
 	}, nil
 }
@@ -304,16 +304,16 @@ func resolveUpEnvironment(cwd, name string) (*providerv1.Environment, error) {
 // resolveRmEnvironment builds the addressing Environment for `ocel preview rm`:
 // --name targets a persistent preview; --ref targets an explicit ref's
 // ephemeral preview; bare targets the current branch's ephemeral preview.
-func resolveRmEnvironment(cwd string, opts previewRmOptions) (*providerv1.Environment, error) {
+func resolveRmEnvironment(cwd string, opts previewRmOptions) (*deploymentsv1.Environment, error) {
 	if opts.name != "" && opts.ref != "" {
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to address a persistent or ephemeral preview")
 	}
 	if opts.name != "" {
-		return &providerv1.Environment{
-			Class:          providerv1.Environment_CLASS_PREVIEW,
-			Lifecycle:      providerv1.Environment_LIFECYCLE_PERSISTENT,
+		return &deploymentsv1.Environment{
+			Class:          deploymentsv1.Environment_CLASS_PREVIEW,
+			Lifecycle:      deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
 			Identity:       opts.name,
-			IdentitySource: providerv1.Environment_IDENTITY_SOURCE_DECLARED,
+			IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_DECLARED,
 		}, nil
 	}
 
@@ -329,11 +329,11 @@ func resolveRmEnvironment(cwd string, opts previewRmOptions) (*providerv1.Enviro
 	if err != nil {
 		return nil, err
 	}
-	return &providerv1.Environment{
-		Class:          providerv1.Environment_CLASS_PREVIEW,
-		Lifecycle:      providerv1.Environment_LIFECYCLE_EPHEMERAL,
+	return &deploymentsv1.Environment{
+		Class:          deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle:      deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
 		Identity:       id.Key,
-		IdentitySource: providerv1.Environment_IDENTITY_SOURCE_GIT,
+		IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_GIT,
 	}, nil
 }
 
@@ -348,7 +348,7 @@ func confirmDestroyPreview(name string, stdout io.Writer, stdin io.Reader) (bool
 // provisioned — when the preview infrastructure is missing or is the wrong
 // class.
 func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor) error {
-	return preflightClass(ctx, runner, provider, providerv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview")
+	return preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview")
 }
 
 // preflightClass asks the provider what its ambient account points at and
@@ -357,8 +357,8 @@ func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provid
 // the running command. The provider enforces the same class match
 // authoritatively; this is the fast local refuse `ocel deploy` and `ocel
 // preview` share.
-func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required providerv1.Environment_Class, bootstrapHint string) error {
-	resp, err := runner.Preflight(ctx, &providerv1.PreflightRequest{
+func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, bootstrapHint string) error {
+	resp, err := runner.Preflight(ctx, &deploymentsv1.PreflightRequest{
 		Options:         []byte(provider.Options),
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		RequiredClass:   required,
@@ -369,12 +369,12 @@ func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider
 	if !resp.GetInfrastructurePresent() {
 		return fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
 	}
-	return providerv1.CheckClass(resp.GetInfraClass(), required)
+	return deploymentsv1.CheckClass(resp.GetInfraClass(), required)
 }
 
 // renderEnvironments prints one line per preview environment: identity,
 // lifecycle tag, PR label, and age/expiry.
-func renderEnvironments(stdout io.Writer, envs []*providerv1.PreviewEnvironment) {
+func renderEnvironments(stdout io.Writer, envs []*deploymentsv1.PreviewEnvironment) {
 	if len(envs) == 0 {
 		fmt.Fprintln(stdout, "No preview environments.")
 		return
@@ -390,11 +390,11 @@ func renderEnvironments(stdout io.Writer, envs []*providerv1.PreviewEnvironment)
 	}
 }
 
-func lifecycleTag(l providerv1.Environment_Lifecycle) string {
+func lifecycleTag(l deploymentsv1.Environment_Lifecycle) string {
 	switch l {
-	case providerv1.Environment_LIFECYCLE_EPHEMERAL:
+	case deploymentsv1.Environment_LIFECYCLE_EPHEMERAL:
 		return "ephemeral"
-	case providerv1.Environment_LIFECYCLE_PERSISTENT:
+	case deploymentsv1.Environment_LIFECYCLE_PERSISTENT:
 		return "persistent"
 	default:
 		return "unknown"
@@ -419,7 +419,7 @@ func epochOrDash(sec int64) string {
 
 // printResourceOutputs renders the provisioned resources' connection details so
 // the user can use the environment immediately.
-func printResourceOutputs(stdout io.Writer, outputs []*providerv1.ResourceOutput) {
+func printResourceOutputs(stdout io.Writer, outputs []*deploymentsv1.ResourceOutput) {
 	if len(outputs) == 0 {
 		return
 	}

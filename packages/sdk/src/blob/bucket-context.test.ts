@@ -6,20 +6,20 @@ vi.mock("../utils/rpc", () => ({
 }));
 
 const { bucket } = await import("./bucket.js");
-const { resolveRuntimeContext } = await import("./runtime-context.js");
+const { resolveBucketContext } = await import("./bucket-context.js");
 
 afterEach(() => {
   delete process.env.OCEL_RESOURCE_BUCKET_storage;
 });
 
-describe("resolveRuntimeContext", () => {
+describe("resolveBucketContext", () => {
   it("reads the injected address/bucket and builds the typed client", () => {
     process.env.OCEL_RESOURCE_BUCKET_storage = JSON.stringify({
       address: "http://localhost:7070",
       bucket: "org-project-store",
     });
 
-    const ctx = resolveRuntimeContext(bucket("storage", { uploaders: {} }));
+    const ctx = resolveBucketContext(bucket("storage", { uploaders: {} }));
 
     expect(ctx.bucket).toBe("org-project-store");
     expect(typeof ctx.client.presignUpload).toBe("function");
@@ -29,7 +29,7 @@ describe("resolveRuntimeContext", () => {
 
   it("throws a clear error when the resource config is missing", () => {
     expect(() =>
-      resolveRuntimeContext(bucket("storage", { uploaders: {} })),
+      resolveBucketContext(bucket("storage", { uploaders: {} })),
     ).toThrow(/OCEL_RESOURCE_BUCKET_storage/);
   });
 });
