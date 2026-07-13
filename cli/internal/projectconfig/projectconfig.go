@@ -189,9 +189,9 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 		if a.Path == "" {
 			return nil, fmt.Errorf("app %q is missing required \"path\"", a.Name)
 		}
-		if a.Framework != supportedFramework {
-			return nil, fmt.Errorf("app %q has unsupported framework %q — only %q is supported", a.Name, a.Framework, supportedFramework)
-		}
+		// if a.Framework != supportedFramework {
+		// 	return nil, fmt.Errorf("app %q has unsupported framework %q — only %q is supported", a.Name, a.Framework, supportedFramework)
+		// }
 
 		apps = append(apps, App{
 			Name:       a.Name,
