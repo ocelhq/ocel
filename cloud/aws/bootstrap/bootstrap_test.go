@@ -30,6 +30,22 @@ type parsedTemplate struct {
 				AttributeName string `yaml:"AttributeName"`
 				Enabled       bool   `yaml:"Enabled"`
 			} `yaml:"TimeToLiveSpecification"`
+			PublicAccessBlockConfiguration struct {
+				BlockPublicAcls       bool `yaml:"BlockPublicAcls"`
+				BlockPublicPolicy     bool `yaml:"BlockPublicPolicy"`
+				IgnorePublicAcls      bool `yaml:"IgnorePublicAcls"`
+				RestrictPublicBuckets bool `yaml:"RestrictPublicBuckets"`
+			} `yaml:"PublicAccessBlockConfiguration"`
+			LifecycleConfiguration struct {
+				Rules []struct {
+					Id                             string `yaml:"Id"`
+					Status                         string `yaml:"Status"`
+					ExpirationInDays               int    `yaml:"ExpirationInDays"`
+					AbortIncompleteMultipartUpload struct {
+						DaysAfterInitiation int `yaml:"DaysAfterInitiation"`
+					} `yaml:"AbortIncompleteMultipartUpload"`
+				} `yaml:"Rules"`
+			} `yaml:"LifecycleConfiguration"`
 		} `yaml:"Properties"`
 	} `yaml:"Resources"`
 	Outputs map[string]struct {
@@ -39,8 +55,13 @@ type parsedTemplate struct {
 
 func parseTemplate(t *testing.T) parsedTemplate {
 	t.Helper()
+	return parseTemplateStr(t, stackTemplate())
+}
+
+func parseTemplateStr(t *testing.T, template string) parsedTemplate {
+	t.Helper()
 	var tmpl parsedTemplate
-	if err := yaml.Unmarshal([]byte(stackTemplate()), &tmpl); err != nil {
+	if err := yaml.Unmarshal([]byte(template), &tmpl); err != nil {
 		t.Fatalf("template is not valid YAML: %v", err)
 	}
 	return tmpl
@@ -80,6 +101,57 @@ func TestStackTemplate_SessionsTable(t *testing.T) {
 	}
 }
 
+// TestArtifactBucket asserts both substrate templates provision the dedicated
+// function-artifact bucket with the public-access lockdown the state bucket
+// uses and a 30-day expiration lifecycle rule (plus incomplete-multipart abort)
+// so churned deploy artifacts don't accrue storage cost. It also asserts the
+// bucket name is exported for the deploy path to consume.
+func TestArtifactBucket(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		template string
+	}{
+		{"production", stackTemplate()},
+		{"preview", previewStackTemplate()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := parseTemplateStr(t, tc.template)
+
+			bucket, ok := tmpl.Resources["ArtifactBucket"]
+			if !ok {
+				t.Fatal("template is missing the ArtifactBucket resource")
+			}
+			if bucket.Type != "AWS::S3::Bucket" {
+				t.Errorf("ArtifactBucket Type = %q, want AWS::S3::Bucket", bucket.Type)
+			}
+
+			pab := bucket.Properties.PublicAccessBlockConfiguration
+			if !pab.BlockPublicAcls || !pab.BlockPublicPolicy || !pab.IgnorePublicAcls || !pab.RestrictPublicBuckets {
+				t.Errorf("ArtifactBucket PublicAccessBlockConfiguration = %+v, want all four blocks true", pab)
+			}
+
+			rules := bucket.Properties.LifecycleConfiguration.Rules
+			if len(rules) != 1 {
+				t.Fatalf("ArtifactBucket lifecycle rules = %d, want exactly 1", len(rules))
+			}
+			rule := rules[0]
+			if rule.Status != "Enabled" {
+				t.Errorf("lifecycle rule Status = %q, want Enabled", rule.Status)
+			}
+			if rule.ExpirationInDays != artifactExpirationDays {
+				t.Errorf("lifecycle rule ExpirationInDays = %d, want %d", rule.ExpirationInDays, artifactExpirationDays)
+			}
+			if rule.AbortIncompleteMultipartUpload.DaysAfterInitiation != artifactAbortMultipartDays {
+				t.Errorf("lifecycle rule AbortIncompleteMultipartUpload = %d, want %d", rule.AbortIncompleteMultipartUpload.DaysAfterInitiation, artifactAbortMultipartDays)
+			}
+
+			if _, ok := tmpl.Outputs[outputArtifactBucket]; !ok {
+				t.Errorf("template is missing the %s output", outputArtifactBucket)
+			}
+		})
+	}
+}
+
 // TestStackTemplate_VersionOutput proves the deployed version output is
 // single-sourced from RequiredBootstrapVersion, so the two never drift.
 func TestStackTemplate_VersionOutput(t *testing.T) {
@@ -107,7 +179,8 @@ func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 			Outputs: []cfntypes.Output{
 				{OutputKey: aws.String(outputStateBucket), OutputValue: aws.String("bucket-123")},
 				{OutputKey: aws.String(outputSessionTable), OutputValue: aws.String("sessions-abc")},
-				{OutputKey: aws.String(outputVersion), OutputValue: aws.String("2")},
+				{OutputKey: aws.String(outputArtifactBucket), OutputValue: aws.String("artifacts-xyz")},
+				{OutputKey: aws.String(outputVersion), OutputValue: aws.String("3")},
 				{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassProduction)},
 			},
 		}},
@@ -117,7 +190,7 @@ func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckDeployed: %v", err)
 	}
-	want := Deployed{Present: true, Version: 2, StateBucket: "bucket-123", SessionTable: "sessions-abc", Class: ClassProduction}
+	want := Deployed{Present: true, Version: 3, StateBucket: "bucket-123", SessionTable: "sessions-abc", ArtifactBucket: "artifacts-xyz", Class: ClassProduction}
 	if got != want {
 		t.Errorf("CheckDeployed = %+v, want %+v", got, want)
 	}

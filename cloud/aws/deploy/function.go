@@ -124,7 +124,8 @@ func bucketEnvPayload(address, bucket string) string {
 
 // artifactArchivePath resolves a ManifestFunction.artifact_path (relative to
 // the project's .ocel/output) against the deploy's artifact root, giving the
-// absolute path to the `.func` directory Pulumi archives into the Lambda zip.
+// absolute path to the `.func` directory the provider hashes, zips, and uploads
+// to the artifact bucket before provisioning.
 func artifactArchivePath(root, artifactPath string) string {
 	return filepath.Join(root, artifactPath)
 }
@@ -142,10 +143,12 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutpu
 
 // registerFunction realizes one ManifestFunction as an AWS Lambda from its
 // `.func` artifact plus a public Function URL, with env carrying every
-// manifest resource (env). archivePath is the absolute `.func` directory
-// Pulumi zips into the deployment package. The Function URL is exported under
-// logicalName for collectFunctionOutput.
-func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs, archivePath string, env pulumi.StringMap) error {
+// manifest resource (env). artifact points at the S3 object the provider
+// already uploaded the `.func` deployment package to; its content-addressed key
+// changes when the code changes, so Pulumi redeploys exactly the changed
+// functions. The Function URL is exported under logicalName for
+// collectFunctionOutput.
+func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs, artifact artifactRef, env pulumi.StringMap) error {
 	role, err := newServiceRole(ctx, logicalName+"-fn", "lambda.amazonaws.com", nil)
 	if err != nil {
 		return err
@@ -164,10 +167,11 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 	env["OCEL_HANDLER"] = pulumi.String("/var/task/" + args.Handler)
 
 	fn, err := lambda.NewFunction(ctx, logicalName, &lambda.FunctionArgs{
-		Runtime: pulumi.String(args.Runtime),
-		Handler: pulumi.String(lambdaConfigHandler),
-		Role:    role.Arn,
-		Code:    pulumi.NewFileArchive(archivePath),
+		Runtime:  pulumi.String(args.Runtime),
+		Handler:  pulumi.String(lambdaConfigHandler),
+		Role:     role.Arn,
+		S3Bucket: pulumi.String(artifact.Bucket),
+		S3Key:    pulumi.String(artifact.Key),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},

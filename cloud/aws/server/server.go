@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
@@ -123,6 +124,9 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	if deployed.StateBucket == "" {
 		return nil, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
+	if deployed.ArtifactBucket == "" {
+		return nil, fmt.Errorf("account bootstrap is present but its artifact bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
@@ -164,6 +168,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		SessionTableARN:  sessionTableARN,
 		ListenerCodePath: listenerCodePath,
 		ArtifactRoot:     artifactRoot(),
+		ArtifactBucket:   deployed.ArtifactBucket,
+		Uploader:         s3.NewFromConfig(awscfg),
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),
 		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
