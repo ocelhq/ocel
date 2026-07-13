@@ -8,6 +8,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/channel"
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
 )
@@ -23,7 +24,7 @@ type authHeaderInterceptor struct{ token string }
 
 func (a authHeaderInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", providerv1.FormatAuthHeader(a.token))
+		req.Header().Set("Authorization", channel.FormatAuthHeader(a.token))
 		return next(ctx, req)
 	}
 }
@@ -31,7 +32,7 @@ func (a authHeaderInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFu
 func (a authHeaderInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
 		conn := next(ctx, spec)
-		conn.RequestHeader().Set("Authorization", providerv1.FormatAuthHeader(a.token))
+		conn.RequestHeader().Set("Authorization", channel.FormatAuthHeader(a.token))
 		return conn
 	}
 }

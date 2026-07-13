@@ -6,7 +6,7 @@
 // deployed environment; it is exercised by a direct-dial integration test.
 //
 // It reuses the provider's local-channel conventions: it binds a private Unix
-// socket (loopback TCP fallback), prints the OCEL_PROVIDER_READY readiness
+// socket (loopback TCP fallback), prints the OCEL_READY readiness
 // sentinel once bound, and verifies a per-session token on every RPC.
 package main
 
@@ -23,7 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/cloud/aws/runtime"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/channel"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
@@ -33,7 +33,7 @@ var version = "dev"
 // endpoint overrides exist for local integration testing against
 // dynamodb-local / MinIO.
 const (
-	sessionTokenEnvVar = providerv1.SessionTokenEnvVar
+	sessionTokenEnvVar = channel.SessionTokenEnvVar
 	tableEnvVar        = "OCEL_RUNTIME_SESSION_TABLE"
 	bucketEnvVar       = "OCEL_RUNTIME_BUCKET"
 	regionEnvVar       = "OCEL_RUNTIME_REGION"
@@ -85,7 +85,7 @@ func run() error {
 	go func() { serveErr <- httpSrv.Serve(ln) }()
 
 	// The listener is bound; announce readiness so a launcher can dial in.
-	fmt.Println(providerv1.FormatReadinessLine(addr))
+	fmt.Println(channel.FormatReadinessLine(addr))
 
 	select {
 	case <-sigCtx.Done():

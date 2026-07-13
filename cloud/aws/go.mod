@@ -26,6 +26,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/blang/semver v3.5.1+incompatible
+	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.36.0
 	github.com/pulumi/pulumi/sdk/v3 v3.251.0
@@ -158,4 +159,5 @@ require (
 	lukechampine.com/frand v1.4.2 // indirect
 )
 
+replace github.com/ocelhq/ocel/pkg/channel => ../../pkg/channel
 replace github.com/ocelhq/ocel/pkg/proto => ../../pkg/proto

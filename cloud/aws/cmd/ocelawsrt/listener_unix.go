@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/channel"
 )
 
 // listen binds the runtime's private local channel: a Unix domain socket at a
@@ -27,5 +27,5 @@ func listen() (net.Listener, string, error) {
 	if err != nil {
 		return nil, "", fmt.Errorf("listen on %s: %w", path, err)
 	}
-	return ln, providerv1.FormatUnixAddr(path), nil
+	return ln, channel.FormatUnixAddr(path), nil
 }

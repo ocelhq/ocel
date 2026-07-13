@@ -25,6 +25,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/channel"
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
 )
@@ -35,7 +36,7 @@ const DefaultReadyTimeout = 10 * time.Second
 
 // ReadyTimeoutEnvVar overrides DefaultReadyTimeout when Config.ReadyTimeout
 // is zero. Its value must parse as a time.Duration (e.g. "15s").
-const ReadyTimeoutEnvVar = "OCEL_PROVIDER_READY_TIMEOUT"
+const ReadyTimeoutEnvVar = "OCEL_READY_TIMEOUT"
 
 // gracePeriod is how long Close waits after SIGTERM before escalating to
 // SIGKILL. A var so tests can shorten it.
@@ -153,7 +154,7 @@ func Spawn(ctx context.Context, cfg Config) (*Runner, error) {
 	}
 	env := make([]string, 0, len(base)+1)
 	env = append(env, base...)
-	env = append(env, providerv1.SessionTokenEnvVar+"="+token)
+	env = append(env, channel.SessionTokenEnvVar+"="+token)
 
 	cmd := exec.Command(cfg.BinaryPath, cfg.Args...)
 	cmd.Env = env
@@ -252,7 +253,7 @@ func (r *Runner) Ready(ctx context.Context) error {
 // builds a Connect client to it, presenting the session token on every
 // call.
 func (r *Runner) dial(addr string) error {
-	network, address, err := providerv1.ParseAddr(addr)
+	network, address, err := channel.ParseAddr(addr)
 	if err != nil {
 		return fmt.Errorf("providerrunner: parse readiness address: %w", err)
 	}
@@ -424,7 +425,7 @@ func (r *Runner) drainStdout(stdout io.Reader) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if !ready {
-			if addr, ok := providerv1.ParseReadinessLine(line); ok {
+			if addr, ok := channel.ParseReadinessLine(line); ok {
 				ready = true
 				r.readyCh <- addr
 				continue
@@ -456,7 +457,7 @@ func (r *Runner) drainStderr(stderr io.Reader) {
 }
 
 // newSessionToken generates a fresh per-session token the CLI presents to
-// the provider on every RPC call (see providerv1.SessionTokenEnvVar).
+// the provider on every RPC call (see channel.SessionTokenEnvVar).
 func newSessionToken() (string, error) {
 	buf := make([]byte, 32)
 	if _, err := rand.Read(buf); err != nil {
@@ -473,7 +474,7 @@ type authInterceptor struct {
 
 func (a authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", providerv1.FormatAuthHeader(a.token))
+		req.Header().Set("Authorization", channel.FormatAuthHeader(a.token))
 		return next(ctx, req)
 	}
 }
@@ -481,7 +482,7 @@ func (a authInterceptor) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 func (a authInterceptor) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
 		conn := next(ctx, spec)
-		conn.RequestHeader().Set("Authorization", providerv1.FormatAuthHeader(a.token))
+		conn.RequestHeader().Set("Authorization", channel.FormatAuthHeader(a.token))
 		return conn
 	}
 }

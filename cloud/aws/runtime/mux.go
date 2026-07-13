@@ -7,7 +7,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/channel"
 	"github.com/ocelhq/ocel/pkg/proto/runtime/v1/runtimev1connect"
 )
 
@@ -53,7 +53,7 @@ func (a *authInterceptor) WrapStreamingHandler(next connect.StreamingHandlerFunc
 }
 
 func (a *authInterceptor) check(header http.Header) error {
-	got, ok := providerv1.ParseAuthHeader(header.Get("Authorization"))
+	got, ok := channel.ParseAuthHeader(header.Get("Authorization"))
 	if !ok || got != a.token {
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("missing or invalid session token"))
 	}

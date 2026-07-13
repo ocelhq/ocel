@@ -8,7 +8,7 @@ import (
 	"os"
 	"path/filepath"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/channel"
 )
 
 // listen binds the provider's private local channel: a Unix domain socket
@@ -18,15 +18,15 @@ import (
 func listen() (net.Listener, string, error) {
 	dir, err := os.MkdirTemp("", "ocel-provider-*")
 	if err != nil {
-	    return nil, "", fmt.Errorf("reserve socket dir: %w", err)
+		return nil, "", fmt.Errorf("reserve socket dir: %w", err)
 	}
 	// dir is 0700 by MkdirTemp — only the owner can traverse it,
 	// so nothing can reach the socket regardless of the socket's own mode.
 	path := filepath.Join(dir, "provider.sock")
 	ln, err := net.Listen("unix", path)
 	if err != nil {
-	    return nil, "", fmt.Errorf("listen on %s: %w", path, err)
+		return nil, "", fmt.Errorf("listen on %s: %w", path, err)
 	}
 
-	return ln, providerv1.FormatUnixAddr(path), nil
+	return ln, channel.FormatUnixAddr(path), nil
 }
