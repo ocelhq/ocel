@@ -19,7 +19,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/channel"
 	runtimev1 "github.com/ocelhq/ocel/pkg/proto/runtime/v1"
 	"github.com/ocelhq/ocel/pkg/proto/runtime/v1/runtimev1connect"
 )
@@ -66,7 +66,7 @@ func TestRuntimeDirectDial(t *testing.T) {
 
 	cmd := exec.Command(binPath)
 	cmd.Env = append(os.Environ(),
-		providerv1.SessionTokenEnvVar+"="+token,
+		channel.SessionTokenEnvVar+"="+token,
 		tableEnvVar+"="+table,
 		bucketEnvVar+"="+bucket,
 		regionEnvVar+"="+region,
@@ -234,7 +234,7 @@ func readReadiness(t *testing.T, r interface{ Read([]byte) (int, error) }) strin
 	go func() {
 		scanner := bufio.NewScanner(r)
 		for scanner.Scan() {
-			if addr, ok := providerv1.ParseReadinessLine(scanner.Text()); ok {
+			if addr, ok := channel.ParseReadinessLine(scanner.Text()); ok {
 				ch <- result{addr: addr}
 				return
 			}
@@ -259,7 +259,7 @@ func readReadiness(t *testing.T, r interface{ Read([]byte) (int, error) }) strin
 
 func dialRuntime(t *testing.T, addr, token string) runtimev1connect.RuntimeServiceClient {
 	t.Helper()
-	network, address, err := providerv1.ParseAddr(addr)
+	network, address, err := channel.ParseAddr(addr)
 	if err != nil {
 		t.Fatalf("parse readiness addr: %v", err)
 	}
@@ -284,7 +284,7 @@ type clientAuth struct{ token string }
 
 func (c *clientAuth) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 	return func(ctx context.Context, req connect.AnyRequest) (connect.AnyResponse, error) {
-		req.Header().Set("Authorization", providerv1.FormatAuthHeader(c.token))
+		req.Header().Set("Authorization", channel.FormatAuthHeader(c.token))
 		return next(ctx, req)
 	}
 }
@@ -292,7 +292,7 @@ func (c *clientAuth) WrapUnary(next connect.UnaryFunc) connect.UnaryFunc {
 func (c *clientAuth) WrapStreamingClient(next connect.StreamingClientFunc) connect.StreamingClientFunc {
 	return func(ctx context.Context, spec connect.Spec) connect.StreamingClientConn {
 		conn := next(ctx, spec)
-		conn.RequestHeader().Set("Authorization", providerv1.FormatAuthHeader(c.token))
+		conn.RequestHeader().Set("Authorization", channel.FormatAuthHeader(c.token))
 		return conn
 	}
 }

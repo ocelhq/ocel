@@ -15,7 +15,7 @@ import (
 	"syscall"
 
 	"github.com/ocelhq/ocel/cloud/aws/server"
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/channel"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
@@ -29,9 +29,9 @@ func main() {
 }
 
 func run() error {
-	token := os.Getenv(providerv1.SessionTokenEnvVar)
+	token := os.Getenv(channel.SessionTokenEnvVar)
 	if token == "" {
-		return fmt.Errorf("%s must be set by the launching CLI", providerv1.SessionTokenEnvVar)
+		return fmt.Errorf("%s must be set by the launching CLI", channel.SessionTokenEnvVar)
 	}
 
 	ln, addr, err := listen()
@@ -53,7 +53,7 @@ func run() error {
 	// The listener above is already bound; print the readiness sentinel now
 	// so the CLI can dial in. Any other stdout/stderr, before or after this
 	// line, is diagnostic log output, not protocol.
-	fmt.Println(providerv1.FormatReadinessLine(addr))
+	fmt.Println(channel.FormatReadinessLine(addr))
 
 	select {
 	case <-ctx.Done():

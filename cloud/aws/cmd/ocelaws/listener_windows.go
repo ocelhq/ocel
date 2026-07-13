@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/channel"
 )
 
 // listen binds the provider's private local channel. Unix domain sockets
@@ -21,5 +21,5 @@ func listen() (net.Listener, string, error) {
 	}
 
 	port := ln.Addr().(*net.TCPAddr).Port
-	return ln, providerv1.FormatTCPAddr(port), nil
+	return ln, channel.FormatTCPAddr(port), nil
 }

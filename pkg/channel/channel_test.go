@@ -1,10 +1,10 @@
-package providerv1
+package channel
 
 import "testing"
 
 func TestFormatReadinessLine_Unix(t *testing.T) {
 	got := FormatReadinessLine("unix:/tmp/ocel-provider-abc123.sock")
-	want := "OCEL_PROVIDER_READY unix:/tmp/ocel-provider-abc123.sock"
+	want := "OCEL_READY unix:/tmp/ocel-provider-abc123.sock"
 	if got != want {
 		t.Fatalf("FormatReadinessLine() = %q, want %q", got, want)
 	}
@@ -31,8 +31,8 @@ func TestParseReadinessLine_IgnoresOtherOutput(t *testing.T) {
 	lines := []string{
 		"",
 		"listening on socket...\n",
-		"OCEL_PROVIDER_READY_TYPO unix:/tmp/x.sock",
-		"some log line mentioning OCEL_PROVIDER_READY midway",
+		"OCEL_READY_TYPO unix:/tmp/x.sock",
+		"some log line mentioning OCEL_READY midway",
 	}
 	for _, line := range lines {
 		if _, ok := ParseReadinessLine(line); ok {

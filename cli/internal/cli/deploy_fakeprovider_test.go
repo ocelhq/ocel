@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/pkg/channel"
 	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
 	"github.com/ocelhq/ocel/pkg/proto/provider/v1/providerv1connect"
 )
@@ -62,14 +63,14 @@ func runDeployFakeProvider() int {
 
 	mux := http.NewServeMux()
 	path, handler := providerv1connect.NewProviderServiceHandler(&deployFakeProviderServer{
-		token: os.Getenv(providerv1.SessionTokenEnvVar),
+		token: os.Getenv(channel.SessionTokenEnvVar),
 		mode:  os.Getenv(deployFakeProviderModeEnvVar),
 	})
 	mux.Handle(path, handler)
 
 	// Printed only once the listener is bound and the handler mounted, per
 	// the readiness sentinel contract.
-	fmt.Println(providerv1.FormatReadinessLine(providerv1.FormatUnixAddr(sockPath)))
+	fmt.Println(channel.FormatReadinessLine(channel.FormatUnixAddr(sockPath)))
 
 	srv := &http.Server{Handler: mux}
 	if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -199,7 +200,7 @@ func (s *deployFakeProviderServer) checkToken(ctx context.Context) error {
 	if info != nil {
 		authHeader = info.RequestHeader().Get("Authorization")
 	}
-	if token, ok := providerv1.ParseAuthHeader(authHeader); !ok || token != s.token {
+	if token, ok := channel.ParseAuthHeader(authHeader); !ok || token != s.token {
 		return connect.NewError(connect.CodeUnauthenticated, errors.New("bad or missing session token"))
 	}
 	return nil

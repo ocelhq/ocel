@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	providerv1 "github.com/ocelhq/ocel/pkg/proto/provider/v1"
+	"github.com/ocelhq/ocel/pkg/channel"
 )
 
 func TestListen_BindsUnixSocket(t *testing.T) {
@@ -21,7 +21,7 @@ func TestListen_BindsUnixSocket(t *testing.T) {
 		t.Fatalf("listen() addr = %q, want unix: scheme", addr)
 	}
 
-	network, path, err := providerv1.ParseAddr(addr)
+	network, path, err := channel.ParseAddr(addr)
 	if err != nil {
 		t.Fatalf("ParseAddr(%q) error = %v", addr, err)
 	}
@@ -39,7 +39,7 @@ func TestListen_ClosingRemovesSocketFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("listen() error = %v", err)
 	}
-	_, path, err := providerv1.ParseAddr(addr)
+	_, path, err := channel.ParseAddr(addr)
 	if err != nil {
 		t.Fatalf("ParseAddr(%q) error = %v", addr, err)
 	}
