@@ -1,5 +1,5 @@
 // Command ocelawsrt is the Ocel AWS runtime binary: the production
-// implementation of runtime.v1.BucketService (mint presigned PUT targets,
+// implementation of buckets.v1.BucketService (mint presigned PUT targets,
 // persist/verify/read upload sessions in DynamoDB). It ships alongside the
 // provider binary and is later wrapped by the membrane, which supervises it and
 // injects its address into the app env. Nothing in this slice launches it in a
@@ -23,6 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/ocelhq/ocel/cloud/aws/runtime"
+	"github.com/ocelhq/ocel/cloud/aws/runtime/bucket"
 	"github.com/ocelhq/ocel/pkg/channel"
 )
 
@@ -57,13 +58,13 @@ func run() error {
 	if table == "" {
 		return fmt.Errorf("%s must be set", tableEnvVar)
 	}
-	bucket := os.Getenv(bucketEnvVar)
-	if bucket == "" {
+	bucketName := os.Getenv(bucketEnvVar)
+	if bucketName == "" {
 		return fmt.Errorf("%s must be set", bucketEnvVar)
 	}
 
 	ctx := context.Background()
-	svc, err := buildService(ctx, table, bucket)
+	svc, err := buildService(ctx, table, bucketName)
 	if err != nil {
 		return err
 	}
@@ -98,7 +99,7 @@ func run() error {
 	}
 }
 
-func buildService(ctx context.Context, table, bucket string) (*runtime.Service, error) {
+func buildService(ctx context.Context, table, bucketName string) (*bucket.Service, error) {
 	optFns := []func(*awsconfig.LoadOptions) error{}
 	if region := os.Getenv(regionEnvVar); region != "" {
 		optFns = append(optFns, awsconfig.WithRegion(region))
@@ -124,10 +125,10 @@ func buildService(ctx context.Context, table, bucket string) (*runtime.Service, 
 		}
 	})
 
-	return runtime.New(runtime.Config{
+	return bucket.New(bucket.Config{
 		DDB:       ddbClient,
 		Presigner: s3.NewPresignClient(s3Client),
 		Table:     table,
-		Bucket:    bucket,
+		Bucket:    bucketName,
 	}), nil
 }
