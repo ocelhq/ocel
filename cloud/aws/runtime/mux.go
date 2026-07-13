@@ -1,3 +1,7 @@
+// Package runtime is the AWS request-time plane: it composes the per-resource
+// services (bucket for now, more as resources gain request-time logic) behind
+// one authenticated local-channel mux that the running app dials. Each
+// resource's mechanics live in a subpackage; this package only mounts them.
 package runtime
 
 import (
@@ -11,9 +15,11 @@ import (
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
-// NewMux serves BucketService behind the same per-session token handshake the
-// provider uses: every call must carry Authorization: Bearer <token> matching
-// the token the launcher (the membrane, later) passed at startup.
+// NewMux mounts the resource services behind the same per-session token
+// handshake the provider uses: every call must carry Authorization: Bearer
+// <token> matching the token the launcher (the membrane, later) passed at
+// startup. Only BucketService exists in this slice; further resource handlers
+// mount here as they arrive.
 func NewMux(token string, svc bucketsv1connect.BucketServiceHandler) *http.ServeMux {
 	mux := http.NewServeMux()
 	path, handler := bucketsv1connect.NewBucketServiceHandler(

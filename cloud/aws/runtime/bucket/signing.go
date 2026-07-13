@@ -4,7 +4,7 @@
 // reports session status. It is the permanent Go implementation of the cloud
 // mechanics behind ocel/blob uploads; dev delegates the same contract to the
 // Ocel API instead.
-package runtime
+package bucket
 
 import (
 	"bytes"
