@@ -167,7 +167,7 @@ func TestRunInit_HappyPath_SingleOrg_WritesConfig(t *testing.T) {
 		t.Fatalf("read ocel.config.ts: %v", err)
 	}
 	content := string(data)
-	if !strings.Contains(content, `import { defineConfig } from "ocel/config";
+	if !strings.Contains(content, `import { defineConfig } from "@ocel/sdk/config";
 `) {
 		t.Fatalf("config content = %q, want defineConfig import", content)
 	}
