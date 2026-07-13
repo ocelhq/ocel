@@ -189,7 +189,7 @@ func runInit(ctx context.Context, cwd string, name string, opts initOptions, std
 	}
 	fmt.Fprintf(stdout, "✓ Created project (id: %s)\n", project.ID)
 
-	configContent := fmt.Sprintf("import { defineConfig } from \"ocel/config\";\n\nexport default defineConfig({\n  projectId: %q,\n});\n", project.ID)
+	configContent := fmt.Sprintf("import { defineConfig } from \"@ocel/sdk/config\";\n\nexport default defineConfig({\n  projectId: %q,\n});\n", project.ID)
 	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
 		return fmt.Errorf("created project (id: %s) but failed to write ocel.config.ts: %w", project.ID, err)
 	}
@@ -250,7 +250,6 @@ func resolveOrganization(ctx context.Context, client *authclient.Client, accessT
 	}
 	fmt.Fprint(stdout, "Select an organization (number or slug): ")
 
-
 	selection := ""
 	if scanner.Scan() {
 		selection = strings.TrimSpace(scanner.Text())
@@ -261,7 +260,6 @@ func resolveOrganization(ctx context.Context, client *authclient.Client, accessT
 	if selection == "" {
 		return nil, errors.New("no organization selected; rerun `ocel init`.")
 	}
-
 
 	if idx, convErr := strconv.Atoi(selection); convErr == nil {
 		if idx < 1 || idx > len(orgs) {
