@@ -170,6 +170,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ArtifactRoot:     artifactRoot(),
 		ArtifactBucket:   deployed.ArtifactBucket,
 		Uploader:         s3.NewFromConfig(awscfg),
+		Cloudflare:       deploy.NewCloudflareDeployer(),
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),
 		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),

@@ -67,6 +67,11 @@ type Config struct {
 	// client satisfies it.
 	Uploader ArtifactUploader
 
+	// Cloudflare deploys the Next.js routing worker once its Lambdas exist and
+	// their Function URLs are known. Nil unless the project has a Next.js app;
+	// the real cloudflare-go implementation is the end-to-end seam.
+	Cloudflare CloudflareDeployer
+
 	// Lifecycle is the environment lifecycle this deploy realizes under; it
 	// selects each resource's realization (see realizationFor). Unspecified for
 	// production and persistent previews, LIFECYCLE_EPHEMERAL for ephemeral
@@ -188,7 +193,19 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 	}
 
 	report(progress, "Collecting outputs")
-	return collectOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
+	outputs, err := collectOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
+	if err != nil {
+		return nil, err
+	}
+
+	// The Next.js worker fronts the just-provisioned Lambdas, so it deploys last
+	// — it needs their Function URLs. A failure here fails the deploy; the AWS
+	// resources persist and a redeploy is idempotent.
+	workerOutputs, err := deployNextWorker(ctx, cfg, manifest, outputs, func(msg string) { report(progress, msg) })
+	if err != nil {
+		return nil, err
+	}
+	return append(outputs, workerOutputs...), nil
 }
 
 // previewExpiryTagKey is the Pulumi stack tag holding an ephemeral preview's
