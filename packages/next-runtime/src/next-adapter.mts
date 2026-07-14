@@ -6,6 +6,7 @@ import {
   cp,
   lstat,
   mkdir,
+  readdir,
   readlink,
   rm,
   symlink,
@@ -92,10 +93,26 @@ const adapter = {
             runtime: "nodejs24.x",
             handler: launcherRel,
             framework: "next",
+            // The route's framework-native identity, carried through to
+            // ManifestFunction.route_id so the routing layer can key
+            // FUNCTION_URLS by it (the Lambda itself keeps an infra-safe name).
+            id: fnRoute.id,
           }),
         );
       }),
     );
+
+    // public/ assets. Next's outputs.staticFiles covers _next/static and the
+    // prerendered error pages but never the project's public/ directory, so the
+    // adapter copies it verbatim into the static output and makes each file
+    // routable — otherwise a request for e.g. /favicon.svg has no dispatch entry
+    // and 404s despite the file existing.
+    const publicFiles = await collectPublicFiles(projectDir);
+    for (const p of publicFiles) {
+      const dest = join("./.ocel/output/static", p.pathname);
+      await mkdir(dirname(dest), { recursive: true });
+      await copyFile(p.filePath, dest);
+    }
 
     // static files
     for (const s of outputs.staticFiles) {
@@ -169,7 +186,10 @@ const adapter = {
       buildId,
       basePath: config.basePath || "",
       i18n: config.i18n ?? undefined,
-      pathnames: routableOutputs.map((o) => o.pathname),
+      pathnames: [
+        ...routableOutputs.map((o) => o.pathname),
+        ...publicFiles.map((p) => p.pathname),
+      ],
       routes: routing,
 
       dispatch: Object.fromEntries([
@@ -183,6 +203,7 @@ const adapter = {
             { kind: "edge", entryKey: o.edgeRuntime?.entryKey },
           ]),
         ...outputs.staticFiles.map((o) => [o.pathname, { kind: "static" }]),
+        ...publicFiles.map((p) => [p.pathname, { kind: "static" }]),
 
         // TODO: ISR
         ...outputs.prerenders.map((p) => [
@@ -214,6 +235,32 @@ function renderLauncher(moduleRel: string): string {
       `module.exports = require(${JSON.stringify(requirePath)})`,
     ].join("\n") + "\n"
   );
+}
+
+// collectPublicFiles walks a project's public/ directory and returns each file
+// as a servable static output: its URL pathname (public/ maps to the site root)
+// and absolute source path. A missing public/ directory yields no files.
+async function collectPublicFiles(
+  projectDir: string,
+): Promise<{ pathname: string; filePath: string }[]> {
+  const publicDir = join(projectDir, "public");
+  let entries;
+  try {
+    entries = await readdir(publicDir, {
+      recursive: true,
+      withFileTypes: true,
+    });
+  } catch {
+    return [];
+  }
+  const files: { pathname: string; filePath: string }[] = [];
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const abs = join(entry.parentPath, entry.name);
+    const rel = relative(publicDir, abs);
+    files.push({ pathname: "/" + rel.split(sep).join("/"), filePath: abs });
+  }
+  return files;
 }
 
 async function copyAsset(srcAbs: string, dest: string) {
