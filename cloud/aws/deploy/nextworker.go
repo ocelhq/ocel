@@ -265,8 +265,10 @@ func deployNextWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 			Content:     mainContent,
 		},
 		Modules: []WorkerModule{{
-			Name:        "routing-manifest.json",
-			ContentType: "application/json",
+			Name: "routing-manifest.json",
+			// Uploaded as a text module (Cloudflare's module upload has no JSON
+			// type); the worker JSON.parses its string default export.
+			ContentType: "text/plain",
 			Content:     manifestContent,
 		}},
 		Vars:         map[string]string{nextWorkerURLsVar: string(functionURLs)},
