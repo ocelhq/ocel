@@ -78,6 +78,29 @@ describe("dispatchResult", () => {
     expect(captured?.url).toBe("https://fn.example.com/api/documents?q=1");
   });
 
+  it("invokes the parent function for a prerender route until ISR lands", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/": { kind: "prerender", id: "/" } },
+      },
+      functionUrls: { "/": "https://fn.example.com" },
+      fetch: (async () => new Response("rendered", { status: 200 })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/", invocationTarget: { pathname: "/" } },
+      new Request("https://app.example/"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("rendered");
+  });
+
   it("returns 502 when a lambda route has no Function URL", async () => {
     const deps = baseDeps({
       manifest: {

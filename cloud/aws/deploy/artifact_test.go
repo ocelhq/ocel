@@ -119,9 +119,10 @@ func TestArtifactKey(t *testing.T) {
 // fakeUploader records PutObject calls and reports a configurable HeadObject
 // existence result.
 type fakeUploader struct {
-	exists  map[string]bool
-	puts    []string
-	headErr error
+	exists    map[string]bool
+	puts      []string
+	putBodies map[string]string
+	headErr   error
 }
 
 func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
@@ -135,7 +136,15 @@ func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ .
 }
 
 func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
-	f.puts = append(f.puts, aws.ToString(in.Key))
+	key := aws.ToString(in.Key)
+	f.puts = append(f.puts, key)
+	if in.Body != nil {
+		b, _ := io.ReadAll(in.Body)
+		if f.putBodies == nil {
+			f.putBodies = map[string]string{}
+		}
+		f.putBodies[key] = string(b)
+	}
 	return &s3.PutObjectOutput{}, nil
 }
 

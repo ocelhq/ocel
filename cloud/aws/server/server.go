@@ -48,10 +48,16 @@ type Server struct{}
 // isolated into its own "<projectID>-preview-<identity>" stack (identity is
 // already substrate-safe from the CLI).
 func stackName(projectID string, env *deploymentsv1.Environment) string {
+	return projectID + "-" + envSegment(env)
+}
+
+// envSegment is the environment token shared by the Pulumi stack name and the
+// asset-bucket key: "preview-<identity>" for a preview, else "prod".
+func envSegment(env *deploymentsv1.Environment) string {
 	if env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
-		return projectID + "-preview-" + env.GetIdentity()
+		return "preview-" + env.GetIdentity()
 	}
-	return projectID + "-" + deployEnv
+	return deployEnv
 }
 
 // options is the provider's opaque per-invocation options, decoded from the
@@ -127,6 +133,9 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	if deployed.ArtifactBucket == "" {
 		return nil, fmt.Errorf("account bootstrap is present but its artifact bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
+	if deployed.AssetBucket == "" {
+		return nil, fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
@@ -169,6 +178,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ListenerCodePath: listenerCodePath,
 		ArtifactRoot:     artifactRoot(),
 		ArtifactBucket:   deployed.ArtifactBucket,
+		AssetBucket:      deployed.AssetBucket,
+		Env:              envSegment(env),
 		Uploader:         s3.NewFromConfig(awscfg),
 		Cloudflare:       deploy.NewCloudflareDeployer(),
 		Lifecycle:        env.GetLifecycle(),

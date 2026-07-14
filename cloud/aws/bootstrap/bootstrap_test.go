@@ -152,6 +152,58 @@ func TestArtifactBucket(t *testing.T) {
 	}
 }
 
+// TestAssetBucket asserts both substrate templates provision the account-global
+// asset bucket that prerender configs + fallbacks are uploaded to. Unlike the
+// artifact bucket, assets are keyed by an immutable build id and a live build's
+// assets are never re-touched by later deploys, so the bucket carries NO
+// object-expiration rule (only an incomplete-multipart abort) and its name is
+// exported for the deploy path to consume.
+func TestAssetBucket(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		template string
+	}{
+		{"production", stackTemplate()},
+		{"preview", previewStackTemplate()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := parseTemplateStr(t, tc.template)
+
+			bucket, ok := tmpl.Resources["AssetBucket"]
+			if !ok {
+				t.Fatal("template is missing the AssetBucket resource")
+			}
+			if bucket.Type != "AWS::S3::Bucket" {
+				t.Errorf("AssetBucket Type = %q, want AWS::S3::Bucket", bucket.Type)
+			}
+
+			pab := bucket.Properties.PublicAccessBlockConfiguration
+			if !pab.BlockPublicAcls || !pab.BlockPublicPolicy || !pab.IgnorePublicAcls || !pab.RestrictPublicBuckets {
+				t.Errorf("AssetBucket PublicAccessBlockConfiguration = %+v, want all four blocks true", pab)
+			}
+
+			rules := bucket.Properties.LifecycleConfiguration.Rules
+			if len(rules) != 1 {
+				t.Fatalf("AssetBucket lifecycle rules = %d, want exactly 1", len(rules))
+			}
+			rule := rules[0]
+			if rule.Status != "Enabled" {
+				t.Errorf("lifecycle rule Status = %q, want Enabled", rule.Status)
+			}
+			if rule.ExpirationInDays != 0 {
+				t.Errorf("lifecycle rule ExpirationInDays = %d, want 0 (no object expiry)", rule.ExpirationInDays)
+			}
+			if rule.AbortIncompleteMultipartUpload.DaysAfterInitiation != artifactAbortMultipartDays {
+				t.Errorf("lifecycle rule AbortIncompleteMultipartUpload = %d, want %d", rule.AbortIncompleteMultipartUpload.DaysAfterInitiation, artifactAbortMultipartDays)
+			}
+
+			if _, ok := tmpl.Outputs[outputAssetBucket]; !ok {
+				t.Errorf("template is missing the %s output", outputAssetBucket)
+			}
+		})
+	}
+}
+
 // TestStackTemplate_VersionOutput proves the deployed version output is
 // single-sourced from RequiredBootstrapVersion, so the two never drift.
 func TestStackTemplate_VersionOutput(t *testing.T) {
@@ -180,6 +232,7 @@ func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 				{OutputKey: aws.String(outputStateBucket), OutputValue: aws.String("bucket-123")},
 				{OutputKey: aws.String(outputSessionTable), OutputValue: aws.String("sessions-abc")},
 				{OutputKey: aws.String(outputArtifactBucket), OutputValue: aws.String("artifacts-xyz")},
+				{OutputKey: aws.String(outputAssetBucket), OutputValue: aws.String("assets-xyz")},
 				{OutputKey: aws.String(outputVersion), OutputValue: aws.String("3")},
 				{OutputKey: aws.String(outputInfraClass), OutputValue: aws.String(ClassProduction)},
 			},
@@ -190,7 +243,7 @@ func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckDeployed: %v", err)
 	}
-	want := Deployed{Present: true, Version: 3, StateBucket: "bucket-123", SessionTable: "sessions-abc", ArtifactBucket: "artifacts-xyz", Class: ClassProduction}
+	want := Deployed{Present: true, Version: 3, StateBucket: "bucket-123", SessionTable: "sessions-abc", ArtifactBucket: "artifacts-xyz", AssetBucket: "assets-xyz", Class: ClassProduction}
 	if got != want {
 		t.Errorf("CheckDeployed = %+v, want %+v", got, want)
 	}

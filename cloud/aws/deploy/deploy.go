@@ -67,6 +67,14 @@ type Config struct {
 	// client satisfies it.
 	Uploader ArtifactUploader
 
+	// AssetBucket is the account-global S3 bucket (from bootstrap) prerender
+	// configs + fallbacks are uploaded to, keyed by build id. Empty when the
+	// bootstrap predates it.
+	AssetBucket string
+	// Env is the environment segment of the S3 asset key ("prod", or
+	// "preview-<identity>"): the same token stackName suffixes.
+	Env string
+
 	// Cloudflare deploys the Next.js routing worker once its Lambdas exist and
 	// their Function URLs are known. Nil unless the project has a Next.js app;
 	// the real cloudflare-go implementation is the end-to-end seam.
@@ -108,6 +116,12 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 	}
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest)
 	if err != nil {
+		return nil, err
+	}
+
+	// A Next app's prerender configs + fallbacks ride to the asset bucket
+	// alongside the function artifacts, keyed by build id. No-op otherwise.
+	if err := uploadPrerenderAssets(ctx, cfg, manifest); err != nil {
 		return nil, err
 	}
 
