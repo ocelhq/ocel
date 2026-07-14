@@ -1,0 +1,23 @@
+{
+  "name": "@ocel/worker-nextjs",
+  "version": "0.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --outdir=dist",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "test": "vitest",
+    "cf-typegen": "wrangler types"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.12.4",
+    "@types/node": "^26.1.1",
+    "typescript": "^5.5.2",
+    "vitest": "~3.2.0",
+    "wrangler": "^4.110.0"
+  },
+  "dependencies": {
+    "@next/routing": "^16.2.10"
+  }
+}
