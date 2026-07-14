@@ -3,6 +3,7 @@ package deploy
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"mime"
@@ -315,6 +316,35 @@ func TestBuildScriptMultipart_AssetsBindingGatedOnCompletionJWT(t *testing.T) {
 	}
 	if !hasAssetBinding(withJWT) {
 		t.Error("assets binding must be present with a completion JWT")
+	}
+}
+
+func TestBuildAssetBatch_EncodesFilePartsPerHash(t *testing.T) {
+	assets := map[string]StaticAsset{
+		"hash-svg": {Path: "/next.svg", Content: []byte("<svg/>"), Hash: "hash-svg"},
+	}
+	body, contentType, err := buildAssetBatch([]string{"hash-svg"}, assets)
+	if err != nil {
+		t.Fatalf("buildAssetBatch: %v", err)
+	}
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse content type: %v", err)
+	}
+	mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	part, err := mr.NextPart()
+	if err != nil {
+		t.Fatalf("read part: %v", err)
+	}
+	if part.FormName() != "hash-svg" || part.FileName() != "hash-svg" {
+		t.Errorf("part name/filename = %q/%q, want the content hash for both", part.FormName(), part.FileName())
+	}
+	if ct := part.Header.Get("Content-Type"); ct != "image/svg+xml" {
+		t.Errorf("part Content-Type = %q, want image/svg+xml", ct)
+	}
+	data, _ := io.ReadAll(part)
+	if string(data) != base64.StdEncoding.EncodeToString([]byte("<svg/>")) {
+		t.Errorf("part body must be the base64-encoded contents, got %q", data)
 	}
 }
 
