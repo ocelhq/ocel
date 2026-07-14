@@ -20,6 +20,7 @@
   "dependencies": {
     "@vercel/nft": "^0.27.4",
     "es-module-lexer": "^1.5.4",
+    "package-manager-detector": "^0.2.11",
     "typescript": "^5.9.3"
   },
   "devDependencies": {

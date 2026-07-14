@@ -14,7 +14,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { buildApp, buildApps, placeFile } from "./build.js";
+import { buildApp, buildApps, detectApp, placeFile } from "./build.js";
+import { sanitizeName } from "./detect.js";
 
 // Import a built entrypoint in a REAL Node ESM process and report the type of
 // its default export. This is what the lambdanode entrypoint does (OCEL_HANDLER points
@@ -67,7 +68,7 @@ describe("buildApp", () => {
     const outDir = freshOut();
     dirs.push(outDir);
 
-    const summary = await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
+    const [summary] = await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
     const funcDir = path.join(outDir, "functions", "api.func");
     // No generated shim: the runtime imports the user's entrypoint directly.
@@ -193,6 +194,7 @@ describe("buildApp", () => {
     dirs.push(outDir);
     const emptyDir = mkdtempSync(path.join(tmpdir(), "nb-empty-"));
     dirs.push(emptyDir);
+    writeFileSync(path.join(emptyDir, "package.json"), JSON.stringify({ dependencies: { express: "5" } }));
 
     await expect(
       buildApp({ name: "api", cwd: emptyDir }, { outDir }),
@@ -202,7 +204,7 @@ describe("buildApp", () => {
   it("honors an explicit entrypoint override", async () => {
     const outDir = freshOut();
     dirs.push(outDir);
-    const summary = await buildApp(
+    const [summary] = await buildApp(
       { name: "api", cwd: fixtureDir, entrypoint: "src/server.ts" },
       { outDir },
     );
@@ -272,6 +274,30 @@ describe("self-contained .func artifact", () => {
     cpSync(funcDir, isolated, { recursive: true });
     const { defaultType } = importEntryInNode(path.join(isolated, "src", "server.js"));
     expect(defaultType).toBe("function");
+  });
+});
+
+describe("framework resolution", () => {
+  it("throws when a configured app's framework can't be detected", async () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "nb-nofw-"));
+    dirs.push(dir);
+    writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { lodash: "4" } }));
+    await expect(buildApp({ name: "x", cwd: dir }, { outDir: dir })).rejects.toThrow(/could not detect a framework/);
+  });
+});
+
+describe("detectApp", () => {
+  it("synthesizes a single app named from the dir with the detected framework", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "nb-detect-"));
+    dirs.push(dir);
+    writeFileSync(path.join(dir, "package.json"), JSON.stringify({ dependencies: { express: "5" } }));
+    expect(detectApp(dir)).toEqual({ name: sanitizeName(path.basename(dir)), cwd: dir, framework: "express" });
+  });
+  it("returns undefined when no framework is detected", () => {
+    const dir = mkdtempSync(path.join(tmpdir(), "nb-nodetect-"));
+    dirs.push(dir);
+    writeFileSync(path.join(dir, "package.json"), JSON.stringify({}));
+    expect(detectApp(dir)).toBeUndefined();
   });
 });
 

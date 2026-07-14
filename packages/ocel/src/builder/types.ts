@@ -5,7 +5,7 @@ export interface AppInput {
   cwd: string;
   /** Explicit entrypoint relative to `cwd`; skips candidate resolution. */
   entrypoint?: string;
-  /** Framework key; defaults to "express". */
+  /** Framework key; when absent it is auto-detected from `cwd`. */
   framework?: string;
 }
 
