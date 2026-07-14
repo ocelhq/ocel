@@ -47,6 +47,13 @@ const (
 	// it), so its Function URL is public this iteration — no IAM in front.
 	functionURLAuthNone = "NONE"
 
+	// functionURLInvokeModeStream deploys every Function URL in response-stream
+	// mode: the service invokes via InvokeWithResponseStream and the lambdanode
+	// bootstrap replies with the http-integration-response streaming contract.
+	// All functions stream (streaming is a superset — small responses stream
+	// fine), so this is unconditional.
+	functionURLInvokeModeStream = "RESPONSE_STREAM"
+
 	// outputKeyFunctionURL is the key registerFunction exports the Function URL
 	// under, read back by collectFunctionOutput.
 	outputKeyFunctionURL = "url"
@@ -187,6 +194,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 	url, err := lambda.NewFunctionUrl(ctx, logicalName+"-url", &lambda.FunctionUrlArgs{
 		FunctionName:      fn.Name,
 		AuthorizationType: pulumi.String(functionURLAuthNone),
+		InvokeMode:        pulumi.String(functionURLInvokeModeStream),
 	})
 	if err != nil {
 		return err
