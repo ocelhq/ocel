@@ -5,11 +5,14 @@ packages:
   - tools/*
   - examples/*
   - tests/*
+  - workers/*
 
 allowBuilds:
   '@bufbuild/buf': true
   esbuild: true
   sharp: true
+  unrs-resolver: true
+  workerd: true
 
 linkWorkspacePackages: true
 
