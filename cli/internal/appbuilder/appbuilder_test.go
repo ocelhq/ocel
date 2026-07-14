@@ -86,6 +86,9 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 	if got, want := gotReq.OutDir, filepath.Join(root, ".ocel", "output"); got != want {
 		t.Errorf("request outDir = %q, want %q", got, want)
 	}
+	if got, want := gotReq.ProjectRoot, root; got != want {
+		t.Errorf("request projectRoot = %q, want %q", got, want)
+	}
 	if len(gotReq.Apps) != 2 {
 		t.Fatalf("request had %d apps, want 2", len(gotReq.Apps))
 	}
@@ -124,16 +127,17 @@ func TestBuild_MissingBuilderPath(t *testing.T) {
 	}
 }
 
-func TestBuild_NoApps_SkipsBuilderAndResetsOutput(t *testing.T) {
+func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 	root := t.TempDir()
-	// A stale artifact from a previous build must not survive to be deployed,
-	// even though the builder never runs with no apps configured.
+	t.Setenv("OCEL_BUILDER_PATH", filepath.Join(t.TempDir(), "cli.js"))
+	// A stale artifact from a previous build must not survive to be deployed.
 	writeFuncConfig(t, filepath.Join(root, ".ocel", "output"), "stale.func",
 		functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express"})
 
-	swapExec(t, func(_ context.Context, _ string, _ []byte, _ io.Writer) error {
-		t.Fatal("builderExec should not run when there are no apps")
-		return nil
+	var gotReq builderRequest
+	swapExec(t, func(_ context.Context, _ string, request []byte, _ io.Writer) error {
+		// Simulate the builder running detection and finding nothing to build.
+		return json.Unmarshal(request, &gotReq)
 	})
 
 	fns, err := Build(context.Background(), &projectconfig.Config{Dir: root}, io.Discard)
@@ -142,6 +146,12 @@ func TestBuild_NoApps_SkipsBuilderAndResetsOutput(t *testing.T) {
 	}
 	if fns != nil {
 		t.Errorf("Build returned %+v, want nil", fns)
+	}
+	if len(gotReq.Apps) != 0 {
+		t.Errorf("request apps = %+v, want empty", gotReq.Apps)
+	}
+	if got, want := gotReq.ProjectRoot, root; got != want {
+		t.Errorf("request projectRoot = %q, want %q", got, want)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".ocel", "output", "functions", "stale.func")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("stale .func survived the reset (stat err = %v)", err)
@@ -305,6 +315,40 @@ func TestBuild_Integration(t *testing.T) {
 	}
 	if fns[0] != want {
 		t.Errorf("function = %+v, want %+v", fns[0], want)
+	}
+}
+
+// TestBuild_Integration_DetectsSingleApp proves the 0-apps path: with no apps
+// configured, the real builder detects the express app at the project root and
+// discovers its function. The function name is the sanitized root dir basename.
+func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
+	if testing.Short() {
+		t.Skip("integration test: spawns real node over the builder")
+	}
+
+	builderPath := filepath.Join(repoRelPath(t, "packages", "ocel"), "dist", "builder", "cli.js")
+	if _, err := os.Stat(builderPath); err != nil {
+		t.Skipf("builder not built: %v; run `pnpm --filter ocel build` first", err)
+	}
+	t.Setenv("OCEL_BUILDER_PATH", builderPath)
+
+	fixtureRoot := repoRelPath(t, "packages", "ocel", "test", "fixtures", "express-app")
+	if _, err := os.Stat(fixtureRoot); err != nil {
+		t.Skipf("fixture not available: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
+
+	var stderr bytes.Buffer
+	fns, err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, &stderr)
+	if err != nil {
+		t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
+	}
+
+	if len(fns) != 1 {
+		t.Fatalf("Build returned %d functions, want 1: %+v", len(fns), fns)
+	}
+	if fns[0].Name != "express-app" || fns[0].Framework != "express" {
+		t.Errorf("detected function = %+v, want name express-app framework express", fns[0])
 	}
 }
 

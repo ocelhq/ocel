@@ -49,8 +49,8 @@ type App struct {
 	Name string
 	// Path is the app's directory, relative to the config dir.
 	Path string
-	// Framework is the app's web framework; only "express" is supported
-	// this iteration.
+	// Framework is the app's web framework, passed through to the builder.
+	// Empty means the builder auto-detects it. The builder validates the value.
 	Framework string
 	// Entrypoint is an optional override relative to Path.
 	Entrypoint string
@@ -106,9 +106,6 @@ type rawConfig struct {
 // defaultCompute is the Ocel-internal compute target applied to every app
 // during normalization. It is not user-settable.
 const defaultCompute = "serverless"
-
-// supportedFramework is the only web framework accepted this iteration.
-const supportedFramework = "express"
 
 // Resolve walks up from startDir to find the nearest ancestor
 // ocel.config.ts, bundles and executes it, and returns its parsed,
@@ -167,9 +164,9 @@ func Resolve(startDir string) (*Config, error) {
 }
 
 // normalizeApps validates the raw apps and applies internal defaults. It is
-// framework-agnostic structural work only: it checks names, paths, and the
-// supported framework, and sets the Ocel-internal compute target. It does not
-// resolve entrypoint candidates or embed any framework-specific knowledge.
+// framework-agnostic structural work only: it checks names and paths and sets
+// the Ocel-internal compute target. Framework validation and detection are the
+// node builder's job — the framework string is passed through untouched.
 func normalizeApps(raw rawConfig) ([]App, error) {
 	if len(raw.Apps) == 0 {
 		return nil, nil
@@ -189,9 +186,6 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 		if a.Path == "" {
 			return nil, fmt.Errorf("app %q is missing required \"path\"", a.Name)
 		}
-		// if a.Framework != supportedFramework {
-		// 	return nil, fmt.Errorf("app %q has unsupported framework %q — only %q is supported", a.Name, a.Framework, supportedFramework)
-		// }
 
 		apps = append(apps, App{
 			Name:       a.Name,

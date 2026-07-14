@@ -586,6 +586,9 @@ importers:
       es-module-lexer:
         specifier: ^1.5.4
         version: 1.7.0
+      package-manager-detector:
+        specifier: ^0.2.11
+        version: 0.2.11
       typescript:
         specifier: ^5.9.3
         version: 5.9.3

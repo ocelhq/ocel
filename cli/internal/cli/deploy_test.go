@@ -397,6 +397,11 @@ export {};
 	t.Setenv(fakeInfraClassEnvVar, "production")
 	t.Setenv(fakeInfraPresentEnvVar, "1")
 
+	// The builder always runs now; default it to no functions so tests that
+	// aren't about app building don't spawn the real node builder. Tests that
+	// need functions override this seam after calling setUpDeployFixture.
+	stubAppFunctions(t, nil)
+
 	return root, sockPath
 }
 

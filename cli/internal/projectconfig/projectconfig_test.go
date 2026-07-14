@@ -319,24 +319,6 @@ export default {
 	}
 }
 
-func TestResolve_AppNonExpressFrameworkErrors(t *testing.T) {
-	root := t.TempDir()
-	writeConfig(t, root, `
-export default {
-  projectId: "proj_123",
-  apps: [{ name: "api", path: "services/api", framework: "fastify" }],
-};
-`)
-
-	_, err := Resolve(root)
-	if err == nil {
-		t.Fatal("Resolve: expected error, got nil")
-	}
-	if !strings.Contains(err.Error(), "fastify") {
-		t.Fatalf("err = %q, want it to name the bad framework %q", err.Error(), "fastify")
-	}
-}
-
 func TestResolve_AppDuplicateNamesError(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
