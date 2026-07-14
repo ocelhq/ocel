@@ -6,8 +6,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"mime"
 	"mime/multipart"
 	"net/textproto"
+	"path"
 
 	"github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
@@ -62,13 +64,13 @@ func (d *cfDeployer) uploadAssets(ctx context.Context, upload WorkerUpload) (str
 	}
 
 	manifest := make(map[string]workers.ScriptAssetUploadNewParamsManifest, len(upload.Assets))
-	contentByHash := make(map[string][]byte, len(upload.Assets))
+	assetByHash := make(map[string]StaticAsset, len(upload.Assets))
 	for _, a := range upload.Assets {
 		manifest[a.Path] = workers.ScriptAssetUploadNewParamsManifest{
 			Hash: cloudflare.F(a.Hash),
 			Size: cloudflare.F(a.Size),
 		}
-		contentByHash[a.Hash] = a.Content
+		assetByHash[a.Hash] = a
 	}
 
 	session, err := d.client.Workers.Scripts.Assets.Upload.New(ctx, upload.ScriptName, workers.ScriptAssetUploadNewParams{
@@ -80,23 +82,33 @@ func (d *cfDeployer) uploadAssets(ctx context.Context, upload WorkerUpload) (str
 	}
 
 	// When every file in the manifest is already present (e.g. a redeploy), the
-	// session returns no buckets to upload and its own JWT is the completion
-	// token. Otherwise each bucket is uploaded and the final response carries the
-	// completion token; the session JWT authenticates those uploads.
-	completionJWT := session.JWT
+	// session returns no buckets and its own JWT is the completion token. When
+	// there are buckets, only a completed batch upload yields the completion
+	// token — the session JWT merely authenticates the uploads.
+	filesToUpload := 0
+	for _, bucket := range session.Buckets {
+		filesToUpload += len(bucket)
+	}
+	if filesToUpload == 0 {
+		if session.JWT == "" {
+			return "", fmt.Errorf("assets session returned no completion token")
+		}
+		return session.JWT, nil
+	}
+
+	completionJWT := ""
 	for _, bucket := range session.Buckets {
 		if len(bucket) == 0 {
 			continue
 		}
-		body := make(map[string]string, len(bucket))
-		for _, hash := range bucket {
-			body[hash] = base64.StdEncoding.EncodeToString(contentByHash[hash])
+		body, contentType, err := buildAssetBatch(bucket, assetByHash)
+		if err != nil {
+			return "", err
 		}
 		res, err := d.client.Workers.Assets.Upload.New(ctx, workers.AssetUploadNewParams{
 			AccountID: cloudflare.F(upload.AccountID),
 			Base64:    cloudflare.F(workers.AssetUploadNewParamsBase64True),
-			Body:      body,
-		}, option.WithHeader("Authorization", "Bearer "+session.JWT))
+		}, option.WithRequestBody(contentType, body), option.WithHeader("Authorization", "Bearer "+session.JWT))
 		if err != nil {
 			return "", fmt.Errorf("upload asset batch: %w", err)
 		}
@@ -104,7 +116,36 @@ func (d *cfDeployer) uploadAssets(ctx context.Context, upload WorkerUpload) (str
 			completionJWT = res.JWT
 		}
 	}
+	if completionJWT == "" {
+		return "", fmt.Errorf("asset upload returned no completion token")
+	}
 	return completionJWT, nil
+}
+
+// buildAssetBatch encodes one bucket of files as the multipart/form-data body
+// the assets upload endpoint expects: one part per file, named and filenamed by
+// its content hash, carrying the base64-encoded contents (the ?base64=true query
+// tells Cloudflare the parts are base64). An unknown extension maps to
+// "application/null" — Cloudflare's sentinel for "serve without a Content-Type",
+// mirroring wrangler.
+func buildAssetBatch(bucket []string, assetByHash map[string]StaticAsset) ([]byte, string, error) {
+	buf := &bytes.Buffer{}
+	w := multipart.NewWriter(buf)
+	for _, hash := range bucket {
+		asset := assetByHash[hash]
+		contentType := mime.TypeByExtension(path.Ext(asset.Path))
+		if contentType == "" {
+			contentType = "application/null"
+		}
+		encoded := base64.StdEncoding.EncodeToString(asset.Content)
+		if err := writePart(w, hash, hash, contentType, []byte(encoded)); err != nil {
+			return nil, "", err
+		}
+	}
+	if err := w.Close(); err != nil {
+		return nil, "", err
+	}
+	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
 // putScript uploads the worker as a multipart module-syntax script: a metadata
