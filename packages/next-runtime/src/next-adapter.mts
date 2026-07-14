@@ -9,9 +9,10 @@ import {
   stat,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 
 const scratchDir = join(process.cwd(), ".ocel/output");
+const launcherName = "__next_launcher.cjs";
 
 const adapter = {
   name: "ocel-adapter",
@@ -44,14 +45,23 @@ const adapter = {
       buildId,
     } = args;
 
-    const functionRoutes = [
+    const allRoutes = [
       ...outputs.pages,
       ...outputs.pagesApi,
       ...outputs.appPages,
       ...outputs.appRoutes,
     ];
 
-    // function routes
+    const functionRoutes = allRoutes.filter((r) => r.runtime === "nodejs");
+    const skipped = allRoutes.length - functionRoutes.length;
+    if (skipped > 0) {
+      console.warn(
+        `ocel: skipping ${skipped} non-nodejs route(s) — only the nodejs runtime is supported`,
+      );
+    }
+
+    const appRel = relative(repoRoot, projectDir);
+
     await Promise.all(
       functionRoutes.map(async (fnRoute) => {
         const funcDir = join(
@@ -63,14 +73,20 @@ const adapter = {
 
         for (const [destRel, srcAbs] of Object.entries(fnRoute.assets)) {
           await copyAsset(srcAbs, join(funcDir, destRel));
-          await copyAsset(fnRoute.filePath, join(funcDir, handlerRel));
         }
+        await copyAsset(fnRoute.filePath, join(funcDir, handlerRel));
+
+        const launcherRel = join(appRel, launcherName);
+        await writeFile(
+          join(funcDir, launcherRel),
+          renderLauncher(relative(projectDir, fnRoute.filePath)),
+        );
 
         await writeFile(
           join(funcDir, "config.json"),
           JSON.stringify({
             runtime: "nodejs24.x",
-            handler: handlerRel,
+            handler: launcherRel,
             framework: "next",
           }),
         );
@@ -146,6 +162,18 @@ const adapter = {
     );
   },
 } satisfies NextAdapter;
+
+function renderLauncher(moduleRel: string): string {
+  const requirePath = "./" + moduleRel.split(sep).join("/");
+  return (
+    [
+      `const { AsyncLocalStorage } = require('node:async_hooks')`,
+      `globalThis.AsyncLocalStorage = AsyncLocalStorage`,
+      `process.env.NODE_ENV ||= 'production'`,
+      `module.exports = require(${JSON.stringify(requirePath)})`,
+    ].join("\n") + "\n"
+  );
+}
 
 async function copyAsset(srcAbs: string, dest: string) {
   if (!existsSync(srcAbs)) return;

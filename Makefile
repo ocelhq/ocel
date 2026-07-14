@@ -46,12 +46,13 @@ proto:
 # node entrypoint into the layer zip. No AWS calls — publishing is separate.
 layer:
 	pnpm --filter @ocel/lambda-entrypoints build
+	rm -rf $(LAYER_DIR)/ocel
 	mkdir -p $(LAYER_DIR)/ocel
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 	  go build -tags lambda.norpc -ldflags="-s -w" \
 	  -o $(CURDIR)/$(LAYER_DIR)/ocel/bootstrap ./cloud/aws/cmd/lambdanode/bootstrap
 	chmod +x $(LAYER_DIR)/ocel/bootstrap
-	cp packages/lambda-entrypoints/dist/node/entrypoint.mjs $(LAYER_DIR)/ocel/node-entrypoint.mjs
+	cp -R packages/lambda-entrypoints/dist/. $(LAYER_DIR)/ocel/
 	rm -f $(LAYER_ZIP)
 	cd $(LAYER_DIR) && zip -r $(CURDIR)/$(LAYER_ZIP) ocel
 
