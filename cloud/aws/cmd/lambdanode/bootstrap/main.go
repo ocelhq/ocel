@@ -7,9 +7,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-
-	"github.com/aws/aws-lambda-go/lambda"
-	"github.com/aws/aws-lambda-go/lambdacontext"
 )
 
 func main() {
@@ -22,26 +19,19 @@ func main() {
 
 	membrane, err := startNode()
 	if err != nil {
-		// Must report init failure BEFORE lambda.Start takes over the loop.
+		// Must report init failure BEFORE we start polling the Runtime API.
 		fatalInit(fmt.Sprintf("failed to start node runtime: %v", err))
 	}
 
-	lambda.Start(membrane)
-}
-
-func (m *Membrane) Invoke(ctx context.Context, payload []byte) ([]byte, error) {
-	lc, _ := lambdacontext.FromContext(ctx)
-
-	// TODO: ocel pre-invoke logic
-
-	resp, err := m.forward(ctx, lc, payload)
-	if err != nil {
-		return nil, err
+	rt := newRuntimeClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
+	ctx := context.Background()
+	for {
+		if err := handleInvocation(ctx, rt, membrane); err != nil {
+			// A Runtime API failure is fatal to the loop; the sandbox is recycled.
+			fmt.Fprintf(os.Stderr, "ocel: runtime loop error: %v\n", err)
+			os.Exit(1)
+		}
 	}
-
-	// TODO: post invoke logic
-
-	return resp, nil
 }
 
 func fatalInit(msg string) {

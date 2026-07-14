@@ -1,82 +1,104 @@
-// cmd/bootstrap/forward.go
 package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
+	"os"
+	"time"
 
 	"github.com/aws/aws-lambda-go/lambdacontext"
 )
 
-// LambdaEvent is the incoming event shape (API Gateway / Ocel proxy style).
-type LambdaEvent struct {
-	Method  string            `json:"method"`
-	Path    string            `json:"path"`
-	Headers map[string]string `json:"headers"`
-	Body    string            `json:"body"`
-}
-
-// ProxyResponse is what we return to Lambda (serialized to the response bytes).
-type ProxyResponse struct {
-	StatusCode int               `json:"statusCode"`
-	Headers    map[string]string `json:"headers"`
-	Body       string            `json:"body"`
-}
-
-// forward turns the Lambda event into a real HTTP request against the user's
-// app on loopback, and turns the HTTP response back into ProxyResponse bytes.
-func (m *Membrane) forward(ctx context.Context, lc *lambdacontext.LambdaContext, payload []byte) ([]byte, error) {
-	var event LambdaEvent
-	if err := json.Unmarshal(payload, &event); err != nil {
-		return nil, fmt.Errorf("bad event payload: %w", err)
-	}
-
-	url := fmt.Sprintf("http://127.0.0.1:%d%s", m.nodePort, event.Path)
-	req, err := http.NewRequestWithContext(ctx, event.Method, url, strings.NewReader(event.Body))
+// handleInvocation runs one iteration of the Runtime API loop: pull the next
+// invocation, open the streaming response, and proxy it through to the user's
+// app on loopback. It returns an error only when the Runtime API itself is
+// unreachable (a failed /next) — that is fatal to the loop. Everything after
+// that, including a failed response delivery, is logged and swallowed so one
+// bad invocation doesn't recycle the sandbox; if the API really is down, the
+// next /next fails and the loop exits then.
+func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error {
+	inv, err := rt.next(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	for k, v := range event.Headers {
-		req.Header.Set(k, v)
+
+	ctx = lambdacontext.NewContext(ctx, inv.lc)
+	if inv.deadlineMs > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithDeadline(ctx, time.UnixMilli(inv.deadlineMs))
+		defer cancel()
+	}
+
+	rw, err := rt.startResponse(ctx, inv.lc.AwsRequestID)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: start response for %s: %v\n", inv.lc.AwsRequestID, err)
+		return nil
+	}
+	if err := m.forward(ctx, inv, rw); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
+	}
+	return nil
+}
+
+// forward turns the Function URL event into a real HTTP request against the
+// user's app on loopback and streams the response back through rw: a prelude
+// (status + headers) followed by the body as it arrives.
+func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWriter) error {
+	ev, err := parseEvent(inv.Payload)
+	if err != nil {
+		return m.fail(rw, fmt.Sprintf("bad event payload: %v", err))
+	}
+
+	req, err := buildLoopbackRequest(ctx, m.nodePort, ev)
+	if err != nil {
+		return m.fail(rw, fmt.Sprintf("build loopback request: %v", err))
 	}
 
 	// Inject internal context the JS wrapper reads per-request (and strips
 	// before the user's app sees it).
-	if lc != nil {
+	if lc, ok := lambdacontext.FromContext(ctx); ok {
 		req.Header.Set("x-ocel-request-id", lc.AwsRequestID)
 		req.Header.Set("x-ocel-function-arn", lc.InvokedFunctionArn)
 	}
 
 	resp, err := m.client.Do(req)
 	if err != nil {
-		return nil, err
+		return m.fail(rw, fmt.Sprintf("upstream request failed: %v", err))
 	}
 	defer resp.Body.Close()
 
-	body, err := io.ReadAll(resp.Body)
+	prelude, err := encodePrelude(resp.StatusCode, resp.Header)
 	if err != nil {
-		return nil, err
+		return m.fail(rw, fmt.Sprintf("encode prelude: %v", err))
+	}
+	if _, err := rw.Write(prelude); err != nil {
+		return err
 	}
 
-	out, err := json.Marshal(ProxyResponse{
-		StatusCode: resp.StatusCode,
-		Headers:    flattenHeaders(resp.Header),
-		Body:       string(body),
-	})
-	if err != nil {
-		return nil, err
+	if _, err := io.Copy(rw, resp.Body); err != nil {
+		// Body is already streaming; the status/prelude can't change, so signal
+		// the truncation via the response's error trailers.
+		return rw.closeWithError(errTypeUpstream, err.Error())
 	}
-	return out, nil
+	return rw.Close()
 }
 
-func flattenHeaders(h http.Header) map[string]string {
-	out := make(map[string]string, len(h))
-	for k := range h {
-		out[k] = h.Get(k) // first value; extend for multi-value if needed
+// fail reports an upstream failure that occurred before any body byte was
+// written: the response hasn't started, so we still own the status and send a
+// clean 502 prelude.
+func (m *Membrane) fail(rw *responseWriter, message string) error {
+	header := http.Header{"Content-Type": []string{"text/plain; charset=utf-8"}}
+	prelude, err := encodePrelude(http.StatusBadGateway, header)
+	if err != nil {
+		return rw.closeWithError(errTypeUpstream, message)
 	}
-	return out
+	if _, err := rw.Write(prelude); err != nil {
+		return err
+	}
+	if _, err := rw.Write([]byte(message)); err != nil {
+		return err
+	}
+	return rw.Close()
 }
