@@ -33,6 +33,7 @@ type goldenFunction struct {
 	Handler      string `json:"handler"`
 	ArtifactPath string `json:"artifact_path"`
 	Framework    string `json:"framework"`
+	RouteID      string `json:"route_id"`
 }
 
 type goldenResource struct {
@@ -66,6 +67,7 @@ func toGolden(m *deploymentsv1.Manifest) goldenManifest {
 			Handler:      f.GetHandler(),
 			ArtifactPath: f.GetArtifactPath(),
 			Framework:    f.GetFramework(),
+			RouteID:      f.GetRouteId(),
 		})
 	}
 	return g
@@ -89,7 +91,7 @@ func synthDeclarations() []Declaration {
 
 func synthFunctions() []Function {
 	return []Function{
-		{Name: "Web API", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
+		{Name: "api/documents", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "next", RouteID: "/api/documents"},
 		{Name: "worker", Runtime: "nodejs24.x", Handler: "app/worker.ts", ArtifactPath: "dist/worker.zip", Framework: ""},
 	}
 }
@@ -334,5 +336,21 @@ func TestBuild_FunctionLogicalNameNormalized(t *testing.T) {
 	}
 	if got := manifest.GetFunctions()[0].GetLogicalName(); got != "web_api" {
 		t.Fatalf("logical_name = %q, want %q", got, "web_api")
+	}
+}
+
+func TestBuild_FunctionRouteIDCarriedDistinctFromLogicalName(t *testing.T) {
+	manifest, err := Build("proj_1", nil, []Function{
+		{Name: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "functions/api/documents.func", Framework: "next", RouteID: "/api/documents"},
+	})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	fn := manifest.GetFunctions()[0]
+	if got, want := fn.GetLogicalName(), "api_documents"; got != want {
+		t.Fatalf("logical_name = %q, want %q", got, want)
+	}
+	if got, want := fn.GetRouteId(), "/api/documents"; got != want {
+		t.Fatalf("route_id = %q, want %q (must be preserved verbatim, not normalized)", got, want)
 	}
 }

@@ -67,6 +67,10 @@ type functionConfig struct {
 	Runtime   string `json:"runtime"`
 	Handler   string `json:"handler"`
 	Framework string `json:"framework"`
+	// ID is the framework-native route identity (e.g. Next's "/api/documents")
+	// a routing layer dispatches to. Optional: frameworks without a routing
+	// layer omit it, so unlike the three fields above it is not required.
+	ID string `json:"id,omitempty"`
 }
 
 // builderExec runs the builder script with the request on stdin. It is a
@@ -198,6 +202,7 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 		Handler:      fc.Handler,
 		ArtifactPath: filepath.ToSlash(artifactRel),
 		Framework:    fc.Framework,
+		RouteID:      fc.ID,
 	}, nil
 }
 

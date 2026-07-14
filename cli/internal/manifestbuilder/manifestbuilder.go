@@ -39,6 +39,11 @@ type Function struct {
 	Handler      string
 	ArtifactPath string
 	Framework    string
+	// RouteID is the framework-native route identity a routing layer dispatches
+	// to (e.g. Next's "/api/documents"), carried verbatim into
+	// ManifestFunction.route_id — unlike Name, it is never normalized. Empty for
+	// functions whose framework has no routing layer.
+	RouteID string
 }
 
 // DuplicateError is returned by Build when two declarations resolve to the
@@ -165,6 +170,7 @@ func Build(projectID string, declarations []Declaration, functions []Function) (
 			Handler:      f.Handler,
 			ArtifactPath: f.ArtifactPath,
 			Framework:    f.Framework,
+			RouteId:      f.RouteID,
 		})
 	}
 	sort.Slice(manifestFunctions, func(i, j int) bool {

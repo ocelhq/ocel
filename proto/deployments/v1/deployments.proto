@@ -144,6 +144,13 @@ message ManifestFunction {
   string handler = 3;
   string artifact_path = 4;
   string framework = 5;
+  // route_id is the framework-native identity a routing layer dispatches to,
+  // distinct from logical_name: logical_name is normalized to an
+  // infrastructure-safe charset (an AWS Lambda name can't hold '/' or '.'),
+  // while route_id preserves the original route (e.g. Next's "/api/documents").
+  // The Cloudflare worker keys FUNCTION_URLS by route_id. Empty for functions
+  // whose framework has no routing layer.
+  string route_id = 6;
 }
 
 // ManifestResource pairs a resource's identity with its typed configuration.

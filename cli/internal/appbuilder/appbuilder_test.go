@@ -209,6 +209,23 @@ func TestCollectFunctions_Nested(t *testing.T) {
 	}
 }
 
+func TestCollectFunctions_RouteIDFromConfig(t *testing.T) {
+	outDir := t.TempDir()
+	writeFuncConfig(t, outDir, filepath.Join("api", "documents.func"),
+		functionConfig{Runtime: "nodejs24.x", Handler: "route.js", Framework: "next", ID: "/api/documents"})
+
+	fns, err := collectFunctions(outDir)
+	if err != nil {
+		t.Fatalf("collectFunctions: %v", err)
+	}
+	if len(fns) != 1 {
+		t.Fatalf("got %d functions, want 1", len(fns))
+	}
+	if got, want := fns[0].RouteID, "/api/documents"; got != want {
+		t.Errorf("RouteID = %q, want %q (config.json id must flow into the function)", got, want)
+	}
+}
+
 func TestCollectFunctions_NoFunctionsDir(t *testing.T) {
 	fns, err := collectFunctions(t.TempDir())
 	if err != nil {
