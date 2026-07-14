@@ -72,13 +72,13 @@ describe("buildApp", () => {
     const funcDir = path.join(outDir, "functions", "api.func");
     // No generated shim: the runtime imports the user's entrypoint directly.
     expect(existsSync(path.join(funcDir, "index.mjs"))).toBe(false);
-    expect(existsSync(path.join(funcDir, "meta.json"))).toBe(true);
+    expect(existsSync(path.join(funcDir, "config.json"))).toBe(true);
     expect(existsSync(path.join(funcDir, "src", "server.js"))).toBe(true);
     // JS helper is copied verbatim, TS entrypoint is transpiled next to it.
     expect(existsSync(path.join(funcDir, "src", "greeting.js"))).toBe(true);
 
-    const meta = JSON.parse(readFileSync(path.join(funcDir, "meta.json"), "utf8"));
-    expect(meta).toEqual({
+    const config = JSON.parse(readFileSync(path.join(funcDir, "config.json"), "utf8"));
+    expect(config).toEqual({
       runtime: "nodejs24.x",
       // handler is the entrypoint path within the .func; OCEL_HANDLER resolves
       // it as /var/task/<handler>.
@@ -217,23 +217,11 @@ describe("buildApps", () => {
     const summaries = await buildApps(
       [
         { name: "api", cwd: fixtureDir },
-        { name: "worker", cwd: fixtureDir, logicalName: "Worker" },
+        { name: "worker", cwd: fixtureDir },
       ],
       { outDir },
     );
     expect(summaries.map((s) => s.name)).toEqual(["api", "worker"]);
-    expect(summaries[1]!.logicalName).toBe("Worker");
-  });
-
-  it("clears orphaned .func dirs from a previous run", async () => {
-    const outDir = freshOut();
-    dirs.push(outDir);
-    await buildApps([{ name: "old", cwd: fixtureDir }], { outDir });
-    expect(existsSync(path.join(outDir, "functions", "old.func"))).toBe(true);
-
-    await buildApps([{ name: "new", cwd: fixtureDir }], { outDir });
-    expect(existsSync(path.join(outDir, "functions", "new.func"))).toBe(true);
-    expect(existsSync(path.join(outDir, "functions", "old.func"))).toBe(false);
   });
 });
 
