@@ -14,10 +14,12 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"golang.org/x/sync/errgroup"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
@@ -227,19 +229,32 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 	if cfg.Uploader == nil {
 		return nil, fmt.Errorf("no artifact uploader configured")
 	}
+
+	g, ctx := errgroup.WithContext(ctx)
+	g.SetLimit(8) // tune: bounded S3 conns + bounded peak memory
+
+	var mu sync.Mutex
 	for _, fn := range functions {
-		dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
-		hash, err := hashArtifact(dir)
-		if err != nil {
-			return nil, err
-		}
-		key := artifactKey(manifest.GetProjectId(), fn.GetLogicalName(), hash)
-		if err := uploadArtifact(ctx, cfg.Uploader, cfg.ArtifactBucket, key, func() ([]byte, error) {
-			return zipDir(dir)
-		}); err != nil {
-			return nil, err
-		}
-		refs[fn.GetLogicalName()] = artifactRef{Bucket: cfg.ArtifactBucket, Key: key}
+		g.Go(func() error {
+			dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
+			hash, err := hashArtifact(dir)
+			if err != nil {
+				return err
+			}
+			key := artifactKey(manifest.GetProjectId(), fn.GetLogicalName(), hash)
+			if err := uploadArtifact(ctx, cfg.Uploader, cfg.ArtifactBucket, key, func() ([]byte, error) {
+				return zipDir(dir)
+			}); err != nil {
+				return err
+			}
+			mu.Lock()
+			refs[fn.GetLogicalName()] = artifactRef{Bucket: cfg.ArtifactBucket, Key: key}
+			mu.Unlock()
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
 	}
 	return refs, nil
 }

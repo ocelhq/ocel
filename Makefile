@@ -15,11 +15,14 @@ LAYER_ZIP := dist/ocel-membrane-layer.zip
 # ---- Aggregates ----------------------------------------------------------
 
 # Local build of every artifact (no AWS side effects; publish-layer is opt-in).
-all: cli provider layer
+all: cli provider layer lib
 
 # All codegen: proto bindings. (The node builder ships in the ocel npm package,
 # built via `pnpm --filter ocel build`, not go generate.)
 generate: proto
+
+lib: 
+	pnpm -F=@ocel/sdk -F=ocel -F=@ocel/next-runtime build
 
 # ---- Binaries ------------------------------------------------------------
 

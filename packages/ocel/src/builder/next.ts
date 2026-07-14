@@ -25,7 +25,7 @@ export async function buildNext(input: AppInput, _options: BuildOptions): Promis
   if (!cmd) throw new Error(`ocel: could not resolve a build command for app "${input.name}"`);
 
   await nextRunner.run(cmd.command, cmd.args, input.cwd);
-  process.stderr.write(`ocel: Next app "${input.name}" built; deploy support is pending\n`);
+  process.stderr.write(`ocel: Next app "${input.name}" built\n`);
   return [];
 }
 
