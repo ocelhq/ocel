@@ -234,6 +234,9 @@ func TestDeployNextWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	if len(up.Modules) != 1 || up.Modules[0].Name != "routing-manifest.json" {
 		t.Errorf("expected the routing manifest module, got %v", up.Modules)
 	}
+	if up.Modules[0].ContentType != "text/plain" {
+		t.Errorf("manifest module Content-Type = %q, want text/plain (no JSON module type exists)", up.Modules[0].ContentType)
+	}
 	if len(up.Assets) != 1 || up.Assets[0].Path != "/next.svg" {
 		t.Errorf("expected the static asset, got %v", up.Assets)
 	}

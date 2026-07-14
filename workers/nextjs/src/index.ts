@@ -129,12 +129,12 @@ async function assetsOr404(
 
 export default {
   async fetch(request, env): Promise<Response> {
-    // The routing manifest is uploaded alongside the worker as a JSON module,
-    // so its parsed object is the module's default export. The variable
-    // specifier keeps esbuild from trying to inline a file that only exists at
-    // deploy time.
+    // The routing manifest is uploaded alongside the worker as a text module
+    // (Cloudflare's module upload has no JSON type), so its default export is the
+    // raw JSON string. The variable specifier keeps esbuild from trying to inline
+    // a file that only exists at deploy time.
     const specifier = "./routing-manifest.json";
-    const manifest = (await import(specifier)).default as Manifest;
+    const manifest = JSON.parse((await import(specifier)).default) as Manifest;
 
     const result = (await resolveRoutes({
       url: new URL(request.url),
