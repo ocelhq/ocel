@@ -1,8 +1,6 @@
 export interface AppInput {
   /** Function name; drives the `<name>.func` artifact directory. */
   name: string;
-  /** Optional stable identifier the Go orchestrator maps to IaC. */
-  logicalName?: string;
   /** App root directory (where the framework project lives). */
   cwd: string;
   /** Explicit entrypoint relative to `cwd`; skips candidate resolution. */
@@ -17,12 +15,13 @@ export interface BuildOptions {
 }
 
 /**
- * One entry of the stdout `functions[]` contract consumed by the Go
- * orchestrator. See README for the full contract shape.
+ * The result of building one app. The builder is otherwise "dumb": it writes
+ * each `.func` (with its `config.json`) under `outDir` and the Go CLI discovers
+ * functions by walking that tree — this summary is an in-process return value,
+ * not a cross-process contract.
  */
 export interface FunctionSummary {
   name: string;
-  logicalName?: string;
   runtime: string;
   handler: string;
   /** `.func` directory relative to `outDir` (e.g. `functions/api.func`). */

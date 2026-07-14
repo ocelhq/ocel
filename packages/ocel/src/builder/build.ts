@@ -298,13 +298,12 @@ export async function buildApp(
   // there is no generated shim.
   const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest).split(path.sep).join("/");
   await writeFile(
-    path.join(funcDir, "meta.json"),
+    path.join(funcDir, "config.json"),
     `${JSON.stringify({ runtime: fw.runtime, handler, framework: fw.name }, null, 2)}\n`,
   );
 
   return {
     name: input.name,
-    logicalName: input.logicalName,
     runtime: fw.runtime,
     handler,
     artifactPath: funcRel,
@@ -316,9 +315,6 @@ export async function buildApps(
   inputs: AppInput[],
   options: BuildOptions,
 ): Promise<FunctionSummary[]> {
-  // Clear the whole output once per run so a .func from an app that's no longer
-  // in `inputs` doesn't linger; per-app builds only touch their own dir after.
-  await rm(path.join(options.outDir, "functions"), { recursive: true, force: true });
   const summaries: FunctionSummary[] = [];
   for (const input of inputs) {
     summaries.push(await buildApp(input, options));

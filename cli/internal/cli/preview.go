@@ -156,6 +156,10 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 	if err != nil {
 		return err
 	}
+	if manifest == nil {
+		fmt.Fprintln(stdout, "Nothing to deploy.")
+		return nil
+	}
 
 	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
 		if err := preflightPreview(ctx, runner, provider); err != nil {

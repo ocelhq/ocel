@@ -2,9 +2,11 @@ import { buildApps } from "./build.js";
 import type { AppInput, BuildOptions } from "./types.js";
 
 /**
- * Runnable entry the CLI resolves at ${OCEL_HOME}/dist/builder/cli.js. Reads a build request as JSON from
- * argv[2] or stdin: `{ outDir, apps: AppInput[] }`. Emits the functions[]
- * contract as a single JSON object to stdout: `{ "functions": [...] }`.
+ * Runnable entry the CLI resolves via OCEL_BUILDER_PATH. Reads a build request
+ * as JSON from argv[2] or stdin: `{ outDir, apps: AppInput[] }`, then builds
+ * each app into `<outDir>/functions/<name>.func` (each carrying a `config.json`).
+ * It writes nothing to stdout: the Go CLI discovers the built functions by
+ * walking the output tree.
  */
 interface BuildRequest extends BuildOptions {
   apps: AppInput[];
@@ -20,8 +22,7 @@ async function readRequest(): Promise<BuildRequest> {
 
 async function main(): Promise<void> {
   const req = await readRequest();
-  const functions = await buildApps(req.apps, { outDir: req.outDir });
-  process.stdout.write(`${JSON.stringify({ functions })}\n`);
+  await buildApps(req.apps, { outDir: req.outDir });
 }
 
 main().catch((err) => {

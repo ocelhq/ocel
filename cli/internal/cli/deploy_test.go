@@ -200,8 +200,8 @@ func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	if !strings.Contains(out, "FUNCTION logical_name=api runtime=nodejs24.x handler=src/server.js artifact_path=output/api framework=express") {
 		t.Errorf("stdout = %q, want the function to have reached the manifest", out)
 	}
-	if strings.Contains(stderr.String(), "no apps configured") {
-		t.Errorf("stderr = %q, want no no-apps warning when an app is configured", stderr.String())
+	if strings.Contains(stderr.String(), "deploying infrastructure only") {
+		t.Errorf("stderr = %q, want no infra-only warning when a function is built", stderr.String())
 	}
 	if !strings.Contains(out, "Deploy succeeded") {
 		t.Errorf("stdout = %q, want a terminal success message", out)
@@ -223,8 +223,8 @@ func TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	if !strings.Contains(stderr.String(), "no apps configured; deploying infrastructure only") {
-		t.Errorf("stderr = %q, want the no-apps warning", stderr.String())
+	if !strings.Contains(stderr.String(), "no functions to deploy; deploying infrastructure only") {
+		t.Errorf("stderr = %q, want the infra-only warning", stderr.String())
 	}
 	if !strings.Contains(stdout.String(), "Deploy succeeded") {
 		t.Errorf("stdout = %q, want resources to still deploy to success", stdout.String())

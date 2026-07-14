@@ -109,6 +109,10 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 	if err != nil {
 		return err
 	}
+	if manifest == nil {
+		fmt.Fprintln(stdout, "Nothing to deploy.")
+		return nil
+	}
 
 	env := &deploymentsv1.Environment{
 		Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
@@ -149,21 +153,27 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 
 // collectAndBuildManifest runs the pre-provision path `ocel deploy` and `ocel
 // preview` share: it collects the declared infrastructure, builds the
-// project's apps into functions, and lowers both into the provider Manifest.
-// When no apps are configured it warns and proceeds infrastructure-only. Any
-// app-build failure aborts here, before any provider is spawned.
+// project's apps into functions (discovered from the build output), and lowers
+// both into the provider Manifest. When the build yields no functions it warns
+// and proceeds infrastructure-only; when there is nothing at all — no functions
+// and no resources — it returns a nil manifest so the caller can exit cleanly.
+// Any app-build failure aborts here, before any provider is spawned.
 func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) (*deploymentsv1.Manifest, error) {
 	resources, err := deploycollector.Collect(ctx, cfg, stdout, stderr)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(cfg.Apps) == 0 {
-		fmt.Fprintln(stderr, "no apps configured; deploying infrastructure only")
-	}
 	functions, err := buildAppFunctions(ctx, cfg, stderr)
 	if err != nil {
 		return nil, err
+	}
+
+	if len(functions) == 0 {
+		if len(resources) == 0 {
+			return nil, nil
+		}
+		fmt.Fprintln(stderr, "no functions to deploy; deploying infrastructure only")
 	}
 
 	return manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources), functions)
