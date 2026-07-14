@@ -1,7 +1,12 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"io"
+	"mime"
+	"mime/multipart"
 	"os"
 	"path/filepath"
 	"testing"
@@ -236,6 +241,80 @@ func TestDeployNextWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	}
 	if len(out) != 1 || out[0].GetFunction().GetUrl() != "https://ocel-proj-prod.acme.workers.dev" {
 		t.Errorf("expected the worker URL output, got %v", out)
+	}
+}
+
+// metadataFromMultipart builds the worker upload body and parses its "metadata"
+// part back into a map for assertion.
+func metadataFromMultipart(t *testing.T, upload WorkerUpload, assetsJWT string) map[string]any {
+	t.Helper()
+	body, contentType, err := buildScriptMultipart(upload, assetsJWT)
+	if err != nil {
+		t.Fatalf("buildScriptMultipart: %v", err)
+	}
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse content type: %v", err)
+	}
+	mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read part: %v", err)
+		}
+		if part.FormName() != "metadata" {
+			continue
+		}
+		data, _ := io.ReadAll(part)
+		var meta map[string]any
+		if err := json.Unmarshal(data, &meta); err != nil {
+			t.Fatalf("unmarshal metadata: %v", err)
+		}
+		return meta
+	}
+	t.Fatal("no metadata part in multipart body")
+	return nil
+}
+
+func hasAssetBinding(meta map[string]any) bool {
+	bindings, _ := meta["bindings"].([]any)
+	for _, b := range bindings {
+		if m, ok := b.(map[string]any); ok && m["type"] == "assets" {
+			return true
+		}
+	}
+	return false
+}
+
+func TestBuildScriptMultipart_AssetsBindingGatedOnCompletionJWT(t *testing.T) {
+	upload := WorkerUpload{
+		ScriptName:   "w",
+		AssetBinding: "ASSETS",
+		Main:         WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("x")},
+		Vars:         map[string]string{"FUNCTION_URLS": "{}"},
+		Assets:       []StaticAsset{{Path: "/a.svg", Hash: "h", Size: 1, Content: []byte("a")}},
+	}
+
+	// Without a completion JWT (e.g. a redeploy where the session returned no
+	// buckets and the token was lost), neither the assets binding nor the assets
+	// metadata may appear — Cloudflare rejects a binding without assets.
+	noJWT := metadataFromMultipart(t, upload, "")
+	if _, ok := noJWT["assets"]; ok {
+		t.Error("assets metadata must be absent without a completion JWT")
+	}
+	if hasAssetBinding(noJWT) {
+		t.Error("assets binding must be absent without a completion JWT")
+	}
+
+	withJWT := metadataFromMultipart(t, upload, "completion-token")
+	if _, ok := withJWT["assets"]; !ok {
+		t.Error("assets metadata must be present with a completion JWT")
+	}
+	if !hasAssetBinding(withJWT) {
+		t.Error("assets binding must be present with a completion JWT")
 	}
 }
 
