@@ -65,24 +65,52 @@ const adapter = {
 
     const appRel = relative(repoRoot, projectDir);
 
+    const funcDirFor = (pathname: string) =>
+      join(
+        `${scratchDir}/functions`,
+        `${pathname === "/" ? "index" : pathname}.func`,
+      );
+
+    // Routes sharing a filePath and config are the same compiled function —
+    // e.g. a page and its `.rsc` variant. Emit one real `.func` per group and
+    // symlink the rest to it, mirroring the Vercel Build Output API. The parent
+    // is the group's shortest pathname: the base route the variants extend, and
+    // the id prerenders reference via parentOutputId.
+    const groups = new Map<string, typeof functionRoutes>();
+    for (const route of functionRoutes) {
+      const key = `${route.filePath}\0${JSON.stringify(route.config)}`;
+      const members = groups.get(key);
+      if (members) members.push(route);
+      else groups.set(key, [route]);
+    }
+
+    const parentIdByPathname = new Map<string, string>();
+    for (const members of groups.values()) {
+      members.sort(
+        (a, b) =>
+          a.pathname.length - b.pathname.length ||
+          (a.pathname < b.pathname ? -1 : 1),
+      );
+      const parentId = members[0]!.id;
+      for (const m of members) parentIdByPathname.set(m.pathname, parentId);
+    }
+
     await Promise.all(
-      functionRoutes.map(async (fnRoute) => {
-        const funcDir = join(
-          `${scratchDir}/functions`,
-          `${fnRoute.pathname === "/" ? "index" : fnRoute.pathname}.func`,
-        );
+      [...groups.values()].map(async (members) => {
+        const parent = members[0]!;
+        const variants = members.slice(1);
+        const funcDir = funcDirFor(parent.pathname);
+        const handlerRel = relative(repoRoot, parent.filePath);
 
-        const handlerRel = relative(repoRoot, fnRoute.filePath);
-
-        for (const [destRel, srcAbs] of Object.entries(fnRoute.assets)) {
+        for (const [destRel, srcAbs] of Object.entries(parent.assets)) {
           await copyAsset(srcAbs, join(funcDir, destRel));
         }
-        await copyAsset(fnRoute.filePath, join(funcDir, handlerRel));
+        await copyAsset(parent.filePath, join(funcDir, handlerRel));
 
         const launcherRel = join(appRel, launcherName);
         await writeFile(
           join(funcDir, launcherRel),
-          renderLauncher(relative(projectDir, fnRoute.filePath)),
+          renderLauncher(relative(projectDir, parent.filePath)),
         );
 
         await writeFile(
@@ -94,9 +122,18 @@ const adapter = {
             // The route's framework-native identity, carried through to
             // ManifestFunction.route_id so the routing layer can key
             // FUNCTION_URLS by it (the Lambda itself keeps an infra-safe name).
-            id: fnRoute.id,
+            id: parent.id,
           }),
         );
+
+        // Each variant reuses the parent Lambda: a relative symlink to the
+        // sibling parent `.func`, so the CLI's function walk (which skips
+        // symlinked `.func` dirs) deploys the parent only.
+        for (const variant of variants) {
+          const variantDir = funcDirFor(variant.pathname);
+          await mkdir(dirname(variantDir), { recursive: true });
+          await symlink(relative(dirname(variantDir), funcDir), variantDir);
+        }
       }),
     );
 
@@ -193,7 +230,10 @@ const adapter = {
       dispatch: Object.fromEntries([
         ...functionRoutes
           .filter((o) => o.runtime !== "edge")
-          .map((o) => [o.pathname, { kind: "lambda", id: o.id }]),
+          .map((o) => [
+            o.pathname,
+            { kind: "lambda", id: parentIdByPathname.get(o.pathname) ?? o.id },
+          ]),
         ...functionRoutes
           .filter((o) => o.runtime === "edge")
           .map((o) => [
@@ -203,12 +243,14 @@ const adapter = {
         ...outputs.staticFiles.map((o) => [o.pathname, { kind: "static" }]),
         ...publicFiles.map((p) => [p.pathname, { kind: "static" }]),
 
-        // TODO: ISR
+        // TODO: ISR. A prerender resolves to its parent output's function (the
+        // base route), the one deployed as a Lambda — its own id is a variant
+        // that was symlinked, not deployed.
         ...outputs.prerenders.map((p) => [
           p.pathname,
           {
             kind: "lambda",
-            id: p.id,
+            id: p.parentOutputId,
             parent: p.parentOutputId,
             revalidate: p.fallback?.initialRevalidate,
           },
