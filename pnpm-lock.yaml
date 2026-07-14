@@ -222,10 +222,13 @@ importers:
         version: 2.12.1(@bufbuild/protobuf@2.12.1)
       '@changesets/cli':
         specifier: ^2.31.0
-        version: 2.31.0(@types/node@20.19.43)
+        version: 2.31.0(@types/node@26.1.1)
       '@connectrpc/validate':
         specifier: ^0.2.0
         version: 0.2.0(@bufbuild/protobuf@2.12.1)(@connectrpc/connect@2.1.2(@bufbuild/protobuf@2.12.1))
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
       esbuild:
         specifier: ^0.24.2
         version: 0.24.2
@@ -522,7 +525,7 @@ importers:
         version: link:../db
       better-auth:
         specifier: ^1.6.23
-        version: 1.6.23(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0))(next@16.2.10(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.22.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)))
+        version: 1.6.23(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0))(next@16.2.10(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.22.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.9(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)))
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0)
@@ -578,8 +581,23 @@ importers:
 
   packages/native-lib/provider-aws-win32-x64: {}
 
+  packages/next-runtime:
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.13.2
+      next:
+        specifier: 16.2.10
+        version: 16.2.10(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+
   packages/ocel:
     dependencies:
+      '@ocel/next-runtime':
+        specifier: workspace:^
+        version: link:../next-runtime
       '@vercel/nft':
         specifier: ^0.27.4
         version: 0.27.10
@@ -2332,6 +2350,9 @@ packages:
   '@types/node@24.13.2':
     resolution: {integrity: sha512-fRa09kZTgu8o71KFcDjUFuc7F+dEbZYZmkI0mg5YBTRs0yMKjYHsq/c0urDKeDb+D5qVgXOdFcuu+DZPKOITwA==}
 
+  '@types/node@26.1.1':
+    resolution: {integrity: sha512-nxAkRSVkN1Y0JC1W8ky/fTfkGsMmcrRsbx+3XoZE+rMOX71kLYTV7fLXpqud1GpbpP5TuffXFqfX7fH2GgZREw==}
+
   '@types/pg@8.20.0':
     resolution: {integrity: sha512-bEPFOaMAHTEP1EzpvHTbmwR8UsFyHSKsRisLIHVMXnpNefSbGA1bD6CVy+qKjGSqmZqNqBDV2azOBo8TgkcVow==}
 
@@ -3750,6 +3771,9 @@ packages:
   undici-types@7.18.2:
     resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
+  undici-types@8.3.0:
+    resolution: {integrity: sha512-j375ScV60dom+YkPFIfTLcOiPxkN/buHz5GobjLhixFuANaNs3C9l4GmrWqejgXWJ7BbJcFYpTEUkS1Ge8bpZQ==}
+
   universalify@0.1.2:
     resolution: {integrity: sha512-rBJeI5CXAlmy1pV+617WB9J63U6XcazHHF2f2dbJix4XzpUF0RS3Zbj0FGIOCAva5P/d/GBOYaACQ1w+0azUkg==}
     engines: {node: '>= 4.0.0'}
@@ -4243,7 +4267,7 @@ snapshots:
     dependencies:
       '@changesets/types': 6.1.0
 
-  '@changesets/cli@2.31.0(@types/node@20.19.43)':
+  '@changesets/cli@2.31.0(@types/node@26.1.1)':
     dependencies:
       '@changesets/apply-release-plan': 7.1.1
       '@changesets/assemble-release-plan': 6.0.10
@@ -4259,7 +4283,7 @@ snapshots:
       '@changesets/should-skip-package': 0.1.2
       '@changesets/types': 6.1.0
       '@changesets/write': 0.4.0
-      '@inquirer/external-editor': 1.0.3(@types/node@20.19.43)
+      '@inquirer/external-editor': 1.0.3(@types/node@26.1.1)
       '@manypkg/get-packages': 1.1.3
       ansi-colors: 4.1.3
       enquirer: 2.4.1
@@ -4837,12 +4861,12 @@ snapshots:
   '@img/sharp-win32-x64@0.34.5':
     optional: true
 
-  '@inquirer/external-editor@1.0.3(@types/node@20.19.43)':
+  '@inquirer/external-editor@1.0.3(@types/node@26.1.1)':
     dependencies:
       chardet: 2.2.0
       iconv-lite: 0.7.3
     optionalDependencies:
-      '@types/node': 20.19.43
+      '@types/node': 26.1.1
 
   '@isaacs/fs-minipass@4.0.1':
     dependencies:
@@ -5166,9 +5190,13 @@ snapshots:
     dependencies:
       undici-types: 7.18.2
 
+  '@types/node@26.1.1':
+    dependencies:
+      undici-types: 8.3.0
+
   '@types/pg@8.20.0':
     dependencies:
-      '@types/node': 20.19.43
+      '@types/node': 24.13.2
       pg-protocol: 1.15.0
       pg-types: 2.2.0
 
@@ -5243,6 +5271,15 @@ snapshots:
       magic-string: 0.30.21
     optionalDependencies:
       vite: 8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
+
+  '@vitest/mocker@4.1.9(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))':
+    dependencies:
+      '@vitest/spy': 4.1.9
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
+    optional: true
 
   '@vitest/pretty-format@4.1.9':
     dependencies:
@@ -5358,7 +5395,7 @@ snapshots:
       - '@cloudflare/workers-types'
       - '@opentelemetry/api'
 
-  better-auth@1.6.23(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0))(next@16.2.10(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.22.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))):
+  better-auth@1.6.23(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0))(next@16.2.10(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4))(pg@8.22.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(vitest@4.1.9(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))):
     dependencies:
       '@better-auth/core': 1.6.23(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.3)(kysely@0.29.2)(nanostores@1.4.0)
       '@better-auth/drizzle-adapter': 1.6.23(@better-auth/core@1.6.23(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(better-call@1.3.7(zod@4.4.3))(jose@6.2.3)(kysely@0.29.2)(nanostores@1.4.0))(@better-auth/utils@0.4.2)(drizzle-orm@0.45.2(@types/pg@8.20.0)(kysely@0.29.2)(pg@8.22.0))
@@ -5384,7 +5421,7 @@ snapshots:
       pg: 8.22.0
       react: 19.2.4
       react-dom: 19.2.4(react@19.2.4)
-      vitest: 4.1.9(@types/node@24.13.2)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
+      vitest: 4.1.9(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
     transitivePeerDependencies:
       - '@cloudflare/workers-types'
       - '@opentelemetry/api'
@@ -6574,6 +6611,8 @@ snapshots:
 
   undici-types@7.18.2: {}
 
+  undici-types@8.3.0: {}
+
   universalify@0.1.2: {}
 
   unpipe@1.0.0: {}
@@ -6611,6 +6650,21 @@ snapshots:
       fsevents: 2.3.3
       jiti: 2.7.0
       tsx: 4.23.0
+
+  vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0):
+    dependencies:
+      lightningcss: 1.32.0
+      picomatch: 4.0.5
+      postcss: 8.5.16
+      rolldown: 1.1.4
+      tinyglobby: 0.2.17
+    optionalDependencies:
+      '@types/node': 26.1.1
+      esbuild: 0.28.1
+      fsevents: 2.3.3
+      jiti: 2.7.0
+      tsx: 4.23.0
+    optional: true
 
   vitest@4.1.9(@types/node@20.19.43)(vite@8.1.3(@types/node@20.19.43)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)):
     dependencies:
@@ -6665,6 +6719,34 @@ snapshots:
       '@types/node': 24.13.2
     transitivePeerDependencies:
       - msw
+
+  vitest@4.1.9(@types/node@26.1.1)(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)):
+    dependencies:
+      '@vitest/expect': 4.1.9
+      '@vitest/mocker': 4.1.9(vite@8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0))
+      '@vitest/pretty-format': 4.1.9
+      '@vitest/runner': 4.1.9
+      '@vitest/snapshot': 4.1.9
+      '@vitest/spy': 4.1.9
+      '@vitest/utils': 4.1.9
+      es-module-lexer: 2.3.0
+      expect-type: 1.4.0
+      magic-string: 0.30.21
+      obug: 2.1.3
+      pathe: 2.0.3
+      picomatch: 4.0.5
+      std-env: 4.1.0
+      tinybench: 2.9.0
+      tinyexec: 1.2.4
+      tinyglobby: 0.2.17
+      tinyrainbow: 3.1.0
+      vite: 8.1.3(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@types/node': 26.1.1
+    transitivePeerDependencies:
+      - msw
+    optional: true
 
   webidl-conversions@3.0.1: {}
 

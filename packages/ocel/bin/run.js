@@ -12,6 +12,7 @@ const require = createRequire(import.meta.url);
 // builder entry directly, without any path stitching of its own.
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const builderPath = join(packageRoot, "dist", "builder", "cli.js");
+const nextAdapterPath = require.resolve("@ocel/next-runtime");
 
 let packageName = "";
 
@@ -41,7 +42,12 @@ try {
   // tooling that may need to resolve other package-relative assets.
   const result = spawnSync(binaryPath, process.argv.slice(2), {
     stdio: "inherit",
-    env: { ...process.env, OCEL_HOME: packageRoot, OCEL_BUILDER_PATH: builderPath },
+    env: {
+      ...process.env,
+      OCEL_HOME: packageRoot,
+      OCEL_BUILDER_PATH: builderPath,
+      NEXT_ADAPTER_PATH: nextAdapterPath,
+    },
   });
   process.exit(result.status);
 } catch (e) {
