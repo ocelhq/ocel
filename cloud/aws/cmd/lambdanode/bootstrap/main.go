@@ -10,8 +10,8 @@ import (
 )
 
 func main() {
-	if _, err := os.Stat("/opt/ocel/node-entrypoint.mjs"); err != nil {
-		fatalInit(fmt.Sprintf("node-entrypoint.mjs not found: %v", err))
+	if _, err := os.Stat("/opt/ocel/node/entrypoint.mjs"); err != nil {
+		fatalInit(fmt.Sprintf("node entrypoint not found: %v", err))
 	}
 	if _, err := os.Stat("/var/lang/bin/node"); err != nil {
 		fatalInit(fmt.Sprintf("node binary not found: %v", err))

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"time"
 )
 
@@ -24,6 +25,25 @@ type serverReadyPayload struct {
 	HTTPPort int `json:"httpPort"`
 }
 
+func entrypointPath() string {
+	const nodeEntry = "/opt/ocel/node/entrypoint.mjs"
+	root := os.Getenv("LAMBDA_TASK_ROOT")
+	if root == "" {
+		root = "/var/task"
+	}
+	data, err := os.ReadFile(filepath.Join(root, "config.json"))
+	if err != nil {
+		return nodeEntry
+	}
+	var cfg struct {
+		Framework string `json:"framework"`
+	}
+	if json.Unmarshal(data, &cfg) == nil && cfg.Framework == "next" {
+		return "/opt/ocel/next/entrypoint.mjs"
+	}
+	return nodeEntry
+}
+
 func startNode() (*Membrane, error) {
 	// TODO: randomize
 	sockPath := "/tmp/ocel-control.sock"
@@ -34,7 +54,7 @@ func startNode() (*Membrane, error) {
 		return nil, err
 	}
 
-	cmd := exec.Command("/var/lang/bin/node", "/opt/ocel/node-entrypoint.mjs")
+	cmd := exec.Command("/var/lang/bin/node", entrypointPath())
 	cmd.Env = append(os.Environ(),
 		"OCEL_CONTROL_SOCKET="+sockPath,
 		"OCEL_HANDLER="+os.Getenv("OCEL_HANDLER"), // user's compiled entry

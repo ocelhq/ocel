@@ -1,12 +1,7 @@
-import net from "node:net";
 import http from "node:http";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
-
-const controlSocket = net.createConnection(process.env.OCEL_CONTROL_SOCKET!);
-function sendControl(type: string, payload: unknown): void {
-  controlSocket.write(JSON.stringify({ type, payload }) + "\n");
-}
+import { sendControl, serveInvoke, startServer, type Invoke } from "../shared/membrane.mjs";
 
 type Loaded =
   | { kind: "server"; value: http.Server }
@@ -77,41 +72,13 @@ function resolveHandler(exported: any): Resolved {
   );
 }
 
-function buildServer(resolved: Resolved): http.Server {
-  if (resolved.type === "server") {
-    return resolved.server;
-  }
-  const requestListener =
-    resolved.type === "node-handler"
-      ? wrapWithOcelContext(resolved.handler)
-      : wrapWithOcelContext(fetchToNodeHandler(resolved.fetch));
-  return http.createServer(requestListener);
+function invokeFor(resolved: Resolved): Invoke {
+  if (resolved.type === "node-handler") return resolved.handler;
+  if (resolved.type === "web-handler") return fetchToNodeHandler(resolved.fetch);
+  throw new Error(`cannot build an invoke for resolved type: ${resolved.type}`);
 }
 
-function wrapWithOcelContext(handler: NodeHandler): http.RequestListener {
-  return (req, res) => {
-    const requestId = req.headers["x-ocel-request-id"];
-    delete req.headers["x-ocel-request-id"];
-    delete req.headers["x-ocel-trace-id"];
-    const start = performance.now();
-    res.once("finish", () => {
-      sendControl("request-end", {
-        requestId,
-        status: res.statusCode,
-        durationMs: performance.now() - start,
-      });
-    });
-    try {
-      handler(req, res);
-    } catch (err: any) {
-      sendControl("log", { level: "error", message: String(err?.stack || err) });
-      if (!res.headersSent) res.writeHead(500);
-      res.end("Internal Server Error");
-    }
-  };
-}
-
-function fetchToNodeHandler(fetchFn: FetchHandler): NodeHandler {
+function fetchToNodeHandler(fetchFn: FetchHandler): Invoke {
   return async (req, res) => {
     const url = `http://${req.headers.host || "localhost"}${req.url}`;
     const body = req.method === "GET" || req.method === "HEAD" ? null : req;
@@ -178,26 +145,11 @@ function interceptListen(): ListenHook {
 
 async function boot(): Promise<void> {
   const loaded = await loadUserApp(process.env.OCEL_HANDLER!);
-
-  let server: http.Server;
   if (loaded.kind === "server") {
-    server = loaded.value;
+    await startServer(loaded.value);
   } else {
-    server = buildServer(resolveHandler(loaded.value));
+    await serveInvoke(invokeFor(resolveHandler(loaded.value)));
   }
-
-  await new Promise<void>((resolve, reject) => {
-    server.on("error", reject);
-    server.listen({ host: "127.0.0.1", port: 0 }, () => {
-      const addr = server.address();
-      if (!addr || typeof addr === "string") {
-        reject(new Error(`unexpected server.address(): ${JSON.stringify(addr)}`));
-        return;
-      }
-      sendControl("server-ready", { httpPort: addr.port });
-      resolve();
-    });
-  });
 }
 
 boot().catch((err) => {
