@@ -198,6 +198,72 @@ func TestUploadArtifact_HeadErrorSurfaces(t *testing.T) {
 // TestZipDir_RoundTrips proves the produced archive contains every source file
 // at its relative path with its contents, so the Lambda package matches the
 // .func tree.
+func TestZipDir_PreservesSymlinks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "real.js"), []byte("module.exports={}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("real.js", filepath.Join(dir, "link.js")); err != nil {
+		t.Fatal(err)
+	}
+
+	data, err := zipDir(dir)
+	if err != nil {
+		t.Fatalf("zipDir: %v", err)
+	}
+	zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	if err != nil {
+		t.Fatalf("open zip: %v", err)
+	}
+
+	entries := map[string]*zip.File{}
+	for _, f := range zr.File {
+		entries[f.Name] = f
+	}
+	link, ok := entries["link.js"]
+	if !ok {
+		t.Fatal("symlink entry missing from zip")
+	}
+	if link.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("link.js zipped as mode %v, want a symlink", link.Mode())
+	}
+	rc, err := link.Open()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, _ := io.ReadAll(rc)
+	rc.Close()
+	if string(target) != "real.js" {
+		t.Errorf("symlink target = %q, want %q", target, "real.js")
+	}
+	if entries["real.js"].Mode()&os.ModeSymlink != 0 {
+		t.Error("real.js should be a regular file, not a symlink")
+	}
+}
+
+func TestHashArtifact_SensitiveToSymlinkTarget(t *testing.T) {
+	build := func(target string) string {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "a.js"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "b.js"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, filepath.Join(dir, "link.js")); err != nil {
+			t.Fatal(err)
+		}
+		h, err := hashArtifact(dir)
+		if err != nil {
+			t.Fatalf("hashArtifact: %v", err)
+		}
+		return h
+	}
+	if build("a.js") == build("b.js") {
+		t.Error("hash ignored the symlink target")
+	}
+}
+
 func TestZipDir_RoundTrips(t *testing.T) {
 	dir := writeTree(t, map[string]string{
 		"src/server.js": "handler",
