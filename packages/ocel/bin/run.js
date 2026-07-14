@@ -12,7 +12,9 @@ const require = createRequire(import.meta.url);
 // builder entry directly, without any path stitching of its own.
 const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const builderPath = join(packageRoot, "dist", "builder", "cli.js");
+
 const nextAdapterPath = require.resolve("@ocel/next-runtime");
+const nextWorkerPath = require.resolve("@ocel/worker-nextjs")
 
 let packageName = "";
 
@@ -47,6 +49,7 @@ try {
       OCEL_HOME: packageRoot,
       OCEL_BUILDER_PATH: builderPath,
       NEXT_ADAPTER_PATH: nextAdapterPath,
+      OCEL_NEXT_WORKER_PATH: nextWorkerPath
     },
   });
   process.exit(result.status);

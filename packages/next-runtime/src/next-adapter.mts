@@ -54,6 +54,8 @@ const adapter = {
       ...outputs.appRoutes,
     ];
 
+    const routableOutputs = [...allRoutes, ...outputs.staticFiles];
+
     const functionRoutes = allRoutes.filter((r) => r.runtime === "nodejs");
     const skipped = allRoutes.length - functionRoutes.length;
     if (skipped > 0) {
@@ -161,6 +163,43 @@ const adapter = {
     writeFileSync(
       `${scratchDir}/isr-cache.json`,
       JSON.stringify(Object.fromEntries(cacheMap)),
+    );
+
+    const routingManifest = {
+      buildId,
+      basePath: config.basePath || "",
+      i18n: config.i18n ?? undefined,
+      pathnames: routableOutputs.map((o) => o.pathname),
+      routes: routing,
+
+      dispatch: Object.fromEntries([
+        ...functionRoutes
+          .filter((o) => o.runtime !== "edge")
+          .map((o) => [o.pathname, { kind: "lambda", id: o.id }]),
+        ...functionRoutes
+          .filter((o) => o.runtime === "edge")
+          .map((o) => [
+            o.pathname,
+            { kind: "edge", entryKey: o.edgeRuntime?.entryKey },
+          ]),
+        ...outputs.staticFiles.map((o) => [o.pathname, { kind: "static" }]),
+
+        // TODO: ISR
+        ...outputs.prerenders.map((p) => [
+          p.pathname,
+          {
+            kind: "lambda",
+            id: p.id,
+            parent: p.parentOutputId,
+            revalidate: p.fallback?.initialRevalidate,
+          },
+        ]),
+      ]),
+    };
+
+    writeFileSync(
+      `${scratchDir}/routing-manifest.json`,
+      JSON.stringify(routingManifest),
     );
   },
 } satisfies NextAdapter;
