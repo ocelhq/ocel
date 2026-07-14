@@ -1,64 +1,67 @@
-// node-entrypoint.mjs — the Node-side entrypoint the lambdanode Go bootstrap
-// launches: it loads the user's app, adapts it (Express/handler/fetch), wraps
-// each request in Ocel context, and serves it on an ephemeral loopback port.
 import net from "node:net";
 import http from "node:http";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 
-var controlSocket = net.createConnection(process.env.OCEL_CONTROL_SOCKET);
-function sendControl(type, payload) {
+const controlSocket = net.createConnection(process.env.OCEL_CONTROL_SOCKET!);
+function sendControl(type: string, payload: unknown): void {
   controlSocket.write(JSON.stringify({ type, payload }) + "\n");
 }
 
-async function loadUserApp(entrypoint) {
-  const href = isAbsolute(entrypoint)
-    ? pathToFileURL(entrypoint).href
-    : entrypoint;
+type Loaded =
+  | { kind: "server"; value: http.Server }
+  | { kind: "export"; value: unknown };
+
+async function loadUserApp(entrypoint: string): Promise<Loaded> {
+  const href = isAbsolute(entrypoint) ? pathToFileURL(entrypoint).href : entrypoint;
 
   const listenHook = interceptListen();
 
-  const importPromise = import(href).then((mod) => {
-    let exported = mod;
+  const importPromise: Promise<Loaded> = import(href).then((mod) => {
+    let exported: any = mod;
     for (let i = 0; i < 5; i++) {
       if (exported.default) exported = exported.default;
     }
     return { kind: "export", value: exported };
   });
 
-  const serverPromise = listenHook
+  const serverPromise: Promise<Loaded> = listenHook
     .waitForServer()
     .then((server) => ({ kind: "server", value: server }));
 
   const result = await Promise.race([
     serverPromise,
     importPromise.then((r) => {
-      // If the export itself is a server or app, prefer it; otherwise keep
-      // waiting for a .listen() capture (Nest resolves via serverPromise).
-      if (
-        r.value &&
-        (typeof r.value === "function" || typeof r.value.listen === "function")
-      ) {
+      // Prefer the export if it's itself a server/app; otherwise keep waiting
+      // for a .listen() capture (Nest resolves via serverPromise).
+      const v = r.value as any;
+      if (v && (typeof v === "function" || typeof v.listen === "function")) {
         return r;
       }
-      return serverPromise; // no useful export → must be a listen-based app
+      return serverPromise;
     }),
   ]);
 
   listenHook.restore();
-  return result; // { kind: "server" | "export", value }
+  return result;
 }
 
-function resolveHandler(exported) {
-  // Callable check MUST come first. An Express `app` is a function AND has a
-  // `.listen` method — if we checked `.listen` first, Express would wrongly
-  // match the "server" branch, we'd return the app as-is, and app.address()
-  // (which doesn't exist) would throw. Checking callability first routes
-  // Express to node-handler, so WE wrap it in http.createServer ourselves.
+type NodeHandler = (req: http.IncomingMessage, res: http.ServerResponse) => void;
+type FetchHandler = (request: Request) => Response | Promise<Response>;
+
+type Resolved =
+  | { type: "server"; server: http.Server }
+  | { type: "node-handler"; handler: NodeHandler }
+  | { type: "web-handler"; fetch: FetchHandler };
+
+function resolveHandler(exported: any): Resolved {
+  // Callability MUST be checked before `.listen`: an Express `app` is both a
+  // function and has `.listen`, so a `.listen`-first check would route it to
+  // the "server" branch, and app.address() (nonexistent) would later throw.
+  // Treating it as a node-handler makes us wrap it in http.createServer.
   if (typeof exported === "function") {
     return { type: "node-handler", handler: exported };
   }
-  // Only a genuine, non-callable http.Server instance reaches here.
   if (exported && typeof exported.listen === "function") {
     return { type: "server", server: exported };
   }
@@ -74,24 +77,20 @@ function resolveHandler(exported) {
   );
 }
 
-function buildServer(resolved) {
-  let requestListener;
+function buildServer(resolved: Resolved): http.Server {
   if (resolved.type === "server") {
     return resolved.server;
   }
-  if (resolved.type === "node-handler") {
-    requestListener = wrapWithOcelContext(resolved.handler);
-  }
-  if (resolved.type === "web-handler") {
-    requestListener = wrapWithOcelContext(fetchToNodeHandler(resolved.fetch));
-  }
+  const requestListener =
+    resolved.type === "node-handler"
+      ? wrapWithOcelContext(resolved.handler)
+      : wrapWithOcelContext(fetchToNodeHandler(resolved.fetch));
   return http.createServer(requestListener);
 }
 
-function wrapWithOcelContext(handler) {
+function wrapWithOcelContext(handler: NodeHandler): http.RequestListener {
   return (req, res) => {
     const requestId = req.headers["x-ocel-request-id"];
-    const traceId = req.headers["x-ocel-trace-id"];
     delete req.headers["x-ocel-request-id"];
     delete req.headers["x-ocel-trace-id"];
     const start = performance.now();
@@ -104,27 +103,24 @@ function wrapWithOcelContext(handler) {
     });
     try {
       handler(req, res);
-    } catch (err) {
-      sendControl("log", {
-        level: "error",
-        message: String(err?.stack || err),
-      });
+    } catch (err: any) {
+      sendControl("log", { level: "error", message: String(err?.stack || err) });
       if (!res.headersSent) res.writeHead(500);
       res.end("Internal Server Error");
     }
   };
 }
 
-function fetchToNodeHandler(fetchFn) {
+function fetchToNodeHandler(fetchFn: FetchHandler): NodeHandler {
   return async (req, res) => {
     const url = `http://${req.headers.host || "localhost"}${req.url}`;
-    const body = ["GET", "HEAD"].includes(req.method) ? null : req;
+    const body = req.method === "GET" || req.method === "HEAD" ? null : req;
     const request = new Request(url, {
       method: req.method,
-      headers: req.headers,
-      body,
+      headers: req.headers as any,
+      body: body as any,
       duplex: "half",
-    });
+    } as RequestInit);
     const response = await fetchFn(request);
     res.writeHead(response.status, Object.fromEntries(response.headers));
     if (response.body) {
@@ -139,7 +135,7 @@ function fetchToNodeHandler(fetchFn) {
   };
 }
 
-function dispatchByMethod(exported) {
+function dispatchByMethod(exported: any): FetchHandler {
   return (request) => {
     const fn = exported[request.method];
     if (typeof fn !== "function") return new Response(null, { status: 405 });
@@ -147,26 +143,28 @@ function dispatchByMethod(exported) {
   };
 }
 
-function interceptListen() {
+interface ListenHook {
+  waitForServer: () => Promise<http.Server>;
+  restore: () => void;
+}
+
+function interceptListen(): ListenHook {
   const realListen = http.Server.prototype.listen;
-  let captured = null;
-  const waiters = [];
+  let captured: http.Server | null = null;
+  const waiters: Array<(server: http.Server) => void> = [];
 
-  http.Server.prototype.listen = function (...args) {
-    // Restore the real listen immediately so our own later listen() works.
+  http.Server.prototype.listen = function (this: http.Server, ...args: any[]) {
+    // Restore immediately so our own later listen() binds for real; the user's
+    // .listen() is captured but never actually binds their port.
     http.Server.prototype.listen = realListen;
-
-    captured = this; // `this` is the http.Server Express/Nest created internally
-
+    captured = this;
     const cb = args.find((a) => typeof a === "function");
     if (cb) setImmediate(cb);
-
     waiters.forEach((w) => w(this));
-    return this; // pretend we bound; we did NOT actually bind the user's port
-  };
+    return this;
+  } as typeof http.Server.prototype.listen;
 
   return {
-    // resolves as soon as the user calls .listen()
     waitForServer: () =>
       new Promise((resolve) => {
         if (captured) resolve(captured);
@@ -178,28 +176,22 @@ function interceptListen() {
   };
 }
 
-async function boot() {
-  const loaded = await loadUserApp(process.env.OCEL_HANDLER);
+async function boot(): Promise<void> {
+  const loaded = await loadUserApp(process.env.OCEL_HANDLER!);
 
-  let server;
+  let server: http.Server;
   if (loaded.kind === "server") {
-    // User called .listen(); we captured their real http.Server. Use it directly.
     server = loaded.value;
   } else {
-    // Export-based path
-    const resolved = resolveHandler(loaded.value);
-    server = buildServer(resolved);
+    server = buildServer(resolveHandler(loaded.value));
   }
 
-  await new Promise((resolve, reject) => {
+  await new Promise<void>((resolve, reject) => {
     server.on("error", reject);
-    // OUR real listen on an ephemeral loopback port — same for both paths.
     server.listen({ host: "127.0.0.1", port: 0 }, () => {
       const addr = server.address();
       if (!addr || typeof addr === "string") {
-        reject(
-          new Error(`unexpected server.address(): ${JSON.stringify(addr)}`),
-        );
+        reject(new Error(`unexpected server.address(): ${JSON.stringify(addr)}`));
         return;
       }
       sendControl("server-ready", { httpPort: addr.port });
