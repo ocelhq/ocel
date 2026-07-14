@@ -41,7 +41,12 @@ func walkRegularFiles(dir string) ([]string, error) {
 		if err != nil {
 			return err
 		}
-		if d.IsDir() || !d.Type().IsRegular() {
+		if d.IsDir() {
+			return nil
+		}
+		// Regular files and symlinks only; symlinks carry pnpm's node_modules
+		// structure and must survive into the package.
+		if !d.Type().IsRegular() && d.Type()&fs.ModeSymlink == 0 {
 			return nil
 		}
 		rel, err := filepath.Rel(dir, path)
@@ -71,14 +76,25 @@ func hashArtifact(dir string) (string, error) {
 	h := sha256.New()
 	for _, rel := range rels {
 		full := filepath.Join(dir, rel)
-		info, err := os.Stat(full)
+		info, err := os.Lstat(full)
 		if err != nil {
 			return "", err
 		}
 		// Length-prefix the path so no two distinct (path, contents) layouts can
-		// collide by concatenation, and fold in the executable bit (it changes
-		// whether Lambda can exec a bundled binary).
+		// collide by concatenation. The tag byte after it is 0/1 for a regular
+		// file's executable bit, 2 for a symlink whose target follows.
 		writeLenPrefixed(h, []byte(rel))
+
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(full)
+			if err != nil {
+				return "", err
+			}
+			h.Write([]byte{2})
+			writeLenPrefixed(h, []byte(target))
+			continue
+		}
+
 		var execBit [1]byte
 		if info.Mode()&0o100 != 0 {
 			execBit[0] = 1
@@ -129,7 +145,7 @@ func zipDir(dir string) ([]byte, error) {
 	zw := zip.NewWriter(&buf)
 	for _, rel := range rels {
 		full := filepath.Join(dir, rel)
-		info, err := os.Stat(full)
+		info, err := os.Lstat(full)
 		if err != nil {
 			return nil, err
 		}
@@ -142,6 +158,18 @@ func zipDir(dir string) ([]byte, error) {
 		w, err := zw.CreateHeader(header)
 		if err != nil {
 			return nil, err
+		}
+		// FileInfoHeader carries the symlink mode; a symlink entry's body is its
+		// target path, which unzip on Lambda recreates as a link.
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(full)
+			if err != nil {
+				return nil, err
+			}
+			if _, err := io.WriteString(w, target); err != nil {
+				return nil, fmt.Errorf("zip artifact %s: %w", dir, err)
+			}
+			continue
 		}
 		if err := copyFileInto(w, full); err != nil {
 			return nil, fmt.Errorf("zip artifact %s: %w", dir, err)
