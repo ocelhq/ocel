@@ -208,8 +208,6 @@ func runNode(ctx context.Context, scriptPath string, request []byte, stderr io.W
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
 	cmd.Stdin = bytes.NewReader(request)
-	// The builder's stdout is no longer a contract; forward it, like stderr, as
-	// progress for the user.
 	cmd.Stdout = stderr
 
 	var capturedErr bytes.Buffer

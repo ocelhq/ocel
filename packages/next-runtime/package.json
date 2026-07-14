@@ -2,7 +2,8 @@
   "name": "@ocel/next-runtime",
   "version": "0.0.0",
   "private": true,
-  "main": "./dist/next-adapter.cjs",
+  "type": "module",
+  "main": "./dist/next-adapter.mjs",
   "scripts": {
     "build": "tsc",
     "typecheck": "tsc --noEmit"

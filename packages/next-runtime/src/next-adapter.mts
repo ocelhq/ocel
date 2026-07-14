@@ -1,8 +1,15 @@
 import type { NextAdapter } from "next";
-import { PHASE_PRODUCTION_BUILD } from "next/constants";
+import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { copyFile, cp, mkdir, realpath, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import {
+  copyFile,
+  cp,
+  mkdir,
+  realpath,
+  stat,
+  writeFile,
+} from "node:fs/promises";
+import { dirname, join, relative } from "node:path";
 
 const scratchDir = join(process.cwd(), ".ocel/output");
 
@@ -24,6 +31,8 @@ const adapter = {
   },
 
   async onBuildComplete(args) {
+    writeFileSync("args.json", JSON.stringify({ args }, null, 2));
+
     const {
       routing,
       outputs,
@@ -50,9 +59,21 @@ const adapter = {
           `${fnRoute.pathname === "/" ? "index" : fnRoute.pathname}.func`,
         );
 
+        const handlerRel = relative(repoRoot, fnRoute.filePath);
+
         for (const [destRel, srcAbs] of Object.entries(fnRoute.assets)) {
           await copyAsset(srcAbs, join(funcDir, destRel));
+          await copyAsset(fnRoute.filePath, join(funcDir, handlerRel));
         }
+
+        await writeFile(
+          join(funcDir, "config.json"),
+          JSON.stringify({
+            runtime: "nodejs24.x",
+            handler: handlerRel,
+            framework: "next",
+          }),
+        );
       }),
     );
 
@@ -127,15 +148,22 @@ const adapter = {
 } satisfies NextAdapter;
 
 async function copyAsset(srcAbs: string, dest: string) {
-  // Dereference: pnpm entries are symlinks to the real package dir/file.
+  if (!existsSync(srcAbs)) return;
   const real = await realpath(srcAbs);
-  const st = await stat(real); // statSync already follows symlinks; realpath guards nested ones
-  mkdir(dirname(dest), { recursive: true });
+  const st = await stat(real);
   if (st.isDirectory()) {
-    await cp(real, dest, { recursive: true, dereference: true });
-  } else {
-    await copyFile(real, dest);
+    // Package-root markers from the tracer — copy only package.json,
+    // not the whole tree. The specific files are separate asset entries.
+    const pkg = join(real, "package.json");
+    if (existsSync(pkg)) {
+      const pkgDest = join(dest, "package.json");
+      await mkdir(dirname(pkgDest), { recursive: true });
+      await copyFile(pkg, pkgDest);
+    }
+    return;
   }
+  await mkdir(dirname(dest), { recursive: true });
+  await copyFile(real, dest);
 }
 
 export default adapter;
