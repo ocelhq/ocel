@@ -347,11 +347,18 @@ type ManifestFunction struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// logical_name is the app name normalized by the same rule as
 	// ManifestResource.logical_name. Deterministic across declaration order.
-	LogicalName   string `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
-	Runtime       string `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
-	Handler       string `protobuf:"bytes,3,opt,name=handler,proto3" json:"handler,omitempty"`
-	ArtifactPath  string `protobuf:"bytes,4,opt,name=artifact_path,json=artifactPath,proto3" json:"artifact_path,omitempty"`
-	Framework     string `protobuf:"bytes,5,opt,name=framework,proto3" json:"framework,omitempty"`
+	LogicalName  string `protobuf:"bytes,1,opt,name=logical_name,json=logicalName,proto3" json:"logical_name,omitempty"`
+	Runtime      string `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
+	Handler      string `protobuf:"bytes,3,opt,name=handler,proto3" json:"handler,omitempty"`
+	ArtifactPath string `protobuf:"bytes,4,opt,name=artifact_path,json=artifactPath,proto3" json:"artifact_path,omitempty"`
+	Framework    string `protobuf:"bytes,5,opt,name=framework,proto3" json:"framework,omitempty"`
+	// route_id is the framework-native identity a routing layer dispatches to,
+	// distinct from logical_name: logical_name is normalized to an
+	// infrastructure-safe charset (an AWS Lambda name can't hold '/' or '.'),
+	// while route_id preserves the original route (e.g. Next's "/api/documents").
+	// The Cloudflare worker keys FUNCTION_URLS by route_id. Empty for functions
+	// whose framework has no routing layer.
+	RouteId       string `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -417,6 +424,13 @@ func (x *ManifestFunction) GetArtifactPath() string {
 func (x *ManifestFunction) GetFramework() string {
 	if x != nil {
 		return x.Framework
+	}
+	return ""
+}
+
+func (x *ManifestFunction) GetRouteId() string {
+	if x != nil {
+		return x.RouteId
 	}
 	return ""
 }
@@ -1666,13 +1680,14 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12>\n" +
 	"\tresources\x18\x03 \x03(\v2 .deployments.v1.ManifestResourceR\tresources\x12>\n" +
-	"\tfunctions\x18\x04 \x03(\v2 .deployments.v1.ManifestFunctionR\tfunctions\"\xac\x01\n" +
+	"\tfunctions\x18\x04 \x03(\v2 .deployments.v1.ManifestFunctionR\tfunctions\"\xc7\x01\n" +
 	"\x10ManifestFunction\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12\x18\n" +
 	"\aruntime\x18\x02 \x01(\tR\aruntime\x12\x18\n" +
 	"\ahandler\x18\x03 \x01(\tR\ahandler\x12#\n" +
 	"\rartifact_path\x18\x04 \x01(\tR\fartifactPath\x12\x1c\n" +
-	"\tframework\x18\x05 \x01(\tR\tframework\"\xef\x01\n" +
+	"\tframework\x18\x05 \x01(\tR\tframework\x12\x19\n" +
+	"\broute_id\x18\x06 \x01(\tR\arouteId\"\xef\x01\n" +
 	"\x10ManifestResource\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12<\n" +
 	"\bresource\x18\x02 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
