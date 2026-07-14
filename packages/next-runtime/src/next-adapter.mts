@@ -35,8 +35,6 @@ const adapter = {
   },
 
   async onBuildComplete(args) {
-    writeFileSync("args.json", JSON.stringify({ args }, null, 2));
-
     const {
       routing,
       outputs,
