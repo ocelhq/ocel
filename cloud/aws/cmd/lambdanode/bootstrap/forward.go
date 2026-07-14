@@ -36,24 +36,40 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error
 		fmt.Fprintf(os.Stderr, "ocel: start response for %s: %v\n", inv.lc.AwsRequestID, err)
 		return nil
 	}
-	if err := m.forward(ctx, inv, rw); err != nil {
+
+	// Register before forwarding so a fast completion signal can't race the
+	// waiter into existence.
+	waiter := m.registerWaiter(inv.lc.AwsRequestID)
+	reached, err := m.forward(ctx, inv, rw)
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: deliver response for %s: %v\n", inv.lc.AwsRequestID, err)
 	}
+	if !reached {
+		// Node never processed the request, so no invocation-complete is coming;
+		// release the waiter rather than stalling to the deadline.
+		m.signalComplete(inv.lc.AwsRequestID)
+	}
+	// The response is delivered; hold the loop (and the sandbox) open until the
+	// JS side reports every waitUntil promise has settled.
+	m.awaitCompletion(ctx, inv.lc.AwsRequestID, waiter)
 	return nil
 }
 
 // forward turns the Function URL event into a real HTTP request against the
 // user's app on loopback and streams the response back through rw: a prelude
-// (status + headers) followed by the body as it arrives.
-func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWriter) error {
+// (status + headers) followed by the body as it arrives. reached reports
+// whether the request actually reached Node and got a response — once true, the
+// JS wrapper has run and will report invocation-complete, so the loop must wait
+// for it; while false, no completion will ever come.
+func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWriter) (reached bool, err error) {
 	ev, err := parseEvent(inv.Payload)
 	if err != nil {
-		return m.fail(rw, fmt.Sprintf("bad event payload: %v", err))
+		return false, m.fail(rw, fmt.Sprintf("bad event payload: %v", err))
 	}
 
 	req, err := buildLoopbackRequest(ctx, m.nodePort, ev)
 	if err != nil {
-		return m.fail(rw, fmt.Sprintf("build loopback request: %v", err))
+		return false, m.fail(rw, fmt.Sprintf("build loopback request: %v", err))
 	}
 
 	// Inject internal context the JS wrapper reads per-request (and strips
@@ -65,24 +81,24 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 
 	resp, err := m.client.Do(req)
 	if err != nil {
-		return m.fail(rw, fmt.Sprintf("upstream request failed: %v", err))
+		return false, m.fail(rw, fmt.Sprintf("upstream request failed: %v", err))
 	}
 	defer resp.Body.Close()
 
 	prelude, err := encodePrelude(resp.StatusCode, resp.Header)
 	if err != nil {
-		return m.fail(rw, fmt.Sprintf("encode prelude: %v", err))
+		return true, m.fail(rw, fmt.Sprintf("encode prelude: %v", err))
 	}
 	if _, err := rw.Write(prelude); err != nil {
-		return err
+		return true, err
 	}
 
 	if _, err := io.Copy(rw, resp.Body); err != nil {
 		// Body is already streaming; the status/prelude can't change, so signal
 		// the truncation via the response's error trailers.
-		return rw.closeWithError(errTypeUpstream, err.Error())
+		return true, rw.closeWithError(errTypeUpstream, err.Error())
 	}
-	return rw.Close()
+	return true, rw.Close()
 }
 
 // fail reports an upstream failure that occurred before any body byte was

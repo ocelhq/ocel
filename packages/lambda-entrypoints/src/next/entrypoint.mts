@@ -2,10 +2,6 @@ import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { sendControl, serveInvoke, type Invoke } from "../shared/membrane.mjs";
 
-const waitUntil = (p: Promise<unknown>): void => {
-  void Promise.resolve(p).catch(() => {});
-};
-
 async function boot(): Promise<void> {
   // OCEL_HANDLER points at the generated launcher beside the app's .next dir,
   // so its dirname is the Next project root and its default export is the
@@ -20,9 +16,9 @@ async function boot(): Promise<void> {
     throw new Error(`Next launcher ${handlerPath} does not export a handler function`);
   }
 
-  const invoke: Invoke = (req, res) =>
+  const invoke: Invoke = (req, res, ocel) =>
     handler(req, res, {
-      waitUntil,
+      waitUntil: ocel.waitUntil,
       requestMeta: { relativeProjectDir, hostname: req.headers.host },
     });
 
