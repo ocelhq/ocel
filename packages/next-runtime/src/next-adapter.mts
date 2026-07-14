@@ -4,9 +4,11 @@ import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import {
   copyFile,
   cp,
+  lstat,
   mkdir,
-  realpath,
-  stat,
+  readlink,
+  rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
@@ -176,22 +178,26 @@ function renderLauncher(moduleRel: string): string {
 }
 
 async function copyAsset(srcAbs: string, dest: string) {
-  if (!existsSync(srcAbs)) return;
-  const real = await realpath(srcAbs);
-  const st = await stat(real);
-  if (st.isDirectory()) {
-    // Package-root markers from the tracer — copy only package.json,
-    // not the whole tree. The specific files are separate asset entries.
-    const pkg = join(real, "package.json");
-    if (existsSync(pkg)) {
-      const pkgDest = join(dest, "package.json");
-      await mkdir(dirname(pkgDest), { recursive: true });
-      await copyFile(pkg, pkgDest);
-    }
+  let info;
+  try {
+    info = await lstat(srcAbs);
+  } catch {
     return;
   }
   await mkdir(dirname(dest), { recursive: true });
-  await copyFile(real, dest);
+  // Preserve symlinks verbatim: the tracer emits pnpm's node_modules as a
+  // forest of links, and dereferencing them collapses package roots into
+  // unresolvable stubs. The link targets are copied as their own asset entries.
+  if (info.isSymbolicLink()) {
+    await rm(dest, { recursive: true, force: true });
+    await symlink(await readlink(srcAbs), dest);
+    return;
+  }
+  if (info.isDirectory()) {
+    await cp(srcAbs, dest, { recursive: true });
+    return;
+  }
+  await copyFile(srcAbs, dest);
 }
 
 export default adapter;
