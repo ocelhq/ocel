@@ -195,6 +195,120 @@ async function synthDedupProject() {
   return { projectDir, args };
 }
 
+// A build result centred on prerenders: the root page (/ and /index.rsc) plus
+// its PPR segment, each with an on-disk fallback body and a rich config, so the
+// tests can assert the emitted .prerender-config.json / .prerender-fallback.*
+// pairs preserve Next's raw fields and the segment folder structure.
+async function synthPrerenderProject() {
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-isr-"));
+
+  const pageHandler = join(projectDir, ".next/server/app/page.js");
+  await mkdir(dirname(pageHandler), { recursive: true });
+  await writeFile(pageHandler, "module.exports = () => {}");
+
+  // Fallback bodies Next would have generated under .next/server/app.
+  const appDir = join(projectDir, ".next/server/app");
+  await mkdir(join(appDir, "index.segments"), { recursive: true });
+  await writeFile(join(appDir, "index.html"), "<html>root</html>");
+  await writeFile(join(appDir, "index.rsc"), "RSC-ROOT");
+  await writeFile(
+    join(appDir, "index.segments/_tree.segment.rsc"),
+    "RSC-TREE",
+  );
+
+  const richConfig = {
+    allowQuery: [],
+    allowHeader: ["host", "x-prerender-revalidate"],
+    bypassFor: [{ type: "header", key: "next-action" }],
+    bypassToken: "tok",
+  };
+
+  const args = {
+    routing: {
+      beforeMiddleware: [],
+      beforeFiles: [],
+      afterFiles: [],
+      dynamicRoutes: [],
+      onMatch: [],
+      fallback: [],
+    },
+    outputs: {
+      pages: [],
+      pagesApi: [],
+      appPages: [
+        {
+          pathname: "/index.rsc",
+          id: "/index.rsc",
+          assets: {},
+          runtime: "nodejs",
+          filePath: pageHandler,
+          config: {},
+          type: "APP_PAGE",
+        },
+        {
+          pathname: "/",
+          id: "/",
+          assets: {},
+          runtime: "nodejs",
+          filePath: pageHandler,
+          config: {},
+          type: "APP_PAGE",
+        },
+      ],
+      appRoutes: [],
+      staticFiles: [],
+      prerenders: [
+        {
+          pathname: "/",
+          id: "/",
+          type: "PRERENDER",
+          parentOutputId: "/",
+          groupId: 1,
+          fallback: {
+            filePath: join(appDir, "index.html"),
+            initialRevalidate: false,
+            initialHeaders: { "content-type": "text/html; charset=utf-8" },
+          },
+          config: richConfig,
+        },
+        {
+          pathname: "/index.rsc",
+          id: "/index.rsc",
+          type: "PRERENDER",
+          parentOutputId: "/",
+          groupId: 1,
+          fallback: {
+            filePath: join(appDir, "index.rsc"),
+            initialRevalidate: false,
+            initialHeaders: { "content-type": "text/x-component" },
+          },
+          config: richConfig,
+        },
+        {
+          pathname: "/index.segments/_tree.segment.rsc",
+          id: "/index.segments/_tree.segment.rsc",
+          type: "PRERENDER",
+          parentOutputId: "/",
+          groupId: 1,
+          fallback: {
+            filePath: join(appDir, "index.segments/_tree.segment.rsc"),
+            initialRevalidate: false,
+          },
+          config: richConfig,
+        },
+      ],
+    },
+    projectDir,
+    repoRoot: projectDir,
+    distDir: join(projectDir, ".next"),
+    config: { basePath: "" },
+    nextVersion: "16.2.10",
+    buildId: "test-build",
+  };
+
+  return { projectDir, args };
+}
+
 async function isSymlink(p: string): Promise<boolean> {
   try {
     return (await lstat(p)).isSymbolicLink();
@@ -323,6 +437,104 @@ test("enumerates public/ files as static in the routing manifest", async () => {
   expect(manifest.pathnames).toContain("/icons/logo.png");
   expect(manifest.dispatch["/next.svg"]).toEqual({ kind: "static" });
   expect(manifest.dispatch["/icons/logo.png"]).toEqual({ kind: "static" });
+});
+
+test("emits a prerender config + fallback per prerender, preserving raw fields", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const fns = functionsDir(projectDir);
+  const cfg = JSON.parse(
+    await readFile(join(fns, "index.prerender-config.json"), "utf8"),
+  );
+  // Next's raw fields survive verbatim.
+  expect(cfg.groupId).toBe(1);
+  expect(cfg.parentOutputId).toBe("/");
+  expect(cfg.config.bypassToken).toBe("tok");
+  expect(cfg.config.allowHeader).toContain("host");
+  expect(cfg.fallback.initialRevalidate).toBe(false);
+  expect(cfg.fallback.initialHeaders["content-type"]).toBe(
+    "text/html; charset=utf-8",
+  );
+  // fallback.filePath is rewritten from the absolute .next path to the sibling
+  // fallback filename.
+  expect(cfg.fallback.filePath).toBe("index.prerender-fallback.html");
+  // fallback body copied verbatim.
+  expect(
+    await readFile(join(fns, "index.prerender-fallback.html"), "utf8"),
+  ).toBe("<html>root</html>");
+});
+
+test("emits rsc + segment prerender assets preserving the folder structure", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const fns = functionsDir(projectDir);
+  expect(await exists(join(fns, "index.rsc.prerender-config.json"))).toBe(true);
+  expect(await readFile(join(fns, "index.rsc.prerender-fallback.rsc"), "utf8")).toBe(
+    "RSC-ROOT",
+  );
+  // Segment assets keep their .segments/ subdirectory; the base is the full
+  // pathname (incl. the .rsc suffix) so nothing collides with the html variant.
+  expect(
+    await exists(
+      join(fns, "index.segments/_tree.segment.rsc.prerender-config.json"),
+    ),
+  ).toBe(true);
+  expect(
+    await readFile(
+      join(fns, "index.segments/_tree.segment.rsc.prerender-fallback.rsc"),
+      "utf8",
+    ),
+  ).toBe("RSC-TREE");
+  // The segment config points at its sibling fallback by basename.
+  const segCfg = JSON.parse(
+    await readFile(
+      join(fns, "index.segments/_tree.segment.rsc.prerender-config.json"),
+      "utf8",
+    ),
+  );
+  expect(segCfg.fallback.filePath).toBe(
+    "_tree.segment.rsc.prerender-fallback.rsc",
+  );
+});
+
+test("marks prerendered pathnames as prerender in dispatch and writes no isr-cache.json", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect(await exists(join(projectDir, ".ocel/output/isr-cache.json"))).toBe(
+    false,
+  );
+  const manifest = await readManifest(projectDir);
+  // The prerender marker replaces the plain lambda entry; the id stays the
+  // parent function so the runtime can invoke it to regenerate.
+  expect(manifest.dispatch["/"]).toEqual({ kind: "prerender", id: "/" });
+  expect(manifest.dispatch["/index.rsc"]).toEqual({
+    kind: "prerender",
+    id: "/",
+  });
+});
+
+test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", async () => {
+  const { projectDir, args } = await synthProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  process.env.OCEL_APP_NAME = "marketing";
+  try {
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    delete process.env.OCEL_APP_NAME;
+  }
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.appName).toBe("marketing");
 });
 
 test("writes each function's route id into its config.json", async () => {

@@ -8,6 +8,10 @@ interface Env {
 type DispatchTarget =
   | { kind: "static" }
   | { kind: "lambda"; id: string; parent?: string; revalidate?: unknown }
+  // A prerendered route. Its config + fallback live in the asset bucket keyed
+  // by build id; until the ISR cache path lands the worker just invokes the
+  // parent function (id) to render on every request, so the route still works.
+  | { kind: "prerender"; id: string }
   | { kind: "edge"; entryKey?: string };
 
 interface Manifest {
@@ -81,6 +85,7 @@ export async function dispatchResult(
       // files. Use the ORIGINAL request so the asset path matches.
       return assetsOr404(request, assets);
 
+    case "prerender":
     case "lambda": {
       const fnUrl = functionUrls[target.id];
       if (!fnUrl) {

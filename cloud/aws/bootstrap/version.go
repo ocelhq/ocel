@@ -10,8 +10,9 @@ import "fmt"
 // can't tolerate. The bootstrap CloudFormation stack records the version it
 // deployed as its BootstrapVersion output; every invocation compares the two.
 // Version 2 added the account-global DynamoDB sessions table. Version 3 added
-// the account-global function-artifact S3 bucket.
-const RequiredBootstrapVersion = 3
+// the account-global function-artifact S3 bucket. Version 4 added the
+// account-global asset S3 bucket for prerender configs + fallbacks.
+const RequiredBootstrapVersion = 4
 
 // Compatibility is the outcome of comparing the deployed bootstrap version
 // against the version a provider requires.

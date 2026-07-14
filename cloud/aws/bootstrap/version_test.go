@@ -30,8 +30,8 @@ func TestCheckCompat_Matrix(t *testing.T) {
 // a deliberate act (it forces every older account to re-run `ocel bootstrap`),
 // so a change must be matched here.
 func TestRequiredBootstrapVersion(t *testing.T) {
-	if RequiredBootstrapVersion != 3 {
-		t.Fatalf("RequiredBootstrapVersion = %d, want 3", RequiredBootstrapVersion)
+	if RequiredBootstrapVersion != 4 {
+		t.Fatalf("RequiredBootstrapVersion = %d, want 4", RequiredBootstrapVersion)
 	}
 }
 

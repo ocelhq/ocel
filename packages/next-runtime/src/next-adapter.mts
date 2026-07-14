@@ -1,6 +1,6 @@
 import type { NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import {
   copyFile,
   cp,
@@ -12,7 +12,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { dirname, join, relative, sep } from "node:path";
+import { basename, dirname, extname, join, relative, sep } from "node:path";
 
 const scratchDir = join(process.cwd(), ".ocel/output");
 const launcherName = "__next_launcher.cjs";
@@ -160,65 +160,44 @@ const adapter = {
       await copyFile(s.filePath, dest);
     }
 
-    // pre-renders
-    const cacheMap = new Map();
-    for (const p of outputs.prerenders) {
-      console.log("Prerendered:", p.pathname);
+    // pre-renders. Each PRERENDER output is one servable variant; emit a
+    // Vercel-style config + fallback pair colocated beside its `.func`,
+    // mirroring the Build Output API so the CLI can crawl them by glob. The
+    // config carries Next's raw fields verbatim, with fallback.filePath
+    // rewritten from the absolute build path to the sibling fallback filename
+    // the CLI uploads alongside it. The base is the full pathname (retaining
+    // any .rsc/.html suffix) so an html variant and its .rsc variant never
+    // collide on one config name.
+    await Promise.all(
+      outputs.prerenders.map(async (p) => {
+        const base = p.pathname === "/" ? "index" : p.pathname.replace(/^\//, "");
+        const configPath = join(
+          `${scratchDir}/functions`,
+          `${base}.prerender-config.json`,
+        );
+        await mkdir(dirname(configPath), { recursive: true });
 
-      const parentId = p.parentOutputId;
+        const config: Record<string, unknown> = { ...p };
+        const src = p.fallback?.filePath;
+        if (src) {
+          const fallbackName = `${basename(base)}.prerender-fallback${extname(src)}`;
+          await copyAsset(src, join(dirname(configPath), fallbackName));
+          config.fallback = { ...p.fallback, filePath: fallbackName };
+        }
 
-      if (!cacheMap.get(parentId)) {
-        const parent =
-          p.id === parentId
-            ? p
-            : outputs.prerenders.find((p) => p.id === parentId);
-
-        const fallback = parent?.fallback?.filePath;
-        const kind = fallback?.endsWith(".body")
-          ? "route"
-          : fallback?.endsWith(".rsc")
-            ? "rsc"
-            : "app";
-
-        cacheMap.set(parentId, {
-          kind,
-          segments: {},
-        });
-      }
-
-      const e = { ...cacheMap.get(parentId) };
-      const f = p.fallback?.filePath;
-      const base = f?.replace(/\.(html|rsc|body)$/, "");
-
-      if (!f) continue;
-
-      const contents = existsSync(f) ? readFileSync(f).toString() : undefined;
-      const read = (fl: string) =>
-        existsSync(fl) ? readFileSync(fl).toString() : undefined;
-
-      if (f.endsWith(".html")) e.html = contents;
-      else if (f.endsWith(".body")) e.body = contents;
-      else if (f.endsWith(".json")) e.json = contents;
-      else if (p.pathname.includes(".segments/")) {
-        const seg = p.pathname.split(".segments/")[1]; // "_tree.segment.rsc"
-        e.segments[seg as any] = contents;
-      } else if (f.endsWith(".rsc")) e.rsc = contents;
-
-      if (read(`${base}.meta`)) {
-        e.meta = JSON.parse(read(`${base}.meta`)!.toString());
-      }
-
-      cacheMap.set(parentId, e);
-    }
-
-    // write isr cache manifest
-    writeFileSync(
-      `${scratchDir}/isr-cache.json`,
-      JSON.stringify(Object.fromEntries(cacheMap)),
+        await writeFile(configPath, JSON.stringify(config));
+      }),
     );
+
+    // The ocel app name keys this app's assets in the account-global bucket
+    // (<env>/<project>/<appName>/<buildId>/…). The ocel builder passes it via
+    // OCEL_APP_NAME; falling back to the project dir name keeps a bare
+    // `next build` self-consistent.
+    const appName = process.env.OCEL_APP_NAME || basename(projectDir);
 
     const routingManifest = {
       buildId,
+      appName,
       basePath: config.basePath || "",
       i18n: config.i18n ?? undefined,
       pathnames: [
@@ -243,16 +222,16 @@ const adapter = {
         ...outputs.staticFiles.map((o) => [o.pathname, { kind: "static" }]),
         ...publicFiles.map((p) => [p.pathname, { kind: "static" }]),
 
-        // TODO: ISR. A prerender resolves to its parent output's function (the
-        // base route), the one deployed as a Lambda — its own id is a variant
-        // that was symlinked, not deployed.
+        // A prerendered pathname resolves to a prerender: its config + fallback
+        // live in the asset bucket (keyed by build id) and its id is the parent
+        // output's function — the base route deployed as a Lambda that
+        // regenerates the entry. Spread last so it replaces the plain lambda
+        // entry a prerendered function route also produced above.
         ...outputs.prerenders.map((p) => [
           p.pathname,
           {
-            kind: "lambda",
-            id: p.parentOutputId,
-            parent: p.parentOutputId,
-            revalidate: p.fallback?.initialRevalidate,
+            kind: "prerender",
+            id: parentIdByPathname.get(p.pathname) ?? p.parentOutputId,
           },
         ]),
       ]),

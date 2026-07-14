@@ -24,15 +24,27 @@ export async function buildNext(input: AppInput, _options: BuildOptions): Promis
   const cmd = resolveCommand(detected?.agent ?? "npm", "run", ["build"]);
   if (!cmd) throw new Error(`ocel: could not resolve a build command for app "${input.name}"`);
 
-  await nextRunner.run(cmd.command, cmd.args, input.cwd);
+  // OCEL_APP_NAME reaches the Next adapter (running inside `next build`), which
+  // records it in routing-manifest.json so the deploy path can key this app's
+  // prerender assets in the account-global asset bucket.
+  await nextRunner.run(cmd.command, cmd.args, input.cwd, { OCEL_APP_NAME: input.name });
   process.stderr.write(`ocel: Next app "${input.name}" built\n`);
   return [];
 }
 
-async function spawnBuild(command: string, args: string[], cwd: string): Promise<void> {
+async function spawnBuild(
+  command: string,
+  args: string[],
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<void> {
   const { spawn } = await import("node:child_process");
   await new Promise<void>((resolve, reject) => {
-    const child = spawn(command, args, { cwd, stdio: ["ignore", "inherit", "inherit"] });
+    const child = spawn(command, args, {
+      cwd,
+      env: { ...process.env, ...env },
+      stdio: ["ignore", "inherit", "inherit"],
+    });
     child.on("error", reject);
     child.on("exit", (code) =>
       code === 0 ? resolve() : reject(new Error(`${command} ${args.join(" ")} exited with code ${code}`)),

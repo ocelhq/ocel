@@ -35,4 +35,14 @@ describe("buildNext", () => {
     expect(calls[0]).toContain("run");
     expect(calls[0]).toContain("build");
   });
+
+  it("passes the app name to the build as OCEL_APP_NAME", async () => {
+    const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
+    let env: Record<string, string> | undefined;
+    nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);
+
+    await buildNext({ name: "marketing", cwd: dir }, { outDir: dir });
+
+    expect(env?.OCEL_APP_NAME).toBe("marketing");
+  });
 });

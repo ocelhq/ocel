@@ -42,6 +42,7 @@ const (
 	outputStateBucket    = "StateBucketName"
 	outputSessionTable   = "SessionTableName"
 	outputArtifactBucket = "ArtifactBucketName"
+	outputAssetBucket    = "AssetBucketName"
 	outputVersion        = "BootstrapVersion"
 	outputInfraClass     = "InfrastructureClass"
 
@@ -74,6 +75,10 @@ type Deployed struct {
 	// ArtifactBucket is the account-global S3 bucket function deployment
 	// artifacts are uploaded to; the deploy path points Lambda code at it.
 	ArtifactBucket string
+	// AssetBucket is the account-global S3 bucket prerender configs + fallbacks
+	// are uploaded to, keyed by build id; the deploy path crawls a Next app's
+	// output for them and the runtime reads them to serve ISR.
+	AssetBucket string
 	// Class is the class the substrate was stamped with at bootstrap
 	// (ClassProduction or ClassPreview), or "" for an older bootstrap predating
 	// the marker.
@@ -126,6 +131,8 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 			d.SessionTable = aws.ToString(o.OutputValue)
 		case outputArtifactBucket:
 			d.ArtifactBucket = aws.ToString(o.OutputValue)
+		case outputAssetBucket:
+			d.AssetBucket = aws.ToString(o.OutputValue)
 		case outputInfraClass:
 			d.Class = aws.ToString(o.OutputValue)
 		case outputVersion:
@@ -345,20 +352,20 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
-%sOutputs:
+%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
   %s:
     Description: DynamoDB table holding account-global upload sessions.
     Value: !Ref SessionsTable
-%s  %s:
+%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, artifactBucketResource(), outputStateBucket, outputSessionTable, artifactBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
+`, artifactBucketResource(), assetBucketResource(), outputStateBucket, outputSessionTable, artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
@@ -403,20 +410,20 @@ Resources:
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
-%sOutputs:
+%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
     Value: !Ref StateBucket
   %s:
     Description: DynamoDB table holding preview upload sessions.
     Value: !Ref SessionsTable
-%s  %s:
+%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, artifactBucketResource(), outputStateBucket, outputSessionTable, artifactBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+`, artifactBucketResource(), assetBucketResource(), outputStateBucket, outputSessionTable, artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
 }
 
 // artifactBucketResource renders the ArtifactBucket resource block shared by
@@ -456,6 +463,46 @@ func artifactBucketOutput() string {
     Description: S3 bucket holding function deployment artifacts.
     Value: !Ref ArtifactBucket
 `, outputArtifactBucket)
+}
+
+// assetBucketResource renders the AssetBucket resource block shared by both
+// substrate templates: the dedicated bucket prerender configs + fallbacks are
+// uploaded to, keyed by build id. It carries the same public-access lockdown
+// and encryption the other buckets use and no versioning (keys are immutable
+// per build), but — unlike the artifact bucket — NO object-expiration rule: a
+// live build's assets are never re-uploaded by later deploys, so an age rule
+// would delete assets still backing production. Superseded build prefixes are
+// reaped by the deploy path instead. The block is a Resources child, so it is
+// emitted before the template's Outputs: line.
+func assetBucketResource() string {
+	return fmt.Sprintf(`  AssetBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+          - Id: abort-incomplete-uploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: %d
+`, artifactAbortMultipartDays)
+}
+
+// assetBucketOutput renders the AssetBucket name output shared by both substrate
+// templates, consumed by the deploy path to address the bucket.
+func assetBucketOutput() string {
+	return fmt.Sprintf(`  %s:
+    Description: S3 bucket holding prerender configs and fallbacks, keyed by build id.
+    Value: !Ref AssetBucket
+`, outputAssetBucket)
 }
 
 // CloudFormation surfaces both "stack does not exist" and the no-op update as
