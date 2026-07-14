@@ -79,8 +79,15 @@ func (d *cfDeployer) uploadAssets(ctx context.Context, upload WorkerUpload) (str
 		return "", fmt.Errorf("create assets upload session: %w", err)
 	}
 
-	completionJWT := ""
+	// When every file in the manifest is already present (e.g. a redeploy), the
+	// session returns no buckets to upload and its own JWT is the completion
+	// token. Otherwise each bucket is uploaded and the final response carries the
+	// completion token; the session JWT authenticates those uploads.
+	completionJWT := session.JWT
 	for _, bucket := range session.Buckets {
+		if len(bucket) == 0 {
+			continue
+		}
 		body := make(map[string]string, len(bucket))
 		for _, hash := range bucket {
 			body[hash] = base64.StdEncoding.EncodeToString(contentByHash[hash])
@@ -120,13 +127,17 @@ func (d *cfDeployer) putScript(ctx context.Context, upload WorkerUpload, assetsJ
 // buildScriptMultipart assembles the worker upload's multipart/form-data body
 // and its content type.
 func buildScriptMultipart(upload WorkerUpload, assetsJWT string) ([]byte, string, error) {
+	// Cloudflare rejects an assets binding without a completed assets upload, so
+	// the binding and the assets metadata are gated on the same token: present
+	// together or absent together.
+	includeAssets := assetsJWT != ""
 	metadata := map[string]any{
 		"main_module":         upload.Main.Name,
 		"compatibility_date":  nextWorkerCompatDate,
 		"compatibility_flags": nextWorkerCompatFlags,
-		"bindings":            scriptBindings(upload),
+		"bindings":            scriptBindings(upload, includeAssets),
 	}
-	if assetsJWT != "" {
+	if includeAssets {
 		metadata["assets"] = map[string]any{
 			"jwt": assetsJWT,
 			// The worker is the authoritative router: it always runs and delegates
@@ -157,11 +168,12 @@ func buildScriptMultipart(upload WorkerUpload, assetsJWT string) ([]byte, string
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
-// scriptBindings is the worker's binding set: the Assets Fetcher plus one
-// plain-text binding per var (e.g. FUNCTION_URLS).
-func scriptBindings(upload WorkerUpload) []map[string]any {
+// scriptBindings is the worker's binding set: the Assets Fetcher (only when
+// assets were uploaded) plus one plain-text binding per var (e.g.
+// FUNCTION_URLS).
+func scriptBindings(upload WorkerUpload, includeAssets bool) []map[string]any {
 	bindings := []map[string]any{}
-	if upload.AssetBinding != "" && len(upload.Assets) > 0 {
+	if includeAssets && upload.AssetBinding != "" {
 		bindings = append(bindings, map[string]any{
 			"type": "assets",
 			"name": upload.AssetBinding,
