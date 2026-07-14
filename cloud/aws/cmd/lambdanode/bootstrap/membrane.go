@@ -2,24 +2,104 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"time"
 )
+
+// completionMargin is how far before the invocation deadline we stop waiting
+// for background (waitUntil) tasks, so the runtime can cleanly call /next
+// before Lambda hard-kills the sandbox.
+const completionMargin = 500 * time.Millisecond
 
 type Membrane struct {
 	nodePort int
 	control  net.Conn
 	client   *http.Client
+
+	// pending maps an in-flight request id to the channel closed when the JS
+	// side reports the invocation complete (response finished and every
+	// waitUntil promise settled). Nil in tests that don't exercise completion.
+	mu      sync.Mutex
+	pending map[string]chan struct{}
+}
+
+// registerWaiter records interest in an invocation's completion signal and
+// returns a channel closed when it arrives. It must be called before the
+// request is forwarded so a fast completion can't be missed. A Membrane without
+// a completion map (unit tests of the data plane) returns nil, meaning "don't
+// wait".
+func (m *Membrane) registerWaiter(requestID string) <-chan struct{} {
+	if m.pending == nil {
+		return nil
+	}
+	ch := make(chan struct{})
+	m.mu.Lock()
+	m.pending[requestID] = ch
+	m.mu.Unlock()
+	return ch
+}
+
+// dropWaiter removes and returns the waiter for requestID, if one is
+// registered. It is the single owner of deletes from m.pending.
+func (m *Membrane) dropWaiter(requestID string) (chan struct{}, bool) {
+	m.mu.Lock()
+	ch, ok := m.pending[requestID]
+	if ok {
+		delete(m.pending, requestID)
+	}
+	m.mu.Unlock()
+	return ch, ok
+}
+
+// signalComplete unblocks awaitCompletion for requestID (no-op if already
+// completed or timed out).
+func (m *Membrane) signalComplete(requestID string) {
+	if ch, ok := m.dropWaiter(requestID); ok {
+		close(ch)
+	}
+}
+
+// awaitCompletion blocks until the invocation is reported complete or the
+// deadline (minus completionMargin) elapses, holding off the next /next so the
+// sandbox stays warm for background tasks. A nil waiter returns immediately.
+// With no deadline (only reachable off-Lambda; the Runtime API always sets one)
+// it waits on the completion signal alone.
+func (m *Membrane) awaitCompletion(ctx context.Context, requestID string, waiter <-chan struct{}) {
+	if waiter == nil {
+		return
+	}
+	var timeout <-chan time.Time
+	if deadline, ok := ctx.Deadline(); ok {
+		d := time.Until(deadline) - completionMargin
+		if d < 0 {
+			d = 0
+		}
+		t := time.NewTimer(d)
+		defer t.Stop()
+		timeout = t.C
+	}
+	select {
+	case <-waiter:
+	case <-timeout:
+		m.dropWaiter(requestID)
+		fmt.Fprintf(os.Stderr, "ocel: background tasks abandoned for %s: deadline reached\n", requestID)
+	}
 }
 
 type controlMsg struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
+}
+type invocationCompletePayload struct {
+	RequestID string `json:"requestId"`
 }
 type serverReadyPayload struct {
 	HTTPPort int `json:"httpPort"`
@@ -71,7 +151,7 @@ func startNode() (*Membrane, error) {
 		return nil, err
 	}
 
-	m := &Membrane{control: control}
+	m := &Membrane{control: control, pending: map[string]chan struct{}{}}
 
 	// Read control messages until "server-ready" gives us the port.
 	reader := bufio.NewReader(control)
@@ -125,7 +205,14 @@ func (m *Membrane) drainControl(reader *bufio.Reader) {
 		case "metric":
 			// forward to Ocel telemetry
 		case "request-end":
-			// per-request completion signal from the JS wrapper
+			// per-request telemetry (status/duration) from the JS wrapper
+		case "invocation-complete":
+			// response finished and every waitUntil promise settled; release
+			// the runtime loop to call /next and let the sandbox freeze.
+			var p invocationCompletePayload
+			if json.Unmarshal(msg.Payload, &p) == nil {
+				m.signalComplete(p.RequestID)
+			}
 		}
 	}
 }
