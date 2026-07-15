@@ -69,11 +69,11 @@ func TestBuildFunctionURLs_SkipsNonNextAndUnresolvedFunctions(t *testing.T) {
 
 func TestSanitizeWorkerName(t *testing.T) {
 	cases := map[string]string{
-		"ocel-proj_ABC-prod":  "ocel-proj-abc-prod",
-		"ocel-Proj.123":       "ocel-proj-123",
-		"--weird__name--":     "weird-name",
-		"":                    "ocel-worker",
-		"////":                "ocel-worker",
+		"ocel-proj_ABC-prod": "ocel-proj-abc-prod",
+		"ocel-Proj.123":      "ocel-proj-123",
+		"--weird__name--":    "weird-name",
+		"":                   "ocel-worker",
+		"////":               "ocel-worker",
 	}
 	for in, want := range cases {
 		if got := sanitizeWorkerName(in); got != want {

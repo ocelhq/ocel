@@ -40,7 +40,8 @@ function fakeStore() {
       return found;
     },
     async writeTags(names, record) {
-      for (const n of names) tags.set(n, record);
+      // Models UpdateItem SET: fields present are overwritten, absent ones kept.
+      for (const n of names) tags.set(n, { ...tags.get(n), ...record });
     },
   };
   OcelCacheHandler.store = store;
@@ -190,4 +191,24 @@ test("takes fetch tags from the request context", async () => {
   });
 
   expect(entry).toBeNull();
+});
+
+// Next's own revalidateTag spreads the existing record before applying updates,
+// so a later duration-based call must not drop an expiry set by an earlier
+// invalidation. Dropping it would make an already-invalidated tag look fresh and
+// serve stale content again.
+test("marking a tag stale preserves an expiry set earlier", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { tags: "products", lastModified: 1_000 });
+  const handler = new OcelCacheHandler();
+
+  await handler.revalidateTag("products");
+  const expiredAfterFirst = store.tags.get("products")?.expired;
+
+  // durations present but no expire: sets stale only, and must leave expired be.
+  await handler.revalidateTag("products", {});
+
+  expect(store.tags.get("products")?.expired).toBe(expiredAfterFirst);
+  expect(store.tags.get("products")?.stale).toBeGreaterThan(0);
+  expect(await handler.get("/", { kind: "APP_PAGE" })).toBeNull();
 });
