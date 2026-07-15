@@ -202,6 +202,9 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 			"PULUMI_BACKEND_URL":       cfg.BackendURL,
 			"PULUMI_CONFIG_PASSPHRASE": cfg.Passphrase,
 			"AWS_REGION":               cfg.Region,
+			// TODO: revisit ?
+			"PULUMI_SKIP_CHECKPOINTS":  "true",
+			"PULUMI_SKIP_UPDATE_CHECK": "true",
 		}),
 	)
 	if err != nil {
@@ -218,6 +221,7 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 	if logWriter != nil {
 		upOpts = append(upOpts, optup.ProgressStreams(logWriter))
 	}
+
 	res, err := stack.Up(ctx, upOpts...)
 	logWriter.Flush() // emit any final, un-newline-terminated engine line
 	if err != nil {

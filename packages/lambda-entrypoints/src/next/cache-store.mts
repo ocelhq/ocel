@@ -2,6 +2,7 @@ import {
   DynamoDBClient,
   BatchGetItemCommand,
   UpdateItemCommand,
+  type AttributeValue,
 } from "@aws-sdk/client-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
@@ -29,6 +30,14 @@ export interface CacheStore {
   readTags(tags: string[]): Promise<Map<string, TagRecord>>;
   writeTags(tags: string[], record: TagRecord): Promise<void>;
 }
+
+// Tag reads sit on the request path, so the retry budget is deliberately small:
+// 50/100/200ms, then give up. Spending longer than that chasing a throttled key
+// costs more than the fresh render giving up buys.
+const batchGetMaxAttempts = 4;
+const batchGetBackoffMs = 50;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function env(name: string): string {
   const value = process.env[name];
@@ -88,32 +97,48 @@ export function awsCacheStore(): CacheStore {
       );
     },
 
+    // A tag whose record fails to come back is indistinguishable from a tag that
+    // was never revalidated, and the caller reads that as "not expired" — so a
+    // dropped record serves stale content. Throttled keys therefore must not be
+    // silently skipped: drain them, and if they won't drain, throw so get()
+    // degrades to a miss and re-renders. Failing closed beats failing stale.
     async readTags(tags) {
       const found = new Map<string, TagRecord>();
       if (tags.length === 0) return found;
 
       // BatchGetItem caps at 100 keys per call.
       for (let i = 0; i < tags.length; i += 100) {
-        const batch = tags.slice(i, i + 100);
-        const out = await ddb.send(
-          new BatchGetItemCommand({
-            RequestItems: {
-              [table]: {
-                Keys: batch.map((tag) => ({
-                  pk: { S: tagPK(tag) },
-                  sk: { S: "#META" },
-                })),
-              },
-            },
-          }),
-        );
-        for (const item of out.Responses?.[table] ?? []) {
-          const tag = item.pk?.S?.slice(tagNamespace.length);
-          if (!tag) continue;
-          found.set(tag, {
-            stale: item.stale?.N ? Number(item.stale.N) : undefined,
-            expired: item.expired?.N ? Number(item.expired.N) : undefined,
-          });
+        // Widened to the SDK's key type: UnprocessedKeys feeds straight back in.
+        let keys: Record<string, AttributeValue>[] = tags
+          .slice(i, i + 100)
+          .map((tag) => ({
+            pk: { S: tagPK(tag) },
+            sk: { S: "#META" },
+          }));
+
+        for (let attempt = 0; keys.length > 0; attempt++) {
+          if (attempt === batchGetMaxAttempts) {
+            throw new Error(
+              `ocel cache handler: ${keys.length} tag key(s) still unprocessed after ${attempt} attempts`,
+            );
+          }
+          // BatchGetItem returns throttled keys in UnprocessedKeys on an
+          // otherwise successful response, so the SDK's own retries never see
+          // them.
+          if (attempt > 0) await sleep(batchGetBackoffMs << (attempt - 1));
+
+          const out = await ddb.send(
+            new BatchGetItemCommand({ RequestItems: { [table]: { Keys: keys } } }),
+          );
+          for (const item of out.Responses?.[table] ?? []) {
+            const tag = item.pk?.S?.slice(tagNamespace.length);
+            if (!tag) continue;
+            found.set(tag, {
+              stale: item.stale?.N ? Number(item.stale.N) : undefined,
+              expired: item.expired?.N ? Number(item.expired.N) : undefined,
+            });
+          }
+          keys = out.UnprocessedKeys?.[table]?.Keys ?? [];
         }
       }
       return found;

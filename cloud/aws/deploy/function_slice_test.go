@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"encoding/json"
+	"slices"
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -145,6 +146,15 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 	ddbStmt := doc.Statement[1]
 	if ddbStmt.Resource != cfg.TableARN {
 		t.Errorf("DynamoDB Resource = %q, want the table ARN", ddbStmt.Resource)
+	}
+	// The granted actions must match the calls the handler's tag store actually
+	// makes (BatchGetItem to read, UpdateItem to merge). The two live in
+	// different languages with nothing linking them, so a missing action is only
+	// discovered as a runtime 403 out of the user's revalidateTag call — which is
+	// exactly what happened when writeTags moved from PutItem to UpdateItem.
+	wantActions := []string{"dynamodb:BatchGetItem", "dynamodb:UpdateItem"}
+	if !slices.Equal(ddbStmt.Action, wantActions) {
+		t.Errorf("DynamoDB Action = %v, want exactly %v", ddbStmt.Action, wantActions)
 	}
 	// Exact LeadingKeys matching cannot express a prefix, so the scoping rests
 	// on StringLike; a plain StringEquals here would silently grant the table.
