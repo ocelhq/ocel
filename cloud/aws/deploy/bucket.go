@@ -31,10 +31,10 @@ const (
 	listenerHandler        = "bootstrap"
 	listenerTimeoutSeconds = 30
 
-	// Listener Lambda env vars. envSessionTable matches the runtime binary's
-	// OCEL_RUNTIME_SESSION_TABLE so both processes read the same table name;
+	// Listener Lambda env vars. envStateTable matches the runtime binary's
+	// OCEL_RUNTIME_STATE_TABLE so both processes read the same table name;
 	// envAllowedOrigins carries the deploy-known callback-origin allowlist.
-	envSessionTable   = "OCEL_RUNTIME_SESSION_TABLE"
+	envStateTable   = "OCEL_RUNTIME_STATE_TABLE"
 	envAllowedOrigins = "OCEL_LISTENER_ALLOWED_ORIGINS"
 )
 
@@ -112,11 +112,11 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 // allowed_origins, an ObjectCreated -> listener Lambda notification, the listener
 // Lambda itself, and the two IAM roles (runtime process: S3-presign +
 // session-table access; listener: object-tag read + session-table transition).
-// sessionTableName/sessionTableARN identify the account-global sessions table
+// stateTableName/stateTableARN identify the account-global sessions table
 // bootstrap provisions; listenerCodePath is the built listener handler archive
 // (its packaging via provider distribution is deferred — see deploy.Config).
 // The bucket name is exported under logicalName for collectBucketOutput.
-func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, sessionTableName, sessionTableARN, listenerCodePath string) (pulumi.StringOutput, error) {
+func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, stateTableName, stateTableARN, listenerCodePath string) (pulumi.StringOutput, error) {
 	// The logical name is `<type>_<id>` (underscores); S3 bucket names are
 	// DNS-constrained and reject underscores, so name from a safe prefix rather
 	// than Pulumi's autoname. bucket.Bucket still resolves to the generated
@@ -159,7 +159,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 	// touch the session table.
 	if _, err := newServiceRole(ctx, logicalName+"-runtime", "ec2.amazonaws.com", map[string]policyStatement{
 		"s3":       {Actions: args.RuntimeS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-		"sessions": {Actions: args.RuntimeSessionActions, Resources: []pulumi.StringInput{pulumi.String(sessionTableARN)}},
+		"sessions": {Actions: args.RuntimeSessionActions, Resources: []pulumi.StringInput{pulumi.String(stateTableARN)}},
 	}); err != nil {
 		return pulumi.StringOutput{}, err
 	}
@@ -168,7 +168,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 	// transition. It also needs the basic Lambda execution policy for logs.
 	listenerRole, err := newServiceRole(ctx, logicalName+"-listener", "lambda.amazonaws.com", map[string]policyStatement{
 		"s3":       {Actions: args.ListenerS3Actions, Resources: []pulumi.StringInput{joinArn(bucket.Arn, "/*")}},
-		"sessions": {Actions: args.ListenerSessionActions, Resources: []pulumi.StringInput{pulumi.String(sessionTableARN)}},
+		"sessions": {Actions: args.ListenerSessionActions, Resources: []pulumi.StringInput{pulumi.String(stateTableARN)}},
 	})
 	if err != nil {
 		return pulumi.StringOutput{}, err
@@ -188,7 +188,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, se
 		Code:    pulumi.NewFileArchive(listenerCodePath),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
-				envSessionTable:   pulumi.String(sessionTableName),
+				envStateTable:   pulumi.String(stateTableName),
 				envAllowedOrigins: pulumi.String(strings.Join(args.AllowedOrigins, ",")),
 			},
 		},

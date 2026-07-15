@@ -11,8 +11,11 @@ import "fmt"
 // deployed as its BootstrapVersion output; every invocation compares the two.
 // Version 2 added the account-global DynamoDB sessions table. Version 3 added
 // the account-global function-artifact S3 bucket. Version 4 added the
-// account-global asset S3 bucket for prerender configs + fallbacks.
-const RequiredBootstrapVersion = 4
+// account-global asset S3 bucket for prerender configs + fallbacks. Version 5
+// replaced the single-purpose sessions table with a generic pk/sk state table
+// shared by every Ocel state entity — a key-schema change, so CloudFormation
+// replaces the table and in-flight upload sessions are dropped.
+const RequiredBootstrapVersion = 5
 
 // Compatibility is the outcome of comparing the deployed bootstrap version
 // against the version a provider requires.

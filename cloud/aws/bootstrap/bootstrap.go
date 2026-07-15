@@ -1,6 +1,6 @@
 // Package bootstrap provisions and inspects the account-global resources the
 // Ocel AWS provider needs before any deploy can run: an S3 bucket for Pulumi
-// state and a DynamoDB table for upload sessions (both via CloudFormation),
+// state and a DynamoDB table for Ocel state (both via CloudFormation),
 // and a Pulumi passphrase (an SSM SecureString minted imperatively, because
 // CloudFormation cannot create SecureStrings).
 // The bootstrapped resources carry a monotonic integer version so every
@@ -40,7 +40,7 @@ const (
 	PassphraseParamName = "/ocel/pulumi/passphrase"
 
 	outputStateBucket    = "StateBucketName"
-	outputSessionTable   = "SessionTableName"
+	outputStateTable     = "StateTableName"
 	outputArtifactBucket = "ArtifactBucketName"
 	outputAssetBucket    = "AssetBucketName"
 	outputVersion        = "BootstrapVersion"
@@ -68,10 +68,13 @@ const (
 
 // Deployed describes the bootstrap state discovered in an account.
 type Deployed struct {
-	Present      bool
-	Version      int
-	StateBucket  string
-	SessionTable string
+	Present     bool
+	Version     int
+	StateBucket string
+	// StateTable is the account-global DynamoDB table every Ocel state entity
+	// keys into under a generic pk/sk pair: upload sessions, Next ISR tag
+	// revalidation records, and whatever comes next.
+	StateTable string
 	// ArtifactBucket is the account-global S3 bucket function deployment
 	// artifacts are uploaded to; the deploy path points Lambda code at it.
 	ArtifactBucket string
@@ -127,8 +130,8 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 		switch aws.ToString(o.OutputKey) {
 		case outputStateBucket:
 			d.StateBucket = aws.ToString(o.OutputValue)
-		case outputSessionTable:
-			d.SessionTable = aws.ToString(o.OutputValue)
+		case outputStateTable:
+			d.StateTable = aws.ToString(o.OutputValue)
 		case outputArtifactBucket:
 			d.ArtifactBucket = aws.ToString(o.OutputValue)
 		case outputAssetBucket:
@@ -158,7 +161,7 @@ func Run(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, prog
 		}
 	}
 
-	report(progress, "Ensuring Pulumi state bucket and sessions table (CloudFormation)")
+	report(progress, "Ensuring Pulumi state bucket and state table (CloudFormation)")
 	if err := upsertStack(ctx, cfn); err != nil {
 		return err
 	}
@@ -339,37 +342,21 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-  SessionsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: session_id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: session_id
-          KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: expires_at
-        Enabled: true
-%s%sOutputs:
+%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
-  %s:
-    Description: DynamoDB table holding account-global upload sessions.
-    Value: !Ref SessionsTable
-%s%s  %s:
+%s%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, artifactBucketResource(), assetBucketResource(), outputStateBucket, outputSessionTable, artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
-// template. It shares the state bucket + sessions table shape production uses
+// template. It shares the state bucket + state table shape production uses
 // (each preview is its own Pulumi stack and needs the shared backend) and
 // stamps InfrastructureClass=preview so a command can verify the substrate.
 //
@@ -397,33 +384,54 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-  SessionsTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: session_id
-          AttributeType: S
-      KeySchema:
-        - AttributeName: session_id
-          KeyType: HASH
-      TimeToLiveSpecification:
-        AttributeName: expires_at
-        Enabled: true
-%s%sOutputs:
+%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
     Value: !Ref StateBucket
-  %s:
-    Description: DynamoDB table holding preview upload sessions.
-    Value: !Ref SessionsTable
-%s%s  %s:
+%s%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, artifactBucketResource(), assetBucketResource(), outputStateBucket, outputSessionTable, artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+}
+
+// stateTableResource renders the StateTable resource block shared by both
+// substrate templates: the account-global table every Ocel state entity is
+// keyed into. Its pk/sk pair is deliberately opaque — upload sessions and Next
+// ISR tag records already share it — so each entity namespaces itself with its
+// own key prefix rather than getting a table of its own. expires_at is the TTL
+// attribute; entities that outlive a request simply omit it. The block is a
+// Resources child, so it is emitted before the template's Outputs: line.
+func stateTableResource() string {
+	return `  StateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: pk
+          AttributeType: S
+        - AttributeName: sk
+          AttributeType: S
+      KeySchema:
+        - AttributeName: pk
+          KeyType: HASH
+        - AttributeName: sk
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: expires_at
+        Enabled: true
+`
+}
+
+// stateTableOutput renders the StateTable name output shared by both substrate
+// templates, consumed by the deploy path to address the table.
+func stateTableOutput() string {
+	return fmt.Sprintf(`  %s:
+    Description: DynamoDB table holding account-global Ocel state, keyed by pk/sk.
+    Value: !Ref StateTable
+`, outputStateTable)
 }
 
 // artifactBucketResource renders the ArtifactBucket resource block shared by

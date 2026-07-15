@@ -96,10 +96,12 @@ func createTable(t *testing.T, ctx context.Context, ddb *dynamodb.Client, table 
 		TableName:   aws.String(table),
 		BillingMode: ddbtypes.BillingModePayPerRequest,
 		AttributeDefinitions: []ddbtypes.AttributeDefinition{
-			{AttributeName: aws.String("session_id"), AttributeType: ddbtypes.ScalarAttributeTypeS},
+			{AttributeName: aws.String("pk"), AttributeType: ddbtypes.ScalarAttributeTypeS},
+			{AttributeName: aws.String("sk"), AttributeType: ddbtypes.ScalarAttributeTypeS},
 		},
 		KeySchema: []ddbtypes.KeySchemaElement{
-			{AttributeName: aws.String("session_id"), KeyType: ddbtypes.KeyTypeHash},
+			{AttributeName: aws.String("pk"), KeyType: ddbtypes.KeyTypeHash},
+			{AttributeName: aws.String("sk"), KeyType: ddbtypes.KeyTypeRange},
 		},
 	}); err != nil {
 		t.Fatalf("create table: %v", err)

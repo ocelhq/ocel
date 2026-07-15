@@ -33,12 +33,15 @@ type sessionFile struct {
 	Error    string    `dynamodbav:"error,omitempty"`
 }
 
-// session is the DynamoDB item persisted at presign. The table's partition key
-// is session_id (no sort key); expires_at is the table's TTL attribute (epoch
-// seconds) so DynamoDB reaps orphaned sessions. The secret never leaves this
-// item — VerifyUploadSignature re-derives the HMAC store-side and returns only
-// the metadata. The provisioned table must match this shape exactly.
+// session is the DynamoDB item persisted at presign. It lives in the shared
+// account-global state table under the generic pk/sk pair (see sessionKey), so
+// nothing here may assume the table holds only sessions. expires_at is the
+// table's TTL attribute (epoch seconds) so DynamoDB reaps orphaned sessions.
+// The secret never leaves this item — VerifyUploadSignature re-derives the HMAC
+// store-side and returns only the metadata.
 type session struct {
+	PK                 string        `dynamodbav:"pk"`
+	SK                 string        `dynamodbav:"sk"`
 	SessionID          string        `dynamodbav:"session_id"`
 	Secret             string        `dynamodbav:"secret"`
 	Bucket             string        `dynamodbav:"bucket"`
@@ -61,13 +64,26 @@ type ddbAPI interface {
 	UpdateItem(context.Context, *dynamodb.UpdateItemInput, ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error)
 }
 
-// sessionStore persists and reads upload sessions in a single DynamoDB table.
+// sessionStore persists and reads upload sessions in the shared state table.
 type sessionStore struct {
 	client ddbAPI
 	table  string
 }
 
+// sessionKey is the item's key in the shared state table. Sessions namespace
+// themselves under a SESSION# partition so they never collide with the other
+// entities keyed into the same table, and pin a constant sort key because a
+// session is a single item rather than a collection.
+func sessionKey(sessionID string) map[string]ddbtypes.AttributeValue {
+	return map[string]ddbtypes.AttributeValue{
+		"pk": &ddbtypes.AttributeValueMemberS{Value: "SESSION#" + sessionID},
+		"sk": &ddbtypes.AttributeValueMemberS{Value: "#META"},
+	}
+}
+
 func (s *sessionStore) put(ctx context.Context, sess session) error {
+	sess.PK = "SESSION#" + sess.SessionID
+	sess.SK = "#META"
 	item, err := attributevalue.MarshalMap(sess)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
@@ -85,9 +101,7 @@ func (s *sessionStore) put(ctx context.Context, sess session) error {
 func (s *sessionStore) get(ctx context.Context, sessionID string) (session, error) {
 	out, err := s.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: aws.String(s.table),
-		Key: map[string]ddbtypes.AttributeValue{
-			"session_id": &ddbtypes.AttributeValueMemberS{Value: sessionID},
-		},
+		Key:       sessionKey(sessionID),
 	})
 	if err != nil {
 		return session{}, fmt.Errorf("get session: %w", err)
@@ -113,10 +127,8 @@ func (s *sessionStore) get(ctx context.Context, sessionID string) (session, erro
 func (s *sessionStore) markSucceeded(ctx context.Context, sessionID string, idx int) (bool, error) {
 	expr := fmt.Sprintf("files[%d].#st", idx)
 	_, err := s.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
-		TableName: aws.String(s.table),
-		Key: map[string]ddbtypes.AttributeValue{
-			"session_id": &ddbtypes.AttributeValueMemberS{Value: sessionID},
-		},
+		TableName:                aws.String(s.table),
+		Key:                      sessionKey(sessionID),
 		UpdateExpression:         aws.String("SET " + expr + " = :succeeded"),
 		ConditionExpression:      aws.String(expr + " = :pending"),
 		ExpressionAttributeNames: map[string]string{"#st": "state"},
