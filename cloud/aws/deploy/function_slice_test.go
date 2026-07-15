@@ -103,3 +103,80 @@ func TestCollectFunctionOutput_ReportsURLKeyedByLogicalName(t *testing.T) {
 		t.Errorf("url = %q, want the Function URL", fn.GetUrl())
 	}
 }
+
+// TestISRPolicy_ScopesToTheAppsOwnNamespace proves a Next function's cache
+// grant cannot reach another app's data. The asset bucket and the state table
+// are account-global and shared across every env/project/app, and the state
+// table also holds upload sessions (whose items carry HMAC secrets) — so an
+// unscoped grant here would expose every tenant to every function.
+func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
+	cfg := isrConfig{
+		Bucket:   "assets-xyz",
+		Prefix:   "prod/proj123/marketing/build456",
+		Table:    "state-abc",
+		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+	}
+
+	raw, err := isrPolicy(cfg)
+	if err != nil {
+		t.Fatalf("isrPolicy: %v", err)
+	}
+
+	var doc struct {
+		Statement []struct {
+			Effect    string   `json:"Effect"`
+			Action    []string `json:"Action"`
+			Resource  string   `json:"Resource"`
+			Condition map[string]map[string][]string
+		}
+	}
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatalf("policy is not valid JSON: %v", err)
+	}
+	if len(doc.Statement) != 2 {
+		t.Fatalf("got %d statements, want 2", len(doc.Statement))
+	}
+
+	s3Stmt := doc.Statement[0]
+	if want := "arn:aws:s3:::assets-xyz/prod/proj123/marketing/build456/*"; s3Stmt.Resource != want {
+		t.Errorf("S3 Resource = %q, want %q", s3Stmt.Resource, want)
+	}
+
+	ddbStmt := doc.Statement[1]
+	if ddbStmt.Resource != cfg.TableARN {
+		t.Errorf("DynamoDB Resource = %q, want the table ARN", ddbStmt.Resource)
+	}
+	// Exact LeadingKeys matching cannot express a prefix, so the scoping rests
+	// on StringLike; a plain StringEquals here would silently grant the table.
+	keys := ddbStmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
+	if len(keys) != 1 || keys[0] != "TAG#prod#proj123#marketing#build456#*" {
+		t.Errorf("LeadingKeys = %v, want the app's own tag partitions", keys)
+	}
+}
+
+// The handler joins its S3 keys onto OCEL_ISR_PREFIX and its tag partitions onto
+// OCEL_ISR_TAG_NAMESPACE. Both must agree with what isrPolicy grants, or every
+// read fails closed at runtime.
+func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
+	cfg := isrConfig{
+		Bucket:   "assets-xyz",
+		Prefix:   "prod/proj123/marketing/build456",
+		Table:    "state-abc",
+		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+	}
+
+	env := cfg.isrEnv()
+
+	if env["OCEL_ISR_BUCKET"] != "assets-xyz" {
+		t.Errorf("OCEL_ISR_BUCKET = %q", env["OCEL_ISR_BUCKET"])
+	}
+	if env["OCEL_ISR_PREFIX"] != cfg.Prefix {
+		t.Errorf("OCEL_ISR_PREFIX = %q, want %q", env["OCEL_ISR_PREFIX"], cfg.Prefix)
+	}
+	if env["OCEL_STATE_TABLE"] != "state-abc" {
+		t.Errorf("OCEL_STATE_TABLE = %q", env["OCEL_STATE_TABLE"])
+	}
+	if want := "TAG#prod#proj123#marketing#build456#"; env["OCEL_ISR_TAG_NAMESPACE"] != want {
+		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want %q", env["OCEL_ISR_TAG_NAMESPACE"], want)
+	}
+}

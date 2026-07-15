@@ -168,8 +168,24 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 			env[functionEnvKey(r.GetResource().GetType(), r.GetResource().GetName())] = value
 		}
 
+		// A Next function's cache handler reads and writes this app's slice of
+		// the account-global asset bucket and state table; everything else gets
+		// no cache access at all.
+		prefix, err := assetPrefix(cfg, manifest)
+		if err != nil {
+			return err
+		}
 		for _, fn := range manifest.GetFunctions() {
-			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), artifacts[fn.GetLogicalName()], env); err != nil {
+			var isr *isrConfig
+			if prefix != "" && fn.GetFramework() == frameworkNext {
+				isr = &isrConfig{
+					Bucket:   cfg.AssetBucket,
+					Prefix:   prefix,
+					Table:    cfg.StateTable,
+					TableARN: cfg.StateTableARN,
+				}
+			}
+			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), artifacts[fn.GetLogicalName()], env, isr); err != nil {
 				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}

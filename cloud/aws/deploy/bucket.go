@@ -34,7 +34,7 @@ const (
 	// Listener Lambda env vars. envStateTable matches the runtime binary's
 	// OCEL_RUNTIME_STATE_TABLE so both processes read the same table name;
 	// envAllowedOrigins carries the deploy-known callback-origin allowlist.
-	envStateTable   = "OCEL_RUNTIME_STATE_TABLE"
+	envStateTable     = "OCEL_RUNTIME_STATE_TABLE"
 	envAllowedOrigins = "OCEL_LISTENER_ALLOWED_ORIGINS"
 )
 
@@ -188,7 +188,7 @@ func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, st
 		Code:    pulumi.NewFileArchive(listenerCodePath),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: pulumi.StringMap{
-				envStateTable:   pulumi.String(stateTableName),
+				envStateTable:     pulumi.String(stateTableName),
 				envAllowedOrigins: pulumi.String(strings.Join(args.AllowedOrigins, ",")),
 			},
 		},

@@ -3,8 +3,10 @@ package deploy
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
+	"strings"
 
 	iam "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/iam"
 	lambda "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/lambda"
@@ -74,6 +76,70 @@ func membraneLayerARN() string {
 type functionArgs struct {
 	Runtime string
 	Handler string
+}
+
+// isrConfig points a Next function's cache handler at the account-global stores
+// backing ISR. Prefix and TagNamespace both derive from the deploy's
+// <env>/<project>/<app>/<build> identity, so an app can only ever address its
+// own entries and its own tags — which is what isrPolicy then enforces.
+type isrConfig struct {
+	Bucket   string
+	Prefix   string
+	Table    string
+	TableARN string
+}
+
+// tagNamespace is the partition-key prefix this app's ISR tag records live
+// under in the shared state table. It mirrors the S3 prefix so one identity
+// governs both stores. Building it from the same Prefix is what lets isrPolicy
+// scope DynamoDB with a single LeadingKeys wildcard.
+func (c isrConfig) tagNamespace() string {
+	return "TAG#" + strings.ReplaceAll(c.Prefix, "/", "#") + "#"
+}
+
+// isrEnv is what the bundled cache handler reads to find its backing stores.
+func (c isrConfig) isrEnv() map[string]string {
+	return map[string]string{
+		"OCEL_ISR_BUCKET":        c.Bucket,
+		"OCEL_ISR_PREFIX":        c.Prefix,
+		"OCEL_STATE_TABLE":       c.Table,
+		"OCEL_ISR_TAG_NAMESPACE": c.tagNamespace(),
+	}
+}
+
+// isrPolicy grants a Next function exactly the cache access it needs and no
+// more. Both the asset bucket and the state table are account-global and shared
+// by every env, project and app, so an unscoped grant would let any function
+// read or corrupt another project's cache — and the state table also holds
+// upload sessions, whose items carry HMAC secrets. The DynamoDB grant leans on
+// StringLike (plain LeadingKeys matching is exact-only) to bound the function to
+// its own tag partitions.
+func isrPolicy(c isrConfig) (string, error) {
+	doc := map[string]any{
+		"Version": "2012-10-17",
+		"Statement": []any{
+			map[string]any{
+				"Effect":   "Allow",
+				"Action":   []string{"s3:GetObject", "s3:PutObject"},
+				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
+			},
+			map[string]any{
+				"Effect":   "Allow",
+				"Action":   []string{"dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:PutItem"},
+				"Resource": c.TableARN,
+				"Condition": map[string]any{
+					"ForAllValues:StringLike": map[string]any{
+						"dynamodb:LeadingKeys": []string{c.tagNamespace() + "*"},
+					},
+				},
+			},
+		},
+	}
+	out, err := json.Marshal(doc)
+	if err != nil {
+		return "", fmt.Errorf("render isr policy: %w", err)
+	}
+	return string(out), nil
 }
 
 // translateFunction lowers a ManifestFunction into the concrete Lambda
@@ -155,7 +221,7 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutpu
 // changes when the code changes, so Pulumi redeploys exactly the changed
 // functions. The Function URL is exported under logicalName for
 // collectFunctionOutput.
-func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs, artifact artifactRef, env pulumi.StringMap) error {
+func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs, artifact artifactRef, env pulumi.StringMap, isr *isrConfig) error {
 	role, err := newServiceRole(ctx, logicalName+"-fn", "lambda.amazonaws.com", nil)
 	if err != nil {
 		return err
@@ -167,11 +233,31 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 		return err
 	}
 
+	// env is shared across every function in the deploy, so per-function
+	// additions are made on a copy.
+	env = maps.Clone(env)
+
 	// The lambdanode bootstrap (in the membrane layer) takes over as the runtime and
 	// imports the user entrypoint at /var/task/<handler>. The Lambda's own
 	// Handler config is vestigial under this exec wrapper.
 	env["AWS_LAMBDA_EXEC_WRAPPER"] = pulumi.String(execWrapper)
 	env["OCEL_HANDLER"] = pulumi.String("/var/task/" + args.Handler)
+
+	if isr != nil {
+		for k, v := range isr.isrEnv() {
+			env[k] = pulumi.String(v)
+		}
+		policy, err := isrPolicy(*isr)
+		if err != nil {
+			return err
+		}
+		if _, err := iam.NewRolePolicy(ctx, logicalName+"-fn-isr", &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(policy),
+		}); err != nil {
+			return err
+		}
+	}
 
 	fn, err := lambda.NewFunction(ctx, logicalName, &lambda.FunctionArgs{
 		Runtime:  pulumi.String(args.Runtime),
