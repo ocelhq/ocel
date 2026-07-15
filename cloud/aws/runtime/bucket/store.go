@@ -70,20 +70,25 @@ type sessionStore struct {
 	table  string
 }
 
-// sessionKey is the item's key in the shared state table. Sessions namespace
+// A session's key grammar in the shared state table. Sessions namespace
 // themselves under a SESSION# partition so they never collide with the other
 // entities keyed into the same table, and pin a constant sort key because a
 // session is a single item rather than a collection.
+const (
+	sessionPKPrefix = "SESSION#"
+	sessionSK       = "#META"
+)
+
 func sessionKey(sessionID string) map[string]ddbtypes.AttributeValue {
 	return map[string]ddbtypes.AttributeValue{
-		"pk": &ddbtypes.AttributeValueMemberS{Value: "SESSION#" + sessionID},
-		"sk": &ddbtypes.AttributeValueMemberS{Value: "#META"},
+		"pk": &ddbtypes.AttributeValueMemberS{Value: sessionPKPrefix + sessionID},
+		"sk": &ddbtypes.AttributeValueMemberS{Value: sessionSK},
 	}
 }
 
 func (s *sessionStore) put(ctx context.Context, sess session) error {
-	sess.PK = "SESSION#" + sess.SessionID
-	sess.SK = "#META"
+	sess.PK = sessionPKPrefix + sess.SessionID
+	sess.SK = sessionSK
 	item, err := attributevalue.MarshalMap(sess)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)

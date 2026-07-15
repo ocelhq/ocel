@@ -56,14 +56,14 @@ type bucketArgs struct {
 	ListenerTimeoutSeconds int
 
 	// RuntimeS3Actions / RuntimeSessionActions are granted to the runtime
-	// process's IAM role: mint presigned PUTs (PutObject) and read/write the
-	// session table.
+	// process's IAM role: mint presigned PUTs (PutObject) and read/write its
+	// upload sessions in the state table.
 	RuntimeS3Actions      []string
 	RuntimeSessionActions []string
 
 	// ListenerS3Actions / ListenerSessionActions are granted to the listener
 	// Lambda's role: read the landed object's tags and perform the guarded
-	// transition on the session table.
+	// session transition in the state table.
 	ListenerS3Actions      []string
 	ListenerSessionActions []string
 }
@@ -111,9 +111,10 @@ func translateBucket(cfg *resourcesv1.BucketConfig) bucketArgs {
 // Pulumi program: a private (public-access-blocked) S3 bucket with CORS from
 // allowed_origins, an ObjectCreated -> listener Lambda notification, the listener
 // Lambda itself, and the two IAM roles (runtime process: S3-presign +
-// session-table access; listener: object-tag read + session-table transition).
-// stateTableName/stateTableARN identify the account-global sessions table
-// bootstrap provisions; listenerCodePath is the built listener handler archive
+// session access; listener: object-tag read + guarded session transition).
+// stateTableName/stateTableARN identify the account-global state table
+// bootstrap provisions, where a bucket's upload sessions live alongside the
+// other entities keyed into it; listenerCodePath is the built listener archive
 // (its packaging via provider distribution is deferred — see deploy.Config).
 // The bucket name is exported under logicalName for collectBucketOutput.
 func registerBucket(ctx *pulumi.Context, logicalName string, args bucketArgs, stateTableName, stateTableARN, listenerCodePath string) (pulumi.StringOutput, error) {

@@ -1,7 +1,7 @@
 import {
   DynamoDBClient,
   BatchGetItemCommand,
-  PutItemCommand,
+  UpdateItemCommand,
 } from "@aws-sdk/client-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
@@ -119,22 +119,32 @@ export function awsCacheStore(): CacheStore {
       return found;
     },
 
+    // Merges rather than replaces. Next's own revalidateTag spreads the existing
+    // record before applying its updates, so marking a tag stale must not drop an
+    // expiry set earlier — a lost `expired` silently makes an invalidated tag
+    // look fresh again and resurrects stale content.
     async writeTags(tags, record) {
+      const sets: string[] = [];
+      const names: Record<string, string> = {};
+      const values: Record<string, any> = {};
+      for (const field of ["stale", "expired"] as const) {
+        const v = record[field];
+        if (v === undefined) continue;
+        sets.push(`#${field} = :${field}`);
+        names[`#${field}`] = field;
+        values[`:${field}`] = { N: String(v) };
+      }
+      if (sets.length === 0) return;
+
       await Promise.all(
         tags.map((tag) =>
           ddb.send(
-            new PutItemCommand({
+            new UpdateItemCommand({
               TableName: table,
-              Item: {
-                pk: { S: tagPK(tag) },
-                sk: { S: "#META" },
-                ...(record.stale !== undefined
-                  ? { stale: { N: String(record.stale) } }
-                  : {}),
-                ...(record.expired !== undefined
-                  ? { expired: { N: String(record.expired) } }
-                  : {}),
-              },
+              Key: { pk: { S: tagPK(tag) }, sk: { S: "#META" } },
+              UpdateExpression: "SET " + sets.join(", "),
+              ExpressionAttributeNames: names,
+              ExpressionAttributeValues: values,
             }),
           ),
         ),

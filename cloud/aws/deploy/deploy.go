@@ -43,10 +43,12 @@ type Config struct {
 	Pulumi      auto.PulumiCommand
 	Secrets     SecretsReader
 
-	// StateTable is the account-global upload-sessions table bootstrap
-	// provisions; a bucket's runtime and listener roles are scoped to it.
+	// StateTable is the account-global state table bootstrap provisions, shared
+	// by every entity that keys into it: a bucket's upload sessions and a Next
+	// app's ISR tag records both live here under their own key prefixes.
 	StateTable string
-	// StateTableARN is that table's ARN, used to scope the bucket IAM grants.
+	// StateTableARN is that table's ARN, used to scope each consumer's IAM
+	// grants to its own key prefix.
 	StateTableARN string
 	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
 	// deploys. Packaging it (building + zipping the handler binary) rides the

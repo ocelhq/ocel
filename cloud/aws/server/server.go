@@ -136,6 +136,9 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	if deployed.AssetBucket == "" {
 		return nil, fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
+	if deployed.StateTable == "" {
+		return nil, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
@@ -151,19 +154,16 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		logf(resourceSummary(r))
 	}
 
-	// A bucket resource scopes its IAM grants to the account-global sessions
-	// table, so resolve that table's ARN (account + region) up front.
-	var stateTableARN string
-	if manifestHasBucket(manifest) {
-		if deployed.StateTable == "" {
-			return nil, fmt.Errorf("account bootstrap is present but its sessions table is missing; re-run `%s`", bootstrapCmd)
-		}
-		account, err := accountID(ctx, sts.NewFromConfig(awscfg))
-		if err != nil {
-			return nil, err
-		}
-		stateTableARN = fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
+	// Bucket resources and Next cache handlers both scope their IAM grants to
+	// the state table, so resolve its ARN up front — unconditionally. Gating
+	// this on which resources happen to need it means every new consumer has to
+	// remember to widen the gate, and one that forgets renders an empty
+	// Resource into its policy and fails the deploy at Pulumi.
+	account, err := accountID(ctx, sts.NewFromConfig(awscfg))
+	if err != nil {
+		return nil, err
 	}
+	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
 	return deploy.Run(ctx, deploy.Config{
 		Region:           awscfg.Region,
@@ -283,8 +283,8 @@ func artifactRoot() string {
 	return filepath.Join(wd, artifactRootDirName)
 }
 
-// STSAPI is the read subset of the STS client the bucket deploy path uses to
-// resolve the account id for the sessions-table ARN.
+// STSAPI is the read subset of the STS client the deploy path uses to resolve
+// the account id for the state-table ARN.
 type STSAPI interface {
 	GetCallerIdentity(ctx context.Context, in *sts.GetCallerIdentityInput, optFns ...func(*sts.Options)) (*sts.GetCallerIdentityOutput, error)
 }
@@ -295,16 +295,6 @@ func accountID(ctx context.Context, api STSAPI) (string, error) {
 		return "", fmt.Errorf("resolve AWS account id: %w", err)
 	}
 	return aws.ToString(out.Account), nil
-}
-
-// manifestHasBucket reports whether any resource in the manifest is a bucket.
-func manifestHasBucket(m *deploymentsv1.Manifest) bool {
-	for _, r := range m.GetResources() {
-		if r.GetBucket() != nil {
-			return true
-		}
-	}
-	return false
 }
 
 // loadAWS resolves AWS configuration from the standard default chain,

@@ -165,7 +165,7 @@ func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
 		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
 	}
 
-	env := cfg.isrEnv()
+	env := cfg.env()
 
 	if env["OCEL_ISR_BUCKET"] != "assets-xyz" {
 		t.Errorf("OCEL_ISR_BUCKET = %q", env["OCEL_ISR_BUCKET"])

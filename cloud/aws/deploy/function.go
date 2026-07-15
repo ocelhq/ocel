@@ -97,8 +97,8 @@ func (c isrConfig) tagNamespace() string {
 	return "TAG#" + strings.ReplaceAll(c.Prefix, "/", "#") + "#"
 }
 
-// isrEnv is what the bundled cache handler reads to find its backing stores.
-func (c isrConfig) isrEnv() map[string]string {
+// env is what the bundled cache handler reads to find its backing stores.
+func (c isrConfig) env() map[string]string {
 	return map[string]string{
 		"OCEL_ISR_BUCKET":        c.Bucket,
 		"OCEL_ISR_PREFIX":        c.Prefix,
@@ -244,7 +244,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 	env["OCEL_HANDLER"] = pulumi.String("/var/task/" + args.Handler)
 
 	if isr != nil {
-		for k, v := range isr.isrEnv() {
+		for k, v := range isr.env() {
 			env[k] = pulumi.String(v)
 		}
 		policy, err := isrPolicy(*isr)
