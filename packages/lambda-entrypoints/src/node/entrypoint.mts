@@ -1,7 +1,7 @@
 import http from "node:http";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
-import { sendControl, serveInvoke, startServer, type Invoke } from "../shared/membrane.mjs";
+import { reportFatalBoot, serveInvoke, startServer, type Invoke } from "../shared/membrane.mjs";
 
 type Loaded =
   | { kind: "server"; value: http.Server }
@@ -153,6 +153,6 @@ async function boot(): Promise<void> {
 }
 
 boot().catch((err) => {
-  sendControl("log", { level: "error", message: String(err?.stack || err) });
+  reportFatalBoot(err);
   process.exit(1);
 });
