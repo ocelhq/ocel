@@ -50,7 +50,7 @@ const (
 	// layer version. It is a released-artifact version, bumped only when the
 	// layer is republished (`make publish-layer`); override via
 	// OCEL_MEMBRANE_LAYER_ARN for dev/testing.
-	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:9"
+	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:10"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
 	// A function in the manifest is web-facing (an express framework implies
