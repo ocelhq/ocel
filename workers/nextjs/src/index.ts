@@ -1,5 +1,7 @@
 import { resolveRoutes } from "@next/routing";
 
+import { type CacheDeps, cacheKey, serveCached } from "./cache";
+
 interface Env {
   ASSETS: Fetcher;
   FUNCTION_URLS: string;
@@ -11,14 +13,30 @@ type DispatchTarget =
   // A prerendered route. Its config + fallback live in the asset bucket keyed
   // by build id; until the ISR cache path lands the worker just invokes the
   // parent function (id) to render on every request, so the route still works.
-  | { kind: "prerender"; id: string }
+  //
+  // tags are the route's Cloudflare-legal cache tags (the only purge path once
+  // the edge cache lands) and allowQuery the query params that belong in its
+  // cache key. Both are baked in by the adapter — the origin response carries
+  // neither. Optional: a manifest from a build before they existed has neither,
+  // and an empty allowQuery ([] — drop all query) is not the same as no rule.
+  | { kind: "prerender"; id: string; tags?: string[]; allowQuery?: string[] }
   | { kind: "edge"; entryKey?: string };
+
+// The RSC block of the routes manifest. Next's adapter derives the .rsc output
+// pathnames from these same values, so resolution here must mirror it.
+interface RscConfig {
+  header: string;
+  suffix: string;
+  prefetchSegmentHeader: string;
+  prefetchSegmentSuffix: string;
+  prefetchSegmentDirSuffix: string;
+}
 
 interface Manifest {
   buildId: string;
   basePath: string;
   pathnames: string[];
-  routes: unknown;
+  routes: { rsc?: RscConfig };
   dispatch: Record<string, DispatchTarget>;
 }
 
@@ -40,6 +58,66 @@ export interface RouteDeps {
   assets: Pick<Fetcher, "fetch">;
   // Injectable so lambda/external forwarding can be observed in tests.
   fetch?: typeof fetch;
+  // Absent outside a Worker request (and in routing tests): routes then forward
+  // to their origin uncached.
+  cache?: CacheDeps;
+}
+
+export interface RscResolution {
+  // The dispatch (and, later, cache) identity for this request. Never forwarded
+  // to the origin — see dispatchResult.
+  pathname: string;
+  // False when an RSC variant was requested but has no dispatch entry, so the
+  // request falls back to an identity it shares with the document response.
+  // Cloudflare ignores Vary, so caching on that shared identity would serve RSC
+  // payloads to document requests.
+  cacheEligible: boolean;
+}
+
+// Mirrors Next's normalizePagePath: the adapter names RSC outputs after the
+// page file, so '/' is '/index' and a literal '/index' route doubles.
+function normalizePagePath(pathname: string): string {
+  if (pathname === "/") return "/index";
+  return /^\/index(\/|$)/.test(pathname) ? `/index${pathname}` : pathname;
+}
+
+function rscVariantPathname(
+  pathname: string,
+  headers: Headers,
+  rsc: RscConfig,
+): string | undefined {
+  const base = normalizePagePath(pathname);
+
+  const segment = headers.get(rsc.prefetchSegmentHeader);
+  if (segment) {
+    const dir = base + rsc.prefetchSegmentDirSuffix;
+    const path = segment.startsWith("/") ? segment : `/${segment}`;
+    return dir + path + rsc.prefetchSegmentSuffix;
+  }
+
+  if (headers.has(rsc.header)) return base + rsc.suffix;
+  return undefined;
+}
+
+// resolveRsc gives an RSC or segment-prefetch request its own identity, because
+// @next/routing resolves both to the bare pathname the document uses. Vercel
+// separates these variants by pathname rather than by Vary, and the manifest's
+// dispatch entries are keyed that way.
+export function resolveRsc(
+  pathname: string,
+  headers: Headers,
+  manifest: Manifest,
+): RscResolution {
+  const rsc = manifest.routes?.rsc;
+  if (!rsc) return { pathname, cacheEligible: true };
+
+  const variant = rscVariantPathname(pathname, headers, rsc);
+  if (!variant) return { pathname, cacheEligible: true };
+  if (manifest.dispatch[variant]) {
+    return { pathname: variant, cacheEligible: true };
+  }
+
+  return { pathname, cacheEligible: false };
 }
 
 // dispatchResult turns a resolved route into a response: it serves static
@@ -72,7 +150,12 @@ export async function dispatchResult(
     return assetsOr404(request, assets);
   }
 
-  const target = manifest.dispatch[result.resolvedPathname];
+  // An identity for lookup only: Next inside the Lambda has no '/index.rsc'
+  // route, it expects '/' plus the RSC headers. Everything below forwards the
+  // ORIGINAL pathname and headers.
+  const rsc = resolveRsc(result.resolvedPathname, request.headers, manifest);
+
+  const target = manifest.dispatch[rsc.pathname];
   if (!target) {
     // Not in the manifest — fall back to the Assets binding before giving up,
     // so any file present in static/ is still served even if unenumerated.
@@ -101,13 +184,33 @@ export async function dispatchResult(
         ? new URL(result.invocationTarget.pathname + url.search, fnUrl)
         : new URL(url.pathname + url.search, fnUrl);
 
-      const proxied = new Request(forwardUrl, {
-        method: request.method,
-        headers: request.headers,
-        body: request.body,
-        redirect: "manual",
-      });
-      return doFetch(proxied);
+      // Built per call: a background refresh reaches the origin a second time,
+      // and a Request cannot be replayed.
+      const origin = () =>
+        doFetch(
+          new Request(forwardUrl, {
+            method: request.method,
+            headers: request.headers,
+            body: request.body,
+            redirect: "manual",
+          }),
+        );
+
+      // A lambda route serves per-user data under default headers; it must never
+      // become cacheable by omission.
+      if (target.kind !== "prerender" || !rsc.cacheEligible || !deps.cache) {
+        return origin();
+      }
+
+      return serveCached(
+        request,
+        {
+          key: cacheKey(manifest.buildId, rsc.pathname, url, target.allowQuery),
+          tags: target.tags,
+        },
+        deps.cache,
+        origin,
+      );
     }
 
     case "edge":
@@ -133,7 +236,7 @@ async function assetsOr404(
 }
 
 export default {
-  async fetch(request, env): Promise<Response> {
+  async fetch(request, env, ctx): Promise<Response> {
     // The routing manifest is uploaded alongside the worker as a text module
     // (Cloudflare's module upload has no JSON type), so its default export is the
     // raw JSON string. The variable specifier keeps esbuild from trying to inline
@@ -164,6 +267,12 @@ export default {
       functionUrls: JSON.parse(env.FUNCTION_URLS) as Record<string, string>,
       assets: env.ASSETS,
       fetch,
+      // Dormant on *.workers.dev, where cache operations are silently discarded;
+      // it comes alive once the worker is routed through a custom domain.
+      cache: {
+        cache: caches.default,
+        waitUntil: (promise) => ctx.waitUntil(promise),
+      },
     });
   },
 } satisfies ExportedHandler<Env>;
