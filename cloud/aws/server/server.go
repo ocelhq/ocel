@@ -153,16 +153,16 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 	// A bucket resource scopes its IAM grants to the account-global sessions
 	// table, so resolve that table's ARN (account + region) up front.
-	var sessionTableARN string
+	var stateTableARN string
 	if manifestHasBucket(manifest) {
-		if deployed.SessionTable == "" {
+		if deployed.StateTable == "" {
 			return nil, fmt.Errorf("account bootstrap is present but its sessions table is missing; re-run `%s`", bootstrapCmd)
 		}
 		account, err := accountID(ctx, sts.NewFromConfig(awscfg))
 		if err != nil {
 			return nil, err
 		}
-		sessionTableARN = fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.SessionTable)
+		stateTableARN = fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 	}
 
 	return deploy.Run(ctx, deploy.Config{
@@ -173,8 +173,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		StackName:        stackName(manifest.GetProjectId(), env),
 		Pulumi:           pulumiCmd,
 		Secrets:          secretsmanager.NewFromConfig(awscfg),
-		SessionTable:     deployed.SessionTable,
-		SessionTableARN:  sessionTableARN,
+		StateTable:     deployed.StateTable,
+		StateTableARN:  stateTableARN,
 		ListenerCodePath: listenerCodePath,
 		ArtifactRoot:     artifactRoot(),
 		ArtifactBucket:   deployed.ArtifactBucket,

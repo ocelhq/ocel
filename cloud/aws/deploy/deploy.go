@@ -43,11 +43,11 @@ type Config struct {
 	Pulumi      auto.PulumiCommand
 	Secrets     SecretsReader
 
-	// SessionTable is the account-global upload-sessions table bootstrap
+	// StateTable is the account-global upload-sessions table bootstrap
 	// provisions; a bucket's runtime and listener roles are scoped to it.
-	SessionTable string
-	// SessionTableARN is that table's ARN, used to scope the bucket IAM grants.
-	SessionTableARN string
+	StateTable string
+	// StateTableARN is that table's ARN, used to scope the bucket IAM grants.
+	StateTableARN string
 	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
 	// deploys. Packaging it (building + zipping the handler binary) rides the
 	// provider's distribution workflow, which is deferred with provider publish;
@@ -158,7 +158,7 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 				}
 				value, err = registerPostgres(pctx, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
 			case r.GetBucket() != nil:
-				value, err = registerBucket(pctx, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.SessionTable, cfg.SessionTableARN, cfg.ListenerCodePath)
+				value, err = registerBucket(pctx, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
 			default:
 				continue
 			}

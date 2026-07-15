@@ -19,8 +19,9 @@ import (
 	bucketsv1 "github.com/ocelhq/ocel/pkg/proto/buckets/v1"
 )
 
-// fakeDDB is an in-memory stand-in for the narrowed DynamoDB API, keyed by the
-// session_id partition key.
+// fakeDDB is an in-memory stand-in for the narrowed DynamoDB API. It keys items
+// by the shared state table's pk/sk pair, so a store that forgot to namespace
+// its keys would collide here exactly as it would against the real table.
 type fakeDDB struct {
 	items map[string]map[string]ddbtypes.AttributeValue
 }
@@ -33,13 +34,18 @@ func avString(v ddbtypes.AttributeValue) string {
 	return v.(*ddbtypes.AttributeValueMemberS).Value
 }
 
+// itemKey collapses an item's pk/sk pair into the fake's map key.
+func itemKey(m map[string]ddbtypes.AttributeValue) string {
+	return avString(m["pk"]) + "\x00" + avString(m["sk"])
+}
+
 func (f *fakeDDB) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
-	f.items[avString(in.Item["session_id"])] = in.Item
+	f.items[itemKey(in.Item)] = in.Item
 	return &dynamodb.PutItemOutput{}, nil
 }
 
 func (f *fakeDDB) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
-	item, ok := f.items[avString(in.Key["session_id"])]
+	item, ok := f.items[itemKey(in.Key)]
 	if !ok {
 		return &dynamodb.GetItemOutput{}, nil
 	}
@@ -56,7 +62,7 @@ var updateFileIdxRe = regexp.MustCompile(`files\[(\d+)\]`)
 // DynamoDB's atomic conditional write, which is the listener's idempotency
 // guarantee under duplicate S3 deliveries.
 func (f *fakeDDB) UpdateItem(_ context.Context, in *dynamodb.UpdateItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.UpdateItemOutput, error) {
-	item, ok := f.items[avString(in.Key["session_id"])]
+	item, ok := f.items[itemKey(in.Key)]
 	if !ok {
 		return nil, &ddbtypes.ConditionalCheckFailedException{}
 	}

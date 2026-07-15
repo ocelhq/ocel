@@ -67,37 +67,58 @@ func parseTemplateStr(t *testing.T, template string) parsedTemplate {
 	return tmpl
 }
 
-// TestStackTemplate_SessionsTable asserts the bootstrap template provisions the
-// account-global sessions table with exactly the schema the runtime expects:
-// partition key session_id (S), no sort key, and a TTL on expires_at.
-func TestStackTemplate_SessionsTable(t *testing.T) {
-	tmpl := parseTemplate(t)
+// TestStackTemplate_StateTable asserts both substrate templates provision the
+// account-global state table with the generic single-table schema every Ocel
+// state entity keys into: partition key pk (S), sort key sk (S), and a TTL on
+// expires_at. The keys are deliberately opaque — upload sessions and Next ISR
+// tag records share this table — so nothing here may name an entity.
+func TestStackTemplate_StateTable(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		template string
+	}{
+		{"production", stackTemplate()},
+		{"preview", previewStackTemplate()},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tmpl := parseTemplateStr(t, tc.template)
 
-	table, ok := tmpl.Resources["SessionsTable"]
-	if !ok {
-		t.Fatal("template is missing the SessionsTable resource")
-	}
-	if table.Type != "AWS::DynamoDB::Table" {
-		t.Errorf("SessionsTable Type = %q, want AWS::DynamoDB::Table", table.Type)
-	}
-	if table.Properties.BillingMode != "PAY_PER_REQUEST" {
-		t.Errorf("BillingMode = %q, want PAY_PER_REQUEST", table.Properties.BillingMode)
-	}
+			table, ok := tmpl.Resources["StateTable"]
+			if !ok {
+				t.Fatal("template is missing the StateTable resource")
+			}
+			if table.Type != "AWS::DynamoDB::Table" {
+				t.Errorf("StateTable Type = %q, want AWS::DynamoDB::Table", table.Type)
+			}
+			if table.Properties.BillingMode != "PAY_PER_REQUEST" {
+				t.Errorf("BillingMode = %q, want PAY_PER_REQUEST", table.Properties.BillingMode)
+			}
 
-	if got := table.Properties.AttributeDefinitions; len(got) != 1 || got[0].AttributeName != "session_id" || got[0].AttributeType != "S" {
-		t.Errorf("AttributeDefinitions = %+v, want single session_id (S)", got)
-	}
-	if got := table.Properties.KeySchema; len(got) != 1 || got[0].AttributeName != "session_id" || got[0].KeyType != "HASH" {
-		t.Errorf("KeySchema = %+v, want single session_id HASH (no sort key)", got)
-	}
+			attrs := table.Properties.AttributeDefinitions
+			if len(attrs) != 2 ||
+				attrs[0].AttributeName != "pk" || attrs[0].AttributeType != "S" ||
+				attrs[1].AttributeName != "sk" || attrs[1].AttributeType != "S" {
+				t.Errorf("AttributeDefinitions = %+v, want pk (S) and sk (S)", attrs)
+			}
+			keys := table.Properties.KeySchema
+			if len(keys) != 2 ||
+				keys[0].AttributeName != "pk" || keys[0].KeyType != "HASH" ||
+				keys[1].AttributeName != "sk" || keys[1].KeyType != "RANGE" {
+				t.Errorf("KeySchema = %+v, want pk HASH + sk RANGE", keys)
+			}
 
-	ttl := table.Properties.TimeToLiveSpecification
-	if ttl.AttributeName != "expires_at" || !ttl.Enabled {
-		t.Errorf("TimeToLiveSpecification = %+v, want expires_at enabled", ttl)
-	}
+			ttl := table.Properties.TimeToLiveSpecification
+			if ttl.AttributeName != "expires_at" || !ttl.Enabled {
+				t.Errorf("TimeToLiveSpecification = %+v, want expires_at enabled", ttl)
+			}
 
-	if _, ok := tmpl.Outputs[outputSessionTable]; !ok {
-		t.Errorf("template is missing the %s output", outputSessionTable)
+			if _, ok := tmpl.Outputs[outputStateTable]; !ok {
+				t.Errorf("template is missing the %s output", outputStateTable)
+			}
+			if _, ok := tmpl.Resources["SessionsTable"]; ok {
+				t.Error("SessionsTable is superseded by StateTable and must not be provisioned")
+			}
+		})
 	}
 }
 
@@ -223,14 +244,14 @@ func (s stubDescriber) DescribeStacks(context.Context, *cloudformation.DescribeS
 }
 
 // TestCheckDeployed_ParsesOutputs proves the discovery path surfaces the
-// session table name, state bucket, version, and class marker that later
+// state table name, state bucket, version, and class marker that later
 // deploys and the class guard depend on.
 func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	api := stubDescriber{out: &cloudformation.DescribeStacksOutput{
 		Stacks: []cfntypes.Stack{{
 			Outputs: []cfntypes.Output{
 				{OutputKey: aws.String(outputStateBucket), OutputValue: aws.String("bucket-123")},
-				{OutputKey: aws.String(outputSessionTable), OutputValue: aws.String("sessions-abc")},
+				{OutputKey: aws.String(outputStateTable), OutputValue: aws.String("state-abc")},
 				{OutputKey: aws.String(outputArtifactBucket), OutputValue: aws.String("artifacts-xyz")},
 				{OutputKey: aws.String(outputAssetBucket), OutputValue: aws.String("assets-xyz")},
 				{OutputKey: aws.String(outputVersion), OutputValue: aws.String("3")},
@@ -243,7 +264,7 @@ func TestCheckDeployed_ParsesOutputs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CheckDeployed: %v", err)
 	}
-	want := Deployed{Present: true, Version: 3, StateBucket: "bucket-123", SessionTable: "sessions-abc", ArtifactBucket: "artifacts-xyz", AssetBucket: "assets-xyz", Class: ClassProduction}
+	want := Deployed{Present: true, Version: 3, StateBucket: "bucket-123", StateTable: "state-abc", ArtifactBucket: "artifacts-xyz", AssetBucket: "assets-xyz", Class: ClassProduction}
 	if got != want {
 		t.Errorf("CheckDeployed = %+v, want %+v", got, want)
 	}

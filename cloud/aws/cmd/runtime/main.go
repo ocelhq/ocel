@@ -35,7 +35,7 @@ var version = "dev"
 // dynamodb-local / MinIO.
 const (
 	sessionTokenEnvVar = channel.SessionTokenEnvVar
-	tableEnvVar        = "OCEL_RUNTIME_SESSION_TABLE"
+	tableEnvVar        = "OCEL_RUNTIME_STATE_TABLE"
 	bucketEnvVar       = "OCEL_RUNTIME_BUCKET"
 	regionEnvVar       = "OCEL_RUNTIME_REGION"
 	ddbEndpointEnvVar  = "OCEL_RUNTIME_DDB_ENDPOINT"
