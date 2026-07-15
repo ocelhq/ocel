@@ -529,11 +529,135 @@ test("marks prerendered pathnames as prerender in dispatch and writes no isr-cac
   const manifest = await readManifest(projectDir);
   // The prerender marker replaces the plain lambda entry; the id stays the
   // parent function so the runtime can invoke it to regenerate.
-  expect(manifest.dispatch["/"]).toEqual({ kind: "prerender", id: "/" });
-  expect(manifest.dispatch["/index.rsc"]).toEqual({
+  expect(manifest.dispatch["/"]).toMatchObject({ kind: "prerender", id: "/" });
+  expect(manifest.dispatch["/index.rsc"]).toMatchObject({
     kind: "prerender",
     id: "/",
   });
+});
+
+// Next never emits x-next-cache-tags on an HTTP response, so a worker caching
+// the route cannot recover the tags from the origin — they only exist as build
+// metadata. Baking them into dispatch is the only channel that reaches the edge.
+test("copies each prerender's cache tags and allowQuery onto its dispatch target", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  args.outputs.prerenders[0].fallback.initialHeaders = {
+    "content-type": "text/html; charset=utf-8",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/page,_N_T_/",
+  };
+  args.outputs.prerenders[1].fallback.initialHeaders = {
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/page",
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"]).toEqual({
+    kind: "prerender",
+    id: "/",
+    tags: ["_N_T_/layout", "_N_T_/page", "_N_T_/"],
+    allowQuery: [],
+  });
+  // Tags are per-variant, not shared across a route's outputs.
+  expect(manifest.dispatch["/index.rsc"].tags).toEqual([
+    "_N_T_/layout",
+    "_N_T_/page",
+  ]);
+});
+
+// allowQuery is per route: [] means drop every query param from the cache key,
+// while no rule at all is a different instruction. Collapsing the two would
+// silently break a route that legitimately allows a param.
+test("preserves an empty allowQuery and omits it entirely when Next set no rule", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  args.outputs.prerenders[0].config = { allowQuery: ["slug"] };
+  args.outputs.prerenders[1].config = {};
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"].allowQuery).toEqual(["slug"]);
+  expect(manifest.dispatch["/index.rsc"]).not.toHaveProperty("allowQuery");
+});
+
+// Next's encodeCacheTag only percent-encodes outside [\t\x20-\x7e], so a tag
+// with a space reaches us intact — but Cloudflare's Cache-Tag forbids spaces,
+// and an illegal tag would have Cloudflare reject the whole header.
+test("sanitizes tags containing whitespace into a Cloudflare-legal form", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  args.outputs.prerenders[0].fallback.initialHeaders = {
+    "x-next-cache-tags": "_N_T_/blog/[slug],my tag,tab\tsep",
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"].tags).toEqual([
+    "_N_T_/blog/[slug]",
+    "my%20tag",
+    "tab%09sep",
+  ]);
+  for (const tag of manifest.dispatch["/"].tags) {
+    expect(tag).not.toMatch(/\s/);
+  }
+});
+
+// Over any ceiling Cloudflare rejects the whole Cache-Tag header, which would
+// cost the route every tag rather than the offending few.
+test("drops tags over the per-tag limit and stops at the tag-count ceiling", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const huge = "x".repeat(1025);
+  args.outputs.prerenders[0].fallback.initialHeaders = {
+    "x-next-cache-tags": ["_N_T_/ok", huge, "_N_T_/also-ok"].join(","),
+  };
+  args.outputs.prerenders[1].fallback.initialHeaders = {
+    "x-next-cache-tags": Array.from({ length: 1200 }, (_, i) => `t${i}`).join(","),
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  // The over-long tag is dropped; its legal neighbours survive.
+  expect(manifest.dispatch["/"].tags).toEqual(["_N_T_/ok", "_N_T_/also-ok"]);
+  expect(manifest.dispatch["/index.rsc"].tags).toHaveLength(1000);
+  expect(manifest.dispatch["/index.rsc"].tags[0]).toBe("t0");
+});
+
+// A 16KB aggregate is the header's hard ceiling regardless of tag count.
+test("stops at the 16KB aggregate header ceiling", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  // 40 x 512-byte tags = 20KB of tags, well past 16KB but under 1000 tags.
+  args.outputs.prerenders[0].fallback.initialHeaders = {
+    "x-next-cache-tags": Array.from({ length: 40 }, (_, i) =>
+      `${i}`.padStart(512, "p"),
+    ).join(","),
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  const tags: string[] = manifest.dispatch["/"].tags;
+  // 32 tags would be 16384 bytes exactly, but the separators count against the
+  // budget too — so 31 is the most that fits (31*512 + 30 commas = 15902).
+  expect(tags.length).toBe(31);
+  expect(Buffer.byteLength(tags.join(","))).toBeLessThanOrEqual(16 * 1024);
+});
+
+// A route with no tag header at all is normal (a static prerender with nothing
+// to revalidate); it must not gain an empty tags key.
+test("omits tags entirely when the prerender carries no tag header", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"]).not.toHaveProperty("tags");
 });
 
 test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", async () => {
