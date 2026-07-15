@@ -112,3 +112,39 @@ func TestUploadPrerenderAssets_MissingBucket(t *testing.T) {
 		t.Fatal("uploadPrerenderAssets = nil, want an error for a missing asset bucket")
 	}
 }
+
+// TestUploadPrerenderAssets_UploadsCacheEntries proves the seeded ISR cache
+// entries reach the bucket at exactly the key the cache handler reads:
+// <prefix>/cache/<key>.cache.json. The handler joins its own key onto
+// OCEL_ISR_PREFIX + "/cache/", so a drift here leaves every route re-rendering
+// with no error to show for it. Entries live beside functions/ rather than
+// under it, so they need their own crawl.
+func TestUploadPrerenderAssets_UploadsCacheEntries(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"routing-manifest.json":      `{"buildId":"BID","appName":"web"}`,
+		"cache/index.cache.json":     `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		"cache/blog/post.cache.json": `{"lastModified":2,"value":{"kind":"APP_PAGE"}}`,
+	})
+
+	f := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: f}
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+
+	got := append([]string(nil), f.puts...)
+	sort.Strings(got)
+	want := []string{
+		"prod/proj/web/BID/cache/blog/post.cache.json",
+		"prod/proj/web/BID/cache/index.cache.json",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("uploaded keys = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("uploaded key[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}

@@ -23,16 +23,42 @@ type prerenderManifest struct {
 	AppName string `json:"appName"`
 }
 
-// uploadPrerenderAssets crawls a Next app's functions output for the Vercel-
-// style prerender assets the adapter emits (*.prerender-config.json and
-// *.prerender-fallback.*) and uploads each to the account-global asset bucket,
-// keyed by <env>/<project-id>/<app-id>/<build-id>/<relpath> where relpath is
-// the file's path relative to the functions directory. The .func directories
+// assetPrefix is the key prefix every asset this app publishes to the
+// account-global bucket sits under: <env>/<project-id>/<app-id>/<build-id>. It
+// is also what the function's IAM policy is scoped to and what the cache
+// handler joins its keys onto, so all three agree by construction. Returns ""
+// for a manifest with no Next.js function.
+func assetPrefix(cfg Config, manifest *deploymentsv1.Manifest) (string, error) {
+	if !hasNextFunction(manifest.GetFunctions()) {
+		return "", nil
+	}
+	var pm prerenderManifest
+	raw, err := os.ReadFile(filepath.Join(cfg.ArtifactRoot, "routing-manifest.json"))
+	if err != nil {
+		return "", fmt.Errorf("read routing manifest: %w", err)
+	}
+	if err := json.Unmarshal(raw, &pm); err != nil {
+		return "", fmt.Errorf("parse routing manifest: %w", err)
+	}
+	if pm.BuildID == "" || pm.AppName == "" {
+		return "", fmt.Errorf("routing manifest is missing buildId or appName; rebuild the app")
+	}
+	// The app-id key segment reuses the worker-name sanitizer so it agrees with
+	// how the app is otherwise addressed, and stays a safe, stable path token.
+	appID := sanitizeWorkerName(pm.AppName)
+	return path.Join(cfg.Env, manifest.GetProjectId(), appID, pm.BuildID), nil
+}
+
+// uploadPrerenderAssets uploads a Next app's build output to the account-global
+// asset bucket under assetPrefix: the Vercel-style prerender assets the adapter
+// emits beside each function (*.prerender-config.json, *.prerender-fallback.*),
+// and the seeded ISR cache entries under cache/. The .func directories
 // (deployed Lambda trees) are skipped so the crawl never descends into their
 // traced node_modules. It is a no-op for a manifest with no Next.js function.
 func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
-	if !hasNextFunction(manifest.GetFunctions()) {
-		return nil
+	prefix, err := assetPrefix(cfg, manifest)
+	if err != nil || prefix == "" {
+		return err
 	}
 
 	functionsDir := filepath.Join(cfg.ArtifactRoot, "functions")
@@ -40,7 +66,13 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 	if err != nil {
 		return err
 	}
-	if len(assets) == 0 {
+	// Cache entries live beside functions/ rather than inside it, and keep their
+	// cache/ segment in the key: that is exactly where the handler looks.
+	cacheEntries, err := collectFiles(filepath.Join(cfg.ArtifactRoot, "cache"))
+	if err != nil {
+		return err
+	}
+	if len(assets) == 0 && len(cacheEntries) == 0 {
 		return nil
 	}
 
@@ -51,35 +83,59 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 		return fmt.Errorf("no asset uploader configured")
 	}
 
-	var pm prerenderManifest
-	raw, err := os.ReadFile(filepath.Join(cfg.ArtifactRoot, "routing-manifest.json"))
-	if err != nil {
-		return fmt.Errorf("read routing manifest for prerender upload: %w", err)
+	type upload struct{ key, src string }
+	uploads := make([]upload, 0, len(assets)+len(cacheEntries))
+	for _, rel := range assets {
+		uploads = append(uploads, upload{
+			key: path.Join(prefix, rel),
+			src: filepath.Join(functionsDir, filepath.FromSlash(rel)),
+		})
 	}
-	if err := json.Unmarshal(raw, &pm); err != nil {
-		return fmt.Errorf("parse routing manifest for prerender upload: %w", err)
+	for _, rel := range cacheEntries {
+		uploads = append(uploads, upload{
+			key: path.Join(prefix, "cache", rel),
+			src: filepath.Join(cfg.ArtifactRoot, "cache", filepath.FromSlash(rel)),
+		})
 	}
-	if pm.BuildID == "" || pm.AppName == "" {
-		return fmt.Errorf("routing manifest is missing buildId or appName; rebuild the app")
-	}
-
-	// The app-id key segment reuses the worker-name sanitizer so it agrees with
-	// how the app is otherwise addressed, and stays a safe, stable path token.
-	appID := sanitizeWorkerName(pm.AppName)
-	prefix := path.Join(cfg.Env, manifest.GetProjectId(), appID, pm.BuildID)
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(8) // bounded S3 conns
-	for _, rel := range assets {
+	for _, u := range uploads {
 		g.Go(func() error {
-			key := path.Join(prefix, rel)
-			src := filepath.Join(functionsDir, filepath.FromSlash(rel))
-			return uploadArtifact(ctx, cfg.Uploader, cfg.AssetBucket, key, func() ([]byte, error) {
-				return os.ReadFile(src)
+			return uploadArtifact(ctx, cfg.Uploader, cfg.AssetBucket, u.key, func() ([]byte, error) {
+				return os.ReadFile(u.src)
 			})
 		})
 	}
 	return g.Wait()
+}
+
+// collectFiles returns every file under dir as slash-separated paths relative to
+// it. A missing dir yields no files — an app with nothing prerendered emits no
+// cache entries.
+func collectFiles(dir string) ([]string, error) {
+	var rels []string
+	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(dir, p)
+		if err != nil {
+			return err
+		}
+		rels = append(rels, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("crawl %s: %w", dir, err)
+	}
+	return rels, nil
 }
 
 // collectPrerenderAssets returns every prerender config + fallback under dir as
