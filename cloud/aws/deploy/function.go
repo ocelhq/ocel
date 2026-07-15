@@ -124,8 +124,14 @@ func isrPolicy(c isrConfig) (string, error) {
 				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
 			},
 			map[string]any{
-				"Effect":   "Allow",
-				"Action":   []string{"dynamodb:GetItem", "dynamodb:BatchGetItem", "dynamodb:PutItem"},
+				"Effect": "Allow",
+				// Exactly the two calls the handler's tag store makes: readTags
+				// sends BatchGetItem, writeTags sends UpdateItem (it merges, so
+				// PutItem would clobber an earlier expiry). Adding a third call
+				// there means adding its action here — a mismatch 403s at runtime,
+				// and revalidateTag does not catch, so it throws out of the user's
+				// server action.
+				"Action":   []string{"dynamodb:BatchGetItem", "dynamodb:UpdateItem"},
 				"Resource": c.TableARN,
 				"Condition": map[string]any{
 					"ForAllValues:StringLike": map[string]any{
