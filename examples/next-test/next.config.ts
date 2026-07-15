@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  adapterPath: require.resolve("@ocel/next-runtime"),
 };
 
 export default nextConfig;
