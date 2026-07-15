@@ -1,6 +1,6 @@
 import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
-import { sendControl, serveInvoke, type Invoke } from "../shared/membrane.mjs";
+import { reportFatalBoot, serveInvoke, type Invoke } from "../shared/membrane.mjs";
 
 async function boot(): Promise<void> {
   // OCEL_HANDLER points at the generated launcher beside the app's .next dir,
@@ -26,6 +26,6 @@ async function boot(): Promise<void> {
 }
 
 boot().catch((err) => {
-  sendControl("log", { level: "error", message: String(err?.stack || err) });
+  reportFatalBoot(err);
   process.exit(1);
 });

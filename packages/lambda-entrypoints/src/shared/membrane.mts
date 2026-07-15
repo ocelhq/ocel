@@ -16,6 +16,17 @@ export function sendControl(type: string, payload: unknown): void {
   control().write(JSON.stringify({ type, payload }) + "\n");
 }
 
+// Reports an error that killed the boot, before there is an app to serve or,
+// often, a control socket to talk over. It must not go through sendControl:
+// that write is async, and the process.exit that follows a fatal error
+// abandons it, losing the one message explaining why the app never came up.
+// stderr is the real fd inherited from the Go bootstrap, which forwards it to
+// CloudWatch, so the write lands before the process goes.
+export function reportFatalBoot(err: unknown): void {
+  const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
+  console.error(`ocel: fatal boot error: ${detail}`);
+}
+
 export interface OcelContext {
   waitUntil: (p: Promise<unknown>) => void;
 }
