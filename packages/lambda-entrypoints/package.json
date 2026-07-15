@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/bundle-cache-handler.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
   "devDependencies": {
+    "@aws-sdk/client-dynamodb": "^3.1086.0",
+    "@aws-sdk/client-s3": "^3.1083.0",
     "@types/node": "^24",
+    "esbuild": "^0.24.2",
     "typescript": "^5.9.3",
     "vitest": "^3.2.7"
   }
