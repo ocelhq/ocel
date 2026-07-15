@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -119,10 +120,16 @@ func TestArtifactKey(t *testing.T) {
 // fakeUploader records PutObject calls and reports a configurable HeadObject
 // existence result.
 type fakeUploader struct {
-	exists    map[string]bool
+	exists  map[string]bool
+	headErr error
+
+	// Callers upload concurrently (uploadPrerenderAssets crawls under an
+	// errgroup), so what PutObject records is written from many goroutines at
+	// once and has to be guarded. Reading the fields back is safe unlocked:
+	// every caller waits for the uploads to finish first.
+	mu        sync.Mutex
 	puts      []string
 	putBodies map[string]string
-	headErr   error
 }
 
 func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
@@ -137,13 +144,19 @@ func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ .
 
 func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	key := aws.ToString(in.Key)
+	var body []byte
+	if in.Body != nil {
+		body, _ = io.ReadAll(in.Body)
+	}
+
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.puts = append(f.puts, key)
 	if in.Body != nil {
-		b, _ := io.ReadAll(in.Body)
 		if f.putBodies == nil {
 			f.putBodies = map[string]string{}
 		}
-		f.putBodies[key] = string(b)
+		f.putBodies[key] = string(body)
 	}
 	return &s3.PutObjectOutput{}, nil
 }
