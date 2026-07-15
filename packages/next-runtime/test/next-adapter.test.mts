@@ -206,6 +206,20 @@ async function synthPrerenderProject() {
   await mkdir(dirname(pageHandler), { recursive: true });
   await writeFile(pageHandler, "module.exports = () => {}");
 
+  // `next build` writes this manifest; the runtime reads its `config` back as
+  // nextConfig, which is the only channel through which the cache handler can
+  // be named.
+  await writeFile(
+    join(projectDir, ".next/required-server-files.json"),
+    JSON.stringify({
+      version: 1,
+      config: { cacheMaxMemorySize: 0, cacheHandlers: {} },
+      appDir: projectDir,
+      files: [],
+      ignore: [],
+    }),
+  );
+
   // Fallback bodies Next would have generated under .next/server/app.
   const appDir = join(projectDir, ".next/server/app");
   await mkdir(join(appDir, "index.segments"), { recursive: true });
@@ -555,4 +569,71 @@ test("writes each function's route id into its config.json", async () => {
 
   expect(config.id).toBe("/api/documents");
   expect(config.framework).toBe("next");
+});
+
+async function readCacheEntry(projectDir: string, key: string) {
+  return JSON.parse(
+    await readFile(
+      join(projectDir, ".ocel/output/cache", `${key}.cache.json`),
+      "utf8",
+    ),
+  );
+}
+
+// The runtime resolves nextConfig.cacheHandler through
+// formatDynamicImportPath(distDir, path), which only leaves the value alone
+// when it is already absolute — and `next build` rewrites any absolute value in
+// this manifest to a path relative to the *build* machine's distDir. Patching
+// the built manifest after the fact is what keeps the runtime path intact.
+test("names the layer's cache handler by absolute path in required-server-files", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = JSON.parse(
+    await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
+  );
+  expect(manifest.config.cacheHandler).toBe("/opt/ocel/next/cache-handler.cjs");
+  // Untouched neighbours prove we patched the manifest rather than rewrote it.
+  expect(manifest.config.cacheMaxMemorySize).toBe(0);
+  expect(manifest.version).toBe(1);
+});
+
+// Next stores one cache entry per route holding html + rscData + segments
+// together, but the adapter API surfaces those as three separate PRERENDER
+// outputs (/, /index.rsc, /index.segments/*). Seeding means regrouping them.
+test("regroups a route's prerender outputs into one cache entry", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const entry = await readCacheEntry(projectDir, "index");
+
+  expect(entry.value.kind).toBe("APP_PAGE");
+  expect(entry.value.html).toBe("<html>root</html>");
+  expect(Buffer.from(entry.value.rscData, "base64").toString()).toBe("RSC-ROOT");
+  expect(entry.value.segmentData).toEqual({
+    "/_tree": Buffer.from("RSC-TREE").toString("base64"),
+  });
+  expect(typeof entry.lastModified).toBe("number");
+});
+
+// The html variant carries the route's real response headers; the tags the
+// cache handler checks on every read ride in on x-next-cache-tags.
+test("carries the html variant's headers and status onto the cache entry", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  args.outputs.prerenders[0].fallback.initialHeaders = {
+    "content-type": "text/html; charset=utf-8",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/",
+  };
+  (args.outputs.prerenders[0].fallback as Record<string, unknown>).initialStatus = 200;
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const entry = await readCacheEntry(projectDir, "index");
+  expect(entry.value.headers["x-next-cache-tags"]).toBe("_N_T_/layout,_N_T_/");
+  expect(entry.value.status).toBe(200);
 });

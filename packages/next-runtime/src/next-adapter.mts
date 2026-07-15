@@ -6,6 +6,7 @@ import {
   cp,
   lstat,
   mkdir,
+  readFile,
   readdir,
   readlink,
   rm,
@@ -17,6 +18,14 @@ import { basename, dirname, extname, join, relative, sep } from "node:path";
 const scratchDir = join(process.cwd(), ".ocel/output");
 const launcherName = "__next_launcher.cjs";
 
+// Where the membrane layer mounts the bundled cache handler. Deliberately not
+// set through modifyConfig: `next build` would hand this to its own static
+// generation workers, which would then try to reach S3 with no credentials, and
+// it rewrites any cacheHandler it is given to a path relative to the *build*
+// machine's distDir — which does not survive the move to /var/task. Patched
+// into the built manifest instead (see patchCacheHandler).
+const cacheHandlerPath = "/opt/ocel/next/cache-handler.cjs";
+
 const adapter = {
   name: "ocel-adapter",
 
@@ -24,10 +33,6 @@ const adapter = {
     if (phase === PHASE_PRODUCTION_BUILD) {
       return {
         ...config,
-
-        // TODO: cache handlers
-        // cacheHandler: {},
-        // cacheHandlers: {},
         cacheMaxMemorySize: 0,
       };
     }
@@ -64,6 +69,10 @@ const adapter = {
     }
 
     const appRel = relative(repoRoot, projectDir);
+
+    // Patch the built manifest before anything is copied out of distDir, so
+    // every `.func` picks the cache handler up through the normal asset copy.
+    await patchCacheHandler(distDir);
 
     const funcDirFor = (pathname: string) =>
       join(
@@ -189,6 +198,8 @@ const adapter = {
       }),
     );
 
+    await emitCacheEntries(outputs.prerenders, allRoutes);
+
     // The ocel app name keys this app's assets in the account-global bucket
     // (<env>/<project>/<appName>/<buildId>/…). The ocel builder passes it via
     // OCEL_APP_NAME; falling back to the project dir name keeps a bare
@@ -243,6 +254,131 @@ const adapter = {
     );
   },
 } satisfies NextAdapter;
+
+// patchCacheHandler names the layer's cache handler in the manifest `next build`
+// just wrote. The runtime reads this file back as nextConfig and resolves
+// cacheHandler through formatDynamicImportPath(distDir, value), which leaves the
+// value alone only when it is already absolute — so writing the runtime path
+// here, after the build, is what survives the move to /var/task. A build with no
+// manifest (`output: 'export'`) has no server to configure.
+async function patchCacheHandler(distDir: string): Promise<void> {
+  const manifestPath = join(distDir, "required-server-files.json");
+  let manifest: { config?: Record<string, unknown> };
+  try {
+    manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  } catch {
+    return;
+  }
+  if (!manifest.config) return;
+  manifest.config.cacheHandler = cacheHandlerPath;
+  await writeFile(manifestPath, JSON.stringify(manifest));
+}
+
+// A route's cache entry as the handler reads it back: Next keys one entry per
+// route holding the html, the RSC payload and any PPR segments together, but the
+// adapter API surfaces those as separate PRERENDER outputs. Bodies are base64 so
+// the entry stays a single JSON object — one GET, one atomic write, and no torn
+// entry to serve.
+interface CacheEntryFile {
+  lastModified: number;
+  value: Record<string, unknown>;
+}
+
+// baseRoute maps any of a route's prerender variants back to the route itself:
+// `/index.rsc` and `/index.segments/_tree.segment.rsc` both belong to `/`.
+function baseRoute(pathname: string): string {
+  const segmentsAt = pathname.indexOf(".segments/");
+  let base = segmentsAt === -1 ? pathname : pathname.slice(0, segmentsAt);
+  if (base.endsWith(".rsc")) base = base.slice(0, -".rsc".length);
+  if (base === "/index") return "/";
+  return base;
+}
+
+// segmentPath recovers the key FileSystemCache stores a PPR segment under:
+// `<route>.segments/<segmentPath>.segment.rsc`.
+function segmentPath(pathname: string): string | null {
+  const at = pathname.indexOf(".segments/");
+  if (at === -1 || !pathname.endsWith(".segment.rsc")) return null;
+  return pathname.slice(at + ".segments".length, -".segment.rsc".length);
+}
+
+// readMaybe returns a fallback body, or null when the build did not emit one.
+// A prerender can name a body it never wrote (a blocking fallback, say), and an
+// entry we cannot seed is not a build failure — the route renders on first
+// request and populates the cache itself.
+async function readMaybe(filePath: string | undefined): Promise<Buffer | null> {
+  if (!filePath) return null;
+  try {
+    return await readFile(filePath);
+  } catch {
+    return null;
+  }
+}
+
+// emitCacheEntries seeds one cache entry per prerendered route from the build's
+// own output, so a deployed route serves its prerender instead of re-rendering
+// on the first request to every instance. Routes whose html variant Next did not
+// prerender (a blocking fallback) have nothing to seed and are skipped.
+async function emitCacheEntries(
+  prerenders: readonly any[],
+  routes: readonly { id: string; type?: string }[],
+): Promise<void> {
+  const kindById = new Map(routes.map((r) => [r.id, r.type]));
+
+  const byRoute = new Map<string, any[]>();
+  for (const p of prerenders) {
+    const base = baseRoute(p.pathname);
+    const members = byRoute.get(base);
+    if (members) members.push(p);
+    else byRoute.set(base, [p]);
+  }
+
+  const lastModified = Date.now();
+
+  await Promise.all(
+    [...byRoute.entries()].map(async ([route, members]) => {
+      const kind = kindById.get(members[0].parentOutputId) ?? "APP_PAGE";
+      const html = members.find((m) => baseRoute(m.pathname) === m.pathname);
+      const rsc = members.find(
+        (m) => m.pathname.endsWith(".rsc") && !segmentPath(m.pathname),
+      );
+      const body = await readMaybe(html?.fallback?.filePath);
+      if (!html || !body) return;
+
+      const value: Record<string, unknown> = {
+        kind,
+        headers: html.fallback.initialHeaders,
+        status: html.fallback.initialStatus,
+      };
+
+      if (kind === "APP_ROUTE") {
+        value.body = body.toString("base64");
+      } else {
+        value.html = body.toString("utf8");
+        const rscBody = await readMaybe(rsc?.fallback?.filePath);
+        if (rscBody) value.rscData = rscBody.toString("base64");
+
+        const segments: Record<string, string> = {};
+        for (const m of members) {
+          const sp = segmentPath(m.pathname);
+          if (!sp) continue;
+          const segBody = await readMaybe(m.fallback?.filePath);
+          if (segBody) segments[sp] = segBody.toString("base64");
+        }
+        if (Object.keys(segments).length > 0) value.segmentData = segments;
+        if (html.fallback.postponedState !== undefined) {
+          value.postponed = html.fallback.postponedState;
+        }
+      }
+
+      const key = route === "/" ? "index" : route.replace(/^\//, "");
+      const dest = join(scratchDir, "cache", `${key}.cache.json`);
+      await mkdir(dirname(dest), { recursive: true });
+      const entry: CacheEntryFile = { lastModified, value };
+      await writeFile(dest, JSON.stringify(entry));
+    }),
+  );
+}
 
 function renderLauncher(moduleRel: string): string {
   const requirePath = "./" + moduleRel.split(sep).join("/");
