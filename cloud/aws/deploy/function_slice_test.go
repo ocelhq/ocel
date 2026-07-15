@@ -32,6 +32,34 @@ func TestTranslateFunction_EmptyFallsBackToPinnedDefaults(t *testing.T) {
 	}
 }
 
+func TestTranslateFunction_DefaultsSizeTheFunctionForSSR(t *testing.T) {
+	got := translateFunction(&deploymentsv1.ManifestFunction{})
+	if got.MemorySizeMB != defaultFunctionMemoryMB {
+		t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
+	}
+	if got.TimeoutSeconds != defaultFunctionTimeoutSeconds {
+		t.Errorf("TimeoutSeconds = %d, want default %d", got.TimeoutSeconds, defaultFunctionTimeoutSeconds)
+	}
+}
+
+// Leaving either unset hands the function AWS's implicit 3s/128MB, which a Next
+// SSR cold start (measured 4.25s at 128MB, peaking at 109MB) cannot fit inside:
+// every invocation times out with no body and no error, presenting as a hang.
+func TestFunctionDefaults_ClearAWSImplicitCeilings(t *testing.T) {
+	const (
+		awsDefaultTimeoutSeconds = 3
+		awsDefaultMemoryMB       = 128
+	)
+	if defaultFunctionTimeoutSeconds <= awsDefaultTimeoutSeconds {
+		t.Errorf("defaultFunctionTimeoutSeconds = %d, must exceed AWS's implicit %ds",
+			defaultFunctionTimeoutSeconds, awsDefaultTimeoutSeconds)
+	}
+	if defaultFunctionMemoryMB <= awsDefaultMemoryMB {
+		t.Errorf("defaultFunctionMemoryMB = %d, must exceed AWS's implicit %dMB",
+			defaultFunctionMemoryMB, awsDefaultMemoryMB)
+	}
+}
+
 func TestMembraneLayerARN_DefaultAndEnvOverride(t *testing.T) {
 	t.Setenv(membraneLayerARNEnv, "")
 	if got := membraneLayerARN(); got != defaultMembraneLayerARN {

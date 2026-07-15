@@ -28,6 +28,14 @@ const (
 	// the fallback when the manifest omits it.
 	defaultFunctionEntry = "src/server.js"
 
+	// AWS's implicit 3s/128MB cannot fit an SSR cold start, and a Lambda
+	// timeout surfaces as neither a body nor an error — only a REPORT line —
+	// so an undersized function reads as a hang rather than a failure. Memory
+	// is the CPU dial too: Lambda scales cores with it, so 128MB is what makes
+	// a cold start slow enough to hit the ceiling in the first place.
+	defaultFunctionMemoryMB       = 1024
+	defaultFunctionTimeoutSeconds = 30
+
 	// lambdaConfigHandler is the Lambda's own Handler config value. Under the
 	// lambdanode exec-wrapper the Go bootstrap owns the Runtime API loop, so
 	// this is vestigial — but the managed nodejs runtime still requires a
@@ -74,8 +82,10 @@ func membraneLayerARN() string {
 // to, independent of any Pulumi or AWS call. It is the pure output of
 // translateFunction so the translation can be unit-tested without provisioning.
 type functionArgs struct {
-	Runtime string
-	Handler string
+	Runtime        string
+	Handler        string
+	MemorySizeMB   int
+	TimeoutSeconds int
 }
 
 // isrConfig points a Next function's cache handler at the account-global stores
@@ -161,7 +171,12 @@ func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	if h := fn.GetHandler(); h != "" {
 		handler = h
 	}
-	return functionArgs{Runtime: runtime, Handler: handler}
+	return functionArgs{
+		Runtime:        runtime,
+		Handler:        handler,
+		MemorySizeMB:   defaultFunctionMemoryMB,
+		TimeoutSeconds: defaultFunctionTimeoutSeconds,
+	}
 }
 
 // functionEnvKey is the environment variable a resource is injected onto every
@@ -266,11 +281,13 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 	}
 
 	fn, err := lambda.NewFunction(ctx, logicalName, &lambda.FunctionArgs{
-		Runtime:  pulumi.String(args.Runtime),
-		Handler:  pulumi.String(lambdaConfigHandler),
-		Role:     role.Arn,
-		S3Bucket: pulumi.String(artifact.Bucket),
-		S3Key:    pulumi.String(artifact.Key),
+		Runtime:    pulumi.String(args.Runtime),
+		Handler:    pulumi.String(lambdaConfigHandler),
+		Role:       role.Arn,
+		S3Bucket:   pulumi.String(artifact.Bucket),
+		S3Key:      pulumi.String(artifact.Key),
+		MemorySize: pulumi.Int(args.MemorySizeMB),
+		Timeout:    pulumi.Int(args.TimeoutSeconds),
 		Environment: &lambda.FunctionEnvironmentArgs{
 			Variables: env,
 		},
