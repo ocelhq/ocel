@@ -153,8 +153,11 @@ export async function dispatchResult(
           const cookie = request.headers.get("cookie");
           const entry = (cookie?.split(";") ?? [])
             .map((e) => e.trim())
-            .find((e) => e.slice(0, e.indexOf("=")) === bypass.key);
-          const value = entry?.slice(entry.indexOf("=") + 1);
+            .find((e) => {
+              const eq = e.indexOf("=");
+              return eq > 0 && e.slice(0, eq) === bypass.key;
+            });
+          const value = entry ? entry.slice(entry.indexOf("=") + 1) : undefined;
           shouldBypass =
             entry !== undefined &&
             (bypass.value ? value === bypass.value : true);
