@@ -136,11 +136,17 @@ async function store(
   deps: CacheDeps,
   response: Response,
 ): Promise<void> {
-  if (response.status !== 200) return;
+  if (response.status !== 200) {
+    response.body?.cancel();
+    return;
+  }
 
   const policy = storagePolicy(response.headers.get("cache-control"));
 
-  if (!policy) return;
+  if (!policy) {
+    response.body?.cancel();
+    return;
+  }
 
   const now = deps.now ?? Date.now;
   await deps.cache.put(keyRequest, forStorage(response, policy, target, now()));

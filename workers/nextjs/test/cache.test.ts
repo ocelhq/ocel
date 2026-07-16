@@ -285,6 +285,21 @@ describe("serveCached", () => {
     expect(await again.text()).toBe("rendered");
   });
 
+  it("does not store a non-200 origin response", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=60", "unavailable", 503);
+
+    const first = await serveCached(req(), target("err"), deps, origin, origin);
+    expect(first.headers.get("x-ocel-cache")).toBe("MISS");
+    await deps.flush();
+
+    clock.ms = 1_000;
+    const second = await serveCached(req(), target("err"), deps, origin, origin);
+    expect(second.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(origin.calls).toBe(2);
+  });
+
   it("stamps the manifest tags onto the stored entry", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
