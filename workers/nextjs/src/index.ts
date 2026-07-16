@@ -250,13 +250,6 @@ async function assetsOr404(
   return res.status === 404 ? new Response("Not Found", { status: 404 }) : res;
 }
 
-function scrubHeaders(res: Response) {
-  const h = res.headers;
-  const toDelete = ["x-amzn-requestid", "x-amzn-trace-id", "x-powered-by"];
-
-  for (const name of toDelete) h.delete(name);
-}
-
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     // The routing manifest is uploaded alongside the worker as a text module
@@ -282,7 +275,7 @@ export default {
       },
     })) as RouteResult;
 
-    const res = await dispatchResult(result, request, {
+    return dispatchResult(result, request, {
       manifest,
       functionUrls: JSON.parse(env.FUNCTION_URLS) as Record<string, string>,
       assets: env.ASSETS,
@@ -292,9 +285,5 @@ export default {
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
     });
-
-    scrubHeaders(res);
-
-    return res;
   },
 } satisfies ExportedHandler<Env>;

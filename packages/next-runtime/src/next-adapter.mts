@@ -219,13 +219,13 @@ const adapter = {
             {
               kind: "prerender",
               id: parentIdByPathname.get(p.pathname) ?? p.parentOutputId,
-              ...(tags.length > 0 && { tags }),
-              ...(allowQuery && { allowQuery }),
               config: p.config,
               fallback: {
                 filePath: "TODO: Point to expected S3 Key",
                 ...p.fallback,
               },
+              ...(tags.length > 0 && { tags }),
+              ...(allowQuery && { allowQuery }),
             },
           ];
         }),
