@@ -24,6 +24,9 @@ export interface OcelConfig {
   };
   provider?: ProviderDescriptor;
   apps?: AppConfig[];
+  domains?: {
+    production?: string;
+  };
 }
 
 export function defineConfig(config: OcelConfig): OcelConfig {

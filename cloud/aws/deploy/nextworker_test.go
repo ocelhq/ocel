@@ -248,6 +248,53 @@ func TestDeployNextWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	}
 }
 
+func TestDeployNextWorker_CustomDomainOnlyForProduction(t *testing.T) {
+	cases := []struct {
+		name    string
+		class   deploymentsv1.Environment_Class
+		domains map[string]string
+		want    string
+	}{
+		{"production with domain", deploymentsv1.Environment_CLASS_PRODUCTION, map[string]string{"production": "app.acme.com"}, "app.acme.com"},
+		{"production without domain", deploymentsv1.Environment_CLASS_PRODUCTION, nil, ""},
+		{"preview ignores domain", deploymentsv1.Environment_CLASS_PREVIEW, map[string]string{"production": "app.acme.com"}, ""},
+		{"unspecified ignores domain", deploymentsv1.Environment_CLASS_UNSPECIFIED, map[string]string{"production": "app.acme.com"}, ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			artifactRoot := writeMinimalWorkerArtifacts(t)
+			fake := &fakeCloudflare{}
+			cfg := Config{Cloudflare: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Class: tc.class}
+			manifest := &deploymentsv1.Manifest{
+				Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_documents", Framework: "next", RouteId: "/api/documents"}},
+				Domains:   tc.domains,
+			}
+
+			if _, err := deployNextWorker(context.Background(), cfg, manifest, nil, nil); err != nil {
+				t.Fatalf("deployNextWorker: %v", err)
+			}
+			if fake.got.Domain != tc.want {
+				t.Errorf("Domain = %q, want %q", fake.got.Domain, tc.want)
+			}
+		})
+	}
+}
+
+func writeMinimalWorkerArtifacts(t *testing.T) string {
+	t.Helper()
+	artifactRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(artifactRoot, "routing-manifest.json"), []byte(`{"buildId":"b"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	workerBundle := filepath.Join(t.TempDir(), "index.js")
+	if err := os.WriteFile(workerBundle, []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envCloudflareAccountID, "acct-123")
+	t.Setenv(envNextWorkerPath, workerBundle)
+	return artifactRoot
+}
+
 // metadataFromMultipart builds the worker upload body and parses its "metadata"
 // part back into a map for assertion.
 func metadataFromMultipart(t *testing.T, upload WorkerUpload, assetsJWT string) map[string]any {

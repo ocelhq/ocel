@@ -131,6 +131,12 @@ message Manifest {
   string project_id = 2;
   repeated ManifestResource resources = 3;
   repeated ManifestFunction functions = 4;
+
+  // domains maps a lowercased environment class ("production") to the custom
+  // hostname the web-facing worker is served on for that class. A provider
+  // reads only the entry matching DeployRequest.environment; absent entries
+  // mean the default vendor subdomain. Only "production" is populated today.
+  map<string, string> domains = 5;
 }
 
 // ManifestFunction is a deployable function unit. Being listed in

@@ -69,6 +69,41 @@ export default {
 	}
 }
 
+func TestResolve_ParsesProductionDomain(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  domains: { production: "App.Acme.com" },
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := cfg.Domains["production"]; got != "app.acme.com" {
+		t.Fatalf("Domains[production] = %q, want %q (lowercased)", got, "app.acme.com")
+	}
+}
+
+func TestResolve_NoDomainsYieldsEmptyMap(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(cfg.Domains) != 0 {
+		t.Fatalf("Domains = %v, want empty", cfg.Domains)
+	}
+}
+
 func TestResolve_ReturnsConfigDirectory(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `

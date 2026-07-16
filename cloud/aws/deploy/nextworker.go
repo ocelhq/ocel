@@ -64,6 +64,9 @@ type WorkerUpload struct {
 	AssetBinding string
 	// Assets are the truly-static files served by Workers Assets.
 	Assets []StaticAsset
+	// Domain is the custom hostname the worker is served on. Empty deploys the
+	// worker on its vendor subdomain instead.
+	Domain string
 }
 
 // WorkerModule is one part of the worker's multipart upload: a module name (as
@@ -259,6 +262,7 @@ func deployNextWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	result, err := cfg.Cloudflare.DeployWorker(ctx, WorkerUpload{
 		AccountID:  accountID,
 		ScriptName: sanitizeWorkerName("ocel-" + cfg.StackName),
+		Domain:     productionDomain(cfg, manifest),
 		Main: WorkerModule{
 			Name:        "index.js",
 			ContentType: "application/javascript+module",
@@ -282,6 +286,13 @@ func deployNextWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	return []*deploymentsv1.ResourceOutput{
 		collectFunctionOutput(nextWorkerOutputName, result.URL),
 	}, nil
+}
+
+func productionDomain(cfg Config, manifest *deploymentsv1.Manifest) string {
+	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION {
+		return ""
+	}
+	return manifest.GetDomains()["production"]
 }
 
 // hasNextFunction reports whether any function in the manifest is a Next.js

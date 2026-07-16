@@ -69,6 +69,9 @@ type Config struct {
 	Provider *ProviderDescriptor
 	// Apps holds the normalized applications declared in the config.
 	Apps []App
+	// Domains maps a lowercased environment class ("production") to the custom
+	// hostname the web-facing worker is served on. Empty entries are dropped.
+	Domains map[string]string
 	// Dir is the directory containing the resolved ocel.config.ts.
 	// discovery.paths are relative to it.
 	Dir string
@@ -101,6 +104,9 @@ type rawConfig struct {
 		Framework  string `json:"framework"`
 		Entrypoint string `json:"entrypoint"`
 	} `json:"apps"`
+	Domains struct {
+		Production string `json:"production"`
+	} `json:"domains"`
 }
 
 // defaultCompute is the Ocel-internal compute target applied to every app
@@ -154,11 +160,17 @@ func Resolve(startDir string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
 
+	domains := map[string]string{}
+	if raw.Domains.Production != "" {
+		domains["production"] = strings.ToLower(raw.Domains.Production)
+	}
+
 	return &Config{
 		ProjectID: raw.ProjectID,
 		Discovery: Discovery{Paths: paths},
 		Provider:  provider,
 		Apps:      apps,
+		Domains:   domains,
 		Dir:       filepath.Dir(configPath),
 	}, nil
 }

@@ -278,6 +278,11 @@ type Manifest struct {
 	ProjectId     string              `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Resources     []*ManifestResource `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
 	Functions     []*ManifestFunction `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
+	// domains maps a lowercased environment class ("production") to the custom
+	// hostname the web-facing worker is served on for that class. A provider
+	// reads only the entry matching DeployRequest.environment; absent entries
+	// mean the default vendor subdomain. Only "production" is populated today.
+	Domains       map[string]string `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -336,6 +341,13 @@ func (x *Manifest) GetResources() []*ManifestResource {
 func (x *Manifest) GetFunctions() []*ManifestFunction {
 	if x != nil {
 		return x.Functions
+	}
+	return nil
+}
+
+func (x *Manifest) GetDomains() map[string]string {
+	if x != nil {
+		return x.Domains
 	}
 	return nil
 }
@@ -1674,13 +1686,17 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x0eIdentitySource\x12\x1f\n" +
 	"\x1bIDENTITY_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13IDENTITY_SOURCE_GIT\x10\x01\x12\x1c\n" +
-	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\xd0\x01\n" +
+	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\xcd\x02\n" +
 	"\bManifest\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12>\n" +
 	"\tresources\x18\x03 \x03(\v2 .deployments.v1.ManifestResourceR\tresources\x12>\n" +
-	"\tfunctions\x18\x04 \x03(\v2 .deployments.v1.ManifestFunctionR\tfunctions\"\xc7\x01\n" +
+	"\tfunctions\x18\x04 \x03(\v2 .deployments.v1.ManifestFunctionR\tfunctions\x12?\n" +
+	"\adomains\x18\x05 \x03(\v2%.deployments.v1.Manifest.DomainsEntryR\adomains\x1a:\n" +
+	"\fDomainsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc7\x01\n" +
 	"\x10ManifestFunction\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12\x18\n" +
 	"\aruntime\x18\x02 \x01(\tR\aruntime\x12\x18\n" +
@@ -1782,7 +1798,7 @@ func file_deployments_v1_deployments_proto_rawDescGZIP() []byte {
 }
 
 var file_deployments_v1_deployments_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_deployments_v1_deployments_proto_goTypes = []any{
 	(Environment_Class)(0),           // 0: deployments.v1.Environment.Class
 	(Environment_Lifecycle)(0),       // 1: deployments.v1.Environment.Lifecycle
@@ -1807,9 +1823,10 @@ var file_deployments_v1_deployments_proto_goTypes = []any{
 	(*PostgresOutput)(nil),           // 20: deployments.v1.PostgresOutput
 	(*BucketOutput)(nil),             // 21: deployments.v1.BucketOutput
 	(*FunctionOutput)(nil),           // 22: deployments.v1.FunctionOutput
-	(*v1.ResourceIdentifier)(nil),    // 23: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),        // 24: resources.v1.PostgresConfig
-	(*v1.BucketConfig)(nil),          // 25: resources.v1.BucketConfig
+	nil,                              // 23: deployments.v1.Manifest.DomainsEntry
+	(*v1.ResourceIdentifier)(nil),    // 24: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),        // 25: resources.v1.PostgresConfig
+	(*v1.BucketConfig)(nil),          // 26: resources.v1.BucketConfig
 }
 var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	0,  // 0: deployments.v1.Environment.class:type_name -> deployments.v1.Environment.Class
@@ -1817,39 +1834,40 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	2,  // 2: deployments.v1.Environment.identity_source:type_name -> deployments.v1.Environment.IdentitySource
 	6,  // 3: deployments.v1.Manifest.resources:type_name -> deployments.v1.ManifestResource
 	5,  // 4: deployments.v1.Manifest.functions:type_name -> deployments.v1.ManifestFunction
-	23, // 5: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	24, // 6: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	25, // 7: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
-	4,  // 8: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
-	3,  // 9: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
-	0,  // 10: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
-	3,  // 11: deployments.v1.DestroyRequest.environment:type_name -> deployments.v1.Environment
-	12, // 12: deployments.v1.ListEnvironmentsResponse.environments:type_name -> deployments.v1.PreviewEnvironment
-	1,  // 13: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
-	0,  // 14: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
-	0,  // 15: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
-	16, // 16: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
-	17, // 17: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
-	18, // 18: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
-	19, // 19: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
-	20, // 20: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
-	21, // 21: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
-	22, // 22: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
-	7,  // 23: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
-	8,  // 24: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
-	9,  // 25: deployments.v1.DeploymentService.Destroy:input_type -> deployments.v1.DestroyRequest
-	10, // 26: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
-	13, // 27: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
-	15, // 28: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
-	15, // 29: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
-	15, // 30: deployments.v1.DeploymentService.Destroy:output_type -> deployments.v1.DeployEvent
-	11, // 31: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
-	14, // 32: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
-	28, // [28:33] is the sub-list for method output_type
-	23, // [23:28] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	23, // 5: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
+	24, // 6: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	25, // 7: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	26, // 8: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	4,  // 9: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
+	3,  // 10: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
+	0,  // 11: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
+	3,  // 12: deployments.v1.DestroyRequest.environment:type_name -> deployments.v1.Environment
+	12, // 13: deployments.v1.ListEnvironmentsResponse.environments:type_name -> deployments.v1.PreviewEnvironment
+	1,  // 14: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
+	0,  // 15: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
+	0,  // 16: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
+	16, // 17: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
+	17, // 18: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
+	18, // 19: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
+	19, // 20: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
+	20, // 21: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
+	21, // 22: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
+	22, // 23: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
+	7,  // 24: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
+	8,  // 25: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
+	9,  // 26: deployments.v1.DeploymentService.Destroy:input_type -> deployments.v1.DestroyRequest
+	10, // 27: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
+	13, // 28: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
+	15, // 29: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
+	15, // 30: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
+	15, // 31: deployments.v1.DeploymentService.Destroy:output_type -> deployments.v1.DeployEvent
+	11, // 32: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
+	14, // 33: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
+	29, // [29:34] is the sub-list for method output_type
+	24, // [24:29] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_deployments_v1_deployments_proto_init() }
@@ -1877,7 +1895,7 @@ func file_deployments_v1_deployments_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_deployments_v1_deployments_proto_rawDesc), len(file_deployments_v1_deployments_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   20,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
