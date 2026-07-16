@@ -101,6 +101,63 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("rendered");
   });
 
+  // A cache that always misses, so a prerender route that is NOT bypassed goes
+  // through serveCached and comes back stamped x-ocel-cache; a bypassed route
+  // returns the origin response directly, with no such header.
+  function missingCache(): NonNullable<RouteDeps["cache"]> {
+    return {
+      cache: {
+        match: async () => undefined,
+        put: async () => {},
+      } as unknown as Cache,
+      waitUntil: () => {},
+    };
+  }
+
+  function bypassDeps(bypassKey: string): RouteDeps {
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/preview": {
+            kind: "prerender",
+            id: "/preview",
+            config: { bypassFor: [{ type: "cookie", key: bypassKey }] },
+          },
+        },
+      },
+      functionUrls: { "/preview": "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        })) as unknown as typeof fetch,
+      cache: missingCache(),
+    });
+  }
+
+  async function dispatchPreview(deps: RouteDeps, cookie: string) {
+    return dispatchResult(
+      { resolvedPathname: "/preview", invocationTarget: { pathname: "/preview" } },
+      new Request("https://app.example/preview", { headers: { cookie } }),
+      deps,
+    );
+  }
+
+  it("does not treat a valueless cookie as a bypass match on a key prefix", async () => {
+    // "badcookie" has no '='; it must not match bypass.key "badcooki".
+    const res = await dispatchPreview(bypassDeps("badcooki"), "badcookie");
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+  });
+
+  it("bypasses the cache when a real bypass cookie is present", async () => {
+    const res = await dispatchPreview(bypassDeps("preview"), "preview=1");
+    expect(res.headers.get("x-ocel-cache")).toBeNull();
+  });
+
   it("returns 502 when a lambda route has no Function URL", async () => {
     const deps = baseDeps({
       manifest: {
