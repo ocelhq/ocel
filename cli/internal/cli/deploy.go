@@ -176,7 +176,7 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, std
 		fmt.Fprintln(stderr, "no functions to deploy; deploying infrastructure only")
 	}
 
-	return manifestbuilder.Build(cfg.ProjectID, toDeclarations(resources), functions)
+	return manifestbuilder.Build(cfg.ProjectID, cfg.Domains, toDeclarations(resources), functions)
 }
 
 // runProviderSession locates and spawns the project's configured provider,

@@ -97,11 +97,11 @@ func synthFunctions() []Function {
 }
 
 func TestBuild_GoldenFile_DeterministicOutput(t *testing.T) {
-	first, err := Build("proj_1", synthDeclarations(), nil)
+	first, err := Build("proj_1", nil, synthDeclarations(), nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	second, err := Build("proj_1", synthDeclarations(), nil)
+	second, err := Build("proj_1", nil, synthDeclarations(), nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -123,13 +123,13 @@ func TestBuild_GoldenFile_DeterministicOutput(t *testing.T) {
 
 func TestBuild_ReorderInvariance(t *testing.T) {
 	declarations := synthDeclarations()
-	inOrder, err := Build("proj_1", declarations, nil)
+	inOrder, err := Build("proj_1", nil, declarations, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
 	reversed := []Declaration{declarations[1], declarations[0]}
-	reorderedManifest, err := Build("proj_1", reversed, nil)
+	reorderedManifest, err := Build("proj_1", nil, reversed, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestBuild_ReorderInvariance(t *testing.T) {
 
 func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 	base := synthDeclarations()
-	before, err := Build("proj_1", base, nil)
+	before, err := Build("proj_1", nil, base, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 	withExtra := append(append([]Declaration{}, base...), Declaration{
 		Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "billing", Source: "app/billing.ts:2",
 	})
-	after, err := Build("proj_1", withExtra, nil)
+	after, err := Build("proj_1", nil, withExtra, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 }
 
 func TestBuild_TypedConfigRoundTripsAsOneof(t *testing.T) {
-	manifest, err := Build("proj_1", []Declaration{
+	manifest, err := Build("proj_1", nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
 	}, nil)
 	if err != nil {
@@ -195,7 +195,7 @@ func TestBuild_TypedConfigRoundTripsAsOneof(t *testing.T) {
 }
 
 func TestBuild_BucketConfigRoundTripsAsOneof(t *testing.T) {
-	manifest, err := Build("proj_1", []Declaration{
+	manifest, err := Build("proj_1", nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
 	}, nil)
 	if err != nil {
@@ -219,7 +219,7 @@ func TestBuild_BucketConfigRoundTripsAsOneof(t *testing.T) {
 }
 
 func TestBuild_DuplicateTypeAndID_NamesBothDeclarationsAndSources(t *testing.T) {
-	_, err := Build("proj_1", []Declaration{
+	_, err := Build("proj_1", nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/db.ts:5"},
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/other.ts:12"},
 	}, nil)
@@ -247,7 +247,7 @@ func TestBuild_DuplicateTypeAndID_NamesBothDeclarationsAndSources(t *testing.T) 
 }
 
 func TestBuild_UnsupportedResourceType(t *testing.T) {
-	_, err := Build("proj_1", []Declaration{
+	_, err := Build("proj_1", nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, ID: "main"},
 	}, nil)
 	if err == nil {
@@ -256,7 +256,7 @@ func TestBuild_UnsupportedResourceType(t *testing.T) {
 }
 
 func TestBuild_EmptyID(t *testing.T) {
-	_, err := Build("proj_1", []Declaration{
+	_, err := Build("proj_1", nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: ""},
 	}, nil)
 	if err == nil {
@@ -282,11 +282,11 @@ func TestNormalizeLogicalName(t *testing.T) {
 }
 
 func TestBuild_FunctionsGoldenFile_DeterministicOutput(t *testing.T) {
-	first, err := Build("proj_1", synthDeclarations(), synthFunctions())
+	first, err := Build("proj_1", nil, synthDeclarations(), synthFunctions())
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	second, err := Build("proj_1", synthDeclarations(), synthFunctions())
+	second, err := Build("proj_1", nil, synthDeclarations(), synthFunctions())
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -308,13 +308,13 @@ func TestBuild_FunctionsGoldenFile_DeterministicOutput(t *testing.T) {
 
 func TestBuild_FunctionsReorderInvariance(t *testing.T) {
 	functions := synthFunctions()
-	inOrder, err := Build("proj_1", nil, functions)
+	inOrder, err := Build("proj_1", nil, nil, functions)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
 	reversed := []Function{functions[1], functions[0]}
-	reordered, err := Build("proj_1", nil, reversed)
+	reordered, err := Build("proj_1", nil, nil, reversed)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -324,8 +324,19 @@ func TestBuild_FunctionsReorderInvariance(t *testing.T) {
 	}
 }
 
+func TestBuild_CarriesDomains(t *testing.T) {
+	domains := map[string]string{"production": "app.acme.com"}
+	manifest, err := Build("proj_1", domains, nil, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got := manifest.GetDomains()["production"]; got != "app.acme.com" {
+		t.Fatalf("Domains[production] = %q, want %q", got, "app.acme.com")
+	}
+}
+
 func TestBuild_FunctionLogicalNameNormalized(t *testing.T) {
-	manifest, err := Build("proj_1", nil, []Function{
+	manifest, err := Build("proj_1", nil, nil, []Function{
 		{Name: "Web API", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
 	})
 	if err != nil {
@@ -340,7 +351,7 @@ func TestBuild_FunctionLogicalNameNormalized(t *testing.T) {
 }
 
 func TestBuild_FunctionRouteIDCarriedDistinctFromLogicalName(t *testing.T) {
-	manifest, err := Build("proj_1", nil, []Function{
+	manifest, err := Build("proj_1", nil, nil, []Function{
 		{Name: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "functions/api/documents.func", Framework: "next", RouteID: "/api/documents"},
 	})
 	if err != nil {

@@ -1,4 +1,4 @@
-import type { NextAdapter } from "next";
+import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { writeFileSync } from "node:fs";
 import {
@@ -179,7 +179,8 @@ const adapter = {
     // collide on one config name.
     await Promise.all(
       outputs.prerenders.map(async (p) => {
-        const base = p.pathname === "/" ? "index" : p.pathname.replace(/^\//, "");
+        const base =
+          p.pathname === "/" ? "index" : p.pathname.replace(/^\//, "");
         const configPath = join(
           `${scratchDir}/functions`,
           `${base}.prerender-config.json`,
@@ -238,13 +239,25 @@ const adapter = {
         // output's function — the base route deployed as a Lambda that
         // regenerates the entry. Spread last so it replaces the plain lambda
         // entry a prerendered function route also produced above.
-        ...outputs.prerenders.map((p) => [
-          p.pathname,
-          {
-            kind: "prerender",
-            id: parentIdByPathname.get(p.pathname) ?? p.parentOutputId,
-          },
-        ]),
+        ...outputs.prerenders.map((p) => {
+          const allowQuery = p.config?.allowQuery;
+          const tags = cacheTags(p);
+
+          return [
+            p.pathname,
+            {
+              kind: "prerender",
+              id: parentIdByPathname.get(p.pathname) ?? p.parentOutputId,
+              ...(tags.length > 0 && { tags }),
+              ...(allowQuery && { allowQuery }),
+              config: p.config,
+              fallback: {
+                filePath: "TODO: Point to expected S3 Key",
+                ...p.fallback,
+              },
+            },
+          ];
+        }),
       ]),
     };
 
@@ -254,6 +267,52 @@ const adapter = {
     );
   },
 } satisfies NextAdapter;
+
+// Cloudflare's Cache-Tag ceilings: 16KB aggregate on the response header, 1000
+// tags in it, and 1024 chars per tag in a purge call. Cloudflare rejects an
+// over-limit header outright, which would cost the route every one of its tags
+// rather than the offending few — so trim to fit here instead.
+const maxTagBytes = 1024;
+const maxTags = 1000;
+const maxTagsBytes = 16 * 1024;
+
+// Next's encodeCacheTag percent-encodes only characters outside [\t\x20-\x7e],
+// so spaces and tabs survive it — and Cloudflare's Cache-Tag forbids both.
+// Extending Next's own scheme keeps one canonical encoding end to end, and the
+// purge side has to apply the same transform to match what was stamped.
+function sanitizeCacheTag(tag: string): string {
+  return tag.replace(/[\t ]/g, (c) => encodeURIComponent(c));
+}
+
+// cacheTags reads the tag set Next recorded for a prerender and returns it in a
+// form Cloudflare will accept: sanitized, and trimmed to the header's ceilings.
+// A tag over the per-tag limit is dropped rather than truncated — a truncated
+// tag matches nothing, so it would occupy budget while never purging.
+function cacheTags(prerender: AdapterOutput["PRERENDER"]): string[] {
+  const header = prerender.fallback?.initialHeaders?.["x-next-cache-tags"];
+  const raw = Array.isArray(header) ? header.join(",") : header;
+  if (!raw) return [];
+
+  const parts = raw.split(",");
+  const tags: string[] = [];
+  let bytes = 0;
+  for (const part of parts) {
+    const tag = sanitizeCacheTag(part);
+    const size = Buffer.byteLength(tag);
+    if (!tag || size > maxTagBytes) continue;
+    const cost = size + (tags.length > 0 ? 1 : 0);
+    if (tags.length >= maxTags || bytes + cost > maxTagsBytes) break;
+    bytes += cost;
+    tags.push(tag);
+  }
+
+  if (tags.length < parts.length) {
+    console.warn(
+      `ocel: dropped ${parts.length - tags.length} cache tag(s) over Cloudflare's limits for "${prerender.pathname}" — purges naming them will not hit this route`,
+    );
+  }
+  return tags;
+}
 
 // patchCacheHandler names the layer's cache handler in the manifest `next build`
 // just wrote. The runtime reads this file back as nextConfig and resolves

@@ -113,7 +113,7 @@ func normalizeLogicalName(s string) string {
 // existing entry's logical name. Two declarations sharing the same
 // (type, id) are a hard error naming both declarations and their source
 // locations.
-func Build(projectID string, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
+func Build(projectID string, domains map[string]string, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
 	type identity struct {
 		typ resourcesv1.ResourceType
 		id  string
@@ -182,5 +182,6 @@ func Build(projectID string, declarations []Declaration, functions []Function) (
 		ProjectId:     projectID,
 		Resources:     resources,
 		Functions:     manifestFunctions,
+		Domains:       domains,
 	}, nil
 }

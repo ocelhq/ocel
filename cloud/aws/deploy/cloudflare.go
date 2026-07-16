@@ -10,10 +10,12 @@ import (
 	"mime/multipart"
 	"net/textproto"
 	"path"
+	"strings"
 
 	"github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
+	"github.com/cloudflare/cloudflare-go/v4/zones"
 )
 
 // nextWorkerCompatDate pins the Workers runtime compatibility date the worker is
@@ -25,9 +27,9 @@ var nextWorkerCompatFlags = []string{"nodejs_compat"}
 
 // cfDeployer is the cloudflare-go-backed CloudflareDeployer. It performs the
 // real multi-step worker upload (assets session -> asset batches -> script
-// PUT -> workers.dev enablement) and is exercised only end-to-end; the deploy
-// orchestration is unit-tested against a fake through the CloudflareDeployer
-// seam.
+// PUT -> custom-domain or workers.dev routing) and is exercised only
+// end-to-end; the deploy orchestration is unit-tested against a fake through
+// the CloudflareDeployer seam.
 type cfDeployer struct {
 	client *cloudflare.Client
 }
@@ -48,9 +50,15 @@ func (d *cfDeployer) DeployWorker(ctx context.Context, upload WorkerUpload) (Wor
 		return WorkerResult{}, fmt.Errorf("put worker script: %w", err)
 	}
 
-	url, err := d.enableSubdomain(ctx, upload)
+	if err := d.reconcileCustomDomains(ctx, upload, upload.Domain); err != nil {
+		return WorkerResult{}, err
+	}
+	url, err := d.setSubdomain(ctx, upload, upload.Domain == "")
 	if err != nil {
-		return WorkerResult{}, fmt.Errorf("enable workers.dev subdomain: %w", err)
+		return WorkerResult{}, fmt.Errorf("set workers.dev subdomain: %w", err)
+	}
+	if upload.Domain != "" {
+		url = "https://" + upload.Domain
 	}
 	return WorkerResult{URL: url}, nil
 }
@@ -248,15 +256,18 @@ func writePart(w *multipart.Writer, name, filename, contentType string, content 
 	return err
 }
 
-// enableSubdomain turns on the worker's workers.dev route and returns its public
-// URL, composed from the script name and the account's workers.dev subdomain.
-func (d *cfDeployer) enableSubdomain(ctx context.Context, upload WorkerUpload) (string, error) {
+// setSubdomain returns the worker's public workers.dev URL when enabling, or ""
+// when disabling.
+func (d *cfDeployer) setSubdomain(ctx context.Context, upload WorkerUpload, enabled bool) (string, error) {
 	if _, err := d.client.Workers.Scripts.Subdomain.New(ctx, upload.ScriptName, workers.ScriptSubdomainNewParams{
 		AccountID:       cloudflare.F(upload.AccountID),
-		Enabled:         cloudflare.F(true),
+		Enabled:         cloudflare.F(enabled),
 		PreviewsEnabled: cloudflare.F(false),
 	}); err != nil {
 		return "", err
+	}
+	if !enabled {
+		return "", nil
 	}
 
 	account, err := d.client.Workers.Subdomains.Get(ctx, workers.SubdomainGetParams{
@@ -266,4 +277,76 @@ func (d *cfDeployer) enableSubdomain(ctx context.Context, upload WorkerUpload) (
 		return "", err
 	}
 	return fmt.Sprintf("https://%s.%s.workers.dev", upload.ScriptName, account.Subdomain), nil
+}
+
+// reconcileCustomDomains makes the worker's attached custom domains exactly
+// {desired}, or none when desired is empty: it detaches every attached hostname
+// that isn't desired, then attaches desired if it isn't already. The desired
+// hostname's zone is resolved from the account's zones.
+func (d *cfDeployer) reconcileCustomDomains(ctx context.Context, upload WorkerUpload, desired string) error {
+	attached := d.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
+		AccountID: cloudflare.F(upload.AccountID),
+		Service:   cloudflare.F(upload.ScriptName),
+	})
+	desiredAttached := false
+	for attached.Next() {
+		dom := attached.Current()
+		if dom.Hostname == desired {
+			desiredAttached = true
+			continue
+		}
+		if err := d.client.Workers.Domains.Delete(ctx, dom.ID, workers.DomainDeleteParams{
+			AccountID: cloudflare.F(upload.AccountID),
+		}); err != nil {
+			return fmt.Errorf("detach custom domain %q: %w", dom.Hostname, err)
+		}
+	}
+	if err := attached.Err(); err != nil {
+		return fmt.Errorf("list custom domains: %w", err)
+	}
+	if desired == "" || desiredAttached {
+		return nil
+	}
+
+	zoneID, err := d.resolveZoneID(ctx, upload.AccountID, desired)
+	if err != nil {
+		return err
+	}
+	if _, err := d.client.Workers.Domains.Update(ctx, workers.DomainUpdateParams{
+		AccountID:   cloudflare.F(upload.AccountID),
+		Environment: cloudflare.F("production"),
+		Hostname:    cloudflare.F(desired),
+		Service:     cloudflare.F(upload.ScriptName),
+		ZoneID:      cloudflare.F(zoneID),
+	}); err != nil {
+		return fmt.Errorf("attach custom domain %q: %w", desired, err)
+	}
+	return nil
+}
+
+// resolveZoneID finds the account zone whose name is the longest suffix of
+// hostname (e.g. "acme.com" for "app.acme.com"). A hostname with no owning zone
+// in the account is a hard error: the deploy cannot serve it.
+func (d *cfDeployer) resolveZoneID(ctx context.Context, accountID, hostname string) (string, error) {
+	owned := d.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
+		Account: cloudflare.F(zones.ZoneListParamsAccount{ID: cloudflare.F(accountID)}),
+	})
+	bestID, bestName := "", ""
+	for owned.Next() {
+		z := owned.Current()
+		if zoneOwns(hostname, z.Name) && len(z.Name) > len(bestName) {
+			bestID, bestName = z.ID, z.Name
+		}
+	}
+	if err := owned.Err(); err != nil {
+		return "", fmt.Errorf("list zones: %w", err)
+	}
+	if bestID == "" {
+		return "", fmt.Errorf("no Cloudflare zone in this account owns %q — add its zone to the account whose CLOUDFLARE_API_TOKEN you provided", hostname)
+	}
+	return bestID, nil
+}
+
+func zoneOwns(hostname, zone string) bool {
+	return hostname == zone || strings.HasSuffix(hostname, "."+zone)
 }

@@ -82,6 +82,10 @@ type Config struct {
 	// the real cloudflare-go implementation is the end-to-end seam.
 	Cloudflare CloudflareDeployer
 
+	// Class is the environment class this deploy realizes under. It selects the
+	// web-facing worker's custom domain: only CLASS_PRODUCTION consults
+	// Manifest.domains["production"].
+	Class deploymentsv1.Environment_Class
 	// Lifecycle is the environment lifecycle this deploy realizes under; it
 	// selects each resource's realization (see realizationFor). Unspecified for
 	// production and persistent previews, LIFECYCLE_EPHEMERAL for ephemeral

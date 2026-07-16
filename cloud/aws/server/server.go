@@ -182,6 +182,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Env:              envSegment(env),
 		Uploader:         s3.NewFromConfig(awscfg),
 		Cloudflare:       deploy.NewCloudflareDeployer(),
+		Class:            env.GetClass(),
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),
 		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
