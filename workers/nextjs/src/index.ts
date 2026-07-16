@@ -145,31 +145,34 @@ export async function dispatchResult(
       let shouldBypass = false;
 
       for (const bypass of target.config.bypassFor ?? []) {
+        if (shouldBypass) break;
         if (bypass.type === "header") {
           const h = request.headers.get(bypass.key);
-          shouldBypass = bypass.value ? h === bypass.value : true;
+          shouldBypass = bypass.value ? h === bypass.value : h !== null;
         } else if (bypass.type === "cookie") {
-          const c = request.headers.get("cookie");
-          const entries = c?.split(";") ?? [];
-
-          const entry = entries.find(
-            (e) => e.slice(0, e.indexOf("=")) === bypass.key,
-          );
-          const [key, value] = entry?.split("=") ?? [];
+          const cookie = request.headers.get("cookie");
+          const entry = (cookie?.split(";") ?? [])
+            .map((e) => e.trim())
+            .find((e) => e.slice(0, e.indexOf("=")) === bypass.key);
+          const value = entry?.slice(entry.indexOf("=") + 1);
           shouldBypass =
-            !!key && (bypass.value ? value === bypass.value : true);
+            entry !== undefined &&
+            (bypass.value ? value === bypass.value : true);
         } else if (bypass.type === "host") {
           shouldBypass = bypass.value === url.host;
         } else if (bypass.type === "query") {
           const q = url.searchParams.get(bypass.key);
-          shouldBypass = bypass.value ? q === bypass.value : true;
+          shouldBypass = bypass.value ? q === bypass.value : q !== null;
         }
       }
 
       const bypassToken = request.headers.get("x-prerender-revalidate");
-      shouldBypass = target.config.bypassToken
-        ? bypassToken === target.config.bypassToken
-        : false;
+      if (
+        target.config.bypassToken &&
+        bypassToken === target.config.bypassToken
+      ) {
+        shouldBypass = true;
+      }
 
       if (shouldBypass) {
         return origin();
@@ -180,13 +183,12 @@ export async function dispatchResult(
         h.toLowerCase(),
       );
 
-      for (const h in request.headers.entries()) {
-        if (allowedHeaders?.includes(h.toLowerCase())) {
-          safeHeaders.set(h, request.headers.get(h)!);
+      for (const [name, value] of request.headers) {
+        if (allowedHeaders?.includes(name.toLowerCase())) {
+          safeHeaders.set(name, value);
         }
       }
 
-      // whitelist headers
       origin = () =>
         doFetch(
           new Request(forwardUrl, {

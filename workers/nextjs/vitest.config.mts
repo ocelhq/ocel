@@ -5,6 +5,10 @@ export default defineWorkersConfig({
 		poolOptions: {
 			workers: {
 				wrangler: { configPath: "./wrangler.jsonc" },
+				// The Cache API is not covered by isolated storage; snapshotting the
+				// CacheObject fails non-deterministically. Cache tests key each case
+				// uniquely instead.
+				isolatedStorage: false,
 			},
 		},
 	},
