@@ -235,25 +235,47 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutpu
 	}
 }
 
-// registerFunction realizes one ManifestFunction as an AWS Lambda from its
-// `.func` artifact plus a public Function URL, with env carrying every
-// manifest resource (env). artifact points at the S3 object the provider
-// already uploaded the `.func` deployment package to; its content-addressed key
-// changes when the code changes, so Pulumi redeploys exactly the changed
-// functions. The Function URL is exported under logicalName for
-// collectFunctionOutput.
-func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs, artifact artifactRef, env pulumi.StringMap, isr *isrConfig) error {
-	role, err := newServiceRole(ctx, logicalName+"-fn", "lambda.amazonaws.com", nil)
+// newFunctionRole creates the single IAM role every Lambda in a deploy assumes.
+// A function's role governs only two things, neither of them per-function: the
+// CloudWatch Logs grant every function needs, and — when the deploy has a Next
+// app — the ISR cache grant. So one role serves them all. isr is nil when the
+// deploy has no Next app.
+func newFunctionRole(ctx *pulumi.Context, isr *isrConfig) (*iam.Role, error) {
+	role, err := newServiceRole(ctx, "ocel-fn", "lambda.amazonaws.com", nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, logicalName+"-fn-logs", &iam.RolePolicyAttachmentArgs{
+	if _, err := iam.NewRolePolicyAttachment(ctx, "ocel-fn-logs", &iam.RolePolicyAttachmentArgs{
 		Role:      role.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 	}); err != nil {
-		return err
+		return nil, err
 	}
+	if isr != nil {
+		policy, err := isrPolicy(*isr)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := iam.NewRolePolicy(ctx, "ocel-fn-isr", &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(policy),
+		}); err != nil {
+			return nil, err
+		}
+	}
+	return role, nil
+}
 
+// registerFunction realizes one ManifestFunction as an AWS Lambda from its
+// `.func` artifact plus a public Function URL, with env carrying every
+// manifest resource (env). Every function assumes the deploy's one shared role
+// (roleArn, from newFunctionRole). artifact points at the S3 object the provider
+// already uploaded the `.func` deployment package to; its content-addressed key
+// changes when the code changes, so Pulumi redeploys exactly the changed
+// functions. isr is non-nil only for a Next function, and injects the cache
+// handler's env; the grant backing it lives on the shared role. The Function URL
+// is exported under logicalName for collectFunctionOutput.
+func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs, artifact artifactRef, env pulumi.StringMap, isr *isrConfig, roleArn pulumi.StringInput) error {
 	// env is shared across every function in the deploy, so per-function
 	// additions are made on a copy.
 	env = maps.Clone(env)
@@ -268,22 +290,12 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 		for k, v := range isr.env() {
 			env[k] = pulumi.String(v)
 		}
-		policy, err := isrPolicy(*isr)
-		if err != nil {
-			return err
-		}
-		if _, err := iam.NewRolePolicy(ctx, logicalName+"-fn-isr", &iam.RolePolicyArgs{
-			Role:   role.Name,
-			Policy: pulumi.String(policy),
-		}); err != nil {
-			return err
-		}
 	}
 
 	fn, err := lambda.NewFunction(ctx, logicalName, &lambda.FunctionArgs{
 		Runtime:    pulumi.String(args.Runtime),
 		Handler:    pulumi.String(lambdaConfigHandler),
-		Role:       role.Arn,
+		Role:       roleArn,
 		S3Bucket:   pulumi.String(artifact.Bucket),
 		S3Key:      pulumi.String(artifact.Key),
 		MemorySize: pulumi.Int(args.MemorySizeMB),
