@@ -19,52 +19,6 @@ func nextManifest() *deploymentsv1.Manifest {
 	}
 }
 
-// TestUploadPrerenderAssets_CrawlsAndKeys proves the crawl finds every
-// prerender config + fallback under functions/ (recursing into the .segments/
-// subtree), skips the heavy .func directories, and keys each object by
-// <env>/<project-id>/<app-id>/<build-id>/<relpath>.
-func TestUploadPrerenderAssets_CrawlsAndKeys(t *testing.T) {
-	root := writeTree(t, map[string]string{
-		"routing-manifest.json":                                             `{"buildId":"BID","appName":"web"}`,
-		"functions/index.prerender-config.json":                             `{"pathname":"/"}`,
-		"functions/index.prerender-fallback.html":                           "<html>root</html>",
-		"functions/index.segments/_tree.segment.rsc.prerender-config.json":  `{"seg":true}`,
-		"functions/index.segments/_tree.segment.rsc.prerender-fallback.rsc": "RSC-TREE",
-		// A decoy config living inside a .func must be skipped: the crawl never
-		// descends into deployed Lambda trees.
-		"functions/index.func/config.json":                 `{"id":"/"}`,
-		"functions/index.func/decoy.prerender-config.json": "SKIP",
-	})
-
-	f := &fakeUploader{exists: map[string]bool{}}
-	cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: f}
-
-	if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
-		t.Fatalf("uploadPrerenderAssets: %v", err)
-	}
-
-	got := append([]string(nil), f.puts...)
-	sort.Strings(got)
-	want := []string{
-		"prod/proj/web/BID/index.prerender-config.json",
-		"prod/proj/web/BID/index.prerender-fallback.html",
-		"prod/proj/web/BID/index.segments/_tree.segment.rsc.prerender-config.json",
-		"prod/proj/web/BID/index.segments/_tree.segment.rsc.prerender-fallback.rsc",
-	}
-	if len(got) != len(want) {
-		t.Fatalf("uploaded keys = %v, want %v", got, want)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("uploaded key[%d] = %q, want %q", i, got[i], want[i])
-		}
-	}
-	// The fallback body is uploaded verbatim.
-	if body := f.putBodies["prod/proj/web/BID/index.prerender-fallback.html"]; body != "<html>root</html>" {
-		t.Errorf("fallback body = %q, want %q", body, "<html>root</html>")
-	}
-}
-
 // TestUploadPrerenderAssets_NoNextApp proves the path is a no-op for a manifest
 // with no Next.js function: nothing is read or uploaded.
 func TestUploadPrerenderAssets_NoNextApp(t *testing.T) {
@@ -99,11 +53,11 @@ func TestUploadPrerenderAssets_NoPrerenders(t *testing.T) {
 }
 
 // TestUploadPrerenderAssets_MissingBucket proves the path fails loudly when a
-// Next app has prerender assets but no asset bucket is configured.
+// Next app has cache entries to seed but no asset bucket is configured.
 func TestUploadPrerenderAssets_MissingBucket(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"routing-manifest.json":                 `{"buildId":"BID","appName":"web"}`,
-		"functions/index.prerender-config.json": `{"pathname":"/"}`,
+		"routing-manifest.json":  `{"buildId":"BID","appName":"web"}`,
+		"cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 	})
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: root, Env: "prod", Uploader: f}
