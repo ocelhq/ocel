@@ -81,7 +81,7 @@ function hasDraftCookie(request: Request): boolean {
   );
 }
 
-function withStatus(response: Response, status: CacheStatus): Response {
+export function withStatus(response: Response, status: CacheStatus): Response {
   const headers = new Headers(response.headers);
   headers.set(CACHE_STATUS, status);
   return new Response(response.body, {
@@ -153,7 +153,6 @@ export async function serveCached(
   origin: () => Promise<Response>,
   originBlocking: () => Promise<Response>
 ): Promise<Response> {
-  // TODO: check bypassFor and bypassToken
   if (request.method !== "GET" || hasDraftCookie(request)) {
     return withStatus(await origin(), "BYPASS");
   }

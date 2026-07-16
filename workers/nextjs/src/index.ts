@@ -1,5 +1,5 @@
 import { resolveRoutes } from "@next/routing";
-import { CacheDeps, cacheKey, serveCached } from "./cache";
+import { CacheDeps, cacheKey, serveCached, withStatus } from "./cache";
 
 interface Env {
   ASSETS: Fetcher;
@@ -178,7 +178,7 @@ export async function dispatchResult(
       }
 
       if (shouldBypass) {
-        return origin();
+        return withStatus(await origin(), "BYPASS");
       }
 
       const safeHeaders = new Headers();

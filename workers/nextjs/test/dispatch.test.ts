@@ -155,7 +155,7 @@ describe("dispatchResult", () => {
 
   it("bypasses the cache when a real bypass cookie is present", async () => {
     const res = await dispatchPreview(bypassDeps("preview"), "preview=1");
-    expect(res.headers.get("x-ocel-cache")).toBeNull();
+    expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
   });
 
   it("returns 502 when a lambda route has no Function URL", async () => {
