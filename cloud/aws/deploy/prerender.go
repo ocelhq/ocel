@@ -8,7 +8,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"strings"
 
 	"golang.org/x/sync/errgroup"
 
@@ -49,48 +48,35 @@ func assetPrefix(cfg Config, manifest *deploymentsv1.Manifest) (string, error) {
 	return path.Join(cfg.Env, manifest.GetProjectId(), appID, pm.BuildID), nil
 }
 
-// uploadPrerenderAssets uploads a Next app's build output to the account-global
-// asset bucket under assetPrefix: the Vercel-style prerender assets the adapter
-// emits beside each function (*.prerender-config.json, *.prerender-fallback.*),
-// and the seeded ISR cache entries under cache/. The .func directories
-// (deployed Lambda trees) are skipped so the crawl never descends into their
-// traced node_modules. It is a no-op for a manifest with no Next.js function.
+// uploadPrerenderAssets uploads a Next app's seeded ISR cache entries to the
+// account-global asset bucket under assetPrefix, keeping their cache/ segment in
+// the key so the deployed cache handler reads them back at exactly that path. It
+// is a no-op for a manifest with no Next.js function.
 func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
 	prefix, err := assetPrefix(cfg, manifest)
 	if err != nil || prefix == "" {
 		return err
 	}
 
-	functionsDir := filepath.Join(cfg.ArtifactRoot, "functions")
-	assets, err := collectPrerenderAssets(functionsDir)
-	if err != nil {
-		return err
-	}
 	// Cache entries live beside functions/ rather than inside it, and keep their
 	// cache/ segment in the key: that is exactly where the handler looks.
 	cacheEntries, err := collectFiles(filepath.Join(cfg.ArtifactRoot, "cache"))
 	if err != nil {
 		return err
 	}
-	if len(assets) == 0 && len(cacheEntries) == 0 {
+	if len(cacheEntries) == 0 {
 		return nil
 	}
 
 	if cfg.AssetBucket == "" {
-		return fmt.Errorf("Next app has prerender assets but no asset bucket is configured; re-run `ocel bootstrap`")
+		return fmt.Errorf("Next app has cache entries to seed but no asset bucket is configured; re-run `ocel bootstrap`")
 	}
 	if cfg.Uploader == nil {
 		return fmt.Errorf("no asset uploader configured")
 	}
 
 	type upload struct{ key, src string }
-	uploads := make([]upload, 0, len(assets)+len(cacheEntries))
-	for _, rel := range assets {
-		uploads = append(uploads, upload{
-			key: path.Join(prefix, rel),
-			src: filepath.Join(functionsDir, filepath.FromSlash(rel)),
-		})
-	}
+	uploads := make([]upload, 0, len(cacheEntries))
 	for _, rel := range cacheEntries {
 		uploads = append(uploads, upload{
 			key: path.Join(prefix, "cache", rel),
@@ -134,42 +120,6 @@ func collectFiles(dir string) ([]string, error) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("crawl %s: %w", dir, err)
-	}
-	return rels, nil
-}
-
-// collectPrerenderAssets returns every prerender config + fallback under dir as
-// slash-separated paths relative to dir, skipping descent into `.func`
-// directories. A missing dir yields no assets.
-func collectPrerenderAssets(dir string) ([]string, error) {
-	var rels []string
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			if strings.HasSuffix(d.Name(), ".func") {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasSuffix(name, ".prerender-config.json") &&
-			!strings.Contains(name, ".prerender-fallback.") {
-			return nil
-		}
-		rel, err := filepath.Rel(dir, p)
-		if err != nil {
-			return err
-		}
-		rels = append(rels, filepath.ToSlash(rel))
-		return nil
-	})
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
-		return nil, fmt.Errorf("crawl prerender assets %s: %w", dir, err)
 	}
 	return rels, nil
 }

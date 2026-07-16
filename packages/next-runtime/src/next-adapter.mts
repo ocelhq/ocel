@@ -13,7 +13,7 @@ import {
   symlink,
   writeFile,
 } from "node:fs/promises";
-import { basename, dirname, extname, join, relative, sep } from "node:path";
+import { basename, dirname, join, relative, sep } from "node:path";
 
 const scratchDir = join(process.cwd(), ".ocel/output");
 const launcherName = "__next_launcher.cjs";
@@ -169,36 +169,7 @@ const adapter = {
       await copyFile(s.filePath, dest);
     }
 
-    // pre-renders. Each PRERENDER output is one servable variant; emit a
-    // Vercel-style config + fallback pair colocated beside its `.func`,
-    // mirroring the Build Output API so the CLI can crawl them by glob. The
-    // config carries Next's raw fields verbatim, with fallback.filePath
-    // rewritten from the absolute build path to the sibling fallback filename
-    // the CLI uploads alongside it. The base is the full pathname (retaining
-    // any .rsc/.html suffix) so an html variant and its .rsc variant never
-    // collide on one config name.
-    await Promise.all(
-      outputs.prerenders.map(async (p) => {
-        const base =
-          p.pathname === "/" ? "index" : p.pathname.replace(/^\//, "");
-        const configPath = join(
-          `${scratchDir}/functions`,
-          `${base}.prerender-config.json`,
-        );
-        await mkdir(dirname(configPath), { recursive: true });
-
-        const config: Record<string, unknown> = { ...p };
-        const src = p.fallback?.filePath;
-        if (src) {
-          const fallbackName = `${basename(base)}.prerender-fallback${extname(src)}`;
-          await copyAsset(src, join(dirname(configPath), fallbackName));
-          config.fallback = { ...p.fallback, filePath: fallbackName };
-        }
-
-        await writeFile(configPath, JSON.stringify(config));
-      }),
-    );
-
+    // Seed each prerendered route's cache entry from the build output.
     await emitCacheEntries(outputs.prerenders, allRoutes);
 
     // The ocel app name keys this app's assets in the account-global bucket
@@ -343,16 +314,6 @@ interface CacheEntryFile {
   value: Record<string, unknown>;
 }
 
-// baseRoute maps any of a route's prerender variants back to the route itself:
-// `/index.rsc` and `/index.segments/_tree.segment.rsc` both belong to `/`.
-function baseRoute(pathname: string): string {
-  const segmentsAt = pathname.indexOf(".segments/");
-  let base = segmentsAt === -1 ? pathname : pathname.slice(0, segmentsAt);
-  if (base.endsWith(".rsc")) base = base.slice(0, -".rsc".length);
-  if (base === "/index") return "/";
-  return base;
-}
-
 // segmentPath recovers the key FileSystemCache stores a PPR segment under:
 // `<route>.segments/<segmentPath>.segment.rsc`.
 function segmentPath(pathname: string): string | null {
@@ -374,45 +335,69 @@ async function readMaybe(filePath: string | undefined): Promise<Buffer | null> {
   }
 }
 
+// stripContentType drops the per-variant content-type Next injects into each
+// prerender output's headers. An APP_PAGE cache entry holds html, RSC and segment
+// bodies under one `headers`; Next derives each variant's content-type from the
+// body it serves, so a stored content-type would mislabel every non-html read.
+function stripContentType(
+  headers: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!headers) return headers;
+  const { "content-type": _ct, ...rest } = headers;
+  return rest;
+}
+
 // emitCacheEntries seeds one cache entry per prerendered route from the build's
 // own output, so a deployed route serves its prerender instead of re-rendering
-// on the first request to every instance. Routes whose html variant Next did not
-// prerender (a blocking fallback) have nothing to seed and are skipped.
+// on the first request to every instance. Next surfaces a route's html, RSC and
+// PPR-segment variants as separate PRERENDER outputs sharing a groupId — the
+// grouping key here — and this recombines each group into the single entry the
+// cache handler reads. Routes whose html variant Next did not prerender (a
+// blocking fallback) have nothing to seed and are skipped.
 async function emitCacheEntries(
   prerenders: readonly any[],
   routes: readonly { id: string; type?: string }[],
 ): Promise<void> {
   const kindById = new Map(routes.map((r) => [r.id, r.type]));
 
-  const byRoute = new Map<string, any[]>();
+  const byGroup = new Map<number, any[]>();
   for (const p of prerenders) {
-    const base = baseRoute(p.pathname);
-    const members = byRoute.get(base);
+    const members = byGroup.get(p.groupId);
     if (members) members.push(p);
-    else byRoute.set(base, [p]);
+    else byGroup.set(p.groupId, [p]);
   }
 
   const lastModified = Date.now();
 
   await Promise.all(
-    [...byRoute.entries()].map(async ([route, members]) => {
-      const kind = kindById.get(members[0].parentOutputId) ?? "APP_PAGE";
-      const html = members.find((m) => baseRoute(m.pathname) === m.pathname);
+    [...byGroup.values()].map(async (members) => {
+      // A member is a segment or the .rsc payload by its own suffix; the base is
+      // the html variant, the one that is neither. Its concrete pathname keys the
+      // entry (e.g. /blog/a → blog/a, / → index) — not parentOutputId, which
+      // names the shared function under its dynamic pattern.
+      const isSegment = (m: any) => segmentPath(m.pathname) !== null;
+      const html = members.find(
+        (m) => !m.pathname.endsWith(".rsc") && !isSegment(m),
+      );
       const rsc = members.find(
-        (m) => m.pathname.endsWith(".rsc") && !segmentPath(m.pathname),
+        (m) => m.pathname.endsWith(".rsc") && !isSegment(m),
       );
       const body = await readMaybe(html?.fallback?.filePath);
       if (!html || !body) return;
 
+      const kind = kindById.get(html.parentOutputId) ?? "APP_PAGE";
+
       const value: Record<string, unknown> = {
         kind,
-        headers: html.fallback.initialHeaders,
         status: html.fallback.initialStatus,
       };
 
       if (kind === "APP_ROUTE") {
+        // A single, non-derivable body type: keep content-type verbatim.
+        value.headers = html.fallback.initialHeaders;
         value.body = body.toString("base64");
       } else {
+        value.headers = stripContentType(html.fallback.initialHeaders);
         value.html = body.toString("utf8");
         const rscBody = await readMaybe(rsc?.fallback?.filePath);
         if (rscBody) value.rscData = rscBody.toString("base64");
@@ -430,7 +415,8 @@ async function emitCacheEntries(
         }
       }
 
-      const key = route === "/" ? "index" : route.replace(/^\//, "");
+      const key =
+        html.pathname === "/" ? "index" : html.pathname.replace(/^\//, "");
       const dest = join(scratchDir, "cache", `${key}.cache.json`);
       await mkdir(dirname(dest), { recursive: true });
       const entry: CacheEntryFile = { lastModified, value };

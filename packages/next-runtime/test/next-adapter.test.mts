@@ -97,6 +97,17 @@ async function exists(p: string): Promise<boolean> {
   }
 }
 
+// allFileNames returns the basenames of every file under dir, recursively.
+// A missing dir yields no names.
+async function allFileNames(dir: string): Promise<string[]> {
+  try {
+    const entries = await readdir(dir, { recursive: true, withFileTypes: true });
+    return entries.filter((e) => e.isFile()).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
 // A build result where routes come in base + `.rsc` pairs that share the same
 // filePath (and config, assets): the root page (/ and /index.rsc), plus an app
 // route (/api/documents and /api/documents.rsc). The root page is also
@@ -196,9 +207,9 @@ async function synthDedupProject() {
 }
 
 // A build result centred on prerenders: the root page (/ and /index.rsc) plus
-// its PPR segment, each with an on-disk fallback body and a rich config, so the
-// tests can assert the emitted .prerender-config.json / .prerender-fallback.*
-// pairs preserve Next's raw fields and the segment folder structure.
+// its PPR segment — all sharing one groupId — each with an on-disk fallback body
+// and a rich config, so the tests can assert the group recombines into one
+// seeded cache entry carrying html + rscData + segmentData.
 async function synthPrerenderProject() {
   const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-isr-"));
 
@@ -453,84 +464,28 @@ test("enumerates public/ files as static in the routing manifest", async () => {
   expect(manifest.dispatch["/icons/logo.png"]).toEqual({ kind: "static" });
 });
 
-test("emits a prerender config + fallback per prerender, preserving raw fields", async () => {
+test("writes no Vercel-style prerender config or fallback files", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
-  const fns = functionsDir(projectDir);
-  const cfg = JSON.parse(
-    await readFile(join(fns, "index.prerender-config.json"), "utf8"),
-  );
-  // Next's raw fields survive verbatim.
-  expect(cfg.groupId).toBe(1);
-  expect(cfg.parentOutputId).toBe("/");
-  expect(cfg.config.bypassToken).toBe("tok");
-  expect(cfg.config.allowHeader).toContain("host");
-  expect(cfg.fallback.initialRevalidate).toBe(false);
-  expect(cfg.fallback.initialHeaders["content-type"]).toBe(
-    "text/html; charset=utf-8",
-  );
-  // fallback.filePath is rewritten from the absolute .next path to the sibling
-  // fallback filename.
-  expect(cfg.fallback.filePath).toBe("index.prerender-fallback.html");
-  // fallback body copied verbatim.
-  expect(
-    await readFile(join(fns, "index.prerender-fallback.html"), "utf8"),
-  ).toBe("<html>root</html>");
+  const names = await allFileNames(functionsDir(projectDir));
+  expect(names.some((n) => n.endsWith(".prerender-config.json"))).toBe(false);
+  expect(names.some((n) => n.includes(".prerender-fallback."))).toBe(false);
 });
 
-test("emits rsc + segment prerender assets preserving the folder structure", async () => {
+test("marks prerendered pathnames as prerender in dispatch", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
-  const fns = functionsDir(projectDir);
-  expect(await exists(join(fns, "index.rsc.prerender-config.json"))).toBe(true);
-  expect(await readFile(join(fns, "index.rsc.prerender-fallback.rsc"), "utf8")).toBe(
-    "RSC-ROOT",
-  );
-  // Segment assets keep their .segments/ subdirectory; the base is the full
-  // pathname (incl. the .rsc suffix) so nothing collides with the html variant.
-  expect(
-    await exists(
-      join(fns, "index.segments/_tree.segment.rsc.prerender-config.json"),
-    ),
-  ).toBe(true);
-  expect(
-    await readFile(
-      join(fns, "index.segments/_tree.segment.rsc.prerender-fallback.rsc"),
-      "utf8",
-    ),
-  ).toBe("RSC-TREE");
-  // The segment config points at its sibling fallback by basename.
-  const segCfg = JSON.parse(
-    await readFile(
-      join(fns, "index.segments/_tree.segment.rsc.prerender-config.json"),
-      "utf8",
-    ),
-  );
-  expect(segCfg.fallback.filePath).toBe(
-    "_tree.segment.rsc.prerender-fallback.rsc",
-  );
-});
-
-test("marks prerendered pathnames as prerender in dispatch and writes no isr-cache.json", async () => {
-  const { projectDir, args } = await synthPrerenderProject();
-  const adapter = await loadAdapterIn(projectDir);
-
-  await adapter.onBuildComplete(args as never);
-
-  expect(await exists(join(projectDir, ".ocel/output/isr-cache.json"))).toBe(
-    false,
-  );
   const manifest = await readManifest(projectDir);
   // The prerender marker replaces the plain lambda entry; the id stays the
   // parent function so the runtime can invoke it to regenerate.
-  expect(manifest.dispatch["/"]).toEqual({ kind: "prerender", id: "/" });
-  expect(manifest.dispatch["/index.rsc"]).toEqual({
+  expect(manifest.dispatch["/"]).toMatchObject({ kind: "prerender", id: "/" });
+  expect(manifest.dispatch["/index.rsc"]).toMatchObject({
     kind: "prerender",
     id: "/",
   });
@@ -621,8 +576,10 @@ test("regroups a route's prerender outputs into one cache entry", async () => {
 });
 
 // The html variant carries the route's real response headers; the tags the
-// cache handler checks on every read ride in on x-next-cache-tags.
-test("carries the html variant's headers and status onto the cache entry", async () => {
+// cache handler checks on every read ride in on x-next-cache-tags. Content-type
+// is dropped for an APP_PAGE — Next derives it per-variant at serve time, so a
+// stored text/html would mislabel the RSC and segment reads sharing this entry.
+test("carries the html variant's headers (sans content-type) and status onto an APP_PAGE entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.prerenders[0].fallback.initialHeaders = {
     "content-type": "text/html; charset=utf-8",
@@ -635,5 +592,102 @@ test("carries the html variant's headers and status onto the cache entry", async
 
   const entry = await readCacheEntry(projectDir, "index");
   expect(entry.value.headers["x-next-cache-tags"]).toBe("_N_T_/layout,_N_T_/");
+  expect(entry.value.headers["content-type"]).toBeUndefined();
   expect(entry.value.status).toBe(200);
+});
+
+// An APP_ROUTE stores a single body whose type Next cannot re-derive, so its
+// content-type must survive verbatim onto the entry.
+test("keeps content-type on an APP_ROUTE cache entry", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-route-"));
+  const handler = join(projectDir, ".next/server/app/api/data/route.js");
+  await mkdir(dirname(handler), { recursive: true });
+  await writeFile(handler, "module.exports = () => {}");
+  const body = join(projectDir, ".next/server/app/api/data.body");
+  await writeFile(body, "PAYLOAD");
+
+  const args = {
+    routing: {
+      beforeMiddleware: [],
+      beforeFiles: [],
+      afterFiles: [],
+      dynamicRoutes: [],
+      onMatch: [],
+      fallback: [],
+    },
+    outputs: {
+      pages: [],
+      pagesApi: [],
+      appPages: [],
+      appRoutes: [
+        {
+          pathname: "/api/data",
+          id: "/api/data",
+          assets: {},
+          runtime: "nodejs",
+          filePath: handler,
+          config: {},
+          type: "APP_ROUTE",
+        },
+      ],
+      staticFiles: [],
+      prerenders: [
+        {
+          pathname: "/api/data",
+          id: "/api/data",
+          type: "PRERENDER",
+          parentOutputId: "/api/data",
+          groupId: 1,
+          fallback: {
+            filePath: body,
+            initialStatus: 200,
+            initialHeaders: { "content-type": "application/json" },
+          },
+        },
+      ],
+    },
+    projectDir,
+    repoRoot: projectDir,
+    distDir: join(projectDir, ".next"),
+    config: { basePath: "" },
+    nextVersion: "16.2.10",
+    buildId: "test-build",
+  };
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const entry = await readCacheEntry(projectDir, "api/data");
+  expect(entry.value.kind).toBe("APP_ROUTE");
+  expect(entry.value.headers["content-type"]).toBe("application/json");
+  expect(Buffer.from(entry.value.body, "base64").toString()).toBe("PAYLOAD");
+});
+
+// groupId is 1:1 with a route's cache entry, so two prerendered routes with
+// distinct groupIds must land in two separate cache.json files.
+test("splits distinct groupIds into separate cache files", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const appDir = join(projectDir, ".next/server/app");
+  await writeFile(join(appDir, "about.html"), "<html>about</html>");
+  args.outputs.prerenders.push({
+    pathname: "/about",
+    id: "/about",
+    type: "PRERENDER",
+    parentOutputId: "/",
+    groupId: 2,
+    fallback: {
+      filePath: join(appDir, "about.html"),
+      initialRevalidate: false,
+      initialHeaders: { "content-type": "text/html; charset=utf-8" },
+    },
+    config: {},
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const index = await readCacheEntry(projectDir, "index");
+  const about = await readCacheEntry(projectDir, "about");
+  expect(index.value.html).toBe("<html>root</html>");
+  expect(about.value.html).toBe("<html>about</html>");
 });
