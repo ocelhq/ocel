@@ -87,24 +87,26 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	if err := validateManifest(manifest); err != nil {
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
+	progress := func(phase deploymentsv1.Phase, m string, current, total uint32) {
+		_ = stream.Send(phaseProgressEvent(phase, m, current, total))
+	}
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
-	outputs, err := s.runDeploy(ctx, req, manifest, progress, logf)
+	outputs, appURLs, err := s.runDeploy(ctx, req, manifest, progress, logf)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
-	return stream.Send(resultEvent(true, "", outputs))
+	return stream.Send(resultEvent(true, "", outputs, appURLs))
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress, logf func(string)) ([]*deploymentsv1.ResourceOutput, error) {
+func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string)) ([]*deploymentsv1.ResourceOutput, []string, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
@@ -119,35 +121,37 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// A preview deploy must read (and write) the preview substrate's Pulumi
 	// backend, not production's — otherwise `ocel preview rm`/`ls`, which
 	// resolve the preview backend, never see what up just created.
-	progress("Checking account bootstrap")
+	progress(deploymentsv1.Phase_PHASE_UPLOADING, "Checking account bootstrap", 0, 0)
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if err := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion).Explain(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if deployed.StateBucket == "" {
-		return nil, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return nil, nil, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 	if deployed.ArtifactBucket == "" {
-		return nil, fmt.Errorf("account bootstrap is present but its artifact bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return nil, nil, fmt.Errorf("account bootstrap is present but its artifact bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 	if deployed.AssetBucket == "" {
-		return nil, fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return nil, nil, fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 	if deployed.StateTable == "" {
-		return nil, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return nil, nil, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	pulumiCmd, err := pulumirt.Ensure(ctx, progress)
+	pulumiCmd, err := pulumirt.Ensure(ctx, func(m string) {
+		progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
+	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	for _, r := range manifest.GetResources() {
@@ -161,7 +165,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// Resource into its policy and fails the deploy at Pulumi.
 	account, err := accountID(ctx, sts.NewFromConfig(awscfg))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
@@ -214,11 +218,11 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
@@ -232,10 +236,10 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	// Each substrate has its own stack, so the gate reads the one being acted on.
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
 	if bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion) == bootstrap.NeedsCLIUpgrade {
-		return stream.Send(resultEvent(false, bootstrap.NeedsCLIUpgrade.Explain().Error(), nil))
+		return stream.Send(resultEvent(false, bootstrap.NeedsCLIUpgrade.Explain().Error(), nil, nil))
 	}
 
 	run := bootstrap.Run
@@ -243,9 +247,9 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		run = bootstrap.RunPreview
 	}
 	if err := run(ctx, cfn, ssmClient, progress, logf); err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
-	return stream.Send(resultEvent(true, "", nil))
+	return stream.Send(resultEvent(true, "", nil, nil))
 }
 
 // checkBootstrap reads the deployed state of the substrate a command acts on:
@@ -329,18 +333,33 @@ func progressEvent(message string) *deploymentsv1.DeployEvent {
 	}
 }
 
+// phaseProgressEvent builds a phase-tagged ProgressEvent. A non-zero total
+// marks a determinate step (current of total); total==0 leaves current/total
+// unset so the CLI renders a spinner.
+func phaseProgressEvent(phase deploymentsv1.Phase, message string, current, total uint32) *deploymentsv1.DeployEvent {
+	p := &deploymentsv1.ProgressEvent{Message: message, Phase: phase}
+	if total > 0 {
+		p.Current = &current
+		p.Total = &total
+	}
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: p},
+	}
+}
+
 func logEvent(message string) *deploymentsv1.DeployEvent {
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Log{Log: &deploymentsv1.LogEvent{Message: message}},
 	}
 }
 
-func resultEvent(success bool, errMsg string, outputs []*deploymentsv1.ResourceOutput) *deploymentsv1.DeployEvent {
+func resultEvent(success bool, errMsg string, outputs []*deploymentsv1.ResourceOutput, appURLs []string) *deploymentsv1.DeployEvent {
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
 			Success: success,
 			Error:   errMsg,
 			Outputs: outputs,
+			AppUrls: appURLs,
 		}},
 	}
 }

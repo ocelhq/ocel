@@ -114,8 +114,8 @@ func TestRunPreviewUp_RefusesOnClassMismatch_NoDeploy(t *testing.T) {
 	if err == nil {
 		t.Fatal("runPreviewUp err = nil, want a class-mismatch error")
 	}
-	if !strings.Contains(err.Error(), "ocel preview can only run against preview infrastructure") {
-		t.Errorf("err = %v, want the concrete class-mismatch message", err)
+	if !strings.Contains(stdout.String(), "ocel preview can only run against preview infrastructure") {
+		t.Errorf("stdout = %q, want the concrete class-mismatch message", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "DEPLOY ") {
 		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
@@ -133,8 +133,8 @@ func TestRunPreviewUp_RefusesWhenInfraAbsent_NoDeploy(t *testing.T) {
 	if err == nil {
 		t.Fatal("runPreviewUp err = nil, want a missing-infrastructure error")
 	}
-	if !strings.Contains(err.Error(), "ocel bootstrap --preview") {
-		t.Errorf("err = %v, want it to direct the user to `ocel bootstrap --preview`", err)
+	if !strings.Contains(stdout.String(), "ocel bootstrap --preview") {
+		t.Errorf("stdout = %q, want it to direct the user to `ocel bootstrap --preview`", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "DEPLOY ") {
 		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())

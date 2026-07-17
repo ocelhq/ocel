@@ -320,9 +320,34 @@ message DeployEvent {
   }
 }
 
+// Phase names the coarse stage a deploy is in, so the CLI can render a fixed
+// roadmap (build, upload, provision, finalize) instead of matching progress
+// wording. It is shared vocabulary across providers; a provider that does not
+// classify a step leaves PHASE_UNSPECIFIED and the CLI renders it as a plain
+// titled step. BUILDING is CLI-side (it runs before any provider is spawned)
+// and never travels the wire; it is defined here so the CLI and every provider
+// speak one vocabulary.
+enum Phase {
+  PHASE_UNSPECIFIED = 0;
+  PHASE_BUILDING = 1;
+  PHASE_UPLOADING = 2;
+  PHASE_PROVISIONING = 3;
+  PHASE_FINALIZING = 4;
+}
+
 // ProgressEvent reports a discrete, human-readable step of deploy progress.
 message ProgressEvent {
   string message = 1;
+
+  // phase classifies this step so the CLI can group steps under a fixed
+  // roadmap. PHASE_UNSPECIFIED means the provider did not classify it.
+  Phase phase = 2;
+
+  // current/total describe a determinate step (e.g. uploading 3 of 5
+  // artifacts) so the CLI can render a progress bar. Both unset means the
+  // step is indeterminate and the CLI shows a spinner.
+  optional uint32 current = 3;
+  optional uint32 total = 4;
 }
 
 // LogEvent carries diagnostic output that isn't a discrete progress step.
@@ -341,6 +366,11 @@ message ResultEvent {
   // on failure, and always empty for Bootstrap. The CLI collects these; the
   // SDK is their eventual consumer.
   repeated ResourceOutput outputs = 3;
+
+  // app_urls are the user-facing URLs the CLI features on the success screen,
+  // in priority order (e.g. a Next.js worker URL, else the function URLs). The
+  // provider declares them so the CLI never has to match magic logical names.
+  repeated string app_urls = 4;
 }
 
 // ResourceOutput pairs a resource's logical name with its typed connection

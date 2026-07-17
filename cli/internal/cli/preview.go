@@ -13,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -152,16 +153,22 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 		return err
 	}
 
-	manifest, err := collectAndBuildManifest(ctx, cfg, stdout, stderr)
+	ui := deployui.New(stdout, cfg.Dir, "ocel preview up", verboseEnabled())
+	defer ui.Close()
+
+	ui.Building()
+	manifest, err := collectAndBuildManifest(ctx, cfg, ui.BuildWriter())
 	if err != nil {
-		return err
+		return failSession(ctx, ui, err)
 	}
 	if manifest == nil {
-		fmt.Fprintln(stdout, "Nothing to deploy.")
+		ui.Finish("Nothing to deploy")
 		return nil
 	}
+	ui.BuildOK()
 
-	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+	provW := ui.BuildWriter()
+	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
 		if err := preflightPreview(ctx, runner, provider); err != nil {
 			return err
 		}
@@ -174,20 +181,25 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 		}
 
 		var stackOutputs []*deploymentsv1.ResourceOutput
+		var appURLs []string
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
-			streamDeployEvent(stdout, ev)
+			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
 				stackOutputs = res.GetOutputs()
+				appURLs = res.GetAppUrls()
 			}
 		}
 		if err := runner.Deploy(ctx, req, onEvent); err != nil {
 			return err
 		}
 
-		fmt.Fprintf(stdout, "✓ Preview %s is up.\n", env.GetIdentity())
-		printResourceOutputs(stdout, stackOutputs)
+		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), appURLs, stackOutputs)
 		return nil
 	})
+	if err != nil {
+		return failSession(ctx, ui, err)
+	}
+	return nil
 }
 
 // runPreviewRm resolves the addressing Environment, guards it against the
@@ -225,7 +237,11 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 		}
 	}
 
-	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+	ui := deployui.New(stdout, cfg.Dir, "ocel preview rm", verboseEnabled())
+	defer ui.Close()
+
+	provW := ui.BuildWriter()
+	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
 		if err := preflightPreview(ctx, runner, provider); err != nil {
 			return err
 		}
@@ -236,12 +252,16 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			ProjectId:       cfg.ProjectID,
 		}
-		if err := runner.Destroy(ctx, req, func(ev *deploymentsv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
+		if err := runner.Destroy(ctx, req, ui.Event); err != nil {
 			return err
 		}
-		fmt.Fprintf(stdout, "✓ Preview %s torn down.\n", env.GetIdentity())
+		ui.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
 		return nil
 	})
+	if err != nil {
+		return failSession(ctx, ui, err)
+	}
+	return nil
 }
 
 // runPreviewLs drives the provider's ListEnvironments RPC and renders each
@@ -421,24 +441,3 @@ func epochOrDash(sec int64) string {
 	return time.Unix(sec, 0).UTC().Format("2006-01-02")
 }
 
-// printResourceOutputs renders the provisioned resources' connection details so
-// the user can use the environment immediately.
-func printResourceOutputs(stdout io.Writer, outputs []*deploymentsv1.ResourceOutput) {
-	if len(outputs) == 0 {
-		return
-	}
-	fmt.Fprintln(stdout, "Connection outputs:")
-	for _, o := range outputs {
-		if pg := o.GetPostgres(); pg != nil {
-			fmt.Fprintf(stdout, "  %s: postgres://%s@%s:%d/%s\n", o.GetLogicalName(), pg.GetUsername(), pg.GetHost(), pg.GetPort(), pg.GetDatabase())
-			continue
-		}
-		if b := o.GetBucket(); b != nil {
-			fmt.Fprintf(stdout, "  %s: bucket %s at %s\n", o.GetLogicalName(), b.GetBucket(), b.GetAddress())
-			continue
-		}
-		if f := o.GetFunction(); f != nil {
-			fmt.Fprintf(stdout, "  %s: %s\n", o.GetLogicalName(), f.GetUrl())
-		}
-	}
-}

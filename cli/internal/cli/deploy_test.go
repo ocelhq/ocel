@@ -160,7 +160,7 @@ func TestRunDeploy_HappyPath_DiscoversBuildsSpawnsAndDeploysToSuccess(t *testing
 	if !strings.Contains(stdout.String(), "provisioning...") {
 		t.Errorf("stdout = %q, want it to contain the streamed progress event", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Deploy succeeded") {
+	if !strings.Contains(stdout.String(), "Deployed") {
 		t.Errorf("stdout = %q, want a terminal success message", stdout.String())
 	}
 	if !strings.Contains(stdout.String(), "DEPLOY class=CLASS_PRODUCTION lifecycle=LIFECYCLE_UNSPECIFIED") {
@@ -203,7 +203,7 @@ func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	if strings.Contains(stderr.String(), "deploying infrastructure only") {
 		t.Errorf("stderr = %q, want no infra-only warning when a function is built", stderr.String())
 	}
-	if !strings.Contains(out, "Deploy succeeded") {
+	if !strings.Contains(out, "Deployed") {
 		t.Errorf("stdout = %q, want a terminal success message", out)
 	}
 
@@ -223,10 +223,10 @@ func TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly(t *testing.T) {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
-	if !strings.Contains(stderr.String(), "no functions to deploy; deploying infrastructure only") {
-		t.Errorf("stderr = %q, want the infra-only warning", stderr.String())
+	if !strings.Contains(stdout.String(), "no functions to deploy; deploying infrastructure only") {
+		t.Errorf("stdout = %q, want the infra-only warning", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Deploy succeeded") {
+	if !strings.Contains(stdout.String(), "Deployed") {
 		t.Errorf("stdout = %q, want resources to still deploy to success", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "FUNCTION ") {
@@ -252,8 +252,8 @@ func TestRunDeploy_AppBuildFailure_AbortsBeforeSpawn(t *testing.T) {
 	if err == nil {
 		t.Fatal("runDeploy err = nil, want the app-build failure")
 	}
-	if !strings.Contains(err.Error(), "boom: app build failed") {
-		t.Errorf("err = %v, want the app-build failure surfaced", err)
+	if !strings.Contains(stdout.String(), "boom: app build failed") {
+		t.Errorf("stdout = %q, want the app-build failure surfaced", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "DEPLOY ") {
 		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
@@ -273,8 +273,8 @@ func TestRunDeploy_RefusesOnClassMismatch_NoDeploy(t *testing.T) {
 	if err == nil {
 		t.Fatal("runDeploy err = nil, want a class-mismatch error")
 	}
-	if !strings.Contains(err.Error(), "ocel deploy can only run against production infrastructure") {
-		t.Errorf("err = %v, want the concrete class-mismatch message", err)
+	if !strings.Contains(stdout.String(), "ocel deploy can only run against production infrastructure") {
+		t.Errorf("stdout = %q, want the concrete class-mismatch message", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "DEPLOY ") {
 		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
@@ -292,8 +292,8 @@ func TestRunDeploy_RefusesWhenInfraAbsent_NoDeploy(t *testing.T) {
 	if err == nil {
 		t.Fatal("runDeploy err = nil, want a missing-infrastructure error")
 	}
-	if !strings.Contains(err.Error(), "ocel bootstrap") {
-		t.Errorf("err = %v, want it to direct the user to `ocel bootstrap`", err)
+	if !strings.Contains(stdout.String(), "ocel bootstrap") {
+		t.Errorf("stdout = %q, want it to direct the user to `ocel bootstrap`", stdout.String())
 	}
 	if strings.Contains(stdout.String(), "DEPLOY ") {
 		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
@@ -319,7 +319,7 @@ func TestRunDeploy_ConfirmSkippedWhenStdinNotATTY_ProceedsWithoutPrompting(t *te
 	if strings.Contains(stdout.String(), "[y/N]") {
 		t.Errorf("stdout = %q, want the confirm prompt skipped for non-TTY stdin", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Deploy succeeded") {
+	if !strings.Contains(stdout.String(), "Deployed") {
 		t.Errorf("stdout = %q, want deploy to still proceed to success", stdout.String())
 	}
 

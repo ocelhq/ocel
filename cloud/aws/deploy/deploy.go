@@ -106,29 +106,34 @@ type Config struct {
 	ExpiresAt int64
 }
 
-// Run provisions every resource in manifest against AWS and returns the
-// whole-stack connection outputs. progress reports discrete steps and log
-// forwards Pulumi engine output; both may be nil. Run performs the real
-// Pulumi up and is not exercised by unit tests.
-func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
-	report := func(f func(string), msg string) {
-		if f != nil {
-			f(msg)
-		}
-	}
+// Progress reports a phase-tagged deploy step so the CLI can render a fixed
+// roadmap. current/total are 0 for an indeterminate step (spinner) and set for
+// a determinate one (progress bar). Implementations may be nil-safe via
+// report.
+type Progress func(phase deploymentsv1.Phase, message string, current, total uint32)
 
-	if len(manifest.GetFunctions()) > 0 {
-		report(progress, "Uploading function artifacts")
+// report invokes p only when it is non-nil, so callers need not guard every
+// progress call.
+func (p Progress) report(phase deploymentsv1.Phase, message string, current, total uint32) {
+	if p != nil {
+		p(phase, message, current, total)
 	}
-	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest)
+}
+
+// Run provisions every resource in manifest against AWS and returns the
+// whole-stack connection outputs plus the user-facing app URLs. progress
+// reports phase-tagged steps and log forwards Pulumi engine output; both may be
+// nil. Run performs the real Pulumi up and is not exercised by unit tests.
+func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, error) {
+	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// A Next app's prerender configs + fallbacks ride to the asset bucket
 	// alongside the function artifacts, keyed by build id. No-op otherwise.
 	if err := uploadPrerenderAssets(ctx, cfg, manifest); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	program := func(pctx *pulumi.Context) error {
@@ -215,7 +220,7 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 		return nil
 	}
 
-	report(progress, "Preparing deployment stack")
+	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack", 0, 0)
 	stack, err := auto.UpsertStackInlineSource(ctx, cfg.StackName, cfg.ProjectName, program,
 		auto.Pulumi(cfg.Pulumi),
 		auto.SecretsProvider("passphrase"),
@@ -229,14 +234,14 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 		}),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("prepare stack %s: %w", cfg.StackName, err)
+		return nil, nil, fmt.Errorf("prepare stack %s: %w", cfg.StackName, err)
 	}
 
 	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	report(progress, "Provisioning resources (this can take several minutes)")
+	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning resources (this can take several minutes)", 0, 0)
 	logWriter := lineWriter(log)
 	upOpts := []optup.Option{}
 	if logWriter != nil {
@@ -246,23 +251,48 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 	res, err := stack.Up(ctx, upOpts...)
 	logWriter.Flush() // emit any final, un-newline-terminated engine line
 	if err != nil {
-		return nil, fmt.Errorf("provision stack %s: %w", cfg.StackName, err)
+		return nil, nil, fmt.Errorf("provision stack %s: %w", cfg.StackName, err)
 	}
 
-	report(progress, "Collecting outputs")
+	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Collecting outputs", 0, 0)
 	outputs, err := collectOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// The Next.js worker fronts the just-provisioned Lambdas, so it deploys last
 	// — it needs their Function URLs. A failure here fails the deploy; the AWS
 	// resources persist and a redeploy is idempotent.
-	workerOutputs, err := deployNextWorker(ctx, cfg, manifest, outputs, func(msg string) { report(progress, msg) })
+	workerOutputs, err := deployNextWorker(ctx, cfg, manifest, outputs, func(msg string) {
+		progress.report(deploymentsv1.Phase_PHASE_FINALIZING, msg, 0, 0)
+	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return append(outputs, workerOutputs...), nil
+	outputs = append(outputs, workerOutputs...)
+	return outputs, appURLs(outputs), nil
+}
+
+// appURLs returns the user-facing URLs to feature on the success screen, in
+// priority order: a Next.js worker URL when present (it fronts the whole app),
+// otherwise every function's own URL. Non-function outputs (postgres, bucket)
+// are never app URLs. Keyed by nextWorkerOutputName, defined alongside the
+// worker deploy, so the wire contract carries no magic logical name.
+func appURLs(outputs []*deploymentsv1.ResourceOutput) []string {
+	for _, o := range outputs {
+		if o.GetLogicalName() == nextWorkerOutputName {
+			if f := o.GetFunction(); f != nil && f.GetUrl() != "" {
+				return []string{f.GetUrl()}
+			}
+		}
+	}
+	var urls []string
+	for _, o := range outputs {
+		if f := o.GetFunction(); f != nil && f.GetUrl() != "" {
+			urls = append(urls, f.GetUrl())
+		}
+	}
+	return urls
 }
 
 // previewExpiryTagKey is the Pulumi stack tag holding an ephemeral preview's
