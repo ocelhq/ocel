@@ -39,6 +39,13 @@ const (
 	// passphrase.
 	PassphraseParamName = "/ocel/pulumi/passphrase"
 
+	// EdgeUserName / EdgePreviewUserName are the deterministic IAM user names the
+	// per-substrate edge reader is provisioned under. The name is stable so the
+	// imperative access-key step (ensureEdgeCredentials) can find the user without
+	// a stack output, and so a redeploy updates it in place.
+	EdgeUserName        = "ocel-edge"
+	EdgePreviewUserName = "ocel-edge-preview"
+
 	outputStateBucket    = "StateBucketName"
 	outputStateTable     = "StateTableName"
 	outputArtifactBucket = "ArtifactBucketName"
@@ -217,9 +224,11 @@ func RunPreview(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAP
 	return nil
 }
 
-// upsertStack creates or updates the production bootstrap stack.
+// upsertStack creates or updates the production bootstrap stack. It requests
+// named-IAM capability because the stack provisions the edge reader IAM user
+// under a deterministic name.
 func upsertStack(ctx context.Context, cfn *cloudformation.Client) error {
-	return upsertCFNStack(ctx, cfn, StackName, stackTemplate(), nil)
+	return upsertCFNStack(ctx, cfn, StackName, stackTemplate(), []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam})
 }
 
 // upsertPreviewStack creates or updates the preview infrastructure stack. It
@@ -342,7 +351,7 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%sOutputs:
+%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
@@ -352,7 +361,7 @@ Resources:
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), edgeUserResource(EdgeUserName), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
@@ -384,7 +393,7 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%sOutputs:
+%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
     Value: !Ref StateBucket
@@ -394,7 +403,7 @@ Resources:
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), edgeUserResource(EdgePreviewUserName), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
 }
 
 // stateTableResource renders the StateTable resource block shared by both
@@ -511,6 +520,50 @@ func assetBucketOutput() string {
     Description: S3 bucket holding prerender configs and fallbacks, keyed by build id.
     Value: !Ref AssetBucket
 `, outputAssetBucket)
+}
+
+// edgeUserResource renders the per-substrate edge reader IAM user shared by both
+// substrate templates: the single principal the Cloudflare worker signs its
+// direct ISR reads with. It carries an inline policy scoped to exactly the
+// account-global stores this stack provisions — s3:GetObject on the whole asset
+// bucket and dynamodb:BatchGetItem on the state table, the latter bounded to the
+// TAG# tag partitions so the edge key can never read the upload-session items
+// (which carry HMAC secrets) sharing the table. The lambda:Invoke* grant is
+// dormant: Function URLs are public today, but scoping it here now means turning
+// on AWS_IAM auth later needs no bootstrap change. userName is the deterministic
+// name the imperative access-key step looks the user up by. The block is a
+// Resources child, so it is emitted before the template's Outputs: line.
+//
+// Credential rotation runbook (no automation yet): mint a second access key with
+// iam.CreateAccessKey for this user, re-inject it into every deployed worker
+// script's bindings, then delete the first key. Staged this way, no request is
+// ever signed with a key that has already been revoked.
+func edgeUserResource(userName string) string {
+	return fmt.Sprintf(`  EdgeUser:
+    Type: AWS::IAM::User
+    Properties:
+      UserName: %s
+      Policies:
+        - PolicyName: ocel-edge-isr-read
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub '${AssetBucket.Arn}/*'
+              - Effect: Allow
+                Action: dynamodb:BatchGetItem
+                Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys:
+                      - 'TAG#*'
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunctionUrl
+                  - lambda:InvokeFunction
+                Resource: !Sub 'arn:aws:lambda:*:${AWS::AccountId}:function:ocel-*'
+`, userName)
 }
 
 // CloudFormation surfaces both "stack does not exist" and the no-op update as
