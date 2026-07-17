@@ -155,6 +155,21 @@ describe("serveCached", () => {
     expect(origin.calls).toBe(1);
   });
 
+  it("misses without mutating an immutable origin response", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    // A real fetch() response has immutable headers; Response.redirect is the
+    // one constructor that reproduces that guard in the test runtime.
+    const origin = async () => Response.redirect("https://app.example/next", 302);
+
+    const first = await serveCached(req(), target("immutable"), deps, origin, origin);
+
+    expect(first.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(first.headers.get("cache-control")).toBe(
+      "public, max-age=0, must-revalidate",
+    );
+  });
+
   it("serves the browser a revalidating Cache-Control, never the stored TTL", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);

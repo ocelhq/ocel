@@ -194,8 +194,8 @@ export async function serveCached(
     store(keyRequest, target, deps, response.clone()).catch(() => {}),
   );
 
+  const result = withStatus(response, "MISS");
   // client must always revalidate - no browser cache
-  response.headers.set("cache-control", "public, max-age=0, must-revalidate");
-
-  return withStatus(response, "MISS");
+  result.headers.set("cache-control", "public, max-age=0, must-revalidate");
+  return result;
 }
