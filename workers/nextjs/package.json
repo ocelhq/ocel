@@ -18,6 +18,8 @@
     "wrangler": "^4.110.0"
   },
   "dependencies": {
-    "@next/routing": "^16.2.10"
+    "@next/routing": "^16.2.10",
+    "@ocel/next-cache": "workspace:*",
+    "aws4fetch": "^1.0.20"
   }
 }

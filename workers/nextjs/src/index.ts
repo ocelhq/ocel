@@ -1,9 +1,22 @@
 import { resolveRoutes } from "@next/routing";
 import { CacheDeps, cacheKey, serveCached, withStatus } from "./cache";
+import {
+  intercept,
+  readInterceptionConfig,
+  signerFor,
+  type InterceptionConfig,
+} from "./interception";
 
 interface Env {
   ASSETS: Fetcher;
   FUNCTION_URLS: string;
+  OCEL_EDGE_ACCESS_KEY_ID?: string;
+  OCEL_EDGE_SECRET_KEY?: string;
+  OCEL_AWS_REGION?: string;
+  OCEL_ISR_BUCKET?: string;
+  OCEL_STATE_TABLE?: string;
+  OCEL_ISR_PREFIX?: string;
+  OCEL_ISR_TAG_NAMESPACE?: string;
 }
 
 type RouteHas =
@@ -75,6 +88,15 @@ export interface RouteDeps {
   // Absent outside a Worker request (and in routing tests): routes then forward
   // to their origin uncached.
   cache?: CacheDeps;
+
+  // Present when the deploy injected edge credentials: prerender routes then try
+  // reading the authoritative ISR cache directly from S3+DynamoDB before falling
+  // open to the Lambda origin. Absent leaves the Lambda path unchanged.
+  interception?: {
+    config: InterceptionConfig;
+    signedFetch: typeof fetch;
+    now?: () => number;
+  };
 }
 
 export async function dispatchResult(
@@ -218,6 +240,25 @@ export async function dispatchResult(
           }),
         );
 
+      // When edge credentials are present, a prerender read is tried directly
+      // against S3+DynamoDB first; any miss/expiry/error falls open to the
+      // Lambda origin. The interception hit carries a full-window cache-control
+      // so serveCached memoizes it exactly as it would the Lambda's response.
+      let cachingOrigin = origin;
+      if (target.kind === "prerender" && deps.interception) {
+        const lambdaOrigin = origin;
+        const interceptTarget = {
+          routePath: result.invocationTarget?.pathname ?? url.pathname,
+          revalidate: target.fallback?.initialRevalidate,
+        };
+        const interception = deps.interception;
+        cachingOrigin = async () =>
+          (await intercept(request, interceptTarget, interception.config, {
+            signedFetch: interception.signedFetch,
+            now: interception.now,
+          })) ?? lambdaOrigin();
+      }
+
       return serveCached(
         request,
         {
@@ -225,7 +266,7 @@ export async function dispatchResult(
           tags: target.tags,
         },
         deps.cache,
-        origin,
+        cachingOrigin,
         originBlocking,
       );
     }
@@ -275,6 +316,10 @@ export default {
       },
     })) as RouteResult;
 
+    const interceptionConfig = readInterceptionConfig(
+      env as unknown as Record<string, string | undefined>,
+    );
+
     return dispatchResult(result, request, {
       manifest,
       functionUrls: JSON.parse(env.FUNCTION_URLS) as Record<string, string>,
@@ -284,6 +329,12 @@ export default {
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
+      interception: interceptionConfig
+        ? {
+            config: interceptionConfig,
+            signedFetch: signerFor(interceptionConfig),
+          }
+        : undefined,
     });
   },
 } satisfies ExportedHandler<Env>;

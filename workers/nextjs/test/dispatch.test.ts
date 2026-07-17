@@ -158,6 +158,94 @@ describe("dispatchResult", () => {
     expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
   });
 
+  // Interception is wired as an origin tried before the Lambda. These prove the
+  // dispatch-level contract: a clean hit serves without touching the Lambda, and
+  // any interception miss falls open to it.
+  const interceptionConfig = {
+    accessKeyId: "a",
+    secretKey: "s",
+    region: "us-east-1",
+    bucket: "assets",
+    table: "state",
+    prefix: "prod/p/app/build",
+    tagNamespace: "TAG#prod#p#app#build#",
+  };
+
+  function interceptDeps(
+    lambdaBody: string,
+    s3Entry: unknown | null,
+  ): { deps: RouteDeps; lambdaCalls: () => number } {
+    let lambda = 0;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            config: {},
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async () => {
+        lambda++;
+        return new Response(lambdaBody, {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        });
+      }) as unknown as typeof fetch,
+      cache: missingCache(),
+      interception: {
+        config: interceptionConfig,
+        now: () => 2_000,
+        signedFetch: (async (input: RequestInfo | URL) => {
+          const url = typeof input === "string" ? input : input.toString();
+          if (url.includes(".s3.")) {
+            return s3Entry
+              ? new Response(JSON.stringify(s3Entry), { status: 200 })
+              : new Response("", { status: 404 });
+          }
+          return new Response(JSON.stringify({ Responses: {} }), { status: 200 });
+        }) as typeof fetch,
+      },
+    });
+    return { deps, lambdaCalls: () => lambda };
+  }
+
+  const dispatchBlog = (deps: RouteDeps) =>
+    dispatchResult(
+      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+      new Request("https://app.example/blog"),
+      deps,
+    );
+
+  it("serves a prerender from interception without invoking the Lambda", async () => {
+    const { deps, lambdaCalls } = interceptDeps("from-lambda", {
+      lastModified: 1_000,
+      value: { kind: "APP_PAGE", html: "<html>edge</html>", status: 200, headers: {} },
+    });
+
+    const res = await dispatchBlog(deps);
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS"); // memo miss, served via edge
+    expect(await res.text()).toBe("<html>edge</html>");
+    expect(lambdaCalls()).toBe(0);
+  });
+
+  it("falls open to the Lambda when interception misses in S3", async () => {
+    const { deps, lambdaCalls } = interceptDeps("from-lambda", null);
+
+    const res = await dispatchBlog(deps);
+
+    expect(await res.text()).toBe("from-lambda");
+    expect(lambdaCalls()).toBe(1);
+  });
+
   it("returns 502 when a lambda route has no Function URL", async () => {
     const deps = baseDeps({
       manifest: {
