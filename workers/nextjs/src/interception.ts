@@ -117,13 +117,15 @@ export async function intercept(
       if (areTagsExpired(tags, records, entry.lastModified, now)) return null;
     }
 
-    if (typeof target.revalidate === "number") {
-      const ageSeconds = (now - entry.lastModified) / 1000;
-      if (ageSeconds >= target.revalidate) return null;
+    const ageSeconds = (now - entry.lastModified) / 1000;
+    if (typeof target.revalidate === "number" && ageSeconds >= target.revalidate) {
+      return null;
     }
 
     const revalidateWindow =
-      typeof target.revalidate === "number" ? target.revalidate : STATIC_WINDOW;
+      typeof target.revalidate === "number"
+        ? Math.max(1, target.revalidate - Math.floor(ageSeconds))
+        : STATIC_WINDOW;
     return reconstruct(request, value, revalidateWindow);
   } catch {
     return null;
@@ -211,8 +213,9 @@ async function readTags(
 // negotiating RSC vs html and deriving each variant's content-type the way Next
 // does (an APP_PAGE stores html and RSC under one entry with the content-type
 // stripped). The stored headers are carried through, minus the internal tag
-// header, and cache-control is set to the full revalidate window so serveCached
-// memoizes the hit for exactly that long. Returns null on an incomplete entry.
+// header, and cache-control is set to the entry's remaining revalidate window so
+// the CDN expires when the entry's revalidate window does, not a full window
+// later. Returns null on an incomplete entry.
 function reconstruct(
   request: Request,
   value: Record<string, any>,
