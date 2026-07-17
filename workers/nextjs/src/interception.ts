@@ -122,9 +122,9 @@ export async function intercept(
       if (ageSeconds >= target.revalidate) return null;
     }
 
-    const window =
+    const revalidateWindow =
       typeof target.revalidate === "number" ? target.revalidate : STATIC_WINDOW;
-    return reconstruct(request, value, window);
+    return reconstruct(request, value, revalidateWindow);
   } catch {
     return null;
   }
@@ -216,7 +216,7 @@ async function readTags(
 function reconstruct(
   request: Request,
   value: Record<string, any>,
-  window: number,
+  revalidateWindow: number,
 ): Response | null {
   const restored = deserialize(value);
   const headers = new Headers();
@@ -249,7 +249,7 @@ function reconstruct(
     headers.set("content-type", "text/html; charset=utf-8");
   }
 
-  headers.set("cache-control", `s-maxage=${window}`);
+  headers.set("cache-control", `s-maxage=${revalidateWindow}`);
   return new Response(body, { status, headers });
 }
 

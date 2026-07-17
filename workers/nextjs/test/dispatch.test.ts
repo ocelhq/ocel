@@ -246,6 +246,24 @@ describe("dispatchResult", () => {
     expect(lambdaCalls()).toBe(1);
   });
 
+  it("skips interception for a pages-router _next/data request (serves JSON via Lambda)", async () => {
+    // A data request would resolve to the same /blog prerender target, but must
+    // be answered with pageData JSON, not the html interception reconstructs.
+    const { deps, lambdaCalls } = interceptDeps("from-lambda", {
+      lastModified: 1_000,
+      value: { kind: "PAGES", html: "<html>edge</html>", status: 200, headers: {} },
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+      new Request("https://app.example/_next/data/t/blog.json"),
+      deps,
+    );
+
+    expect(await res.text()).toBe("from-lambda");
+    expect(lambdaCalls()).toBe(1);
+  });
+
   it("returns 502 when a lambda route has no Function URL", async () => {
     const deps = baseDeps({
       manifest: {

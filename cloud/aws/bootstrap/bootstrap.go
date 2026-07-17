@@ -553,13 +553,9 @@ func assetBucketOutput() string {
 // (which carry HMAC secrets) sharing the table. The lambda:Invoke* grant is
 // dormant: Function URLs are public today, but scoping it here now means turning
 // on AWS_IAM auth later needs no bootstrap change. userName is the deterministic
-// name the imperative access-key step looks the user up by. The block is a
+// name the imperative access-key step (ensureEdgeCredentials, which also carries
+// the credential rotation runbook) looks the user up by. The block is a
 // Resources child, so it is emitted before the template's Outputs: line.
-//
-// Credential rotation runbook (no automation yet): mint a second access key with
-// iam.CreateAccessKey for this user, re-inject it into every deployed worker
-// script's bindings, then delete the first key. Staged this way, no request is
-// ever signed with a key that has already been revoked.
 func edgeUserResource(userName string) string {
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
