@@ -240,12 +240,20 @@ export async function dispatchResult(
           }),
         );
 
+      // A pages-router data request (/_next/data/<build>/route.json) resolves to
+      // the same prerender target as its html route, but must be answered with
+      // JSON pageData, not html. Interception reconstructs only the html/RSC
+      // variants, so those requests fall open to the Lambda exactly as today.
+      const isNextData =
+        url.pathname.startsWith((manifest.basePath ?? "") + "/_next/data/") &&
+        url.pathname.endsWith(".json");
+
       // When edge credentials are present, a prerender read is tried directly
       // against S3+DynamoDB first; any miss/expiry/error falls open to the
       // Lambda origin. The interception hit carries a full-window cache-control
       // so serveCached memoizes it exactly as it would the Lambda's response.
       let cachingOrigin = origin;
-      if (target.kind === "prerender" && deps.interception) {
+      if (target.kind === "prerender" && deps.interception && !isNextData) {
         const lambdaOrigin = origin;
         const interceptTarget = {
           routePath: result.invocationTarget?.pathname ?? url.pathname,
