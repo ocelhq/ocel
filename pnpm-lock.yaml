@@ -600,6 +600,10 @@ importers:
         version: 5.9.3
 
   packages/lambda-entrypoints:
+    dependencies:
+      '@ocel/next-cache':
+        specifier: workspace:*
+        version: link:../next-cache
     devDependencies:
       '@aws-sdk/client-dynamodb':
         specifier: ^3.1086.0
@@ -635,6 +639,18 @@ importers:
   packages/native-lib/provider-aws-linux-x64: {}
 
   packages/native-lib/provider-aws-win32-x64: {}
+
+  packages/next-cache:
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.13.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
 
   packages/next-runtime:
     devDependencies:

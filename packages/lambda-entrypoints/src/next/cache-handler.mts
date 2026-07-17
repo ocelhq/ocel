@@ -4,40 +4,12 @@ import {
   type CacheStore,
   type TagRecord,
 } from "./cache-store.mjs";
-
-// The header Next stamps a route's cache tags onto. For page and route kinds the
-// tags reach us only this way: unlike the FETCH kind, their `get` context
-// carries no tags at all, so the entry itself is the only record of what it
-// depends on.
-const TAGS_HEADER = "x-next-cache-tags";
-
-// areTagsExpired mirrors Next's own tagsManifest check: a tag expires an entry
-// only when its expiry has already passed *and* it landed after the entry was
-// written. An expiry still in the future leaves the entry usable until then.
-function areTagsExpired(
-  tags: string[],
-  records: Map<string, TagRecord>,
-  timestamp: number,
-  now: number,
-): boolean {
-  for (const tag of tags) {
-    const expiredAt = records.get(tag)?.expired;
-    if (typeof expiredAt !== "number") continue;
-    if (expiredAt <= now && expiredAt > timestamp) return true;
-  }
-  return false;
-}
-
-// tagsOf reports what a cached entry depends on. FETCH entries are told their
-// tags per request; everything else carries them in the response headers Next
-// stored alongside the body.
-function tagsOf(value: Record<string, any>, ctx: any): string[] {
-  if (value?.kind === "FETCH") {
-    return [...(ctx?.tags ?? []), ...(ctx?.softTags ?? []), ...(value.tags ?? [])];
-  }
-  const header = value?.headers?.[TAGS_HEADER];
-  return typeof header === "string" && header.length > 0 ? header.split(",") : [];
-}
+import {
+  areTagsExpired,
+  cacheKey,
+  deserialize as deserializeBytes,
+  tagsOf,
+} from "@ocel/next-cache";
 
 // unchunk flattens whatever Next hands us as a body into something storable. On
 // `set` an html body is a RenderResult; on the way back out of S3 it is already
@@ -90,34 +62,24 @@ function serialize(data: any): Record<string, any> {
   return value;
 }
 
-// deserialize rebuilds the value Next expects from the stored JSON, restoring
-// the binary payloads the entry base64'd on the way in.
+// deserialize rebuilds the value Next expects from the stored JSON. The shared
+// codec restores the binary payloads as Uint8Array; Next wrote and expects Node
+// Buffers, so the bytes are re-wrapped (a Buffer view, no copy) to hand back
+// exactly what it stored.
 function deserialize(value: Record<string, any>): Record<string, any> {
-  const out: Record<string, any> = { ...value };
-  if (value.kind === "APP_ROUTE" && typeof value.body === "string") {
-    out.body = Buffer.from(value.body, "base64");
-  }
-  if (value.kind === "APP_PAGE") {
-    out.rscData = value.rscData
-      ? Buffer.from(value.rscData, "base64")
-      : undefined;
-    if (value.segmentData) {
-      out.segmentData = new Map(
-        Object.entries(value.segmentData as Record<string, string>).map(
-          ([path, b64]) => [path, Buffer.from(b64, "base64")],
-        ),
-      );
+  const out = deserializeBytes(value);
+  if (out.body instanceof Uint8Array) out.body = toBuffer(out.body);
+  if (out.rscData instanceof Uint8Array) out.rscData = toBuffer(out.rscData);
+  if (out.segmentData instanceof Map) {
+    for (const [path, bytes] of out.segmentData) {
+      out.segmentData.set(path, toBuffer(bytes as Uint8Array));
     }
   }
   return out;
 }
 
-// cacheKey turns Next's key into the object name the adapter seeded at build
-// time. Fetch entries share the namespace with routes, so they are kept under
-// their own folder rather than risking a collision with a route of the same name.
-function cacheKey(key: string, kind: string | undefined): string {
-  const normalized = key === "/" || key === "" ? "index" : key.replace(/^\//, "");
-  return kind === "FETCH" ? `__fetch__/${normalized}` : normalized;
+function toBuffer(bytes: Uint8Array): Buffer {
+  return Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength);
 }
 
 // OcelCacheHandler backs Next's server cache with the account-global asset
