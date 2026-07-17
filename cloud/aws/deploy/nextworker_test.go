@@ -248,6 +248,85 @@ func TestDeployNextWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	}
 }
 
+func TestDeployNextWorker_InjectsInterceptionBindingsWhenEdgeCredsPresent(t *testing.T) {
+	artifactRoot := t.TempDir()
+	if err := os.WriteFile(filepath.Join(artifactRoot, "routing-manifest.json"), []byte(`{"buildId":"b1","appName":"web"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	workerBundle := filepath.Join(t.TempDir(), "index.js")
+	if err := os.WriteFile(workerBundle, []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(envCloudflareAccountID, "acct-123")
+	t.Setenv(envNextWorkerPath, workerBundle)
+
+	fake := &fakeCloudflare{}
+	cfg := Config{
+		Cloudflare:      fake,
+		ArtifactRoot:    artifactRoot,
+		StackName:       "proj_1-prod",
+		Region:          "us-west-2",
+		AssetBucket:     "ocel-assets",
+		StateTable:      "ocel-state",
+		Env:             "prod",
+		EdgeAccessKeyID: "AKIAEDGE",
+		EdgeSecretKey:   "secret-edge",
+	}
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "index", Framework: "next", RouteId: "/"},
+		},
+	}
+
+	if _, err := deployNextWorker(context.Background(), cfg, manifest, nil, nil); err != nil {
+		t.Fatalf("deployNextWorker: %v", err)
+	}
+
+	up := fake.got
+	// The secret access key must be a secret_text binding, never a plain var.
+	if up.Secrets[edgeSecretKeyVar] != "secret-edge" {
+		t.Errorf("%s secret = %q, want secret-edge", edgeSecretKeyVar, up.Secrets[edgeSecretKeyVar])
+	}
+	if _, leaked := up.Vars[edgeSecretKeyVar]; leaked {
+		t.Error("the secret access key must not appear in plain-text Vars")
+	}
+
+	wantVars := map[string]string{
+		edgeAccessKeyIDVar:       "AKIAEDGE",
+		edgeRegionVar:            "us-west-2",
+		"OCEL_ISR_BUCKET":        "ocel-assets",
+		"OCEL_STATE_TABLE":       "ocel-state",
+		"OCEL_ISR_PREFIX":        "prod/proj/web/b1",
+		"OCEL_ISR_TAG_NAMESPACE": "TAG#prod#proj#web#b1#",
+	}
+	for k, want := range wantVars {
+		if got := up.Vars[k]; got != want {
+			t.Errorf("Vars[%s] = %q, want %q", k, got, want)
+		}
+	}
+}
+
+func TestDeployNextWorker_NoInterceptionBindingsWithoutEdgeCreds(t *testing.T) {
+	artifactRoot := writeMinimalWorkerArtifacts(t)
+	fake := &fakeCloudflare{}
+	cfg := Config{Cloudflare: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
+	manifest := &deploymentsv1.Manifest{
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", RouteId: "/"}},
+	}
+
+	if _, err := deployNextWorker(context.Background(), cfg, manifest, nil, nil); err != nil {
+		t.Fatalf("deployNextWorker: %v", err)
+	}
+
+	if fake.got.Secrets != nil {
+		t.Errorf("expected no secrets without edge creds, got %v", fake.got.Secrets)
+	}
+	if _, ok := fake.got.Vars[edgeAccessKeyIDVar]; ok {
+		t.Error("expected no edge access key var without edge creds")
+	}
+}
+
 func TestDeployNextWorker_CustomDomainOnlyForProduction(t *testing.T) {
 	cases := []struct {
 		name    string

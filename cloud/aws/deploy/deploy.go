@@ -77,6 +77,15 @@ type Config struct {
 	// "preview-<identity>"): the same token stackName suffixes.
 	Env string
 
+	// EdgeAccessKeyID / EdgeSecretKey are the substrate's edge reader credentials
+	// (from bootstrap's SSM parameter), injected into the Next.js worker so it can
+	// read the ISR cache directly from S3+DynamoDB. Both empty when the bootstrap
+	// predates edge credentials or the read failed: the worker then simply
+	// forwards prerender routes to the Lambda, as before (interception is
+	// strictly additive).
+	EdgeAccessKeyID string
+	EdgeSecretKey   string
+
 	// Cloudflare deploys the Next.js routing worker once its Lambdas exist and
 	// their Function URLs are known. Nil unless the project has a Next.js app;
 	// the real cloudflare-go implementation is the end-to-end seam.

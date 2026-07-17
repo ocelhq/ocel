@@ -230,8 +230,10 @@ func buildScriptMultipart(upload WorkerUpload, assetsJWT string) ([]byte, string
 }
 
 // scriptBindings is the worker's binding set: the Assets Fetcher (only when
-// assets were uploaded) plus one plain-text binding per var (e.g.
-// FUNCTION_URLS).
+// assets were uploaded), one plain-text binding per var (e.g. FUNCTION_URLS,
+// and the edge reader's access key id + region + ISR store coordinates), and one
+// secret_text binding per secret (the edge reader's secret access key, which
+// must never surface in plaintext metadata).
 func scriptBindings(upload WorkerUpload, includeAssets bool) []map[string]any {
 	bindings := []map[string]any{}
 	if includeAssets && upload.AssetBinding != "" {
@@ -243,6 +245,13 @@ func scriptBindings(upload WorkerUpload, includeAssets bool) []map[string]any {
 	for name, text := range upload.Vars {
 		bindings = append(bindings, map[string]any{
 			"type": "plain_text",
+			"name": name,
+			"text": text,
+		})
+	}
+	for name, text := range upload.Secrets {
+		bindings = append(bindings, map[string]any{
+			"type": "secret_text",
 			"name": name,
 			"text": text,
 		})

@@ -148,6 +148,20 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return nil, nil, err
 	}
 
+	// The edge reader credentials are injected into the Next.js worker so it can
+	// read ISR directly from S3+DynamoDB. Read best-effort: an account bootstrapped
+	// before edge credentials existed simply deploys without interception, and the
+	// worker forwards prerender routes to the Lambda as before.
+	edgeClass := bootstrap.ClassProduction
+	if preview {
+		edgeClass = bootstrap.ClassPreview
+	}
+	edgeCreds, err := bootstrap.ReadEdgeCredentials(ctx, ssmClient, edgeClass)
+	if err != nil {
+		logf("edge cache interception disabled: " + err.Error() + " (re-run `" + bootstrapCmd + "` to enable)")
+		edgeCreds = bootstrap.EdgeCredentials{}
+	}
+
 	pulumiCmd, err := pulumirt.Ensure(ctx, func(m string) {
 		progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
 	})
@@ -185,6 +199,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ArtifactBucket:   deployed.ArtifactBucket,
 		AssetBucket:      deployed.AssetBucket,
 		Env:              envSegment(env),
+		EdgeAccessKeyID:  edgeCreds.AccessKeyID,
+		EdgeSecretKey:    edgeCreds.SecretAccessKey,
 		Uploader:         s3.NewFromConfig(awscfg),
 		Cloudflare:       deploy.NewCloudflareDeployer(),
 		Class:            env.GetClass(),
