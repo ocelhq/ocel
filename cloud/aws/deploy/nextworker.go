@@ -28,6 +28,16 @@ const nextWorkerAssetBinding = "ASSETS"
 // Function URL map from (env.FUNCTION_URLS).
 const nextWorkerURLsVar = "FUNCTION_URLS"
 
+// The edge reader bindings the worker signs its direct ISR reads with. The
+// access key id and region are plain_text; the secret access key is secret_text.
+// These names must match what the worker's readInterceptionConfig reads; the
+// OCEL_ISR_* / OCEL_STATE_TABLE coordinates come from isrConfig.env().
+const (
+	edgeAccessKeyIDVar = "OCEL_EDGE_ACCESS_KEY_ID"
+	edgeSecretKeyVar   = "OCEL_EDGE_SECRET_KEY"
+	edgeRegionVar      = "OCEL_AWS_REGION"
+)
+
 // nextWorkerOutputName is the logical name the deployed worker's public URL is
 // reported under in the stack outputs.
 const nextWorkerOutputName = "next-worker"
@@ -60,6 +70,10 @@ type WorkerUpload struct {
 	Modules []WorkerModule
 	// Vars are plain-text bindings surfaced on the worker's env.
 	Vars map[string]string
+	// Secrets are secret_text bindings surfaced on the worker's env: values that
+	// must not appear as plaintext in the script metadata (the edge reader's
+	// secret access key).
+	Secrets map[string]string
 	// AssetBinding is the env name the worker reads the Assets Fetcher from.
 	AssetBinding string
 	// Assets are the truly-static files served by Workers Assets.
@@ -256,6 +270,12 @@ func deployNextWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 		return nil, fmt.Errorf("marshal function urls: %w", err)
 	}
 
+	vars := map[string]string{nextWorkerURLsVar: string(functionURLs)}
+	secrets, err := interceptionBindings(cfg, manifest, vars)
+	if err != nil {
+		return nil, err
+	}
+
 	if progress != nil {
 		progress("Deploying Next.js worker to Cloudflare")
 	}
@@ -275,7 +295,8 @@ func deployNextWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 			ContentType: "text/plain",
 			Content:     manifestContent,
 		}},
-		Vars:         map[string]string{nextWorkerURLsVar: string(functionURLs)},
+		Vars:         vars,
+		Secrets:      secrets,
 		AssetBinding: nextWorkerAssetBinding,
 		Assets:       assets,
 	})
@@ -286,6 +307,36 @@ func deployNextWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	return []*deploymentsv1.ResourceOutput{
 		collectFunctionOutput(nextWorkerOutputName, result.URL),
 	}, nil
+}
+
+// interceptionBindings adds the edge-read bindings the worker needs to serve ISR
+// directly from S3+DynamoDB: the store coordinates (isrConfig.env) and region +
+// access key id go onto vars as plain_text, and returns the secret access key as
+// a secret_text binding. It is a no-op — no bindings added, nil secrets — unless
+// the substrate has edge credentials AND the app has a prerender asset prefix, so
+// an older bootstrap or a non-Next deploy leaves the worker forwarding to the
+// Lambda exactly as before. The injected env-var names must match the worker's
+// readInterceptionConfig.
+func interceptionBindings(cfg Config, manifest *deploymentsv1.Manifest, vars map[string]string) (map[string]string, error) {
+	if cfg.EdgeAccessKeyID == "" || cfg.EdgeSecretKey == "" {
+		return nil, nil
+	}
+	prefix, err := assetPrefix(cfg, manifest)
+	if err != nil {
+		return nil, err
+	}
+	if prefix == "" {
+		return nil, nil
+	}
+
+	isr := isrConfig{Bucket: cfg.AssetBucket, Prefix: prefix, Table: cfg.StateTable}
+	for k, v := range isr.env() {
+		vars[k] = v
+	}
+	vars[edgeAccessKeyIDVar] = cfg.EdgeAccessKeyID
+	vars[edgeRegionVar] = cfg.Region
+
+	return map[string]string{edgeSecretKeyVar: cfg.EdgeSecretKey}, nil
 }
 
 func productionDomain(cfg Config, manifest *deploymentsv1.Manifest) string {
