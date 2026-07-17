@@ -2,6 +2,7 @@
 package cli
 
 import (
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -14,6 +15,21 @@ var version = "dev"
 // subcommand. Empty unless explicitly set; the default target is resolved
 // per command (see effectiveAPIURL / resolveAPIURL).
 var apiURLFlag string
+
+// verboseFlag is bound to the root persistent --verbose/-v flag. When set (or
+// when OCEL_DEBUG is set in the environment), commands that show a phased
+// progress view instead stream every underlying log line to the terminal.
+var verboseFlag bool
+
+// verboseEnabled reports whether verbose output is requested, via the
+// --verbose flag or the OCEL_DEBUG environment variable.
+func verboseEnabled() bool {
+	if verboseFlag {
+		return true
+	}
+	_, ok := os.LookupEnv("OCEL_DEBUG")
+	return ok
+}
 
 // rootCmd is the base command for the Ocel CLI.
 var rootCmd = &cobra.Command{
@@ -32,6 +48,7 @@ func Execute() error {
 
 func init() {
 	rootCmd.PersistentFlags().StringVar(&apiURLFlag, "api-url", "", "Base URL of the Ocel server (defaults to $OCEL_API_URL, else https://ocel.app)")
+	rootCmd.PersistentFlags().BoolVarP(&verboseFlag, "verbose", "v", false, "Stream full deploy logs to the terminal instead of the phased progress view (also OCEL_DEBUG)")
 
 	rootCmd.AddCommand(devCmd)
 	rootCmd.AddCommand(runCmd)

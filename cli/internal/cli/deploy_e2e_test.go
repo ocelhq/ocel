@@ -51,7 +51,7 @@ func TestRunDeploy_E2E_RealBuiltStubProvider(t *testing.T) {
 	if !strings.Contains(stdout.String(), "postgres_main: postgres version=15") {
 		t.Errorf("stdout = %q, want the real stub provider to report the exact typed postgres version it decoded", stdout.String())
 	}
-	if !strings.Contains(stdout.String(), "Deploy succeeded") {
+	if !strings.Contains(stdout.String(), "Deployed") {
 		t.Errorf("stdout = %q, want a terminal success message", stdout.String())
 	}
 
@@ -76,7 +76,7 @@ func TestRunDeploy_E2E_ExpressFunctionURL(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "Deploy succeeded") {
+	if !strings.Contains(stdout.String(), "Deployed") {
 		t.Fatalf("stdout = %q, want a terminal success message", stdout.String())
 	}
 

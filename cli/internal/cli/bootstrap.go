@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
@@ -87,18 +88,26 @@ func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout
 		}
 	}
 
-	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+	ui := deployui.New(stdout, cfg.Dir, "ocel bootstrap", verboseEnabled())
+	defer ui.Close()
+
+	provW := ui.BuildWriter()
+	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
 		req := &deploymentsv1.BootstrapRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Class:           class,
 		}
-		if err := runner.Bootstrap(ctx, req, func(ev *deploymentsv1.DeployEvent) { streamDeployEvent(stdout, ev) }); err != nil {
+		if err := runner.Bootstrap(ctx, req, ui.Event); err != nil {
 			return err
 		}
-		fmt.Fprintln(stdout, "✓ Bootstrap succeeded.")
+		ui.Finish("Bootstrapped")
 		return nil
 	})
+	if err != nil {
+		return failSession(ctx, ui, err)
+	}
+	return nil
 }
 
 // confirmBootstrap prints the "Bootstrap <preview|production> infrastructure

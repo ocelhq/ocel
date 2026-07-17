@@ -86,9 +86,9 @@ func (s *Server) Destroy(ctx context.Context, req *deploymentsv1.DestroyRequest,
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
 	if err := s.runDestroy(ctx, req, progress, logf); err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
-	return stream.Send(resultEvent(true, "", nil))
+	return stream.Send(resultEvent(true, "", nil, nil))
 }
 
 func (s *Server) runDestroy(ctx context.Context, req *deploymentsv1.DestroyRequest, progress, logf func(string)) error {

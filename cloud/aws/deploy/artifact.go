@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"sync"
+	"sync/atomic"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -245,7 +246,7 @@ type artifactRef struct {
 // so the content-addressed objects the Lambdas point at already exist. Uploads
 // are skip-if-exists, and the (potentially large) zip is deferred behind that
 // presence check, so an unchanged function re-deploying is a cheap HeadObject.
-func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) (map[string]artifactRef, error) {
+func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress) (map[string]artifactRef, error) {
 	functions := manifest.GetFunctions()
 	refs := make(map[string]artifactRef, len(functions))
 	if len(functions) == 0 {
@@ -257,6 +258,10 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 	if cfg.Uploader == nil {
 		return nil, fmt.Errorf("no artifact uploader configured")
 	}
+
+	total := uint32(len(functions))
+	var done atomic.Uint32
+	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 0, total)
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(8) // tune: bounded S3 conns + bounded peak memory
@@ -275,8 +280,12 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 			}); err != nil {
 				return err
 			}
+			// Hold mu across the progress emit too: report reaches the provider's
+			// stream.Send, which is not safe for concurrent use, and these
+			// goroutines run in parallel.
 			mu.Lock()
 			refs[fn.GetLogicalName()] = artifactRef{Bucket: cfg.ArtifactBucket, Key: key}
+			progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", done.Add(1), total)
 			mu.Unlock()
 			return nil
 		})

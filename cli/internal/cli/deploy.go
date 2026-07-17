@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerlocator"
@@ -105,21 +106,27 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		}
 	}
 
-	manifest, err := collectAndBuildManifest(ctx, cfg, stdout, stderr)
+	ui := deployui.New(stdout, cfg.Dir, "ocel deploy", verboseEnabled())
+	defer ui.Close()
+
+	ui.Building()
+	manifest, err := collectAndBuildManifest(ctx, cfg, ui.BuildWriter())
 	if err != nil {
-		return err
+		return failSession(ctx, ui, err)
 	}
 	if manifest == nil {
-		fmt.Fprintln(stdout, "Nothing to deploy.")
+		ui.Finish("Nothing to deploy")
 		return nil
 	}
+	ui.BuildOK()
 
 	env := &deploymentsv1.Environment{
 		Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
 		Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
 	}
 
-	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+	provW := ui.BuildWriter()
+	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
 		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
 			return err
 		}
@@ -131,24 +138,26 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 			Environment:     env,
 		}
 
-		// The provider reports the whole stack's connection outputs on the
-		// terminal ResultEvent. We collect them here; the CLI does not consume
-		// them yet.
 		var stackOutputs []*deploymentsv1.ResourceOutput
+		var appURLs []string
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
-			streamDeployEvent(stdout, ev)
+			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
 				stackOutputs = res.GetOutputs()
+				appURLs = res.GetAppUrls()
 			}
 		}
 		if err := runner.Deploy(ctx, req, onEvent); err != nil {
 			return err
 		}
 
-		fmt.Fprintln(stdout, "✓ Deploy succeeded.")
-		printResourceOutputs(stdout, stackOutputs)
+		ui.Deployed("Deployed", appURLs, stackOutputs)
 		return nil
 	})
+	if err != nil {
+		return failSession(ctx, ui, err)
+	}
+	return nil
 }
 
 // collectAndBuildManifest runs the pre-provision path `ocel deploy` and `ocel
@@ -158,13 +167,13 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 // and proceeds infrastructure-only; when there is nothing at all — no functions
 // and no resources — it returns a nil manifest so the caller can exit cleanly.
 // Any app-build failure aborts here, before any provider is spawned.
-func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) (*deploymentsv1.Manifest, error) {
-	resources, err := deploycollector.Collect(ctx, cfg, stdout, stderr)
+func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
+	resources, err := deploycollector.Collect(ctx, cfg, buildOut, buildOut)
 	if err != nil {
 		return nil, err
 	}
 
-	functions, err := buildAppFunctions(ctx, cfg, stderr)
+	functions, err := buildAppFunctions(ctx, cfg, buildOut)
 	if err != nil {
 		return nil, err
 	}
@@ -173,10 +182,23 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, std
 		if len(resources) == 0 {
 			return nil, nil
 		}
-		fmt.Fprintln(stderr, "no functions to deploy; deploying infrastructure only")
+		fmt.Fprintln(buildOut, "no functions to deploy; deploying infrastructure only")
 	}
 
 	return manifestbuilder.Build(cfg.ProjectID, cfg.Domains, toDeclarations(resources), functions)
+}
+
+// failSession ends a deploy/preview/bootstrap run on error: it renders a
+// cancellation when the context was interrupted, otherwise a failure, and
+// returns the sentinel exit error. It centralises the terminal error handling
+// the provider-driving commands share.
+func failSession(ctx context.Context, ui *deployui.Session, err error) error {
+	if ctx.Err() != nil {
+		ui.Cancel()
+	} else {
+		ui.Fail(err)
+	}
+	return &ExitError{Code: 1}
 }
 
 // runProviderSession locates and spawns the project's configured provider,
@@ -250,16 +272,3 @@ func toDeclarations(resources []declare.Resource) []manifestbuilder.Declaration 
 	return decls
 }
 
-// streamDeployEvent prints a DeployEvent's progress/log message to stdout.
-// The terminal ResultEvent needs no extra printing here: runner.Deploy
-// already turns a failure result into a *providerrunner.DeployFailedError
-// and a success result into a nil return.
-func streamDeployEvent(stdout io.Writer, ev *deploymentsv1.DeployEvent) {
-	if p := ev.GetProgress(); p != nil {
-		fmt.Fprintln(stdout, p.GetMessage())
-		return
-	}
-	if l := ev.GetLog(); l != nil {
-		fmt.Fprintln(stdout, l.GetMessage())
-	}
-}
