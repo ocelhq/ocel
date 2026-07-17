@@ -6,21 +6,12 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
-// A cache entry exactly as it sits in S3: one object per route holding the html,
-// the RSC payload and any PPR segments together, so a read is a single GET and a
-// write is atomic. Bodies are base64 so the whole entry stays one JSON document.
-export interface CacheEntryFile {
-  lastModified: number;
-  value: Record<string, any>;
-}
+// The entry and tag-record shapes are the shared ISR contract — the same the
+// edge worker reads — so they live in @ocel/next-cache and are re-exported here
+// for the handler and its tests.
+import type { CacheEntryFile, TagRecord } from "@ocel/next-cache";
 
-// When a tag was last invalidated. Mirrors Next's own tagsManifest entries:
-// `expired` marks the moment the tag's content stopped being usable, `stale`
-// the moment it should be refreshed in the background.
-export interface TagRecord {
-  stale?: number;
-  expired?: number;
-}
+export type { CacheEntryFile, TagRecord } from "@ocel/next-cache";
 
 // CacheStore is the handler's whole view of its backing services, so the cache
 // semantics can be exercised without reaching AWS.
