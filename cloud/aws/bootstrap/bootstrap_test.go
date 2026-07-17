@@ -302,3 +302,90 @@ func TestPreviewStackTemplate_StampsPreviewClass(t *testing.T) {
 		t.Errorf("%s output = %q, want %q", outputInfraClass, got, ClassPreview)
 	}
 }
+
+// edgeUserTemplate is the subset of a rendered template needed to assert the
+// edge reader IAM user and its inline ISR-read policy.
+type edgeUserTemplate struct {
+	Resources map[string]struct {
+		Type       string `yaml:"Type"`
+		Properties struct {
+			UserName string `yaml:"UserName"`
+			Policies []struct {
+				PolicyName     string `yaml:"PolicyName"`
+				PolicyDocument struct {
+					Statement []struct {
+						Effect    string         `yaml:"Effect"`
+						Action    any            `yaml:"Action"`
+						Resource  string         `yaml:"Resource"`
+						Condition map[string]any `yaml:"Condition"`
+					} `yaml:"Statement"`
+				} `yaml:"PolicyDocument"`
+			} `yaml:"Policies"`
+		} `yaml:"Properties"`
+	} `yaml:"Resources"`
+}
+
+// TestEdgeUser asserts both substrate templates provision the deterministic edge
+// reader IAM user with an inline policy scoped to this stack's own stores: read
+// on the asset bucket, BatchGetItem on the state table bounded to the TAG#
+// partitions (so the edge key can never reach the upload-session HMAC secrets
+// sharing the table), and the dormant lambda:Invoke* grant.
+func TestEdgeUser(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		template string
+		userName string
+	}{
+		{"production", stackTemplate(), EdgeUserName},
+		{"preview", previewStackTemplate(), EdgePreviewUserName},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var tmpl edgeUserTemplate
+			if err := yaml.Unmarshal([]byte(tc.template), &tmpl); err != nil {
+				t.Fatalf("template is not valid YAML: %v", err)
+			}
+			user, ok := tmpl.Resources["EdgeUser"]
+			if !ok {
+				t.Fatal("template is missing the EdgeUser resource")
+			}
+			if user.Type != "AWS::IAM::User" {
+				t.Errorf("EdgeUser Type = %q, want AWS::IAM::User", user.Type)
+			}
+			if user.Properties.UserName != tc.userName {
+				t.Errorf("UserName = %q, want %q", user.Properties.UserName, tc.userName)
+			}
+			if len(user.Properties.Policies) != 1 {
+				t.Fatalf("want exactly one inline policy, got %d", len(user.Properties.Policies))
+			}
+
+			stmts := user.Properties.Policies[0].PolicyDocument.Statement
+			var s3, ddb, invoke bool
+			for _, st := range stmts {
+				if st.Resource == "${AssetBucket.Arn}/*" {
+					s3 = st.Action == "s3:GetObject"
+				}
+				if cond, ok := st.Condition["ForAllValues:StringLike"].(map[string]any); ok {
+					if keys, ok := cond["dynamodb:LeadingKeys"].([]any); ok && len(keys) == 1 && keys[0] == "TAG#*" {
+						ddb = true
+					}
+				}
+				if actions, ok := st.Action.([]any); ok {
+					for _, a := range actions {
+						if a == "lambda:InvokeFunctionUrl" {
+							invoke = true
+						}
+					}
+				}
+			}
+			if !s3 {
+				t.Error("missing s3:GetObject on the asset bucket")
+			}
+			if !ddb {
+				t.Error("missing dynamodb:BatchGetItem bounded to the TAG# LeadingKeys")
+			}
+			if !invoke {
+				t.Error("missing the dormant lambda:Invoke* grant")
+			}
+		})
+	}
+}
