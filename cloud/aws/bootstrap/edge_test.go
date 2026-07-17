@@ -32,14 +32,27 @@ func (f *fakeSSM) GetParameter(_ context.Context, in *ssm.GetParameterInput, _ .
 
 func (f *fakeSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
 	f.puts++
+	if _, exists := f.params[aws.ToString(in.Name)]; exists && !aws.ToBool(in.Overwrite) {
+		return nil, &ssmtypes.ParameterAlreadyExists{}
+	}
 	f.params[aws.ToString(in.Name)] = aws.ToString(in.Value)
 	return &ssm.PutParameterOutput{}, nil
 }
 
 // fakeIAM records the users it minted a key for and hands back a deterministic
-// key so the stored payload can be asserted.
+// key so the stored payload can be asserted. existingKeys is the number of keys
+// ListAccessKeys reports before any mint, so tests can drive the 2-key guard.
 type fakeIAM struct {
-	created []string
+	created      []string
+	existingKeys int
+}
+
+func (f *fakeIAM) ListAccessKeys(_ context.Context, in *iam.ListAccessKeysInput, _ ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error) {
+	meta := make([]iamtypes.AccessKeyMetadata, f.existingKeys)
+	for i := range meta {
+		meta[i] = iamtypes.AccessKeyMetadata{UserName: in.UserName}
+	}
+	return &iam.ListAccessKeysOutput{AccessKeyMetadata: meta}, nil
 }
 
 func (f *fakeIAM) CreateAccessKey(_ context.Context, in *iam.CreateAccessKeyInput, _ ...func(*iam.Options)) (*iam.CreateAccessKeyOutput, error) {
@@ -95,6 +108,22 @@ func TestEnsureEdgeCredentials_ReusesWhenPresent(t *testing.T) {
 	}
 	if ssmc.puts != 0 {
 		t.Errorf("overwrote the existing parameter (%d puts)", ssmc.puts)
+	}
+}
+
+func TestEnsureEdgeCredentials_FailsWhenKeyCapReached(t *testing.T) {
+	ssmc := newFakeSSM()
+	iamc := &fakeIAM{existingKeys: 2}
+
+	_, err := ensureEdgeCredentials(context.Background(), iamc, ssmc, ClassProduction)
+	if err == nil {
+		t.Fatal("expected an error when the user is already at the 2-key cap")
+	}
+	if len(iamc.created) != 0 {
+		t.Errorf("minted a key despite the cap: %v", iamc.created)
+	}
+	if ssmc.puts != 0 {
+		t.Errorf("wrote a parameter despite the cap (%d puts)", ssmc.puts)
 	}
 }
 

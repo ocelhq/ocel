@@ -21,6 +21,7 @@ const (
 
 // IAMAPI is the subset of the IAM client the edge-credential step needs.
 type IAMAPI interface {
+	ListAccessKeys(ctx context.Context, in *iam.ListAccessKeysInput, optFns ...func(*iam.Options)) (*iam.ListAccessKeysOutput, error)
 	CreateAccessKey(ctx context.Context, in *iam.CreateAccessKeyInput, optFns ...func(*iam.Options)) (*iam.CreateAccessKeyOutput, error)
 }
 
@@ -86,6 +87,26 @@ func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMA
 	var notFound *ssmtypes.ParameterNotFound
 	if !errors.As(err, &notFound) {
 		return false, fmt.Errorf("read edge credentials parameter: %w", err)
+	}
+
+	// Guard against the dangling-key trap: if a prior run minted a key but failed
+	// before storing it in SSM, GetParameter still reads ParameterNotFound and we
+	// would mint again. Two such failures hit the AWS 2-key cap and wedge every
+	// later bootstrap at CreateAccessKey with an opaque LimitExceeded. Fail early
+	// with a diagnostic pointing at the rotation runbook instead.
+	keys, err := iamClient.ListAccessKeys(ctx, &iam.ListAccessKeysInput{
+		UserName: aws.String(userName),
+	})
+	if err != nil {
+		return false, fmt.Errorf("list edge access keys for %s: %w", userName, err)
+	}
+	if len(keys.AccessKeyMetadata) >= 2 {
+		return false, fmt.Errorf(
+			"edge reader %s already has %d access keys but none is stored in %s: "+
+				"a prior mint likely failed before its PutParameter; delete a stale "+
+				"key with iam.DeleteAccessKey, then re-run bootstrap",
+			userName, len(keys.AccessKeyMetadata), paramName,
+		)
 	}
 
 	out, err := iamClient.CreateAccessKey(ctx, &iam.CreateAccessKeyInput{

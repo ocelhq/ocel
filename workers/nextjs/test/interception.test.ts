@@ -128,7 +128,9 @@ describe("intercept", () => {
     expect(res!.status).toBe(200);
     expect(res!.headers.get("content-type")).toBe("text/html; charset=utf-8");
     expect(await res!.text()).toBe("<html>hi</html>");
-    expect(res!.headers.get("cache-control")).toBe("s-maxage=60");
+    // Entry is 1s old (lastModified 1_000, now 2_000), so the CDN gets the
+    // remaining window, not the full 60s.
+    expect(res!.headers.get("cache-control")).toBe("s-maxage=59");
     expect(aws.ddbCalls.length).toBe(0);
   });
 
