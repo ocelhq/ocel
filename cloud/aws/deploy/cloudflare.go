@@ -25,6 +25,17 @@ const nextWorkerCompatDate = "2026-07-13"
 
 var nextWorkerCompatFlags = []string{"nodejs_compat"}
 
+// nextWorkerObservability is the Workers observability settings every deployed
+// worker ships with: logs (with per-invocation summaries) and OTel traces, both
+// at 100% head sampling. It is uploaded as a field of the script metadata, the
+// same way wrangler applies it, so no separate settings call is needed.
+var nextWorkerObservability = map[string]any{
+	"enabled":            true,
+	"head_sampling_rate": 1,
+	"logs":               map[string]any{"enabled": true, "invocation_logs": true},
+	"traces":             map[string]any{"enabled": true},
+}
+
 // cfDeployer is the cloudflare-go-backed CloudflareDeployer. It performs the
 // real multi-step worker upload (assets session -> asset batches -> script
 // PUT -> custom-domain or workers.dev routing) and is exercised only
@@ -184,6 +195,7 @@ func buildScriptMultipart(upload WorkerUpload, assetsJWT string) ([]byte, string
 		"main_module":         upload.Main.Name,
 		"compatibility_date":  nextWorkerCompatDate,
 		"compatibility_flags": nextWorkerCompatFlags,
+		"observability":       nextWorkerObservability,
 		"bindings":            scriptBindings(upload, includeAssets),
 	}
 	if includeAssets {

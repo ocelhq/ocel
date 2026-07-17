@@ -2,6 +2,30 @@ package deploy
 
 import "testing"
 
+func TestBuildScriptMultipartEnablesObservability(t *testing.T) {
+	upload := WorkerUpload{
+		ScriptName: "ocel-test",
+		Main:       WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+	}
+
+	meta := metadataFromMultipart(t, upload, "")
+	obs, ok := meta["observability"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata has no observability object: %v", meta["observability"])
+	}
+	if obs["enabled"] != true {
+		t.Errorf("observability.enabled = %v, want true", obs["enabled"])
+	}
+	logs, ok := obs["logs"].(map[string]any)
+	if !ok || logs["enabled"] != true {
+		t.Errorf("observability.logs not enabled: %v", obs["logs"])
+	}
+	traces, ok := obs["traces"].(map[string]any)
+	if !ok || traces["enabled"] != true {
+		t.Errorf("observability.traces not enabled: %v", obs["traces"])
+	}
+}
+
 func TestZoneOwns(t *testing.T) {
 	cases := []struct {
 		hostname string
