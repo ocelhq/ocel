@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -226,6 +227,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
+	iamClient := iam.NewFromConfig(awscfg)
 
 	preview := req.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
 
@@ -246,7 +248,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	if preview {
 		run = bootstrap.RunPreview
 	}
-	if err := run(ctx, cfn, ssmClient, progress, logf); err != nil {
+	if err := run(ctx, cfn, ssmClient, iamClient, progress, logf); err != nil {
 		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
 	return stream.Send(resultEvent(true, "", nil, nil))

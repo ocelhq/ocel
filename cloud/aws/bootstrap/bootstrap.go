@@ -161,7 +161,7 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 // Run creates or updates the bootstrap CloudFormation stack and ensures the
 // Pulumi passphrase exists, idempotently. progress reports discrete steps and
 // log forwards detail; both may be nil.
-func Run(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, progress, log func(string)) error {
+func Run(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, iamClient IAMAPI, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
@@ -183,6 +183,17 @@ func Run(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, prog
 	} else {
 		report(log, "reused the existing Pulumi passphrase")
 	}
+
+	report(progress, "Ensuring edge reader credentials (SSM SecureString)")
+	created, err = ensureEdgeCredentials(ctx, iamClient, ssmClient, ClassProduction)
+	if err != nil {
+		return err
+	}
+	if created {
+		report(log, "minted a new edge reader access key")
+	} else {
+		report(log, "reused the existing edge reader access key")
+	}
 	return nil
 }
 
@@ -199,7 +210,7 @@ func Run(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, prog
 // live account. Like Run, that CloudFormation orchestration is the opt-in-e2e
 // seam: this signature is final and the passphrase/stamping contract is settled;
 // the preview stack template is filled in and exercised against real infra.
-func RunPreview(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, progress, log func(string)) error {
+func RunPreview(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, iamClient IAMAPI, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
@@ -220,6 +231,17 @@ func RunPreview(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAP
 		report(log, "generated a new Pulumi passphrase")
 	} else {
 		report(log, "reused the existing Pulumi passphrase")
+	}
+
+	report(progress, "Ensuring edge reader credentials (SSM SecureString)")
+	created, err = ensureEdgeCredentials(ctx, iamClient, ssmClient, ClassPreview)
+	if err != nil {
+		return err
+	}
+	if created {
+		report(log, "minted a new edge reader access key")
+	} else {
+		report(log, "reused the existing edge reader access key")
 	}
 	return nil
 }
