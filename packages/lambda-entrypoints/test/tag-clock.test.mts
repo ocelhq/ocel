@@ -43,7 +43,7 @@ function fakeStore(pageSize = 100) {
 
       const ordered = [...rows.values()]
         .sort((a, b) => a.writtenAt - b.writtenAt)
-        .filter((row) => row.writtenAt > since);
+        .filter((row) => row.writtenAt >= since);
       const start = (cursor as number | undefined) ?? 0;
       const records = ordered.slice(start, start + pageSize);
       const next = start + records.length;
