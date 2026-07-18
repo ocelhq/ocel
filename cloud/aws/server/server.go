@@ -27,6 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
+	"github.com/ocelhq/ocel/cloud/edge/cloudflare"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -202,7 +203,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		EdgeAccessKeyID:  edgeCreds.AccessKeyID,
 		EdgeSecretKey:    edgeCreds.SecretAccessKey,
 		Uploader:         s3.NewFromConfig(awscfg),
-		Cloudflare:       deploy.NewCloudflareDeployer(),
+		Edge:             cloudflare.New(),
 		Class:            env.GetClass(),
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),

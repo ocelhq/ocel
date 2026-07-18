@@ -1,0 +1,87 @@
+// Package edge is the contract between a cloud provider and the edge running in
+// front of it. A provider bootstraps and deploys through Provider without
+// knowing which edge is configured; an edge implements Provider without knowing
+// which cloud it fronts or which framework produced the worker it uploads.
+package edge
+
+import "context"
+
+// Kind identifies an edge implementation. It keys the framework registry, so a
+// framework declares support for an edge by registering under its Kind rather
+// than by being referenced from the edge's own code.
+type Kind string
+
+// KindCloudflare is the Cloudflare Workers edge, the default and — for now —
+// only edge.
+const KindCloudflare Kind = "cloudflare"
+
+// Provider is an edge: somewhere a framework's worker runs in front of the
+// cloud provider's compute. Implementing it is the whole of adding an edge.
+type Provider interface {
+	// Bootstrap provisions whatever the edge needs to exist before any deploy,
+	// and reports its trust posture, its outputs, and any resources it offers
+	// the provider. It runs before the provider's own bootstrap.
+	Bootstrap(ctx context.Context) (BootstrapOutput, error)
+
+	// DeployApp uploads one app's assembled worker and returns where it is
+	// served. The edge receives exactly one app, already assembled, so it never
+	// filters a project-wide manifest or understands a framework.
+	DeployApp(ctx context.Context, app AppDeployment) (AppResult, error)
+}
+
+// AppDeployment is one app's fully-resolved edge deployment: everything read off
+// disk and computed by the provider, so the edge only talks to its own API.
+type AppDeployment struct {
+	// Name is the app's deterministic deployment identity. Redeploys of the same
+	// app reuse it, so the edge updates in place rather than accumulating
+	// deployments.
+	Name string
+	// Worker is the assembled bundle and bindings to upload under Name.
+	Worker Worker
+	// Domain is the custom hostname the app is served on. Empty serves it on the
+	// edge's own vendor subdomain instead.
+	Domain string
+}
+
+// Worker is a framework's edge bundle: the entrypoint, the modules shipping
+// alongside it, its bindings, and the static files served next to it. It is
+// what a framework registry entry produces and what an edge uploads.
+type Worker struct {
+	// Main is the worker entrypoint (a module-syntax fetch handler).
+	Main WorkerModule
+	// Modules are additional modules uploaded alongside Main and resolvable by
+	// its imports — a routing manifest, say.
+	Modules []WorkerModule
+	// Vars are plain-text bindings surfaced on the worker's env.
+	Vars map[string]string
+	// Secrets are bindings surfaced on the worker's env whose values must never
+	// appear as plaintext in the uploaded metadata.
+	Secrets map[string]string
+	// AssetBinding is the env name the worker reads its static-asset fetcher
+	// from. Empty when the worker serves no static assets.
+	AssetBinding string
+	// Assets are the truly-static files served alongside the worker.
+	Assets []StaticAsset
+}
+
+// WorkerModule is one module of a worker upload: a name (as the entrypoint's
+// imports reference it), its content type, and its bytes.
+type WorkerModule struct {
+	Name        string
+	ContentType string
+	Content     []byte
+}
+
+// StaticAsset is one file served alongside the worker, keyed by its URL path
+// (e.g. "/next.svg"), with the content hash and size an upload session needs.
+type StaticAsset struct {
+	Path    string
+	Content []byte
+	Hash    string
+	Size    int64
+}
+
+// AppResult reports where a deployed app is served.
+type AppResult struct {
+	URL string
+}
