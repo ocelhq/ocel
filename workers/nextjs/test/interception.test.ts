@@ -131,6 +131,8 @@ describe("intercept", () => {
     // Entry is 1s old (lastModified 1_000, now 2_000), so the CDN gets the
     // remaining window, not the full 60s.
     expect(res!.headers.get("cache-control")).toBe("s-maxage=59");
+    // Marks the serve as an interception hit, not a Lambda-origin fill.
+    expect(res!.headers.get("x-ocel-isr")).toBe("HIT");
     expect(aws.ddbCalls.length).toBe(0);
   });
 
