@@ -6,6 +6,8 @@ beforeEach(() => {
   process.env.OCEL_STATE_TABLE = "state";
   process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#prod#proj#app#BID#";
   process.env.OCEL_STATE_TABLE_INDEX = "gsi1";
+  process.env.OCEL_ISR_BUCKET = "assets";
+  process.env.OCEL_ISR_PREFIX = "prod/proj/app/BID";
 });
 
 afterEach(() => {
@@ -140,4 +142,103 @@ test("hands back the response cursor and feeds it into the next page", async () 
   const second = await store.queryTagRecords(0, first.cursor);
   expect(second.cursor).toBeUndefined();
   expect(sends[1].ExclusiveStartKey).toEqual(last);
+});
+
+// Drives the store against a scripted S3 the same way, so the object key layout
+// and the envelope round-trip are asserted on the command actually emitted.
+async function storeWithObjects(responses: any[]) {
+  const sends: any[] = [];
+  vi.doMock("@aws-sdk/client-s3", async (orig) => {
+    const actual = await orig<any>();
+    return {
+      ...actual,
+      S3Client: class {
+        async send(cmd: any) {
+          sends.push(cmd.input);
+          const next = responses.shift();
+          if (!next) throw new Error("unexpected extra send()");
+          if (next instanceof Error) throw next;
+          return next;
+        }
+      },
+    };
+  });
+  const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
+  return { store: awsUseCacheStore(), sends };
+}
+
+const envelope = {
+  tags: ["products"],
+  stale: 30,
+  timestamp: 1700,
+  expire: 3600,
+  revalidate: 60,
+  body: Buffer.from("payload").toString("base64"),
+};
+
+const objectBody = (value: unknown) => ({
+  Body: { transformToString: async () => JSON.stringify(value) },
+});
+
+// The cache key Next hands a handler is an encodeReply blob of arbitrary bytes
+// and arbitrary length, which is not a legal object key.
+test("hashes the cache key into a legal object name under the build prefix", async () => {
+  const { store, sends } = await storeWithObjects([{}]);
+  const cacheKey = "\u0000binary\uffff" + "x".repeat(4096);
+
+  await store.writeEntry(cacheKey, envelope);
+
+  expect(sends[0].Bucket).toBe("assets");
+  expect(sends[0].Key).toMatch(/^prod\/proj\/app\/BID\/use-cache\/[0-9a-f]{64}\.json$/);
+  expect(sends[0].Key).not.toContain("binary");
+});
+
+test("keys the same entry identically on write and read", async () => {
+  const { store, sends } = await storeWithObjects([{}, objectBody(envelope)]);
+
+  await store.writeEntry("k", envelope);
+  await store.readEntry("k");
+
+  expect(sends[1].Key).toBe(sends[0].Key);
+});
+
+test("gives distinct keys distinct object names", async () => {
+  const { store, sends } = await storeWithObjects([{}, {}]);
+
+  await store.writeEntry("a", envelope);
+  await store.writeEntry("b", envelope);
+
+  expect(sends[1].Key).not.toBe(sends[0].Key);
+});
+
+// One JSON document per entry: one round-trip to read, and an atomic write with
+// no torn entry to serve.
+test("round-trips the entry as a single JSON envelope", async () => {
+  const { store, sends } = await storeWithObjects([{}]);
+
+  await store.writeEntry("k", envelope);
+
+  expect(sends[0].ContentType).toBe("application/json");
+  expect(JSON.parse(sends[0].Body)).toEqual(envelope);
+});
+
+test("reads an entry back off the stored envelope", async () => {
+  const { store } = await storeWithObjects([objectBody(envelope)]);
+
+  expect(await store.readEntry("k")).toEqual(envelope);
+});
+
+test("reports an absent object as a miss rather than a failure", async () => {
+  const missing = Object.assign(new Error("nope"), { name: "NoSuchKey" });
+  const { store } = await storeWithObjects([missing]);
+
+  await expect(store.readEntry("k")).resolves.toBeNull();
+});
+
+// Anything that is not a 404 is a real outage, and the handler is what turns it
+// into a miss — the store must not disguise it as an absent entry.
+test("surfaces a read failure that is not an absent object", async () => {
+  const { store } = await storeWithObjects([new Error("s3 is down")]);
+
+  await expect(store.readEntry("k")).rejects.toThrow(/down/);
 });

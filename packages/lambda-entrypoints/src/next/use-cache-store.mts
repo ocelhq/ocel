@@ -1,4 +1,19 @@
 import { DynamoDBClient, QueryCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { createHash } from "node:crypto";
+
+// A `use cache` entry exactly as it sits in object storage: the metadata and the
+// body in one JSON document, so a read is a single GET and a write is atomic
+// with no torn entry. The body is base64 for the same reason the ISR entry's is
+// — it has to survive inside JSON.
+export interface UseCacheEntry {
+  tags: string[];
+  stale: number;
+  timestamp: number;
+  expire: number;
+  revalidate: number;
+  body: string;
+}
 
 // A tag record as it is written: the invalidation watermarks plus the time the
 // write happened, which is what the index is sorted by. The two are separate
@@ -23,6 +38,8 @@ export interface TagRecordPage {
 // UseCacheStore is the plural cache handlers' whole view of their backing
 // services, so the cache semantics can be exercised without reaching AWS.
 export interface UseCacheStore {
+  readEntry(key: string): Promise<UseCacheEntry | null>;
+  writeEntry(key: string, entry: UseCacheEntry): Promise<void>;
   queryTagRecords(since: number, cursor?: unknown): Promise<TagRecordPage>;
   writeTag(tag: string, record: TagRecordUpdate): Promise<boolean>;
 }
@@ -38,6 +55,21 @@ const sortKey = (at: number) => String(at).padStart(sortKeyWidth, "0");
 // and every extra round trip is one more on its first request.
 const tagPageSize = 200;
 
+// The key Next hands a handler is an encodeReply blob of arbitrary bytes and
+// arbitrary length. It is not a legal object key, so it is hashed into one.
+function objectName(key: string): string {
+  return createHash("sha256").update(key).digest("hex");
+}
+
+async function streamToString(body: any): Promise<string> {
+  if (typeof body?.transformToString === "function") {
+    return body.transformToString();
+  }
+  const chunks: Buffer[] = [];
+  for await (const chunk of body) chunks.push(Buffer.from(chunk));
+  return Buffer.concat(chunks).toString("utf8");
+}
+
 function env(name: string): string {
   const value = process.env[name];
   if (!value) throw new Error(`ocel use cache: ${name} is not set`);
@@ -52,10 +84,44 @@ export function awsUseCacheStore(): UseCacheStore {
   const table = env("OCEL_STATE_TABLE");
   const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
   const index = env("OCEL_STATE_TABLE_INDEX");
+  const bucket = env("OCEL_ISR_BUCKET");
+  const prefix = env("OCEL_ISR_PREFIX");
 
   const ddb = new DynamoDBClient({});
+  const s3 = new S3Client({});
+
+  // Entries sit under the build's own prefix, which the function's existing
+  // object grant already covers. Next seeds every `use cache` key with the build
+  // id, so an app-scoped prefix would buy no extra sharing while widening the
+  // grant — and build scoping means entries are cleaned up with the build.
+  const objectKey = (key: string) => `${prefix}/use-cache/${objectName(key)}.json`;
 
   return {
+    async readEntry(key) {
+      try {
+        const out = await s3.send(
+          new GetObjectCommand({ Bucket: bucket, Key: objectKey(key) }),
+        );
+        return JSON.parse(await streamToString(out.Body));
+      } catch (err: any) {
+        if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
+          return null;
+        }
+        throw err;
+      }
+    },
+
+    async writeEntry(key, entry) {
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: objectKey(key),
+          Body: JSON.stringify(entry),
+          ContentType: "application/json",
+        }),
+      );
+    },
+
     async queryTagRecords(since, cursor) {
       const out = await ddb.send(
         new QueryCommand({

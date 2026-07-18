@@ -31,6 +31,7 @@ const launcherName = "__next_launcher.cjs";
 const cacheHandlerPath = "/opt/ocel/next/cache-handler.cjs";
 const useCacheHandlerPaths = {
   default: "/opt/ocel/next/use-cache-default.cjs",
+  remote: "/opt/ocel/next/use-cache-remote.cjs",
 };
 
 const adapter = {

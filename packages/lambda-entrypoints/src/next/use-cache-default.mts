@@ -1,15 +1,5 @@
 import { tagClock } from "./tag-clock.mjs";
-
-// Next's CacheHandler contract, restated here because the runtime types are not
-// a dependency of this package (and the layer must bundle without one).
-interface CacheEntry {
-  value: ReadableStream<Uint8Array>;
-  tags: string[];
-  stale: number;
-  timestamp: number;
-  expire: number;
-  revalidate: number;
-}
+import { bufferValue, now, streamOf, type CacheEntry } from "./use-cache-entry.mjs";
 
 // An entry as it is held: the stream buffered to bytes, because the stream Next
 // hands over is one-shot and every read has to get its own.
@@ -36,21 +26,11 @@ function resolveBudget(): number {
   return 50 * MB;
 }
 
-function resolveEntryCap(): number {
-  const override = Number(process.env.OCEL_USE_CACHE_MAX_ENTRY);
-  return override > 0 ? override : 5 * MB;
-}
-
 const maxBytes = resolveBudget();
-const maxEntryBytes = resolveEntryCap();
 
 const entries = new Map<string, StoredEntry>();
 const pendingSets = new Map<string, Promise<void>>();
 let usedBytes = 0;
-
-function now(): number {
-  return performance.timeOrigin + performance.now();
-}
 
 // Map iteration order is insertion order, so re-inserting on every touch makes
 // the first key the least recently used one.
@@ -71,25 +51,6 @@ function store(key: string, stored: StoredEntry): void {
     usedBytes -= entries.get(oldest)!.bytes.byteLength;
     entries.delete(oldest);
   }
-}
-
-function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {
-  return new ReadableStream({
-    start(controller) {
-      controller.enqueue(bytes);
-      controller.close();
-    },
-  });
-}
-
-function concat(chunks: Uint8Array[], size: number): Uint8Array {
-  const out = new Uint8Array(size);
-  let at = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, at);
-    at += chunk.byteLength;
-  }
-  return out;
 }
 
 // The `default` cache kind, backing `use cache`. A byte-bounded LRU in the
@@ -144,26 +105,13 @@ const handler = {
 
     try {
       const entry = await pendingEntry;
-      // Tee'd so the caller's copy of the entry keeps an unconsumed stream.
-      const [value, cloned] = entry.value.tee();
-      entry.value = value;
-
-      const reader = cloned.getReader();
-      const chunks: Uint8Array[] = [];
-      let size = 0;
-      for (let chunk; !(chunk = await reader.read()).done; ) {
-        size += chunk.value.byteLength;
-        // Abandoned rather than finished: one oversized entry must not be
-        // buffered whole just to be rejected, nor evict the working set.
-        if (size > maxEntryBytes) {
-          await reader.cancel().catch(() => {});
-          return;
-        }
-        chunks.push(chunk.value);
-      }
+      const bytes = await bufferValue(entry);
+      // An oversized entry evicts nothing: one giant page must not cost the
+      // whole working set.
+      if (!bytes) return;
 
       store(cacheKey, {
-        bytes: concat(chunks, size),
+        bytes,
         tags: entry.tags,
         stale: entry.stale,
         timestamp: entry.timestamp,
