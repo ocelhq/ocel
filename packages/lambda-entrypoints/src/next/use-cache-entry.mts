@@ -13,7 +13,7 @@ export interface CacheEntry {
   revalidate: number;
 }
 
-const MB = 1024 * 1024;
+export const MB = 1024 * 1024;
 
 // One cap for both tiers: what it bounds is the buffer a single set() builds in
 // the function's heap, which is the same risk whether those bytes then go to
@@ -30,6 +30,34 @@ export const maxEntryBytes = resolveEntryCap();
 // come from the same clock.
 export function now(): number {
   return performance.timeOrigin + performance.now();
+}
+
+// Per-key in-flight set tracking, which the CacheHandler contract requires of
+// every tier: "If a `get` for the same cache key is called, before the pending
+// entry is complete, the cache handler must wait for the `set` operation to
+// finish, before returning the entry, instead of returning undefined."
+export function pendingSets() {
+  const inflight = new Map<string, Promise<void>>();
+  return {
+    wait(key: string): Promise<void> | undefined {
+      return inflight.get(key);
+    },
+    async run(key: string, fill: () => Promise<void>): Promise<void> {
+      let release = (): void => {};
+      inflight.set(
+        key,
+        new Promise<void>((resolve) => {
+          release = resolve;
+        }),
+      );
+      try {
+        await fill();
+      } finally {
+        release();
+        inflight.delete(key);
+      }
+    },
+  };
 }
 
 export function streamOf(bytes: Uint8Array): ReadableStream<Uint8Array> {

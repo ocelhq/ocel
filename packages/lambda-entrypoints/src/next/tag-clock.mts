@@ -1,10 +1,7 @@
 import type { TagRecord } from "@ocel/next-cache";
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
+import { now } from "./use-cache-entry.mjs";
 
-// The tag clock every plural cache handler consults. Its surface is the whole of
-// what a handler needs to know about invalidation; the storage behind it is
-// deliberately private.
-//
 // Invalidations are recorded in the state table and synced back into a local
 // map, so a revalidateTag raised on one instance reaches every other instance
 // within a sync interval. The local map is what answers reads: the index is
@@ -39,13 +36,6 @@ const syncIntervalMs = 2_000;
 // compiled against this one.
 const stateKey = Symbol.for("ocel.use-cache.tag-clock.v1");
 
-// performance.timeOrigin + performance.now() rather than Date.now(), matching
-// the clock Next's own handler stamps entry timestamps with — the two are
-// compared against each other, so they have to be the same clock.
-function now(): number {
-  return Math.round(performance.timeOrigin + performance.now());
-}
-
 // Next loads each registered handler as its own module graph, so a clock bundled
 // into both handler bundles exists twice. Sharing it through globalThis is what
 // keeps the two copies agreeing on one tag map, one cursor and one query — the
@@ -63,9 +53,6 @@ function sharedState(): ClockState {
   // so adopting it would silently answer with another deployment's tags.
   if (existing?.fingerprint === fingerprint) return existing;
 
-  // `??=` on the assignment below is unnecessary: creation is synchronous and so
-  // cannot interleave. The race that matters is the sync, which the in-flight
-  // promise collapses.
   return (host[stateKey] = {
     fingerprint,
     records: new Map(),
@@ -234,5 +221,23 @@ export const tagClock: TagClock = {
   // read as "nothing was invalidated".
   get hasSynced() {
     return state.hasSynced;
+  },
+};
+
+// The three CacheHandler methods that are pure clock delegation, shared so both
+// tiers cannot drift apart. Next fans updateTags out to every registered
+// handler, so both raise every invalidation; the shared clock collapses them,
+// the second durable write losing the monotonic guard.
+export const clockMethods = {
+  async refreshTags(): Promise<void> {
+    await tagClock.refreshTags();
+  },
+
+  async getExpiration(tags: string[]): Promise<number> {
+    return tagClock.getExpiration(tags);
+  },
+
+  async updateTags(tags: string[], durations?: { expire?: number }): Promise<void> {
+    await tagClock.updateTags(tags, durations);
   },
 };
