@@ -214,6 +214,66 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 	}
 }
 
+// TestISRPolicy_CannotReachAnotherAppsPrefix proves two apps deployed side by
+// side are sealed off from each other: neither app's role grants any resource
+// under the other's prefix, in S3 or in the state table. Both apps share the
+// account-global bucket and table, so this scoping is the only thing standing
+// between one app's Lambdas and another's cached pages.
+func TestISRPolicy_CannotReachAnotherAppsPrefix(t *testing.T) {
+	const tableARN = "arn:aws:dynamodb:us-east-1:1234:table/state-abc"
+	web := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/web/WEB1", Table: "state-abc", TableARN: tableARN}
+	admin := isrConfig{Bucket: "assets-xyz", Prefix: "prod/proj/admin/ADM1", Table: "state-abc", TableARN: tableARN}
+
+	webDoc, adminDoc := parsePolicy(t, web), parsePolicy(t, admin)
+
+	if want := "arn:aws:s3:::assets-xyz/prod/proj/web/WEB1/*"; webDoc.Statement[0].Resource != want {
+		t.Errorf("web S3 Resource = %q, want %q", webDoc.Statement[0].Resource, want)
+	}
+	if want := "arn:aws:s3:::assets-xyz/prod/proj/admin/ADM1/*"; adminDoc.Statement[0].Resource != want {
+		t.Errorf("admin S3 Resource = %q, want %q", adminDoc.Statement[0].Resource, want)
+	}
+	if strings.Contains(webDoc.Statement[0].Resource, "admin") {
+		t.Errorf("web's S3 grant %q reaches the admin app", webDoc.Statement[0].Resource)
+	}
+
+	// The table and its index are addressed by a bare ARN both apps share, so
+	// the separation rests entirely on the leading-key condition.
+	for _, stmt := range webDoc.Statement[1:] {
+		keys := stmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
+		if len(keys) != 1 || keys[0] != "TAG#prod#proj#web#WEB1#*" {
+			t.Fatalf("web LeadingKeys = %v, want only its own tag partitions", keys)
+		}
+		if strings.HasPrefix(admin.tagNamespace(), strings.TrimSuffix(keys[0], "*")) {
+			t.Errorf("web's LeadingKeys %q admits the admin app's namespace %q", keys[0], admin.tagNamespace())
+		}
+	}
+}
+
+type policyDoc struct {
+	Statement []struct {
+		Effect    string   `json:"Effect"`
+		Action    []string `json:"Action"`
+		Resource  string   `json:"Resource"`
+		Condition map[string]map[string][]string
+	}
+}
+
+func parsePolicy(t *testing.T, cfg isrConfig) policyDoc {
+	t.Helper()
+	raw, err := isrPolicy(cfg)
+	if err != nil {
+		t.Fatalf("isrPolicy: %v", err)
+	}
+	var doc policyDoc
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatalf("policy is not valid JSON: %v", err)
+	}
+	if len(doc.Statement) != 3 {
+		t.Fatalf("got %d statements, want 3", len(doc.Statement))
+	}
+	return doc
+}
+
 // The handler joins its S3 keys onto OCEL_ISR_PREFIX and its tag partitions onto
 // OCEL_ISR_TAG_NAMESPACE. Both must agree with what isrPolicy grants, or every
 // read fails closed at runtime.

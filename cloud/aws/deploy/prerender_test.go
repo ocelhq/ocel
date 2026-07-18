@@ -19,6 +19,163 @@ func nextManifest() *deploymentsv1.Manifest {
 	}
 }
 
+// twoAppManifest is a manifest carrying two Next.js apps, each with its own
+// function.
+func twoAppManifest() *deploymentsv1.Manifest {
+	return &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "web_index", Framework: "next", App: "web"},
+			{LogicalName: "admin_index", Framework: "next", App: "admin"},
+		},
+	}
+}
+
+// twoAppTree seeds two Next apps' build output, each with its own build id and
+// its own prerendered cache entry.
+func twoAppTree(t *testing.T) string {
+	t.Helper()
+	return writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json":    `{"buildId":"WEB1"}`,
+		"apps/web/cache/index.cache.json":   `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		"apps/admin/routing-manifest.json":  `{"buildId":"ADM1"}`,
+		"apps/admin/cache/dash.cache.json":  `{"lastModified":2,"value":{"kind":"APP_PAGE"}}`,
+		"apps/admin/cache/users.cache.json": `{"lastModified":3,"value":{"kind":"APP_PAGE"}}`,
+	})
+}
+
+// TestAppCaches_GivesEachAppItsOwnPrefix proves two apps in one deploy address
+// two disjoint slices of the account-global asset bucket. A shared prefix would
+// let either app's functions read and overwrite the other's cached pages.
+func TestAppCaches_GivesEachAppItsOwnPrefix(t *testing.T) {
+	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+
+	caches, err := appCaches(cfg, twoAppManifest())
+	if err != nil {
+		t.Fatalf("appCaches: %v", err)
+	}
+	if len(caches) != 2 {
+		t.Fatalf("got %d caches, want one per app", len(caches))
+	}
+	if want := "prod/proj/web/WEB1"; caches["web"].Prefix != want {
+		t.Errorf("web prefix = %q, want %q", caches["web"].Prefix, want)
+	}
+	if want := "prod/proj/admin/ADM1"; caches["admin"].Prefix != want {
+		t.Errorf("admin prefix = %q, want %q", caches["admin"].Prefix, want)
+	}
+}
+
+// TestAppCaches_OmitsAnAppWithNoPrerenderedContent proves an app whose framework
+// keeps no server-side cache is absent, so its role carries no cache grant at
+// all.
+func TestAppCaches_OmitsAnAppWithNoPrerenderedContent(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+	})
+	cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "web_index", Framework: "next", App: "web"},
+			{LogicalName: "api_index", Framework: "express", App: "api"},
+		},
+	}
+
+	caches, err := appCaches(cfg, manifest)
+	if err != nil {
+		t.Fatalf("appCaches: %v", err)
+	}
+	if _, ok := caches["api"]; ok {
+		t.Errorf("an app with no prerendered content must have no cache, got %+v", caches["api"])
+	}
+	if caches["web"] == nil {
+		t.Error("the Next app must still have its own cache")
+	}
+}
+
+// TestExecutionRoles_OnePerApp proves each app gets exactly one execution role,
+// however many functions it owns, and that a single-app project still provisions
+// exactly one.
+func TestExecutionRoles_OnePerApp(t *testing.T) {
+	roles := executionRoles(map[string]*isrConfig{}, []*deploymentsv1.ManifestFunction{
+		{LogicalName: "web_index", App: "web"},
+		{LogicalName: "web_blog", App: "web"},
+		{LogicalName: "admin_index", App: "admin"},
+	})
+	if len(roles) != 2 {
+		t.Fatalf("got %d roles, want one per app", len(roles))
+	}
+	// Manifest order, so redeploys declare the same roles in the same order.
+	if roles[0].App != "web" || roles[1].App != "admin" {
+		t.Errorf("roles = %q/%q, want web then admin", roles[0].App, roles[1].App)
+	}
+
+	single := executionRoles(map[string]*isrConfig{}, []*deploymentsv1.ManifestFunction{
+		{LogicalName: "web_index", App: "web"},
+		{LogicalName: "web_blog", App: "web"},
+	})
+	if len(single) != 1 {
+		t.Fatalf("a single-app project got %d roles, want exactly 1", len(single))
+	}
+}
+
+// TestExecutionRoles_CarryOnlyTheirOwnAppsCache proves a role's cache grant is
+// its own app's and no other's, and that an app with no cache gets no grant.
+func TestExecutionRoles_CarryOnlyTheirOwnAppsCache(t *testing.T) {
+	caches := map[string]*isrConfig{
+		"web":   {Prefix: "prod/proj/web/WEB1"},
+		"admin": {Prefix: "prod/proj/admin/ADM1"},
+	}
+	roles := executionRoles(caches, []*deploymentsv1.ManifestFunction{
+		{LogicalName: "web_index", App: "web"},
+		{LogicalName: "admin_index", App: "admin"},
+		{LogicalName: "api_index", App: "api"},
+	})
+	if len(roles) != 3 {
+		t.Fatalf("got %d roles, want 3", len(roles))
+	}
+	for _, r := range roles {
+		switch r.App {
+		case "api":
+			if r.Cache != nil {
+				t.Errorf("api role carries a cache grant %+v, want none", r.Cache)
+			}
+		default:
+			if r.Cache != caches[r.App] {
+				t.Errorf("%s role carries %+v, want its own app's cache", r.App, r.Cache)
+			}
+		}
+	}
+}
+
+// TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix proves every app's
+// seeded cache entries land under that app's prefix, not one shared with its
+// neighbours.
+func TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
+	f := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+
+	got := append([]string(nil), f.puts...)
+	sort.Strings(got)
+	want := []string{
+		"prod/proj/admin/ADM1/cache/dash.cache.json",
+		"prod/proj/admin/ADM1/cache/users.cache.json",
+		"prod/proj/web/WEB1/cache/index.cache.json",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("uploaded keys = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("uploaded key[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
 // TestUploadPrerenderAssets_NoNextApp proves the path is a no-op for a manifest
 // with no Next.js function: nothing is read or uploaded.
 func TestUploadPrerenderAssets_NoNextApp(t *testing.T) {

@@ -253,28 +253,52 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutpu
 	}
 }
 
-// newFunctionRole creates the single IAM role every Lambda in a deploy assumes.
-// A function's role governs only two things, neither of them per-function: the
-// CloudWatch Logs grant every function needs, and — when the deploy has a Next
-// app — the ISR cache grant. So one role serves them all. isr is nil when the
-// deploy has no Next app.
-func newFunctionRole(ctx *pulumi.Context, isr *isrConfig) (*iam.Role, error) {
-	role, err := newServiceRole(ctx, "ocel-fn", "lambda.amazonaws.com", nil)
+// executionRole is one app's Lambda execution role: the app it belongs to and
+// the ISR cache it grants, nil when the app keeps none.
+type executionRole struct {
+	App   string
+	Cache *isrConfig
+}
+
+// executionRoles is the set of roles a manifest needs — one per app, in
+// first-appearance order so redeploys declare them identically. A role's grant
+// is its own app's cache and nothing else, which is what keeps one app's
+// functions out of another app's cached pages.
+func executionRoles(caches map[string]*isrConfig, functions []*deploymentsv1.ManifestFunction) []executionRole {
+	var roles []executionRole
+	seen := map[string]bool{}
+	for _, fn := range functions {
+		app := fn.GetApp()
+		if seen[app] {
+			continue
+		}
+		seen[app] = true
+		roles = append(roles, executionRole{App: app, Cache: caches[app]})
+	}
+	return roles
+}
+
+// newFunctionRole creates the IAM role every Lambda belonging to one app
+// assumes: the CloudWatch Logs grant every function needs, plus the app's own
+// ISR cache grant when it has one.
+func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
+	name := "ocel-fn-" + safeName(r.App)
+	role, err := newServiceRole(ctx, name, "lambda.amazonaws.com", nil)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := iam.NewRolePolicyAttachment(ctx, "ocel-fn-logs", &iam.RolePolicyAttachmentArgs{
+	if _, err := iam.NewRolePolicyAttachment(ctx, name+"-logs", &iam.RolePolicyAttachmentArgs{
 		Role:      role.Name,
 		PolicyArn: pulumi.String("arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"),
 	}); err != nil {
 		return nil, err
 	}
-	if isr != nil {
-		policy, err := isrPolicy(*isr)
+	if r.Cache != nil {
+		policy, err := isrPolicy(*r.Cache)
 		if err != nil {
 			return nil, err
 		}
-		if _, err := iam.NewRolePolicy(ctx, "ocel-fn-isr", &iam.RolePolicyArgs{
+		if _, err := iam.NewRolePolicy(ctx, name+"-isr", &iam.RolePolicyArgs{
 			Role:   role.Name,
 			Policy: pulumi.String(policy),
 		}); err != nil {
@@ -286,13 +310,13 @@ func newFunctionRole(ctx *pulumi.Context, isr *isrConfig) (*iam.Role, error) {
 
 // registerFunction realizes one ManifestFunction as an AWS Lambda from its
 // `.func` artifact plus a public Function URL, with env carrying every
-// manifest resource (env). Every function assumes the deploy's one shared role
+// manifest resource (env). The function assumes its own app's execution role
 // (roleArn, from newFunctionRole). artifact points at the S3 object the provider
 // already uploaded the `.func` deployment package to; its content-addressed key
 // changes when the code changes, so Pulumi redeploys exactly the changed
-// functions. isr is non-nil only for a Next function, and injects the cache
-// handler's env; the grant backing it lives on the shared role. The Function URL
-// is exported under logicalName for collectFunctionOutput.
+// functions. isr is the app's cache, nil when it keeps none; it injects the
+// cache handler's env, and the grant backing it lives on that same app's role.
+// The Function URL is exported under logicalName for collectFunctionOutput.
 func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs, artifact artifactRef, env pulumi.StringMap, isr *isrConfig, roleArn pulumi.StringInput) error {
 	// env is shared across every function in the deploy, so per-function
 	// additions are made on a copy.

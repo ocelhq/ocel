@@ -189,41 +189,25 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 			env[functionEnvKey(r.GetResource().GetType(), r.GetResource().GetName())] = value
 		}
 
-		// A Next function's cache handler reads and writes this app's slice of
-		// the account-global asset bucket and state table; everything else gets
-		// no cache access at all. The prefix is per-deploy, so the ISR config is
-		// built once and its grant lives on the one shared role.
-		prefix, err := assetPrefix(cfg, manifest)
+		// Each app's functions read and write only that app's slice of the
+		// account-global asset bucket and state table, so the execution role
+		// follows the app: one role per app, granting logs plus its own cache.
+		caches, err := appCaches(cfg, manifest)
 		if err != nil {
 			return err
 		}
-		var deployISR *isrConfig
-		if prefix != "" {
-			deployISR = &isrConfig{
-				Bucket:   cfg.AssetBucket,
-				Prefix:   prefix,
-				Table:    cfg.StateTable,
-				TableARN: cfg.StateTableARN,
-			}
-		}
-
-		var fnRoleArn pulumi.StringInput
-		if len(manifest.GetFunctions()) > 0 {
-			role, err := newFunctionRole(pctx, deployISR)
+		roleArns := map[string]pulumi.StringInput{}
+		for _, r := range executionRoles(caches, manifest.GetFunctions()) {
+			role, err := newFunctionRole(pctx, r)
 			if err != nil {
 				return err
 			}
-			fnRoleArn = role.Arn
+			roleArns[r.App] = role.Arn
 		}
 
 		for _, fn := range manifest.GetFunctions() {
-			// Only a Next function carries the ISR cache env; the grant is already
-			// on the shared role.
-			var isr *isrConfig
-			if deployISR != nil && fn.GetFramework() == frameworkNext {
-				isr = deployISR
-			}
-			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), artifacts[fn.GetLogicalName()], env, isr, fnRoleArn); err != nil {
+			app := fn.GetApp()
+			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[app], roleArns[app]); err != nil {
 				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}

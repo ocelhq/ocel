@@ -48,7 +48,7 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 
 	worker, err := assemble(
 		edge.WorkerSource{ArtifactRoot: appArtifactRoot(cfg.ArtifactRoot, app), BundlePath: bundlePath, Routes: routes},
-		&deployResolver{cfg: cfg, manifest: manifest, urls: functionURLsByRoute(manifest.GetFunctions(), outputs)},
+		&deployResolver{cfg: cfg, manifest: manifest, app: app, urls: functionURLsByRoute(manifest.GetFunctions(), outputs)},
 	)
 	if err != nil {
 		return nil, err
@@ -140,6 +140,7 @@ func functionURLsByRoute(functions []*deploymentsv1.ManifestFunction, outputs []
 type deployResolver struct {
 	cfg      Config
 	manifest *deploymentsv1.Manifest
+	app      string
 	urls     map[string]string
 }
 
@@ -159,15 +160,15 @@ func (d *deployResolver) CacheStore() (edge.CacheStore, bool, error) {
 	if d.cfg.EdgeAccessKeyID == "" || d.cfg.EdgeSecretKey == "" {
 		return edge.CacheStore{}, false, nil
 	}
-	prefix, err := assetPrefix(d.cfg, d.manifest)
+	caches, err := appCaches(d.cfg, d.manifest)
 	if err != nil {
 		return edge.CacheStore{}, false, err
 	}
-	if prefix == "" {
+	isr := caches[d.app]
+	if isr == nil {
 		return edge.CacheStore{}, false, nil
 	}
 
-	isr := isrConfig{Bucket: d.cfg.AssetBucket, Prefix: prefix, Table: d.cfg.StateTable}
 	return edge.CacheStore{
 		Bucket:        isr.Bucket,
 		Prefix:        isr.Prefix,
@@ -187,19 +188,6 @@ func productionDomain(cfg Config, manifest *deploymentsv1.Manifest) string {
 		return ""
 	}
 	return manifest.GetDomains()["production"]
-}
-
-// nextAppArtifactRoot locates the build output of this deploy's Next.js app —
-// where its routing manifest and seeded cache entries live. It reports false
-// when the manifest has no Next.js route, i.e. when this deploy has no ISR
-// cache to scope.
-func nextAppArtifactRoot(cfg Config, manifest *deploymentsv1.Manifest) (string, bool) {
-	for _, fn := range manifest.GetFunctions() {
-		if fn.GetFramework() == frameworkNext {
-			return appArtifactRoot(cfg.ArtifactRoot, fn.GetApp()), true
-		}
-	}
-	return "", false
 }
 
 // sanitizeWorkerName lowers an arbitrary identity into an edge deployment

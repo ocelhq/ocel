@@ -15,75 +15,94 @@ import (
 )
 
 // prerenderManifest is the subset of a Next app's routing-manifest.json the
-// asset upload reads: the build id (which keys the objects, immutable per build)
-// and the app name (the <app-id> key segment).
+// asset upload reads: the build id, which keys the objects and is immutable per
+// build.
 type prerenderManifest struct {
 	BuildID string `json:"buildId"`
-	AppName string `json:"appName"`
 }
 
-// assetPrefix is the key prefix every asset this app publishes to the
+// appAssetPrefix is the key prefix every asset one app publishes to the
 // account-global bucket sits under: <env>/<project-id>/<app-id>/<build-id>. It
-// is also what the function's IAM policy is scoped to and what the cache
-// handler joins its keys onto, so all three agree by construction. Returns ""
-// for a manifest with no Next.js function.
-func assetPrefix(cfg Config, manifest *deploymentsv1.Manifest) (string, error) {
-	root, ok := nextAppArtifactRoot(cfg, manifest)
-	if !ok {
-		return "", nil
-	}
+// is also what that app's IAM policy is scoped to and what its cache handler
+// joins its keys onto, so all three agree by construction — and no two apps ever
+// address the same slice.
+func appAssetPrefix(cfg Config, projectID, app string) (string, error) {
 	var pm prerenderManifest
-	raw, err := os.ReadFile(filepath.Join(root, "routing-manifest.json"))
+	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "routing-manifest.json"))
 	if err != nil {
-		return "", fmt.Errorf("read routing manifest: %w", err)
+		return "", fmt.Errorf("read routing manifest for %s: %w", app, err)
 	}
 	if err := json.Unmarshal(raw, &pm); err != nil {
-		return "", fmt.Errorf("parse routing manifest: %w", err)
+		return "", fmt.Errorf("parse routing manifest for %s: %w", app, err)
 	}
-	if pm.BuildID == "" || pm.AppName == "" {
-		return "", fmt.Errorf("routing manifest is missing buildId or appName; rebuild the app")
+	if pm.BuildID == "" {
+		return "", fmt.Errorf("routing manifest for %s is missing buildId; rebuild the app", app)
 	}
 	// The app-id key segment reuses the worker-name sanitizer so it agrees with
 	// how the app is otherwise addressed, and stays a safe, stable path token.
-	appID := sanitizeWorkerName(pm.AppName)
-	return path.Join(cfg.Env, manifest.GetProjectId(), appID, pm.BuildID), nil
+	return path.Join(cfg.Env, projectID, sanitizeWorkerName(app), pm.BuildID), nil
 }
 
-// uploadPrerenderAssets uploads a Next app's seeded ISR cache entries to the
-// account-global asset bucket under assetPrefix, keeping their cache/ segment in
-// the key so the deployed cache handler reads them back at exactly that path. It
-// is a no-op for a manifest with no Next.js function.
-func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
-	prefix, err := assetPrefix(cfg, manifest)
-	if err != nil || prefix == "" {
-		return err
+// appCaches describes the ISR cache of every app in the manifest that keeps
+// one, keyed by app name. An app whose framework has no server-side cache is
+// absent, and so gets neither cache env nor a cache grant.
+func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrConfig, error) {
+	caches := map[string]*isrConfig{}
+	for _, fn := range manifest.GetFunctions() {
+		app := fn.GetApp()
+		if fn.GetFramework() != frameworkNext || caches[app] != nil {
+			continue
+		}
+		prefix, err := appAssetPrefix(cfg, manifest.GetProjectId(), app)
+		if err != nil {
+			return nil, err
+		}
+		caches[app] = &isrConfig{
+			Bucket:   cfg.AssetBucket,
+			Prefix:   prefix,
+			Table:    cfg.StateTable,
+			TableARN: cfg.StateTableARN,
+		}
 	}
-	root, _ := nextAppArtifactRoot(cfg, manifest)
+	return caches, nil
+}
 
-	// Cache entries live beside functions/ rather than inside it, and keep their
-	// cache/ segment in the key: that is exactly where the handler looks.
-	cacheEntries, err := collectFiles(filepath.Join(root, "cache"))
+// uploadPrerenderAssets uploads each app's seeded ISR cache entries to the
+// account-global asset bucket under that app's own prefix, keeping their cache/
+// segment in the key so the deployed cache handler reads them back at exactly
+// that path. It is a no-op for a manifest with no cached app.
+func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
+	caches, err := appCaches(cfg, manifest)
 	if err != nil {
 		return err
 	}
-	if len(cacheEntries) == 0 {
+
+	type upload struct{ key, src string }
+	var uploads []upload
+	for app, cache := range caches {
+		// Cache entries live beside functions/ rather than inside it, and keep
+		// their cache/ segment in the key: that is exactly where the handler looks.
+		cacheDir := filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "cache")
+		entries, err := collectFiles(cacheDir)
+		if err != nil {
+			return err
+		}
+		for _, rel := range entries {
+			uploads = append(uploads, upload{
+				key: path.Join(cache.Prefix, "cache", rel),
+				src: filepath.Join(cacheDir, filepath.FromSlash(rel)),
+			})
+		}
+	}
+	if len(uploads) == 0 {
 		return nil
 	}
 
 	if cfg.AssetBucket == "" {
-		return fmt.Errorf("Next app has cache entries to seed but no asset bucket is configured; re-run `ocel bootstrap`")
+		return fmt.Errorf("this project has cache entries to seed but no asset bucket is configured; re-run `ocel bootstrap`")
 	}
 	if cfg.Uploader == nil {
 		return fmt.Errorf("no asset uploader configured")
-	}
-
-	type upload struct{ key, src string }
-	uploads := make([]upload, 0, len(cacheEntries))
-	for _, rel := range cacheEntries {
-		uploads = append(uploads, upload{
-			key: path.Join(prefix, "cache", rel),
-			src: filepath.Join(root, "cache", filepath.FromSlash(rel)),
-		})
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
