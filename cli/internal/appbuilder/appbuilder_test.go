@@ -24,10 +24,10 @@ func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath string, requ
 }
 
 // writeFuncConfig simulates one thing the builder does: writing a `.func`
-// directory with its config.json under outDir/functions.
-func writeFuncConfig(t *testing.T, outDir, funcRel string, cfg functionConfig) {
+// directory with its config.json into the app's own subtree of the output.
+func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg functionConfig) {
 	t.Helper()
-	dir := filepath.Join(outDir, functionsDirName, funcRel)
+	dir := filepath.Join(outDir, appsDirName, app, functionsDirName, funcRel)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -60,8 +60,8 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 			return err
 		}
 		// Simulate the builder writing its output tree.
-		writeFuncConfig(t, gotReq.OutDir, "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "api"})
-		writeFuncConfig(t, gotReq.OutDir, "worker.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "worker"})
+		writeFuncConfig(t, gotReq.OutDir, "api", "index.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "api"})
+		writeFuncConfig(t, gotReq.OutDir, "worker", "index.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "worker"})
 		return nil
 	})
 
@@ -71,8 +71,8 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 	}
 
 	want := []manifestbuilder.Function{
-		{Name: "api", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/api.func", Framework: "express", App: "api"},
-		{Name: "worker", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/worker.func", Framework: "express", App: "worker"},
+		{Name: "api/index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/api/functions/index.func", Framework: "express", App: "api"},
+		{Name: "worker/index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/worker/functions/index.func", Framework: "express", App: "worker"},
 	}
 	if len(fns) != len(want) {
 		t.Fatalf("Build returned %d functions, want %d: %+v", len(fns), len(want), fns)
@@ -131,7 +131,7 @@ func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 	root := t.TempDir()
 	t.Setenv("OCEL_BUILDER_PATH", filepath.Join(t.TempDir(), "cli.js"))
 	// A stale artifact from a previous build must not survive to be deployed.
-	writeFuncConfig(t, filepath.Join(root, ".ocel", "output"), "stale.func",
+	writeFuncConfig(t, filepath.Join(root, ".ocel", "output"), "stale", "index.func",
 		functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express", App: "stale"})
 
 	var gotReq builderRequest
@@ -153,7 +153,7 @@ func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 	if got, want := gotReq.ProjectRoot, root; got != want {
 		t.Errorf("request projectRoot = %q, want %q", got, want)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".ocel", "output", "functions", "stale.func")); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(filepath.Join(root, ".ocel", "output", appsDirName, "stale")); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("stale .func survived the reset (stat err = %v)", err)
 	}
 }
@@ -180,13 +180,13 @@ func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
 
 func TestCollectFunctions_Nested(t *testing.T) {
 	outDir := t.TempDir()
-	writeFuncConfig(t, outDir, filepath.Join("api", "todos", "[id].func"),
+	writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
 		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
-	writeFuncConfig(t, outDir, "index.func",
+	writeFuncConfig(t, outDir, "web", "index.func",
 		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
 	// A nested node_modules with its own package.json must not be mistaken for
 	// a function (no config.json, and it lives inside a .func leaf).
-	if err := os.MkdirAll(filepath.Join(outDir, "functions", "index.func", "node_modules", "dep"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(outDir, appsDirName, "web", "functions", "index.func", "node_modules", "dep"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -196,8 +196,37 @@ func TestCollectFunctions_Nested(t *testing.T) {
 	}
 
 	want := []manifestbuilder.Function{
-		{Name: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/api/todos/[id].func", Framework: "next", App: "web"},
-		{Name: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/index.func", Framework: "next", App: "web"},
+		{Name: "web/api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", Framework: "next", App: "web"},
+		{Name: "web/index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", Framework: "next", App: "web"},
+	}
+	if len(fns) != len(want) {
+		t.Fatalf("collectFunctions returned %d, want %d: %+v", len(fns), len(want), fns)
+	}
+	for i, w := range want {
+		if fns[i] != w {
+			t.Errorf("function[%d] = %+v, want %+v", i, fns[i], w)
+		}
+	}
+}
+
+// Two apps exposing the same route path is what a flat output tree could not
+// represent: one `.func` overwrote the other on disk, and even discovered
+// separately they produced the same logical name and so the same Lambda.
+func TestCollectFunctions_SameRouteInTwoApps_DoesNotCollide(t *testing.T) {
+	outDir := t.TempDir()
+	for _, app := range []string{"admin", "storefront"} {
+		writeFuncConfig(t, outDir, app, filepath.Join("api", "documents.func"),
+			functionConfig{Runtime: "nodejs24.x", Handler: "route.js", Framework: "next", ID: "/api/documents", App: app})
+	}
+
+	fns, err := collectFunctions(outDir)
+	if err != nil {
+		t.Fatalf("collectFunctions: %v", err)
+	}
+
+	want := []manifestbuilder.Function{
+		{Name: "admin/api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "apps/admin/functions/api/documents.func", Framework: "next", RouteID: "/api/documents", App: "admin"},
+		{Name: "storefront/api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "apps/storefront/functions/api/documents.func", Framework: "next", RouteID: "/api/documents", App: "storefront"},
 	}
 	if len(fns) != len(want) {
 		t.Fatalf("collectFunctions returned %d, want %d: %+v", len(fns), len(want), fns)
@@ -211,7 +240,7 @@ func TestCollectFunctions_Nested(t *testing.T) {
 
 func TestCollectFunctions_RouteIDFromConfig(t *testing.T) {
 	outDir := t.TempDir()
-	writeFuncConfig(t, outDir, filepath.Join("api", "documents.func"),
+	writeFuncConfig(t, outDir, "web", filepath.Join("api", "documents.func"),
 		functionConfig{Runtime: "nodejs24.x", Handler: "route.js", Framework: "next", ID: "/api/documents", App: "web"})
 
 	fns, err := collectFunctions(outDir)
@@ -238,7 +267,7 @@ func TestCollectFunctions_NoFunctionsDir(t *testing.T) {
 
 func TestCollectFunctions_MissingConfig_Errors(t *testing.T) {
 	outDir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(outDir, "functions", "api.func"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(outDir, appsDirName, "web", "functions", "api.func"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 
@@ -254,7 +283,7 @@ func TestCollectFunctions_MissingConfig_Errors(t *testing.T) {
 func TestCollectFunctions_MissingField_Errors(t *testing.T) {
 	outDir := t.TempDir()
 	// framework omitted: all four fields are required.
-	writeFuncConfig(t, outDir, "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", App: "web"})
+	writeFuncConfig(t, outDir, "web", "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", App: "web"})
 
 	_, err := collectFunctions(outDir)
 	if err == nil {
@@ -267,7 +296,7 @@ func TestCollectFunctions_MissingField_Errors(t *testing.T) {
 
 func TestCollectFunctions_InvalidJSON_Errors(t *testing.T) {
 	outDir := t.TempDir()
-	dir := filepath.Join(outDir, "functions", "api.func")
+	dir := filepath.Join(outDir, appsDirName, "web", "functions", "api.func")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -324,10 +353,10 @@ func TestBuild_Integration(t *testing.T) {
 		t.Fatalf("Build returned %d functions, want 1: %+v", len(fns), fns)
 	}
 	want := manifestbuilder.Function{
-		Name:         "api",
+		Name:         "api/index",
 		Runtime:      "nodejs24.x",
 		Handler:      "src/server.js",
-		ArtifactPath: "functions/api.func",
+		ArtifactPath: "apps/api/functions/index.func",
 		Framework:    "express",
 		App:          "api",
 	}
@@ -365,8 +394,8 @@ func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 	if len(fns) != 1 {
 		t.Fatalf("Build returned %d functions, want 1: %+v", len(fns), fns)
 	}
-	if fns[0].Name != "express-app" || fns[0].Framework != "express" {
-		t.Errorf("detected function = %+v, want name express-app framework express", fns[0])
+	if fns[0].Name != "express-app/index" || fns[0].Framework != "express" {
+		t.Errorf("detected function = %+v, want name express-app/index framework express", fns[0])
 	}
 	// The detected app must still be named, so the manifest can carry it.
 	if fns[0].App != "express-app" {
@@ -387,7 +416,7 @@ func repoRelPath(t *testing.T, parts ...string) string {
 
 func TestCollectFunctions_AppFromConfig(t *testing.T) {
 	outDir := t.TempDir()
-	writeFuncConfig(t, outDir, "api.func",
+	writeFuncConfig(t, outDir, "storefront", "index.func",
 		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "storefront"})
 
 	fns, err := collectFunctions(outDir)
@@ -401,7 +430,7 @@ func TestCollectFunctions_AppFromConfig(t *testing.T) {
 
 func TestCollectFunctions_MissingApp_Errors(t *testing.T) {
 	outDir := t.TempDir()
-	writeFuncConfig(t, outDir, "api.func",
+	writeFuncConfig(t, outDir, "web", "index.func",
 		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express"})
 
 	_, err := collectFunctions(outDir)

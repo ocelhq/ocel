@@ -45,4 +45,17 @@ describe("buildNext", () => {
 
     expect(env?.OCEL_APP_NAME).toBe("marketing");
   });
+
+  // The adapter runs inside `next build` with the app dir as its cwd, so it
+  // cannot infer where this build's output belongs. Being told keeps two Next
+  // apps from writing over each other.
+  it("passes the app's own output subtree to the build as OCEL_OUTPUT_DIR", async () => {
+    const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
+    let env: Record<string, string> | undefined;
+    nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);
+
+    await buildNext({ name: "marketing", cwd: dir }, { outDir: "/out" });
+
+    expect(env?.OCEL_OUTPUT_DIR).toBe(path.join("/out", "apps", "marketing"));
+  });
 });

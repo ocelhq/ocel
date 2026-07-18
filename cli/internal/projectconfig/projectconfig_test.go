@@ -375,6 +375,31 @@ export default {
 	}
 }
 
+// An app name becomes a directory in the build output and part of every one of
+// that app's function logical names, so a name that could escape the output
+// tree has to be rejected at the config boundary.
+func TestResolve_AppUnsafeNameErrors(t *testing.T) {
+	for _, name := range []string{"../escape", "web/admin", "we b"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  apps: [{ name: "`+name+`", path: "services/api", framework: "express" }],
+};
+`)
+
+			_, err := Resolve(root)
+			if err == nil {
+				t.Fatal("Resolve: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), "invalid app name") {
+				t.Fatalf("err = %q, want it to reject the app name", err.Error())
+			}
+		})
+	}
+}
+
 func TestResolve_AppMissingPathErrors(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `

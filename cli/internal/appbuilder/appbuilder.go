@@ -1,8 +1,8 @@
 // Package appbuilder runs the node builder that ships with the ocel npm
 // package over a project's normalized apps, then discovers the built functions
 // by walking the build output. The builder is "dumb": it writes each `.func`
-// (carrying a `config.json`) under `.ocel/output/functions` and never reports
-// anything back over stdout — this package reads that tree into the functions
+// (carrying a `config.json`) under `.ocel/output/apps/<app>/functions` and never reports
+// anything back over stdout — this package reads those trees into the functions
 // the manifest builder consumes. It resolves the builder entry from
 // OCEL_BUILDER_PATH (exported by the npm launcher) and spawns it with the
 // user's node, never talking to any provider or the dev server.
@@ -34,8 +34,14 @@ const scratchDirName = ".ocel"
 // before each build and discovers functions by walking it afterward.
 const outputDirName = "output"
 
-// functionsDirName is the subtree of outputDirName the builder writes `.func`
-// artifacts into, and the only place this package looks for functions.
+// appsDirName holds one subtree per app under outputDirName. Build output is
+// namespaced per app — each subtree carries that app's functions, static
+// assets, cache entries and routing manifest — so two apps exposing the same
+// route path never write over each other.
+const appsDirName = "apps"
+
+// functionsDirName is the subtree of an app's directory the builder writes
+// `.func` artifacts into, and the only place this package looks for functions.
 const functionsDirName = "functions"
 
 // funcDirSuffix marks a directory as a function artifact.
@@ -127,15 +133,45 @@ func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) ([]
 	return collectFunctions(outputDir)
 }
 
-// collectFunctions walks <outputDir>/functions and returns one function per
-// `*.func` directory, reading its config.json. Nested functions (e.g.
-// functions/api/todos/[id].func) are supported: a function's name is its
-// directory path under functions/ with the .func suffix stripped, and its
-// artifact_path is that directory relative to outputDir. A `.func` that is
-// missing or has an invalid config.json is a hard error naming the file. The
-// result is sorted by name for determinism.
+// collectFunctions walks each app's <outputDir>/apps/<app>/functions subtree
+// and returns one function per `*.func` directory, reading its config.json.
+// Nested functions (e.g. functions/api/todos/[id].func) are supported. A
+// function's name is app-qualified — the owning app, then the `.func`
+// directory's path under functions/ with the suffix stripped — so two apps
+// exposing the same route path stay distinct all the way to the Lambda they
+// become. Its artifact_path is that directory relative to outputDir. A `.func`
+// that is missing or has an invalid config.json is a hard error naming the
+// file. The result is sorted by name for determinism.
 func collectFunctions(outputDir string) ([]manifestbuilder.Function, error) {
-	functionsDir := filepath.Join(outputDir, functionsDirName)
+	appsDir := filepath.Join(outputDir, appsDirName)
+	entries, err := os.ReadDir(appsDir)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	var functions []manifestbuilder.Function
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		appFunctions, err := collectAppFunctions(outputDir, filepath.Join(appsDir, entry.Name()), entry.Name())
+		if err != nil {
+			return nil, err
+		}
+		functions = append(functions, appFunctions...)
+	}
+
+	sort.Slice(functions, func(i, j int) bool { return functions[i].Name < functions[j].Name })
+	return functions, nil
+}
+
+// collectAppFunctions reads every `.func` in one app's subtree. An app that
+// built no functions (a fully static export, say) contributes none.
+func collectAppFunctions(outputDir, appDir, app string) ([]manifestbuilder.Function, error) {
+	functionsDir := filepath.Join(appDir, functionsDirName)
 	if _, err := os.Stat(functionsDir); err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil, nil
@@ -152,7 +188,7 @@ func collectFunctions(outputDir string) ([]manifestbuilder.Function, error) {
 			return nil
 		}
 
-		fn, err := readFunction(outputDir, functionsDir, dir)
+		fn, err := readFunction(outputDir, functionsDir, dir, app)
 		if err != nil {
 			return err
 		}
@@ -163,16 +199,14 @@ func collectFunctions(outputDir string) ([]manifestbuilder.Function, error) {
 	if walkErr != nil {
 		return nil, walkErr
 	}
-
-	sort.Slice(functions, func(i, j int) bool { return functions[i].Name < functions[j].Name })
 	return functions, nil
 }
 
 // readFunction reads one `.func` directory's config.json into a manifest
 // function. Name and artifact_path come from the directory's location, not
 // from config.json.
-func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Function, error) {
-	nameRel, err := filepath.Rel(functionsDir, funcDir)
+func readFunction(outputDir, functionsDir, funcDir, app string) (manifestbuilder.Function, error) {
+	routeRel, err := filepath.Rel(functionsDir, funcDir)
 	if err != nil {
 		return manifestbuilder.Function{}, err
 	}
@@ -180,7 +214,7 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 	if err != nil {
 		return manifestbuilder.Function{}, err
 	}
-	name := strings.TrimSuffix(filepath.ToSlash(nameRel), funcDirSuffix)
+	name := app + "/" + strings.TrimSuffix(filepath.ToSlash(routeRel), funcDirSuffix)
 
 	configPath := filepath.Join(funcDir, configFileName)
 	data, err := os.ReadFile(configPath)

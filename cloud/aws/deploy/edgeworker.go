@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -24,7 +25,7 @@ const edgeWorkerOutputName = "next-worker"
 // deploy values it needs through a resolver. A framework registering no worker
 // deploys nothing here and is served from its own Function URL.
 func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput, progress func(string)) ([]*deploymentsv1.ResourceOutput, error) {
-	framework, routes := appRoutes(manifest.GetFunctions())
+	framework, app, routes := appRoutes(manifest.GetFunctions())
 	if !edge.NeedsWorker(framework) {
 		return nil, nil
 	}
@@ -46,7 +47,7 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	}
 
 	worker, err := assemble(
-		edge.WorkerSource{ArtifactRoot: cfg.ArtifactRoot, BundlePath: bundlePath, Routes: routes},
+		edge.WorkerSource{ArtifactRoot: appArtifactRoot(cfg.ArtifactRoot, app), BundlePath: bundlePath, Routes: routes},
 		&deployResolver{cfg: cfg, manifest: manifest, urls: functionURLsByRoute(manifest.GetFunctions(), outputs)},
 	)
 	if err != nil {
@@ -70,12 +71,13 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	}, nil
 }
 
-// appRoutes reports the framework fronting this project's app and the
-// framework-native route ids it serves, in manifest order. The single-app
-// assumption lives here: every function declaring the first framework seen is
-// taken to belong to one app.
-func appRoutes(functions []*deploymentsv1.ManifestFunction) (edge.Framework, []string) {
+// appRoutes reports the framework fronting this project's app, that app's name,
+// and the framework-native route ids it serves, in manifest order. The
+// single-app assumption lives here: every function declaring the first
+// framework seen is taken to belong to one app.
+func appRoutes(functions []*deploymentsv1.ManifestFunction) (edge.Framework, string, []string) {
 	var framework edge.Framework
+	var app string
 	var routes []string
 	for _, fn := range functions {
 		declared := edge.Framework(fn.GetFramework())
@@ -83,13 +85,24 @@ func appRoutes(functions []*deploymentsv1.ManifestFunction) (edge.Framework, []s
 			continue
 		}
 		if framework == "" {
-			framework = declared
+			framework, app = declared, fn.GetApp()
 		}
 		if declared == framework {
 			routes = append(routes, routeID(fn))
 		}
 	}
-	return framework, routes
+	return framework, app, routes
+}
+
+// appsDirName mirrors the builder's per-app namespacing of the build output.
+// Each app owns <ArtifactRoot>/apps/<app>, holding its functions, static
+// assets, cache entries and routing manifest.
+const appsDirName = "apps"
+
+// appArtifactRoot is the subtree of the build output belonging to one app —
+// what an edge assembly and the prerender upload read their inputs from.
+func appArtifactRoot(artifactRoot, app string) string {
+	return filepath.Join(artifactRoot, appsDirName, app)
 }
 
 // routeID is the framework-native identity a worker dispatches to. The manifest
@@ -176,15 +189,17 @@ func productionDomain(cfg Config, manifest *deploymentsv1.Manifest) string {
 	return manifest.GetDomains()["production"]
 }
 
-// hasNextFunction reports whether any function in the manifest is a Next.js
-// route, i.e. whether this deploy has an ISR cache to scope.
-func hasNextFunction(functions []*deploymentsv1.ManifestFunction) bool {
-	for _, fn := range functions {
+// nextAppArtifactRoot locates the build output of this deploy's Next.js app —
+// where its routing manifest and seeded cache entries live. It reports false
+// when the manifest has no Next.js route, i.e. when this deploy has no ISR
+// cache to scope.
+func nextAppArtifactRoot(cfg Config, manifest *deploymentsv1.Manifest) (string, bool) {
+	for _, fn := range manifest.GetFunctions() {
 		if fn.GetFramework() == frameworkNext {
-			return true
+			return appArtifactRoot(cfg.ArtifactRoot, fn.GetApp()), true
 		}
 	}
-	return false
+	return "", false
 }
 
 // sanitizeWorkerName lowers an arbitrary identity into an edge deployment

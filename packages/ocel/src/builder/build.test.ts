@@ -16,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { buildApp, buildApps, detectApp, placeFile } from "./build.js";
 import { sanitizeName } from "./detect.js";
+import { appOutDir } from "./layout.js";
 
 // Import a built entrypoint in a REAL Node ESM process and report the type of
 // its default export. This is what the lambdanode entrypoint does (OCEL_HANDLER points
@@ -63,6 +64,11 @@ afterAll(() => {
   for (const d of dirs) rmSync(d, { recursive: true, force: true });
 });
 
+/** The sole `.func` a traced app builds, inside that app's own subtree. */
+function appFuncDir(outDir: string, app: string): string {
+  return path.join(appOutDir(outDir, app), "functions", "index.func");
+}
+
 describe("buildApp", () => {
   it("produces the documented .func layout", async () => {
     const outDir = freshOut();
@@ -70,7 +76,7 @@ describe("buildApp", () => {
 
     const [summary] = await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
-    const funcDir = path.join(outDir, "functions", "api.func");
+    const funcDir = appFuncDir(outDir, "api");
     // No generated shim: the runtime imports the user's entrypoint directly.
     expect(existsSync(path.join(funcDir, "index.mjs"))).toBe(false);
     expect(existsSync(path.join(funcDir, "config.json"))).toBe(true);
@@ -93,7 +99,7 @@ describe("buildApp", () => {
     expect(summary.runtime).toBe("nodejs24.x");
     expect(summary.handler).toBe("src/server.js");
     expect(summary.framework).toBe("express");
-    expect(summary.artifactPath).toBe(path.join("functions", "api.func"));
+    expect(summary.artifactPath).toBe(path.join("apps", "api", "functions", "index.func"));
   });
 
   it("preserves the module tree instead of emitting a single bundle", async () => {
@@ -101,7 +107,7 @@ describe("buildApp", () => {
     dirs.push(outDir);
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
-    const funcDir = path.join(outDir, "functions", "api.func");
+    const funcDir = appFuncDir(outDir, "api");
     // Transpiled entrypoint still imports its dependencies (not inlined).
     const server = readFileSync(path.join(funcDir, "src", "server.js"), "utf8");
     expect(server).toContain('from "express"');
@@ -116,7 +122,7 @@ describe("buildApp", () => {
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
     const server = readFileSync(
-      path.join(outDir, "functions", "api.func", "src", "server.js"),
+      path.join(appFuncDir(outDir, "api"), "src", "server.js"),
       "utf8",
     );
     // Optional chaining and nullish coalescing survive to the emitted output;
@@ -134,7 +140,7 @@ describe("buildApp", () => {
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
     const server = readFileSync(
-      path.join(outDir, "functions", "api.func", "src", "server.js"),
+      path.join(appFuncDir(outDir, "api"), "src", "server.js"),
       "utf8",
     );
     // Extensionless relative file import -> gains the emitted extension.
@@ -150,7 +156,7 @@ describe("buildApp", () => {
 
     // A nested user module keeps its already-extensioned relative import as-is.
     const db = readFileSync(
-      path.join(outDir, "functions", "api.func", "src", "lib", "db.js"),
+      path.join(appFuncDir(outDir, "api"), "src", "lib", "db.js"),
       "utf8",
     );
     expect(db).toContain('"../greeting.js"');
@@ -160,7 +166,7 @@ describe("buildApp", () => {
     const outDir = freshOut();
     dirs.push(outDir);
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
-    const funcDir = path.join(outDir, "functions", "api.func");
+    const funcDir = appFuncDir(outDir, "api");
 
     // Copied ESM dep: its extensionless internal import gains `.js`.
     const dep = readFileSync(path.join(funcDir, "node_modules", "fake-dep", "index.js"), "utf8");
@@ -177,7 +183,7 @@ describe("buildApp", () => {
     dirs.push(outDir);
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
-    const funcDir = path.join(outDir, "functions", "api.func");
+    const funcDir = appFuncDir(outDir, "api");
 
     // Copy the artifact outside the repo (no ancestor node_modules) and import
     // the entrypoint there: a clean import proves every runtime dep travels
@@ -227,6 +233,25 @@ describe("buildApps", () => {
     );
     expect(summaries.map((s) => s.name)).toEqual(["api", "worker"]);
   });
+
+  // Two apps building the same route is the case a flat output tree silently
+  // corrupted: the second build overwrote the first.
+  it("gives each app its own subtree so a shared route path cannot collide", async () => {
+    const outDir = freshOut();
+    dirs.push(outDir);
+    await buildApps(
+      [
+        { name: "storefront", cwd: fixtureDir },
+        { name: "admin", cwd: fixtureDir },
+      ],
+      { outDir },
+    );
+
+    for (const app of ["storefront", "admin"]) {
+      const config = JSON.parse(readFileSync(path.join(appFuncDir(outDir, app), "config.json"), "utf8"));
+      expect(config.app).toBe(app);
+    }
+  });
 });
 
 // A built `.func` is copied into a real Lambda-style sandbox and run with the
@@ -243,7 +268,7 @@ describe("self-contained .func artifact", () => {
     const outDir = buildIsolated();
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
-    const funcDir = path.join(outDir, "functions", "api.func");
+    const funcDir = appFuncDir(outDir, "api");
     // The workspace pkg's real files live outside node_modules; they must be
     // reconstructed under node_modules/<name>, WITH its package.json, not dumped
     // in _external.
@@ -264,7 +289,7 @@ describe("self-contained .func artifact", () => {
     const outDir = buildIsolated();
     await buildApp({ name: "api", cwd: fixtureDir }, { outDir });
 
-    const funcDir = path.join(outDir, "functions", "api.func");
+    const funcDir = appFuncDir(outDir, "api");
     // typed-dep is imported ONLY from the typed src/lib/db.ts. nft under-traced
     // it before the readFile transpile hook; it must now be in the artifact.
     expect(existsSync(path.join(funcDir, "node_modules", "typed-dep", "index.js"))).toBe(true);

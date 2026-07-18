@@ -15,8 +15,16 @@ import {
 } from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
 
-const scratchDir = join(process.cwd(), ".ocel/output");
 const launcherName = "__next_launcher.cjs";
+
+// The subtree this build's output belongs in. Build output is namespaced per
+// app, and the adapter runs inside `next build` with the app dir as its cwd, so
+// it cannot infer which subtree is its own — the ocel builder passes
+// OCEL_OUTPUT_DIR. Falling back to the flat cwd path keeps a bare `next build`
+// self-consistent, the same way OCEL_APP_NAME falls back to the project dir.
+function resolveOutputRoot(): string {
+  return process.env.OCEL_OUTPUT_DIR || join(process.cwd(), ".ocel/output");
+}
 
 // Where the membrane layer mounts the bundled cache handlers. Deliberately not
 // set through modifyConfig: `next build` would hand these to its own static
@@ -76,6 +84,7 @@ const adapter = {
       );
     }
 
+    const outputRoot = resolveOutputRoot();
     const appRel = relative(repoRoot, projectDir);
 
     // The ocel app name keys this app's assets in the account-global bucket
@@ -91,7 +100,8 @@ const adapter = {
 
     const funcDirFor = (pathname: string) =>
       join(
-        `${scratchDir}/functions`,
+        outputRoot,
+        "functions",
         `${pathname === "/" ? "index" : pathname}.func`,
       );
 
@@ -169,7 +179,7 @@ const adapter = {
     // and 404s despite the file existing.
     const publicFiles = await collectPublicFiles(projectDir);
     for (const p of publicFiles) {
-      const dest = join("./.ocel/output/static", p.pathname);
+      const dest = join(outputRoot, "static", p.pathname);
       await mkdir(dirname(dest), { recursive: true });
       await copyFile(p.filePath, dest);
     }
@@ -179,14 +189,14 @@ const adapter = {
       const normalize = (p: string) =>
         ["/404", "/500"].some((i) => p === i) ? `${p}.html` : p;
 
-      const dest = join("./.ocel/output/static", normalize(s.pathname));
+      const dest = join(outputRoot, "static", normalize(s.pathname));
 
       await mkdir(dirname(dest), { recursive: true });
       await copyFile(s.filePath, dest);
     }
 
     // Seed each prerendered route's cache entry from the build output.
-    await emitCacheEntries(outputs.prerenders, allRoutes);
+    await emitCacheEntries(outputRoot, outputs.prerenders, allRoutes);
 
     const routingManifest = {
       buildId,
@@ -242,8 +252,9 @@ const adapter = {
       ]),
     };
 
+    await mkdir(outputRoot, { recursive: true });
     writeFileSync(
-      `${scratchDir}/routing-manifest.json`,
+      join(outputRoot, "routing-manifest.json"),
       JSON.stringify(routingManifest),
     );
   },
@@ -369,6 +380,7 @@ function stripContentType(
 // cache handler reads. Routes whose html variant Next did not prerender (a
 // blocking fallback) have nothing to seed and are skipped.
 async function emitCacheEntries(
+  outputRoot: string,
   prerenders: readonly any[],
   routes: readonly { id: string; type?: string }[],
 ): Promise<void> {
@@ -431,7 +443,7 @@ async function emitCacheEntries(
 
       const key =
         html.pathname === "/" ? "index" : html.pathname.replace(/^\//, "");
-      const dest = join(scratchDir, "cache", `${key}.cache.json`);
+      const dest = join(outputRoot, "cache", `${key}.cache.json`);
       await mkdir(dirname(dest), { recursive: true });
       const entry: CacheEntryFile = { lastModified, value };
       await writeFile(dest, JSON.stringify(entry));

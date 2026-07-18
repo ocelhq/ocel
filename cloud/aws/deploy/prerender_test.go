@@ -14,7 +14,7 @@ func nextManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
 		ProjectId: "proj",
 		Functions: []*deploymentsv1.ManifestFunction{
-			{LogicalName: "index", Framework: "next"},
+			{LogicalName: "web_index", Framework: "next", App: "web"},
 		},
 	}
 }
@@ -38,8 +38,8 @@ func TestUploadPrerenderAssets_NoNextApp(t *testing.T) {
 // prerender assets uploads nothing and does not error.
 func TestUploadPrerenderAssets_NoPrerenders(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"routing-manifest.json":            `{"buildId":"BID","appName":"web"}`,
-		"functions/index.func/config.json": `{"id":"/"}`,
+		"apps/web/routing-manifest.json":            `{"buildId":"BID","appName":"web"}`,
+		"apps/web/functions/index.func/config.json": `{"id":"/"}`,
 	})
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: f}
@@ -56,8 +56,8 @@ func TestUploadPrerenderAssets_NoPrerenders(t *testing.T) {
 // Next app has cache entries to seed but no asset bucket is configured.
 func TestUploadPrerenderAssets_MissingBucket(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"routing-manifest.json":  `{"buildId":"BID","appName":"web"}`,
-		"cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		"apps/web/routing-manifest.json":  `{"buildId":"BID","appName":"web"}`,
+		"apps/web/cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 	})
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: root, Env: "prod", Uploader: f}
@@ -75,9 +75,9 @@ func TestUploadPrerenderAssets_MissingBucket(t *testing.T) {
 // under it, so they need their own crawl.
 func TestUploadPrerenderAssets_UploadsCacheEntries(t *testing.T) {
 	root := writeTree(t, map[string]string{
-		"routing-manifest.json":      `{"buildId":"BID","appName":"web"}`,
-		"cache/index.cache.json":     `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
-		"cache/blog/post.cache.json": `{"lastModified":2,"value":{"kind":"APP_PAGE"}}`,
+		"apps/web/routing-manifest.json":      `{"buildId":"BID","appName":"web"}`,
+		"apps/web/cache/index.cache.json":     `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		"apps/web/cache/blog/post.cache.json": `{"lastModified":2,"value":{"kind":"APP_PAGE"}}`,
 	})
 
 	f := &fakeUploader{exists: map[string]bool{}}
