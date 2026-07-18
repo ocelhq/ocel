@@ -526,6 +526,27 @@ test("writes each function's route id into its config.json", async () => {
   expect(config.framework).toBe("next");
 });
 
+test("records the owning app in each function's config.json", async () => {
+  const { projectDir, args } = await synthProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  process.env.OCEL_APP_NAME = "marketing";
+  try {
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    delete process.env.OCEL_APP_NAME;
+  }
+
+  const config = JSON.parse(
+    await readFile(
+      join(projectDir, ".ocel/output/functions/api/documents.func/config.json"),
+      "utf8",
+    ),
+  );
+
+  expect(config.app).toBe("marketing");
+});
+
 async function readCacheEntry(projectDir: string, key: string) {
   return JSON.parse(
     await readFile(

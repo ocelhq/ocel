@@ -30,6 +30,17 @@ type Declaration struct {
 	Source   string
 }
 
+// App is a single application declared in the project's config: the pure
+// input to Build for Manifest.apps. Framework may be empty when the config
+// leaves detection to the builder — Build fills it from the app's functions.
+type App struct {
+	Name      string
+	Framework string
+	// Domains maps a lowercased environment class ("production") to the custom
+	// hostname this app is served on, mirroring the project-level shape.
+	Domains map[string]string
+}
+
 // Function is a single collected function unit: the pure input to Build for
 // Manifest.functions. Name is the app name, normalized into the function's
 // logical_name by the same rule as a resource's.
@@ -39,6 +50,9 @@ type Function struct {
 	Handler      string
 	ArtifactPath string
 	Framework    string
+	// App is the name of the App this function belongs to, carried verbatim
+	// into ManifestFunction.app.
+	App string
 	// RouteID is the framework-native route identity a routing layer dispatches
 	// to (e.g. Next's "/api/documents"), carried verbatim into
 	// ManifestFunction.route_id — unlike Name, it is never normalized. Empty for
@@ -113,7 +127,7 @@ func normalizeLogicalName(s string) string {
 // existing entry's logical name. Two declarations sharing the same
 // (type, id) are a hard error naming both declarations and their source
 // locations.
-func Build(projectID string, domains map[string]string, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
+func Build(projectID string, domains map[string]string, apps []App, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
 	type identity struct {
 		typ resourcesv1.ResourceType
 		id  string
@@ -171,6 +185,7 @@ func Build(projectID string, domains map[string]string, declarations []Declarati
 			ArtifactPath: f.ArtifactPath,
 			Framework:    f.Framework,
 			RouteId:      f.RouteID,
+			App:          f.App,
 		})
 	}
 	sort.Slice(manifestFunctions, func(i, j int) bool {
@@ -183,5 +198,51 @@ func Build(projectID string, domains map[string]string, declarations []Declarati
 		Resources:     resources,
 		Functions:     manifestFunctions,
 		Domains:       domains,
+		Apps:          buildApps(apps, functions),
 	}, nil
+}
+
+// buildApps lowers the configured apps into manifest apps, sorted by name. An
+// app named by a function but absent from the config is synthesized: with no
+// configured apps the builder detects one at the project root and only the
+// functions it emitted carry its name. A configured app's empty framework is
+// filled from its functions, which is where detection's result surfaces.
+func buildApps(apps []App, functions []Function) []*deploymentsv1.ManifestApp {
+	frameworkByApp := make(map[string]string, len(functions))
+	for _, f := range functions {
+		if f.App != "" && f.Framework != "" {
+			if _, ok := frameworkByApp[f.App]; !ok {
+				frameworkByApp[f.App] = f.Framework
+			}
+		}
+	}
+
+	manifestApps := make([]*deploymentsv1.ManifestApp, 0, len(apps))
+	configured := make(map[string]bool, len(apps))
+	for _, a := range apps {
+		configured[a.Name] = true
+		framework := a.Framework
+		if framework == "" {
+			framework = frameworkByApp[a.Name]
+		}
+		manifestApps = append(manifestApps, &deploymentsv1.ManifestApp{
+			Name:      a.Name,
+			Framework: framework,
+			Domains:   a.Domains,
+		})
+	}
+
+	for _, f := range functions {
+		if f.App == "" || configured[f.App] {
+			continue
+		}
+		configured[f.App] = true
+		manifestApps = append(manifestApps, &deploymentsv1.ManifestApp{
+			Name:      f.App,
+			Framework: frameworkByApp[f.App],
+		})
+	}
+
+	sort.Slice(manifestApps, func(i, j int) bool { return manifestApps[i].Name < manifestApps[j].Name })
+	return manifestApps
 }

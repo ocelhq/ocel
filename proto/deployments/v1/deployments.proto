@@ -137,6 +137,28 @@ message Manifest {
   // reads only the entry matching DeployRequest.environment; absent entries
   // mean the default vendor subdomain. Only "production" is populated today.
   map<string, string> domains = 5;
+
+  // apps are the project's applications. Every ManifestFunction belongs to
+  // exactly one of them. A project that configures no apps still yields one,
+  // the app the builder detected at the project root.
+  repeated ManifestApp apps = 6;
+}
+
+// ManifestApp is one application in the project: a unit the CLI builds and a
+// provider deploys as a whole.
+message ManifestApp {
+  // name is the app's name as configured (or, for a detected app, as the
+  // builder named it). It is the key ManifestFunction.app references, and is
+  // unique within a manifest. Unlike a logical_name it is carried verbatim.
+  string name = 1;
+  // framework is the app's web framework (e.g. "express", "next"). It matches
+  // the framework of the app's functions.
+  string framework = 2;
+  // domains maps a lowercased environment class ("production") to the custom
+  // hostname this app is served on for that class, mirroring Manifest.domains
+  // so a persistent preview can gain a domain without a schema change. Absent
+  // entries mean the default vendor subdomain.
+  map<string, string> domains = 3;
 }
 
 // ManifestFunction is a deployable function unit. Being listed in
@@ -157,6 +179,9 @@ message ManifestFunction {
   // The Cloudflare worker keys FUNCTION_URLS by route_id. Empty for functions
   // whose framework has no routing layer.
   string route_id = 6;
+  // app is the name of the ManifestApp this function belongs to. Always set:
+  // every function the builder emits records the app it was built from.
+  string app = 7;
 }
 
 // ManifestResource pairs a resource's identity with its typed configuration.

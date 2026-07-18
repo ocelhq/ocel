@@ -78,6 +78,13 @@ const adapter = {
 
     const appRel = relative(repoRoot, projectDir);
 
+    // The ocel app name keys this app's assets in the account-global bucket
+    // (<env>/<project>/<appName>/<buildId>/…) and records each function's
+    // owning app in its config.json. The ocel builder passes it via
+    // OCEL_APP_NAME; falling back to the project dir name keeps a bare
+    // `next build` self-consistent.
+    const appName = process.env.OCEL_APP_NAME || basename(projectDir);
+
     // Patch the built manifest before anything is copied out of distDir, so
     // every `.func` picks the cache handler up through the normal asset copy.
     await patchCacheHandlers(distDir);
@@ -140,6 +147,7 @@ const adapter = {
             // ManifestFunction.route_id so the routing layer can key
             // FUNCTION_URLS by it (the Lambda itself keeps an infra-safe name).
             id: parent.id,
+            app: appName,
           }),
         );
 
@@ -179,12 +187,6 @@ const adapter = {
 
     // Seed each prerendered route's cache entry from the build output.
     await emitCacheEntries(outputs.prerenders, allRoutes);
-
-    // The ocel app name keys this app's assets in the account-global bucket
-    // (<env>/<project>/<appName>/<buildId>/…). The ocel builder passes it via
-    // OCEL_APP_NAME; falling back to the project dir name keeps a bare
-    // `next build` self-consistent.
-    const appName = process.env.OCEL_APP_NAME || basename(projectDir);
 
     const routingManifest = {
       buildId,

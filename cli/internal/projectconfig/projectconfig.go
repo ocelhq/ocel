@@ -54,6 +54,10 @@ type App struct {
 	Framework string
 	// Entrypoint is an optional override relative to Path.
 	Entrypoint string
+	// Domains maps a lowercased environment class ("production") to the custom
+	// hostname this app is served on, mirroring Config.Domains. Empty entries
+	// are dropped.
+	Domains map[string]string
 	// Compute is Ocel-internal: it defaults to "serverless" during
 	// normalization, is never user-settable, and is never serialized onto
 	// the manifest wire.
@@ -99,14 +103,29 @@ type rawConfig struct {
 		Options json.RawMessage `json:"options"`
 	} `json:"provider"`
 	Apps []struct {
-		Name       string `json:"name"`
-		Path       string `json:"path"`
-		Framework  string `json:"framework"`
-		Entrypoint string `json:"entrypoint"`
+		Name       string     `json:"name"`
+		Path       string     `json:"path"`
+		Framework  string     `json:"framework"`
+		Entrypoint string     `json:"entrypoint"`
+		Domains    rawDomains `json:"domains"`
 	} `json:"apps"`
-	Domains struct {
-		Production string `json:"production"`
-	} `json:"domains"`
+	Domains rawDomains `json:"domains"`
+}
+
+// rawDomains is the class-keyed domain block, shared by the project and each
+// app. Only "production" is settable today.
+type rawDomains struct {
+	Production string `json:"production"`
+}
+
+// normalizeDomains lowers a raw domain block into the class-keyed map the
+// manifest carries, dropping empty entries.
+func normalizeDomains(raw rawDomains) map[string]string {
+	domains := map[string]string{}
+	if raw.Production != "" {
+		domains["production"] = strings.ToLower(raw.Production)
+	}
+	return domains
 }
 
 // defaultCompute is the Ocel-internal compute target applied to every app
@@ -160,10 +179,7 @@ func Resolve(startDir string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
 
-	domains := map[string]string{}
-	if raw.Domains.Production != "" {
-		domains["production"] = strings.ToLower(raw.Domains.Production)
-	}
+	domains := normalizeDomains(raw.Domains)
 
 	return &Config{
 		ProjectID: raw.ProjectID,
@@ -204,6 +220,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			Path:       a.Path,
 			Framework:  a.Framework,
 			Entrypoint: a.Entrypoint,
+			Domains:    normalizeDomains(a.Domains),
 			Compute:    defaultCompute,
 		})
 	}

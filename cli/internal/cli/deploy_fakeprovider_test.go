@@ -106,6 +106,16 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		return err
 	}
 
+	// Echo each received app so tests can assert the manifest attributes
+	// functions to the apps the project configured (or the builder detected).
+	for _, a := range req.GetManifest().GetApps() {
+		if err := stream.Send(&deploymentsv1.DeployEvent{
+			Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "APP " + describeApp(a)}},
+		}); err != nil {
+			return err
+		}
+	}
+
 	// Echo each received function so tests can assert the manifest built by
 	// runDeploy actually carries the apps' functions alongside its resources.
 	for _, f := range req.GetManifest().GetFunctions() {
@@ -215,8 +225,14 @@ func describeEnv(env *deploymentsv1.Environment) string {
 // describeFunction renders a ManifestFunction into a stable, assertable
 // one-line string carrying every field the manifest should preserve.
 func describeFunction(f *deploymentsv1.ManifestFunction) string {
-	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s framework=%s",
-		f.GetLogicalName(), f.GetRuntime(), f.GetHandler(), f.GetArtifactPath(), f.GetFramework())
+	return fmt.Sprintf("logical_name=%s runtime=%s handler=%s artifact_path=%s framework=%s app=%s",
+		f.GetLogicalName(), f.GetRuntime(), f.GetHandler(), f.GetArtifactPath(), f.GetFramework(), f.GetApp())
+}
+
+// describeApp renders a ManifestApp into a stable, assertable one-line string.
+func describeApp(a *deploymentsv1.ManifestApp) string {
+	return fmt.Sprintf("name=%s framework=%s production_domain=%s",
+		a.GetName(), a.GetFramework(), a.GetDomains()["production"])
 }
 
 // parseInfraClass maps the fakeInfraClassEnvVar value to an Environment_Class.

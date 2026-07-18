@@ -60,8 +60,8 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 			return err
 		}
 		// Simulate the builder writing its output tree.
-		writeFuncConfig(t, gotReq.OutDir, "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express"})
-		writeFuncConfig(t, gotReq.OutDir, "worker.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express"})
+		writeFuncConfig(t, gotReq.OutDir, "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "api"})
+		writeFuncConfig(t, gotReq.OutDir, "worker.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "worker"})
 		return nil
 	})
 
@@ -71,8 +71,8 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 	}
 
 	want := []manifestbuilder.Function{
-		{Name: "api", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/api.func", Framework: "express"},
-		{Name: "worker", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/worker.func", Framework: "express"},
+		{Name: "api", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/api.func", Framework: "express", App: "api"},
+		{Name: "worker", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/worker.func", Framework: "express", App: "worker"},
 	}
 	if len(fns) != len(want) {
 		t.Fatalf("Build returned %d functions, want %d: %+v", len(fns), len(want), fns)
@@ -132,7 +132,7 @@ func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 	t.Setenv("OCEL_BUILDER_PATH", filepath.Join(t.TempDir(), "cli.js"))
 	// A stale artifact from a previous build must not survive to be deployed.
 	writeFuncConfig(t, filepath.Join(root, ".ocel", "output"), "stale.func",
-		functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express"})
+		functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express", App: "stale"})
 
 	var gotReq builderRequest
 	swapExec(t, func(_ context.Context, _ string, request []byte, _ io.Writer) error {
@@ -181,9 +181,9 @@ func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
 func TestCollectFunctions_Nested(t *testing.T) {
 	outDir := t.TempDir()
 	writeFuncConfig(t, outDir, filepath.Join("api", "todos", "[id].func"),
-		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next"})
+		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
 	writeFuncConfig(t, outDir, "index.func",
-		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next"})
+		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
 	// A nested node_modules with its own package.json must not be mistaken for
 	// a function (no config.json, and it lives inside a .func leaf).
 	if err := os.MkdirAll(filepath.Join(outDir, "functions", "index.func", "node_modules", "dep"), 0o755); err != nil {
@@ -196,8 +196,8 @@ func TestCollectFunctions_Nested(t *testing.T) {
 	}
 
 	want := []manifestbuilder.Function{
-		{Name: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/api/todos/[id].func", Framework: "next"},
-		{Name: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/index.func", Framework: "next"},
+		{Name: "api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/api/todos/[id].func", Framework: "next", App: "web"},
+		{Name: "index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "functions/index.func", Framework: "next", App: "web"},
 	}
 	if len(fns) != len(want) {
 		t.Fatalf("collectFunctions returned %d, want %d: %+v", len(fns), len(want), fns)
@@ -212,7 +212,7 @@ func TestCollectFunctions_Nested(t *testing.T) {
 func TestCollectFunctions_RouteIDFromConfig(t *testing.T) {
 	outDir := t.TempDir()
 	writeFuncConfig(t, outDir, filepath.Join("api", "documents.func"),
-		functionConfig{Runtime: "nodejs24.x", Handler: "route.js", Framework: "next", ID: "/api/documents"})
+		functionConfig{Runtime: "nodejs24.x", Handler: "route.js", Framework: "next", ID: "/api/documents", App: "web"})
 
 	fns, err := collectFunctions(outDir)
 	if err != nil {
@@ -253,14 +253,14 @@ func TestCollectFunctions_MissingConfig_Errors(t *testing.T) {
 
 func TestCollectFunctions_MissingField_Errors(t *testing.T) {
 	outDir := t.TempDir()
-	// framework omitted: all three fields are required.
-	writeFuncConfig(t, outDir, "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler"})
+	// framework omitted: all four fields are required.
+	writeFuncConfig(t, outDir, "api.func", functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", App: "web"})
 
 	_, err := collectFunctions(outDir)
 	if err == nil {
 		t.Fatal("collectFunctions succeeded on config missing framework, want error")
 	}
-	if !strings.Contains(err.Error(), "requires runtime, handler, and framework") {
+	if !strings.Contains(err.Error(), "requires runtime, handler, framework, and app") {
 		t.Errorf("error = %q, want it to explain the required fields", err)
 	}
 }
@@ -329,6 +329,7 @@ func TestBuild_Integration(t *testing.T) {
 		Handler:      "src/server.js",
 		ArtifactPath: "functions/api.func",
 		Framework:    "express",
+		App:          "api",
 	}
 	if fns[0] != want {
 		t.Errorf("function = %+v, want %+v", fns[0], want)
@@ -367,6 +368,10 @@ func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 	if fns[0].Name != "express-app" || fns[0].Framework != "express" {
 		t.Errorf("detected function = %+v, want name express-app framework express", fns[0])
 	}
+	// The detected app must still be named, so the manifest can carry it.
+	if fns[0].App != "express-app" {
+		t.Errorf("detected function app = %q, want %q", fns[0].App, "express-app")
+	}
 }
 
 func repoRelPath(t *testing.T, parts ...string) string {
@@ -378,4 +383,32 @@ func repoRelPath(t *testing.T, parts ...string) string {
 	// this file: <repo>/cli/internal/appbuilder/appbuilder_test.go
 	repoRoot := filepath.Join(filepath.Dir(file), "..", "..", "..")
 	return filepath.Join(append([]string{repoRoot}, parts...)...)
+}
+
+func TestCollectFunctions_AppFromConfig(t *testing.T) {
+	outDir := t.TempDir()
+	writeFuncConfig(t, outDir, "api.func",
+		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express", App: "storefront"})
+
+	fns, err := collectFunctions(outDir)
+	if err != nil {
+		t.Fatalf("collectFunctions: %v", err)
+	}
+	if got, want := fns[0].App, "storefront"; got != want {
+		t.Errorf("App = %q, want %q (config.json app must flow into the function)", got, want)
+	}
+}
+
+func TestCollectFunctions_MissingApp_Errors(t *testing.T) {
+	outDir := t.TempDir()
+	writeFuncConfig(t, outDir, "api.func",
+		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "express"})
+
+	_, err := collectFunctions(outDir)
+	if err == nil {
+		t.Fatal("collectFunctions succeeded on config missing app, want error")
+	}
+	if !strings.Contains(err.Error(), "requires runtime, handler, framework, and app") {
+		t.Errorf("error = %q, want it to explain the required fields", err)
+	}
 }
