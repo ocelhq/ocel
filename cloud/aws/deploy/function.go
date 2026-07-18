@@ -13,6 +13,7 @@ import (
 	secretsmanager "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/secretsmanager"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
+	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -113,6 +114,7 @@ func (c isrConfig) env() map[string]string {
 		"OCEL_ISR_BUCKET":        c.Bucket,
 		"OCEL_ISR_PREFIX":        c.Prefix,
 		"OCEL_STATE_TABLE":       c.Table,
+		"OCEL_STATE_TABLE_INDEX": bootstrap.StateTableIndexName,
 		"OCEL_ISR_TAG_NAMESPACE": c.tagNamespace(),
 	}
 }
@@ -135,14 +137,30 @@ func isrPolicy(c isrConfig) (string, error) {
 			},
 			map[string]any{
 				"Effect": "Allow",
-				// Exactly the two calls the handler's tag store makes: readTags
-				// sends BatchGetItem, writeTags sends UpdateItem (it merges, so
-				// PutItem would clobber an earlier expiry). Adding a third call
-				// there means adding its action here — a mismatch 403s at runtime,
-				// and revalidateTag does not catch, so it throws out of the user's
-				// server action.
+				// Exactly the calls the handler's tag store makes against the
+				// table itself: readTags sends BatchGetItem, writeTags sends
+				// UpdateItem (it merges, so PutItem would clobber an earlier
+				// expiry). Index reads are granted separately below. Adding a
+				// call in either place means adding its action here — a mismatch
+				// 403s at runtime, and revalidateTag does not catch, so it throws
+				// out of the user's server action.
 				"Action":   []string{"dynamodb:BatchGetItem", "dynamodb:UpdateItem"},
 				"Resource": c.TableARN,
+				"Condition": map[string]any{
+					"ForAllValues:StringLike": map[string]any{
+						"dynamodb:LeadingKeys": []string{c.tagNamespace() + "*"},
+					},
+				},
+			},
+			map[string]any{
+				"Effect": "Allow",
+				// An index is not covered by its table's ARN, so the tag sync's
+				// Query needs this separate resource or it 403s. LeadingKeys is
+				// evaluated against the *index's* partition key here, which is
+				// the tag namespace verbatim — the same wildcard admits it
+				// because * matches zero characters.
+				"Action":   []string{"dynamodb:Query"},
+				"Resource": c.TableARN + "/index/" + bootstrap.StateTableIndexName,
 				"Condition": map[string]any{
 					"ForAllValues:StringLike": map[string]any{
 						"dynamodb:LeadingKeys": []string{c.tagNamespace() + "*"},
