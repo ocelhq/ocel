@@ -146,6 +146,33 @@ test("serves an entry written by an instance that no longer exists", async () =>
   expect(await readAll(hit!.value)).toBe("payload");
 });
 
+// The CacheHandler contract states this of set(), not of a tier: "If a `get` for
+// the same cache key is called, before the pending entry is complete, the cache
+// handler must wait for the `set` operation to finish, before returning the
+// entry, instead of returning undefined." Without it, concurrent same-key
+// requests each render and each write.
+test("makes a read arriving mid-fill wait for the fill rather than miss", async () => {
+  const store = fakeStore();
+  const { handler } = await loadSynced(store);
+
+  let complete = (value: ReturnType<typeof entry>) => {
+    void value;
+  };
+  const pendingEntry = new Promise<ReturnType<typeof entry>>((resolve) => {
+    complete = resolve;
+  });
+
+  const writing = handler.set("/slow", pendingEntry);
+  const reading = handler.get("/slow", []);
+
+  complete(entry("filled"));
+  await writing;
+
+  const found = await reading;
+  expect(found).toBeDefined();
+  expect(await readAll(found!.value)).toBe("filled");
+});
+
 test("misses a key that was never stored", async () => {
   const { handler } = await loadSynced(fakeStore());
 

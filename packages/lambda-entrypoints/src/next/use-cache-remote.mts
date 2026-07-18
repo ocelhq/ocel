@@ -1,5 +1,13 @@
-import { tagClock, useCacheStore } from "./tag-clock.mjs";
-import { bufferValue, now, streamOf, type CacheEntry } from "./use-cache-entry.mjs";
+import { clockMethods, tagClock, useCacheStore } from "./tag-clock.mjs";
+import {
+  bufferValue,
+  now,
+  pendingSets,
+  streamOf,
+  type CacheEntry,
+} from "./use-cache-entry.mjs";
+
+const pending = pendingSets();
 
 // The `remote` cache kind, backing `use cache: remote`. Entries live in the
 // account-global asset bucket under the build's own prefix, so every instance of
@@ -16,11 +24,11 @@ const handler = {
   // render error rather than a cache miss. Every failure becomes a miss.
   async get(cacheKey: string, _softTags: string[]): Promise<CacheEntry | undefined> {
     try {
-      // Fail closed. An empty tag map on an instance that has never synced means
-      // "I have not learned about any invalidations", which must not be read as
-      // "nothing was invalidated" — the entries here outlive this instance, so
-      // there is real history to be ignorant of. A fresh render is correct,
-      // merely slower.
+      await pending.wait(cacheKey);
+
+      // Entries here outlive the instance, so an unsynced clock has real history
+      // to be ignorant of and must fail closed. The memory tier serves in the
+      // same state, because its entries cannot predate its own map.
       if (!tagClock.hasSynced) return undefined;
 
       const store = useCacheStore();
@@ -58,42 +66,32 @@ const handler = {
   // envelope so a read is one round-trip and a write is atomic, and base64
   // needs every byte before it can produce any.
   async set(cacheKey: string, pendingEntry: Promise<CacheEntry>): Promise<void> {
-    try {
-      const store = useCacheStore();
-      if (!store) return;
+    await pending.run(cacheKey, async () => {
+      try {
+        const store = useCacheStore();
+        if (!store) return;
 
-      const entry = await pendingEntry;
-      const bytes = await bufferValue(entry);
-      if (!bytes) return;
+        const entry = await pendingEntry;
+        const bytes = await bufferValue(entry);
+        if (!bytes) return;
 
-      await store.writeEntry(cacheKey, {
-        tags: entry.tags,
-        stale: entry.stale,
-        timestamp: entry.timestamp,
-        expire: entry.expire,
-        revalidate: entry.revalidate,
-        body: Buffer.from(bytes).toString("base64"),
-      });
-    } catch {
-      // A stream that errored part-way leaves no entry, and a backend that
-      // refused the write leaves no entry: either way the cost is one re-render.
-    }
+        await store.writeEntry(cacheKey, {
+          tags: entry.tags,
+          stale: entry.stale,
+          timestamp: entry.timestamp,
+          expire: entry.expire,
+          revalidate: entry.revalidate,
+          body: Buffer.from(bytes).toString("base64"),
+        });
+      } catch {
+        // A stream that errored part-way leaves no entry, and a backend that
+        // refused the write leaves no entry: either way the cost is one
+        // re-render.
+      }
+    });
   },
 
-  async refreshTags(): Promise<void> {
-    await tagClock.refreshTags();
-  },
-
-  async getExpiration(tags: string[]): Promise<number> {
-    return tagClock.getExpiration(tags);
-  },
-
-  // Next fans updateTags out to every registered handler, so this and the
-  // `default` handler both raise every invalidation. The shared clock collapses
-  // them: the second durable write loses the monotonic guard and is swallowed.
-  async updateTags(tags: string[], durations?: { expire?: number }): Promise<void> {
-    await tagClock.updateTags(tags, durations);
-  },
+  ...clockMethods,
 };
 
 export default handler;

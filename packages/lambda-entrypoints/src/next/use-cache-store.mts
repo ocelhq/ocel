@@ -1,4 +1,9 @@
-import { DynamoDBClient, QueryCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import {
+  DynamoDBClient,
+  QueryCommand,
+  UpdateItemCommand,
+  type AttributeValue,
+} from "@aws-sdk/client-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 
@@ -49,7 +54,10 @@ export interface UseCacheStore {
 // outlasts millisecond epochs by several millennia.
 const sortKeyWidth = 15;
 
-const sortKey = (at: number) => String(at).padStart(sortKeyWidth, "0");
+// Rounded here rather than at the call site: the clock's timestamps come from
+// performance.now(), which is fractional, and a fractional string neither pads
+// to the fixed width nor orders lexicographically against one that does.
+const sortKey = (at: number) => String(Math.round(at)).padStart(sortKeyWidth, "0");
 
 // One page is deliberately large: a cold instance drains the whole partition,
 // and every extra round trip is one more on its first request.
@@ -127,7 +135,11 @@ export function awsUseCacheStore(): UseCacheStore {
         new QueryCommand({
           TableName: table,
           IndexName: index,
-          KeyConditionExpression: "gsi1pk = :ns AND gsi1sk > :since",
+          // Inclusive of the cursor: a truncated page advances it only to the
+          // last record consumed, and a strict `>` would then skip any record
+          // sharing that millisecond. Re-reading the boundary record each sync
+          // is the cheaper mistake, since merging a record is idempotent.
+          KeyConditionExpression: "gsi1pk = :ns AND gsi1sk >= :since",
           ExpressionAttributeValues: {
             ":ns": { S: tagNamespace },
             ":since": { S: sortKey(since) },
@@ -162,25 +174,33 @@ export function awsUseCacheStore(): UseCacheStore {
     // Rejection is the *common* path, because Next calls updateTags on every
     // registered handler and the second write for an event always loses.
     async writeTag(tag, record) {
+      // Only the fields this event actually carries are written, and the guard
+      // is on the field being advanced. Writing an absent field as 0 would both
+      // clobber a value another instance set and — since the guard is a strict
+      // `<` — wedge the record, so every later write of that field is rejected
+      // against its own zero.
+      const advancing = record.expired !== undefined ? "expired" : "stale";
+      const sets = ["tag = :tag", "gsi1pk = :ns", "gsi1sk = :writtenAt"];
+      const values: Record<string, AttributeValue> = {
+        ":tag": { S: tag },
+        ":ns": { S: tagNamespace },
+        ":writtenAt": { S: sortKey(record.writtenAt) },
+      };
+      for (const field of ["expired", "stale"] as const) {
+        const value = record[field];
+        if (value === undefined) continue;
+        sets.push(`${field} = :${field}`);
+        values[`:${field}`] = { N: String(value) };
+      }
+
       try {
         await ddb.send(
           new UpdateItemCommand({
             TableName: table,
             Key: { pk: { S: `${tagNamespace}${tag}` }, sk: { S: "#META" } },
-            ConditionExpression: "attribute_not_exists(expired) OR expired < :expired",
-            UpdateExpression:
-              "SET expired = :expired, stale = :stale, tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt",
-            ExpressionAttributeValues: {
-              // A record with no expiry at all writes 0, which is below every
-              // real timestamp and so never invalidates anything. Next only
-              // reaches that state by passing durations without an expire
-              // window, which its own cacheLife profiles do not do.
-              ":expired": { N: String(record.expired ?? 0) },
-              ":stale": { N: String(record.stale ?? 0) },
-              ":tag": { S: tag },
-              ":ns": { S: tagNamespace },
-              ":writtenAt": { S: sortKey(record.writtenAt) },
-            },
+            ConditionExpression: `attribute_not_exists(${advancing}) OR ${advancing} < :${advancing}`,
+            UpdateExpression: "SET " + sets.join(", "),
+            ExpressionAttributeValues: values,
           }),
         );
         return true;

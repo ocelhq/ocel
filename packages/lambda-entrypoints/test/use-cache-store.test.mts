@@ -55,7 +55,7 @@ test("writes a tag record under the monotonic guard", async () => {
     Key: { pk: { S: "TAG#prod#proj#app#BID#products" }, sk: { S: "#META" } },
     ConditionExpression: "attribute_not_exists(expired) OR expired < :expired",
     UpdateExpression:
-      "SET expired = :expired, stale = :stale, tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt",
+      "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, expired = :expired, stale = :stale",
     ExpressionAttributeValues: {
       ":expired": { N: "1800" },
       ":stale": { N: "1700" },
@@ -63,6 +63,34 @@ test("writes a tag record under the monotonic guard", async () => {
       ":ns": { S: "TAG#prod#proj#app#BID#" },
       ":writtenAt": { S: "000000000001700" },
     },
+  });
+});
+
+// A stale-only event carries no expiry, and writing one as 0 would both clobber
+// an expiry another instance set and — the guard being a strict `<` — wedge the
+// record, so every later stale-only write is rejected against its own zero.
+test("guards a stale-only write on stale, and does not write an absent expiry", async () => {
+  const { store, sends } = await storeWithResponses([{}]);
+
+  await store.writeTag("products", { stale: 1700, writtenAt: 1700 });
+
+  expect(sends[0]).toMatchObject({
+    ConditionExpression: "attribute_not_exists(stale) OR stale < :stale",
+    UpdateExpression: "SET tag = :tag, gsi1pk = :ns, gsi1sk = :writtenAt, stale = :stale",
+  });
+  expect(sends[0].ExpressionAttributeValues).not.toHaveProperty(":expired");
+  expect(sends[0].UpdateExpression).not.toContain("expired");
+});
+
+// performance.now() is fractional, and a fractional sort key neither pads to the
+// fixed width nor orders lexicographically against one that does.
+test("rounds a fractional write time into the fixed-width sort key", async () => {
+  const { store, sends } = await storeWithResponses([{}]);
+
+  await store.writeTag("products", { expired: 9, writtenAt: 1700.6 });
+
+  expect(sends[0].ExpressionAttributeValues[":writtenAt"]).toEqual({
+    S: "000000000001701",
   });
 });
 
@@ -95,7 +123,9 @@ test("queries the index for records written since the cursor", async () => {
   expect(sends[0]).toMatchObject({
     TableName: "state",
     IndexName: "gsi1",
-    KeyConditionExpression: "gsi1pk = :ns AND gsi1sk > :since",
+    // Inclusive: a truncated page advances the cursor only to the last record
+    // consumed, so a strict `>` would skip any record sharing that millisecond.
+    KeyConditionExpression: "gsi1pk = :ns AND gsi1sk >= :since",
     ExpressionAttributeValues: {
       ":ns": { S: "TAG#prod#proj#app#BID#" },
       ":since": { S: "000000000001700" },

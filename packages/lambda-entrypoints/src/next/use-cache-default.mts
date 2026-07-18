@@ -1,5 +1,12 @@
-import { tagClock } from "./tag-clock.mjs";
-import { bufferValue, now, streamOf, type CacheEntry } from "./use-cache-entry.mjs";
+import { clockMethods, tagClock } from "./tag-clock.mjs";
+import {
+  bufferValue,
+  MB,
+  now,
+  pendingSets,
+  streamOf,
+  type CacheEntry,
+} from "./use-cache-entry.mjs";
 
 // An entry as it is held: the stream buffered to bytes, because the stream Next
 // hands over is one-shot and every read has to get its own.
@@ -11,8 +18,6 @@ interface StoredEntry {
   expire: number;
   revalidate: number;
 }
-
-const MB = 1024 * 1024;
 
 // The whole cache lives in the function's own heap, so the budget has to scale
 // with the memory the function was actually given — a fifth of a 256MB function
@@ -29,7 +34,7 @@ function resolveBudget(): number {
 const maxBytes = resolveBudget();
 
 const entries = new Map<string, StoredEntry>();
-const pendingSets = new Map<string, Promise<void>>();
+const pending = pendingSets();
 let usedBytes = 0;
 
 // Map iteration order is insertion order, so re-inserting on every touch makes
@@ -66,7 +71,7 @@ const handler = {
     try {
       // A read that arrives mid-fill waits for it, rather than wasting the fill
       // by reporting a miss and re-rendering alongside it.
-      await pendingSets.get(cacheKey);
+      await pending.wait(cacheKey);
 
       const stored = entries.get(cacheKey);
       if (!stored) return undefined;
@@ -95,49 +100,30 @@ const handler = {
   // set() runs while the response is already streaming, so a failure costs one
   // re-render and nothing else. It never throws.
   async set(cacheKey: string, pendingEntry: Promise<CacheEntry>): Promise<void> {
-    let resolvePending = (): void => {};
-    pendingSets.set(
-      cacheKey,
-      new Promise<void>((resolve) => {
-        resolvePending = resolve;
-      }),
-    );
+    await pending.run(cacheKey, async () => {
+      try {
+        const entry = await pendingEntry;
+        const bytes = await bufferValue(entry);
+        // An oversized entry evicts nothing: one giant page must not cost the
+        // whole working set.
+        if (!bytes) return;
 
-    try {
-      const entry = await pendingEntry;
-      const bytes = await bufferValue(entry);
-      // An oversized entry evicts nothing: one giant page must not cost the
-      // whole working set.
-      if (!bytes) return;
-
-      store(cacheKey, {
-        bytes,
-        tags: entry.tags,
-        stale: entry.stale,
-        timestamp: entry.timestamp,
-        expire: entry.expire,
-        revalidate: entry.revalidate,
-      });
-    } catch {
-      // A stream that errored part-way leaves no entry: a truncated RSC payload
-      // replayed to every later reader is worse than a miss.
-    } finally {
-      resolvePending();
-      pendingSets.delete(cacheKey);
-    }
+        store(cacheKey, {
+          bytes,
+          tags: entry.tags,
+          stale: entry.stale,
+          timestamp: entry.timestamp,
+          expire: entry.expire,
+          revalidate: entry.revalidate,
+        });
+      } catch {
+        // A stream that errored part-way leaves no entry: a truncated RSC
+        // payload replayed to every later reader is worse than a miss.
+      }
+    });
   },
 
-  async refreshTags(): Promise<void> {
-    await tagClock.refreshTags();
-  },
-
-  async getExpiration(tags: string[]): Promise<number> {
-    return tagClock.getExpiration(tags);
-  },
-
-  async updateTags(tags: string[], durations?: { expire?: number }): Promise<void> {
-    await tagClock.updateTags(tags, durations);
-  },
+  ...clockMethods,
 };
 
 export default handler;
