@@ -14,7 +14,15 @@ const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const builderPath = join(packageRoot, "dist", "builder", "cli.js");
 
 const nextAdapterPath = require.resolve("@ocel/next-runtime");
-const nextWorkerPath = require.resolve("@ocel/worker-nextjs")
+
+// Every edge worker bundle this launcher ships, keyed by the framework that
+// produced it and the edge it runs on. A framework/edge pairing absent from it
+// has no worker to deploy.
+const workerBundles = {
+  next: {
+    cloudflare: require.resolve("@ocel/worker-nextjs"),
+  },
+};
 
 let packageName = "";
 
@@ -49,7 +57,7 @@ try {
       OCEL_HOME: packageRoot,
       OCEL_BUILDER_PATH: builderPath,
       NEXT_ADAPTER_PATH: nextAdapterPath,
-      OCEL_NEXT_WORKER_PATH: nextWorkerPath
+      OCEL_WORKER_BUNDLES: JSON.stringify(workerBundles),
     },
   });
   process.exit(result.status);

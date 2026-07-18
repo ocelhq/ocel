@@ -61,6 +61,8 @@ func New() edge.Provider {
 	return &provider{client: cf.NewClient()}
 }
 
+func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }
+
 // Bootstrap reports Cloudflare's trust posture. Cloudflare runs in its own
 // account, outside any cloud provider's trust boundary, so the provider must
 // mint static credentials for it. It provisions nothing of its own and so
