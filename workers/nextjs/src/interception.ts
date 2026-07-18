@@ -49,6 +49,12 @@ export interface InterceptDeps {
 // tag-based; it is memoized for a year, matching Next's own fully-static TTL.
 const STATIC_WINDOW = 31536000;
 
+// Stamped on every response reconstructed from the S3/DynamoDB read so an
+// interception serve is distinguishable from a Lambda-origin one. Orthogonal to
+// x-ocel-cache (the colo cache status): its absence means the fill came from the
+// Lambda.
+const ISR_STATUS = "x-ocel-isr";
+
 // Tag reads sit on the request path, so the retry budget is deliberately small,
 // mirroring the Lambda store: 50/100/200ms, then give up (fail open).
 const batchGetMaxAttempts = 4;
@@ -215,7 +221,8 @@ async function readTags(
 // stripped). The stored headers are carried through, minus the internal tag
 // header, and cache-control is set to the entry's remaining revalidate window so
 // the CDN expires when the entry's revalidate window does, not a full window
-// later. Returns null on an incomplete entry.
+// later. An x-ocel-isr: HIT marker is stamped so the serve is distinguishable
+// from a Lambda-origin one. Returns null on an incomplete entry.
 function reconstruct(
   request: Request,
   value: Record<string, any>,
@@ -253,6 +260,7 @@ function reconstruct(
   }
 
   headers.set("cache-control", `s-maxage=${revalidateWindow}`);
+  headers.set(ISR_STATUS, "HIT");
   return new Response(body, { status, headers });
 }
 
