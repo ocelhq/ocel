@@ -23,6 +23,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	smithy "github.com/aws/smithy-go"
+
+	"github.com/ocelhq/ocel/cloud/edge"
 )
 
 const (
@@ -107,6 +109,15 @@ type CFNDescriber interface {
 	DescribeStacks(ctx context.Context, in *cloudformation.DescribeStacksInput, optFns ...func(*cloudformation.Options)) (*cloudformation.DescribeStacksOutput, error)
 }
 
+// CFNAPI is the subset of the CloudFormation client the stack upsert needs. It
+// embeds CFNDescriber so the create/update waiters, which only describe, accept
+// it directly.
+type CFNAPI interface {
+	CFNDescriber
+	CreateStack(ctx context.Context, in *cloudformation.CreateStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.CreateStackOutput, error)
+	UpdateStack(ctx context.Context, in *cloudformation.UpdateStackInput, optFns ...func(*cloudformation.Options)) (*cloudformation.UpdateStackOutput, error)
+}
+
 // SSMAPI is the subset of the SSM client the passphrase step needs.
 type SSMAPI interface {
 	GetParameter(ctx context.Context, in *ssm.GetParameterInput, optFns ...func(*ssm.Options)) (*ssm.GetParameterOutput, error)
@@ -164,43 +175,26 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 	return d, nil
 }
 
+// substrate is the per-class difference between the two bootstrap paths: which
+// stack holds it, which template renders it, and what to call that step. The
+// steps themselves are identical, so both classes share run.
+type substrate struct {
+	class     string
+	stackName string
+	stackStep string
+	template  func(edge.TrustBoundary) string
+}
+
 // Run creates or updates the bootstrap CloudFormation stack and ensures the
 // Pulumi passphrase exists, idempotently. progress reports discrete steps and
 // log forwards detail; both may be nil.
-func Run(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, iamClient IAMAPI, progress, log func(string)) error {
-	report := func(f func(string), msg string) {
-		if f != nil {
-			f(msg)
-		}
-	}
-
-	report(progress, "Ensuring Pulumi state bucket and state table (CloudFormation)")
-	if err := upsertStack(ctx, cfn); err != nil {
-		return err
-	}
-
-	report(progress, "Ensuring Pulumi passphrase (SSM SecureString)")
-	created, err := ensurePassphrase(ctx, ssmClient)
-	if err != nil {
-		return err
-	}
-	if created {
-		report(log, "generated a new Pulumi passphrase")
-	} else {
-		report(log, "reused the existing Pulumi passphrase")
-	}
-
-	report(progress, "Ensuring edge reader credentials (SSM SecureString)")
-	created, err = ensureEdgeCredentials(ctx, iamClient, ssmClient, ClassProduction)
-	if err != nil {
-		return err
-	}
-	if created {
-		report(log, "minted a new edge reader access key")
-	} else {
-		report(log, "reused the existing edge reader access key")
-	}
-	return nil
+func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, progress, log func(string)) error {
+	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, substrate{
+		class:     ClassProduction,
+		stackName: StackName,
+		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
+		template:  stackTemplate,
+	}, progress, log)
 }
 
 // RunPreview creates or updates the preview infrastructure stack — the shared
@@ -216,15 +210,41 @@ func Run(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, iamC
 // live account. Like Run, that CloudFormation orchestration is the opt-in-e2e
 // seam: this signature is final and the passphrase/stamping contract is settled;
 // the preview stack template is filled in and exercised against real infra.
-func RunPreview(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAPI, iamClient IAMAPI, progress, log func(string)) error {
+func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, progress, log func(string)) error {
+	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, substrate{
+		class:     ClassPreview,
+		stackName: PreviewStackName,
+		stackStep: "Ensuring preview infrastructure (CloudFormation)",
+		template:  previewStackTemplate,
+	}, progress, log)
+}
+
+// run bootstraps one substrate, edge first. The edge is a pure producer here —
+// nothing calls back into it — and what it reports decides what the provider
+// then provisions: an edge outside the provider's trust boundary needs the edge
+// reader IAM user and a static access key to sign its reads with, an edge inside
+// it needs neither, so neither is created.
+func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, sub substrate, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
 		}
 	}
 
-	report(progress, "Ensuring preview infrastructure (CloudFormation)")
-	if err := upsertPreviewStack(ctx, cfn); err != nil {
+	report(progress, fmt.Sprintf("Bootstrapping the %s edge", edgeProvider.Kind()))
+	edgeOut, err := edgeProvider.Bootstrap(ctx)
+	if err != nil {
+		return fmt.Errorf("bootstrap %s edge: %w", edgeProvider.Kind(), err)
+	}
+	// No offer kind is adopted today. An unrecognised kind is ignored rather than
+	// rejected, so a newer edge paired with an older provider degrades instead of
+	// breaking.
+	for _, offer := range edgeOut.Offers {
+		report(log, fmt.Sprintf("ignoring edge offer %q: no provider resource adopts it", offer.Kind))
+	}
+
+	report(progress, sub.stackStep)
+	if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust), []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}); err != nil {
 		return err
 	}
 
@@ -239,8 +259,20 @@ func RunPreview(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAP
 		report(log, "reused the existing Pulumi passphrase")
 	}
 
+	if len(edgeOut.Values) > 0 {
+		report(progress, "Storing edge bootstrap outputs (SSM SecureString)")
+		if err := writeEdgeValues(ctx, ssmClient, sub.class, edgeOut.Values); err != nil {
+			return err
+		}
+	}
+
+	if edgeOut.Trust != edge.TrustExternal {
+		report(log, "edge runs inside the trust boundary; no edge reader or static key created")
+		return nil
+	}
+
 	report(progress, "Ensuring edge reader credentials (SSM SecureString)")
-	created, err = ensureEdgeCredentials(ctx, iamClient, ssmClient, ClassPreview)
+	created, err = ensureEdgeCredentials(ctx, iamClient, ssmClient, sub.class)
 	if err != nil {
 		return err
 	}
@@ -252,23 +284,9 @@ func RunPreview(ctx context.Context, cfn *cloudformation.Client, ssmClient SSMAP
 	return nil
 }
 
-// upsertStack creates or updates the production bootstrap stack. It requests
-// named-IAM capability because the stack provisions the edge reader IAM user
-// under a deterministic name.
-func upsertStack(ctx context.Context, cfn *cloudformation.Client) error {
-	return upsertCFNStack(ctx, cfn, StackName, stackTemplate(), []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam})
-}
-
-// upsertPreviewStack creates or updates the preview infrastructure stack. It
-// requests named-IAM capability so the stack's shared execution-role
-// scaffolding can be created.
-func upsertPreviewStack(ctx context.Context, cfn *cloudformation.Client) error {
-	return upsertCFNStack(ctx, cfn, PreviewStackName, previewStackTemplate(), []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam})
-}
-
 // upsertCFNStack creates the named stack, or updates it if it already exists,
 // waiting for the operation to settle. A no-op update is not an error.
-func upsertCFNStack(ctx context.Context, cfn *cloudformation.Client, stackName, template string, capabilities []cfntypes.Capability) error {
+func upsertCFNStack(ctx context.Context, cfn CFNAPI, stackName, template string, capabilities []cfntypes.Capability) error {
 	body := aws.String(template)
 	_, err := cfn.DescribeStacks(ctx, &cloudformation.DescribeStacksInput{StackName: aws.String(stackName)})
 	switch {
@@ -358,10 +376,11 @@ func generatePassphrase() (string, error) {
 	return base64.RawURLEncoding.EncodeToString(buf), nil
 }
 
-// stackTemplate renders the bootstrap CloudFormation template. The
-// BootstrapVersion output is single-sourced from RequiredBootstrapVersion so
-// the deployed version and the provider's requirement never drift.
-func stackTemplate() string {
+// stackTemplate renders the bootstrap CloudFormation template for an edge with
+// the given trust posture. The BootstrapVersion output is single-sourced from
+// RequiredBootstrapVersion so the deployed version and the provider's
+// requirement never drift.
+func stackTemplate(trust edge.TrustBoundary) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel bootstrap - account-global resources for the Ocel AWS provider.
 Resources:
@@ -389,7 +408,7 @@ Resources:
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), edgeUserResource(EdgeUserName), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), edgeUserResource(EdgeUserName, trust), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
@@ -403,7 +422,7 @@ Resources:
 // account, so — like RunPreview itself — they are added and exercised there.
 // The stamped class, the shared backend, and the stack's independent lifecycle
 // are settled here.
-func previewStackTemplate() string {
+func previewStackTemplate(trust edge.TrustBoundary) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel preview infrastructure - shared substrate per-PR previews are carved from.
 Resources:
@@ -431,7 +450,7 @@ Resources:
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), edgeUserResource(EdgePreviewUserName), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), edgeUserResource(EdgePreviewUserName, trust), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
 }
 
 // stateTableResource renders the StateTable resource block shared by both
@@ -586,7 +605,14 @@ func assetBucketOutput() string {
 // name the imperative access-key step (ensureEdgeCredentials, which also carries
 // the credential rotation runbook) looks the user up by. The block is a
 // Resources child, so it is emitted before the template's Outputs: line.
-func edgeUserResource(userName string) string {
+//
+// It renders nothing for an edge inside the provider's trust boundary: such an
+// edge reads under the provider's native identity, so a user whose only purpose
+// is to hold a long-lived key would be a dangling credential in the account.
+func edgeUserResource(userName string, trust edge.TrustBoundary) string {
+	if trust != edge.TrustExternal {
+		return ""
+	}
 	return fmt.Sprintf(`  EdgeUser:
     Type: AWS::IAM::User
     Properties:

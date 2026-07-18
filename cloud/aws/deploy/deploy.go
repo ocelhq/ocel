@@ -87,6 +87,12 @@ type Config struct {
 	EdgeAccessKeyID string
 	EdgeSecretKey   string
 
+	// EdgeValues is what the edge reported provisioning at bootstrap, persisted by
+	// the provider and handed back here verbatim so the edge can read back its own
+	// state without re-querying its API. Opaque: nothing on the provider side may
+	// read a key from it. Empty when the edge provisioned nothing of its own.
+	EdgeValues map[string]string
+
 	// Edge deploys the Next.js routing worker once its Lambdas exist and their
 	// Function URLs are known. Nil unless the project has a Next.js app; the
 	// concrete edge implementation is the end-to-end seam.

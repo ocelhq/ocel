@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	cfntypes "github.com/aws/aws-sdk-go-v2/service/cloudformation/types"
 	"gopkg.in/yaml.v3"
+
+	"github.com/ocelhq/ocel/cloud/edge"
 )
 
 // parsedTemplate is the subset of the rendered bootstrap template the tests
@@ -67,7 +69,7 @@ type parsedTemplate struct {
 
 func parseTemplate(t *testing.T) parsedTemplate {
 	t.Helper()
-	return parseTemplateStr(t, stackTemplate())
+	return parseTemplateStr(t, stackTemplate(edge.TrustExternal))
 }
 
 func parseTemplateStr(t *testing.T, template string) parsedTemplate {
@@ -89,8 +91,8 @@ func TestStackTemplate_StateTable(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate()},
-		{"preview", previewStackTemplate()},
+		{"production", stackTemplate(edge.TrustExternal)},
+		{"preview", previewStackTemplate(edge.TrustExternal)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -173,8 +175,8 @@ func TestArtifactBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate()},
-		{"preview", previewStackTemplate()},
+		{"production", stackTemplate(edge.TrustExternal)},
+		{"preview", previewStackTemplate(edge.TrustExternal)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -225,8 +227,8 @@ func TestAssetBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate()},
-		{"preview", previewStackTemplate()},
+		{"production", stackTemplate(edge.TrustExternal)},
+		{"preview", previewStackTemplate(edge.TrustExternal)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -336,7 +338,7 @@ func TestCheckDeployed_ReadsPreviewClassMarker(t *testing.T) {
 // the preview class marker so CheckDeployedPreview surfaces it.
 func TestPreviewStackTemplate_StampsPreviewClass(t *testing.T) {
 	var tmpl parsedTemplate
-	if err := yaml.Unmarshal([]byte(previewStackTemplate()), &tmpl); err != nil {
+	if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal)), &tmpl); err != nil {
 		t.Fatalf("preview template is not valid YAML: %v", err)
 	}
 	if got := tmpl.Outputs[outputInfraClass].Value; got != ClassPreview {
@@ -377,8 +379,8 @@ func TestEdgeUser(t *testing.T) {
 		template string
 		userName string
 	}{
-		{"production", stackTemplate(), EdgeUserName},
-		{"preview", previewStackTemplate(), EdgePreviewUserName},
+		{"production", stackTemplate(edge.TrustExternal), EdgeUserName},
+		{"preview", previewStackTemplate(edge.TrustExternal), EdgePreviewUserName},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var tmpl edgeUserTemplate

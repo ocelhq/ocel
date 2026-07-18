@@ -17,6 +17,11 @@ const (
 	// SecureString parameters holding each substrate's edge reader access key.
 	EdgeCredentialsParamName        = "/ocel/edge/credentials"
 	EdgeCredentialsPreviewParamName = "/ocel/edge/credentials-preview"
+
+	// EdgeValuesParamName / EdgeValuesPreviewParamName are the SSM SecureString
+	// parameters holding each substrate's edge bootstrap outputs.
+	EdgeValuesParamName        = "/ocel/edge/values"
+	EdgeValuesPreviewParamName = "/ocel/edge/values-preview"
 )
 
 // IAMAPI is the subset of the IAM client the edge-credential step needs.
@@ -52,6 +57,69 @@ func edgeParamName(class string) (string, error) {
 	default:
 		return "", fmt.Errorf("edge credentials: unknown substrate class %q", class)
 	}
+}
+
+func edgeValuesParamName(class string) (string, error) {
+	switch class {
+	case ClassProduction:
+		return EdgeValuesParamName, nil
+	case ClassPreview:
+		return EdgeValuesPreviewParamName, nil
+	default:
+		return "", fmt.Errorf("edge values: unknown substrate class %q", class)
+	}
+}
+
+// writeEdgeValues stores the edge's own bootstrap outputs so the deploy path can
+// hand them back verbatim. They are opaque to the provider — stored and read as
+// one blob, never keyed into — and are held as a SecureString because an edge is
+// free to put a secret among them. Unlike the minted access key, they are the
+// edge's current state rather than something that must survive re-minting, so a
+// re-run overwrites them.
+func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, values map[string]string) error {
+	paramName, err := edgeValuesParamName(class)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(values)
+	if err != nil {
+		return fmt.Errorf("marshal edge values: %w", err)
+	}
+	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:      aws.String(paramName),
+		Value:     aws.String(string(payload)),
+		Type:      ssmtypes.ParameterTypeSecureString,
+		Overwrite: aws.Bool(true),
+	}); err != nil {
+		return fmt.Errorf("write edge values parameter: %w", err)
+	}
+	return nil
+}
+
+// ReadEdgeValues returns the substrate's stored edge bootstrap outputs, decrypted,
+// for the deploy path to hand back to the edge. A substrate whose edge stored
+// none reads as empty rather than as a failure.
+func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, class string) (map[string]string, error) {
+	paramName, err := edgeValuesParamName(class)
+	if err != nil {
+		return nil, err
+	}
+	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read edge values parameter: %w", err)
+	}
+	var values map[string]string
+	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &values); err != nil {
+		return nil, fmt.Errorf("parse edge values: %w", err)
+	}
+	return values, nil
 }
 
 // ensureEdgeCredentials mints the edge reader's access key if the substrate has
