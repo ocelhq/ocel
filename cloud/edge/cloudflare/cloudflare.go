@@ -6,7 +6,9 @@ package cloudflare
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -138,11 +140,12 @@ func (p *provider) uploadAssets(ctx context.Context, up upload) (string, error) 
 	manifest := make(map[string]workers.ScriptAssetUploadNewParamsManifest, len(up.worker.Assets))
 	assetByHash := make(map[string]edge.StaticAsset, len(up.worker.Assets))
 	for _, a := range up.worker.Assets {
+		hash := hashAsset(a)
 		manifest[a.Path] = workers.ScriptAssetUploadNewParamsManifest{
-			Hash: cf.F(a.Hash),
-			Size: cf.F(a.Size),
+			Hash: cf.F(hash),
+			Size: cf.F(int64(len(a.Content))),
 		}
-		assetByHash[a.Hash] = a
+		assetByHash[hash] = a
 	}
 
 	session, err := p.client.Workers.Scripts.Assets.Upload.New(ctx, up.scriptName, workers.ScriptAssetUploadNewParams{
@@ -192,6 +195,17 @@ func (p *provider) uploadAssets(ctx context.Context, up upload) (string, error) 
 		return "", fmt.Errorf("asset upload returned no completion token")
 	}
 	return completionJWT, nil
+}
+
+// hashAsset computes the content hash the assets upload session keys a file by:
+// the SHA-256 of the base64-encoded contents concatenated with the file
+// extension (no leading dot), hex-encoded and truncated to 32 characters. This
+// mirrors wrangler's algorithm; a mismatch would make the session reject the
+// upload.
+func hashAsset(a edge.StaticAsset) string {
+	ext := strings.TrimPrefix(path.Ext(a.Path), ".")
+	sum := sha256.Sum256([]byte(base64.StdEncoding.EncodeToString(a.Content) + ext))
+	return hex.EncodeToString(sum[:])[:32]
 }
 
 // buildAssetBatch encodes one bucket of files as the multipart/form-data body

@@ -9,6 +9,7 @@ import (
 
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/edge"
+	"github.com/ocelhq/ocel/cloud/edge/framework"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -52,12 +53,12 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 
 	var workerOutputs []*deploymentsv1.ResourceOutput
 	for _, app := range apps {
-		framework := edge.Framework(app.GetFramework())
-		assemble, err := edge.WorkerFor(framework, cfg.Edge.Kind())
+		fw := edge.Framework(app.GetFramework())
+		assemble, err := framework.WorkerFor(fw, cfg.Edge.Kind())
 		if err != nil {
 			return nil, err
 		}
-		bundlePath, err := bundles.Path(framework, cfg.Edge.Kind())
+		bundlePath, err := bundles.Path(fw, cfg.Edge.Kind())
 		if err != nil {
 			return nil, err
 		}
@@ -87,6 +88,7 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 			Name:   workerScriptName(cfg.StackName, name),
 			Domain: domains[name],
 			Worker: worker,
+			Values: cfg.EdgeValues,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("deploy edge worker for %s: %w", name, err)
@@ -114,11 +116,14 @@ func manifestApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp
 	return apps
 }
 
-// workerApps are the apps fronted by an edge worker, in manifest order.
+// workerApps are the apps fronted by an edge worker, in manifest order. An app
+// whose framework wants a worker but which emitted no functions — a Next.js
+// static export, say — is not one of them: it produced no build output for a
+// worker to route to, so it deploys as its static assets alone.
 func workerApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
 	var apps []*deploymentsv1.ManifestApp
 	for _, app := range manifestApps(manifest) {
-		if edge.NeedsWorker(edge.Framework(app.GetFramework())) {
+		if framework.NeedsWorker(edge.Framework(app.GetFramework())) && len(appRoutes(manifest.GetFunctions(), app)) > 0 {
 			apps = append(apps, app)
 		}
 	}
@@ -140,6 +145,11 @@ func appRoutes(functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.M
 // appsDirName mirrors the builder's per-app namespacing of the build output.
 // Each app owns <ArtifactRoot>/apps/<app>, holding its functions, static
 // assets, cache entries and routing manifest.
+//
+// This name is a cross-process, cross-language contract with no single home:
+// packages/ocel/src/builder/layout.ts (APPS_DIR) writes the layout,
+// cli/internal/appbuilder (appsDirName) discovers functions in it, and this
+// package reads each app's artifacts from it. Change one, change all three.
 const appsDirName = "apps"
 
 // appArtifactRoot is the subtree of the build output belonging to one app —
@@ -297,7 +307,7 @@ const maxWorkerNameLen = 63
 // absorbs any clamping needed to fit the platform limit and the app segment is
 // carried whole.
 func workerScriptName(stackName, app string) string {
-	appSegment := clamp(sanitizeWorkerName(app), maxWorkerNameLen)
+	appSegment := sanitizeWorkerName(app)
 	budget := maxWorkerNameLen - len(appSegment) - 1
 	if budget <= 0 {
 		return appSegment
@@ -344,9 +354,9 @@ func warnOrphanedWorker(ctx context.Context, cfg Config, progress func(string)) 
 
 // sanitizeWorkerName lowers an arbitrary identity into an edge deployment
 // name: lowercase, every character outside [a-z0-9] replaced with '-',
-// leading/trailing hyphens trimmed, and clamped to the 63-char limit. The result
-// is deterministic so redeploys of the same project+env update the script in
-// place.
+// leading/trailing hyphens trimmed, and clamped to the platform limit. The
+// result is deterministic so redeploys of the same project+env update the
+// script in place.
 func sanitizeWorkerName(s string) string {
 	buf := make([]byte, 0, len(s))
 	for _, r := range s {
@@ -362,10 +372,7 @@ func sanitizeWorkerName(s string) string {
 			}
 		}
 	}
-	name := trimHyphens(string(buf))
-	if len(name) > 63 {
-		name = trimHyphens(name[:63])
-	}
+	name := clamp(trimHyphens(string(buf)), maxWorkerNameLen)
 	if name == "" {
 		return "ocel-worker"
 	}

@@ -1,16 +1,18 @@
-package edge
+package nextjs
 
 import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ocelhq/ocel/cloud/edge"
 )
 
 // stubResolver answers exactly what a test configures, so an assembly's pulls
 // are asserted through the worker it produces.
 type stubResolver struct {
 	urls       map[string]string
-	store      CacheStore
+	store      edge.CacheStore
 	configured bool
 	storeErr   error
 }
@@ -23,7 +25,7 @@ func (s stubResolver) FunctionURL(routeID string) (string, error) {
 	return url, nil
 }
 
-func (s stubResolver) CacheStore() (CacheStore, bool, error) {
+func (s stubResolver) CacheStore() (edge.CacheStore, bool, error) {
 	return s.store, s.configured, s.storeErr
 }
 
@@ -31,7 +33,7 @@ type errNoURL struct{ route string }
 
 func (e errNoURL) Error() string { return "no function URL for route " + e.route }
 
-func writeNextArtifacts(t *testing.T) WorkerSource {
+func writeNextArtifacts(t *testing.T) edge.WorkerSource {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "routing-manifest.json"), []byte(`{"buildId":"b1"}`), 0o644); err != nil {
@@ -47,22 +49,22 @@ func writeNextArtifacts(t *testing.T) WorkerSource {
 	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return WorkerSource{ArtifactRoot: root, BundlePath: bundle}
+	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle}
 }
 
-func fullCacheStore() CacheStore {
-	return CacheStore{
+func fullCacheStore() edge.CacheStore {
+	return edge.CacheStore{
 		Bucket:        "ocel-assets",
 		Prefix:        "prod/proj/web/b1",
 		Region:        "us-west-2",
 		TagTable:      "ocel-state",
 		TagTableIndex: "gsi1",
 		TagNamespace:  "TAG#prod#proj#web#b1#",
-		Credentials:   Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
+		Credentials:   edge.Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
 	}
 }
 
-func TestAssembleNextCloudflare_FullyConfigured(t *testing.T) {
+func TestAssembleCloudflare_FullyConfigured(t *testing.T) {
 	src := writeNextArtifacts(t)
 	src.Routes = []string{"/api/documents"}
 	r := stubResolver{
@@ -71,7 +73,7 @@ func TestAssembleNextCloudflare_FullyConfigured(t *testing.T) {
 		configured: true,
 	}
 
-	w, err := assembleNextCloudflare(src, r)
+	w, err := AssembleCloudflare(src, r)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
@@ -115,12 +117,12 @@ func TestAssembleNextCloudflare_FullyConfigured(t *testing.T) {
 	}
 }
 
-func TestAssembleNextCloudflare_UnconfiguredCacheOmitsBindings(t *testing.T) {
+func TestAssembleCloudflare_UnconfiguredCacheOmitsBindings(t *testing.T) {
 	src := writeNextArtifacts(t)
 	src.Routes = []string{"/"}
 	r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
 
-	w, err := assembleNextCloudflare(src, r)
+	w, err := AssembleCloudflare(src, r)
 	if err != nil {
 		t.Fatalf("an unconfigured cache must not fail the deploy: %v", err)
 	}
@@ -132,17 +134,17 @@ func TestAssembleNextCloudflare_UnconfiguredCacheOmitsBindings(t *testing.T) {
 	}
 }
 
-func TestAssembleNextCloudflare_UnresolvableRouteIsAnError(t *testing.T) {
+func TestAssembleCloudflare_UnresolvableRouteIsAnError(t *testing.T) {
 	src := writeNextArtifacts(t)
 	src.Routes = []string{"/orphan"}
 
-	_, err := assembleNextCloudflare(src, stubResolver{urls: map[string]string{}})
+	_, err := AssembleCloudflare(src, stubResolver{urls: map[string]string{}})
 	if err == nil {
 		t.Fatal("expected an error for an unresolvable route")
 	}
 }
 
-func TestCollectStaticAssets_ReadsFilesWithHashAndSize(t *testing.T) {
+func TestCollectStaticAssets_ReadsFilesWithPathAndContent(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "icons"), 0o755); err != nil {
 		t.Fatal(err)
@@ -162,7 +164,7 @@ func TestCollectStaticAssets_ReadsFilesWithHashAndSize(t *testing.T) {
 		t.Fatalf("got %d assets, want 2", len(assets))
 	}
 
-	byPath := map[string]StaticAsset{}
+	byPath := map[string]edge.StaticAsset{}
 	for _, a := range assets {
 		byPath[a.Path] = a
 	}
@@ -170,11 +172,8 @@ func TestCollectStaticAssets_ReadsFilesWithHashAndSize(t *testing.T) {
 	if !ok {
 		t.Fatalf("missing /next.svg; got %v", byPath)
 	}
-	if svg.Size != 5 {
-		t.Errorf("/next.svg size = %d, want 5", svg.Size)
-	}
-	if svg.Hash != hashAsset([]byte("hello"), "svg") {
-		t.Errorf("/next.svg hash = %q, want hashAsset of its contents+ext", svg.Hash)
+	if string(svg.Content) != "hello" {
+		t.Errorf("/next.svg content = %q, want %q", svg.Content, "hello")
 	}
 	if _, ok := byPath["/icons/logo.png"]; !ok {
 		t.Errorf("missing nested /icons/logo.png; got %v", byPath)
@@ -188,16 +187,5 @@ func TestCollectStaticAssets_MissingDirYieldsNone(t *testing.T) {
 	}
 	if len(assets) != 0 {
 		t.Errorf("expected no assets, got %d", len(assets))
-	}
-}
-
-func TestHashAsset_MatchesWranglerAlgorithm(t *testing.T) {
-	// Reference value computed independently:
-	//   sha256(base64("hello") + "txt").hex()[:32]
-	if got, want := hashAsset([]byte("hello"), "txt"), "129d0bf9c674d4cc340cf5f8feeb9f36"; got != want {
-		t.Fatalf("hashAsset = %q, want %q", got, want)
-	}
-	if len(hashAsset([]byte("anything"), "")) != 32 {
-		t.Errorf("hash must be 32 hex chars")
 	}
 }

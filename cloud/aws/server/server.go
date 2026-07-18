@@ -163,13 +163,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		edgeCreds = bootstrap.EdgeCredentials{}
 	}
 
-	// Whatever the edge provisioned for itself at bootstrap, handed back verbatim.
-	// It is the edge's own state: the provider persisted it without reading it and
-	// passes it on the same way.
-	edgeValues, err := bootstrap.ReadEdgeValues(ctx, ssmClient, edgeClass)
-	if err != nil {
-		return nil, nil, err
-	}
+	edgeValues := readEdgeValues(ctx, ssmClient, edgeClass, bootstrapCmd, logf)
 
 	pulumiCmd, err := pulumirt.Ensure(ctx, func(m string) {
 		progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
@@ -229,6 +223,23 @@ const previewTTL = 7 * 24 * time.Hour
 // previewExpiry returns the epoch-seconds expiry to stamp on a deploy: now +
 // previewTTL for an ephemeral preview, 0 (no expiry) for every other lifecycle.
 // It is pure.
+// readEdgeValues returns whatever the edge provisioned for itself at bootstrap,
+// for the deploy path to hand back verbatim. It is the edge's own state: the
+// provider persisted it without reading it and passes it on the same way.
+//
+// Best-effort, like the edge credentials read: a substrate that stored none, or
+// one whose policy denies the read, deploys with none rather than failing a
+// deploy that otherwise works. The edge then sees no prior state, which is the
+// same position it is in on its first deploy.
+func readEdgeValues(ctx context.Context, ssmClient bootstrap.SSMAPI, class, bootstrapCmd string, logf func(string)) map[string]string {
+	values, err := bootstrap.ReadEdgeValues(ctx, ssmClient, class)
+	if err != nil {
+		logf("edge bootstrap values unavailable: " + err.Error() + " (re-run `" + bootstrapCmd + "` if the edge needs them)")
+		return nil
+	}
+	return values
+}
+
 func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time) int64 {
 	if lifecycle != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
 		return 0

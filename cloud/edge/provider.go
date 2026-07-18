@@ -53,6 +53,10 @@ type AppDeployment struct {
 	// Domain is the custom hostname the app is served on. Empty serves it on the
 	// edge's own vendor subdomain instead.
 	Domain string
+	// Values are what this edge reported at bootstrap, persisted verbatim by the
+	// provider and handed back unread, so the edge can see what it provisioned
+	// without re-querying its own API.
+	Values map[string]string
 }
 
 // Worker is a framework's edge bundle: the entrypoint, the modules shipping
@@ -85,12 +89,12 @@ type WorkerModule struct {
 }
 
 // StaticAsset is one file served alongside the worker, keyed by its URL path
-// (e.g. "/next.svg"), with the content hash and size an upload session needs.
+// (e.g. "/next.svg"). It carries raw bytes: an edge whose upload session keys
+// files by a content hash computes that hash in the form its own API requires,
+// so no framework has to know one edge's hashing rules.
 type StaticAsset struct {
 	Path    string
 	Content []byte
-	Hash    string
-	Size    int64
 }
 
 // AppResult reports where a deployed app is served.

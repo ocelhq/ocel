@@ -121,7 +121,7 @@ func TestBuildScriptMultipart_AssetsBindingGatedOnCompletionJWT(t *testing.T) {
 		AssetBinding: "ASSETS",
 		Main:         edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("x")},
 		Vars:         map[string]string{"FUNCTION_URLS": "{}"},
-		Assets:       []edge.StaticAsset{{Path: "/a.svg", Hash: "h", Size: 1, Content: []byte("a")}},
+		Assets:       []edge.StaticAsset{{Path: "/a.svg", Content: []byte("a")}},
 	}
 
 	// Without a completion JWT (e.g. a redeploy where the session returned no
@@ -183,7 +183,7 @@ func TestBuildScriptMultipart_UploadsMainAndSiblingModules(t *testing.T) {
 
 func TestBuildAssetBatch_EncodesFilePartsPerHash(t *testing.T) {
 	assets := map[string]edge.StaticAsset{
-		"hash-svg": {Path: "/next.svg", Content: []byte("<svg/>"), Hash: "hash-svg"},
+		"hash-svg": {Path: "/next.svg", Content: []byte("<svg/>")},
 	}
 	body, contentType, err := buildAssetBatch([]string{"hash-svg"}, assets)
 	if err != nil {
@@ -253,5 +253,17 @@ func TestBootstrap_ReportsExternalTrust(t *testing.T) {
 	}
 	if len(out.Values) != 0 {
 		t.Errorf("Values = %v, want none: Cloudflare provisions nothing of its own", out.Values)
+	}
+}
+
+func TestHashAsset_MatchesWranglerAlgorithm(t *testing.T) {
+	// Reference value computed independently:
+	//   sha256(base64("hello") + "txt").hex()[:32]
+	got := hashAsset(edge.StaticAsset{Path: "/greeting.txt", Content: []byte("hello")})
+	if want := "129d0bf9c674d4cc340cf5f8feeb9f36"; got != want {
+		t.Fatalf("hashAsset = %q, want %q", got, want)
+	}
+	if len(hashAsset(edge.StaticAsset{Path: "/noext", Content: []byte("anything")})) != 32 {
+		t.Errorf("hash must be 32 hex chars")
 	}
 }

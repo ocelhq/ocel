@@ -17,11 +17,8 @@ import { basename, dirname, join, relative, sep } from "node:path";
 
 const launcherName = "__next_launcher.cjs";
 
-// The subtree this build's output belongs in. Build output is namespaced per
-// app, and the adapter runs inside `next build` with the app dir as its cwd, so
-// it cannot infer which subtree is its own — the ocel builder passes
-// OCEL_OUTPUT_DIR. Falling back to the flat cwd path keeps a bare `next build`
-// self-consistent, the same way OCEL_APP_NAME falls back to the project dir.
+// The ocel builder passes this app's own subtree; a bare `next build` outside
+// ocel falls back to the flat cwd path.
 function resolveOutputRoot(): string {
   return process.env.OCEL_OUTPUT_DIR || join(process.cwd(), ".ocel/output");
 }
