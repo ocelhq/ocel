@@ -19,11 +19,11 @@ import { fileURLToPath } from "node:url";
 const pkgDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const distNext = join(pkgDir, "dist/next");
 
-const handlers = ["cache-handler", "use-cache-default"];
+const handlers = ["cache-handler", "use-cache-default", "use-cache-remote"];
 
 // Sources that only exist to be bundled into a handler; their unbundled tsc
 // output must not ship next to the bundles.
-const internalModules = ["cache-store", "tag-clock", "use-cache-store"];
+const internalModules = ["cache-store", "tag-clock", "use-cache-entry", "use-cache-store"];
 
 await Promise.all(
   handlers.map((name) =>

@@ -570,6 +570,7 @@ test("registers the 'use cache' handlers by absolute path alongside the ISR one"
   );
   expect(manifest.config.cacheHandlers).toEqual({
     default: "/opt/ocel/next/use-cache-default.cjs",
+    remote: "/opt/ocel/next/use-cache-remote.cjs",
   });
   expect(manifest.config.cacheHandler).toBe("/opt/ocel/next/cache-handler.cjs");
 });
