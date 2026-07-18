@@ -18,13 +18,20 @@ import { basename, dirname, join, relative, sep } from "node:path";
 const scratchDir = join(process.cwd(), ".ocel/output");
 const launcherName = "__next_launcher.cjs";
 
-// Where the membrane layer mounts the bundled cache handler. Deliberately not
-// set through modifyConfig: `next build` would hand this to its own static
+// Where the membrane layer mounts the bundled cache handlers. Deliberately not
+// set through modifyConfig: `next build` would hand these to its own static
 // generation workers, which would then try to reach S3 with no credentials, and
-// it rewrites any cacheHandler it is given to a path relative to the *build*
+// it rewrites any handler path it is given to one relative to the *build*
 // machine's distDir — which does not survive the move to /var/task. Patched
-// into the built manifest instead (see patchCacheHandler).
+// into the built manifest instead (see patchCacheHandlers).
+//
+// The singular `cacheHandler` is the incremental cache (ISR, prerenders, Pages
+// Router); the plural `cacheHandlers` map, keyed by cache kind, is what backs
+// the `use cache` directive. They are separate contracts and separate modules.
 const cacheHandlerPath = "/opt/ocel/next/cache-handler.cjs";
+const useCacheHandlerPaths = {
+  default: "/opt/ocel/next/use-cache-default.cjs",
+};
 
 const adapter = {
   name: "ocel-adapter",
@@ -72,7 +79,7 @@ const adapter = {
 
     // Patch the built manifest before anything is copied out of distDir, so
     // every `.func` picks the cache handler up through the normal asset copy.
-    await patchCacheHandler(distDir);
+    await patchCacheHandlers(distDir);
 
     const funcDirFor = (pathname: string) =>
       join(
@@ -291,7 +298,7 @@ function cacheTags(prerender: AdapterOutput["PRERENDER"]): string[] {
 // value alone only when it is already absolute — so writing the runtime path
 // here, after the build, is what survives the move to /var/task. A build with no
 // manifest (`output: 'export'`) has no server to configure.
-async function patchCacheHandler(distDir: string): Promise<void> {
+async function patchCacheHandlers(distDir: string): Promise<void> {
   const manifestPath = join(distDir, "required-server-files.json");
   let manifest: { config?: Record<string, unknown> };
   try {
@@ -301,6 +308,10 @@ async function patchCacheHandler(distDir: string): Promise<void> {
   }
   if (!manifest.config) return;
   manifest.config.cacheHandler = cacheHandlerPath;
+  manifest.config.cacheHandlers = {
+    ...(manifest.config.cacheHandlers as Record<string, string> | undefined),
+    ...useCacheHandlerPaths,
+  };
   await writeFile(manifestPath, JSON.stringify(manifest));
 }
 

@@ -555,6 +555,25 @@ test("names the layer's cache handler by absolute path in required-server-files"
   expect(manifest.version).toBe(1);
 });
 
+// `use cache` is served by the plural cacheHandlers map, which the runtime
+// resolves the same way and therefore needs the same absolute-path treatment.
+// Without an entry here the framework's built-in handler is constructed at
+// cacheMaxMemorySize 0 — a literal no-op that re-runs every cached function.
+test("registers the 'use cache' handlers by absolute path alongside the ISR one", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = JSON.parse(
+    await readFile(join(projectDir, ".next/required-server-files.json"), "utf8"),
+  );
+  expect(manifest.config.cacheHandlers).toEqual({
+    default: "/opt/ocel/next/use-cache-default.cjs",
+  });
+  expect(manifest.config.cacheHandler).toBe("/opt/ocel/next/cache-handler.cjs");
+});
+
 // Next stores one cache entry per route holding html + rscData + segments
 // together, but the adapter API surfaces those as three separate PRERENDER
 // outputs (/, /index.rsc, /index.segments/*). Seeding means regrouping them.
