@@ -163,6 +163,14 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		edgeCreds = bootstrap.EdgeCredentials{}
 	}
 
+	// Whatever the edge provisioned for itself at bootstrap, handed back verbatim.
+	// It is the edge's own state: the provider persisted it without reading it and
+	// passes it on the same way.
+	edgeValues, err := bootstrap.ReadEdgeValues(ctx, ssmClient, edgeClass)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	pulumiCmd, err := pulumirt.Ensure(ctx, func(m string) {
 		progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
 	})
@@ -202,6 +210,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Env:              envSegment(env),
 		EdgeAccessKeyID:  edgeCreds.AccessKeyID,
 		EdgeSecretKey:    edgeCreds.SecretAccessKey,
+		EdgeValues:       edgeValues,
 		Uploader:         s3.NewFromConfig(awscfg),
 		Edge:             cloudflare.New(),
 		Class:            env.GetClass(),
@@ -265,7 +274,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	if preview {
 		run = bootstrap.RunPreview
 	}
-	if err := run(ctx, cfn, ssmClient, iamClient, progress, logf); err != nil {
+	if err := run(ctx, cfn, ssmClient, iamClient, cloudflare.New(), progress, logf); err != nil {
 		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
 	return stream.Send(resultEvent(true, "", nil, nil))
