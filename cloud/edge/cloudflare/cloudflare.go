@@ -1,4 +1,7 @@
-package deploy
+// Package cloudflare is the Cloudflare Workers edge: it uploads an assembled
+// worker as a Workers script with its static assets, and routes it on a custom
+// domain or the account's workers.dev subdomain.
+package cloudflare
 
 import (
 	"bytes"
@@ -9,92 +12,121 @@ import (
 	"mime"
 	"mime/multipart"
 	"net/textproto"
+	"os"
 	"path"
 	"strings"
 
-	"github.com/cloudflare/cloudflare-go/v4"
+	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	"github.com/cloudflare/cloudflare-go/v4/zones"
+
+	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// nextWorkerCompatDate pins the Workers runtime compatibility date the worker is
-// built against (mirrors workers/nextjs/wrangler.jsonc). nextWorkerCompatFlags
-// enables the Node.js compatibility the bundled routing code relies on.
-const nextWorkerCompatDate = "2026-07-13"
+// envAccountID names the Cloudflare account workers are deployed into. The API
+// token is read by the SDK client from CLOUDFLARE_API_TOKEN.
+const envAccountID = "CLOUDFLARE_ACCOUNT_ID"
 
-var nextWorkerCompatFlags = []string{"nodejs_compat"}
+// compatDate pins the Workers runtime compatibility date uploaded scripts are
+// built against (mirrors workers/nextjs/wrangler.jsonc). compatFlags enables the
+// Node.js compatibility the bundled routing code relies on.
+const compatDate = "2026-07-13"
 
-// nextWorkerObservability is the Workers observability settings every deployed
-// worker ships with: logs (with per-invocation summaries) and OTel traces, both
-// at 100% head sampling. It is uploaded as a field of the script metadata, the
-// same way wrangler applies it, so no separate settings call is needed.
-var nextWorkerObservability = map[string]any{
+var compatFlags = []string{"nodejs_compat"}
+
+// observability is the Workers observability settings every deployed worker
+// ships with: logs (with per-invocation summaries) and OTel traces, both at 100%
+// head sampling. It is uploaded as a field of the script metadata, the same way
+// wrangler applies it, so no separate settings call is needed.
+var observability = map[string]any{
 	"enabled":            true,
 	"head_sampling_rate": 1,
 	"logs":               map[string]any{"enabled": true, "invocation_logs": true},
 	"traces":             map[string]any{"enabled": true},
 }
 
-// cfDeployer is the cloudflare-go-backed CloudflareDeployer. It performs the
-// real multi-step worker upload (assets session -> asset batches -> script
-// PUT -> custom-domain or workers.dev routing) and is exercised only
-// end-to-end; the deploy orchestration is unit-tested against a fake through
-// the CloudflareDeployer seam.
-type cfDeployer struct {
-	client *cloudflare.Client
+// provider is the cloudflare-go-backed edge.Provider. It performs the real
+// multi-step worker upload (assets session -> asset batches -> script PUT ->
+// custom-domain or workers.dev routing) and is exercised only end-to-end; the
+// provider-side deploy orchestration is unit-tested against a fake through the
+// edge.Provider seam.
+type provider struct {
+	client *cf.Client
 }
 
-// NewCloudflareDeployer builds a CloudflareDeployer whose API token is read from
+// New builds the Cloudflare edge. Its API token is read from
 // CLOUDFLARE_API_TOKEN by the cloudflare-go client.
-func NewCloudflareDeployer() CloudflareDeployer {
-	return &cfDeployer{client: cloudflare.NewClient()}
+func New() edge.Provider {
+	return &provider{client: cf.NewClient()}
 }
 
-func (d *cfDeployer) DeployWorker(ctx context.Context, upload WorkerUpload) (WorkerResult, error) {
-	assetsJWT, err := d.uploadAssets(ctx, upload)
+// Bootstrap reports Cloudflare's trust posture. Cloudflare runs in its own
+// account, outside any cloud provider's trust boundary, so the provider must
+// mint static credentials for it. It provisions nothing of its own and so
+// offers nothing.
+func (p *provider) Bootstrap(context.Context) (edge.BootstrapOutput, error) {
+	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
+}
+
+func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return edge.AppResult{}, fmt.Errorf("%s is not set; it is required to deploy to the Cloudflare edge", envAccountID)
+	}
+	up := upload{accountID: accountID, scriptName: app.Name, worker: app.Worker}
+
+	assetsJWT, err := p.uploadAssets(ctx, up)
 	if err != nil {
-		return WorkerResult{}, fmt.Errorf("upload assets: %w", err)
+		return edge.AppResult{}, fmt.Errorf("upload assets: %w", err)
 	}
 
-	if err := d.putScript(ctx, upload, assetsJWT); err != nil {
-		return WorkerResult{}, fmt.Errorf("put worker script: %w", err)
+	if err := p.putScript(ctx, up, assetsJWT); err != nil {
+		return edge.AppResult{}, fmt.Errorf("put worker script: %w", err)
 	}
 
-	if err := d.reconcileCustomDomains(ctx, upload, upload.Domain); err != nil {
-		return WorkerResult{}, err
+	if err := p.reconcileCustomDomains(ctx, up, app.Domain); err != nil {
+		return edge.AppResult{}, err
 	}
-	url, err := d.setSubdomain(ctx, upload, upload.Domain == "")
+	url, err := p.setSubdomain(ctx, up, app.Domain == "")
 	if err != nil {
-		return WorkerResult{}, fmt.Errorf("set workers.dev subdomain: %w", err)
+		return edge.AppResult{}, fmt.Errorf("set workers.dev subdomain: %w", err)
 	}
-	if upload.Domain != "" {
-		url = "https://" + upload.Domain
+	if app.Domain != "" {
+		url = "https://" + app.Domain
 	}
-	return WorkerResult{URL: url}, nil
+	return edge.AppResult{URL: url}, nil
+}
+
+// upload is one app deployment resolved against the Cloudflare account it lands
+// in.
+type upload struct {
+	accountID  string
+	scriptName string
+	worker     edge.Worker
 }
 
 // uploadAssets registers the static-asset manifest, uploads the file batches the
 // session asks for, and returns the completion JWT the script upload binds. When
 // the worker has no static assets it returns an empty token and uploads nothing.
-func (d *cfDeployer) uploadAssets(ctx context.Context, upload WorkerUpload) (string, error) {
-	if len(upload.Assets) == 0 {
+func (p *provider) uploadAssets(ctx context.Context, up upload) (string, error) {
+	if len(up.worker.Assets) == 0 {
 		return "", nil
 	}
 
-	manifest := make(map[string]workers.ScriptAssetUploadNewParamsManifest, len(upload.Assets))
-	assetByHash := make(map[string]StaticAsset, len(upload.Assets))
-	for _, a := range upload.Assets {
+	manifest := make(map[string]workers.ScriptAssetUploadNewParamsManifest, len(up.worker.Assets))
+	assetByHash := make(map[string]edge.StaticAsset, len(up.worker.Assets))
+	for _, a := range up.worker.Assets {
 		manifest[a.Path] = workers.ScriptAssetUploadNewParamsManifest{
-			Hash: cloudflare.F(a.Hash),
-			Size: cloudflare.F(a.Size),
+			Hash: cf.F(a.Hash),
+			Size: cf.F(a.Size),
 		}
 		assetByHash[a.Hash] = a
 	}
 
-	session, err := d.client.Workers.Scripts.Assets.Upload.New(ctx, upload.ScriptName, workers.ScriptAssetUploadNewParams{
-		AccountID: cloudflare.F(upload.AccountID),
-		Manifest:  cloudflare.F(manifest),
+	session, err := p.client.Workers.Scripts.Assets.Upload.New(ctx, up.scriptName, workers.ScriptAssetUploadNewParams{
+		AccountID: cf.F(up.accountID),
+		Manifest:  cf.F(manifest),
 	})
 	if err != nil {
 		return "", fmt.Errorf("create assets upload session: %w", err)
@@ -124,9 +156,9 @@ func (d *cfDeployer) uploadAssets(ctx context.Context, upload WorkerUpload) (str
 		if err != nil {
 			return "", err
 		}
-		res, err := d.client.Workers.Assets.Upload.New(ctx, workers.AssetUploadNewParams{
-			AccountID: cloudflare.F(upload.AccountID),
-			Base64:    cloudflare.F(workers.AssetUploadNewParamsBase64True),
+		res, err := p.client.Workers.Assets.Upload.New(ctx, workers.AssetUploadNewParams{
+			AccountID: cf.F(up.accountID),
+			Base64:    cf.F(workers.AssetUploadNewParamsBase64True),
 		}, option.WithRequestBody(contentType, body), option.WithHeader("Authorization", "Bearer "+session.JWT))
 		if err != nil {
 			return "", fmt.Errorf("upload asset batch: %w", err)
@@ -147,7 +179,7 @@ func (d *cfDeployer) uploadAssets(ctx context.Context, upload WorkerUpload) (str
 // tells Cloudflare the parts are base64). An unknown extension maps to
 // "application/null" — Cloudflare's sentinel for "serve without a Content-Type",
 // mirroring wrangler.
-func buildAssetBatch(bucket []string, assetByHash map[string]StaticAsset) ([]byte, string, error) {
+func buildAssetBatch(bucket []string, assetByHash map[string]edge.StaticAsset) ([]byte, string, error) {
 	buf := &bytes.Buffer{}
 	w := multipart.NewWriter(buf)
 	for _, hash := range bucket {
@@ -169,34 +201,34 @@ func buildAssetBatch(bucket []string, assetByHash map[string]StaticAsset) ([]byt
 
 // putScript uploads the worker as a multipart module-syntax script: a metadata
 // part describing the bindings, assets, and compatibility, plus one part per
-// module (the entrypoint and the routing manifest). The generated Update method
-// only serializes metadata JSON, so the multipart body is built by hand and
-// swapped in via WithRequestBody.
-func (d *cfDeployer) putScript(ctx context.Context, upload WorkerUpload, assetsJWT string) error {
-	body, contentType, err := buildScriptMultipart(upload, assetsJWT)
+// module (the entrypoint and any siblings). The generated Update method only
+// serializes metadata JSON, so the multipart body is built by hand and swapped
+// in via WithRequestBody.
+func (p *provider) putScript(ctx context.Context, up upload, assetsJWT string) error {
+	body, contentType, err := buildScriptMultipart(up.worker, assetsJWT)
 	if err != nil {
 		return err
 	}
 
-	_, err = d.client.Workers.Scripts.Update(ctx, upload.ScriptName, workers.ScriptUpdateParams{
-		AccountID: cloudflare.F(upload.AccountID),
+	_, err = p.client.Workers.Scripts.Update(ctx, up.scriptName, workers.ScriptUpdateParams{
+		AccountID: cf.F(up.accountID),
 	}, option.WithRequestBody(contentType, body))
 	return err
 }
 
 // buildScriptMultipart assembles the worker upload's multipart/form-data body
 // and its content type.
-func buildScriptMultipart(upload WorkerUpload, assetsJWT string) ([]byte, string, error) {
+func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string, error) {
 	// Cloudflare rejects an assets binding without a completed assets upload, so
 	// the binding and the assets metadata are gated on the same token: present
 	// together or absent together.
 	includeAssets := assetsJWT != ""
 	metadata := map[string]any{
-		"main_module":         upload.Main.Name,
-		"compatibility_date":  nextWorkerCompatDate,
-		"compatibility_flags": nextWorkerCompatFlags,
-		"observability":       nextWorkerObservability,
-		"bindings":            scriptBindings(upload, includeAssets),
+		"main_module":         worker.Main.Name,
+		"compatibility_date":  compatDate,
+		"compatibility_flags": compatFlags,
+		"observability":       observability,
+		"bindings":            scriptBindings(worker, includeAssets),
 	}
 	if includeAssets {
 		metadata["assets"] = map[string]any{
@@ -218,7 +250,7 @@ func buildScriptMultipart(upload WorkerUpload, assetsJWT string) ([]byte, string
 	if err := writePart(w, "metadata", "", "application/json", metadataJSON); err != nil {
 		return nil, "", err
 	}
-	for _, mod := range append([]WorkerModule{upload.Main}, upload.Modules...) {
+	for _, mod := range append([]edge.WorkerModule{worker.Main}, worker.Modules...) {
 		if err := writePart(w, mod.Name, mod.Name, mod.ContentType, mod.Content); err != nil {
 			return nil, "", err
 		}
@@ -230,26 +262,24 @@ func buildScriptMultipart(upload WorkerUpload, assetsJWT string) ([]byte, string
 }
 
 // scriptBindings is the worker's binding set: the Assets Fetcher (only when
-// assets were uploaded), one plain-text binding per var (e.g. FUNCTION_URLS,
-// and the edge reader's access key id + region + ISR store coordinates), and one
-// secret_text binding per secret (the edge reader's secret access key, which
-// must never surface in plaintext metadata).
-func scriptBindings(upload WorkerUpload, includeAssets bool) []map[string]any {
+// assets were uploaded), one plain-text binding per var, and one secret_text
+// binding per secret — values that must never surface in plaintext metadata.
+func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 	bindings := []map[string]any{}
-	if includeAssets && upload.AssetBinding != "" {
+	if includeAssets && worker.AssetBinding != "" {
 		bindings = append(bindings, map[string]any{
 			"type": "assets",
-			"name": upload.AssetBinding,
+			"name": worker.AssetBinding,
 		})
 	}
-	for name, text := range upload.Vars {
+	for name, text := range worker.Vars {
 		bindings = append(bindings, map[string]any{
 			"type": "plain_text",
 			"name": name,
 			"text": text,
 		})
 	}
-	for name, text := range upload.Secrets {
+	for name, text := range worker.Secrets {
 		bindings = append(bindings, map[string]any{
 			"type": "secret_text",
 			"name": name,
@@ -279,11 +309,11 @@ func writePart(w *multipart.Writer, name, filename, contentType string, content 
 
 // setSubdomain returns the worker's public workers.dev URL when enabling, or ""
 // when disabling.
-func (d *cfDeployer) setSubdomain(ctx context.Context, upload WorkerUpload, enabled bool) (string, error) {
-	if _, err := d.client.Workers.Scripts.Subdomain.New(ctx, upload.ScriptName, workers.ScriptSubdomainNewParams{
-		AccountID:       cloudflare.F(upload.AccountID),
-		Enabled:         cloudflare.F(enabled),
-		PreviewsEnabled: cloudflare.F(false),
+func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (string, error) {
+	if _, err := p.client.Workers.Scripts.Subdomain.New(ctx, up.scriptName, workers.ScriptSubdomainNewParams{
+		AccountID:       cf.F(up.accountID),
+		Enabled:         cf.F(enabled),
+		PreviewsEnabled: cf.F(false),
 	}); err != nil {
 		return "", err
 	}
@@ -291,23 +321,23 @@ func (d *cfDeployer) setSubdomain(ctx context.Context, upload WorkerUpload, enab
 		return "", nil
 	}
 
-	account, err := d.client.Workers.Subdomains.Get(ctx, workers.SubdomainGetParams{
-		AccountID: cloudflare.F(upload.AccountID),
+	account, err := p.client.Workers.Subdomains.Get(ctx, workers.SubdomainGetParams{
+		AccountID: cf.F(up.accountID),
 	})
 	if err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("https://%s.%s.workers.dev", upload.ScriptName, account.Subdomain), nil
+	return fmt.Sprintf("https://%s.%s.workers.dev", up.scriptName, account.Subdomain), nil
 }
 
 // reconcileCustomDomains makes the worker's attached custom domains exactly
 // {desired}, or none when desired is empty: it detaches every attached hostname
 // that isn't desired, then attaches desired if it isn't already. The desired
 // hostname's zone is resolved from the account's zones.
-func (d *cfDeployer) reconcileCustomDomains(ctx context.Context, upload WorkerUpload, desired string) error {
-	attached := d.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
-		AccountID: cloudflare.F(upload.AccountID),
-		Service:   cloudflare.F(upload.ScriptName),
+func (p *provider) reconcileCustomDomains(ctx context.Context, up upload, desired string) error {
+	attached := p.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
+		AccountID: cf.F(up.accountID),
+		Service:   cf.F(up.scriptName),
 	})
 	desiredAttached := false
 	for attached.Next() {
@@ -316,8 +346,8 @@ func (d *cfDeployer) reconcileCustomDomains(ctx context.Context, upload WorkerUp
 			desiredAttached = true
 			continue
 		}
-		if err := d.client.Workers.Domains.Delete(ctx, dom.ID, workers.DomainDeleteParams{
-			AccountID: cloudflare.F(upload.AccountID),
+		if err := p.client.Workers.Domains.Delete(ctx, dom.ID, workers.DomainDeleteParams{
+			AccountID: cf.F(up.accountID),
 		}); err != nil {
 			return fmt.Errorf("detach custom domain %q: %w", dom.Hostname, err)
 		}
@@ -329,16 +359,16 @@ func (d *cfDeployer) reconcileCustomDomains(ctx context.Context, upload WorkerUp
 		return nil
 	}
 
-	zoneID, err := d.resolveZoneID(ctx, upload.AccountID, desired)
+	zoneID, err := p.resolveZoneID(ctx, up.accountID, desired)
 	if err != nil {
 		return err
 	}
-	if _, err := d.client.Workers.Domains.Update(ctx, workers.DomainUpdateParams{
-		AccountID:   cloudflare.F(upload.AccountID),
-		Environment: cloudflare.F("production"),
-		Hostname:    cloudflare.F(desired),
-		Service:     cloudflare.F(upload.ScriptName),
-		ZoneID:      cloudflare.F(zoneID),
+	if _, err := p.client.Workers.Domains.Update(ctx, workers.DomainUpdateParams{
+		AccountID:   cf.F(up.accountID),
+		Environment: cf.F("production"),
+		Hostname:    cf.F(desired),
+		Service:     cf.F(up.scriptName),
+		ZoneID:      cf.F(zoneID),
 	}); err != nil {
 		return fmt.Errorf("attach custom domain %q: %w", desired, err)
 	}
@@ -348,9 +378,9 @@ func (d *cfDeployer) reconcileCustomDomains(ctx context.Context, upload WorkerUp
 // resolveZoneID finds the account zone whose name is the longest suffix of
 // hostname (e.g. "acme.com" for "app.acme.com"). A hostname with no owning zone
 // in the account is a hard error: the deploy cannot serve it.
-func (d *cfDeployer) resolveZoneID(ctx context.Context, accountID, hostname string) (string, error) {
-	owned := d.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
-		Account: cloudflare.F(zones.ZoneListParamsAccount{ID: cloudflare.F(accountID)}),
+func (p *provider) resolveZoneID(ctx context.Context, accountID, hostname string) (string, error) {
+	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
+		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
 	})
 	bestID, bestName := "", ""
 	for owned.Next() {

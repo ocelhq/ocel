@@ -19,6 +19,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
+	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -86,10 +87,10 @@ type Config struct {
 	EdgeAccessKeyID string
 	EdgeSecretKey   string
 
-	// Cloudflare deploys the Next.js routing worker once its Lambdas exist and
-	// their Function URLs are known. Nil unless the project has a Next.js app;
-	// the real cloudflare-go implementation is the end-to-end seam.
-	Cloudflare CloudflareDeployer
+	// Edge deploys the Next.js routing worker once its Lambdas exist and their
+	// Function URLs are known. Nil unless the project has a Next.js app; the
+	// concrete edge implementation is the end-to-end seam.
+	Edge edge.Provider
 
 	// Class is the environment class this deploy realizes under. It selects the
 	// web-facing worker's custom domain: only CLASS_PRODUCTION consults

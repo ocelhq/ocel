@@ -1,17 +1,12 @@
 package deploy
 
 import (
-	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"io"
-	"mime"
-	"mime/multipart"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -123,7 +118,7 @@ func TestCollectStaticAssets_ReadsFilesWithHashAndSize(t *testing.T) {
 		t.Fatalf("got %d assets, want 2", len(assets))
 	}
 
-	byPath := map[string]StaticAsset{}
+	byPath := map[string]edge.StaticAsset{}
 	for _, a := range assets {
 		byPath[a.Path] = a
 	}
@@ -152,28 +147,32 @@ func TestCollectStaticAssets_MissingDirYieldsNone(t *testing.T) {
 	}
 }
 
-// fakeCloudflare captures the WorkerUpload it is handed so orchestration can be
-// asserted without touching the Cloudflare API.
-type fakeCloudflare struct {
-	got    WorkerUpload
+// recordingEdge captures the AppDeployment it is handed so orchestration can be
+// asserted without touching any real edge API.
+type recordingEdge struct {
+	got    edge.AppDeployment
 	called bool
 }
 
-func (f *fakeCloudflare) DeployWorker(_ context.Context, upload WorkerUpload) (WorkerResult, error) {
-	f.got = upload
+func (f *recordingEdge) Bootstrap(context.Context) (edge.BootstrapOutput, error) {
+	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
+}
+
+func (f *recordingEdge) DeployApp(_ context.Context, app edge.AppDeployment) (edge.AppResult, error) {
+	f.got = app
 	f.called = true
-	return WorkerResult{URL: "https://ocel-proj-prod.acme.workers.dev"}, nil
+	return edge.AppResult{URL: "https://ocel-proj-prod.acme.workers.dev"}, nil
 }
 
 func TestDeployNextWorker_NoNextFunction_IsNoOp(t *testing.T) {
-	fake := &fakeCloudflare{}
+	fake := &recordingEdge{}
 	manifest := &deploymentsv1.Manifest{
 		Functions: []*deploymentsv1.ManifestFunction{
 			{LogicalName: "web_api", Framework: "express"},
 		},
 	}
 
-	out, err := deployNextWorker(context.Background(), Config{Cloudflare: fake}, manifest, nil, nil)
+	out, err := deployNextWorker(context.Background(), Config{Edge: fake}, manifest, nil, nil)
 	if err != nil {
 		t.Fatalf("deployNextWorker: %v", err)
 	}
@@ -201,11 +200,10 @@ func TestDeployNextWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	t.Setenv(envCloudflareAccountID, "acct-123")
 	t.Setenv(envNextWorkerPath, workerBundle)
 
-	fake := &fakeCloudflare{}
-	cfg := Config{Cloudflare: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
+	fake := &recordingEdge{}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
 	manifest := &deploymentsv1.Manifest{
 		Functions: []*deploymentsv1.ManifestFunction{
 			{LogicalName: "api_documents", Framework: "next", RouteId: "/api/documents"},
@@ -222,25 +220,22 @@ func TestDeployNextWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	}
 
 	up := fake.got
-	if up.AccountID != "acct-123" {
-		t.Errorf("AccountID = %q, want acct-123", up.AccountID)
+	if up.Name != "ocel-proj-1-prod" {
+		t.Errorf("Name = %q, want ocel-proj-1-prod", up.Name)
 	}
-	if up.ScriptName != "ocel-proj-1-prod" {
-		t.Errorf("ScriptName = %q, want ocel-proj-1-prod", up.ScriptName)
+	if string(up.Worker.Main.Content) != "export default {}" {
+		t.Errorf("Main content = %q", up.Worker.Main.Content)
 	}
-	if string(up.Main.Content) != "export default {}" {
-		t.Errorf("Main content = %q", up.Main.Content)
+	if len(up.Worker.Modules) != 1 || up.Worker.Modules[0].Name != "routing-manifest.json" {
+		t.Errorf("expected the routing manifest module, got %v", up.Worker.Modules)
 	}
-	if len(up.Modules) != 1 || up.Modules[0].Name != "routing-manifest.json" {
-		t.Errorf("expected the routing manifest module, got %v", up.Modules)
+	if up.Worker.Modules[0].ContentType != "text/plain" {
+		t.Errorf("manifest module Content-Type = %q, want text/plain (no JSON module type exists)", up.Worker.Modules[0].ContentType)
 	}
-	if up.Modules[0].ContentType != "text/plain" {
-		t.Errorf("manifest module Content-Type = %q, want text/plain (no JSON module type exists)", up.Modules[0].ContentType)
+	if len(up.Worker.Assets) != 1 || up.Worker.Assets[0].Path != "/next.svg" {
+		t.Errorf("expected the static asset, got %v", up.Worker.Assets)
 	}
-	if len(up.Assets) != 1 || up.Assets[0].Path != "/next.svg" {
-		t.Errorf("expected the static asset, got %v", up.Assets)
-	}
-	if got, want := up.Vars[nextWorkerURLsVar], `{"/api/documents":"https://fn.lambda-url.aws/"}`; got != want {
+	if got, want := up.Worker.Vars[nextWorkerURLsVar], `{"/api/documents":"https://fn.lambda-url.aws/"}`; got != want {
 		t.Errorf("FUNCTION_URLS = %q, want %q", got, want)
 	}
 	if len(out) != 1 || out[0].GetFunction().GetUrl() != "https://ocel-proj-prod.acme.workers.dev" {
@@ -257,12 +252,11 @@ func TestDeployNextWorker_InjectsInterceptionBindingsWhenEdgeCredsPresent(t *tes
 	if err := os.WriteFile(workerBundle, []byte("export default {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(envCloudflareAccountID, "acct-123")
 	t.Setenv(envNextWorkerPath, workerBundle)
 
-	fake := &fakeCloudflare{}
+	fake := &recordingEdge{}
 	cfg := Config{
-		Cloudflare:      fake,
+		Edge:            fake,
 		ArtifactRoot:    artifactRoot,
 		StackName:       "proj_1-prod",
 		Region:          "us-west-2",
@@ -285,10 +279,10 @@ func TestDeployNextWorker_InjectsInterceptionBindingsWhenEdgeCredsPresent(t *tes
 
 	up := fake.got
 	// The secret access key must be a secret_text binding, never a plain var.
-	if up.Secrets[edgeSecretKeyVar] != "secret-edge" {
-		t.Errorf("%s secret = %q, want secret-edge", edgeSecretKeyVar, up.Secrets[edgeSecretKeyVar])
+	if up.Worker.Secrets[edgeSecretKeyVar] != "secret-edge" {
+		t.Errorf("%s secret = %q, want secret-edge", edgeSecretKeyVar, up.Worker.Secrets[edgeSecretKeyVar])
 	}
-	if _, leaked := up.Vars[edgeSecretKeyVar]; leaked {
+	if _, leaked := up.Worker.Vars[edgeSecretKeyVar]; leaked {
 		t.Error("the secret access key must not appear in plain-text Vars")
 	}
 
@@ -301,7 +295,7 @@ func TestDeployNextWorker_InjectsInterceptionBindingsWhenEdgeCredsPresent(t *tes
 		"OCEL_ISR_TAG_NAMESPACE": "TAG#prod#proj#web#b1#",
 	}
 	for k, want := range wantVars {
-		if got := up.Vars[k]; got != want {
+		if got := up.Worker.Vars[k]; got != want {
 			t.Errorf("Vars[%s] = %q, want %q", k, got, want)
 		}
 	}
@@ -309,8 +303,8 @@ func TestDeployNextWorker_InjectsInterceptionBindingsWhenEdgeCredsPresent(t *tes
 
 func TestDeployNextWorker_NoInterceptionBindingsWithoutEdgeCreds(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
-	fake := &fakeCloudflare{}
-	cfg := Config{Cloudflare: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
+	fake := &recordingEdge{}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
 	manifest := &deploymentsv1.Manifest{
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", RouteId: "/"}},
 	}
@@ -319,10 +313,10 @@ func TestDeployNextWorker_NoInterceptionBindingsWithoutEdgeCreds(t *testing.T) {
 		t.Fatalf("deployNextWorker: %v", err)
 	}
 
-	if fake.got.Secrets != nil {
-		t.Errorf("expected no secrets without edge creds, got %v", fake.got.Secrets)
+	if fake.got.Worker.Secrets != nil {
+		t.Errorf("expected no secrets without edge creds, got %v", fake.got.Worker.Secrets)
 	}
-	if _, ok := fake.got.Vars[edgeAccessKeyIDVar]; ok {
+	if _, ok := fake.got.Worker.Vars[edgeAccessKeyIDVar]; ok {
 		t.Error("expected no edge access key var without edge creds")
 	}
 }
@@ -342,8 +336,8 @@ func TestDeployNextWorker_CustomDomainOnlyForProduction(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			artifactRoot := writeMinimalWorkerArtifacts(t)
-			fake := &fakeCloudflare{}
-			cfg := Config{Cloudflare: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Class: tc.class}
+			fake := &recordingEdge{}
+			cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Class: tc.class}
 			manifest := &deploymentsv1.Manifest{
 				Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_documents", Framework: "next", RouteId: "/api/documents"}},
 				Domains:   tc.domains,
@@ -369,125 +363,6 @@ func writeMinimalWorkerArtifacts(t *testing.T) string {
 	if err := os.WriteFile(workerBundle, []byte("export default {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	t.Setenv(envCloudflareAccountID, "acct-123")
 	t.Setenv(envNextWorkerPath, workerBundle)
 	return artifactRoot
-}
-
-// metadataFromMultipart builds the worker upload body and parses its "metadata"
-// part back into a map for assertion.
-func metadataFromMultipart(t *testing.T, upload WorkerUpload, assetsJWT string) map[string]any {
-	t.Helper()
-	body, contentType, err := buildScriptMultipart(upload, assetsJWT)
-	if err != nil {
-		t.Fatalf("buildScriptMultipart: %v", err)
-	}
-	_, params, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		t.Fatalf("parse content type: %v", err)
-	}
-	mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
-	for {
-		part, err := mr.NextPart()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatalf("read part: %v", err)
-		}
-		if part.FormName() != "metadata" {
-			continue
-		}
-		data, _ := io.ReadAll(part)
-		var meta map[string]any
-		if err := json.Unmarshal(data, &meta); err != nil {
-			t.Fatalf("unmarshal metadata: %v", err)
-		}
-		return meta
-	}
-	t.Fatal("no metadata part in multipart body")
-	return nil
-}
-
-func hasAssetBinding(meta map[string]any) bool {
-	bindings, _ := meta["bindings"].([]any)
-	for _, b := range bindings {
-		if m, ok := b.(map[string]any); ok && m["type"] == "assets" {
-			return true
-		}
-	}
-	return false
-}
-
-func TestBuildScriptMultipart_AssetsBindingGatedOnCompletionJWT(t *testing.T) {
-	upload := WorkerUpload{
-		ScriptName:   "w",
-		AssetBinding: "ASSETS",
-		Main:         WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("x")},
-		Vars:         map[string]string{"FUNCTION_URLS": "{}"},
-		Assets:       []StaticAsset{{Path: "/a.svg", Hash: "h", Size: 1, Content: []byte("a")}},
-	}
-
-	// Without a completion JWT (e.g. a redeploy where the session returned no
-	// buckets and the token was lost), neither the assets binding nor the assets
-	// metadata may appear — Cloudflare rejects a binding without assets.
-	noJWT := metadataFromMultipart(t, upload, "")
-	if _, ok := noJWT["assets"]; ok {
-		t.Error("assets metadata must be absent without a completion JWT")
-	}
-	if hasAssetBinding(noJWT) {
-		t.Error("assets binding must be absent without a completion JWT")
-	}
-
-	withJWT := metadataFromMultipart(t, upload, "completion-token")
-	if _, ok := withJWT["assets"]; !ok {
-		t.Error("assets metadata must be present with a completion JWT")
-	}
-	if !hasAssetBinding(withJWT) {
-		t.Error("assets binding must be present with a completion JWT")
-	}
-}
-
-func TestBuildAssetBatch_EncodesFilePartsPerHash(t *testing.T) {
-	assets := map[string]StaticAsset{
-		"hash-svg": {Path: "/next.svg", Content: []byte("<svg/>"), Hash: "hash-svg"},
-	}
-	body, contentType, err := buildAssetBatch([]string{"hash-svg"}, assets)
-	if err != nil {
-		t.Fatalf("buildAssetBatch: %v", err)
-	}
-	_, params, err := mime.ParseMediaType(contentType)
-	if err != nil {
-		t.Fatalf("parse content type: %v", err)
-	}
-	mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
-	part, err := mr.NextPart()
-	if err != nil {
-		t.Fatalf("read part: %v", err)
-	}
-	if part.FormName() != "hash-svg" || part.FileName() != "hash-svg" {
-		t.Errorf("part name/filename = %q/%q, want the content hash for both", part.FormName(), part.FileName())
-	}
-	if ct := part.Header.Get("Content-Type"); ct != "image/svg+xml" {
-		t.Errorf("part Content-Type = %q, want image/svg+xml", ct)
-	}
-	data, _ := io.ReadAll(part)
-	if string(data) != base64.StdEncoding.EncodeToString([]byte("<svg/>")) {
-		t.Errorf("part body must be the base64-encoded contents, got %q", data)
-	}
-}
-
-func TestDeployNextWorker_MissingAccountID_Errors(t *testing.T) {
-	t.Setenv(envCloudflareAccountID, "")
-	fake := &fakeCloudflare{}
-	manifest := &deploymentsv1.Manifest{
-		Functions: []*deploymentsv1.ManifestFunction{
-			{LogicalName: "index", Framework: "next", RouteId: "/"},
-		},
-	}
-
-	_, err := deployNextWorker(context.Background(), Config{Cloudflare: fake}, manifest, nil, nil)
-	if err == nil {
-		t.Fatal("expected an error when CLOUDFLARE_ACCOUNT_ID is unset")
-	}
 }

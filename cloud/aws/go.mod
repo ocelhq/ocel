@@ -27,7 +27,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/cloudflare/cloudflare-go/v4 v4.6.0
+	github.com/ocelhq/ocel/cloud/edge v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/cloud/edge/cloudflare v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.36.0
@@ -36,6 +37,7 @@ require (
 )
 
 require (
+	github.com/cloudflare/cloudflare-go/v4 v4.6.0 // indirect
 	github.com/tidwall/gjson v1.14.4 // indirect
 	github.com/tidwall/match v1.1.1 // indirect
 	github.com/tidwall/pretty v1.2.1 // indirect
@@ -171,3 +173,7 @@ require (
 replace github.com/ocelhq/ocel/pkg/channel => ../../pkg/channel
 
 replace github.com/ocelhq/ocel/pkg/proto => ../../pkg/proto
+
+replace github.com/ocelhq/ocel/cloud/edge => ../edge
+
+replace github.com/ocelhq/ocel/cloud/edge/cloudflare => ../edge/cloudflare
