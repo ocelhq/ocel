@@ -23,7 +23,7 @@ const handlers = ["cache-handler", "use-cache-default"];
 
 // Sources that only exist to be bundled into a handler; their unbundled tsc
 // output must not ship next to the bundles.
-const internalModules = ["cache-store", "tag-clock"];
+const internalModules = ["cache-store", "tag-clock", "use-cache-store"];
 
 await Promise.all(
   handlers.map((name) =>

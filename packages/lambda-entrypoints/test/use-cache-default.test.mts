@@ -1,11 +1,15 @@
 import { afterEach, expect, test, vi } from "vitest";
 
-// Everything the handler decides — budget, per-entry cap, the LRU, the tag map —
-// lives in module scope, exactly as it does in a warm Lambda. Each test therefore
-// rebuilds the module graph so one test's cache never leaks into the next.
+// Everything the handler decides — budget, per-entry cap, the LRU — lives in
+// module scope, exactly as it does in a warm Lambda. Each test therefore
+// rebuilds the module graph so one test's cache never leaks into the next. The
+// tag clock is shared through globalThis and outlives a module reset, so it is
+// rebound explicitly onto no durable store: these tests are about the handler's
+// own memory tier, not about invalidation crossing instances.
 async function loadHandler(env: Record<string, string> = {}) {
   vi.resetModules();
   for (const [k, v] of Object.entries(env)) process.env[k] = v;
+  (await import("../src/next/tag-clock.mjs")).setTagClockStore(null);
   return (await import("../src/next/use-cache-default.mjs")).default;
 }
 
