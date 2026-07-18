@@ -46,6 +46,12 @@ const (
 	EdgeUserName        = "ocel-edge"
 	EdgePreviewUserName = "ocel-edge-preview"
 
+	// StateTableIndexName is the state table's secondary index. Exported so the
+	// deploy path can grant against it and name it to a function's runtime
+	// rather than hardcoding a name this template alone controls. Named
+	// generically, like the pk/sk pair, so a second entity can adopt it.
+	StateTableIndexName = "gsi1"
+
 	outputStateBucket    = "StateBucketName"
 	outputStateTable     = "StateTableName"
 	outputArtifactBucket = "ArtifactBucketName"
@@ -435,8 +441,15 @@ Resources:
 // own key prefix rather than getting a table of its own. expires_at is the TTL
 // attribute; entities that outlive a request simply omit it. The block is a
 // Resources child, so it is emitted before the template's Outputs: line.
+//
+// The gsi1pk/gsi1sk index is the time-ordered access path Next's tag sync
+// needs: without it, "which tags changed since I last looked" is a scan of an
+// account-global table. It is sparse — DynamoDB indexes only items carrying
+// both index keys — so upload sessions and the ISR handler's own tag records,
+// which write neither, stay out of it entirely. The projection carries every
+// field a sync reads so one query answers it with no follow-up per-tag read.
 func stateTableResource() string {
-	return `  StateTable:
+	return fmt.Sprintf(`  StateTable:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
@@ -445,15 +458,32 @@ func stateTableResource() string {
           AttributeType: S
         - AttributeName: sk
           AttributeType: S
+        - AttributeName: gsi1pk
+          AttributeType: S
+        - AttributeName: gsi1sk
+          AttributeType: S
       KeySchema:
         - AttributeName: pk
           KeyType: HASH
         - AttributeName: sk
           KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: %s
+          KeySchema:
+            - AttributeName: gsi1pk
+              KeyType: HASH
+            - AttributeName: gsi1sk
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - expired
+              - stale
+              - tag
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
-`
+`, StateTableIndexName)
 }
 
 // stateTableOutput renders the StateTable name output shared by both substrate

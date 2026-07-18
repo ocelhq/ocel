@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"testing"
 
@@ -26,6 +27,17 @@ type parsedTemplate struct {
 				AttributeName string `yaml:"AttributeName"`
 				KeyType       string `yaml:"KeyType"`
 			} `yaml:"KeySchema"`
+			GlobalSecondaryIndexes []struct {
+				IndexName string `yaml:"IndexName"`
+				KeySchema []struct {
+					AttributeName string `yaml:"AttributeName"`
+					KeyType       string `yaml:"KeyType"`
+				} `yaml:"KeySchema"`
+				Projection struct {
+					ProjectionType   string   `yaml:"ProjectionType"`
+					NonKeyAttributes []string `yaml:"NonKeyAttributes"`
+				} `yaml:"Projection"`
+			} `yaml:"GlobalSecondaryIndexes"`
 			TimeToLiveSpecification struct {
 				AttributeName string `yaml:"AttributeName"`
 				Enabled       bool   `yaml:"Enabled"`
@@ -95,16 +107,45 @@ func TestStackTemplate_StateTable(t *testing.T) {
 			}
 
 			attrs := table.Properties.AttributeDefinitions
-			if len(attrs) != 2 ||
+			if len(attrs) != 4 ||
 				attrs[0].AttributeName != "pk" || attrs[0].AttributeType != "S" ||
-				attrs[1].AttributeName != "sk" || attrs[1].AttributeType != "S" {
-				t.Errorf("AttributeDefinitions = %+v, want pk (S) and sk (S)", attrs)
+				attrs[1].AttributeName != "sk" || attrs[1].AttributeType != "S" ||
+				attrs[2].AttributeName != "gsi1pk" || attrs[2].AttributeType != "S" ||
+				attrs[3].AttributeName != "gsi1sk" || attrs[3].AttributeType != "S" {
+				t.Errorf("AttributeDefinitions = %+v, want pk/sk and gsi1pk/gsi1sk, all (S)", attrs)
 			}
 			keys := table.Properties.KeySchema
 			if len(keys) != 2 ||
 				keys[0].AttributeName != "pk" || keys[0].KeyType != "HASH" ||
 				keys[1].AttributeName != "sk" || keys[1].KeyType != "RANGE" {
 				t.Errorf("KeySchema = %+v, want pk HASH + sk RANGE", keys)
+			}
+
+			// The index is what makes "which tags changed since I last looked"
+			// a bounded query instead of a scan of an account-global table. It
+			// is sparse by construction: only items that carry gsi1pk are
+			// indexed, so upload sessions and the ISR handler's own tag items
+			// stay out of it. The projection must carry every field the sync
+			// reads, or a query that "worked" still costs a follow-up read per
+			// tag.
+			idxs := table.Properties.GlobalSecondaryIndexes
+			if len(idxs) != 1 {
+				t.Fatalf("GlobalSecondaryIndexes = %+v, want exactly the tag-sync index", idxs)
+			}
+			idx := idxs[0]
+			if idx.IndexName != StateTableIndexName {
+				t.Errorf("IndexName = %q, want %q", idx.IndexName, StateTableIndexName)
+			}
+			if len(idx.KeySchema) != 2 ||
+				idx.KeySchema[0].AttributeName != "gsi1pk" || idx.KeySchema[0].KeyType != "HASH" ||
+				idx.KeySchema[1].AttributeName != "gsi1sk" || idx.KeySchema[1].KeyType != "RANGE" {
+				t.Errorf("index KeySchema = %+v, want gsi1pk HASH + gsi1sk RANGE", idx.KeySchema)
+			}
+			if idx.Projection.ProjectionType != "INCLUDE" {
+				t.Errorf("index ProjectionType = %q, want INCLUDE", idx.Projection.ProjectionType)
+			}
+			if want := []string{"expired", "stale", "tag"}; !slices.Equal(idx.Projection.NonKeyAttributes, want) {
+				t.Errorf("index NonKeyAttributes = %v, want %v", idx.Projection.NonKeyAttributes, want)
 			}
 
 			ttl := table.Properties.TimeToLiveSpecification

@@ -3,8 +3,10 @@ package deploy
 import (
 	"encoding/json"
 	"slices"
+	"strings"
 	"testing"
 
+	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -162,8 +164,8 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 		t.Fatalf("policy is not valid JSON: %v", err)
 	}
-	if len(doc.Statement) != 2 {
-		t.Fatalf("got %d statements, want 2", len(doc.Statement))
+	if len(doc.Statement) != 3 {
+		t.Fatalf("got %d statements, want 3", len(doc.Statement))
 	}
 
 	s3Stmt := doc.Statement[0]
@@ -189,6 +191,26 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 	keys := ddbStmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
 	if len(keys) != 1 || keys[0] != "TAG#prod#proj123#marketing#build456#*" {
 		t.Errorf("LeadingKeys = %v, want the app's own tag partitions", keys)
+	}
+
+	// An index is not covered by its table's ARN, so the tag-sync query needs
+	// its own statement against the index ARN — a grant on the table alone 403s
+	// the query at runtime. The leading-key constraint is evaluated against the
+	// index's partition key here, which is the tag namespace verbatim; the
+	// trailing * matches zero characters, so the same wildcard admits it.
+	idxStmt := doc.Statement[2]
+	if want := cfg.TableARN + "/index/" + bootstrap.StateTableIndexName; idxStmt.Resource != want {
+		t.Errorf("index Resource = %q, want %q", idxStmt.Resource, want)
+	}
+	if want := []string{"dynamodb:Query"}; !slices.Equal(idxStmt.Action, want) {
+		t.Errorf("index Action = %v, want exactly %v", idxStmt.Action, want)
+	}
+	idxKeys := idxStmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
+	if len(idxKeys) != 1 || idxKeys[0] != "TAG#prod#proj123#marketing#build456#*" {
+		t.Errorf("index LeadingKeys = %v, want the app's own tag partitions", idxKeys)
+	}
+	if !strings.HasPrefix(cfg.tagNamespace(), strings.TrimSuffix(idxKeys[0], "*")) {
+		t.Errorf("tagNamespace %q is not admitted by LeadingKeys %q; the index query would 403", cfg.tagNamespace(), idxKeys[0])
 	}
 }
 
@@ -216,5 +238,10 @@ func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
 	}
 	if want := "TAG#prod#proj123#marketing#build456#"; env["OCEL_ISR_TAG_NAMESPACE"] != want {
 		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want %q", env["OCEL_ISR_TAG_NAMESPACE"], want)
+	}
+	// Carried in the environment so the handler never hardcodes an index name
+	// the template alone controls.
+	if env["OCEL_STATE_TABLE_INDEX"] != bootstrap.StateTableIndexName {
+		t.Errorf("OCEL_STATE_TABLE_INDEX = %q, want %q", env["OCEL_STATE_TABLE_INDEX"], bootstrap.StateTableIndexName)
 	}
 }
