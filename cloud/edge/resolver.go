@@ -7,8 +7,12 @@ package edge
 type Resolver interface {
 	// FunctionURL returns the public URL serving a framework-native route id.
 	FunctionURL(routeID string) (string, error)
-	// CacheStore returns where this app's incremental cache lives.
-	CacheStore() (CacheStore, error)
+	// CacheStore returns where this app's incremental cache lives, and whether it
+	// is configured at all. Not-configured is not an error: a provider whose
+	// bootstrap predates edge credentials, or an app with no prerendered content,
+	// simply has no cache for the edge to read, and the worker forwards to the
+	// provider's compute exactly as it otherwise would.
+	CacheStore() (CacheStore, bool, error)
 }
 
 // CacheStore describes a framework's incremental cache in terms any provider

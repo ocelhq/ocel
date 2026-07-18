@@ -270,10 +270,10 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 		return nil, nil, err
 	}
 
-	// The Next.js worker fronts the just-provisioned Lambdas, so it deploys last
-	// — it needs their Function URLs. A failure here fails the deploy; the AWS
+	// The edge worker fronts the just-provisioned Lambdas, so it deploys last —
+	// it needs their Function URLs. A failure here fails the deploy; the AWS
 	// resources persist and a redeploy is idempotent.
-	workerOutputs, err := deployNextWorker(ctx, cfg, manifest, outputs, func(msg string) {
+	workerOutputs, err := deployEdgeWorker(ctx, cfg, manifest, outputs, func(msg string) {
 		progress.report(deploymentsv1.Phase_PHASE_FINALIZING, msg, 0, 0)
 	})
 	if err != nil {
@@ -284,13 +284,13 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 }
 
 // appURLs returns the user-facing URLs to feature on the success screen, in
-// priority order: a Next.js worker URL when present (it fronts the whole app),
+// priority order: an edge worker URL when present (it fronts the whole app),
 // otherwise every function's own URL. Non-function outputs (postgres, bucket)
-// are never app URLs. Keyed by nextWorkerOutputName, defined alongside the
+// are never app URLs. Keyed by edgeWorkerOutputName, defined alongside the
 // worker deploy, so the wire contract carries no magic logical name.
 func appURLs(outputs []*deploymentsv1.ResourceOutput) []string {
 	for _, o := range outputs {
-		if o.GetLogicalName() == nextWorkerOutputName {
+		if o.GetLogicalName() == edgeWorkerOutputName {
 			if f := o.GetFunction(); f != nil && f.GetUrl() != "" {
 				return []string{f.GetUrl()}
 			}

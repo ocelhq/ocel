@@ -16,7 +16,7 @@ func pgOutput(logicalName string) *deploymentsv1.ResourceOutput {
 func TestAppURLs_PrefersWorkerURL(t *testing.T) {
 	outputs := []*deploymentsv1.ResourceOutput{
 		fnOutput("api", "https://api.lambda-url.example"),
-		fnOutput(nextWorkerOutputName, "https://app.workers.dev"),
+		fnOutput(edgeWorkerOutputName, "https://app.workers.dev"),
 		pgOutput("main"),
 	}
 	got := appURLs(outputs)

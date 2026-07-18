@@ -18,6 +18,10 @@ const KindCloudflare Kind = "cloudflare"
 // Provider is an edge: somewhere a framework's worker runs in front of the
 // cloud provider's compute. Implementing it is the whole of adding an edge.
 type Provider interface {
+	// Kind names which edge this is, so a provider can look up the worker a
+	// framework registered for it without knowing what it configured.
+	Kind() Kind
+
 	// Bootstrap provisions whatever the edge needs to exist before any deploy,
 	// and reports its trust posture, its outputs, and any resources it offers
 	// the provider. It runs before the provider's own bootstrap.
