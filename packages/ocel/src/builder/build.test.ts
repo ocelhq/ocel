@@ -85,6 +85,8 @@ describe("buildApp", () => {
       // it as /var/task/<handler>.
       handler: "src/server.js",
       framework: "express",
+      // The owning app, so the CLI can attribute the function in the manifest.
+      app: "api",
     });
 
     expect(summary.name).toBe("api");

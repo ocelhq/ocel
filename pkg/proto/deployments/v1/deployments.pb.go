@@ -344,7 +344,11 @@ type Manifest struct {
 	// hostname the web-facing worker is served on for that class. A provider
 	// reads only the entry matching DeployRequest.environment; absent entries
 	// mean the default vendor subdomain. Only "production" is populated today.
-	Domains       map[string]string `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Domains map[string]string `protobuf:"bytes,5,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// apps are the project's applications. Every ManifestFunction belongs to
+	// exactly one of them. A project that configures no apps still yields one,
+	// the app the builder detected at the project root.
+	Apps          []*ManifestApp `protobuf:"bytes,6,rep,name=apps,proto3" json:"apps,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -414,6 +418,84 @@ func (x *Manifest) GetDomains() map[string]string {
 	return nil
 }
 
+func (x *Manifest) GetApps() []*ManifestApp {
+	if x != nil {
+		return x.Apps
+	}
+	return nil
+}
+
+// ManifestApp is one application in the project: a unit the CLI builds and a
+// provider deploys as a whole.
+type ManifestApp struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// name is the app's name as configured (or, for a detected app, as the
+	// builder named it). It is the key ManifestFunction.app references, and is
+	// unique within a manifest. Unlike a logical_name it is carried verbatim.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// framework is the app's web framework (e.g. "express", "next"). It matches
+	// the framework of the app's functions.
+	Framework string `protobuf:"bytes,2,opt,name=framework,proto3" json:"framework,omitempty"`
+	// domains maps a lowercased environment class ("production") to the custom
+	// hostname this app is served on for that class, mirroring Manifest.domains
+	// so a persistent preview can gain a domain without a schema change. Absent
+	// entries mean the default vendor subdomain.
+	Domains       map[string]string `protobuf:"bytes,3,rep,name=domains,proto3" json:"domains,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ManifestApp) Reset() {
+	*x = ManifestApp{}
+	mi := &file_deployments_v1_deployments_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ManifestApp) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ManifestApp) ProtoMessage() {}
+
+func (x *ManifestApp) ProtoReflect() protoreflect.Message {
+	mi := &file_deployments_v1_deployments_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ManifestApp.ProtoReflect.Descriptor instead.
+func (*ManifestApp) Descriptor() ([]byte, []int) {
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ManifestApp) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ManifestApp) GetFramework() string {
+	if x != nil {
+		return x.Framework
+	}
+	return ""
+}
+
+func (x *ManifestApp) GetDomains() map[string]string {
+	if x != nil {
+		return x.Domains
+	}
+	return nil
+}
+
 // ManifestFunction is a deployable function unit. Being listed in
 // Manifest.functions implies serverless compute, and an express framework
 // implies web-facing — so there is deliberately no compute or trigger field.
@@ -432,14 +514,17 @@ type ManifestFunction struct {
 	// while route_id preserves the original route (e.g. Next's "/api/documents").
 	// The Cloudflare worker keys FUNCTION_URLS by route_id. Empty for functions
 	// whose framework has no routing layer.
-	RouteId       string `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	RouteId string `protobuf:"bytes,6,opt,name=route_id,json=routeId,proto3" json:"route_id,omitempty"`
+	// app is the name of the ManifestApp this function belongs to. Always set:
+	// every function the builder emits records the app it was built from.
+	App           string `protobuf:"bytes,7,opt,name=app,proto3" json:"app,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ManifestFunction) Reset() {
 	*x = ManifestFunction{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[2]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -451,7 +536,7 @@ func (x *ManifestFunction) String() string {
 func (*ManifestFunction) ProtoMessage() {}
 
 func (x *ManifestFunction) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[2]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +549,7 @@ func (x *ManifestFunction) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManifestFunction.ProtoReflect.Descriptor instead.
 func (*ManifestFunction) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{2}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ManifestFunction) GetLogicalName() string {
@@ -509,6 +594,13 @@ func (x *ManifestFunction) GetRouteId() string {
 	return ""
 }
 
+func (x *ManifestFunction) GetApp() string {
+	if x != nil {
+		return x.App
+	}
+	return ""
+}
+
 // ManifestResource pairs a resource's identity with its typed configuration.
 // The config oneof reuses resources.v1's typed config messages so a
 // resource's config schema is single-sourced across declare and manifest.
@@ -532,7 +624,7 @@ type ManifestResource struct {
 
 func (x *ManifestResource) Reset() {
 	*x = ManifestResource{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[3]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -544,7 +636,7 @@ func (x *ManifestResource) String() string {
 func (*ManifestResource) ProtoMessage() {}
 
 func (x *ManifestResource) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[3]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -557,7 +649,7 @@ func (x *ManifestResource) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ManifestResource.ProtoReflect.Descriptor instead.
 func (*ManifestResource) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{3}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ManifestResource) GetLogicalName() string {
@@ -636,7 +728,7 @@ type DeployRequest struct {
 
 func (x *DeployRequest) Reset() {
 	*x = DeployRequest{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[4]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -648,7 +740,7 @@ func (x *DeployRequest) String() string {
 func (*DeployRequest) ProtoMessage() {}
 
 func (x *DeployRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[4]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -661,7 +753,7 @@ func (x *DeployRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployRequest.ProtoReflect.Descriptor instead.
 func (*DeployRequest) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{4}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DeployRequest) GetManifest() *Manifest {
@@ -714,7 +806,7 @@ type BootstrapRequest struct {
 
 func (x *BootstrapRequest) Reset() {
 	*x = BootstrapRequest{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[5]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -726,7 +818,7 @@ func (x *BootstrapRequest) String() string {
 func (*BootstrapRequest) ProtoMessage() {}
 
 func (x *BootstrapRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[5]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -739,7 +831,7 @@ func (x *BootstrapRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapRequest.ProtoReflect.Descriptor instead.
 func (*BootstrapRequest) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{5}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *BootstrapRequest) GetOptions() []byte {
@@ -786,7 +878,7 @@ type DestroyRequest struct {
 
 func (x *DestroyRequest) Reset() {
 	*x = DestroyRequest{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[6]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -798,7 +890,7 @@ func (x *DestroyRequest) String() string {
 func (*DestroyRequest) ProtoMessage() {}
 
 func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[6]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -811,7 +903,7 @@ func (x *DestroyRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DestroyRequest.ProtoReflect.Descriptor instead.
 func (*DestroyRequest) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{6}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *DestroyRequest) GetEnvironment() *Environment {
@@ -864,7 +956,7 @@ type ListEnvironmentsRequest struct {
 
 func (x *ListEnvironmentsRequest) Reset() {
 	*x = ListEnvironmentsRequest{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[7]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -876,7 +968,7 @@ func (x *ListEnvironmentsRequest) String() string {
 func (*ListEnvironmentsRequest) ProtoMessage() {}
 
 func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[7]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -889,7 +981,7 @@ func (x *ListEnvironmentsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentsRequest.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentsRequest) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{7}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ListEnvironmentsRequest) GetOptions() []byte {
@@ -924,7 +1016,7 @@ type ListEnvironmentsResponse struct {
 
 func (x *ListEnvironmentsResponse) Reset() {
 	*x = ListEnvironmentsResponse{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[8]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -936,7 +1028,7 @@ func (x *ListEnvironmentsResponse) String() string {
 func (*ListEnvironmentsResponse) ProtoMessage() {}
 
 func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[8]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -949,7 +1041,7 @@ func (x *ListEnvironmentsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListEnvironmentsResponse.ProtoReflect.Descriptor instead.
 func (*ListEnvironmentsResponse) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{8}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ListEnvironmentsResponse) GetEnvironments() []*PreviewEnvironment {
@@ -977,7 +1069,7 @@ type PreviewEnvironment struct {
 
 func (x *PreviewEnvironment) Reset() {
 	*x = PreviewEnvironment{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[9]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -989,7 +1081,7 @@ func (x *PreviewEnvironment) String() string {
 func (*PreviewEnvironment) ProtoMessage() {}
 
 func (x *PreviewEnvironment) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[9]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1002,7 +1094,7 @@ func (x *PreviewEnvironment) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewEnvironment.ProtoReflect.Descriptor instead.
 func (*PreviewEnvironment) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{9}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *PreviewEnvironment) GetIdentity() string {
@@ -1065,7 +1157,7 @@ type PreflightRequest struct {
 
 func (x *PreflightRequest) Reset() {
 	*x = PreflightRequest{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[10]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1077,7 +1169,7 @@ func (x *PreflightRequest) String() string {
 func (*PreflightRequest) ProtoMessage() {}
 
 func (x *PreflightRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[10]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1090,7 +1182,7 @@ func (x *PreflightRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreflightRequest.ProtoReflect.Descriptor instead.
 func (*PreflightRequest) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{10}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PreflightRequest) GetOptions() []byte {
@@ -1130,7 +1222,7 @@ type PreflightResponse struct {
 
 func (x *PreflightResponse) Reset() {
 	*x = PreflightResponse{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[11]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1142,7 +1234,7 @@ func (x *PreflightResponse) String() string {
 func (*PreflightResponse) ProtoMessage() {}
 
 func (x *PreflightResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[11]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1155,7 +1247,7 @@ func (x *PreflightResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreflightResponse.ProtoReflect.Descriptor instead.
 func (*PreflightResponse) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{11}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *PreflightResponse) GetInfraClass() Environment_Class {
@@ -1188,7 +1280,7 @@ type DeployEvent struct {
 
 func (x *DeployEvent) Reset() {
 	*x = DeployEvent{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[12]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1200,7 +1292,7 @@ func (x *DeployEvent) String() string {
 func (*DeployEvent) ProtoMessage() {}
 
 func (x *DeployEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[12]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1213,7 +1305,7 @@ func (x *DeployEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployEvent.ProtoReflect.Descriptor instead.
 func (*DeployEvent) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{12}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeployEvent) GetEvent() isDeployEvent_Event {
@@ -1290,7 +1382,7 @@ type ProgressEvent struct {
 
 func (x *ProgressEvent) Reset() {
 	*x = ProgressEvent{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[13]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1302,7 +1394,7 @@ func (x *ProgressEvent) String() string {
 func (*ProgressEvent) ProtoMessage() {}
 
 func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[13]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1315,7 +1407,7 @@ func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProgressEvent.ProtoReflect.Descriptor instead.
 func (*ProgressEvent) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{13}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ProgressEvent) GetMessage() string {
@@ -1356,7 +1448,7 @@ type LogEvent struct {
 
 func (x *LogEvent) Reset() {
 	*x = LogEvent{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[14]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1368,7 +1460,7 @@ func (x *LogEvent) String() string {
 func (*LogEvent) ProtoMessage() {}
 
 func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[14]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1381,7 +1473,7 @@ func (x *LogEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
 func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{14}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *LogEvent) GetMessage() string {
@@ -1412,7 +1504,7 @@ type ResultEvent struct {
 
 func (x *ResultEvent) Reset() {
 	*x = ResultEvent{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[15]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1424,7 +1516,7 @@ func (x *ResultEvent) String() string {
 func (*ResultEvent) ProtoMessage() {}
 
 func (x *ResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[15]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1437,7 +1529,7 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
 func (*ResultEvent) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{15}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ResultEvent) GetSuccess() bool {
@@ -1488,7 +1580,7 @@ type ResourceOutput struct {
 
 func (x *ResourceOutput) Reset() {
 	*x = ResourceOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[16]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1500,7 +1592,7 @@ func (x *ResourceOutput) String() string {
 func (*ResourceOutput) ProtoMessage() {}
 
 func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[16]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1513,7 +1605,7 @@ func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceOutput.ProtoReflect.Descriptor instead.
 func (*ResourceOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{16}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *ResourceOutput) GetLogicalName() string {
@@ -1597,7 +1689,7 @@ type PostgresOutput struct {
 
 func (x *PostgresOutput) Reset() {
 	*x = PostgresOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[17]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1609,7 +1701,7 @@ func (x *PostgresOutput) String() string {
 func (*PostgresOutput) ProtoMessage() {}
 
 func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[17]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1622,7 +1714,7 @@ func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostgresOutput.ProtoReflect.Descriptor instead.
 func (*PostgresOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{17}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *PostgresOutput) GetHost() string {
@@ -1675,7 +1767,7 @@ type BucketOutput struct {
 
 func (x *BucketOutput) Reset() {
 	*x = BucketOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[18]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1687,7 +1779,7 @@ func (x *BucketOutput) String() string {
 func (*BucketOutput) ProtoMessage() {}
 
 func (x *BucketOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[18]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1700,7 +1792,7 @@ func (x *BucketOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketOutput.ProtoReflect.Descriptor instead.
 func (*BucketOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{18}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *BucketOutput) GetAddress() string {
@@ -1730,7 +1822,7 @@ type FunctionOutput struct {
 
 func (x *FunctionOutput) Reset() {
 	*x = FunctionOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[19]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1742,7 +1834,7 @@ func (x *FunctionOutput) String() string {
 func (*FunctionOutput) ProtoMessage() {}
 
 func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[19]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1755,7 +1847,7 @@ func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FunctionOutput.ProtoReflect.Descriptor instead.
 func (*FunctionOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{19}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *FunctionOutput) GetUrl() string {
@@ -1788,24 +1880,33 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x0eIdentitySource\x12\x1f\n" +
 	"\x1bIDENTITY_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13IDENTITY_SOURCE_GIT\x10\x01\x12\x1c\n" +
-	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\xcd\x02\n" +
+	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\xfe\x02\n" +
 	"\bManifest\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12>\n" +
 	"\tresources\x18\x03 \x03(\v2 .deployments.v1.ManifestResourceR\tresources\x12>\n" +
 	"\tfunctions\x18\x04 \x03(\v2 .deployments.v1.ManifestFunctionR\tfunctions\x12?\n" +
-	"\adomains\x18\x05 \x03(\v2%.deployments.v1.Manifest.DomainsEntryR\adomains\x1a:\n" +
+	"\adomains\x18\x05 \x03(\v2%.deployments.v1.Manifest.DomainsEntryR\adomains\x12/\n" +
+	"\x04apps\x18\x06 \x03(\v2\x1b.deployments.v1.ManifestAppR\x04apps\x1a:\n" +
 	"\fDomainsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc7\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xbf\x01\n" +
+	"\vManifestApp\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1c\n" +
+	"\tframework\x18\x02 \x01(\tR\tframework\x12B\n" +
+	"\adomains\x18\x03 \x03(\v2(.deployments.v1.ManifestApp.DomainsEntryR\adomains\x1a:\n" +
+	"\fDomainsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd9\x01\n" +
 	"\x10ManifestFunction\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12\x18\n" +
 	"\aruntime\x18\x02 \x01(\tR\aruntime\x12\x18\n" +
 	"\ahandler\x18\x03 \x01(\tR\ahandler\x12#\n" +
 	"\rartifact_path\x18\x04 \x01(\tR\fartifactPath\x12\x1c\n" +
 	"\tframework\x18\x05 \x01(\tR\tframework\x12\x19\n" +
-	"\broute_id\x18\x06 \x01(\tR\arouteId\"\xef\x01\n" +
+	"\broute_id\x18\x06 \x01(\tR\arouteId\x12\x10\n" +
+	"\x03app\x18\a \x01(\tR\x03app\"\xef\x01\n" +
 	"\x10ManifestResource\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12<\n" +
 	"\bresource\x18\x02 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
@@ -1913,7 +2014,7 @@ func file_deployments_v1_deployments_proto_rawDescGZIP() []byte {
 }
 
 var file_deployments_v1_deployments_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_deployments_v1_deployments_proto_goTypes = []any{
 	(Phase)(0),                       // 0: deployments.v1.Phase
 	(Environment_Class)(0),           // 1: deployments.v1.Environment.Class
@@ -1921,70 +2022,74 @@ var file_deployments_v1_deployments_proto_goTypes = []any{
 	(Environment_IdentitySource)(0),  // 3: deployments.v1.Environment.IdentitySource
 	(*Environment)(nil),              // 4: deployments.v1.Environment
 	(*Manifest)(nil),                 // 5: deployments.v1.Manifest
-	(*ManifestFunction)(nil),         // 6: deployments.v1.ManifestFunction
-	(*ManifestResource)(nil),         // 7: deployments.v1.ManifestResource
-	(*DeployRequest)(nil),            // 8: deployments.v1.DeployRequest
-	(*BootstrapRequest)(nil),         // 9: deployments.v1.BootstrapRequest
-	(*DestroyRequest)(nil),           // 10: deployments.v1.DestroyRequest
-	(*ListEnvironmentsRequest)(nil),  // 11: deployments.v1.ListEnvironmentsRequest
-	(*ListEnvironmentsResponse)(nil), // 12: deployments.v1.ListEnvironmentsResponse
-	(*PreviewEnvironment)(nil),       // 13: deployments.v1.PreviewEnvironment
-	(*PreflightRequest)(nil),         // 14: deployments.v1.PreflightRequest
-	(*PreflightResponse)(nil),        // 15: deployments.v1.PreflightResponse
-	(*DeployEvent)(nil),              // 16: deployments.v1.DeployEvent
-	(*ProgressEvent)(nil),            // 17: deployments.v1.ProgressEvent
-	(*LogEvent)(nil),                 // 18: deployments.v1.LogEvent
-	(*ResultEvent)(nil),              // 19: deployments.v1.ResultEvent
-	(*ResourceOutput)(nil),           // 20: deployments.v1.ResourceOutput
-	(*PostgresOutput)(nil),           // 21: deployments.v1.PostgresOutput
-	(*BucketOutput)(nil),             // 22: deployments.v1.BucketOutput
-	(*FunctionOutput)(nil),           // 23: deployments.v1.FunctionOutput
-	nil,                              // 24: deployments.v1.Manifest.DomainsEntry
-	(*v1.ResourceIdentifier)(nil),    // 25: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),        // 26: resources.v1.PostgresConfig
-	(*v1.BucketConfig)(nil),          // 27: resources.v1.BucketConfig
+	(*ManifestApp)(nil),              // 6: deployments.v1.ManifestApp
+	(*ManifestFunction)(nil),         // 7: deployments.v1.ManifestFunction
+	(*ManifestResource)(nil),         // 8: deployments.v1.ManifestResource
+	(*DeployRequest)(nil),            // 9: deployments.v1.DeployRequest
+	(*BootstrapRequest)(nil),         // 10: deployments.v1.BootstrapRequest
+	(*DestroyRequest)(nil),           // 11: deployments.v1.DestroyRequest
+	(*ListEnvironmentsRequest)(nil),  // 12: deployments.v1.ListEnvironmentsRequest
+	(*ListEnvironmentsResponse)(nil), // 13: deployments.v1.ListEnvironmentsResponse
+	(*PreviewEnvironment)(nil),       // 14: deployments.v1.PreviewEnvironment
+	(*PreflightRequest)(nil),         // 15: deployments.v1.PreflightRequest
+	(*PreflightResponse)(nil),        // 16: deployments.v1.PreflightResponse
+	(*DeployEvent)(nil),              // 17: deployments.v1.DeployEvent
+	(*ProgressEvent)(nil),            // 18: deployments.v1.ProgressEvent
+	(*LogEvent)(nil),                 // 19: deployments.v1.LogEvent
+	(*ResultEvent)(nil),              // 20: deployments.v1.ResultEvent
+	(*ResourceOutput)(nil),           // 21: deployments.v1.ResourceOutput
+	(*PostgresOutput)(nil),           // 22: deployments.v1.PostgresOutput
+	(*BucketOutput)(nil),             // 23: deployments.v1.BucketOutput
+	(*FunctionOutput)(nil),           // 24: deployments.v1.FunctionOutput
+	nil,                              // 25: deployments.v1.Manifest.DomainsEntry
+	nil,                              // 26: deployments.v1.ManifestApp.DomainsEntry
+	(*v1.ResourceIdentifier)(nil),    // 27: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),        // 28: resources.v1.PostgresConfig
+	(*v1.BucketConfig)(nil),          // 29: resources.v1.BucketConfig
 }
 var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	1,  // 0: deployments.v1.Environment.class:type_name -> deployments.v1.Environment.Class
 	2,  // 1: deployments.v1.Environment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
 	3,  // 2: deployments.v1.Environment.identity_source:type_name -> deployments.v1.Environment.IdentitySource
-	7,  // 3: deployments.v1.Manifest.resources:type_name -> deployments.v1.ManifestResource
-	6,  // 4: deployments.v1.Manifest.functions:type_name -> deployments.v1.ManifestFunction
-	24, // 5: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
-	25, // 6: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	26, // 7: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	27, // 8: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
-	5,  // 9: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
-	4,  // 10: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
-	1,  // 11: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
-	4,  // 12: deployments.v1.DestroyRequest.environment:type_name -> deployments.v1.Environment
-	13, // 13: deployments.v1.ListEnvironmentsResponse.environments:type_name -> deployments.v1.PreviewEnvironment
-	2,  // 14: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
-	1,  // 15: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
-	1,  // 16: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
-	17, // 17: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
-	18, // 18: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
-	19, // 19: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
-	0,  // 20: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
-	20, // 21: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
-	21, // 22: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
-	22, // 23: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
-	23, // 24: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
-	8,  // 25: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
-	9,  // 26: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
-	10, // 27: deployments.v1.DeploymentService.Destroy:input_type -> deployments.v1.DestroyRequest
-	11, // 28: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
-	14, // 29: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
-	16, // 30: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
-	16, // 31: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
-	16, // 32: deployments.v1.DeploymentService.Destroy:output_type -> deployments.v1.DeployEvent
-	12, // 33: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
-	15, // 34: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
-	30, // [30:35] is the sub-list for method output_type
-	25, // [25:30] is the sub-list for method input_type
-	25, // [25:25] is the sub-list for extension type_name
-	25, // [25:25] is the sub-list for extension extendee
-	0,  // [0:25] is the sub-list for field type_name
+	8,  // 3: deployments.v1.Manifest.resources:type_name -> deployments.v1.ManifestResource
+	7,  // 4: deployments.v1.Manifest.functions:type_name -> deployments.v1.ManifestFunction
+	25, // 5: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
+	6,  // 6: deployments.v1.Manifest.apps:type_name -> deployments.v1.ManifestApp
+	26, // 7: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
+	27, // 8: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	28, // 9: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	29, // 10: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	5,  // 11: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
+	4,  // 12: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
+	1,  // 13: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
+	4,  // 14: deployments.v1.DestroyRequest.environment:type_name -> deployments.v1.Environment
+	14, // 15: deployments.v1.ListEnvironmentsResponse.environments:type_name -> deployments.v1.PreviewEnvironment
+	2,  // 16: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
+	1,  // 17: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
+	1,  // 18: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
+	18, // 19: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
+	19, // 20: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
+	20, // 21: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
+	0,  // 22: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
+	21, // 23: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
+	22, // 24: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
+	23, // 25: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
+	24, // 26: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
+	9,  // 27: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
+	10, // 28: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
+	11, // 29: deployments.v1.DeploymentService.Destroy:input_type -> deployments.v1.DestroyRequest
+	12, // 30: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
+	15, // 31: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
+	17, // 32: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
+	17, // 33: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
+	17, // 34: deployments.v1.DeploymentService.Destroy:output_type -> deployments.v1.DeployEvent
+	13, // 35: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
+	16, // 36: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
+	32, // [32:37] is the sub-list for method output_type
+	27, // [27:32] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_deployments_v1_deployments_proto_init() }
@@ -1992,17 +2097,17 @@ func file_deployments_v1_deployments_proto_init() {
 	if File_deployments_v1_deployments_proto != nil {
 		return
 	}
-	file_deployments_v1_deployments_proto_msgTypes[3].OneofWrappers = []any{
+	file_deployments_v1_deployments_proto_msgTypes[4].OneofWrappers = []any{
 		(*ManifestResource_Postgres)(nil),
 		(*ManifestResource_Bucket)(nil),
 	}
-	file_deployments_v1_deployments_proto_msgTypes[12].OneofWrappers = []any{
+	file_deployments_v1_deployments_proto_msgTypes[13].OneofWrappers = []any{
 		(*DeployEvent_Progress)(nil),
 		(*DeployEvent_Log)(nil),
 		(*DeployEvent_Result)(nil),
 	}
-	file_deployments_v1_deployments_proto_msgTypes[13].OneofWrappers = []any{}
-	file_deployments_v1_deployments_proto_msgTypes[16].OneofWrappers = []any{
+	file_deployments_v1_deployments_proto_msgTypes[14].OneofWrappers = []any{}
+	file_deployments_v1_deployments_proto_msgTypes[17].OneofWrappers = []any{
 		(*ResourceOutput_Postgres)(nil),
 		(*ResourceOutput_Bucket)(nil),
 		(*ResourceOutput_Function)(nil),
@@ -2013,7 +2118,7 @@ func file_deployments_v1_deployments_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_deployments_v1_deployments_proto_rawDesc), len(file_deployments_v1_deployments_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   21,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

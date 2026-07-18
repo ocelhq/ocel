@@ -61,12 +61,15 @@ type appInput struct {
 }
 
 // functionConfig is the config.json the builder writes at the root of each
-// `.func`. All three fields are required: the builder and CLI ship in one npm
+// `.func`. All four fields are required: the builder and CLI ship in one npm
 // release, so this is a lockstep contract with no version negotiation.
 type functionConfig struct {
 	Runtime   string `json:"runtime"`
 	Handler   string `json:"handler"`
 	Framework string `json:"framework"`
+	// App names the application this function was built from — including the
+	// app the builder detected when the config declared none.
+	App string `json:"app"`
 	// ID is the framework-native route identity (e.g. Next's "/api/documents")
 	// a routing layer dispatches to. Optional: frameworks without a routing
 	// layer omit it, so unlike the three fields above it is not required.
@@ -192,8 +195,8 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 	if err := json.Unmarshal(data, &fc); err != nil {
 		return manifestbuilder.Function{}, fmt.Errorf("%s: invalid %s: %w", configPath, configFileName, err)
 	}
-	if fc.Runtime == "" || fc.Handler == "" || fc.Framework == "" {
-		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires runtime, handler, and framework", configPath, configFileName)
+	if fc.Runtime == "" || fc.Handler == "" || fc.Framework == "" || fc.App == "" {
+		return manifestbuilder.Function{}, fmt.Errorf("%s: %s requires runtime, handler, framework, and app", configPath, configFileName)
 	}
 
 	return manifestbuilder.Function{
@@ -203,6 +206,7 @@ func readFunction(outputDir, functionsDir, funcDir string) (manifestbuilder.Func
 		ArtifactPath: filepath.ToSlash(artifactRel),
 		Framework:    fc.Framework,
 		RouteID:      fc.ID,
+		App:          fc.App,
 	}, nil
 }
 

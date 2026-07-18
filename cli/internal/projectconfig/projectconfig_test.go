@@ -410,3 +410,35 @@ export default {
 		t.Fatalf("expected build artifact at %s: %v", artifact, err)
 	}
 }
+
+func TestResolve_ParsesPerAppDomain(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  domains: { production: "acme.com" },
+  apps: [
+    { name: "web", path: "apps/web", framework: "express", domains: { production: "App.Acme.com" } },
+    { name: "admin", path: "apps/admin", framework: "express" },
+  ],
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if len(cfg.Apps) != 2 {
+		t.Fatalf("got %d apps, want 2", len(cfg.Apps))
+	}
+	if got := cfg.Apps[0].Domains["production"]; got != "app.acme.com" {
+		t.Fatalf("Apps[0].Domains[production] = %q, want %q (lowercased)", got, "app.acme.com")
+	}
+	if len(cfg.Apps[1].Domains) != 0 {
+		t.Fatalf("Apps[1].Domains = %v, want empty", cfg.Apps[1].Domains)
+	}
+	// The project-level domain is independent of any app's.
+	if got := cfg.Domains["production"]; got != "acme.com" {
+		t.Fatalf("Domains[production] = %q, want %q", got, "acme.com")
+	}
+}

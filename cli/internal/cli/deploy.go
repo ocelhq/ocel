@@ -185,7 +185,22 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, bui
 		fmt.Fprintln(buildOut, "no functions to deploy; deploying infrastructure only")
 	}
 
-	return manifestbuilder.Build(cfg.ProjectID, cfg.Domains, toDeclarations(resources), functions)
+	return manifestbuilder.Build(cfg.ProjectID, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions)
+}
+
+// toApps lowers the resolved config's apps into the manifest builder's input.
+// A project that configures none still yields an app: the builder detects one
+// and the manifest builder recovers it from the functions it emitted.
+func toApps(apps []projectconfig.App) []manifestbuilder.App {
+	out := make([]manifestbuilder.App, 0, len(apps))
+	for _, a := range apps {
+		out = append(out, manifestbuilder.App{
+			Name:      a.Name,
+			Framework: a.Framework,
+			Domains:   a.Domains,
+		})
+	}
+	return out
 }
 
 // failSession ends a deploy/preview/bootstrap run on error: it renders a

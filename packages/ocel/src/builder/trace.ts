@@ -285,7 +285,7 @@ export async function traceBuild(
   const handler = toOutExt(placeFile(entrypoint, input.cwd, pkgCache).dest).split(path.sep).join("/");
   await writeFile(
     path.join(funcDir, "config.json"),
-    `${JSON.stringify({ runtime: fw.runtime, handler, framework: fw.name }, null, 2)}\n`,
+    `${JSON.stringify({ runtime: fw.runtime, handler, framework: fw.name, app: input.name }, null, 2)}\n`,
   );
 
   return { name: input.name, runtime: fw.runtime, handler, artifactPath: funcRel, framework: fw.name };

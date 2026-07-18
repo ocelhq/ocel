@@ -7,6 +7,13 @@ export interface ProviderDescriptor {
   options: unknown;
 }
 
+// DomainConfig maps an environment class to the custom hostname served for it.
+// It is the same shape at the project level and per app; an app's entry wins
+// for that app.
+export interface DomainConfig {
+  production?: string;
+}
+
 // AppConfig declares an application Ocel builds and deploys. `framework` is
 // restricted to the frameworks Ocel supports this iteration; `entrypoint` is
 // an optional override relative to `path`.
@@ -15,6 +22,7 @@ export interface AppConfig {
   path: string;
   framework: "express" | "fastify";
   entrypoint?: string;
+  domains?: DomainConfig;
 }
 
 export interface OcelConfig {
@@ -24,9 +32,7 @@ export interface OcelConfig {
   };
   provider?: ProviderDescriptor;
   apps?: AppConfig[];
-  domains?: {
-    production?: string;
-  };
+  domains?: DomainConfig;
 }
 
 export function defineConfig(config: OcelConfig): OcelConfig {

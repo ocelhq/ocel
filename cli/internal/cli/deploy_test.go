@@ -187,6 +187,7 @@ func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 			Handler:      "src/server.js",
 			ArtifactPath: "output/api",
 			Framework:    "express",
+			App:          "api",
 		},
 	})
 
@@ -197,7 +198,7 @@ func TestRunDeploy_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	}
 
 	out := stdout.String()
-	if !strings.Contains(out, "FUNCTION logical_name=api runtime=nodejs24.x handler=src/server.js artifact_path=output/api framework=express") {
+	if !strings.Contains(out, "FUNCTION logical_name=api runtime=nodejs24.x handler=src/server.js artifact_path=output/api framework=express app=api") {
 		t.Errorf("stdout = %q, want the function to have reached the manifest", out)
 	}
 	if strings.Contains(stderr.String(), "deploying infrastructure only") {
@@ -231,6 +232,9 @@ func TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly(t *testing.T) {
 	}
 	if strings.Contains(stdout.String(), "FUNCTION ") {
 		t.Errorf("stdout = %q, want no function echoed when no apps are configured", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "APP ") {
+		t.Errorf("stdout = %q, want no app echoed when nothing was built", stdout.String())
 	}
 
 	waitForNoStaleSocket(t, sockPath)
@@ -465,4 +469,110 @@ func waitForNoStaleSocket(t *testing.T, sockPath string) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
+}
+
+// TestRunDeploy_SingleApp_ProducesExactlyOneAttributedApp is the regression
+// guard for the single-app case: the manifest that reaches the provider must
+// carry exactly one app, carrying its configured domain, with the project's
+// function attributed to it.
+func TestRunDeploy_SingleApp_ProducesExactlyOneAttributedApp(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  projectId: "proj_deploy_happy",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  apps: [{ name: "api", path: "apps/api", framework: "express", domains: { production: "Api.Acme.com" } }],
+};
+`)
+	stubAppFunctions(t, []manifestbuilder.Function{
+		{Name: "api", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/api", Framework: "express", App: "api"},
+	})
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if got := strings.Count(out, "APP "); got != 1 {
+		t.Fatalf("stdout echoed %d apps, want exactly 1:\n%s", got, out)
+	}
+	if !strings.Contains(out, "APP name=api framework=express production_domain=api.acme.com") {
+		t.Errorf("stdout = %q, want the app with its per-app production domain", out)
+	}
+	if !strings.Contains(out, "framework=express app=api") {
+		t.Errorf("stdout = %q, want the function attributed to the api app", out)
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunDeploy_TwoApps_AttributesFunctionsToTheirApps proves a two-app config
+// yields two manifest apps, each function attributed to its own, and a per-app
+// domain that does not leak across apps.
+func TestRunDeploy_TwoApps_AttributesFunctionsToTheirApps(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  projectId: "proj_deploy_happy",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  apps: [
+    { name: "web", path: "apps/web", framework: "express", domains: { production: "acme.com" } },
+    { name: "admin", path: "apps/admin", framework: "express" },
+  ],
+};
+`)
+	stubAppFunctions(t, []manifestbuilder.Function{
+		{Name: "web", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/web", Framework: "express", App: "web"},
+		{Name: "admin", Runtime: "nodejs24.x", Handler: "src/server.js", ArtifactPath: "output/admin", Framework: "express", App: "admin"},
+	})
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if got := strings.Count(out, "APP "); got != 2 {
+		t.Fatalf("stdout echoed %d apps, want exactly 2:\n%s", got, out)
+	}
+	if !strings.Contains(out, "APP name=admin framework=express production_domain=") {
+		t.Errorf("stdout = %q, want the admin app with no domain of its own", out)
+	}
+	if !strings.Contains(out, "APP name=web framework=express production_domain=acme.com") {
+		t.Errorf("stdout = %q, want the web app with its own production domain", out)
+	}
+	if !strings.Contains(out, "logical_name=web") || !strings.Contains(out, "artifact_path=output/web framework=express app=web") {
+		t.Errorf("stdout = %q, want the web function attributed to the web app", out)
+	}
+	if !strings.Contains(out, "logical_name=admin") || !strings.Contains(out, "artifact_path=output/admin framework=express app=admin") {
+		t.Errorf("stdout = %q, want the admin function attributed to the admin app", out)
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunDeploy_DetectedApp_AppearsInManifest covers the 0-configured-apps
+// path: the builder detects an app and names it, and that name must still
+// reach the manifest as a proper app.
+func TestRunDeploy_DetectedApp_AppearsInManifest(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	stubAppFunctions(t, []manifestbuilder.Function{
+		{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "output/index", Framework: "next", App: "express-app"},
+	})
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if got := strings.Count(out, "APP "); got != 1 {
+		t.Fatalf("stdout echoed %d apps, want exactly 1:\n%s", got, out)
+	}
+	if !strings.Contains(out, "APP name=express-app framework=next production_domain=") {
+		t.Errorf("stdout = %q, want the detected app named in the manifest", out)
+	}
+
+	waitForNoStaleSocket(t, sockPath)
 }
