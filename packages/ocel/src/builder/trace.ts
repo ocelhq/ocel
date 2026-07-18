@@ -4,6 +4,7 @@ import path from "node:path";
 import { nodeFileTrace } from "@vercel/nft";
 import { init as lexerInit, parse as parseImports } from "es-module-lexer";
 import ts from "typescript";
+import { appRel } from "./layout.js";
 import type { AppInput, BuildOptions, FunctionSummary } from "./types.js";
 
 /** A framework built by tracing an entrypoint (express, fastify). */
@@ -254,7 +255,9 @@ export async function traceBuild(
 ): Promise<FunctionSummary> {
   const entrypoint = resolveEntrypoint(input, fw);
 
-  const funcRel = path.join("functions", `${input.name}.func`);
+  // A traced app serves every route through one function, so it takes the root
+  // route's name inside its own subtree.
+  const funcRel = path.join(appRel(input.name), "functions", "index.func");
   const funcDir = path.join(options.outDir, funcRel);
   await rm(funcDir, { recursive: true, force: true });
   await mkdir(funcDir, { recursive: true });

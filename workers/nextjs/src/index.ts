@@ -80,7 +80,7 @@ interface RouteResult {
 export interface RouteDeps {
   manifest: Manifest;
   functionUrls: Record<string, string>;
-  // The Workers Assets binding (or any Fetcher) serving .ocel/output/static.
+  // The Workers Assets binding (or any Fetcher) serving this app's static output.
   assets: Pick<Fetcher, "fetch">;
   // Injectable so lambda/external forwarding can be observed in tests.
   fetch?: typeof fetch;

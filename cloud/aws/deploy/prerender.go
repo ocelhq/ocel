@@ -28,11 +28,12 @@ type prerenderManifest struct {
 // handler joins its keys onto, so all three agree by construction. Returns ""
 // for a manifest with no Next.js function.
 func assetPrefix(cfg Config, manifest *deploymentsv1.Manifest) (string, error) {
-	if !hasNextFunction(manifest.GetFunctions()) {
+	root, ok := nextAppArtifactRoot(cfg, manifest)
+	if !ok {
 		return "", nil
 	}
 	var pm prerenderManifest
-	raw, err := os.ReadFile(filepath.Join(cfg.ArtifactRoot, "routing-manifest.json"))
+	raw, err := os.ReadFile(filepath.Join(root, "routing-manifest.json"))
 	if err != nil {
 		return "", fmt.Errorf("read routing manifest: %w", err)
 	}
@@ -57,10 +58,11 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 	if err != nil || prefix == "" {
 		return err
 	}
+	root, _ := nextAppArtifactRoot(cfg, manifest)
 
 	// Cache entries live beside functions/ rather than inside it, and keep their
 	// cache/ segment in the key: that is exactly where the handler looks.
-	cacheEntries, err := collectFiles(filepath.Join(cfg.ArtifactRoot, "cache"))
+	cacheEntries, err := collectFiles(filepath.Join(root, "cache"))
 	if err != nil {
 		return err
 	}
@@ -80,7 +82,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 	for _, rel := range cacheEntries {
 		uploads = append(uploads, upload{
 			key: path.Join(prefix, "cache", rel),
-			src: filepath.Join(cfg.ArtifactRoot, "cache", filepath.FromSlash(rel)),
+			src: filepath.Join(root, "cache", filepath.FromSlash(rel)),
 		})
 	}
 

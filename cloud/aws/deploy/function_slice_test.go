@@ -114,8 +114,8 @@ func TestBucketEnvPayload_MatchesSDKAddressBucketShape(t *testing.T) {
 }
 
 func TestArtifactArchivePath_ResolvesRelativeToOutputRoot(t *testing.T) {
-	got := artifactArchivePath("/proj/.ocel/output", "functions/api.func")
-	want := "/proj/.ocel/output/functions/api.func"
+	got := artifactArchivePath("/proj/.ocel/output", "apps/web/functions/api.func")
+	want := "/proj/.ocel/output/apps/web/functions/api.func"
 	if got != want {
 		t.Errorf("artifactArchivePath() = %q, want %q", got, want)
 	}

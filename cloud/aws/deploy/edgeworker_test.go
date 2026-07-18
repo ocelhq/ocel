@@ -90,11 +90,11 @@ func TestDeployEdgeWorker_FrameworkWithNoWorkerIsANoOp(t *testing.T) {
 
 func TestDeployEdgeWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	artifactRoot := t.TempDir()
-	writeRoutingManifest(t, artifactRoot, `{"buildId":"b"}`)
-	if err := os.MkdirAll(filepath.Join(artifactRoot, "static"), 0o755); err != nil {
+	appDir := writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b"}`)
+	if err := os.MkdirAll(filepath.Join(appDir, "static"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(artifactRoot, "static", "next.svg"), []byte("<svg/>"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(appDir, "static", "next.svg"), []byte("<svg/>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	setWorkerBundle(t)
@@ -103,7 +103,7 @@ func TestDeployEdgeWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
 	manifest := &deploymentsv1.Manifest{
 		Functions: []*deploymentsv1.ManifestFunction{
-			{LogicalName: "api_documents", Framework: "next", RouteId: "/api/documents"},
+			{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"},
 		},
 	}
 	outputs := []*deploymentsv1.ResourceOutput{fnOutput("api_documents", "https://fn.lambda-url.aws/")}
@@ -146,7 +146,7 @@ func TestDeployEdgeWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 // and costlier — so only pinning the whole set catches it.
 func TestDeployEdgeWorker_FullyConfiguredBindingSet(t *testing.T) {
 	artifactRoot := t.TempDir()
-	writeRoutingManifest(t, artifactRoot, `{"buildId":"b1","appName":"web"}`)
+	writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b1","appName":"web"}`)
 	setWorkerBundle(t)
 
 	fake := &recordingEdge{}
@@ -164,7 +164,7 @@ func TestDeployEdgeWorker_FullyConfiguredBindingSet(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		ProjectId: "proj",
 		Functions: []*deploymentsv1.ManifestFunction{
-			{LogicalName: "index", Framework: "next", RouteId: "/"},
+			{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"},
 		},
 	}
 	outputs := []*deploymentsv1.ResourceOutput{fnOutput("index", "https://fn.lambda-url.aws/")}
@@ -208,7 +208,7 @@ func TestDeployEdgeWorker_NoCacheBindingsWithoutEdgeCreds(t *testing.T) {
 	fake := &recordingEdge{}
 	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
 	manifest := &deploymentsv1.Manifest{
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", RouteId: "/"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 	}
 	outputs := []*deploymentsv1.ResourceOutput{fnOutput("index", "https://fn.lambda-url.aws/")}
 
@@ -232,7 +232,7 @@ func TestDeployResolver_CacheStoreNotConfigured(t *testing.T) {
 	withCreds := Config{ArtifactRoot: artifactRoot, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"}
 	nextApp := &deploymentsv1.Manifest{
 		ProjectId: "proj",
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", RouteId: "/"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 	}
 
 	cases := map[string]*deployResolver{
@@ -257,7 +257,7 @@ func TestDeployEdgeWorker_UnresolvableRouteFailsNamingIt(t *testing.T) {
 	fake := &recordingEdge{}
 	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
 	manifest := &deploymentsv1.Manifest{
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "orphan", Framework: "next", RouteId: "/orphan"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "orphan", Framework: "next", App: "web", RouteId: "/orphan"}},
 	}
 
 	_, err := deployEdgeWorker(context.Background(), cfg, manifest, nil, nil)
@@ -276,7 +276,7 @@ func TestDeployEdgeWorker_UnsupportedPairingNamesBoth(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
 	cfg := Config{Edge: &otherEdge{}, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
 	manifest := &deploymentsv1.Manifest{
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", RouteId: "/"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 	}
 
 	_, err := deployEdgeWorker(context.Background(), cfg, manifest, nil, nil)
@@ -306,7 +306,7 @@ func TestDeployEdgeWorker_CustomDomainOnlyForProduction(t *testing.T) {
 			fake := &recordingEdge{}
 			cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Class: tc.class}
 			manifest := &deploymentsv1.Manifest{
-				Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_documents", Framework: "next", RouteId: "/api/documents"}},
+				Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"}},
 				Domains:   tc.domains,
 			}
 			outputs := []*deploymentsv1.ResourceOutput{fnOutput("api_documents", "https://fn.lambda-url.aws/")}
@@ -321,11 +321,18 @@ func TestDeployEdgeWorker_CustomDomainOnlyForProduction(t *testing.T) {
 	}
 }
 
-func writeRoutingManifest(t *testing.T, dir, content string) {
+// writeRoutingManifest seeds one app's routing manifest in its own subtree of
+// the build output, mirroring the builder's per-app namespacing.
+func writeRoutingManifest(t *testing.T, artifactRoot, app, content string) string {
 	t.Helper()
+	dir := appArtifactRoot(artifactRoot, app)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.WriteFile(filepath.Join(dir, "routing-manifest.json"), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	return dir
 }
 
 // setWorkerBundle writes a worker bundle and exports the manifest pointing the
@@ -346,7 +353,7 @@ func setWorkerBundle(t *testing.T) {
 func writeMinimalWorkerArtifacts(t *testing.T) string {
 	t.Helper()
 	artifactRoot := t.TempDir()
-	writeRoutingManifest(t, artifactRoot, `{"buildId":"b"}`)
+	writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b"}`)
 	setWorkerBundle(t)
 	return artifactRoot
 }

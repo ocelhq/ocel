@@ -12,11 +12,11 @@ import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
-// onBuildComplete writes everything under process.cwd() (its scratch dir binds
-// to the cwd at import time, mirroring how the real builder invokes it inside
-// `next build` in the app directory). Each test runs inside a throwaway project:
-// it chdirs there and imports the adapter fresh so the scratch dir resolves to
-// that project, then restores the cwd afterward.
+// Absent OCEL_OUTPUT_DIR, onBuildComplete writes everything under
+// process.cwd(), mirroring how the real builder invokes it inside `next build`
+// in the app directory. Most tests exercise that fallback: each runs inside a
+// throwaway project, chdirs there and imports the adapter fresh, then restores
+// the cwd afterward.
 let originalCwd: string;
 
 beforeEach(() => {
@@ -25,6 +25,7 @@ beforeEach(() => {
 
 afterEach(() => {
   process.chdir(originalCwd);
+  vi.unstubAllEnvs();
 });
 
 async function loadAdapterIn(projectDir: string) {
@@ -731,4 +732,53 @@ test("splits distinct groupIds into separate cache files", async () => {
   const about = await readCacheEntry(projectDir, "about");
   expect(index.value.html).toBe("<html>root</html>");
   expect(about.value.html).toBe("<html>about</html>");
+});
+
+// Build output is namespaced per app, and the adapter cannot infer which
+// subtree is its own — it builds inside the app dir, not the project root. The
+// ocel builder tells it via OCEL_OUTPUT_DIR; everything the build emits must
+// land there and nowhere else.
+test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const outputRoot = join(await mkdtemp(join(tmpdir(), "ocel-out-")), "apps/web");
+  vi.stubEnv("OCEL_OUTPUT_DIR", outputRoot);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect(await exists(join(outputRoot, "routing-manifest.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "functions/index.func/config.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "cache/index.cache.json"))).toBe(true);
+  // Nothing may fall back to the cwd-derived flat tree.
+  expect(await exists(join(projectDir, ".ocel/output"))).toBe(false);
+});
+
+// The collision this layout exists to prevent: before it, the second app's
+// build overwrote the first's functions, static assets and routing manifest.
+test("two apps exposing the same route path do not overwrite each other", async () => {
+  const outRoot = await mkdtemp(join(tmpdir(), "ocel-two-apps-"));
+
+  for (const app of ["storefront", "admin"]) {
+    const { projectDir, args } = await synthProject();
+    vi.stubEnv("OCEL_OUTPUT_DIR", join(outRoot, "apps", app));
+    vi.stubEnv("OCEL_APP_NAME", app);
+    const adapter = await loadAdapterIn(projectDir);
+    await adapter.onBuildComplete(args as never);
+  }
+
+  for (const app of ["storefront", "admin"]) {
+    const outputRoot = join(outRoot, "apps", app);
+    const config = JSON.parse(
+      await readFile(join(outputRoot, "functions/api/documents.func/config.json"), "utf8"),
+    );
+    expect(config.app).toBe(app);
+    // Same route id in both apps: the worker dispatches on it, so it must NOT
+    // be app-qualified.
+    expect(config.id).toBe("/api/documents");
+
+    const manifest = JSON.parse(await readFile(join(outputRoot, "routing-manifest.json"), "utf8"));
+    expect(manifest.appName).toBe(app);
+    expect(manifest.dispatch["/api/documents"]).toEqual({ kind: "lambda", id: "/api/documents" });
+    expect(await exists(join(outputRoot, "static/next.svg"))).toBe(true);
+  }
 });

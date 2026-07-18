@@ -191,6 +191,21 @@ func Resolve(startDir string) (*Config, error) {
 	}, nil
 }
 
+// validAppName reports whether a name is usable as an app's identity. Build
+// output is namespaced per app by directory, and each function's logical name
+// is app-qualified, so a name outside this charset would either escape the
+// output tree or blur two apps into one infrastructure name.
+func validAppName(name string) bool {
+	for _, r := range name {
+		switch {
+		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // normalizeApps validates the raw apps and applies internal defaults. It is
 // framework-agnostic structural work only: it checks names and paths and sets
 // the Ocel-internal compute target. Framework validation and detection are the
@@ -205,6 +220,9 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 	for _, a := range raw.Apps {
 		if a.Name == "" {
 			return nil, fmt.Errorf("app is missing required \"name\"")
+		}
+		if !validAppName(a.Name) {
+			return nil, fmt.Errorf("invalid app name %q — app names may contain only letters, digits, '-' and '_'", a.Name)
 		}
 		if seen[a.Name] {
 			return nil, fmt.Errorf("duplicate app name %q — app names must be unique", a.Name)
