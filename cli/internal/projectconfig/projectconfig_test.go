@@ -378,8 +378,10 @@ export default {
 // An app name becomes a directory in the build output and part of every one of
 // that app's function logical names, so a name that could escape the output
 // tree has to be rejected at the config boundary.
+// An app name is one directory segment of the build output, so only names that
+// would escape that tree are rejected.
 func TestResolve_AppUnsafeNameErrors(t *testing.T) {
-	for _, name := range []string{"../escape", "web/admin", "we b"} {
+	for _, name := range []string{"..", "../escape", "web/admin", `web\\admin`, "/abs"} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			writeConfig(t, root, `
@@ -395,6 +397,30 @@ export default {
 			}
 			if !strings.Contains(err.Error(), "invalid app name") {
 				t.Fatalf("err = %q, want it to reject the app name", err.Error())
+			}
+		})
+	}
+}
+
+// Names that are unremarkable as a directory segment must keep resolving —
+// a dotted name like "web.app" worked before app names were validated at all.
+func TestResolve_AppNameAllowsHarmlessPathSegments(t *testing.T) {
+	for _, name := range []string{"web.app", "we b", "app.v2", "-web"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+  apps: [{ name: "`+name+`", path: "services/api", framework: "express" }],
+};
+`)
+
+			cfg, err := Resolve(root)
+			if err != nil {
+				t.Fatalf("Resolve: %v", err)
+			}
+			if len(cfg.Apps) != 1 || cfg.Apps[0].Name != name {
+				t.Fatalf("Apps = %v, want the app named %q", cfg.Apps, name)
 			}
 		})
 	}

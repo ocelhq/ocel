@@ -25,11 +25,7 @@ export async function buildNext(input: AppInput, options: BuildOptions): Promise
   const cmd = resolveCommand(detected?.agent ?? "npm", "run", ["build"]);
   if (!cmd) throw new Error(`ocel: could not resolve a build command for app "${input.name}"`);
 
-  // Both reach the Next adapter, which runs inside `next build` with the app
-  // dir as its cwd and so can infer neither. OCEL_APP_NAME is recorded in
-  // routing-manifest.json so the deploy path can key this app's prerender
-  // assets in the account-global asset bucket; OCEL_OUTPUT_DIR is the app's own
-  // subtree of the build output, which is what keeps two Next apps apart.
+  // The Next adapter runs with the app dir as its cwd and can infer neither.
   await nextRunner.run(cmd.command, cmd.args, input.cwd, {
     OCEL_APP_NAME: input.name,
     OCEL_OUTPUT_DIR: appOutDir(options.outDir, input.name),

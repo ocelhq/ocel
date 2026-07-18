@@ -1,7 +1,5 @@
 package edge
 
-import "fmt"
-
 // Framework identifies what produced an app's build output. It keys the worker
 // registry alongside Kind, so supporting a framework on an edge is one registry
 // entry rather than a branch inside either.
@@ -28,27 +26,3 @@ type WorkerSource struct {
 // pulling every deploy value it needs from the Resolver. It owns the binding
 // names its own worker code reads, so that contract lives in one place.
 type Assemble func(WorkerSource, Resolver) (Worker, error)
-
-// workers is the framework registry. A framework absent from it needs no edge
-// worker at all and its app is served straight from its function URL — which is
-// how Express and Fastify already behave.
-var workers = map[Framework]map[Kind]Assemble{
-	FrameworkNext: {KindCloudflare: assembleNextCloudflare},
-}
-
-// NeedsWorker reports whether a framework's app is fronted by an edge worker at
-// all. A framework that registers nothing needs no edge, so its app is served
-// straight from its function URL.
-func NeedsWorker(f Framework) bool {
-	return len(workers[f]) > 0
-}
-
-// WorkerFor returns how to assemble the worker fronting a framework's app on an
-// edge, erroring by naming both when that pairing has no worker.
-func WorkerFor(f Framework, k Kind) (Assemble, error) {
-	assemble, ok := workers[f][k]
-	if !ok {
-		return nil, fmt.Errorf("framework %q has no worker for edge %q", f, k)
-	}
-	return assemble, nil
-}

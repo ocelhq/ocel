@@ -634,3 +634,77 @@ func slicesEqual(got, want []string) bool {
 	}
 	return true
 }
+
+// The edge's own bootstrap outputs are persisted by the provider and handed
+// back verbatim, so the edge can read what it provisioned without re-querying
+// its API. The provider never reads an individual key.
+func TestDeployEdgeWorker_HandsTheEdgeItsOwnBootstrapValues(t *testing.T) {
+	artifactRoot, manifest, outputs := twoNextApps(t)
+	fake := &recordingEdge{}
+	values := map[string]string{"bucketName": "edge-cache-7f3", "zoneID": "z1"}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", EdgeValues: values}
+
+	if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
+		t.Fatalf("deployEdgeWorker: %v", err)
+	}
+	if len(fake.deployed) != 2 {
+		t.Fatalf("expected two deployments, got %d", len(fake.deployed))
+	}
+	for _, d := range fake.deployed {
+		if len(d.Values) != len(values) {
+			t.Fatalf("%s: Values = %v, want %v", d.Name, d.Values, values)
+		}
+		for k, want := range values {
+			if d.Values[k] != want {
+				t.Errorf("%s: Values[%s] = %q, want %q", d.Name, k, d.Values[k], want)
+			}
+		}
+	}
+}
+
+// A configured Next app that emits no functions — a static export — produced no
+// build output for a worker to route to, so it must deploy without one rather
+// than failing on a routing manifest that was never written.
+func TestDeployEdgeWorker_ConfiguredAppWithNoFunctionsDeploysNoWorker(t *testing.T) {
+	setWorkerBundle(t)
+	fake := &recordingEdge{}
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "marketing", Framework: "next"}},
+	}
+	cfg := Config{Edge: fake, ArtifactRoot: t.TempDir(), StackName: "proj-prod"}
+
+	out, err := deployEdgeWorker(context.Background(), cfg, manifest, nil, nil)
+	if err != nil {
+		t.Fatalf("a static-export app must not fail the deploy: %v", err)
+	}
+	if fake.called() {
+		t.Errorf("an app with no functions must not reach the edge, got %v", fake.names())
+	}
+	if out != nil {
+		t.Errorf("expected no outputs, got %v", out)
+	}
+}
+
+// The zero-function app must not suppress its siblings either.
+func TestDeployEdgeWorker_ZeroFunctionAppDoesNotBlockOthers(t *testing.T) {
+	artifactRoot := t.TempDir()
+	writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"bweb"}`)
+	setWorkerBundle(t)
+
+	webApp, webFn := nextApp("web", nil)
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "marketing", Framework: "next"}, webApp},
+		Functions: []*deploymentsv1.ManifestFunction{webFn},
+	}
+	outputs := []*deploymentsv1.ResourceOutput{fnOutput("web_index", "https://web-fn.lambda-url.aws/")}
+	fake := &recordingEdge{}
+
+	if _, err := deployEdgeWorker(context.Background(), Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod"}, manifest, outputs, nil); err != nil {
+		t.Fatalf("deployEdgeWorker: %v", err)
+	}
+	if got := fake.names(); !slicesEqual(got, []string{"ocel-proj-prod-web"}) {
+		t.Errorf("deployed = %v, want only the app that emitted functions", got)
+	}
+}

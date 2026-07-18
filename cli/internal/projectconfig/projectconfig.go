@@ -192,16 +192,16 @@ func Resolve(startDir string) (*Config, error) {
 }
 
 // validAppName reports whether a name is usable as an app's identity. Build
-// output is namespaced per app by directory, and each function's logical name
-// is app-qualified, so a name outside this charset would either escape the
-// output tree or blur two apps into one infrastructure name.
+// output is namespaced per app by directory, so the only constraint is that the
+// name stay a single path segment inside the output tree: anything that is a
+// separator, climbs out, or roots elsewhere is rejected. Everything else — dots
+// included — is harmless in a directory name and stays allowed.
 func validAppName(name string) bool {
-	for _, r := range name {
-		switch {
-		case r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z', r >= '0' && r <= '9', r == '-', r == '_':
-		default:
-			return false
-		}
+	if name == "" || name == "." || name == ".." {
+		return false
+	}
+	if strings.ContainsAny(name, `/\`) || filepath.IsAbs(name) {
+		return false
 	}
 	return true
 }
@@ -222,7 +222,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			return nil, fmt.Errorf("app is missing required \"name\"")
 		}
 		if !validAppName(a.Name) {
-			return nil, fmt.Errorf("invalid app name %q — app names may contain only letters, digits, '-' and '_'", a.Name)
+			return nil, fmt.Errorf("invalid app name %q — an app name is one directory segment of the build output, so it may not be a path separator, \"..\", or an absolute path", a.Name)
 		}
 		if seen[a.Name] {
 			return nil, fmt.Errorf("duplicate app name %q — app names must be unique", a.Name)

@@ -38,6 +38,11 @@ const outputDirName = "output"
 // namespaced per app — each subtree carries that app's functions, static
 // assets, cache entries and routing manifest — so two apps exposing the same
 // route path never write over each other.
+//
+// This name is a cross-process, cross-language contract with no single home:
+// packages/ocel/src/builder/layout.ts (APPS_DIR) writes the layout, this
+// package discovers functions in it, and cloud/aws/deploy/edgeworker.go
+// (appsDirName) reads each app's artifacts from it. Change one, change all three.
 const appsDirName = "apps"
 
 // functionsDirName is the subtree of an app's directory the builder writes

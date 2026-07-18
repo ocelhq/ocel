@@ -37,37 +37,25 @@ type EdgeCredentials struct {
 	SecretAccessKey string `json:"secretAccessKey"`
 }
 
-func edgeUserName(class string) (string, error) {
-	switch class {
-	case ClassProduction:
-		return EdgeUserName, nil
-	case ClassPreview:
-		return EdgePreviewUserName, nil
-	default:
-		return "", fmt.Errorf("edge credentials: unknown substrate class %q", class)
-	}
+// edgeNames are the identities the edge step addresses for one substrate class:
+// its IAM user and the two SSM parameters holding its credentials and values.
+type edgeNames struct {
+	user             string
+	credentialsParam string
+	valuesParam      string
 }
 
-func edgeParamName(class string) (string, error) {
-	switch class {
-	case ClassProduction:
-		return EdgeCredentialsParamName, nil
-	case ClassPreview:
-		return EdgeCredentialsPreviewParamName, nil
-	default:
-		return "", fmt.Errorf("edge credentials: unknown substrate class %q", class)
-	}
+var edgeNamesByClass = map[string]edgeNames{
+	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName},
+	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName},
 }
 
-func edgeValuesParamName(class string) (string, error) {
-	switch class {
-	case ClassProduction:
-		return EdgeValuesParamName, nil
-	case ClassPreview:
-		return EdgeValuesPreviewParamName, nil
-	default:
-		return "", fmt.Errorf("edge values: unknown substrate class %q", class)
+func edgeNamesFor(class string) (edgeNames, error) {
+	names, ok := edgeNamesByClass[class]
+	if !ok {
+		return edgeNames{}, fmt.Errorf("edge: unknown substrate class %q", class)
 	}
+	return names, nil
 }
 
 // writeEdgeValues stores the edge's own bootstrap outputs so the deploy path can
@@ -77,7 +65,7 @@ func edgeValuesParamName(class string) (string, error) {
 // edge's current state rather than something that must survive re-minting, so a
 // re-run overwrites them.
 func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, values map[string]string) error {
-	paramName, err := edgeValuesParamName(class)
+	names, err := edgeNamesFor(class)
 	if err != nil {
 		return err
 	}
@@ -86,7 +74,7 @@ func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, values
 		return fmt.Errorf("marshal edge values: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(paramName),
+		Name:      aws.String(names.valuesParam),
 		Value:     aws.String(string(payload)),
 		Type:      ssmtypes.ParameterTypeSecureString,
 		Overwrite: aws.Bool(true),
@@ -100,12 +88,12 @@ func writeEdgeValues(ctx context.Context, ssmClient SSMAPI, class string, values
 // for the deploy path to hand back to the edge. A substrate whose edge stored
 // none reads as empty rather than as a failure.
 func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, class string) (map[string]string, error) {
-	paramName, err := edgeValuesParamName(class)
+	names, err := edgeNamesFor(class)
 	if err != nil {
 		return nil, err
 	}
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(paramName),
+		Name:           aws.String(names.valuesParam),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
@@ -136,14 +124,11 @@ func ReadEdgeValues(ctx context.Context, ssmClient SSMAPI, class string) (map[st
 // signed with a key that has already been revoked. IAM caps a user at two keys,
 // which is exactly the overlap this needs.
 func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMAPI, class string) (created bool, err error) {
-	paramName, err := edgeParamName(class)
+	names, err := edgeNamesFor(class)
 	if err != nil {
 		return false, err
 	}
-	userName, err := edgeUserName(class)
-	if err != nil {
-		return false, err
-	}
+	paramName, userName := names.credentialsParam, names.user
 
 	_, err = ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
 		Name:           aws.String(paramName),
@@ -204,12 +189,12 @@ func ensureEdgeCredentials(ctx context.Context, iamClient IAMAPI, ssmClient SSMA
 // ReadEdgeCredentials returns the substrate's stored edge credentials, decrypted,
 // for the deploy path to inject into the worker's signed-read bindings.
 func ReadEdgeCredentials(ctx context.Context, ssmClient SSMAPI, class string) (EdgeCredentials, error) {
-	paramName, err := edgeParamName(class)
+	names, err := edgeNamesFor(class)
 	if err != nil {
 		return EdgeCredentials{}, err
 	}
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(paramName),
+		Name:           aws.String(names.credentialsParam),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
