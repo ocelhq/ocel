@@ -8,9 +8,11 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime"
 	"mime/multipart"
+	"net/http"
 	"net/textproto"
 	"os"
 	"path"
@@ -69,6 +71,23 @@ func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }
 // offers nothing.
 func (p *provider) Bootstrap(context.Context) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
+}
+
+// FindApp reports whether a Workers script exists under name. A 404 is the
+// answer "no", not a failure.
+func (p *provider) FindApp(ctx context.Context, name string) (bool, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return false, fmt.Errorf("%s is not set; it is required to query the Cloudflare edge", envAccountID)
+	}
+	_, err := p.client.Workers.Scripts.Settings.Get(ctx, name, workers.ScriptSettingGetParams{
+		AccountID: cf.F(accountID),
+	})
+	var apiErr *cf.Error
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {

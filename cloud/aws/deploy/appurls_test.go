@@ -13,38 +13,60 @@ func pgOutput(logicalName string) *deploymentsv1.ResourceOutput {
 	}
 }
 
-func TestAppURLs_PrefersWorkerURL(t *testing.T) {
+func TestAppURLs_PrefersEachAppsWorkerURL(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "index", Framework: "next", App: "web"},
+		},
+	}
 	outputs := []*deploymentsv1.ResourceOutput{
-		fnOutput("api", "https://api.lambda-url.example"),
-		fnOutput(edgeWorkerOutputName, "https://app.workers.dev"),
+		fnOutput("index", "https://index.lambda-url.example"),
+		fnOutput(workerOutputName("web"), "https://app.workers.dev"),
 		pgOutput("main"),
 	}
-	got := appURLs(outputs)
+
+	got := appURLs(manifest, outputs)
 	if len(got) != 1 || got[0] != "https://app.workers.dev" {
 		t.Fatalf("appURLs = %v, want just the worker URL", got)
 	}
 }
 
-func TestAppURLs_FallsBackToFunctionURLs(t *testing.T) {
+// An app with no worker is served straight from its functions — and only its
+// own, so one app's URLs never surface under another.
+func TestAppURLs_FallsBackToTheAppsOwnFunctionURLs(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		Apps: []*deploymentsv1.ManifestApp{
+			{Name: "api", Framework: "express"},
+			{Name: "web", Framework: "next"},
+		},
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "api_handler", Framework: "express", App: "api"},
+			{LogicalName: "api_worker", Framework: "express", App: "api"},
+			{LogicalName: "web_index", Framework: "next", App: "web"},
+		},
+	}
 	outputs := []*deploymentsv1.ResourceOutput{
-		fnOutput("api", "https://api.lambda-url.example"),
-		fnOutput("worker", "https://worker.lambda-url.example"),
+		fnOutput("api_handler", "https://handler.lambda-url.example"),
+		fnOutput("api_worker", "https://worker.lambda-url.example"),
+		fnOutput("web_index", "https://index.lambda-url.example"),
+		fnOutput(workerOutputName("web"), "https://web.workers.dev"),
 		pgOutput("main"),
 	}
-	got := appURLs(outputs)
-	want := []string{"https://api.lambda-url.example", "https://worker.lambda-url.example"}
-	if len(got) != len(want) {
-		t.Fatalf("appURLs = %v, want %v", got, want)
+
+	want := []string{
+		"https://handler.lambda-url.example",
+		"https://worker.lambda-url.example",
+		"https://web.workers.dev",
 	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("appURLs[%d] = %q, want %q", i, got[i], want[i])
-		}
+	if got := appURLs(manifest, outputs); !slicesEqual(got, want) {
+		t.Fatalf("appURLs = %v, want %v", got, want)
 	}
 }
 
 func TestAppURLs_NoFunctions_ReturnsEmpty(t *testing.T) {
-	if got := appURLs([]*deploymentsv1.ResourceOutput{pgOutput("main")}); len(got) != 0 {
+	manifest := &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
+	if got := appURLs(manifest, []*deploymentsv1.ResourceOutput{pgOutput("main")}); len(got) != 0 {
 		t.Fatalf("appURLs = %v, want empty", got)
 	}
 }

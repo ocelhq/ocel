@@ -33,6 +33,14 @@ type Provider interface {
 	DeployApp(ctx context.Context, app AppDeployment) (AppResult, error)
 }
 
+// AppFinder is an optional Provider capability: reporting whether a deployment
+// already exists under a name. A provider uses it to notice deployments an
+// earlier naming scheme left behind, so it can report rather than orphan them.
+// An edge whose API cannot answer the question simply does not implement it.
+type AppFinder interface {
+	FindApp(ctx context.Context, name string) (bool, error)
+}
+
 // AppDeployment is one app's fully-resolved edge deployment: everything read off
 // disk and computed by the provider, so the edge only talks to its own API.
 type AppDeployment struct {

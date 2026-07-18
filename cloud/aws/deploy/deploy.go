@@ -264,26 +264,36 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 		return nil, nil, err
 	}
 	outputs = append(outputs, workerOutputs...)
-	return outputs, appURLs(outputs), nil
+	return outputs, appURLs(manifest, outputs), nil
 }
 
-// appURLs returns the user-facing URLs to feature on the success screen, in
-// priority order: an edge worker URL when present (it fronts the whole app),
-// otherwise every function's own URL. Non-function outputs (postgres, bucket)
-// are never app URLs. Keyed by edgeWorkerOutputName, defined alongside the
-// worker deploy, so the wire contract carries no magic logical name.
-func appURLs(outputs []*deploymentsv1.ResourceOutput) []string {
-	for _, o := range outputs {
-		if o.GetLogicalName() == edgeWorkerOutputName {
-			if f := o.GetFunction(); f != nil && f.GetUrl() != "" {
-				return []string{f.GetUrl()}
-			}
-		}
-	}
-	var urls []string
+// appURLs returns the user-facing URLs to feature on the success screen: for
+// every app, in manifest order, its edge worker URL when it has one (the worker
+// fronts the whole app), otherwise each of its own functions' URLs. Non-function
+// outputs (postgres, bucket) are never app URLs. Apps are joined to outputs by
+// workerOutputName, defined alongside the worker deploy, so the wire contract
+// carries no magic logical name.
+func appURLs(manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput) []string {
+	urlByLogical := make(map[string]string, len(outputs))
 	for _, o := range outputs {
 		if f := o.GetFunction(); f != nil && f.GetUrl() != "" {
-			urls = append(urls, f.GetUrl())
+			urlByLogical[o.GetLogicalName()] = f.GetUrl()
+		}
+	}
+
+	var urls []string
+	for _, app := range manifestApps(manifest) {
+		if worker := urlByLogical[workerOutputName(app.GetName())]; worker != "" {
+			urls = append(urls, worker)
+			continue
+		}
+		for _, fn := range manifest.GetFunctions() {
+			if fn.GetApp() != app.GetName() {
+				continue
+			}
+			if url := urlByLogical[fn.GetLogicalName()]; url != "" {
+				urls = append(urls, url)
+			}
 		}
 	}
 	return urls
