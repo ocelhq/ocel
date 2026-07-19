@@ -16,6 +16,19 @@ import {
   type InterceptionConfig,
 } from "./interception";
 
+// The request headers a Next App Router response varies on. Next folds them
+// into the `_rsc` cache-buster (which keys the entry, see cache.ts) but its own
+// allowHeader for a prerender deliberately omits them. The origin still needs
+// them to render the right variant on a cache miss — safe to forward precisely
+// because `_rsc` keys the entry, so one variant can never poison another's slot.
+const RSC_FORWARD_HEADERS = new Set([
+  "rsc",
+  "next-router-prefetch",
+  "next-router-state-tree",
+  "next-router-segment-prefetch",
+  "next-url",
+]);
+
 interface Env {
   ASSETS: Fetcher;
   FUNCTION_URLS: string;
@@ -199,7 +212,8 @@ async function dispatchPrerender(
   const safeHeaders = new Headers();
   const allowedHeaders = target.config.allowHeader?.map((h) => h.toLowerCase());
   for (const [name, value] of request.headers) {
-    if (allowedHeaders?.includes(name.toLowerCase())) {
+    const lower = name.toLowerCase();
+    if (allowedHeaders?.includes(lower) || RSC_FORWARD_HEADERS.has(lower)) {
       safeHeaders.set(name, value);
     }
   }

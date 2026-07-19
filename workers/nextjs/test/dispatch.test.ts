@@ -158,6 +158,51 @@ describe("dispatchResult", () => {
     expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
   });
 
+  it("forwards the RSC-family headers to a prerender origin past allowHeader", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            // Next's own allowHeader for a prerender omits the RSC family.
+            config: { allowHeader: ["host"] },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        });
+      }) as unknown as typeof fetch,
+      cache: missingCache(),
+    });
+
+    await dispatchResult(
+      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+      new Request("https://app.example/blog?_rsc=abc", {
+        headers: {
+          rsc: "1",
+          "next-router-prefetch": "1",
+          "next-router-state-tree": "%5B%22%22%5D",
+        },
+      }),
+      deps,
+    );
+
+    expect(captured?.headers.get("rsc")).toBe("1");
+    expect(captured?.headers.get("next-router-prefetch")).toBe("1");
+    expect(captured?.headers.get("next-router-state-tree")).toBe("%5B%22%22%5D");
+  });
+
   // Interception is wired as an origin tried before the Lambda. These prove the
   // dispatch-level contract: a clean hit serves without touching the Lambda, and
   // any interception miss falls open to it.
