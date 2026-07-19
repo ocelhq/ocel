@@ -55,8 +55,8 @@ type DispatchTarget =
         initialExpiration?: number;
         initialRevalidate?: number | false;
       };
-      // The headers Next requires on a resume request. Only ever
-      // { "next-resume": "1" }, but read from the manifest rather than assumed.
+      // The headers the build declares for this route's resume request, read
+      // from the manifest rather than assumed.
       pprChain?: { headers: Record<string, string> };
       config: {
         allowQuery?: string[];
