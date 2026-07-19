@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -10,6 +11,8 @@ import (
 	iamtypes "github.com/aws/aws-sdk-go-v2/service/iam/types"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+
+	"github.com/ocelhq/ocel/cloud/edge"
 )
 
 // fakeSSM keeps parameters in a map, returning a typed ParameterNotFound for a
@@ -157,6 +160,147 @@ func TestReadEdgeCredentials(t *testing.T) {
 
 func TestEdgeCredentials_UnknownClass(t *testing.T) {
 	if _, err := ensureEdgeCredentials(context.Background(), &fakeIAM{}, newFakeSSM(), "nonsense"); err == nil {
+		t.Error("expected an error for an unknown substrate class")
+	}
+}
+
+// offeredStore is a complete cache-store offer as a freshly minted one arrives:
+// every coordinate plus the secret. Tests drop the secret to model a reuse.
+func offeredStore() map[string]string {
+	return map[string]string{
+		edge.OfferKeyBucket:          "ocel-edge-cache",
+		edge.OfferKeyEndpoint:        "https://acct.r2.cloudflarestorage.com",
+		edge.OfferKeyRegion:          "auto",
+		edge.OfferKeyAccessKeyID:     "tok-1",
+		edge.OfferKeySecretAccessKey: "sha-of-tok-1",
+	}
+}
+
+func TestAdoptCacheStore_FreshMintPersistsEveryCoordinate(t *testing.T) {
+	ssmc := newFakeSSM()
+
+	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
+		t.Fatalf("adoptCacheStore: %v", err)
+	}
+	got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+	if err != nil {
+		t.Fatalf("ReadCacheStore: %v", err)
+	}
+	want := CacheStore{
+		Bucket:          "ocel-edge-cache",
+		Endpoint:        "https://acct.r2.cloudflarestorage.com",
+		Region:          "auto",
+		AccessKeyID:     "tok-1",
+		SecretAccessKey: "sha-of-tok-1",
+	}
+	if got != want {
+		t.Errorf("stored store = %+v, want %+v", got, want)
+	}
+}
+
+// TestAdoptCacheStore_ReuseKeepsStoredSecret is the normal re-run: the edge
+// reoffers the token it already minted, carrying no secret, and the secret
+// already in SSM must survive.
+func TestAdoptCacheStore_ReuseKeepsStoredSecret(t *testing.T) {
+	ssmc := newFakeSSM()
+	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
+		t.Fatalf("first adopt: %v", err)
+	}
+
+	reoffer := offeredStore()
+	delete(reoffer, edge.OfferKeySecretAccessKey)
+	reoffer[edge.OfferKeyEndpoint] = "https://acct.r2.cloudflarestorage.com/v2"
+
+	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", reoffer); err != nil {
+		t.Fatalf("second adopt: %v", err)
+	}
+	got, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+	if err != nil {
+		t.Fatalf("ReadCacheStore: %v", err)
+	}
+	if got.SecretAccessKey != "sha-of-tok-1" {
+		t.Errorf("secret = %q, want the stored secret preserved", got.SecretAccessKey)
+	}
+	if got.Endpoint != "https://acct.r2.cloudflarestorage.com/v2" {
+		t.Errorf("endpoint = %q, want the reoffered coordinate", got.Endpoint)
+	}
+}
+
+// TestAdoptCacheStore_DanglingToken covers both shapes of the cross-run hazard: a
+// secretless offer whose access key is not the one in SSM means a prior run
+// minted a token and never persisted it. The secret is gone for good, so bootstrap
+// must say which token to delete rather than store a credential-less config.
+func TestAdoptCacheStore_DanglingToken(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		stored string
+	}{
+		{"nothing stored", ""},
+		{"a different key stored", `{"bucket":"ocel-edge-cache","accessKeyId":"tok-0","secretAccessKey":"sha-of-tok-0"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ssmc := newFakeSSM()
+			if tc.stored != "" {
+				ssmc.params[CacheStoreParamName] = tc.stored
+			}
+			offer := offeredStore()
+			delete(offer, edge.OfferKeySecretAccessKey)
+
+			err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offer)
+			if err == nil {
+				t.Fatal("expected a dangling-token error for a secretless offer with no matching stored secret")
+			}
+			if !strings.Contains(err.Error(), "tok-1") {
+				t.Errorf("diagnostic does not name the token: %v", err)
+			}
+			if ssmc.params[CacheStoreParamName] != tc.stored {
+				t.Errorf("wrote %q over the stored store despite failing", ssmc.params[CacheStoreParamName])
+			}
+		})
+	}
+}
+
+func TestAdoptCacheStore_PreviewStoresSeparately(t *testing.T) {
+	ssmc := newFakeSSM()
+	preview := offeredStore()
+	preview[edge.OfferKeyBucket] = "ocel-edge-cache-preview"
+	preview[edge.OfferKeyAccessKeyID] = "tok-preview"
+
+	if err := adoptCacheStore(context.Background(), ssmc, ClassProduction, "fake", offeredStore()); err != nil {
+		t.Fatalf("production adopt: %v", err)
+	}
+	if err := adoptCacheStore(context.Background(), ssmc, ClassPreview, "fake", preview); err != nil {
+		t.Fatalf("preview adopt: %v", err)
+	}
+
+	prod, err := ReadCacheStore(context.Background(), ssmc, ClassProduction)
+	if err != nil {
+		t.Fatalf("ReadCacheStore production: %v", err)
+	}
+	prev, err := ReadCacheStore(context.Background(), ssmc, ClassPreview)
+	if err != nil {
+		t.Fatalf("ReadCacheStore preview: %v", err)
+	}
+	if prod.Bucket != "ocel-edge-cache" || prod.AccessKeyID != "tok-1" {
+		t.Errorf("production store = %+v, want production's own coordinates", prod)
+	}
+	if prev.Bucket != "ocel-edge-cache-preview" || prev.AccessKeyID != "tok-preview" {
+		t.Errorf("preview store = %+v, want preview's own coordinates", prev)
+	}
+}
+
+func TestReadCacheStore_AbsentIsNotAnError(t *testing.T) {
+	got, err := ReadCacheStore(context.Background(), newFakeSSM(), ClassProduction)
+	if err != nil {
+		t.Fatalf("ReadCacheStore on an absent parameter: %v", err)
+	}
+	if got != (CacheStore{}) {
+		t.Errorf("ReadCacheStore = %+v, want the zero store", got)
+	}
+}
+
+func TestAdoptCacheStore_UnknownClass(t *testing.T) {
+	if err := adoptCacheStore(context.Background(), newFakeSSM(), "nonsense", "fake", offeredStore()); err == nil {
 		t.Error("expected an error for an unknown substrate class")
 	}
 }

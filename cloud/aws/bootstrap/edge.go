@@ -10,6 +10,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
+
+	"github.com/ocelhq/ocel/cloud/edge"
 )
 
 const (
@@ -22,6 +24,11 @@ const (
 	// parameters holding each substrate's edge bootstrap outputs.
 	EdgeValuesParamName        = "/ocel/edge/values"
 	EdgeValuesPreviewParamName = "/ocel/edge/values-preview"
+
+	// CacheStoreParamName / CacheStorePreviewParamName are the SSM SecureString
+	// parameters holding each substrate's adopted cache store.
+	CacheStoreParamName        = "/ocel/edge/cache-store"
+	CacheStorePreviewParamName = "/ocel/edge/cache-store-preview"
 )
 
 // IAMAPI is the subset of the IAM client the edge-credential step needs.
@@ -38,16 +45,18 @@ type EdgeCredentials struct {
 }
 
 // edgeNames are the identities the edge step addresses for one substrate class:
-// its IAM user and the two SSM parameters holding its credentials and values.
+// its IAM user and the SSM parameters holding its credentials, values and
+// adopted cache store.
 type edgeNames struct {
 	user             string
 	credentialsParam string
 	valuesParam      string
+	cacheStoreParam  string
 }
 
 var edgeNamesByClass = map[string]edgeNames{
-	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName},
-	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName},
+	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName},
+	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName},
 }
 
 func edgeNamesFor(class string) (edgeNames, error) {
@@ -205,4 +214,99 @@ func ReadEdgeCredentials(ctx context.Context, ssmClient SSMAPI, class string) (E
 		return EdgeCredentials{}, fmt.Errorf("parse edge credentials: %w", err)
 	}
 	return creds, nil
+}
+
+// CacheStore is the JSON payload stored in SSM for an adopted OfferCacheStore:
+// the object store a substrate's incremental cache is backed by, described in
+// S3-compatible terms so any consumer addresses it with the client it already
+// has.
+type CacheStore struct {
+	Bucket          string `json:"bucket"`
+	Endpoint        string `json:"endpoint"`
+	Region          string `json:"region"`
+	AccessKeyID     string `json:"accessKeyId"`
+	SecretAccessKey string `json:"secretAccessKey"`
+}
+
+// adoptCacheStore persists an edge's offered cache store for one substrate class.
+// Coordinates are the edge's current state and are overwritten on every run; the
+// secret is not, because an edge that cannot read a credential back reoffers the
+// store without one and the stored secret is then the only copy in existence.
+//
+// A secretless offer whose access key id is not the one already stored is the
+// cross-run counterpart of the dangling-key trap ensureEdgeCredentials guards
+// against: a prior run minted that credential and failed before persisting it, so
+// its secret is unrecoverable and no re-run can mint over it — the edge finds the
+// credential present and reoffers it forever. Storing the coordinates anyway would
+// leave a store nothing can authenticate against, so this fails with the one
+// remedy that works: delete the credential at the edge and re-run.
+func adoptCacheStore(ctx context.Context, ssmClient SSMAPI, class string, kind edge.Kind, values map[string]string) error {
+	names, err := edgeNamesFor(class)
+	if err != nil {
+		return err
+	}
+	store := CacheStore{
+		Bucket:          values[edge.OfferKeyBucket],
+		Endpoint:        values[edge.OfferKeyEndpoint],
+		Region:          values[edge.OfferKeyRegion],
+		AccessKeyID:     values[edge.OfferKeyAccessKeyID],
+		SecretAccessKey: values[edge.OfferKeySecretAccessKey],
+	}
+
+	if store.SecretAccessKey == "" {
+		stored, err := ReadCacheStore(ctx, ssmClient, class)
+		if err != nil {
+			return err
+		}
+		if stored.AccessKeyID != store.AccessKeyID || stored.SecretAccessKey == "" {
+			return fmt.Errorf(
+				"the %s edge reoffered cache-store credential %q without a secret, but %s holds no secret for it: "+
+					"a prior bootstrap minted that credential and failed before storing it. Its secret cannot be read "+
+					"back, so delete credential %q for bucket %q at the %s edge and re-run bootstrap to mint a fresh one",
+				kind, store.AccessKeyID, names.cacheStoreParam, store.AccessKeyID, store.Bucket, kind,
+			)
+		}
+		store.SecretAccessKey = stored.SecretAccessKey
+	}
+
+	payload, err := json.Marshal(store)
+	if err != nil {
+		return fmt.Errorf("marshal cache store: %w", err)
+	}
+	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:      aws.String(names.cacheStoreParam),
+		Value:     aws.String(string(payload)),
+		Type:      ssmtypes.ParameterTypeSecureString,
+		Overwrite: aws.Bool(true),
+	}); err != nil {
+		return fmt.Errorf("write cache store parameter: %w", err)
+	}
+	return nil
+}
+
+// ReadCacheStore returns the substrate's adopted cache store, decrypted. A
+// substrate whose edge offered none reads as the zero store rather than as a
+// failure, which is how a consumer tells "stay on the provider's own store" from
+// an error.
+func ReadCacheStore(ctx context.Context, ssmClient SSMAPI, class string) (CacheStore, error) {
+	names, err := edgeNamesFor(class)
+	if err != nil {
+		return CacheStore{}, err
+	}
+	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(names.cacheStoreParam),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return CacheStore{}, nil
+		}
+		return CacheStore{}, fmt.Errorf("read cache store parameter: %w", err)
+	}
+	var store CacheStore
+	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &store); err != nil {
+		return CacheStore{}, fmt.Errorf("parse cache store: %w", err)
+	}
+	return store, nil
 }

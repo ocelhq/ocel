@@ -268,14 +268,16 @@ func TestRun_NoEdgeValuesStoresNothing(t *testing.T) {
 
 // TestRun_IgnoresUnrecognisedOffer proves a newer edge offering a resource this
 // provider has never heard of degrades rather than breaking: the offer is
-// ignored and bootstrap still completes.
+// ignored, the recognised one alongside it is still adopted, and bootstrap
+// completes. This is the rollback path for cache-store adoption — an unadopted
+// offer leaves ISR where it was.
 func TestRun_IgnoresUnrecognisedOffer(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{
 		Trust: edge.TrustExternal,
 		Offers: []edge.Offer{
 			{Kind: "something-invented-later", Values: map[string]string{"id": "x"}},
-			{Kind: edge.OfferCacheStore, Values: map[string]string{"bucket": "b"}},
+			{Kind: edge.OfferCacheStore, Values: offeredStore()},
 		},
 	}}
 
@@ -287,6 +289,85 @@ func TestRun_IgnoresUnrecognisedOffer(t *testing.T) {
 	}
 	if len(iamc.created) != 1 {
 		t.Errorf("an unrecognised offer changed what was minted: %v", iamc.created)
+	}
+	if _, ok := ssmc.params[CacheStoreParamName]; !ok {
+		t.Errorf("the recognised offer alongside it was not adopted")
+	}
+}
+
+// TestRun_NoOffersStoresNoCacheStore proves an edge offering nothing leaves ISR
+// exactly where it was: no cache-store parameter is written at all.
+func TestRun_NoOffersStoresNoCacheStore(t *testing.T) {
+	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+
+	if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if _, ok := ssmc.params[CacheStoreParamName]; ok {
+		t.Errorf("stored a cache store for an edge that offered none")
+	}
+}
+
+// TestRun_AdoptsCacheStorePerClass proves each substrate adopts its own edge's
+// store into its own parameter, so a preview deploy can never be pointed at
+// production's cache.
+func TestRun_AdoptsCacheStorePerClass(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		run   func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, func(string), func(string)) error
+		class string
+		param string
+	}{
+		{"production", Run, ClassProduction, CacheStoreParamName},
+		{"preview", RunPreview, ClassPreview, CacheStorePreviewParamName},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ssmc := newFakeSSM()
+			ed := &fakeEdge{out: edge.BootstrapOutput{
+				Trust:  edge.TrustExternal,
+				Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offeredStore()}},
+			}}
+
+			if err := tc.run(context.Background(), newFakeCFN(), ssmc, &fakeIAM{}, ed, nil, nil); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if _, ok := ssmc.params[tc.param]; !ok {
+				t.Fatalf("no cache store stored at %s", tc.param)
+			}
+			got, err := ReadCacheStore(context.Background(), ssmc, tc.class)
+			if err != nil {
+				t.Fatalf("ReadCacheStore: %v", err)
+			}
+			if got.Bucket != "ocel-edge-cache" || got.SecretAccessKey != "sha-of-tok-1" {
+				t.Errorf("stored store = %+v, want the offered coordinates", got)
+			}
+		})
+	}
+}
+
+// TestRun_DanglingCacheStoreTokenFailsBootstrap proves the cross-run hazard stops
+// the bootstrap rather than leaking through it: a secretless offer with nothing
+// stored is an unrecoverable credential, and the run must not proceed as if the
+// store were usable.
+func TestRun_DanglingCacheStoreTokenFailsBootstrap(t *testing.T) {
+	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	offer := offeredStore()
+	delete(offer, edge.OfferKeySecretAccessKey)
+	ed := &fakeEdge{out: edge.BootstrapOutput{
+		Trust:  edge.TrustExternal,
+		Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offer}},
+	}}
+
+	err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil)
+	if err == nil {
+		t.Fatal("expected Run to fail on an unrecoverable cache-store credential")
+	}
+	if _, ok := ssmc.params[CacheStoreParamName]; ok {
+		t.Error("stored a credential-less cache store despite the hazard")
+	}
+	if len(cfn.templates) != 0 {
+		t.Errorf("provisioned %d stacks despite the hazard", len(cfn.templates))
 	}
 }
 
