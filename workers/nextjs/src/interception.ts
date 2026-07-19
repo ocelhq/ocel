@@ -252,10 +252,10 @@ function isServable(value: Record<string, any>): boolean {
 
 // readFallbackShell is the one place a request is answered from a shell built
 // for a different (param-agnostic) path, so it is also the one place to change
-// if that turns out not to resume correctly for arbitrary params — the
-// assumption is unproven until it runs against a real deploy (bd ocelhq-jpx).
-// Only a postponed entry qualifies: a complete entry under the dynamic pattern
-// would be another route's rendered page, not this one's.
+// if that turns out not to resume correctly for arbitrary params — an
+// assumption still unproven against a real deploy. Only a postponed entry
+// qualifies: a complete entry under the dynamic pattern would be another
+// route's rendered page, not this one's.
 async function readFallbackShell(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
