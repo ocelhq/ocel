@@ -1,11 +1,15 @@
-import {
-  DynamoDBClient,
-  QueryCommand,
-  UpdateItemCommand,
-  type AttributeValue,
-} from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, QueryCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
+
+import {
+  isGuardRejection,
+  tagRecordUpdate,
+  tagSortKey,
+  type TagRecordUpdate,
+} from "./tag-index.mjs";
+
+export type { TagRecordUpdate } from "./tag-index.mjs";
 
 // A `use cache` entry exactly as it sits in object storage: the metadata and the
 // body in one JSON document, so a read is a single GET and a write is atomic
@@ -18,15 +22,6 @@ export interface UseCacheEntry {
   expire: number;
   revalidate: number;
   body: string;
-}
-
-// A tag record as it is written: the invalidation watermarks plus the time the
-// write happened, which is what the index is sorted by. The two are separate
-// because a sync has to find changed records regardless of what value they carry.
-export interface TagRecordUpdate {
-  stale?: number;
-  expired?: number;
-  writtenAt: number;
 }
 
 export interface TagRecordRow extends TagRecordUpdate {
@@ -48,16 +43,6 @@ export interface UseCacheStore {
   queryTagRecords(since: number, cursor?: unknown): Promise<TagRecordPage>;
   writeTag(tag: string, record: TagRecordUpdate): Promise<boolean>;
 }
-
-// The index sort key is a string attribute, so a timestamp has to be padded to a
-// fixed width for lexicographic ordering to match numeric ordering. 15 digits
-// outlasts millisecond epochs by several millennia.
-const sortKeyWidth = 15;
-
-// Rounded here rather than at the call site: the clock's timestamps come from
-// performance.now(), which is fractional, and a fractional string neither pads
-// to the fixed width nor orders lexicographically against one that does.
-const sortKey = (at: number) => String(Math.round(at)).padStart(sortKeyWidth, "0");
 
 // One page is deliberately large: a cold instance drains the whole partition,
 // and every extra round trip is one more on its first request.
@@ -142,7 +127,7 @@ export function awsUseCacheStore(): UseCacheStore {
           KeyConditionExpression: "gsi1pk = :ns AND gsi1sk >= :since",
           ExpressionAttributeValues: {
             ":ns": { S: tagNamespace },
-            ":since": { S: sortKey(since) },
+            ":since": { S: tagSortKey(since) },
           },
           Limit: tagPageSize,
           ExclusiveStartKey: cursor as Record<string, any> | undefined,
@@ -166,46 +151,15 @@ export function awsUseCacheStore(): UseCacheStore {
     },
 
     // Writes into the same record the incremental cache's tag store already
-    // uses: revalidateTag fans out to both, so both clocks observe every event.
-    //
-    // The guard is monotonic on `expired`, which is a watermark meaning
-    // everything created at or before this instant is dead — a larger value is
-    // strictly stricter, so rejecting a smaller write can only over-invalidate.
-    // Rejection is the *common* path, because Next calls updateTags on every
-    // registered handler and the second write for an event always loses.
+    // uses, under the same shared update, so both clocks observe every event.
     async writeTag(tag, record) {
-      // Only the fields this event actually carries are written, and the guard
-      // is on the field being advanced. Writing an absent field as 0 would both
-      // clobber a value another instance set and — since the guard is a strict
-      // `<` — wedge the record, so every later write of that field is rejected
-      // against its own zero.
-      const advancing = record.expired !== undefined ? "expired" : "stale";
-      const sets = ["tag = :tag", "gsi1pk = :ns", "gsi1sk = :writtenAt"];
-      const values: Record<string, AttributeValue> = {
-        ":tag": { S: tag },
-        ":ns": { S: tagNamespace },
-        ":writtenAt": { S: sortKey(record.writtenAt) },
-      };
-      for (const field of ["expired", "stale"] as const) {
-        const value = record[field];
-        if (value === undefined) continue;
-        sets.push(`${field} = :${field}`);
-        values[`:${field}`] = { N: String(value) };
-      }
-
       try {
         await ddb.send(
-          new UpdateItemCommand({
-            TableName: table,
-            Key: { pk: { S: `${tagNamespace}${tag}` }, sk: { S: "#META" } },
-            ConditionExpression: `attribute_not_exists(${advancing}) OR ${advancing} < :${advancing}`,
-            UpdateExpression: "SET " + sets.join(", "),
-            ExpressionAttributeValues: values,
-          }),
+          new UpdateItemCommand(tagRecordUpdate(table, tagNamespace, tag, record)),
         );
         return true;
-      } catch (err: any) {
-        if (err?.name === "ConditionalCheckFailedException") return false;
+      } catch (err) {
+        if (isGuardRejection(err)) return false;
         throw err;
       }
     },

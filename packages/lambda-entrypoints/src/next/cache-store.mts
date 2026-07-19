@@ -6,6 +6,8 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
+import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
+
 // The entry and tag-record shapes are the shared ISR contract — the same the
 // edge worker reads — so they live in @ocel/next-cache and are re-exported here
 // for the handler and its tests.
@@ -139,31 +141,32 @@ export function awsCacheStore(): CacheStore {
     // record before applying its updates, so marking a tag stale must not drop an
     // expiry set earlier — a lost `expired` silently makes an invalidated tag
     // look fresh again and resurrects stale content.
+    //
+    // Indexed on the way through, under the same update the `use cache` tier
+    // writes. An app on the classic ISR model has no `use cache` anywhere, so
+    // nothing else ever writes its tags: an unindexed row here is an
+    // invalidation no delta replica can see. Doing it here rather than relying
+    // on Next fanning revalidateTag out to the plural handlers is what keeps
+    // that true across framework versions.
     async writeTags(tags, record) {
-      const sets: string[] = [];
-      const names: Record<string, string> = {};
-      const values: Record<string, any> = {};
-      for (const field of ["stale", "expired"] as const) {
-        const v = record[field];
-        if (v === undefined) continue;
-        sets.push(`#${field} = :${field}`);
-        names[`#${field}`] = field;
-        values[`:${field}`] = { N: String(v) };
-      }
-      if (sets.length === 0) return;
+      if (record.stale === undefined && record.expired === undefined) return;
+      const writtenAt = Date.now();
 
       await Promise.all(
-        tags.map((tag) =>
-          ddb.send(
-            new UpdateItemCommand({
-              TableName: table,
-              Key: { pk: { S: tagPK(tag) }, sk: { S: "#META" } },
-              UpdateExpression: "SET " + sets.join(", "),
-              ExpressionAttributeNames: names,
-              ExpressionAttributeValues: values,
-            }),
-          ),
-        ),
+        tags.map(async (tag) => {
+          try {
+            await ddb.send(
+              new UpdateItemCommand(
+                tagRecordUpdate(table, tagNamespace, tag, { ...record, writtenAt }),
+              ),
+            );
+          } catch (err) {
+            // Next hands revalidateTag through with no try/catch, so a rejected
+            // guard must not fail the request: it only means another writer
+            // already recorded a stricter invalidation for this event.
+            if (!isGuardRejection(err)) throw err;
+          }
+        }),
       );
     },
   };
