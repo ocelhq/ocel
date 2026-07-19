@@ -223,11 +223,17 @@ const adapter = {
         ...outputs.staticFiles.map((o) => [o.pathname, { kind: "static" }]),
         ...publicFiles.map((p) => [p.pathname, { kind: "static" }]),
 
-        // A prerendered pathname resolves to a prerender: its config + fallback
-        // live in the asset bucket (keyed by build id) and its id is the parent
+        // A prerendered pathname resolves to a prerender: its cache entry lives
+        // in the asset bucket (keyed by build id) and its id is the parent
         // output's function — the base route deployed as a Lambda that
         // regenerates the entry. Spread last so it replaces the plain lambda
         // entry a prerendered function route also produced above.
+        //
+        // The fallback is projected down to the two freshness windows rather
+        // than spread: the shell, the postponed state, and the entry's own
+        // status/headers all travel in the cache entry, so carrying build-time
+        // copies here would only put a stale second source of truth (and, for
+        // postponedState, ~96KB of it per route) in front of every request.
         ...outputs.prerenders.map((p) => {
           const allowQuery = p.config?.allowQuery;
           const tags = cacheTags(p);
@@ -239,9 +245,10 @@ const adapter = {
               id: parentIdByPathname.get(p.pathname) ?? p.parentOutputId,
               config: p.config,
               fallback: {
-                filePath: "TODO: Point to expected S3 Key",
-                ...p.fallback,
+                initialRevalidate: p.fallback?.initialRevalidate,
+                initialExpiration: p.fallback?.initialExpiration,
               },
+              ...(p.pprChain && { pprChain: p.pprChain }),
               ...(tags.length > 0 && { tags }),
               ...(allowQuery && { allowQuery }),
             },
