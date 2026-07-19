@@ -44,13 +44,12 @@ type DispatchTarget =
       tags?: string[];
       allowQuery?: string[];
       fallback?: {
-        filePath: string | undefined;
-        initialStatus?: number;
-        initialHeaders?: Record<string, string | string[]>;
         initialExpiration?: number;
         initialRevalidate?: number | false;
-        postponedState: string | undefined;
       };
+      // The headers Next requires on a resume request. Only ever
+      // { "next-resume": "1" }, but read from the manifest rather than assumed.
+      pprChain?: { headers: Record<string, string> };
       config: {
         allowQuery?: string[];
         allowHeader?: string[];
@@ -140,110 +139,18 @@ export async function dispatchResult(
       // files. Use the ORIGINAL request so the asset path matches.
       return assetsOr404(request, assets);
 
-    case "prerender":
     case "lambda": {
       const fnUrl = functionUrls[target.id];
-      if (!fnUrl) {
-        return new Response(`No function URL for ${target.id}`, {
-          status: 502,
-        });
-      }
-
-      const forwardUrl = result.invocationTarget
-        ? new URL(result.invocationTarget.pathname + url.search, fnUrl)
-        : new URL(url.pathname + url.search, fnUrl);
-
-      let origin = () =>
-        doFetch(
-          new Request(forwardUrl, {
-            method: request.method,
-            headers: request.headers,
-            body: request.body,
-            redirect: "manual",
-          }),
-        );
-
-      if (target.kind !== "prerender" || !deps.cache) {
-        return origin();
-      }
-
-      if (shouldBypass(request, url, target.config)) {
-        return withStatus(await origin(), "BYPASS");
-      }
-
-      const safeHeaders = new Headers();
-      const allowedHeaders = target.config.allowHeader?.map((h) =>
-        h.toLowerCase(),
+      if (!fnUrl) return noFunctionUrl(target.id);
+      return doFetch(
+        forward(originUrl(fnUrl, url, result), request, request.headers),
       );
+    }
 
-      for (const [name, value] of request.headers) {
-        if (allowedHeaders?.includes(name.toLowerCase())) {
-          safeHeaders.set(name, value);
-        }
-      }
-
-      origin = () =>
-        doFetch(
-          new Request(forwardUrl, {
-            method: request.method,
-            headers: safeHeaders,
-            body: request.body,
-            redirect: "manual",
-          }),
-        );
-
-      const blockingHeaders = new Headers(safeHeaders);
-      blockingHeaders.set(
-        "x-prerender-revalidate",
-        target.config.bypassToken ?? "",
-      );
-
-      const originBlocking = () =>
-        doFetch(
-          new Request(forwardUrl, {
-            method: request.method,
-            headers: blockingHeaders,
-            body: request.body,
-            redirect: "manual",
-          }),
-        );
-
-      // A pages-router data request (/_next/data/<build>/route.json) resolves to
-      // the same prerender target as its html route, but must be answered with
-      // JSON pageData, not html. Interception reconstructs only the html/RSC
-      // variants, so those requests fall open to the Lambda exactly as today.
-      const isNextData =
-        url.pathname.startsWith((manifest.basePath ?? "") + "/_next/data/") &&
-        url.pathname.endsWith(".json");
-
-      // When edge cache coordinates are present, a prerender read is tried
-      // directly against the cache first; any miss/expiry/error falls open to
-      // the Lambda origin. The interception hit carries a full-window
-      // cache-control so serveCached memoizes it exactly as it would the
-      // Lambda's response.
-      let cachingOrigin = origin;
-      if (target.kind === "prerender" && deps.interception && !isNextData) {
-        const lambdaOrigin = origin;
-        const interceptTarget = {
-          routePath: result.invocationTarget?.pathname ?? url.pathname,
-          revalidate: target.fallback?.initialRevalidate,
-        };
-        const { config, ...interceptDeps } = deps.interception;
-        cachingOrigin = async () =>
-          (await intercept(request, interceptTarget, config, interceptDeps)) ??
-          lambdaOrigin();
-      }
-
-      return serveCached(
-        request,
-        {
-          key: cacheKey(manifest.buildId, url.pathname, url, target.allowQuery),
-          tags: target.tags,
-        },
-        deps.cache,
-        cachingOrigin,
-        originBlocking,
-      );
+    case "prerender": {
+      const fnUrl = functionUrls[target.id];
+      if (!fnUrl) return noFunctionUrl(target.id);
+      return dispatchPrerender(request, url, result, target, fnUrl, deps);
     }
 
     case "edge":
@@ -254,6 +161,115 @@ export async function dispatchResult(
     default:
       return assetsOr404(request, assets);
   }
+}
+
+type PrerenderTarget = Extract<DispatchTarget, { kind: "prerender" }>;
+
+// dispatchPrerender serves a prerendered route: from the colo cache when it can,
+// from the ISR cache the worker reads itself when edge coordinates are present,
+// and from the Lambda whenever neither can answer.
+async function dispatchPrerender(
+  request: Request,
+  url: URL,
+  result: RouteResult,
+  target: PrerenderTarget,
+  fnUrl: string,
+  deps: RouteDeps,
+): Promise<Response> {
+  const doFetch = deps.fetch ?? fetch;
+  const forwardUrl = originUrl(fnUrl, url, result);
+
+  if (!deps.cache) {
+    return doFetch(forward(forwardUrl, request, request.headers));
+  }
+
+  if (shouldBypass(request, url, target.config)) {
+    const response = await doFetch(forward(forwardUrl, request, request.headers));
+    return withStatus(response, "BYPASS");
+  }
+
+  const safeHeaders = new Headers();
+  const allowedHeaders = target.config.allowHeader?.map((h) => h.toLowerCase());
+  for (const [name, value] of request.headers) {
+    if (allowedHeaders?.includes(name.toLowerCase())) {
+      safeHeaders.set(name, value);
+    }
+  }
+
+  const origin = () => doFetch(forward(forwardUrl, request, safeHeaders));
+
+  const blockingHeaders = new Headers(safeHeaders);
+  blockingHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
+  const originBlocking = () =>
+    doFetch(forward(forwardUrl, request, blockingHeaders));
+
+  // A pages-router data request (/_next/data/<build>/route.json) resolves to
+  // the same prerender target as its html route, but must be answered with
+  // JSON pageData, not html. Interception reconstructs only the html/RSC
+  // variants, so those requests fall open to the Lambda exactly as today.
+  const isNextData =
+    url.pathname.startsWith((deps.manifest.basePath ?? "") + "/_next/data/") &&
+    url.pathname.endsWith(".json");
+
+  // When edge cache coordinates are present, a prerender read is tried
+  // directly against the cache first; any miss/expiry/error falls open to
+  // the Lambda origin. The interception hit carries a full-window
+  // cache-control so serveCached memoizes it exactly as it would the
+  // Lambda's response.
+  let cachingOrigin = origin;
+  if (deps.interception && !isNextData) {
+    const interceptTarget = {
+      routePath: result.invocationTarget?.pathname ?? url.pathname,
+      revalidate: target.fallback?.initialRevalidate,
+    };
+    const { config, ...interceptDeps } = deps.interception;
+    cachingOrigin = async () =>
+      (await intercept(request, interceptTarget, config, interceptDeps)) ??
+      origin();
+  }
+
+  return serveCached(
+    request,
+    {
+      key: cacheKey(
+        deps.manifest.buildId,
+        url.pathname,
+        url,
+        target.allowQuery,
+      ),
+      tags: target.tags,
+    },
+    deps.cache,
+    cachingOrigin,
+    originBlocking,
+  );
+}
+
+// originUrl points a request at its Function URL, preferring the routing
+// result's invocation target so a rewritten path reaches the right handler.
+function originUrl(fnUrl: string, url: URL, result: RouteResult): URL {
+  const pathname = result.invocationTarget?.pathname ?? url.pathname;
+  return new URL(pathname + url.search, fnUrl);
+}
+
+// forward rebuilds a request against an origin URL under a chosen header set,
+// keeping the method and body of the request being served.
+export function forward(
+  url: URL,
+  request: Request,
+  headers: HeadersInit,
+  body: BodyInit | null = request.body,
+): Request {
+  return new Request(url, {
+    method: request.method,
+    headers,
+    body,
+    redirect: "manual",
+  });
+}
+
+function noFunctionUrl(id: string): Response {
+  return new Response(`No function URL for ${id}`, { status: 502 });
 }
 
 // shouldBypass decides whether a prerender request must skip the cache and go
