@@ -167,42 +167,7 @@ export async function dispatchResult(
         return origin();
       }
 
-      let shouldBypass = false;
-
-      for (const bypass of target.config.bypassFor ?? []) {
-        if (shouldBypass) break;
-        if (bypass.type === "header") {
-          const h = request.headers.get(bypass.key);
-          shouldBypass = bypass.value ? h === bypass.value : h !== null;
-        } else if (bypass.type === "cookie") {
-          const cookie = request.headers.get("cookie");
-          const entry = (cookie?.split(";") ?? [])
-            .map((e) => e.trim())
-            .find((e) => {
-              const eq = e.indexOf("=");
-              return eq > 0 && e.slice(0, eq) === bypass.key;
-            });
-          const value = entry ? entry.slice(entry.indexOf("=") + 1) : undefined;
-          shouldBypass =
-            entry !== undefined &&
-            (bypass.value ? value === bypass.value : true);
-        } else if (bypass.type === "host") {
-          shouldBypass = bypass.value === url.host;
-        } else if (bypass.type === "query") {
-          const q = url.searchParams.get(bypass.key);
-          shouldBypass = bypass.value ? q === bypass.value : q !== null;
-        }
-      }
-
-      const bypassToken = request.headers.get("x-prerender-revalidate");
-      if (
-        target.config.bypassToken &&
-        bypassToken === target.config.bypassToken
-      ) {
-        shouldBypass = true;
-      }
-
-      if (shouldBypass) {
+      if (shouldBypass(request, url, target.config)) {
         return withStatus(await origin(), "BYPASS");
       }
 
@@ -289,6 +254,72 @@ export async function dispatchResult(
     default:
       return assetsOr404(request, assets);
   }
+}
+
+// shouldBypass decides whether a prerender request must skip the cache and go
+// straight to the origin: the route's own revalidate token, or any one of its
+// bypassFor conditions. Next builds bypassFor as independent bypass *reasons*
+// (server action, multipart upload, bot), so they OR — ANDing them could never
+// match.
+export function shouldBypass(
+  request: Request,
+  url: URL,
+  config: { bypassFor?: RouteHas[]; bypassToken?: string },
+): boolean {
+  if (
+    config.bypassToken &&
+    request.headers.get("x-prerender-revalidate") === config.bypassToken
+  ) {
+    return true;
+  }
+  return (config.bypassFor ?? []).some((has) => matchesHas(has, request, url));
+}
+
+// matchesHas mirrors Next's own hasMatch: a bare condition matches on presence
+// of a truthy value, and a condition with a value matches it as an ANCHORED
+// regex — not a string equality. A repeated key is matched on its last value.
+function matchesHas(has: RouteHas, request: Request, url: URL): boolean {
+  const value = hasValue(has, request, url);
+  if (!value) return false;
+  if (!has.value) return true;
+
+  const candidate = Array.isArray(value) ? value[value.length - 1] : value;
+  try {
+    return new RegExp(`^${has.value}$`).test(candidate);
+  } catch {
+    return false;
+  }
+}
+
+function hasValue(
+  has: RouteHas,
+  request: Request,
+  url: URL,
+): string | string[] | undefined {
+  switch (has.type) {
+    case "header":
+      return request.headers.get(has.key) ?? undefined;
+    case "cookie":
+      return cookieValue(request.headers.get("cookie"), has.key);
+    case "query": {
+      const values = url.searchParams.getAll(has.key);
+      if (values.length === 0) return undefined;
+      return values.length === 1 ? values[0] : values;
+    }
+    case "host":
+      // The port is not part of the host a route condition names.
+      return url.host.split(":", 1)[0].toLowerCase();
+  }
+}
+
+function cookieValue(header: string | null, key: string): string | undefined {
+  for (const part of header?.split(";") ?? []) {
+    const eq = part.indexOf("=");
+    if (eq > 0 && part.slice(0, eq).trim() === key) {
+      return part.slice(eq + 1).trim();
+    }
+  }
+  return undefined;
 }
 
 // assetsOr404 serves a request from the Assets binding, mapping the binding's
