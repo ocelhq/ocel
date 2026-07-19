@@ -63,9 +63,17 @@ export function cacheKey(
   allowQuery?: string[],
 ): string {
   const key = new URL(`https://cache.ocel/${buildId}${identity}`);
-  const names = [...new Set(allowQuery ?? [...url.searchParams.keys()])].sort();
+  const names = new Set(allowQuery ?? [...url.searchParams.keys()]);
 
-  for (const name of names) {
+  // `_rsc` is Next's cache-buster for the current CDN model: a hash of the
+  // rsc / next-router-* / next-url headers folded into one search param. It is
+  // never in a route's allowQuery, but it is exactly what separates an HTML
+  // response from its RSC and prefetch variants, so it must always key the entry
+  // when present. Absent — plain navigations, pathname-based segment routes —
+  // it changes nothing.
+  if (url.searchParams.has("_rsc")) names.add("_rsc");
+
+  for (const name of [...names].sort()) {
     for (const value of url.searchParams.getAll(name)) {
       key.searchParams.append(name, value);
     }
