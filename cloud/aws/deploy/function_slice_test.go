@@ -305,3 +305,82 @@ func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
 		t.Errorf("OCEL_STATE_TABLE_INDEX = %q, want %q", env["OCEL_STATE_TABLE_INDEX"], bootstrap.StateTableIndexName)
 	}
 }
+
+// The membrane fails the init when it cannot read the cache-store parameter, so
+// a function whose env names one and whose role does not grant it would not
+// start at all. The two are asserted together for that reason.
+func TestISRCacheStore_GrantsAndNamesTheSameParameter(t *testing.T) {
+	const paramARN = "arn:aws:ssm:us-east-1:1234:parameter/ocel/edge/cache-store"
+	cfg := isrConfig{
+		Bucket:             "assets-xyz",
+		Prefix:             "prod/proj123/marketing/build456",
+		Table:              "state-abc",
+		TableARN:           "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		CacheStoreParam:    "/ocel/edge/cache-store",
+		CacheStoreParamARN: paramARN,
+	}
+
+	if got := cfg.env()["OCEL_CACHE_STORE_PARAM"]; got != cfg.CacheStoreParam {
+		t.Errorf("OCEL_CACHE_STORE_PARAM = %q, want %q", got, cfg.CacheStoreParam)
+	}
+
+	raw, err := isrPolicy(cfg)
+	if err != nil {
+		t.Fatalf("isrPolicy: %v", err)
+	}
+	var doc struct {
+		Statement []struct {
+			Action    []string `json:"Action"`
+			Resource  string   `json:"Resource"`
+			Condition map[string]map[string]any
+		}
+	}
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatalf("policy is not valid JSON: %v", err)
+	}
+	if len(doc.Statement) != 5 {
+		t.Fatalf("got %d statements, want 5 (the three cache grants plus ssm and kms)", len(doc.Statement))
+	}
+
+	ssmStmt := doc.Statement[3]
+	if want := []string{"ssm:GetParameter"}; !slices.Equal(ssmStmt.Action, want) {
+		t.Errorf("ssm Action = %v, want exactly %v", ssmStmt.Action, want)
+	}
+	// Scoped to the one parameter: a wildcard here would hand every function in
+	// the account read access to every other parameter, including the edge
+	// reader's access key.
+	if ssmStmt.Resource != paramARN {
+		t.Errorf("ssm Resource = %q, want %q", ssmStmt.Resource, paramARN)
+	}
+
+	// The parameter is a SecureString, so GetParameter with decryption also needs
+	// kms:Decrypt. The key is the account's default SSM key, whose ARN the deploy
+	// cannot know, so scoping rests entirely on the encryption context SSM sets —
+	// without the condition this statement would be a decrypt grant on the whole
+	// account.
+	kmsStmt := doc.Statement[4]
+	if want := []string{"kms:Decrypt"}; !slices.Equal(kmsStmt.Action, want) {
+		t.Errorf("kms Action = %v, want exactly %v", kmsStmt.Action, want)
+	}
+	if got := kmsStmt.Condition["StringEquals"]["kms:EncryptionContext:PARAMETER_ARN"]; got != paramARN {
+		t.Errorf("kms encryption-context condition = %q, want it bound to %q", got, paramARN)
+	}
+}
+
+// A substrate with no cache-store parameter must deploy exactly as before: no
+// parameter named in the env, and no grant widening the role.
+func TestISRCacheStore_AbsentParameterLeavesEnvAndPolicyUntouched(t *testing.T) {
+	cfg := isrConfig{
+		Bucket:   "assets-xyz",
+		Prefix:   "prod/proj123/marketing/build456",
+		Table:    "state-abc",
+		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+	}
+
+	if _, ok := cfg.env()["OCEL_CACHE_STORE_PARAM"]; ok {
+		t.Error("OCEL_CACHE_STORE_PARAM is set; an unset name is what makes the membrane skip the fetch")
+	}
+	if doc := parsePolicy(t, cfg); len(doc.Statement) != 3 {
+		t.Errorf("got %d statements, want the original 3", len(doc.Statement))
+	}
+}

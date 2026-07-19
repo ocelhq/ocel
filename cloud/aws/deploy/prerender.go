@@ -58,10 +58,12 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 			return nil, err
 		}
 		caches[app] = &isrConfig{
-			Bucket:   cfg.AssetBucket,
-			Prefix:   prefix,
-			Table:    cfg.StateTable,
-			TableARN: cfg.StateTableARN,
+			Bucket:             cfg.AssetBucket,
+			Prefix:             prefix,
+			Table:              cfg.StateTable,
+			TableARN:           cfg.StateTableARN,
+			CacheStoreParam:    cfg.CacheStoreParam,
+			CacheStoreParamARN: cfg.CacheStoreParamARN,
 		}
 	}
 	return caches, nil

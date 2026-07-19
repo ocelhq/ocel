@@ -187,16 +187,29 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	}
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
+	// The cache-store parameter is named here, not in the Lambda: resolving the
+	// substrate class is already this side's job, and the same name has to appear
+	// in the function's read grant anyway.
+	cacheStoreParam, err := bootstrap.CacheStoreParamFor(edgeClass)
+	if err != nil {
+		return nil, nil, err
+	}
+	cacheStoreParamARN := fmt.Sprintf("arn:aws:ssm:%s:%s:parameter%s", awscfg.Region, account, cacheStoreParam)
+
 	return deploy.Run(ctx, deploy.Config{
-		Region:           awscfg.Region,
-		BackendURL:       "s3://" + deployed.StateBucket,
-		Passphrase:       passphrase,
-		ProjectName:      pulumiProjectName,
-		StackName:        stackName(manifest.GetProjectId(), env),
-		Pulumi:           pulumiCmd,
-		Secrets:          secretsmanager.NewFromConfig(awscfg),
-		StateTable:       deployed.StateTable,
-		StateTableARN:    stateTableARN,
+		Region:        awscfg.Region,
+		BackendURL:    "s3://" + deployed.StateBucket,
+		Passphrase:    passphrase,
+		ProjectName:   pulumiProjectName,
+		StackName:     stackName(manifest.GetProjectId(), env),
+		Pulumi:        pulumiCmd,
+		Secrets:       secretsmanager.NewFromConfig(awscfg),
+		StateTable:    deployed.StateTable,
+		StateTableARN: stateTableARN,
+
+		CacheStoreParam:    cacheStoreParam,
+		CacheStoreParamARN: cacheStoreParamARN,
+
 		ListenerCodePath: listenerCodePath,
 		ArtifactRoot:     artifactRoot(),
 		ArtifactBucket:   deployed.ArtifactBucket,

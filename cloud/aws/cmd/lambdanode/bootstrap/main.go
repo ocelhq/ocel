@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"time"
 )
 
 func main() {
@@ -17,14 +18,25 @@ func main() {
 		fatalInit(fmt.Sprintf("node binary not found: %v", err))
 	}
 
-	membrane, err := startNode()
+	ctx := context.Background()
+
+	// Globally bootstrapped config is fetched here, not baked into every
+	// function's environment, and it must land before node is exec'd because it
+	// travels in that child's environment. Whatever the fetch spends comes out of
+	// node's share of the init ceiling, so the remainder is what it gets.
+	start := time.Now()
+	storeEnv, err := resolveCacheStoreEnv(ctx, os.Getenv(cacheStoreParamEnv))
+	if err != nil {
+		fatalInit(fmt.Sprintf("failed to resolve cache store config: %v", err))
+	}
+
+	membrane, err := startNode(storeEnv, startupBudget-time.Since(start))
 	if err != nil {
 		// Must report init failure BEFORE we start polling the Runtime API.
 		fatalInit(fmt.Sprintf("failed to start node runtime: %v", err))
 	}
 
 	rt := newRuntimeClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
-	ctx := context.Background()
 	for {
 		if err := handleInvocation(ctx, rt, membrane); err != nil {
 			// A Runtime API failure is fatal to the loop; the sandbox is recycled.

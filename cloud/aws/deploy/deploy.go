@@ -51,6 +51,16 @@ type Config struct {
 	// StateTableARN is that table's ARN, used to scope each consumer's IAM
 	// grants to its own key prefix.
 	StateTableARN string
+	// CacheStoreParam and CacheStoreParamARN name the SSM parameter this
+	// substrate's adopted cache store lives in, and its ARN. The name is injected
+	// into every cached function so the membrane can read it at init; the ARN
+	// scopes that function's read grant to it. They are set whether or not the
+	// substrate has adopted a store — an unadopted one is signalled by the
+	// parameter not existing, which the membrane reads as "stay on the provider's
+	// own store". Empty only leaves the fetch unconfigured entirely.
+	CacheStoreParam    string
+	CacheStoreParamARN string
+
 	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
 	// deploys. Packaging it (building + zipping the handler binary) rides the
 	// provider's distribution workflow, which is deferred with provider publish;

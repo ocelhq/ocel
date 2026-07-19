@@ -98,6 +98,16 @@ type isrConfig struct {
 	Prefix   string
 	Table    string
 	TableARN string
+
+	// CacheStoreParam and CacheStoreParamARN address the SSM parameter holding
+	// the substrate's adopted cache store, which the membrane reads at init and
+	// injects into node. The deploy resolves the substrate class, so the runtime
+	// is handed a parameter name rather than a class to map — one mapping, on the
+	// side that also has to name the parameter in the role's grant. Set whether or
+	// not a store was actually adopted: an unadopted one is signalled by the
+	// parameter not existing, which the membrane reads as "stay on S3".
+	CacheStoreParam    string
+	CacheStoreParamARN string
 }
 
 // tagNamespace is the partition-key prefix this app's ISR tag records live
@@ -110,13 +120,20 @@ func (c isrConfig) tagNamespace() string {
 
 // env is what the bundled cache handler reads to find its backing stores.
 func (c isrConfig) env() map[string]string {
-	return map[string]string{
+	env := map[string]string{
 		"OCEL_ISR_BUCKET":        c.Bucket,
 		"OCEL_ISR_PREFIX":        c.Prefix,
 		"OCEL_STATE_TABLE":       c.Table,
 		"OCEL_STATE_TABLE_INDEX": bootstrap.StateTableIndexName,
 		"OCEL_ISR_TAG_NAMESPACE": c.tagNamespace(),
 	}
+	// Left unset rather than set empty when there is no parameter: the membrane
+	// reads an unset name as "this substrate adopted no cache store" and skips
+	// the fetch entirely, which is what keeps an older substrate on S3.
+	if c.CacheStoreParam != "" {
+		env["OCEL_CACHE_STORE_PARAM"] = c.CacheStoreParam
+	}
+	return env
 }
 
 // isrPolicy grants a Next function exactly the cache access it needs and no
@@ -127,48 +144,78 @@ func (c isrConfig) env() map[string]string {
 // StringLike (plain LeadingKeys matching is exact-only) to bound the function to
 // its own tag partitions.
 func isrPolicy(c isrConfig) (string, error) {
-	doc := map[string]any{
-		"Version": "2012-10-17",
-		"Statement": []any{
-			map[string]any{
-				"Effect":   "Allow",
-				"Action":   []string{"s3:GetObject", "s3:PutObject"},
-				"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
-			},
-			map[string]any{
-				"Effect": "Allow",
-				// Exactly the calls the handler's tag store makes against the
-				// table itself: readTags sends BatchGetItem, writeTags sends
-				// UpdateItem (it merges, so PutItem would clobber an earlier
-				// expiry). Index reads are granted separately below. Adding a
-				// call in either place means adding its action here — a mismatch
-				// 403s at runtime, and revalidateTag does not catch, so it throws
-				// out of the user's server action.
-				"Action":   []string{"dynamodb:BatchGetItem", "dynamodb:UpdateItem"},
-				"Resource": c.TableARN,
-				"Condition": map[string]any{
-					"ForAllValues:StringLike": map[string]any{
-						"dynamodb:LeadingKeys": []string{c.tagNamespace() + "*"},
-					},
+	statements := []any{
+		map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"s3:GetObject", "s3:PutObject"},
+			"Resource": fmt.Sprintf("arn:aws:s3:::%s/%s/*", c.Bucket, c.Prefix),
+		},
+		map[string]any{
+			"Effect": "Allow",
+			// Exactly the calls the handler's tag store makes against the
+			// table itself: readTags sends BatchGetItem, writeTags sends
+			// UpdateItem (it merges, so PutItem would clobber an earlier
+			// expiry). Index reads are granted separately below. Adding a
+			// call in either place means adding its action here — a mismatch
+			// 403s at runtime, and revalidateTag does not catch, so it throws
+			// out of the user's server action.
+			"Action":   []string{"dynamodb:BatchGetItem", "dynamodb:UpdateItem"},
+			"Resource": c.TableARN,
+			"Condition": map[string]any{
+				"ForAllValues:StringLike": map[string]any{
+					"dynamodb:LeadingKeys": []string{c.tagNamespace() + "*"},
 				},
 			},
-			map[string]any{
-				"Effect": "Allow",
-				// An index is not covered by its table's ARN, so the tag sync's
-				// Query needs this separate resource or it 403s. LeadingKeys is
-				// evaluated against the *index's* partition key here, which is
-				// the tag namespace verbatim — the same wildcard admits it
-				// because * matches zero characters.
-				"Action":   []string{"dynamodb:Query"},
-				"Resource": c.TableARN + "/index/" + bootstrap.StateTableIndexName,
-				"Condition": map[string]any{
-					"ForAllValues:StringLike": map[string]any{
-						"dynamodb:LeadingKeys": []string{c.tagNamespace() + "*"},
-					},
+		},
+		map[string]any{
+			"Effect": "Allow",
+			// An index is not covered by its table's ARN, so the tag sync's
+			// Query needs this separate resource or it 403s. LeadingKeys is
+			// evaluated against the *index's* partition key here, which is
+			// the tag namespace verbatim — the same wildcard admits it
+			// because * matches zero characters.
+			"Action":   []string{"dynamodb:Query"},
+			"Resource": c.TableARN + "/index/" + bootstrap.StateTableIndexName,
+			"Condition": map[string]any{
+				"ForAllValues:StringLike": map[string]any{
+					"dynamodb:LeadingKeys": []string{c.tagNamespace() + "*"},
 				},
 			},
 		},
 	}
+
+	// The membrane reads this parameter at init to find the store its cache
+	// handler writes to. Without the grant the read 403s, and a 403 fails the
+	// init rather than degrading — so the grant and the injected parameter name
+	// have to appear together, which is why both hang off the same field.
+	if c.CacheStoreParamARN != "" {
+		statements = append(statements,
+			map[string]any{
+				"Effect":   "Allow",
+				"Action":   []string{"ssm:GetParameter"},
+				"Resource": c.CacheStoreParamARN,
+			},
+			map[string]any{
+				"Effect": "Allow",
+				// The parameter is a SecureString, so reading it decrypts under
+				// the account's default SSM key, whose ARN the deploy does not
+				// know. The encryption-context condition is what scopes this to
+				// the one parameter rather than to every secret in the account:
+				// SSM puts the parameter's ARN into the encryption context of
+				// every decrypt it makes, so a Resource of "*" cannot be
+				// exercised against anything else.
+				"Action":   []string{"kms:Decrypt"},
+				"Resource": "*",
+				"Condition": map[string]any{
+					"StringEquals": map[string]any{
+						"kms:EncryptionContext:PARAMETER_ARN": c.CacheStoreParamARN,
+					},
+				},
+			},
+		)
+	}
+
+	doc := map[string]any{"Version": "2012-10-17", "Statement": statements}
 	out, err := json.Marshal(doc)
 	if err != nil {
 		return "", fmt.Errorf("render isr policy: %w", err)
