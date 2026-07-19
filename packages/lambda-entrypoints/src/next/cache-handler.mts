@@ -118,17 +118,23 @@ export default class OcelCacheHandler {
     }
   }
 
-  // set() runs after the response is already streaming, so a failure costs the
-  // cache entry and nothing else — the next request simply renders again.
+  // The entry now lands in the store the edge reads, which is a cross-internet
+  // PUT the response must not be held open for, so the write is deferred onto
+  // the invocation. Nothing reads an entry back within the request that wrote
+  // it; a write that never lands costs the cache entry and nothing else, and the
+  // next request simply renders again.
+  //
+  // The value is serialized here, on the request path, because `data` carries a
+  // live RenderResult that does not outlive the request that produced it.
   async set(key: string, data: any, ctx: any): Promise<void> {
     if (!data) return;
     try {
+      const store = this.store;
       const value = serialize(data);
       if (data.kind === "FETCH") value.tags = ctx?.tags ?? [];
-      await this.store.writeEntry(cacheKey(key, ctx?.fetchCache ? "FETCH" : data.kind), {
-        lastModified: Date.now(),
-        value,
-      });
+      const entry = { lastModified: Date.now(), value };
+      const stored = cacheKey(key, ctx?.fetchCache ? "FETCH" : data.kind);
+      background(() => store.writeEntry(stored, entry));
     } catch {
       // Swallowed deliberately: see above.
     }

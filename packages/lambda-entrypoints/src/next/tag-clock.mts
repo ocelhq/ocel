@@ -1,6 +1,6 @@
 import type { TagRecord } from "@ocel/next-cache";
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
-import { latest, publishTagSnapshot, snapshotRefreshMs } from "./tag-snapshot.mjs";
+import { mergeRecord, publishTagSnapshot, snapshotRefreshMs } from "./tag-snapshot.mjs";
 import { now } from "./use-cache-entry.mjs";
 
 // Invalidations are recorded in the state table and synced back into a local
@@ -48,6 +48,23 @@ const stateKey = Symbol.for("ocel.use-cache.tag-clock.v1");
 // into both handler bundles exists twice. Sharing it through globalThis is what
 // keeps the two copies agreeing on one tag map, one cursor and one query — the
 // same technique Next uses for its own handler registry.
+// The only place a ClockState's fields are enumerated, so resetting one can
+// never fall behind adding one.
+function initialState(fingerprint: string): ClockState {
+  return {
+    fingerprint,
+    records: new Map(),
+    store: undefined,
+    cursor: null,
+    hasSynced: false,
+    lastAttemptAt: -Infinity,
+    inflight: null,
+    revision: 0,
+    publishedRevision: 0,
+    publishedAt: -Infinity,
+  };
+}
+
 function sharedState(): ClockState {
   const fingerprint = [
     process.env.OCEL_STATE_TABLE,
@@ -61,18 +78,7 @@ function sharedState(): ClockState {
   // so adopting it would silently answer with another deployment's tags.
   if (existing?.fingerprint === fingerprint) return existing;
 
-  return (host[stateKey] = {
-    fingerprint,
-    records: new Map(),
-    store: undefined,
-    cursor: null,
-    hasSynced: false,
-    lastAttemptAt: -Infinity,
-    inflight: null,
-    revision: 0,
-    publishedRevision: 0,
-    publishedAt: -Infinity,
-  });
+  return (host[stateKey] = initialState(fingerprint));
 }
 
 const state = sharedState();
@@ -98,16 +104,11 @@ export function useCacheStore(): UseCacheStore | null {
 // Rebinds the shared clock, discarding the state that belonged to the previous
 // store — a tag map and cursor only mean anything against the backend they came
 // from. Production never calls this; tests drive the real clock against a fake.
+//
+// Assigned in place rather than rebound, because every module copy that has
+// already read the shared state holds this exact object.
 export function setTagClockStore(next: UseCacheStore | null): void {
-  state.store = next;
-  state.records.clear();
-  state.cursor = null;
-  state.hasSynced = false;
-  state.lastAttemptAt = -Infinity;
-  state.inflight = null;
-  state.revision = 0;
-  state.publishedRevision = 0;
-  state.publishedAt = -Infinity;
+  Object.assign(state, initialState(state.fingerprint), { store: next });
 }
 
 // Records the tag's new state and reports whether anything actually moved, which
@@ -126,11 +127,7 @@ function set(tag: string, record: TagRecord): void {
 // index must never walk back an invalidation this instance raised itself, which
 // the index is too lagged to have seen yet.
 function observe(tag: string, incoming: TagRecord): void {
-  const existing = state.records.get(tag);
-  set(tag, {
-    stale: latest(existing?.stale, incoming.stale),
-    expired: latest(existing?.expired, incoming.expired),
-  });
+  set(tag, mergeRecord(state.records.get(tag), incoming));
 }
 
 async function sync(): Promise<void> {
@@ -161,11 +158,27 @@ async function sync(): Promise<void> {
   } catch {
     // Next does not guard refreshTags, so a throw here fails the request. A
     // state table outage — or an index that does not exist yet — leaves the
-    // handlers serving on their last known tag state instead.
-    return;
+    // handlers serving on their last known tag state instead, with the cursor
+    // and hasSynced left exactly where they were so nothing is skipped.
   }
 
+  // Published even when the query failed, because the local map is what is being
+  // replicated and it is already merged: recordAndPublish merges its record
+  // before draining, so bailing out here would drop the very invalidation the
+  // kick exists to replicate — and on an app with no `use cache` anywhere,
+  // nothing ever runs this clock again to repair it.
   await publish(backend);
+}
+
+// Starts a drain and records it as the one in flight, which is what lets a
+// concurrent caller join it rather than run a second query against the same
+// cursor. The attempt is marked before it runs rather than after it settles,
+// which is what makes the throttle above bound attempts.
+function drain(): Promise<void> {
+  state.lastAttemptAt = now();
+  return (state.inflight = sync().finally(() => {
+    state.inflight = null;
+  }));
 }
 
 // Publishing from the sync drain rather than from updateTags is what makes the
@@ -209,10 +222,7 @@ export async function recordAndPublish(
   // cursor past records neither had read.
   if (state.inflight) await state.inflight;
 
-  state.lastAttemptAt = now();
-  await (state.inflight = sync().finally(() => {
-    state.inflight = null;
-  }));
+  await drain();
 }
 
 export const tagClock: TagClock = {
@@ -264,10 +274,7 @@ export const tagClock: TagClock = {
     if (state.inflight) return state.inflight;
     if (now() - state.lastAttemptAt < syncIntervalMs) return;
 
-    state.lastAttemptAt = now();
-    return (state.inflight = sync().finally(() => {
-      state.inflight = null;
-    }));
+    return drain();
   },
 
   async getExpiration(tags) {

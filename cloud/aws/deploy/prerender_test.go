@@ -353,6 +353,27 @@ func TestGenesisSnapshot_MatchesThePublishersFormat(t *testing.T) {
 	}
 }
 
+// TestTagSnapshotSuffix_MatchesTheEdgeContract pins where this deploy writes the
+// snapshot to where the readers look for it. tagSnapshotKey() in
+// @ocel/next-cache builds the same key from the same prefix, and neither side
+// calls the other, so the fixture is the only thing that fails when one moves.
+func TestTagSnapshotSuffix_MatchesTheEdgeContract(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "packages", "next-cache", "fixtures", "edge-contract.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var contract struct {
+		TagSnapshotSuffix string `json:"tagSnapshotSuffix"`
+	}
+	if err := json.Unmarshal(body, &contract); err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+	if tagSnapshotSuffix != contract.TagSnapshotSuffix {
+		t.Errorf("tagSnapshotSuffix = %q, want %q", tagSnapshotSuffix, contract.TagSnapshotSuffix)
+	}
+}
+
 // TestUploadPrerenderAssets_NoNextApp proves the path is a no-op for a manifest
 // with no Next.js function: nothing is read or uploaded.
 func TestUploadPrerenderAssets_NoNextApp(t *testing.T) {

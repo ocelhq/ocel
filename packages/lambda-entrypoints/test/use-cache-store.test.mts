@@ -372,9 +372,24 @@ test("creates the snapshot only where none exists", async () => {
 test("replaces the snapshot only where it still carries the etag that was read", async () => {
   const { snapshots, sends } = await snapshotsWith([{}]);
 
-  await expect(snapshots!.write(snapshot, '"abc"')).resolves.toBe(true);
+  await expect(snapshots!.write(snapshot, { snapshot, etag: '"abc"' })).resolves.toBe(
+    true,
+  );
 
   expect(sends[0].IfMatch).toBe('"abc"');
+  expect(sends[0].IfNoneMatch).toBeUndefined();
+});
+
+// An object the store named no version for can satisfy neither precondition, so
+// conditioning on one would fail every publish for the life of the build. The
+// compare-and-swap is what is given up, and the monotonic merge plus the next
+// publish are what make that bounded.
+test("replaces an unversioned snapshot unconditionally", async () => {
+  const { snapshots, sends } = await snapshotsWith([{}]);
+
+  await expect(snapshots!.write(snapshot, { snapshot, etag: null })).resolves.toBe(true);
+
+  expect(sends[0].IfMatch).toBeUndefined();
   expect(sends[0].IfNoneMatch).toBeUndefined();
 });
 
@@ -386,7 +401,9 @@ test("reports a failed precondition rather than throwing", async () => {
   });
   const { snapshots } = await snapshotsWith([rejected]);
 
-  await expect(snapshots!.write(snapshot, '"abc"')).resolves.toBe(false);
+  await expect(snapshots!.write(snapshot, { snapshot, etag: '"abc"' })).resolves.toBe(
+    false,
+  );
 });
 
 // A lost grant must not read as "someone else won", which would leave the
@@ -397,7 +414,9 @@ test("surfaces a write failure that is not a failed precondition", async () => {
   });
   const { snapshots } = await snapshotsWith([denied]);
 
-  await expect(snapshots!.write(snapshot, '"abc"')).rejects.toThrow(/denied/);
+  await expect(snapshots!.write(snapshot, { snapshot, etag: '"abc"' })).rejects.toThrow(
+    /denied/,
+  );
 });
 
 test("reads the snapshot back with the etag the next write conditions on", async () => {
@@ -408,14 +427,26 @@ test("reads the snapshot back with the etag the next write conditions on", async
   await expect(snapshots!.read()).resolves.toEqual({ snapshot, etag: '"abc"' });
 });
 
-// A torn blob still has an etag, so it is replaced under the same
-// compare-and-swap rather than wedging the key for the life of the build.
-test("reports a torn snapshot as unusable while keeping its etag", async () => {
+// deployedAt is written only by the deploy's genesis seed, so a read that
+// reported a torn blob as usable-but-empty would have the publisher overwrite it
+// with a zero anchor and disable pruning for the life of the build.
+test("surfaces a torn snapshot rather than reporting it absent or empty", async () => {
   const { snapshots } = await snapshotsWith([
     { ETag: '"abc"', Body: { transformToString: async () => "{not json" } },
   ]);
 
-  await expect(snapshots!.read()).resolves.toEqual({ snapshot: null, etag: '"abc"' });
+  await expect(snapshots!.read()).rejects.toThrow();
+});
+
+// A missing etag is not an absent object: reporting it as one makes the next
+// write condition on "create", which 412s against the object that is already
+// there — every time, for the life of the build.
+test("reads an existing object the store gave no etag for", async () => {
+  const { snapshots } = await snapshotsWith([
+    { Body: { transformToString: async () => JSON.stringify(snapshot) } },
+  ]);
+
+  await expect(snapshots!.read()).resolves.toEqual({ snapshot, etag: null });
 });
 
 test("reports an absent snapshot as nothing to merge onto", async () => {

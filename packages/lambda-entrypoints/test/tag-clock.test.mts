@@ -13,7 +13,7 @@ import type {
 // A stand-in for the object the edge reads: one versioned blob, written only
 // under a matching etag, exactly as R2's conditional PUT behaves.
 function fakeSnapshots() {
-  let object: { body: string; etag: string } | null = null;
+  let object: { body: string; etag: string | null } | null = null;
   let version = 0;
   let failure: Error | null = null;
   let interposed: TagSnapshot | null = null;
@@ -27,6 +27,7 @@ function fakeSnapshots() {
     readonly reads: number;
     put(snapshot: TagSnapshot): void;
     putRaw(body: string): void;
+    putUnversioned(snapshot: TagSnapshot): void;
     interposeOnce(snapshot: TagSnapshot): void;
     hold(): () => void;
     breakWrites(err?: Error): void;
@@ -46,6 +47,11 @@ function fakeSnapshots() {
     },
     putRaw(body) {
       object = { body, etag: `v${++version}` };
+    },
+    // An object the store returned without an etag: it exists, but names no
+    // version the next write could condition on.
+    putUnversioned(snapshot) {
+      object = { body: JSON.stringify(snapshot), etag: null };
     },
     // Another publisher lands `snapshot` in the gap between our next read and
     // our next write, which is exactly what a precondition failure reports.
@@ -73,14 +79,12 @@ function fakeSnapshots() {
       reads++;
       await Promise.resolve();
       if (!object) return null;
-      try {
-        return { snapshot: JSON.parse(object.body) as TagSnapshot, etag: object.etag };
-      } catch {
-        return { snapshot: null, etag: object.etag };
-      }
+      // Mirrors the real store: an unparseable snapshot is surfaced rather than
+      // reported as absent, so it is never replaced with an unanchored one.
+      return { snapshot: JSON.parse(object.body) as TagSnapshot, etag: object.etag };
     },
 
-    async write(snapshot, etag) {
+    async write(snapshot, prior) {
       writes++;
       // Yields, so concurrent publishers really do interleave read and write.
       await Promise.resolve();
@@ -91,8 +95,11 @@ function fakeSnapshots() {
         interposed = null;
       }
       // Mirrors If-Match / If-None-Match: a stale etag, or a create against an
-      // object that now exists, is a precondition failure and not an error.
-      if (etag === null ? object !== null : object?.etag !== etag) return false;
+      // object that now exists, is a precondition failure and not an error. A
+      // prior naming no version conditions on nothing.
+      const conditional =
+        prior === null ? object !== null : prior.etag !== null && object?.etag !== prior.etag;
+      if (conditional) return false;
       object = { body: JSON.stringify(snapshot), etag: `v${++version}` };
       return true;
     },
@@ -611,18 +618,46 @@ test("a failed publish is repaired by the next one", async () => {
   expect(store.snapshots!.current!.records.products!.expired).toBe(at);
 });
 
-// A blob that cannot be parsed still has an etag, so it is replaced under the
-// same compare-and-swap rather than wedging the key for the life of the build.
-test("overwrites a torn snapshot instead of wedging on it", async () => {
+// deployedAt is written only by the deploy's genesis seed, so a publisher that
+// replaced an unreadable blob would seed a zero anchor and disable pruning for
+// the life of the build. The blast radius of declining is one build's replica
+// until its next deploy re-seeds — and the edge already falls open on a snapshot
+// it cannot parse — where clobbering the anchor is unbounded.
+test("refuses to replace a torn snapshot with an unanchored one", async () => {
   const store = fakeStore();
   const publish = await publisher();
   store.snapshots!.putRaw("{not json");
 
-  await expect(publish(store, new Map([["products", { expired: 700 }]]))).resolves.toBe(
+  await expect(publish(store, new Map([["products", { expired: 700 }]]))).rejects.toThrow();
+
+  expect(store.snapshots!.writes).toBe(0);
+});
+
+test("a torn snapshot cannot fail the request that found it", async () => {
+  const store = fakeStore();
+  const { handler } = await load(store);
+  store.snapshots!.putRaw("{not json");
+
+  await expect(handler.refreshTags()).resolves.toBeUndefined();
+  expect(store.snapshots!.writes).toBe(0);
+});
+
+// Conditioning a create on an object that already exists fails every time, so a
+// store that named no version would stall the publisher permanently rather than
+// lose one race.
+test("replaces a snapshot the store named no version for", async () => {
+  const store = fakeStore();
+  const publish = await publisher();
+  store.snapshots!.putUnversioned(snapshotOf(5_000, { theirs: { expired: 6_000 } }));
+
+  await expect(publish(store, new Map([["ours", { expired: 7_000 }]]))).resolves.toBe(
     true,
   );
 
-  expect(store.snapshots!.current!.records.products!.expired).toBe(700);
+  const snapshot = store.snapshots!.current!;
+  expect(snapshot.deployedAt).toBe(5_000);
+  expect(snapshot.records.theirs!.expired).toBe(6_000);
+  expect(snapshot.records.ours!.expired).toBe(7_000);
 });
 
 // The publisher runs on every sync, but the snapshot only has to be rewritten
@@ -709,6 +744,24 @@ test("publishes an invalidation the index has not caught up to", async () => {
   await Promise.all(deferred);
 
   expect(store.snapshots!.current!.records.products!.expired).toBeGreaterThan(0);
+});
+
+// The kick merges its record before draining, so a publisher that bailed out on
+// a failed query would drop exactly the invalidation the kick exists to
+// replicate — and on an app with no `use cache` anywhere, nothing ever runs the
+// clock again to repair it.
+test("publishes the invalidation even when the index query fails", async () => {
+  const store = fakeStore();
+  const { tagClock, isr } = await loadBoth(store);
+  store.breakQueries();
+
+  const deferred = await invocation(() => isr.revalidateTag("products"));
+  await Promise.all(deferred);
+
+  expect(store.snapshots!.current!.records.products!.expired).toBeGreaterThan(0);
+  // A query that never came back read nothing, so the clock is still cold and
+  // the cursor still unset — publishing must not have moved either.
+  expect(tagClock.hasSynced).toBe(false);
 });
 
 // Resolving while the write is stalled is the whole assertion: a publish on the

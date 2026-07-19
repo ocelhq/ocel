@@ -1,0 +1,10 @@
+{
+  "tagSnapshotSuffix": "/tag-clock.json",
+  "cacheStoreEnv": {
+    "bucket": "OCEL_ISR_STORE_BUCKET",
+    "endpoint": "OCEL_ISR_STORE_ENDPOINT",
+    "region": "OCEL_ISR_STORE_REGION",
+    "accessKeyId": "OCEL_ISR_STORE_ACCESS_KEY_ID",
+    "secretAccessKey": "OCEL_ISR_STORE_SECRET_ACCESS_KEY"
+  }
+}

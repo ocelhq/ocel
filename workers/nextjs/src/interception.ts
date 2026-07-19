@@ -438,16 +438,21 @@ function reconstruct(
   return new Response(body, { status, headers });
 }
 
+// An object key's separators are path structure and have to survive into the
+// URL, so each segment is encoded on its own rather than the key as a whole.
+function encodeKeyPath(key: string): string {
+  return key.split("/").map(encodeURIComponent).join("/");
+}
+
 // The Cache API keys on a URL, and the snapshot has none: it is read through a
 // binding, not fetched. This synthesizes one from the object key, which already
 // carries the build prefix, so two builds on one worker cannot collide.
 function snapshotCacheUrl(key: string): string {
-  return `https://isr.ocel/${key.split("/").map(encodeURIComponent).join("/")}`;
+  return `https://isr.ocel/${encodeKeyPath(key)}`;
 }
 
 function s3Url(cfg: InterceptionConfig, key: string): string {
-  const path = key.split("/").map(encodeURIComponent).join("/");
-  return `https://${cfg.bucket}.s3.${cfg.region}.amazonaws.com/${path}`;
+  return `https://${cfg.bucket}.s3.${cfg.region}.amazonaws.com/${encodeKeyPath(key)}`;
 }
 
 function ddbUrl(cfg: InterceptionConfig): string {
