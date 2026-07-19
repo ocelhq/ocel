@@ -236,11 +236,19 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	if err != nil {
 		return fmt.Errorf("bootstrap %s edge: %w", edgeProvider.Kind(), err)
 	}
-	// No offer kind is adopted today. An unrecognised kind is ignored rather than
-	// rejected, so a newer edge paired with an older provider degrades instead of
-	// breaking.
+	// An unrecognised kind is ignored rather than rejected, so a newer edge paired
+	// with an older provider degrades instead of breaking — and dropping an
+	// adoption here is enough to put the resource it replaced back in service.
 	for _, offer := range edgeOut.Offers {
-		report(log, fmt.Sprintf("ignoring edge offer %q: no provider resource adopts it", offer.Kind))
+		switch offer.Kind {
+		case edge.OfferCacheStore:
+			report(progress, "Adopting the edge cache store (SSM SecureString)")
+			if err := adoptCacheStore(ctx, ssmClient, sub.class, edgeProvider.Kind(), offer.Values); err != nil {
+				return err
+			}
+		default:
+			report(log, fmt.Sprintf("ignoring edge offer %q: no provider resource adopts it", offer.Kind))
+		}
 	}
 
 	report(progress, sub.stackStep)
