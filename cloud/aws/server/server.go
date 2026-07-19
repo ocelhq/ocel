@@ -17,6 +17,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -196,6 +197,15 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	}
 	cacheStoreParamARN := fmt.Sprintf("arn:aws:ssm:%s:%s:parameter%s", awscfg.Region, account, cacheStoreParam)
 
+	// Seeded ISR entries have to land in the same store the deployed cache
+	// handler reads, and the handler resolves that from this same parameter. A
+	// failed read is therefore fatal rather than best-effort: guessing wrong
+	// costs no error, only every prerendered route silently rendering cold.
+	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, edgeClass)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	return deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
 		BackendURL:    "s3://" + deployed.StateBucket,
@@ -209,6 +219,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 		CacheStoreParam:    cacheStoreParam,
 		CacheStoreParamARN: cacheStoreParamARN,
+		CacheStoreBucket:   cacheStore.Bucket,
+		CacheStoreUploader: cacheStoreUploader(cacheStore),
 
 		ListenerCodePath: listenerCodePath,
 		ArtifactRoot:     artifactRoot(),
@@ -251,6 +263,24 @@ func readEdgeValues(ctx context.Context, ssmClient bootstrap.SSMAPI, class, boot
 		return nil
 	}
 	return values
+}
+
+// cacheStoreUploader addresses the substrate's adopted cache store with the same
+// S3 API the origin's cache handler speaks to it. The store is S3-compatible but
+// not S3: it carries its own endpoint and its own bucket-scoped credential, so
+// it is reached with a static provider rather than the deployer's chain. Nil for
+// the zero store — the interface value has to be nil, not a typed nil, for the
+// deploy to read it as "no store adopted".
+func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
+	if store.Bucket == "" {
+		return nil
+	}
+	return s3.NewFromConfig(aws.Config{
+		Region:      store.Region,
+		Credentials: credentials.NewStaticCredentialsProvider(store.AccessKeyID, store.SecretAccessKey, ""),
+	}, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(store.Endpoint)
+	})
 }
 
 func previewExpiry(lifecycle deploymentsv1.Environment_Lifecycle, now time.Time) int64 {
