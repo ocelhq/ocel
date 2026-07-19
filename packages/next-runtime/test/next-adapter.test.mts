@@ -493,6 +493,38 @@ test("marks prerendered pathnames as prerender in dispatch", async () => {
   });
 });
 
+test("projects a prerender's fallback down to its freshness windows and pprChain", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const root = args.outputs.prerenders[0] as Record<string, any>;
+  root.pprChain = { headers: { "next-resume": "1" } };
+  root.fallback.initialRevalidate = 3600;
+  root.fallback.initialExpiration = 86400;
+  root.fallback.initialStatus = 200;
+  root.fallback.postponedState = "2867:[1,{}]";
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const entry = (await readManifest(projectDir)).dispatch["/"];
+  // Only the two windows survive: the shell, the postponed state and the
+  // entry's status/headers all reach the worker through the cache entry.
+  expect(entry.fallback).toEqual({
+    initialRevalidate: 3600,
+    initialExpiration: 86400,
+  });
+  expect(entry.pprChain).toEqual({ headers: { "next-resume": "1" } });
+});
+
+test("emits no build-machine file paths in the routing manifest", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = JSON.stringify(await readManifest(projectDir));
+  expect(manifest).not.toContain(projectDir);
+});
+
 test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
