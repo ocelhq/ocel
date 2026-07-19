@@ -1,5 +1,13 @@
 import { resolveRoutes } from "@next/routing";
-import { CacheDeps, cacheKey, serveCached, withStatus } from "./cache";
+import {
+  CacheDeps,
+  cacheKey,
+  hasDraftCookie,
+  refreshOnce,
+  serveCached,
+  withStatus,
+} from "./cache";
+import { composePpr, resumeRequest } from "./ppr";
 import {
   intercept,
   readInterceptionConfig,
@@ -211,38 +219,84 @@ async function dispatchPrerender(
     url.pathname.startsWith((deps.manifest.basePath ?? "") + "/_next/data/") &&
     url.pathname.endsWith(".json");
 
+  const key = cacheKey(
+    deps.manifest.buildId,
+    url.pathname,
+    url,
+    target.allowQuery,
+  );
+
   // When edge cache coordinates are present, a prerender read is tried
   // directly against the cache first; any miss/expiry/error falls open to
-  // the Lambda origin. The interception hit carries a full-window
-  // cache-control so serveCached memoizes it exactly as it would the
+  // the Lambda origin. A complete interception hit carries the entry's
+  // remaining window so serveCached memoizes it exactly as it would the
   // Lambda's response.
   let cachingOrigin = origin;
   if (deps.interception && !isNextData) {
-    const interceptTarget = {
-      routePath: result.invocationTarget?.pathname ?? url.pathname,
-      revalidate: target.fallback?.initialRevalidate,
-    };
     const { config, ...interceptDeps } = deps.interception;
-    cachingOrigin = async () =>
-      (await intercept(request, interceptTarget, config, interceptDeps)) ??
-      origin();
+    const read = once(() =>
+      intercept(
+        request,
+        {
+          routePath: result.invocationTarget?.pathname ?? url.pathname,
+          fallbackPath: result.resolvedPathname ?? undefined,
+          revalidate: target.fallback?.initialRevalidate,
+          expiration: target.fallback?.initialExpiration,
+        },
+        config,
+        interceptDeps,
+      ),
+    );
+
+    // A composed PPR response is rendered for one visitor and must not reach
+    // serveCached, so a route that might postpone is read before the colo cache
+    // is consulted. A STATIC route cannot postpone, so its read stays behind
+    // the cache, where a hit costs no store read at all.
+    const mayPostpone =
+      target.config.renderingMode !== "STATIC" &&
+      request.method === "GET" &&
+      !hasDraftCookie(request);
+
+    if (mayPostpone) {
+      const hit = await read();
+      if (hit?.kind === "ppr") {
+        if (hit.stale) {
+          refreshOnce(deps.cache, key, async () =>
+            (await originBlocking()).body?.cancel(),
+          );
+        }
+        return composePpr(
+          hit,
+          doFetch(
+            resumeRequest(
+              forwardUrl,
+              request,
+              hit.postponed,
+              target.pprChain?.headers,
+            ),
+          ),
+        );
+      }
+    }
+
+    cachingOrigin = async () => {
+      const hit = await read();
+      return hit?.kind === "complete" ? hit.response : origin();
+    };
   }
 
   return serveCached(
     request,
-    {
-      key: cacheKey(
-        deps.manifest.buildId,
-        url.pathname,
-        url,
-        target.allowQuery,
-      ),
-      tags: target.tags,
-    },
+    { key, tags: target.tags },
     deps.cache,
     cachingOrigin,
     originBlocking,
   );
+}
+
+function once<T>(run: () => Promise<T>): () => Promise<T> {
+  let pending: Promise<T> | undefined;
+  return () => (pending ??= run());
 }
 
 // originUrl points a request at its Function URL, preferring the routing

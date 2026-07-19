@@ -267,6 +267,35 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
+  it("dedupes concurrent stale refreshes to a single origin call", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=1, stale-while-revalidate=100");
+    // A refresh that stays pending until released, so both stale requests are
+    // in flight against it at once.
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const refresh = (async () => {
+      refresh.calls++;
+      await gate;
+      return new Response("fresh", {
+        headers: { "cache-control": "s-maxage=1, stale-while-revalidate=100" },
+      });
+    }) as CountingOrigin;
+    refresh.calls = 0;
+
+    await serveCached(req(), target("dedupe"), deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000;
+    await serveCached(req(), target("dedupe"), deps, origin, refresh);
+    await serveCached(req(), target("dedupe"), deps, origin, refresh);
+
+    expect(refresh.calls).toBe(1);
+    release();
+    await deps.flush();
+  });
+
   it("keeps the prior entry servable when a background refresh throws", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
