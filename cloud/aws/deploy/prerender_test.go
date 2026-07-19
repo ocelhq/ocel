@@ -2,8 +2,13 @@ package deploy
 
 import (
 	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"testing"
+	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
@@ -202,7 +207,9 @@ func TestUploadPrerenderAssets_SeedsTheAdoptedCacheStore(t *testing.T) {
 	want := []string{
 		"prod/proj/admin/ADM1/cache/dash.cache.json",
 		"prod/proj/admin/ADM1/cache/users.cache.json",
+		"prod/proj/admin/ADM1/tag-clock.json",
 		"prod/proj/web/WEB1/cache/index.cache.json",
+		"prod/proj/web/WEB1/tag-clock.json",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("uploaded keys = %v, want %v", got, want)
@@ -236,6 +243,113 @@ func TestUploadPrerenderAssets_UnadoptedStoreStaysOnTheAssetBucket(t *testing.T)
 		if b != "assets" {
 			t.Errorf("uploaded into bucket %q, want the provider's own %q", b, "assets")
 		}
+	}
+}
+
+// TestUploadPrerenderAssets_SeedsTheGenesisTagSnapshot proves each app's build
+// gets its tag-clock replica written at deploy time, anchored to the deploy's
+// own clock. That anchor is the whole point: the publisher prunes against
+// deployedAt, and nothing in the Lambda knows when the build shipped, so a
+// snapshot the deploy never seeded can never be pruned and grows without bound.
+func TestUploadPrerenderAssets_SeedsTheGenesisTagSnapshot(t *testing.T) {
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
+		Uploader: &fakeUploader{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+
+	before := time.Now().UnixMilli()
+	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+	after := time.Now().UnixMilli()
+
+	for _, key := range []string{"prod/proj/web/WEB1/tag-clock.json", "prod/proj/admin/ADM1/tag-clock.json"} {
+		body, ok := store.putBodies[key]
+		if !ok {
+			t.Fatalf("no snapshot seeded at %q; puts = %v", key, store.puts)
+		}
+		var snap tagSnapshot
+		if err := json.Unmarshal([]byte(body), &snap); err != nil {
+			t.Fatalf("parse seeded snapshot %s: %v", key, err)
+		}
+		if snap.Version != tagSnapshotVersion {
+			t.Errorf("%s version = %d, want %d", key, snap.Version, tagSnapshotVersion)
+		}
+		if snap.DeployedAt < before || snap.DeployedAt > after {
+			t.Errorf("%s deployedAt = %d, want the deploy's own clock in [%d,%d]", key, snap.DeployedAt, before, after)
+		}
+		if snap.GeneratedAt != snap.DeployedAt {
+			t.Errorf("%s generatedAt = %d, want the deploy time %d", key, snap.GeneratedAt, snap.DeployedAt)
+		}
+		if want := snap.GeneratedAt + snapshotValidityMs; snap.ValidUntil != want {
+			t.Errorf("%s validUntil = %d, want %d", key, snap.ValidUntil, want)
+		}
+		if len(snap.Records) != 0 {
+			t.Errorf("%s records = %v, want none: no invalidation predates the build", key, snap.Records)
+		}
+	}
+}
+
+// TestUploadPrerenderAssets_KeepsAnExistingSnapshot proves a redeploy of the
+// same build leaves the live snapshot alone. Overwriting it would throw away
+// every invalidation the running build has accumulated and serve them stale
+// again at the edge, so the seed creates and never replaces.
+func TestUploadPrerenderAssets_KeepsAnExistingSnapshot(t *testing.T) {
+	store := &fakeUploader{exists: map[string]bool{"prod/proj/web/WEB1/tag-clock.json": true}}
+	cfg := Config{
+		ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
+		Uploader: &fakeUploader{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+
+	if _, ok := store.putBodies["prod/proj/web/WEB1/tag-clock.json"]; ok {
+		t.Error("an existing snapshot was overwritten, want it left as the publisher last wrote it")
+	}
+	if _, ok := store.putBodies["prod/proj/admin/ADM1/tag-clock.json"]; !ok {
+		t.Error("the other app's snapshot was not seeded; one refusal must not stop the rest")
+	}
+}
+
+// TestUploadPrerenderAssets_UnadoptedStoreSeedsNoSnapshot proves the rollback
+// path stays silent: with no adopted store there is no edge reading a replica,
+// so there is nothing to seed and nothing to fail over.
+func TestUploadPrerenderAssets_UnadoptedStoreSeedsNoSnapshot(t *testing.T) {
+	f := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+	for _, key := range f.puts {
+		if strings.HasSuffix(key, "tag-clock.json") {
+			t.Errorf("seeded %q, want no snapshot without an adopted store", key)
+		}
+	}
+}
+
+// TestGenesisSnapshot_MatchesThePublishersFormat pins the deploy's snapshot
+// bytes to the fixture the TypeScript publisher's own test reads back. The two
+// sides never share a type — Go writes this document and the Lambda rewrites it
+// — so the fixture is the only thing standing between them and a silent drift in
+// field names, version, or the validity window.
+func TestGenesisSnapshot_MatchesThePublishersFormat(t *testing.T) {
+	at := time.UnixMilli(1750000000000)
+	got, err := json.Marshal(genesisSnapshot(at))
+	if err != nil {
+		t.Fatalf("marshal genesis snapshot: %v", err)
+	}
+
+	path := filepath.Join("..", "..", "..", "packages", "next-cache", "fixtures", "genesis-tag-snapshot.json")
+	want, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	if string(got) != strings.TrimSpace(string(want)) {
+		t.Errorf("genesis snapshot = %s, want %s", got, strings.TrimSpace(string(want)))
 	}
 }
 
