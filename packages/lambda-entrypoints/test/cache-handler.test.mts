@@ -1,5 +1,6 @@
 import { afterEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
+import { runWithWaitUntil } from "../src/shared/background.mjs";
 import type {
   CacheEntryFile,
   CacheStore,
@@ -13,22 +14,35 @@ function fakeStore() {
   const entries = new Map<string, CacheEntryFile>();
   const tags = new Map<string, TagRecord>();
   let failReads = false;
+  let gate: Promise<void> | null = null;
 
   const store: CacheStore & {
     entries: typeof entries;
     tags: typeof tags;
     breakReads(): void;
+    holdWrites(): () => void;
   } = {
     entries,
     tags,
     breakReads() {
       failReads = true;
     },
+    // Stalls every entry write until the returned release is called, so a test
+    // can prove the request resolved without it rather than racing it.
+    holdWrites() {
+      let release!: () => void;
+      gate = new Promise<void>((resolve) => (release = resolve));
+      return () => {
+        gate = null;
+        release();
+      };
+    },
     async readEntry(key) {
       if (failReads) throw new Error("s3 is down");
       return entries.get(key) ?? null;
     },
     async writeEntry(key, entry) {
+      if (gate) await gate;
       entries.set(key, entry);
     },
     async readTags(names) {
@@ -51,6 +65,17 @@ function fakeStore() {
 afterEach(() => {
   OcelCacheHandler.store = undefined;
 });
+
+// Runs `fn` the way the membrane runs an invocation: work it defers is collected
+// rather than awaited, so a test can assert what the request itself paid for and
+// then settle the rest deliberately.
+async function invocation(fn: () => Promise<unknown>): Promise<Promise<unknown>[]> {
+  const deferred: Promise<unknown>[] = [];
+  await runWithWaitUntil((task) => {
+    deferred.push(task);
+  }, fn);
+  return deferred;
+}
 
 // The key the adapter seeds a route's entry under at build time; a mismatch here
 // means a deployed route silently re-renders forever.
@@ -156,24 +181,77 @@ test("round-trips a page written by set through get", async () => {
   fakeStore();
   const handler = new OcelCacheHandler();
 
-  await handler.set(
-    "/blog",
-    {
-      kind: "APP_PAGE",
-      // On set, Next hands html over as a RenderResult, not a string.
-      html: { toUnchunkedString: () => "<html>blog</html>" },
-      rscData: Buffer.from("BLOG-RSC"),
-      status: 200,
-      headers: { "x-next-cache-tags": "posts" },
-      segmentData: new Map([["/_tree", Buffer.from("TREE")]]),
-    },
-    {},
+  const deferred = await invocation(() =>
+    handler.set(
+      "/blog",
+      {
+        kind: "APP_PAGE",
+        // On set, Next hands html over as a RenderResult, not a string.
+        html: { toUnchunkedString: () => "<html>blog</html>" },
+        rscData: Buffer.from("BLOG-RSC"),
+        status: 200,
+        headers: { "x-next-cache-tags": "posts" },
+        segmentData: new Map([["/_tree", Buffer.from("TREE")]]),
+      },
+      {},
+    ),
   );
+  await Promise.all(deferred);
 
   const entry = await handler.get("/blog", { kind: "APP_PAGE" });
   expect(entry?.value.html).toBe("<html>blog</html>");
   expect(entry?.value.rscData.toString()).toBe("BLOG-RSC");
   expect(entry?.value.segmentData.get("/_tree").toString()).toBe("TREE");
+});
+
+// The entry now lands in the store the edge reads, which is a cross-internet
+// PUT. Resolving while that write is stalled is the whole assertion: a write on
+// the request path would hang here instead.
+test("the rendering request does not wait for the entry write", async () => {
+  const store = fakeStore();
+  const release = store.holdWrites();
+  const handler = new OcelCacheHandler();
+
+  const deferred = await invocation(() =>
+    handler.set("/blog", { kind: "PAGES", html: "<html>blog</html>", pageData: {} }, {}),
+  );
+  expect(store.entries.size).toBe(0);
+
+  release();
+  await Promise.all(deferred);
+  expect(store.entries.get("blog")).toBeDefined();
+});
+
+// The value has to be read out of `data` on the request path: it carries a live
+// RenderResult that does not outlive the request that produced it.
+test("serializes the render result before deferring the write", async () => {
+  const store = fakeStore();
+  const release = store.holdWrites();
+  const handler = new OcelCacheHandler();
+  let renders = 0;
+
+  const deferred = await invocation(() =>
+    handler.set(
+      "/blog",
+      {
+        kind: "APP_PAGE",
+        html: {
+          toUnchunkedString: () => {
+            renders++;
+            return "<html>blog</html>";
+          },
+        },
+        status: 200,
+        headers: {},
+      },
+      {},
+    ),
+  );
+  expect(renders).toBe(1);
+
+  release();
+  await Promise.all(deferred);
+  expect(store.entries.get("blog")!.value.html).toBe("<html>blog</html>");
 });
 
 // Fetch entries are told their tags per request, unlike page kinds.

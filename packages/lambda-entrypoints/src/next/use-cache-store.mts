@@ -38,24 +38,30 @@ export interface TagRecordPage {
   cursor?: unknown;
 }
 
-// A snapshot as it was found, with the etag the next write conditions on. The
-// snapshot is null when the stored object could not be parsed: the etag is still
-// returned, so a torn blob is overwritten under the same compare-and-swap rather
-// than wedging the key forever.
+// A snapshot as it was found, with the version the next write conditions on. A
+// null etag means the object exists but the store named no version for it, which
+// is a write that has to proceed unconditionally rather than one that can never
+// satisfy its precondition.
 export interface StoredTagSnapshot {
-  snapshot: TagSnapshot | null;
-  etag: string;
+  snapshot: TagSnapshot;
+  etag: string | null;
 }
 
 // TagSnapshotStore is the edge's replica of the tag clock, addressed as one
 // object under compare-and-swap. Only ever written by the publisher and only
 // ever read by it to merge — the authoritative clock is the state table.
 export interface TagSnapshotStore {
+  // Throws rather than reporting an unparseable snapshot as absent. Replacing
+  // one would publish a snapshot with no deploy anchor, and since the anchor is
+  // written only by the deploy's genesis seed, that disables pruning for the
+  // life of the build. Declining costs one build until its next deploy re-seeds
+  // — and the edge already falls open on a snapshot it cannot parse — where
+  // clobbering the anchor is unbounded.
   read(): Promise<StoredTagSnapshot | null>;
-  // `etag` is the version this write replaces, or null to create the object
+  // `prior` is what the write is conditioned on, or null to create the object
   // where none existed. False means the precondition failed: another publisher
   // got there first and the caller must re-read and merge onto their write.
-  write(snapshot: TagSnapshot, etag: string | null): Promise<boolean>;
+  write(snapshot: TagSnapshot, prior: StoredTagSnapshot | null): Promise<boolean>;
 }
 
 // UseCacheStore is the plural cache handlers' whole view of their backing
@@ -111,6 +117,11 @@ function isPreconditionFailure(err: any): boolean {
   );
 }
 
+function preconditionOf(prior: StoredTagSnapshot | null) {
+  if (prior === null) return { IfNoneMatch: "*" };
+  return prior.etag === null ? {} : { IfMatch: prior.etag };
+}
+
 // The snapshot lives in the adopted store because that is the one the edge can
 // read. An unadopted substrate has no edge replica at all, so there is nothing
 // to publish and no bucket to publish it to.
@@ -127,22 +138,17 @@ function tagSnapshotStore(prefix: string): TagSnapshotStore | null {
         const out = await client.send(
           new GetObjectCommand({ Bucket: bucket, Key: key }),
         );
-        // Without an etag there is no version to condition the next write on,
-        // so the object is treated as absent rather than written over blindly.
-        if (!out.ETag) return null;
         const body = await streamToString(out.Body);
-        try {
-          return { snapshot: JSON.parse(body) as TagSnapshot, etag: out.ETag };
-        } catch {
-          return { snapshot: null, etag: out.ETag };
-        }
+        // A parse failure leaves this try as a throw, which is the contract: an
+        // unparseable snapshot must not be reported as absent.
+        return { snapshot: JSON.parse(body) as TagSnapshot, etag: out.ETag ?? null };
       } catch (err: any) {
         if (isNotFound(err)) return null;
         throw err;
       }
     },
 
-    async write(snapshot, etag) {
+    async write(snapshot, prior) {
       try {
         await client.send(
           new PutObjectCommand({
@@ -150,11 +156,15 @@ function tagSnapshotStore(prefix: string): TagSnapshotStore | null {
             Key: key,
             Body: JSON.stringify(snapshot),
             ContentType: "application/json",
-            // Creating and replacing are both conditional, so a publisher that
-            // read "absent" cannot clobber an object another publisher created
-            // in the meantime — including the deploy's own seed, which is what
-            // carries the build's pruning anchor.
-            ...(etag === null ? { IfNoneMatch: "*" } : { IfMatch: etag }),
+            // Creating is conditional too, so a publisher that read "absent"
+            // cannot clobber an object another publisher created in the
+            // meantime — including the deploy's own seed, which is what carries
+            // the build's pruning anchor. An object the store named no version
+            // for is replaced unconditionally: that loses only the
+            // compare-and-swap, which the monotonic merge and the next publish
+            // repair, where conditioning on a version that does not exist would
+            // fail every write for the life of the build.
+            ...preconditionOf(prior),
           }),
         );
         return true;
@@ -196,9 +206,7 @@ export function awsUseCacheStore(): UseCacheStore {
         );
         return JSON.parse(await streamToString(out.Body));
       } catch (err: any) {
-        if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
-          return null;
-        }
+        if (isNotFound(err)) return null;
         throw err;
       }
     },

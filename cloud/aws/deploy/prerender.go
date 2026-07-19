@@ -158,6 +158,11 @@ const (
 	// boundary and held equal by the fixture, whose TypeScript test asserts the
 	// window against the constant itself.
 	snapshotValidityMs = 5 * 60 * 1000
+	// What tagSnapshotKey() in @ocel/next-cache appends to the same prefix. The
+	// deploy writes the object and the edge reads it without either calling the
+	// other's code, so the edge contract fixture is what holds the two spellings
+	// equal; a test here asserts this constant against it.
+	tagSnapshotSuffix = "/tag-clock.json"
 )
 
 // genesisSnapshot is a build's tag clock at the moment it deploys: empty, and
@@ -200,7 +205,7 @@ func seedTagSnapshots(ctx context.Context, cfg Config, caches map[string]*isrCon
 
 	up, bucket := entryTarget(cfg)
 	for _, cache := range caches {
-		key := cache.Prefix + "/tag-clock.json"
+		key := cache.Prefix + tagSnapshotSuffix
 		_, err := up.PutObject(ctx, &s3.PutObjectInput{
 			Bucket:      aws.String(bucket),
 			Key:         aws.String(key),

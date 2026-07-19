@@ -85,6 +85,10 @@ export function mergeSnapshot(
 // snapshot that contains both writers' invalidations, so no invalidation can be
 // lost — and a publish that fails outright is repaired by the next one from any
 // instance that has observed the same events through the index.
+//
+// Throws whatever the store throws, including on a stored snapshot that cannot
+// be parsed: the caller's failure path is to leave the replica alone, which is
+// the whole point of not replacing an unreadable one.
 export async function publishTagSnapshot(
   store: UseCacheStore,
   records: Map<string, TagRecord>,
@@ -95,7 +99,7 @@ export async function publishTagSnapshot(
   for (let attempt = 0; attempt < publishAttempts; attempt++) {
     const stored = await snapshots.read();
     const merged = mergeSnapshot(stored?.snapshot ?? null, records, now());
-    if (await snapshots.write(merged, stored?.etag ?? null)) return true;
+    if (await snapshots.write(merged, stored)) return true;
   }
   return false;
 }

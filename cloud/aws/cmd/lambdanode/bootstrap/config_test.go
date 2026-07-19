@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -161,6 +163,43 @@ func TestCacheStore_MatchesTheProviderJSONContract(t *testing.T) {
 	}
 	if n := reflect.TypeOf(bootstrap.CacheStore{}).NumField(); n != reflect.TypeOf(cacheStore{}).NumField() {
 		t.Errorf("provider CacheStore has %d fields but the membrane's copy has %d; the contract has drifted", n, reflect.TypeOf(cacheStore{}).NumField())
+	}
+}
+
+// TestCacheStoreEnv_MatchesTheEdgeContract pins the names this membrane injects
+// to the names the Next cache handler reads. The two lists are declared
+// independently in Go and in TypeScript and no build step compares them, so —
+// exactly as with the snapshot format — the fixture is what fails when one side
+// is renamed alone. The handler's own test reads the same file.
+func TestCacheStoreEnv_MatchesTheEdgeContract(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "..", "..", "packages", "next-cache", "fixtures", "edge-contract.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var contract struct {
+		CacheStoreEnv struct {
+			Bucket          string `json:"bucket"`
+			Endpoint        string `json:"endpoint"`
+			Region          string `json:"region"`
+			AccessKeyID     string `json:"accessKeyId"`
+			SecretAccessKey string `json:"secretAccessKey"`
+		} `json:"cacheStoreEnv"`
+	}
+	if err := json.Unmarshal(body, &contract); err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+
+	c := contract.CacheStoreEnv
+	want := []string{
+		c.Bucket + "=" + testStore.Bucket,
+		c.Endpoint + "=" + testStore.Endpoint,
+		c.Region + "=" + testStore.Region,
+		c.AccessKeyID + "=" + testStore.AccessKeyID,
+		c.SecretAccessKey + "=" + testStore.SecretAccessKey,
+	}
+	if got := testStore.env(); !reflect.DeepEqual(got, want) {
+		t.Errorf("env = %q, want %q", got, want)
 	}
 }
 

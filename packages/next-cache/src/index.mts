@@ -46,9 +46,12 @@ export interface TagSnapshot {
   records: Record<string, TagRecord>;
 }
 
-// Both sides address the snapshot by construction rather than by convention: it
-// sits beside the build's cache entries, under the same prefix the deploy scopes
-// every other object to.
+// Where the snapshot sits: beside the build's cache entries, under the same
+// prefix the deploy scopes every other object to. Both readers call this, but
+// the deploy that seeds the object is Go and spells the suffix out itself — so
+// nothing about calling one function holds them together. What does is the
+// checked-in edge contract fixture, whose suffix both languages assert their own
+// spelling against.
 export function tagSnapshotKey(prefix: string): string {
   return `${prefix}/tag-clock.json`;
 }
