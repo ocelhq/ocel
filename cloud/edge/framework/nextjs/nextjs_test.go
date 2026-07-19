@@ -134,6 +134,25 @@ func TestAssembleCloudflare_UnconfiguredCacheOmitsBindings(t *testing.T) {
 	}
 }
 
+// The worker always asks for its object store by name; which store lands there,
+// and whether one exists at all, is the edge's to decide at upload.
+func TestAssembleCloudflare_AsksForItsObjectStoreByName(t *testing.T) {
+	src := writeNextArtifacts(t)
+	src.Routes = []string{"/"}
+	r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
+
+	w, err := AssembleCloudflare(src, r)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	if w.ObjectStore.Binding != objectStoreBinding {
+		t.Errorf("ObjectStore.Binding = %q, want %q", w.ObjectStore.Binding, objectStoreBinding)
+	}
+	if w.ObjectStore.Bucket != "" {
+		t.Errorf("ObjectStore.Bucket = %q, want empty: the edge names the bucket it provisioned", w.ObjectStore.Bucket)
+	}
+}
+
 func TestAssembleCloudflare_UnresolvableRouteIsAnError(t *testing.T) {
 	src := writeNextArtifacts(t)
 	src.Routes = []string{"/orphan"}

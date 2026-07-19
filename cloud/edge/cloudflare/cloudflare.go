@@ -105,7 +105,7 @@ func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.
 	if accountID == "" {
 		return edge.AppResult{}, fmt.Errorf("%s is not set; it is required to deploy to the Cloudflare edge", envAccountID)
 	}
-	up := upload{accountID: accountID, scriptName: app.Name, worker: app.Worker}
+	up := upload{accountID: accountID, scriptName: app.Name, worker: bindObjectStore(app.Worker, app.Values)}
 
 	assetsJWT, err := p.uploadAssets(ctx, up)
 	if err != nil {
@@ -304,15 +304,32 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
+// bindObjectStore points the worker's object-store binding at the bucket this
+// edge provisioned for the substrate class, as bootstrap reported it and the
+// provider handed it back. A substrate bootstrapped before there was a cache
+// bucket carries no such value, so the worker uploads without the binding.
+func bindObjectStore(worker edge.Worker, values map[string]string) edge.Worker {
+	worker.ObjectStore.Bucket = values[valueKeyCacheBucket]
+	return worker
+}
+
 // scriptBindings is the worker's binding set: the Assets Fetcher (only when
-// assets were uploaded), one plain-text binding per var, and one secret_text
-// binding per secret — values that must never surface in plaintext metadata.
+// assets were uploaded), the object store as an R2 bucket, one plain-text
+// binding per var, and one secret_text binding per secret — values that must
+// never surface in plaintext metadata.
 func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 	bindings := []map[string]any{}
 	if includeAssets && worker.AssetBinding != "" {
 		bindings = append(bindings, map[string]any{
 			"type": "assets",
 			"name": worker.AssetBinding,
+		})
+	}
+	if store := worker.ObjectStore; store.Binding != "" && store.Bucket != "" {
+		bindings = append(bindings, map[string]any{
+			"type":        "r2_bucket",
+			"name":        store.Binding,
+			"bucket_name": store.Bucket,
 		})
 	}
 	for name, text := range worker.Vars {

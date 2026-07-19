@@ -48,14 +48,20 @@ func metadataFromMultipart(t *testing.T, worker edge.Worker, assetsJWT string) m
 	return nil
 }
 
-func hasAssetBinding(meta map[string]any) bool {
+// bindingsByType is every binding of one type in the uploaded script metadata.
+func bindingsByType(meta map[string]any, typ string) []map[string]any {
+	var found []map[string]any
 	bindings, _ := meta["bindings"].([]any)
 	for _, b := range bindings {
-		if m, ok := b.(map[string]any); ok && m["type"] == "assets" {
-			return true
+		if m, ok := b.(map[string]any); ok && m["type"] == typ {
+			found = append(found, m)
 		}
 	}
-	return false
+	return found
+}
+
+func hasAssetBinding(meta map[string]any) bool {
+	return len(bindingsByType(meta, "assets")) > 0
 }
 
 func TestBuildScriptMultipartEnablesObservability(t *testing.T) {
@@ -141,6 +147,65 @@ func TestBuildScriptMultipart_AssetsBindingGatedOnCompletionJWT(t *testing.T) {
 	}
 	if !hasAssetBinding(withJWT) {
 		t.Error("assets binding must be present with a completion JWT")
+	}
+}
+
+func TestScriptBindings_MapsTheObjectStoreToAnR2Bucket(t *testing.T) {
+	worker := edge.Worker{
+		Main:        edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+		ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE", Bucket: "ocel-edge-cache"},
+	}
+
+	buckets := bindingsByType(metadataFromMultipart(t, worker, ""), "r2_bucket")
+	if len(buckets) != 1 {
+		t.Fatalf("got %d r2_bucket bindings, want 1", len(buckets))
+	}
+	if buckets[0]["name"] != "OCEL_CACHE_STORE" {
+		t.Errorf("r2_bucket binding name = %v, want OCEL_CACHE_STORE", buckets[0]["name"])
+	}
+	if buckets[0]["bucket_name"] != "ocel-edge-cache" {
+		t.Errorf("r2_bucket bucket_name = %v, want ocel-edge-cache", buckets[0]["bucket_name"])
+	}
+}
+
+// A worker with no object store uploads exactly as it did before there was one.
+func TestScriptBindings_NoObjectStoreEmitsNoBucketBinding(t *testing.T) {
+	cases := map[string]edge.ObjectStore{
+		"neither half":   {},
+		"no bucket":      {Binding: "OCEL_CACHE_STORE"},
+		"unbound bucket": {Bucket: "ocel-edge-cache"},
+	}
+	for name, store := range cases {
+		t.Run(name, func(t *testing.T) {
+			worker := edge.Worker{
+				Main:        edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+				Vars:        map[string]string{"FUNCTION_URLS": "{}"},
+				ObjectStore: store,
+			}
+			meta := metadataFromMultipart(t, worker, "")
+			if got := bindingsByType(meta, "r2_bucket"); len(got) != 0 {
+				t.Errorf("r2_bucket bindings = %v, want none", got)
+			}
+			if got := len(bindingsByType(meta, "plain_text")); got != 1 {
+				t.Errorf("plain_text bindings = %d, want the worker's vars unchanged", got)
+			}
+		})
+	}
+}
+
+// The bucket is whatever this edge reported provisioning at bootstrap and got
+// handed back at deploy, never a name recomputed here.
+func TestBindObjectStore_TakesTheBucketFromBootstrapValues(t *testing.T) {
+	worker := edge.Worker{ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE"}}
+
+	bound := bindObjectStore(worker, map[string]string{valueKeyCacheBucket: "ocel-edge-cache-preview"})
+	if bound.ObjectStore.Bucket != "ocel-edge-cache-preview" {
+		t.Errorf("ObjectStore.Bucket = %q, want the bootstrapped bucket", bound.ObjectStore.Bucket)
+	}
+
+	unbootstrapped := bindObjectStore(worker, map[string]string{"unrelated": "x"})
+	if unbootstrapped.ObjectStore.Bucket != "" {
+		t.Errorf("ObjectStore.Bucket = %q, want empty when bootstrap reported no cache bucket", unbootstrapped.ObjectStore.Bucket)
 	}
 }
 
