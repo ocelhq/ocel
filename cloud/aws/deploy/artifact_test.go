@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
+	smithy "github.com/aws/smithy-go"
 )
 
 // readZip decodes an in-memory zip into a relative-path -> contents map.
@@ -145,6 +146,11 @@ func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ .
 
 func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
 	key := aws.ToString(in.Key)
+	// A conditional create is refused by an object already there, which is how
+	// R2 answers a redeploy's seed of a build whose snapshot is already live.
+	if aws.ToString(in.IfNoneMatch) == "*" && f.exists[key] {
+		return nil, &smithy.GenericAPIError{Code: "PreconditionFailed"}
+	}
 	var body []byte
 	if in.Body != nil {
 		body, _ = io.ReadAll(in.Body)
