@@ -1,5 +1,7 @@
+import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
+import genesisSnapshot from "../../../packages/next-cache/fixtures/genesis-tag-snapshot.json?raw";
 import {
   intercept,
   readInterceptionConfig,
@@ -64,6 +66,56 @@ function fakeAws(opts: {
   }) as typeof fetch;
   return { signedFetch, s3Calls, ddbCalls };
 }
+
+// A fake object-store binding, shaped like the R2 bucket the deploy binds as
+// OCEL_CACHE_STORE: canned bodies by key, every get recorded so a test can
+// assert both what was read and that nothing else was. `fail` models a store
+// error, which must fall open exactly like a miss.
+function fakeStore(objects: Record<string, string>, opts: { fail?: boolean } = {}) {
+  const gets: string[] = [];
+  return {
+    gets,
+    async get(key: string) {
+      gets.push(key);
+      if (opts.fail) throw new Error("store unavailable");
+      const body = objects[key];
+      if (body === undefined) return null;
+      return { etag: `"${key}"`, text: async () => body };
+    },
+  };
+}
+
+// A Map-backed stand-in for caches.default. `inert` models *.workers.dev, where
+// put() is silently discarded and match() never hits, so the snapshot read has
+// to degrade to a direct store GET.
+function fakeCache(opts: { inert?: boolean } = {}) {
+  const stored = new Map<string, string>();
+  const calls = { match: 0, put: 0 };
+  return {
+    calls,
+    async match(request: Request): Promise<Response | undefined> {
+      calls.match++;
+      const body = stored.get(request.url);
+      return body === undefined ? undefined : new Response(body);
+    },
+    async put(request: Request, response: Response): Promise<void> {
+      calls.put++;
+      const body = await response.text();
+      if (!opts.inert) stored.set(request.url, body);
+    },
+  };
+}
+
+const snapshotKey = tagSnapshotKey(cfg.prefix);
+
+const snapshot = (over: Partial<TagSnapshot> = {}): TagSnapshot => ({
+  version: 1,
+  deployedAt: 500,
+  generatedAt: 900,
+  validUntil: 300_900,
+  records: {},
+  ...over,
+});
 
 const s3Key = (routePath: string) =>
   `${cfg.prefix}/cache/${routePath === "/" ? "index" : routePath.replace(/^\//, "")}.cache.json`;
@@ -225,5 +277,209 @@ describe("intercept", () => {
     expect(res!.status).toBe(201);
     expect(res!.headers.get("content-type")).toBe("application/json");
     expect(await res!.text()).toBe('{"ok":true}');
+  });
+});
+
+describe("intercept through the object-store binding", () => {
+  const storeDeps = (
+    store: ReturnType<typeof fakeStore>,
+    over: Partial<InterceptDeps> = {},
+  ): InterceptDeps & { s3Calls: string[]; ddbCalls: unknown[] } => ({
+    ...fakeAws({}),
+    store,
+    ...over,
+  });
+
+  it("serves a hit from the binding without making a single AWS call", async () => {
+    const store = fakeStore({ [s3Key("/blog")]: JSON.stringify(appPage()) });
+    const deps = storeDeps(store, { now: () => 2_000 });
+    const res = await intercept(req(), target(), cfg, deps);
+
+    expect(res!.status).toBe(200);
+    expect(await res!.text()).toBe("<html>hi</html>");
+    expect(res!.headers.get("x-ocel-isr")).toBe("HIT");
+    expect(store.gets).toEqual([s3Key("/blog")]);
+    expect(deps.s3Calls).toEqual([]);
+    expect(deps.ddbCalls).toEqual([]);
+  });
+
+  it("decides tag expiry from the snapshot, never DynamoDB", async () => {
+    const store = fakeStore({
+      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
+      [snapshotKey]: JSON.stringify(snapshot({ records: { products: { expired: 1_500 } } })),
+    });
+    const deps = storeDeps(store, { now: () => 2_000 });
+
+    expect(await intercept(req(), target(), cfg, deps)).toBeNull();
+    expect(store.gets).toContain(snapshotKey);
+    expect(deps.ddbCalls).toEqual([]);
+  });
+
+  it("serves when the snapshot's expiry predates the entry", async () => {
+    const store = fakeStore({
+      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
+      [snapshotKey]: JSON.stringify(snapshot({ records: { products: { expired: 500 } } })),
+    });
+    const res = await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
+    expect(res).not.toBeNull();
+  });
+
+  it("serves a tagged page the snapshot has no record for", async () => {
+    const store = fakeStore({
+      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
+      [snapshotKey]: JSON.stringify(snapshot()),
+    });
+    const res = await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
+    expect(res).not.toBeNull();
+  });
+
+  it("falls open on a store miss for the entry", async () => {
+    const store = fakeStore({});
+    expect(
+      await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
+    ).toBeNull();
+  });
+
+  it("falls open when the store errors", async () => {
+    const store = fakeStore({}, { fail: true });
+    expect(
+      await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
+    ).toBeNull();
+  });
+
+  // Every unusable snapshot is a fall-open rather than a serve: waking the
+  // Lambda is what republishes it, so the liveness loop repairs itself.
+  const unusable: Record<string, string> = {
+    missing: "",
+    unparseable: "{not json",
+    "past validUntil": JSON.stringify(snapshot({ validUntil: 1_999 })),
+    "a version this worker does not know": JSON.stringify({
+      ...snapshot({ records: { products: { expired: 500 } } }),
+      version: 2,
+    }),
+  };
+
+  for (const [why, body] of Object.entries(unusable)) {
+    it(`falls open on a snapshot that is ${why}`, async () => {
+      const store = fakeStore({
+        [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
+        ...(body ? { [snapshotKey]: body } : {}),
+      });
+      const deps = storeDeps(store, { now: () => 2_000 });
+      expect(await intercept(req(), target(), cfg, deps)).toBeNull();
+      expect(deps.ddbCalls).toEqual([]);
+    });
+  }
+
+  it("reads the snapshot once across requests when the PoP cache works", async () => {
+    const entry = JSON.stringify(appPage({ tags: "products", lastModified: 1_000 }));
+    const store = fakeStore({
+      [s3Key("/blog")]: entry,
+      [snapshotKey]: JSON.stringify(snapshot()),
+    });
+    const snapshotCache = fakeCache();
+
+    // Far enough apart that the in-isolate memo has lapsed, so the second read
+    // is answered by the PoP cache rather than the memo.
+    expect(
+      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
+    ).not.toBeNull();
+    expect(
+      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 20_000 })),
+    ).not.toBeNull();
+
+    expect(store.gets.filter((k) => k === snapshotKey).length).toBe(1);
+    expect(snapshotCache.calls.put).toBe(1);
+    expect(snapshotCache.calls.match).toBe(2);
+  });
+
+  it("serves a burst from the in-isolate memo without touching the PoP cache", async () => {
+    const store = fakeStore({
+      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
+      [snapshotKey]: JSON.stringify(snapshot()),
+    });
+    const snapshotCache = fakeCache();
+
+    await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 }));
+    await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_100 }));
+
+    expect(snapshotCache.calls.match).toBe(1);
+    expect(store.gets.filter((k) => k === snapshotKey).length).toBe(1);
+  });
+
+  it("stays correct with an inert PoP cache, paying a store read per request", async () => {
+    const store = fakeStore({
+      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
+      [snapshotKey]: JSON.stringify(snapshot({ records: { products: { expired: 1_500 } } })),
+    });
+    const snapshotCache = fakeCache({ inert: true });
+
+    expect(
+      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
+    ).toBeNull();
+    expect(
+      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 20_000 })),
+    ).toBeNull();
+
+    expect(store.gets.filter((k) => k === snapshotKey).length).toBe(2);
+  });
+
+  it("falls open rather than trusting a snapshot the PoP cache held past validUntil", async () => {
+    const store = fakeStore({
+      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
+      [snapshotKey]: JSON.stringify(snapshot({ validUntil: 10_000 })),
+    });
+    const snapshotCache = fakeCache();
+
+    expect(
+      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
+    ).not.toBeNull();
+    expect(
+      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 11_000 })),
+    ).toBeNull();
+  });
+});
+
+// The snapshot format crosses a language boundary twice — the Go deploy seeds it
+// and the Lambda publisher rewrites it — so nothing but this one artifact stops
+// the three from drifting apart in silence. The deploy's test asserts it marshals
+// exactly these bytes and the publisher's test asserts it reads these fields;
+// what follows is the reader half, run against the same bytes rather than
+// against a snapshot this test wrote for itself.
+describe("the published snapshot format", () => {
+  const genesis: TagSnapshot = JSON.parse(genesisSnapshot);
+  const within = genesis.generatedAt + 1_000;
+
+  it("is served, verbatim, by a worker reading it out of the store", async () => {
+    const store = fakeStore({
+      [s3Key("/blog")]: JSON.stringify(
+        appPage({ tags: "products", lastModified: genesis.deployedAt }),
+      ),
+      [snapshotKey]: genesisSnapshot,
+    });
+    const deps = { ...fakeAws({}), store, now: () => within };
+
+    const res = await intercept(req(), target({ revalidate: false }), cfg, deps);
+    expect(res).not.toBeNull();
+    expect(deps.ddbCalls).toEqual([]);
+  });
+
+  it("stops being trusted at the validity window the publisher declared", async () => {
+    const store = fakeStore({
+      [s3Key("/blog")]: JSON.stringify(
+        appPage({ tags: "products", lastModified: genesis.deployedAt }),
+      ),
+      [snapshotKey]: genesisSnapshot,
+    });
+    const res = await intercept(req(), target({ revalidate: false }), cfg, {
+      ...fakeAws({}),
+      store,
+      now: () => genesis.validUntil,
+    });
+    expect(res).toBeNull();
+  });
+
+  it("is addressed at the key the publisher writes it to", () => {
+    expect(snapshotKey).toBe("prod/proj/app/build/tag-clock.json");
   });
 });

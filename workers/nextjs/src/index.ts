@@ -4,12 +4,16 @@ import {
   intercept,
   readInterceptionConfig,
   signerFor,
+  type InterceptDeps,
   type InterceptionConfig,
 } from "./interception";
 
 interface Env {
   ASSETS: Fetcher;
   FUNCTION_URLS: string;
+  // Bound only where the edge provisioned a cache store. Its presence is what
+  // moves the ISR read path off AWS entirely.
+  OCEL_CACHE_STORE?: R2Bucket;
   OCEL_EDGE_ACCESS_KEY_ID?: string;
   OCEL_EDGE_SECRET_KEY?: string;
   OCEL_AWS_REGION?: string;
@@ -89,13 +93,12 @@ export interface RouteDeps {
   // to their origin uncached.
   cache?: CacheDeps;
 
-  // Present when the deploy injected edge credentials: prerender routes then try
-  // reading the authoritative ISR cache directly from S3+DynamoDB before falling
-  // open to the Lambda origin. Absent leaves the Lambda path unchanged.
-  interception?: {
+  // Present when the deploy injected edge cache coordinates: prerender routes
+  // then try reading the authoritative ISR cache directly — through the bound
+  // store when there is one, over signed S3+DynamoDB when there is not — before
+  // falling open to the Lambda origin. Absent leaves the Lambda path unchanged.
+  interception?: Pick<InterceptDeps, "signedFetch" | "store" | "snapshotCache" | "now"> & {
     config: InterceptionConfig;
-    signedFetch: typeof fetch;
-    now?: () => number;
   };
 }
 
@@ -248,10 +251,11 @@ export async function dispatchResult(
         url.pathname.startsWith((manifest.basePath ?? "") + "/_next/data/") &&
         url.pathname.endsWith(".json");
 
-      // When edge credentials are present, a prerender read is tried directly
-      // against S3+DynamoDB first; any miss/expiry/error falls open to the
-      // Lambda origin. The interception hit carries a full-window cache-control
-      // so serveCached memoizes it exactly as it would the Lambda's response.
+      // When edge cache coordinates are present, a prerender read is tried
+      // directly against the cache first; any miss/expiry/error falls open to
+      // the Lambda origin. The interception hit carries a full-window
+      // cache-control so serveCached memoizes it exactly as it would the
+      // Lambda's response.
       let cachingOrigin = origin;
       if (target.kind === "prerender" && deps.interception && !isNextData) {
         const lambdaOrigin = origin;
@@ -259,12 +263,10 @@ export async function dispatchResult(
           routePath: result.invocationTarget?.pathname ?? url.pathname,
           revalidate: target.fallback?.initialRevalidate,
         };
-        const interception = deps.interception;
+        const { config, ...interceptDeps } = deps.interception;
         cachingOrigin = async () =>
-          (await intercept(request, interceptTarget, interception.config, {
-            signedFetch: interception.signedFetch,
-            now: interception.now,
-          })) ?? lambdaOrigin();
+          (await intercept(request, interceptTarget, config, interceptDeps)) ??
+          lambdaOrigin();
       }
 
       return serveCached(
@@ -341,6 +343,10 @@ export default {
         ? {
             config: interceptionConfig,
             signedFetch: signerFor(interceptionConfig),
+            // Passed as the binding itself: it is one stable object per isolate,
+            // which is what the snapshot memo keys on.
+            store: env.OCEL_CACHE_STORE,
+            snapshotCache: caches.default,
           }
         : undefined,
     });

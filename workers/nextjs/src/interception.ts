@@ -1,8 +1,20 @@
-// Cache interception: the worker reads the authoritative ISR cache directly from
-// S3 (with DynamoDB tag parity) via SigV4-signed requests, so a cache hit skips
-// the Lambda origin entirely. It mirrors OcelCacheHandler.get() using the shared
-// @ocel/next-cache primitives, so the edge and the Lambda can never disagree
-// about whether an entry is still servable.
+// Cache interception: the worker reads the authoritative ISR cache itself, so a
+// cache hit skips the Lambda origin entirely. It mirrors OcelCacheHandler.get()
+// using the shared @ocel/next-cache primitives, so the edge and the Lambda can
+// never disagree about whether an entry is still servable.
+//
+// There are two read paths, chosen by whether the deploy bound a cache store:
+//
+//   • Bound. Entries come from the binding and tag state from the tag-clock
+//     replica sitting beside them, so an interception calls exactly one service
+//     and never an AWS API.
+//   • Unbound. The original SigV4-signed S3 GET plus DynamoDB BatchGetItem, kept
+//     verbatim so a substrate that never adopted a store keeps intercepting
+//     rather than silently losing the shortcut.
+//
+// The second is a rollback path, not a fallback: a failed read on the bound path
+// falls open to the origin like every other failure here, and never reaches for
+// AWS behind the store's back.
 //
 // Interception is strictly additive: every miss, expiry, incomplete entry, or
 // error returns null so the caller falls open to the existing Lambda path. A bug
@@ -12,13 +24,17 @@ import {
   areTagsExpired,
   cacheKey,
   deserialize,
+  tagSnapshotKey,
   tagsOf,
   type CacheEntryFile,
   type TagRecord,
+  type TagSnapshot,
 } from "@ocel/next-cache";
 
 // The signed-request bindings the worker deploy injects. All-or-nothing: absent
 // any one of them, interception is disabled and the worker forwards as before.
+// They are injected even on a substrate with a cache store, which is why the
+// binding rather than their absence is what selects the read path.
 export interface InterceptionConfig {
   accessKeyId: string;
   secretKey: string;
@@ -37,10 +53,34 @@ export interface InterceptTarget {
   revalidate: number | false | undefined;
 }
 
+// One stored object, as the R2 binding hands it back.
+export interface StoredObject {
+  etag?: string;
+  text(): Promise<string>;
+}
+
+// The cache store as this file needs it: keyed reads, null for a miss. The
+// Cloudflare R2 binding satisfies it directly, so nothing here names an edge.
+export interface ObjectStoreReader {
+  get(key: string): Promise<StoredObject | null>;
+}
+
+// The subset of the Cache API the snapshot read fronts itself with.
+export interface SnapshotCache {
+  match(request: Request): Promise<Response | undefined>;
+  put(request: Request, response: Response): Promise<void>;
+}
+
 export interface InterceptDeps {
   // A SigV4-signing fetch (aws4fetch's AwsClient.fetch in production, a fake in
   // tests). Signs S3 GETs and DynamoDB BatchGetItem POSTs.
   signedFetch: typeof fetch;
+  // The bound cache store. Present is what moves entries and tag state off AWS;
+  // absent leaves the signed path below in charge.
+  store?: ObjectStoreReader;
+  // The PoP cache fronting the snapshot read. Absent, or inert as it is on
+  // *.workers.dev, costs one store read per interception and nothing else.
+  snapshotCache?: SnapshotCache;
   // Injected so freshness never depends on wall-clock time. Milliseconds.
   now?: () => number;
 }
@@ -60,6 +100,27 @@ const ISR_STATUS = "x-ocel-isr";
 const batchGetMaxAttempts = 4;
 const batchGetBackoffMs = 50;
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// The tag-clock replica is read on every tagged interception, so it is fronted
+// by two layers: the PoP-shared Cache API, and a per-isolate memo covering the
+// burst one isolate serves inside a second.
+//
+// The TTL is the entire delay this design adds to an invalidation, because the
+// publisher republishes on every revalidateTag — so an invalidation raised at
+// the origin reaches a PoP within one TTL of being raised. Ten seconds buys a
+// PoP's whole burst for one store read while staying far inside the publisher's
+// five-minute trust window, so the window, not the cache, remains what bounds
+// worst-case staleness.
+const snapshotTtlSeconds = 10;
+const snapshotMemoMs = 1_000;
+
+// Keyed by the binding itself, which is one stable object for the life of an
+// isolate. Keying on the binding rather than on module state is also what keeps
+// the memo from leaking between tests.
+const snapshotMemo = new WeakMap<
+  ObjectStoreReader,
+  { at: number; snapshot: TagSnapshot }
+>();
 
 // readInterceptionConfig reads the worker's edge bindings, returning null unless
 // every one is present so interception stays all-or-nothing.
@@ -118,8 +179,12 @@ export async function intercept(
 
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
-      const records = await readTags(cfg, deps, tags);
-      if (!records) return null; // DynamoDB read failed or was incomplete.
+      const records = deps.store
+        ? await snapshotRecords(cfg, deps, deps.store, now)
+        : await readTags(cfg, deps, tags);
+      // The replica could not be trusted, or the DynamoDB read failed or came
+      // back partial. Either way tag state is unknown, and unknown never serves.
+      if (!records) return null;
       if (areTagsExpired(tags, records, entry.lastModified, now)) return null;
     }
 
@@ -153,21 +218,130 @@ function isCompleteServable(value: Record<string, any>): boolean {
   }
 }
 
-// readEntry does the signed S3 GET of the entry object, returning null on a miss
-// or any non-200 (fail open).
+// readEntry fetches the entry object through whichever path is configured. The
+// key layout is identical either way, so the two stores hold the same objects
+// under the same names and a substrate can move between them without a backfill.
 async function readEntry(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
   routePath: string,
 ): Promise<CacheEntryFile | null> {
   const key = `${cfg.prefix}/cache/${cacheKey(routePath, undefined)}.cache.json`;
-  const res = await deps.signedFetch(s3Url(cfg, key));
-  if (!res.ok) return null;
-  const entry = (await res.json()) as CacheEntryFile;
+  const body = deps.store
+    ? await storeText(deps.store, key)
+    : await signedText(cfg, deps, key);
+  if (body === null) return null;
+
+  const entry = parseJson<CacheEntryFile>(body);
   if (!entry || typeof entry.lastModified !== "number" || !entry.value) {
     return null;
   }
   return entry;
+}
+
+async function storeText(
+  store: ObjectStoreReader,
+  key: string,
+): Promise<string | null> {
+  const object = await store.get(key);
+  return object ? object.text() : null;
+}
+
+async function signedText(
+  cfg: InterceptionConfig,
+  deps: InterceptDeps,
+  key: string,
+): Promise<string | null> {
+  const res = await deps.signedFetch(s3Url(cfg, key));
+  return res.ok ? res.text() : null;
+}
+
+function parseJson<T>(body: string): T | null {
+  try {
+    return JSON.parse(body) as T;
+  } catch {
+    return null;
+  }
+}
+
+// snapshotRecords is the bound path's answer to readTags: the tag clock as the
+// last publisher left it, rather than a live read of the authoritative one.
+async function snapshotRecords(
+  cfg: InterceptionConfig,
+  deps: InterceptDeps,
+  store: ObjectStoreReader,
+  now: number,
+): Promise<Map<string, TagRecord> | null> {
+  const snapshot = await readSnapshot(cfg, deps, store, now);
+  return snapshot && new Map(Object.entries(snapshot.records));
+}
+
+// readSnapshot returns the build's tag-clock replica, or null whenever it cannot
+// be trusted — missing, torn, stale, or written in a format this worker predates.
+// Every one of those falls open to the origin, which wakes a Lambda, which
+// republishes: the liveness loop repairs itself by being used.
+async function readSnapshot(
+  cfg: InterceptionConfig,
+  deps: InterceptDeps,
+  store: ObjectStoreReader,
+  now: number,
+): Promise<TagSnapshot | null> {
+  const memoized = snapshotMemo.get(store);
+  if (memoized && now - memoized.at < snapshotMemoMs) {
+    return usableSnapshot(memoized.snapshot, now);
+  }
+
+  const key = tagSnapshotKey(cfg.prefix);
+  const cacheRequest = new Request(snapshotCacheUrl(key));
+  const cached = await matchSnapshot(deps.snapshotCache, cacheRequest);
+
+  const body = cached ?? (await storeText(store, key));
+  if (body === null) return null;
+
+  const snapshot = usableSnapshot(parseJson<TagSnapshot>(body), now);
+  if (!snapshot) return null;
+
+  if (cached === null && deps.snapshotCache) {
+    await deps.snapshotCache.put(
+      cacheRequest,
+      new Response(body, {
+        headers: { "cache-control": `max-age=${snapshotTtlSeconds}` },
+      }),
+    );
+  }
+  snapshotMemo.set(store, { at: now, snapshot });
+  return snapshot;
+}
+
+// A PoP cache that is absent, inert, or erroring is a slower read, never a
+// wrong one, so a miss and a failure are the same answer: go to the store.
+async function matchSnapshot(
+  cache: SnapshotCache | undefined,
+  request: Request,
+): Promise<string | null> {
+  try {
+    const hit = await cache?.match(request);
+    return hit ? await hit.text() : null;
+  } catch {
+    return null;
+  }
+}
+
+// A replica is trusted only inside the window its publisher declared, and only
+// at a version this worker was written against. An unknown version is a format
+// this reader cannot claim to understand, so it declines to guess — which is
+// what lets the format change without a worker fleet misreading it.
+function usableSnapshot(
+  snapshot: TagSnapshot | null,
+  now: number,
+): TagSnapshot | null {
+  if (snapshot?.version !== 1) return null;
+  if (typeof snapshot.validUntil !== "number" || now >= snapshot.validUntil) {
+    return null;
+  }
+  return snapshot.records && typeof snapshot.records === "object"
+    ? snapshot
+    : null;
 }
 
 // readTags mirrors the Lambda store's BatchGetItem read: 100 keys per call, with
@@ -262,6 +436,13 @@ function reconstruct(
   headers.set("cache-control", `s-maxage=${revalidateWindow}`);
   headers.set(ISR_STATUS, "HIT");
   return new Response(body, { status, headers });
+}
+
+// The Cache API keys on a URL, and the snapshot has none: it is read through a
+// binding, not fetched. This synthesizes one from the object key, which already
+// carries the build prefix, so two builds on one worker cannot collide.
+function snapshotCacheUrl(key: string): string {
+  return `https://isr.ocel/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
 function s3Url(cfg: InterceptionConfig, key: string): string {
