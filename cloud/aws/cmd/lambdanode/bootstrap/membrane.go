@@ -19,11 +19,13 @@ import (
 // before Lambda hard-kills the sandbox.
 const completionMargin = 500 * time.Millisecond
 
-// startupBudget bounds the wait for node to announce itself. A crashed child is
-// caught by the reaper the moment it exits, so this only has to cover the child
-// that is alive but wedged. It sits under Lambda's ~10s init ceiling, leaving
-// room to report a real init error before the platform kills the sandbox and
-// says nothing useful in its place.
+// startupBudget bounds init as a whole: the globally bootstrapped config fetch
+// (configBudget) and then the wait for node to announce itself, which gets
+// whatever the fetch left. A crashed child is caught by the reaper the moment it
+// exits, so the second half only has to cover the child that is alive but
+// wedged. The total sits under Lambda's ~10s init ceiling, leaving room to
+// report a real init error before the platform kills the sandbox and says
+// nothing useful in its place.
 const startupBudget = 8 * time.Second
 
 type Membrane struct {
@@ -235,7 +237,11 @@ func entrypointPath() string {
 	return nodeEntry
 }
 
-func startNode() (*Membrane, error) {
+// startNode execs the node child and waits budget for it to announce itself.
+// extraEnv is the globally bootstrapped config resolved before this point; it
+// can only reach node through the environment the child is exec'd with, which is
+// why the fetch is not deferred past here.
+func startNode(extraEnv []string, budget time.Duration) (*Membrane, error) {
 	// TODO: randomize
 	sockPath := "/tmp/ocel-control.sock"
 	_ = os.Remove(sockPath) // stale socket from a reused sandbox
@@ -250,6 +256,7 @@ func startNode() (*Membrane, error) {
 		"OCEL_CONTROL_SOCKET="+sockPath,
 		"OCEL_HANDLER="+os.Getenv("OCEL_HANDLER"), // user's compiled entry
 	)
+	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.Stdout = os.Stdout // Node stdout → CloudWatch
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -264,7 +271,7 @@ func startNode() (*Membrane, error) {
 
 	// Node connects back to our control socket and announces its port. Only one
 	// connection is ever accepted, so the listener is spent either way.
-	ready, err := awaitReady(ln, exited, startupBudget)
+	ready, err := awaitReady(ln, exited, budget)
 	ln.Close()
 	if err != nil {
 		return nil, err

@@ -67,6 +67,18 @@ func edgeNamesFor(class string) (edgeNames, error) {
 	return names, nil
 }
 
+// CacheStoreParamFor returns the SSM parameter a substrate class's adopted cache
+// store lives in, for the deploy path to name in a function's environment and
+// scope its read grant to. The parameter need not exist: a substrate whose edge
+// offered no store is one whose consumers read it as absent.
+func CacheStoreParamFor(class string) (string, error) {
+	names, err := edgeNamesFor(class)
+	if err != nil {
+		return "", err
+	}
+	return names.cacheStoreParam, nil
+}
+
 // writeEdgeValues stores the edge's own bootstrap outputs so the deploy path can
 // hand them back verbatim. They are opaque to the provider — stored and read as
 // one blob, never keyed into — and are held as a SecureString because an edge is
