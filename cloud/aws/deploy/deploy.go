@@ -84,6 +84,15 @@ type Config struct {
 	// configs + fallbacks are uploaded to, keyed by build id. Empty when the
 	// bootstrap predates it.
 	AssetBucket string
+
+	// CacheStoreBucket and CacheStoreUploader address the substrate's adopted
+	// cache store — the edge-provisioned bucket the singular ISR entry path now
+	// lives in, seeded here and read back by both the origin's cache handler and
+	// the edge worker. Empty and nil when the edge offered no store, which leaves
+	// seeding on AssetBucket: the rollback for the whole colocation. The keys are
+	// identical either way, so only the bucket moves.
+	CacheStoreBucket   string
+	CacheStoreUploader ArtifactUploader
 	// Env is the environment segment of the S3 asset key ("prod", or
 	// "preview-<identity>"): the same token stackName suffixes.
 	Env string

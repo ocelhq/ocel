@@ -170,3 +170,28 @@ func TestReadEdgeValues_AbsentParameterIsSilent(t *testing.T) {
 		t.Errorf("an edge that stored no values is not a failure to report, got %v", logged)
 	}
 }
+
+// TestCacheStoreUploader_ZeroStoreIsAnUntypedNil pins the rollback path at its
+// one fragile point: the deploy reads a nil uploader as "no store adopted", and
+// a typed nil returned into the interface would read as adopted and seed every
+// entry into a bucket named "".
+func TestCacheStoreUploader_ZeroStoreIsAnUntypedNil(t *testing.T) {
+	if up := cacheStoreUploader(bootstrap.CacheStore{}); up != nil {
+		t.Errorf("cacheStoreUploader(zero) = %v, want nil", up)
+	}
+}
+
+// TestCacheStoreUploader_AdoptedStoreIsAddressable proves an adopted store yields
+// a client, which is what routes seeding away from the provider's own bucket.
+func TestCacheStoreUploader_AdoptedStoreIsAddressable(t *testing.T) {
+	store := bootstrap.CacheStore{
+		Bucket:          "isr",
+		Endpoint:        "https://acct.r2.cloudflarestorage.com",
+		Region:          "auto",
+		AccessKeyID:     "AK",
+		SecretAccessKey: "s3cret",
+	}
+	if up := cacheStoreUploader(store); up == nil {
+		t.Error("cacheStoreUploader on an adopted store = nil, want a client")
+	}
+}

@@ -100,10 +100,11 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 		return nil
 	}
 
-	if cfg.AssetBucket == "" {
+	up, bucket := entryTarget(cfg)
+	if bucket == "" {
 		return fmt.Errorf("this project has cache entries to seed but no asset bucket is configured; re-run `ocel bootstrap`")
 	}
-	if cfg.Uploader == nil {
+	if up == nil {
 		return fmt.Errorf("no asset uploader configured")
 	}
 
@@ -111,12 +112,23 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 	g.SetLimit(8) // bounded S3 conns
 	for _, u := range uploads {
 		g.Go(func() error {
-			return uploadArtifact(ctx, cfg.Uploader, cfg.AssetBucket, u.key, func() ([]byte, error) {
+			return uploadArtifact(ctx, up, bucket, u.key, func() ([]byte, error) {
 				return os.ReadFile(u.src)
 			})
 		})
 	}
 	return g.Wait()
+}
+
+// entryTarget is where seeded ISR cache entries land: the substrate's adopted
+// cache store when its edge offered one, and the provider's own asset bucket
+// when it did not. The cache handler makes the same choice from the coordinates
+// the membrane injects, so the two agree on one bucket by construction.
+func entryTarget(cfg Config) (ArtifactUploader, string) {
+	if cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil {
+		return cfg.CacheStoreUploader, cfg.CacheStoreBucket
+	}
+	return cfg.Uploader, cfg.AssetBucket
 }
 
 // collectFiles returns every file under dir as slash-separated paths relative to

@@ -4,8 +4,9 @@ import {
   UpdateItemCommand,
   type AttributeValue,
 } from "@aws-sdk/client-dynamodb";
-import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
+import { isrObjectStore } from "./object-store.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 // The entry and tag-record shapes are the shared ISR contract — the same the
@@ -47,18 +48,17 @@ async function streamToString(body: any): Promise<string> {
   return Buffer.concat(chunks).toString("utf8");
 }
 
-// awsCacheStore binds the store to the account-global asset bucket and state
-// table. Keys are namespaced by the deploy's <env>/<project>/<app>/<build>
-// prefix, which is also what the function's IAM policy is scoped to — so a key
-// built outside the namespace fails closed rather than reading another app's
-// cache.
+// awsCacheStore binds entries to whichever object store this substrate adopted
+// and tags to the account-global state table. Keys are namespaced by the
+// deploy's <env>/<project>/<app>/<build> prefix, which is also what the
+// function's IAM policy is scoped to — so a key built outside the namespace
+// fails closed rather than reading another app's cache.
 export function awsCacheStore(): CacheStore {
-  const bucket = env("OCEL_ISR_BUCKET");
+  const { client: s3, bucket } = isrObjectStore();
   const prefix = env("OCEL_ISR_PREFIX");
   const table = env("OCEL_STATE_TABLE");
   const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
 
-  const s3 = new S3Client({});
   const ddb = new DynamoDBClient({});
 
   const objectKey = (key: string) => `${prefix}/cache/${key}.cache.json`;

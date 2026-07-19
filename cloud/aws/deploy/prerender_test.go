@@ -176,6 +176,69 @@ func TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 	}
 }
 
+// TestUploadPrerenderAssets_SeedsTheAdoptedCacheStore proves a deploy onto a
+// substrate whose edge offered a cache store seeds into that store and not into
+// the provider's asset bucket. The handler that reads these entries back reads
+// the same store, so seeding the other bucket would leave every prerendered
+// route cold with nothing to show for it — and the keys must not move, because
+// the edge worker reads exactly them.
+func TestUploadPrerenderAssets_SeedsTheAdoptedCacheStore(t *testing.T) {
+	asset := &fakeUploader{exists: map[string]bool{}}
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset,
+		CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+
+	if len(asset.puts) != 0 {
+		t.Errorf("asset bucket received %v, want nothing once a store is adopted", asset.puts)
+	}
+	got := append([]string(nil), store.puts...)
+	sort.Strings(got)
+	want := []string{
+		"prod/proj/admin/ADM1/cache/dash.cache.json",
+		"prod/proj/admin/ADM1/cache/users.cache.json",
+		"prod/proj/web/WEB1/cache/index.cache.json",
+	}
+	if len(got) != len(want) {
+		t.Fatalf("uploaded keys = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("uploaded key[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+	for _, b := range store.buckets {
+		if b != "isr" {
+			t.Errorf("uploaded into bucket %q, want the adopted store %q", b, "isr")
+		}
+	}
+}
+
+// TestUploadPrerenderAssets_UnadoptedStoreStaysOnTheAssetBucket proves the
+// rollback: a substrate whose edge offered no store seeds where it always did.
+func TestUploadPrerenderAssets_UnadoptedStoreStaysOnTheAssetBucket(t *testing.T) {
+	f := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+
+	if len(f.buckets) != 3 {
+		t.Fatalf("uploaded %d objects, want 3", len(f.buckets))
+	}
+	for _, b := range f.buckets {
+		if b != "assets" {
+			t.Errorf("uploaded into bucket %q, want the provider's own %q", b, "assets")
+		}
+	}
+}
+
 // TestUploadPrerenderAssets_NoNextApp proves the path is a no-op for a manifest
 // with no Next.js function: nothing is read or uploaded.
 func TestUploadPrerenderAssets_NoNextApp(t *testing.T) {

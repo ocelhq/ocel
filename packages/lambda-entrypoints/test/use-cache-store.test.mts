@@ -39,6 +39,50 @@ async function storeWithResponses(responses: any[]) {
   return { store: awsUseCacheStore(), sends };
 }
 
+// The plural handlers run in Lambda, where the provider's own bucket is
+// in-region, so adopting an edge cache store deliberately does not move them:
+// only the singular ISR entry path is colocated with the edge.
+test("stays on the provider's bucket when a cache store is adopted", async () => {
+  Object.assign(process.env, {
+    OCEL_ISR_STORE_BUCKET: "isr",
+    OCEL_ISR_STORE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
+    OCEL_ISR_STORE_REGION: "auto",
+    OCEL_ISR_STORE_ACCESS_KEY_ID: "AK",
+    OCEL_ISR_STORE_SECRET_ACCESS_KEY: "s3cret",
+  });
+  const built: any[] = [];
+  const sent: any[] = [];
+  vi.doMock("@aws-sdk/client-s3", async (orig) => {
+    const actual = await orig<any>();
+    return {
+      ...actual,
+      S3Client: class {
+        constructor(cfg: any) {
+          built.push(cfg);
+        }
+        async send(cmd: any) {
+          sent.push(cmd.input);
+          return {};
+        }
+      },
+    };
+  });
+  const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
+
+  await awsUseCacheStore().writeEntry("k", {
+    tags: [],
+    stale: 0,
+    timestamp: 0,
+    expire: 0,
+    revalidate: 0,
+    body: "",
+  });
+
+  expect(built[0].endpoint).toBeUndefined();
+  expect(sent[0].Bucket).toBe("assets");
+  expect(sent[0].Key).toMatch(/^prod\/proj\/app\/BID\/use-cache\//);
+});
+
 test("writes a tag record under the monotonic guard", async () => {
   const { store, sends } = await storeWithResponses([{}]);
 

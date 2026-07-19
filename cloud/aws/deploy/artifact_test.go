@@ -129,6 +129,7 @@ type fakeUploader struct {
 	// every caller waits for the uploads to finish first.
 	mu        sync.Mutex
 	puts      []string
+	buckets   []string
 	putBodies map[string]string
 }
 
@@ -152,6 +153,7 @@ func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.puts = append(f.puts, key)
+	f.buckets = append(f.buckets, aws.ToString(in.Bucket))
 	if in.Body != nil {
 		if f.putBodies == nil {
 			f.putBodies = map[string]string{}
