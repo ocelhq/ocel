@@ -71,7 +71,7 @@ const adapter = {
       ...outputs.appRoutes,
     ];
 
-    const routableOutputs = [...allRoutes, ...outputs.staticFiles];
+    const routableOutputs = [...allRoutes, ...outputs.prerenders, ...outputs.staticFiles];
 
     const functionRoutes = allRoutes.filter((r) => r.runtime === "nodejs");
     const skipped = allRoutes.length - functionRoutes.length;
@@ -201,17 +201,9 @@ const adapter = {
       appName,
       basePath: config.basePath || "",
       i18n: config.i18n ?? undefined,
-      // resolveRoutes matches a request against this list to produce a
-      // resolvedPathname, so it must name every route the dispatch map can
-      // serve. Prerenders carry the .rsc and .segment.rsc variants that exist
-      // only as prerender outputs (never as appPages), so they are folded in
-      // here too — omitting them leaves a segment/RSC prefetch dispatchable but
-      // unresolvable, which surfaces as a 404. Deduped: full-page prerenders
-      // overlap the routable outputs.
       pathnames: [
         ...new Set([
           ...routableOutputs.map((o) => o.pathname),
-          ...outputs.prerenders.map((p) => p.pathname),
           ...publicFiles.map((p) => p.pathname),
         ]),
       ],
