@@ -7,6 +7,7 @@ import {
   stat,
   lstat,
   readlink,
+  utimes,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
@@ -781,4 +782,116 @@ test("two apps exposing the same route path do not overwrite each other", async 
     expect(manifest.dispatch["/api/documents"]).toEqual({ kind: "lambda", id: "/api/documents" });
     expect(await exists(join(outputRoot, "static/next.svg"))).toBe(true);
   }
+});
+
+// Next writes fetch/unstable_cache entries as the bare cache value under a hash
+// filename, deriving lastModified from the file's mtime. The deployed handler
+// reads the stored envelope instead, so the build has to supply one.
+async function seedFetchCache(
+  projectDir: string,
+  name: string,
+  value: Record<string, unknown>,
+  ageMs = 0,
+): Promise<void> {
+  const dir = join(projectDir, ".next", "cache", "fetch-cache");
+  await mkdir(dir, { recursive: true });
+  const p = join(dir, name);
+  await writeFile(p, JSON.stringify(value));
+  if (ageMs > 0) {
+    const at = new Date(Date.now() - ageMs);
+    await utimes(p, at, at);
+  }
+}
+
+const fetchHash = "a".repeat(64);
+
+test("seeds fetch-cache entries under their hash, wrapped in an envelope", async () => {
+  const { projectDir, args } = await synthProject();
+  await seedFetchCache(projectDir, fetchHash, {
+    kind: "FETCH",
+    data: { body: "upstream", status: 200 },
+    revalidate: 900,
+    tags: ["posts"],
+  });
+
+  const adapter = await loadAdapterIn(projectDir);
+  const before = Date.now();
+  await adapter.onBuildComplete(args as never);
+
+  const entry = JSON.parse(
+    await readFile(
+      join(projectDir, ".ocel/output/fetch-cache", `${fetchHash}.cache.json`),
+      "utf8",
+    ),
+  );
+
+  // The hash is the handler's lookup key, so the filename must survive verbatim.
+  expect(entry.value).toEqual({
+    kind: "FETCH",
+    data: { body: "upstream", status: 200 },
+    revalidate: 900,
+    tags: ["posts"],
+  });
+  expect(entry.lastModified).toBeGreaterThanOrEqual(before);
+});
+
+// The pruning proof behind the tag clock rests on every entry in a build having
+// lastModified >= that build's deployedAt. .next/cache survives across builds,
+// so an mtime carried over from an older one would break it.
+test("stamps fetch entries with build time, not the file's mtime", async () => {
+  const { projectDir, args } = await synthProject();
+  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  await seedFetchCache(
+    projectDir,
+    fetchHash,
+    { kind: "FETCH", data: {}, revalidate: false, tags: [] },
+    weekMs,
+  );
+
+  const adapter = await loadAdapterIn(projectDir);
+  const before = Date.now();
+  await adapter.onBuildComplete(args as never);
+
+  const entry = JSON.parse(
+    await readFile(
+      join(projectDir, ".ocel/output/fetch-cache", `${fetchHash}.cache.json`),
+      "utf8",
+    ),
+  );
+  expect(entry.lastModified).toBeGreaterThanOrEqual(before);
+});
+
+// Stamping build time restarts an entry's revalidate window, so one whose window
+// already elapsed must be dropped rather than shipped with a clock it did not
+// earn. force-cache (revalidate: false) has no window and is always kept.
+test("drops fetch entries whose revalidate window already elapsed", async () => {
+  const { projectDir, args } = await synthProject();
+  await seedFetchCache(
+    projectDir,
+    fetchHash,
+    { kind: "FETCH", data: {}, revalidate: 60, tags: [] },
+    10 * 60 * 1000,
+  );
+  const forced = "b".repeat(64);
+  await seedFetchCache(
+    projectDir,
+    forced,
+    { kind: "FETCH", data: {}, revalidate: false, tags: [] },
+    10 * 60 * 1000,
+  );
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const out = join(projectDir, ".ocel/output/fetch-cache");
+  expect(await exists(join(out, `${fetchHash}.cache.json`))).toBe(false);
+  expect(await exists(join(out, `${forced}.cache.json`))).toBe(true);
+});
+
+test("emits no fetch-cache folder for an app that cached no fetch", async () => {
+  const { projectDir, args } = await synthProject();
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  expect(await exists(join(projectDir, ".ocel/output/fetch-cache"))).toBe(false);
 });

@@ -102,7 +102,12 @@ export default class OcelCacheHandler {
   // degrades a cache outage into a fresh render instead of an outage.
   async get(key: string, ctx: any): Promise<CacheEntryFile | null> {
     try {
-      const entry = await this.store.readEntry(cacheKey(key, ctx?.kind));
+      // Next reports the fetch kind differently on each side — ctx.kind here,
+      // ctx.fetchCache on set — so the two predicates differ deliberately.
+      const entry =
+        ctx?.kind === "FETCH"
+          ? await this.store.readFetch(key)
+          : await this.store.readEntry(cacheKey(key));
       if (!entry) return null;
 
       const tags = tagsOf(entry.value, ctx);
@@ -133,8 +138,11 @@ export default class OcelCacheHandler {
       const value = serialize(data);
       if (data.kind === "FETCH") value.tags = ctx?.tags ?? [];
       const entry = { lastModified: Date.now(), value };
-      const stored = cacheKey(key, ctx?.fetchCache ? "FETCH" : data.kind);
-      background(() => store.writeEntry(stored, entry));
+      background(() =>
+        ctx?.fetchCache || data.kind === "FETCH"
+          ? store.writeFetch(key, entry)
+          : store.writeEntry(cacheKey(key), entry),
+      );
     } catch {
       // Swallowed deliberately: see above.
     }

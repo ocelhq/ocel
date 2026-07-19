@@ -194,6 +194,7 @@ const adapter = {
 
     // Seed each prerendered route's cache entry from the build output.
     await emitCacheEntries(outputRoot, outputs.prerenders, allRoutes);
+    await emitFetchEntries(outputRoot, distDir);
 
     const routingManifest = {
       buildId,
@@ -441,6 +442,67 @@ async function emitCacheEntries(
       const key =
         html.pathname === "/" ? "index" : html.pathname.replace(/^\//, "");
       const dest = join(outputRoot, "cache", `${key}.cache.json`);
+      await mkdir(dirname(dest), { recursive: true });
+      const entry: CacheEntryFile = { lastModified, value };
+      await writeFile(dest, JSON.stringify(entry));
+    }),
+  );
+}
+
+// emitFetchEntries seeds the `fetch`/`unstable_cache` entries the build produced
+// under <distDir>/cache/fetch-cache, so a deployed app answers from them instead
+// of re-hitting every upstream on the first request to each instance. It is a
+// rewrite rather than a copy: the file holds the bare cache *value*, since Next
+// synthesizes the envelope's lastModified from the mtime and never stores it.
+// They land in their own output folder because they upload to a different
+// bucket than route entries (see CacheStore.readFetch for why).
+//
+// lastModified is stamped at build time, not taken from the mtime, to keep the
+// tag clock's pruning proof intact: it rests on every entry in a build having
+// lastModified >= deployedAt, and .next/cache survives across builds, so a
+// restored entry's mtime can long predate this deploy. That restarts a restored
+// entry's revalidate window — so one whose window has already elapsed by its
+// mtime is dropped rather than resurrected with a clock it did not earn.
+async function emitFetchEntries(
+  outputRoot: string,
+  distDir: string,
+): Promise<void> {
+  const fetchCacheDir = join(distDir, "cache", "fetch-cache");
+  let names: string[];
+  try {
+    names = await readdir(fetchCacheDir);
+  } catch {
+    return; // An app that cached no fetch has no directory at all.
+  }
+
+  const lastModified = Date.now();
+
+  await Promise.all(
+    names.map(async (name) => {
+      const src = join(fetchCacheDir, name);
+      const [raw, stats] = await Promise.all([
+        readFile(src, "utf8").catch(() => null),
+        lstat(src).catch(() => null),
+      ]);
+      if (raw === null || !stats?.isFile()) return;
+
+      let value: Record<string, unknown>;
+      try {
+        value = JSON.parse(raw);
+      } catch {
+        return; // A half-written entry is a miss, not a failed build.
+      }
+
+      // `revalidate: false` is force-cache: no window to elapse, always kept.
+      const revalidate = value.revalidate;
+      if (
+        typeof revalidate === "number" &&
+        stats.mtimeMs + revalidate * 1000 <= lastModified
+      ) {
+        return;
+      }
+
+      const dest = join(outputRoot, "fetch-cache", `${name}.cache.json`);
       await mkdir(dirname(dest), { recursive: true });
       const entry: CacheEntryFile = { lastModified, value };
       await writeFile(dest, JSON.stringify(entry));

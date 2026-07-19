@@ -77,31 +77,52 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 	return caches, nil
 }
 
-// uploadPrerenderAssets uploads each app's seeded ISR cache entries to the
-// account-global asset bucket under that app's own prefix, keeping their cache/
-// segment in the key so the deployed cache handler reads them back at exactly
-// that path. It is a no-op for a manifest with no cached app.
+// uploadPrerenderAssets uploads each app's seeded cache entries under that app's
+// own prefix, keeping the segment they were emitted under in the key so the
+// deployed cache handler reads them back at exactly that path. It is a no-op for
+// a manifest with no cached app.
+//
+// The two kinds of entry go to different buckets. Route entries follow
+// entryTarget to whichever store the substrate adopted, because the edge reads
+// them directly. Fetch entries hold upstream response bodies — origin-private
+// data — so they always land in the provider's own bucket, whatever the edge
+// offered.
 func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) error {
 	caches, err := appCaches(cfg, manifest)
 	if err != nil {
 		return err
 	}
 
-	type upload struct{ key, src string }
+	// Each segment of a build's cache output and where it publishes to.
+	segments := []struct {
+		dir string
+		to  uploadTarget
+	}{
+		{"cache", entryTarget(cfg)},
+		{"fetch-cache", uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket}},
+	}
+
+	type upload struct {
+		key, src string
+		to       uploadTarget
+	}
 	var uploads []upload
 	for app, cache := range caches {
 		// Cache entries live beside functions/ rather than inside it, and keep
-		// their cache/ segment in the key: that is exactly where the handler looks.
-		cacheDir := filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "cache")
-		entries, err := collectFiles(cacheDir)
-		if err != nil {
-			return err
-		}
-		for _, rel := range entries {
-			uploads = append(uploads, upload{
-				key: path.Join(cache.Prefix, "cache", rel),
-				src: filepath.Join(cacheDir, filepath.FromSlash(rel)),
-			})
+		// their own segment in the key: that is exactly where the handler looks.
+		for _, seg := range segments {
+			dir := filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), seg.dir)
+			entries, err := collectFiles(dir)
+			if err != nil {
+				return err
+			}
+			for _, rel := range entries {
+				uploads = append(uploads, upload{
+					key: path.Join(cache.Prefix, seg.dir, rel),
+					src: filepath.Join(dir, filepath.FromSlash(rel)),
+					to:  seg.to,
+				})
+			}
 		}
 	}
 	// Seeded before the entries and independently of them: an app with nothing
@@ -113,24 +134,38 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 		return nil
 	}
 
-	up, bucket := entryTarget(cfg)
-	if bucket == "" {
-		return fmt.Errorf("this project has cache entries to seed but no asset bucket is configured; re-run `ocel bootstrap`")
-	}
-	if up == nil {
-		return fmt.Errorf("no asset uploader configured")
+	for _, seg := range segments {
+		if err := seg.to.validate(); err != nil {
+			return err
+		}
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
 	g.SetLimit(8) // bounded S3 conns
 	for _, u := range uploads {
 		g.Go(func() error {
-			return uploadArtifact(ctx, up, bucket, u.key, func() ([]byte, error) {
+			return uploadArtifact(ctx, u.to.up, u.to.bucket, u.key, func() ([]byte, error) {
 				return os.ReadFile(u.src)
 			})
 		})
 	}
 	return g.Wait()
+}
+
+// uploadTarget is one bucket and the uploader that addresses it.
+type uploadTarget struct {
+	up     ArtifactUploader
+	bucket string
+}
+
+func (t uploadTarget) validate() error {
+	if t.bucket == "" {
+		return fmt.Errorf("this project has cache entries to seed but no asset bucket is configured; re-run `ocel bootstrap`")
+	}
+	if t.up == nil {
+		return fmt.Errorf("no asset uploader configured")
+	}
+	return nil
 }
 
 // tagSnapshot mirrors the TypeScript TagSnapshot in @ocel/next-cache. The deploy
@@ -203,11 +238,11 @@ func seedTagSnapshots(ctx context.Context, cfg Config, caches map[string]*isrCon
 		return fmt.Errorf("encode tag snapshot: %w", err)
 	}
 
-	up, bucket := entryTarget(cfg)
+	target := entryTarget(cfg)
 	for _, cache := range caches {
 		key := cache.Prefix + tagSnapshotSuffix
-		_, err := up.PutObject(ctx, &s3.PutObjectInput{
-			Bucket:      aws.String(bucket),
+		_, err := target.up.PutObject(ctx, &s3.PutObjectInput{
+			Bucket:      aws.String(target.bucket),
 			Key:         aws.String(key),
 			Body:        bytes.NewReader(body),
 			ContentType: aws.String("application/json"),
@@ -236,11 +271,11 @@ func isPreconditionFailed(err error) bool {
 // cache store when its edge offered one, and the provider's own asset bucket
 // when it did not. The cache handler makes the same choice from the coordinates
 // the membrane injects, so the two agree on one bucket by construction.
-func entryTarget(cfg Config) (ArtifactUploader, string) {
+func entryTarget(cfg Config) uploadTarget {
 	if cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil {
-		return cfg.CacheStoreUploader, cfg.CacheStoreBucket
+		return uploadTarget{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket}
 	}
-	return cfg.Uploader, cfg.AssetBucket
+	return uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket}
 }
 
 // collectFiles returns every file under dir as slash-separated paths relative to

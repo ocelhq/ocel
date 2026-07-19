@@ -6,7 +6,11 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
-import { isrObjectStore } from "./object-store.mjs";
+import {
+  isrObjectStore,
+  providerObjectStore,
+  type ObjectStore,
+} from "./object-store.mjs";
 import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 // The entry and tag-record shapes are the shared ISR contract — the same the
@@ -21,6 +25,13 @@ export type { CacheEntryFile, TagRecord } from "@ocel/next-cache";
 export interface CacheStore {
   readEntry(key: string): Promise<CacheEntryFile | null>;
   writeEntry(key: string, entry: CacheEntryFile): Promise<void>;
+  // Fetch entries are a separate backend, not a flavour of the same one: they
+  // hold upstream response bodies, which are origin-private and must never reach
+  // an adopted edge store the way route entries deliberately do. Separate
+  // methods keep that boundary in the type rather than inside an `if`. This is
+  // the canonical statement of that rule; the sites enforcing it point here.
+  readFetch(hash: string): Promise<CacheEntryFile | null>;
+  writeFetch(hash: string, entry: CacheEntryFile): Promise<void>;
   readTags(tags: string[]): Promise<Map<string, TagRecord>>;
   writeTags(tags: string[], record: TagRecord): Promise<void>;
 }
@@ -54,41 +65,56 @@ async function streamToString(body: any): Promise<string> {
 // function's IAM policy is scoped to — so a key built outside the namespace
 // fails closed rather than reading another app's cache.
 export function awsCacheStore(): CacheStore {
-  const { client: s3, bucket } = isrObjectStore();
   const prefix = env("OCEL_ISR_PREFIX");
   const table = env("OCEL_STATE_TABLE");
   const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
 
+  const entries = isrObjectStore();
+  const fetches = providerObjectStore();
+
   const ddb = new DynamoDBClient({});
 
   const objectKey = (key: string) => `${prefix}/cache/${key}.cache.json`;
+  const fetchKey = (hash: string) => `${prefix}/fetch-cache/${hash}.cache.json`;
   const tagPK = (tag: string) => `${tagNamespace}${tag}`;
 
-  return {
-    async readEntry(key) {
-      try {
-        const out = await s3.send(
-          new GetObjectCommand({ Bucket: bucket, Key: objectKey(key) }),
-        );
-        return JSON.parse(await streamToString(out.Body));
-      } catch (err: any) {
-        if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
-          return null;
-        }
-        throw err;
-      }
-    },
-
-    async writeEntry(key, entry) {
-      await s3.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: objectKey(key),
-          Body: JSON.stringify(entry),
-          ContentType: "application/json",
-        }),
+  async function read(
+    from: ObjectStore,
+    key: string,
+  ): Promise<CacheEntryFile | null> {
+    try {
+      const out = await from.client.send(
+        new GetObjectCommand({ Bucket: from.bucket, Key: key }),
       );
-    },
+      return JSON.parse(await streamToString(out.Body));
+    } catch (err: any) {
+      if (err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async function write(
+    to: ObjectStore,
+    key: string,
+    entry: CacheEntryFile,
+  ): Promise<void> {
+    await to.client.send(
+      new PutObjectCommand({
+        Bucket: to.bucket,
+        Key: key,
+        Body: JSON.stringify(entry),
+        ContentType: "application/json",
+      }),
+    );
+  }
+
+  return {
+    readEntry: (key) => read(entries, objectKey(key)),
+    writeEntry: (key, entry) => write(entries, objectKey(key), entry),
+    readFetch: (hash) => read(fetches, fetchKey(hash)),
+    writeFetch: (hash, entry) => write(fetches, fetchKey(hash), entry),
 
     // A tag whose record fails to come back is indistinguishable from a tag that
     // was never revalidated, and the caller reads that as "not expired" — so a

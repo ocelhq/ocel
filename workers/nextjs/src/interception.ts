@@ -226,7 +226,7 @@ async function readEntry(
   deps: InterceptDeps,
   routePath: string,
 ): Promise<CacheEntryFile | null> {
-  const key = `${cfg.prefix}/cache/${cacheKey(routePath, undefined)}.cache.json`;
+  const key = `${cfg.prefix}/cache/${cacheKey(routePath)}.cache.json`;
   const body = deps.store
     ? await storeText(deps.store, key)
     : await signedText(cfg, deps, key);
