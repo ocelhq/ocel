@@ -74,7 +74,7 @@ export function cacheKey(
   return key.toString();
 }
 
-function hasDraftCookie(request: Request): boolean {
+export function hasDraftCookie(request: Request): boolean {
   const cookie = request.headers.get("cookie");
   return (
     cookie !== null && new RegExp(`(?:^|;\\s*)${DRAFT_COOKIE}=`).test(cookie)
@@ -152,6 +152,28 @@ async function store(
   await deps.cache.put(keyRequest, forStorage(response, policy, target, now()));
 }
 
+// Every request arriving on a stale entry would otherwise start its own origin
+// render, so one isolate can put a burst of identical regenerations on a single
+// Lambda. Keyed by the cache object, which is one stable instance per isolate,
+// so the in-flight set neither leaks between isolates nor between tests.
+const inFlight = new WeakMap<Cache, Map<string, Promise<unknown>>>();
+
+export function refreshOnce(
+  deps: CacheDeps,
+  key: string,
+  run: () => Promise<unknown>,
+): void {
+  let pending = inFlight.get(deps.cache);
+  if (!pending) inFlight.set(deps.cache, (pending = new Map()));
+  if (pending.has(key)) return;
+
+  const promise = run()
+    .catch(() => {})
+    .finally(() => pending.delete(key));
+  pending.set(key, promise);
+  deps.waitUntil(promise);
+}
+
 export async function serveCached(
   request: Request,
   target: CacheTarget,
@@ -177,10 +199,10 @@ export async function serveCached(
       if (state === "stale") {
         // origin will do own staleness check and might serve stale while revalidating
         // force blocking response here
-        deps.waitUntil(
-          originBlocking()
-            .then((response) => store(keyRequest, target, deps, response))
-            .catch(() => {}),
+        refreshOnce(deps, target.key, () =>
+          originBlocking().then((response) =>
+            store(keyRequest, target, deps, response),
+          ),
         );
 
         return fromStorage(cached, "STALE");

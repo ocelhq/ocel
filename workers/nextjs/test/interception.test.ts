@@ -134,6 +134,16 @@ function appPage(opts: { tags?: string; lastModified?: number; postponed?: unkno
   };
 }
 
+// Most cases here are about whether an entry serves at all, which is the
+// complete-entry contract; `served` narrows to that so they read as before. The
+// PPR suite calls intercept directly.
+async function served(
+  ...args: Parameters<typeof intercept>
+): Promise<Response | null> {
+  const outcome = await intercept(...args);
+  return outcome?.kind === "complete" ? outcome.response : null;
+}
+
 const req = (init?: RequestInit) => new Request("https://app.example/blog", init);
 const target = (over: Partial<InterceptTarget> = {}): InterceptTarget => ({
   routePath: "/blog",
@@ -174,7 +184,7 @@ describe("readInterceptionConfig", () => {
 describe("intercept", () => {
   it("serves html for a fresh untagged page and never reads DynamoDB", async () => {
     const aws = fakeAws({ entries: { [s3Key("/blog")]: appPage() } });
-    const res = await intercept(req(), target(), cfg, { ...aws, now: () => 2_000 });
+    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
 
     expect(res).not.toBeNull();
     expect(res!.status).toBe(200);
@@ -190,7 +200,7 @@ describe("intercept", () => {
 
   it("serves the RSC payload when the request negotiates RSC", async () => {
     const aws = fakeAws({ entries: { [s3Key("/blog")]: appPage() } });
-    const res = await intercept(
+    const res = await served(
       req({ headers: { RSC: "1" } }),
       target(),
       cfg,
@@ -203,13 +213,13 @@ describe("intercept", () => {
 
   it("fails open (null) on an S3 miss", async () => {
     const aws = fakeAws({ entries: {} });
-    expect(await intercept(req(), target(), cfg, { ...aws, now: () => 2_000 })).toBeNull();
+    expect(await served(req(), target(), cfg, { ...aws, now: () => 2_000 })).toBeNull();
   });
 
   it("fails open past the revalidate window (time-based expiry)", async () => {
     const aws = fakeAws({ entries: { [s3Key("/blog")]: appPage({ lastModified: 1_000 }) } });
     // 61s later, revalidate is 60s.
-    const res = await intercept(req(), target({ revalidate: 60 }), cfg, {
+    const res = await served(req(), target({ revalidate: 60 }), cfg, {
       ...aws,
       now: () => 1_000 + 61_000,
     });
@@ -218,7 +228,7 @@ describe("intercept", () => {
 
   it("stays fresh within the window with a false (static) revalidate", async () => {
     const aws = fakeAws({ entries: { [s3Key("/blog")]: appPage({ lastModified: 1_000 }) } });
-    const res = await intercept(req(), target({ revalidate: false }), cfg, {
+    const res = await served(req(), target({ revalidate: false }), cfg, {
       ...aws,
       now: () => 1_000 + 10 * 365 * 86400_000,
     });
@@ -231,7 +241,7 @@ describe("intercept", () => {
       entries: { [s3Key("/blog")]: appPage({ tags: "products", lastModified: 1_000 }) },
       tags: { products: { expired: 1_500 } },
     });
-    const res = await intercept(req(), target(), cfg, { ...aws, now: () => 2_000 });
+    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
     expect(res).toBeNull();
     expect(aws.ddbCalls.length).toBe(1);
   });
@@ -241,7 +251,7 @@ describe("intercept", () => {
       entries: { [s3Key("/blog")]: appPage({ tags: "products", lastModified: 1_000 }) },
       tags: { products: { expired: 500 } },
     });
-    const res = await intercept(req(), target(), cfg, { ...aws, now: () => 2_000 });
+    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
     expect(res).not.toBeNull();
   });
 
@@ -251,15 +261,19 @@ describe("intercept", () => {
       tags: {},
       ddbStatus: 500,
     });
-    const res = await intercept(req(), target(), cfg, { ...aws, now: () => 2_000 });
+    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
     expect(res).toBeNull();
   });
 
-  it("forwards (fails open) a partially-postponed PPR page", async () => {
+  it("returns a PPR shell — not a complete response — for a postponed page", async () => {
     const aws = fakeAws({
       entries: { [s3Key("/blog")]: appPage({ postponed: "STATE" }) },
     });
-    expect(await intercept(req(), target(), cfg, { ...aws, now: () => 2_000 })).toBeNull();
+    const outcome = await intercept(req(), target(), cfg, {
+      ...aws,
+      now: () => 2_000,
+    });
+    expect(outcome?.kind).toBe("ppr");
   });
 
   it("serves an APP_ROUTE body with its stored headers verbatim", async () => {
@@ -273,7 +287,7 @@ describe("intercept", () => {
       },
     };
     const aws = fakeAws({ entries: { [s3Key("/blog")]: entry } });
-    const res = await intercept(req(), target(), cfg, { ...aws, now: () => 2_000 });
+    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
     expect(res!.status).toBe(201);
     expect(res!.headers.get("content-type")).toBe("application/json");
     expect(await res!.text()).toBe('{"ok":true}');
@@ -293,7 +307,7 @@ describe("intercept through the object-store binding", () => {
   it("serves a hit from the binding without making a single AWS call", async () => {
     const store = fakeStore({ [s3Key("/blog")]: JSON.stringify(appPage()) });
     const deps = storeDeps(store, { now: () => 2_000 });
-    const res = await intercept(req(), target(), cfg, deps);
+    const res = await served(req(), target(), cfg, deps);
 
     expect(res!.status).toBe(200);
     expect(await res!.text()).toBe("<html>hi</html>");
@@ -310,7 +324,7 @@ describe("intercept through the object-store binding", () => {
     });
     const deps = storeDeps(store, { now: () => 2_000 });
 
-    expect(await intercept(req(), target(), cfg, deps)).toBeNull();
+    expect(await served(req(), target(), cfg, deps)).toBeNull();
     expect(store.gets).toContain(snapshotKey);
     expect(deps.ddbCalls).toEqual([]);
   });
@@ -320,7 +334,7 @@ describe("intercept through the object-store binding", () => {
       [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
       [snapshotKey]: JSON.stringify(snapshot({ records: { products: { expired: 500 } } })),
     });
-    const res = await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
+    const res = await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
     expect(res).not.toBeNull();
   });
 
@@ -329,21 +343,21 @@ describe("intercept through the object-store binding", () => {
       [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
       [snapshotKey]: JSON.stringify(snapshot()),
     });
-    const res = await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
+    const res = await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
     expect(res).not.toBeNull();
   });
 
   it("falls open on a store miss for the entry", async () => {
     const store = fakeStore({});
     expect(
-      await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
+      await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
     ).toBeNull();
   });
 
   it("falls open when the store errors", async () => {
     const store = fakeStore({}, { fail: true });
     expect(
-      await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
+      await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
     ).toBeNull();
   });
 
@@ -366,7 +380,7 @@ describe("intercept through the object-store binding", () => {
         ...(body ? { [snapshotKey]: body } : {}),
       });
       const deps = storeDeps(store, { now: () => 2_000 });
-      expect(await intercept(req(), target(), cfg, deps)).toBeNull();
+      expect(await served(req(), target(), cfg, deps)).toBeNull();
       expect(deps.ddbCalls).toEqual([]);
     });
   }
@@ -382,10 +396,10 @@ describe("intercept through the object-store binding", () => {
     // Far enough apart that the in-isolate memo has lapsed, so the second read
     // is answered by the PoP cache rather than the memo.
     expect(
-      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
+      await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
     ).not.toBeNull();
     expect(
-      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 20_000 })),
+      await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 20_000 })),
     ).not.toBeNull();
 
     expect(store.gets.filter((k) => k === snapshotKey).length).toBe(1);
@@ -400,8 +414,8 @@ describe("intercept through the object-store binding", () => {
     });
     const snapshotCache = fakeCache();
 
-    await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 }));
-    await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_100 }));
+    await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 }));
+    await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_100 }));
 
     expect(snapshotCache.calls.match).toBe(1);
     expect(store.gets.filter((k) => k === snapshotKey).length).toBe(1);
@@ -415,10 +429,10 @@ describe("intercept through the object-store binding", () => {
     const snapshotCache = fakeCache({ inert: true });
 
     expect(
-      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
+      await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
     ).toBeNull();
     expect(
-      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 20_000 })),
+      await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 20_000 })),
     ).toBeNull();
 
     expect(store.gets.filter((k) => k === snapshotKey).length).toBe(2);
@@ -432,11 +446,113 @@ describe("intercept through the object-store binding", () => {
     const snapshotCache = fakeCache();
 
     expect(
-      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
+      await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
     ).not.toBeNull();
     expect(
-      await intercept(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 11_000 })),
+      await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 11_000 })),
     ).toBeNull();
+  });
+});
+
+// A PPR entry is discriminated on value.postponed, never on renderingMode: the
+// build marks routes PARTIALLY_STATIC whether or not they actually postponed,
+// and revalidation can change the answer under a fixed manifest.
+describe("intercept, PPR entries", () => {
+  const pprEntry = (over: Parameters<typeof appPage>[0] = {}) =>
+    appPage({ postponed: "STATE", ...over });
+
+  const pprTarget = (over: Partial<InterceptTarget> = {}) =>
+    target({ revalidate: 60, expiration: 3600, ...over });
+
+  const read = (t: InterceptTarget, entries: Record<string, unknown>, now: number) =>
+    intercept(req(), t, cfg, { ...fakeAws({ entries }), now: () => now });
+
+  it("hands back the shell, the postponed state, and no shared-cache claim", async () => {
+    const outcome = await read(pprTarget(), { [s3Key("/blog")]: pprEntry() }, 2_000);
+
+    expect(outcome).toMatchObject({ kind: "ppr", postponed: "STATE", stale: false });
+    const shell = (outcome as { shell: Response }).shell;
+    expect(await shell.text()).toBe("<html>hi</html>");
+    // Freshness is the caller's to declare; nothing here invites a cache.
+    expect(shell.headers.get("cache-control")).toBeNull();
+  });
+
+  it("serves the shell for the RSC variant off the same postponed state", async () => {
+    const outcome = await intercept(
+      req({ headers: { RSC: "1" } }),
+      pprTarget(),
+      cfg,
+      { ...fakeAws({ entries: { [s3Key("/blog")]: pprEntry() } }), now: () => 2_000 },
+    );
+
+    expect(outcome).toMatchObject({ kind: "ppr", postponed: "STATE" });
+    const shell = (outcome as { shell: Response }).shell;
+    expect(shell.headers.get("content-type")).toBe("text/x-component");
+    expect(await shell.text()).toBe("RSC-PAYLOAD");
+  });
+
+  it("still serves past initialRevalidate, marked stale", async () => {
+    const outcome = await read(
+      pprTarget(),
+      { [s3Key("/blog")]: pprEntry({ lastModified: 1_000 }) },
+      1_000 + 61_000,
+    );
+
+    expect(outcome).toMatchObject({ kind: "ppr", stale: true });
+  });
+
+  it("falls open past initialExpiration", async () => {
+    const outcome = await read(
+      pprTarget({ expiration: 3600 }),
+      { [s3Key("/blog")]: pprEntry({ lastModified: 1_000 }) },
+      1_000 + 3_600_000,
+    );
+
+    expect(outcome).toBeNull();
+  });
+
+  it("still refuses a PPR entry whose tags were invalidated", async () => {
+    const aws = fakeAws({
+      entries: { [s3Key("/blog")]: pprEntry({ tags: "posts" }) },
+      tags: { posts: { expired: 1_500 } },
+    });
+    expect(
+      await intercept(req(), pprTarget(), cfg, { ...aws, now: () => 2_000 }),
+    ).toBeNull();
+  });
+
+  it("resumes a concrete path from the route's param-agnostic fallback shell", async () => {
+    const outcome = await read(
+      pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" }),
+      { [s3Key("/posts/[id]")]: pprEntry() },
+      2_000,
+    );
+
+    expect(outcome).toMatchObject({ kind: "ppr", postponed: "STATE" });
+  });
+
+  it("never serves a complete entry found under the dynamic pattern", async () => {
+    // Without a postponed state that entry is some other path's rendered page.
+    const outcome = await read(
+      pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" }),
+      { [s3Key("/posts/[id]")]: appPage() },
+      2_000,
+    );
+
+    expect(outcome).toBeNull();
+  });
+
+  it("prefers the concrete entry over the fallback shell", async () => {
+    const outcome = await read(
+      pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" }),
+      {
+        [s3Key("/posts/7")]: appPage(),
+        [s3Key("/posts/[id]")]: pprEntry(),
+      },
+      2_000,
+    );
+
+    expect(outcome?.kind).toBe("complete");
   });
 });
 
@@ -459,7 +575,7 @@ describe("the published snapshot format", () => {
     });
     const deps = { ...fakeAws({}), store, now: () => within };
 
-    const res = await intercept(req(), target({ revalidate: false }), cfg, deps);
+    const res = await served(req(), target({ revalidate: false }), cfg, deps);
     expect(res).not.toBeNull();
     expect(deps.ddbCalls).toEqual([]);
   });
@@ -471,7 +587,7 @@ describe("the published snapshot format", () => {
       ),
       [snapshotKey]: genesisSnapshot,
     });
-    const res = await intercept(req(), target({ revalidate: false }), cfg, {
+    const res = await served(req(), target({ revalidate: false }), cfg, {
       ...fakeAws({}),
       store,
       now: () => genesis.validUntil,

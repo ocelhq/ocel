@@ -264,6 +264,154 @@ describe("dispatchResult", () => {
     expect(lambdaCalls()).toBe(1);
   });
 
+  // A PPR entry (APP_PAGE with a postponed state) routes to the compose path:
+  // the shell is served from the ISR read and the origin is POSTed a resume,
+  // never a plain render. These assert that dispatch-level wiring.
+  function pprDeps(opts: {
+    resume: string;
+    entryPath?: string;
+    entry: Record<string, unknown> | null;
+    dispatch?: Record<string, unknown>;
+  }): { deps: RouteDeps; resumeRequests: () => Request[]; cachePuts: () => number } {
+    const resumeRequests: Request[] = [];
+    let puts = 0;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: opts.dispatch ?? {
+          "/ppr": {
+            kind: "prerender",
+            id: "/ppr",
+            config: {},
+            fallback: { initialRevalidate: 60, initialExpiration: 3600 },
+            pprChain: { headers: { "next-resume": "1" } },
+          },
+        },
+      },
+      functionUrls: { "/ppr": "https://fn.example.com", "/posts/[id]": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        resumeRequests.push(req);
+        return new Response(opts.resume, { status: 200 });
+      }) as unknown as typeof fetch,
+      cache: {
+        cache: {
+          match: async () => undefined,
+          put: async () => {
+            puts++;
+          },
+        } as unknown as Cache,
+        waitUntil: () => {},
+      },
+      interception: {
+        config: interceptionConfig,
+        now: () => 2_000,
+        signedFetch: (async (input: RequestInfo | URL) => {
+          const url = typeof input === "string" ? input : input.toString();
+          if (url.includes(".s3.")) {
+            const key = decodeURIComponent(new URL(url).pathname.slice(1));
+            const want = `${interceptionConfig.prefix}/cache/${opts.entryPath ?? "ppr"}.cache.json`;
+            return opts.entry && key === want
+              ? new Response(JSON.stringify(opts.entry), { status: 200 })
+              : new Response("", { status: 404 });
+          }
+          return new Response(JSON.stringify({ Responses: {} }), { status: 200 });
+        }) as typeof fetch,
+      },
+    });
+    return { deps, resumeRequests: () => resumeRequests, cachePuts: () => puts };
+  }
+
+  const pprShellEntry = {
+    lastModified: 1_000,
+    value: {
+      kind: "APP_PAGE",
+      html: "[shell]",
+      postponed: "POSTPONED",
+      status: 200,
+      headers: {},
+    },
+  };
+
+  const dispatchPpr = (deps: RouteDeps, headers?: Record<string, string>) =>
+    dispatchResult(
+      { resolvedPathname: "/ppr", invocationTarget: { pathname: "/ppr" } },
+      new Request("https://app.example/ppr", { headers }),
+      deps,
+    );
+
+  it("composes shell + resumed dynamic for a PPR entry and POSTs the resume", async () => {
+    const { deps, resumeRequests } = pprDeps({
+      resume: "[dynamic]",
+      entry: pprShellEntry,
+    });
+
+    const res = await dispatchPpr(deps);
+
+    expect(await res.text()).toBe("[shell][dynamic]");
+    expect(res.headers.get("x-ocel-ppr")).toBe("HIT");
+    const [resume] = resumeRequests();
+    expect(resume.method).toBe("POST");
+    expect(resume.headers.get("next-resume")).toBe("1");
+    expect(await resume.text()).toBe("POSTPONED");
+  });
+
+  it("never puts a composed PPR response into the colo cache", async () => {
+    const { deps, cachePuts } = pprDeps({ resume: "[dynamic]", entry: pprShellEntry });
+
+    const res = await dispatchPpr(deps);
+    await res.text();
+
+    expect(res.headers.get("cache-control")).toBe("private, no-store");
+    expect(cachePuts()).toBe(0);
+  });
+
+  it("forwards the client's cookie to the resume origin", async () => {
+    const { deps, resumeRequests } = pprDeps({ resume: "[dynamic]", entry: pprShellEntry });
+
+    await dispatchPpr(deps, { cookie: "session=abc" });
+
+    expect(resumeRequests()[0].headers.get("cookie")).toBe("session=abc");
+  });
+
+  it("bypasses PPR entirely when the draft cookie is present", async () => {
+    const { deps, resumeRequests } = pprDeps({ resume: "from-lambda", entry: pprShellEntry });
+
+    const res = await dispatchPpr(deps, { cookie: "__prerender_bypass=1" });
+
+    // Falls through to a plain render (GET), not a resume POST.
+    expect(resumeRequests()[0].method).toBe("GET");
+    expect(await res.text()).toBe("from-lambda");
+  });
+
+  it("resumes a concrete dynamic path from the [id] fallback shell", async () => {
+    const { deps, resumeRequests } = pprDeps({
+      resume: "[dynamic]",
+      entryPath: "posts/[id]",
+      entry: pprShellEntry,
+      dispatch: {
+        "/posts/[id]": {
+          kind: "prerender",
+          id: "/posts/[id]",
+          config: {},
+          fallback: { initialRevalidate: 60 },
+          pprChain: { headers: { "next-resume": "1" } },
+        },
+      },
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/posts/[id]", invocationTarget: { pathname: "/posts/7" } },
+      new Request("https://app.example/posts/7"),
+      deps,
+    );
+
+    expect(await res.text()).toBe("[shell][dynamic]");
+    expect(resumeRequests()[0].method).toBe("POST");
+  });
+
   it("returns 502 when a lambda route has no Function URL", async () => {
     const deps = baseDeps({
       manifest: {

@@ -51,7 +51,20 @@ export interface InterceptionConfig {
 export interface InterceptTarget {
   routePath: string;
   revalidate: number | false | undefined;
+  // How long a stale entry may still be served while a refresh runs behind it.
+  // Only a PPR entry serves stale; absent, it never expires on time alone.
+  expiration?: number;
+  // The route's dynamic dispatch pattern (e.g. /posts/[id]). A concrete path
+  // with no entry of its own falls back to this route's param-agnostic shell.
+  fallbackPath?: string;
 }
+
+// What a read of the ISR cache produced. A complete entry answers the request on
+// its own; a PPR entry answers only its static half, and its shell has to be
+// composed with a resumed render before it is a response.
+export type Interception =
+  | { kind: "complete"; response: Response }
+  | { kind: "ppr"; shell: Response; postponed: string; stale: boolean };
 
 // One stored object, as the R2 binding hands it back.
 export interface StoredObject {
@@ -159,23 +172,25 @@ export function signerFor(cfg: InterceptionConfig): typeof fetch {
     aws.fetch(input as string, init)) as typeof fetch;
 }
 
-// intercept attempts to serve a prerender target directly from S3+DynamoDB. It
-// returns a reconstructed Response on a clean, fresh, unexpired hit, or null to
-// fail open to the Lambda origin. It never throws.
+// intercept attempts to answer a prerender target from the ISR cache. It returns
+// a complete response, a PPR shell awaiting a resumed render, or null to fail
+// open to the Lambda origin. It never throws.
 export async function intercept(
   request: Request,
   target: InterceptTarget,
   cfg: InterceptionConfig,
   deps: InterceptDeps,
-): Promise<Response | null> {
+): Promise<Interception | null> {
   try {
     const now = (deps.now ?? Date.now)();
 
-    const entry = await readEntry(cfg, deps, target.routePath);
+    const entry =
+      (await readEntry(cfg, deps, target.routePath)) ??
+      (await readFallbackShell(cfg, deps, target));
     if (!entry) return null;
 
     const value = entry.value;
-    if (!isCompleteServable(value)) return null;
+    if (!isServable(value)) return null;
 
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
@@ -189,33 +204,68 @@ export async function intercept(
     }
 
     const ageSeconds = (now - entry.lastModified) / 1000;
-    if (typeof target.revalidate === "number" && ageSeconds >= target.revalidate) {
-      return null;
+    const revalidate =
+      typeof target.revalidate === "number" ? target.revalidate : undefined;
+    const stale = revalidate !== undefined && ageSeconds >= revalidate;
+
+    if (value.kind === "APP_PAGE" && value.postponed !== undefined) {
+      // A stale PPR pair still serves — its dynamic half is rendered fresh
+      // either way — until the expiration window closes on it entirely.
+      if (
+        typeof target.expiration === "number" &&
+        ageSeconds >= target.expiration
+      ) {
+        return null;
+      }
+      const shell = reconstruct(request, value);
+      return shell && { kind: "ppr", shell, postponed: value.postponed, stale };
     }
 
-    const revalidateWindow =
-      typeof target.revalidate === "number"
-        ? Math.max(1, target.revalidate - Math.floor(ageSeconds))
+    if (stale) return null;
+
+    const response = reconstruct(request, value);
+    if (!response) return null;
+    const window =
+      revalidate !== undefined
+        ? Math.max(1, revalidate - Math.floor(ageSeconds))
         : STATIC_WINDOW;
-    return reconstruct(request, value, revalidateWindow);
+    response.headers.set("cache-control", `s-maxage=${window}`);
+    return { kind: "complete", response };
   } catch {
     return null;
   }
 }
 
-// isCompleteServable gates interception to the entry kinds it can serve in full:
-// an APP_PAGE without a postponed (PPR) shell, a PAGES html entry, or an
-// APP_ROUTE body. FETCH and partially-postponed entries forward to the Lambda.
-function isCompleteServable(value: Record<string, any>): boolean {
+// isServable gates interception to the entry kinds it can rebuild a response
+// from: an APP_PAGE, a PAGES html entry, or an APP_ROUTE body. FETCH entries and
+// anything unrecognised forward to the Lambda.
+function isServable(value: Record<string, any>): boolean {
   switch (value?.kind) {
     case "APP_PAGE":
-      return value.postponed === undefined;
     case "PAGES":
     case "APP_ROUTE":
       return true;
     default:
       return false;
   }
+}
+
+// readFallbackShell is the one place a request is answered from a shell built
+// for a different (param-agnostic) path, so it is also the one place to change
+// if that turns out not to resume correctly for arbitrary params — the
+// assumption is unproven until it runs against a real deploy (bd ocelhq-jpx).
+// Only a postponed entry qualifies: a complete entry under the dynamic pattern
+// would be another route's rendered page, not this one's.
+async function readFallbackShell(
+  cfg: InterceptionConfig,
+  deps: InterceptDeps,
+  target: InterceptTarget,
+): Promise<CacheEntryFile | null> {
+  if (!target.fallbackPath || target.fallbackPath === target.routePath) {
+    return null;
+  }
+  const entry = await readEntry(cfg, deps, target.fallbackPath);
+  return entry?.value?.postponed === undefined ? null : entry;
 }
 
 // readEntry fetches the entry object through whichever path is configured. The
@@ -393,14 +443,13 @@ async function readTags(
 // negotiating RSC vs html and deriving each variant's content-type the way Next
 // does (an APP_PAGE stores html and RSC under one entry with the content-type
 // stripped). The stored headers are carried through, minus the internal tag
-// header, and cache-control is set to the entry's remaining revalidate window so
-// the CDN expires when the entry's revalidate window does, not a full window
-// later. An x-ocel-isr: HIT marker is stamped so the serve is distinguishable
-// from a Lambda-origin one. Returns null on an incomplete entry.
+// header. An x-ocel-isr: HIT marker is stamped so the serve is distinguishable
+// from a Lambda-origin one. Freshness is the caller's to declare: a complete
+// entry gets its remaining revalidate window, a PPR shell gets no shared cache
+// at all. Returns null on an incomplete entry.
 function reconstruct(
   request: Request,
   value: Record<string, any>,
-  revalidateWindow: number,
 ): Response | null {
   const restored = deserialize(value);
   const headers = new Headers();
@@ -433,7 +482,6 @@ function reconstruct(
     headers.set("content-type", "text/html; charset=utf-8");
   }
 
-  headers.set("cache-control", `s-maxage=${revalidateWindow}`);
   headers.set(ISR_STATUS, "HIT");
   return new Response(body, { status, headers });
 }
