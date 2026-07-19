@@ -189,6 +189,32 @@ async function publish(backend: UseCacheStore): Promise<void> {
   }
 }
 
+// The singular handler makes its own durable tag write, so on an app with no
+// `use cache` anywhere nothing else ever calls into this clock — and a drain
+// that never runs is a replica that never hears about the invalidation. This is
+// the kick that wakes it, deliberately outside the read path's throttle: it
+// answers one specific event, and throttling it would drop that event.
+//
+// The record is merged locally before the drain because the index is eventually
+// consistent. Publishing only what the query read back would produce a snapshot
+// missing the very invalidation that woke the publisher.
+export async function recordAndPublish(
+  tags: string[],
+  record: TagRecord,
+): Promise<void> {
+  for (const tag of tags) observe(tag, record);
+
+  // Joined rather than raced: a sync already in flight was started before this
+  // write and holds the cursor, so a second one alongside it would advance the
+  // cursor past records neither had read.
+  if (state.inflight) await state.inflight;
+
+  state.lastAttemptAt = now();
+  await (state.inflight = sync().finally(() => {
+    state.inflight = null;
+  }));
+}
+
 export const tagClock: TagClock = {
   // Mirrors Next's arithmetic exactly: durations mark the tag stale now and,
   // only if an expire window was given, dead at the end of it; no durations

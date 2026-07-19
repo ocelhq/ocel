@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TagSnapshot } from "@ocel/next-cache";
+import type { CacheStore } from "../src/next/cache-store.mjs";
 import type {
   StoredTagSnapshot,
   TagRecordPage,
@@ -16,6 +17,7 @@ function fakeSnapshots() {
   let version = 0;
   let failure: Error | null = null;
   let interposed: TagSnapshot | null = null;
+  let gate: Promise<void> | null = null;
   let writes = 0;
   let reads = 0;
 
@@ -26,6 +28,7 @@ function fakeSnapshots() {
     put(snapshot: TagSnapshot): void;
     putRaw(body: string): void;
     interposeOnce(snapshot: TagSnapshot): void;
+    hold(): () => void;
     breakWrites(err?: Error): void;
     fixWrites(): void;
   } = {
@@ -49,6 +52,16 @@ function fakeSnapshots() {
     interposeOnce(snapshot) {
       interposed = snapshot;
     },
+    // Stalls every write until the returned release is called, so a test can
+    // prove a caller resolved without the publish rather than racing it.
+    hold() {
+      let release!: () => void;
+      gate = new Promise<void>((resolve) => (release = resolve));
+      return () => {
+        gate = null;
+        release();
+      };
+    },
     breakWrites(err = new Error("r2 is down")) {
       failure = err;
     },
@@ -71,6 +84,7 @@ function fakeSnapshots() {
       writes++;
       // Yields, so concurrent publishers really do interleave read and write.
       await Promise.resolve();
+      if (gate) await gate;
       if (failure) throw failure;
       if (interposed) {
         store.put(interposed);
@@ -175,6 +189,50 @@ async function load(store: UseCacheStore | null, env: Record<string, string> = {
   const handler = (await import("../src/next/use-cache-default.mjs")).default;
   clock.setTagClockStore(store);
   return { tagClock: clock.tagClock, handler };
+}
+
+// The singular handler's whole backing view. Only the tag write matters here:
+// on the classic ISR model it is the one thing that ever reaches the clock. It
+// indexes into the same rows the clock queries, exactly as the real store does —
+// pass null to model an index that has not caught up yet.
+function fakeIsrStore(index: ReturnType<typeof fakeStore> | null): CacheStore {
+  return {
+    async readEntry() {
+      return null;
+    },
+    async writeEntry() {},
+    async readTags() {
+      return new Map();
+    },
+    async writeTags(tags, record) {
+      const writtenAt = Date.now();
+      for (const tag of tags) index?.seed(tag, { ...record, writtenAt });
+    },
+  };
+}
+
+// Loads both caching models against one shared clock, so a test can drive either
+// and observe what the other sees.
+async function loadBoth(store: ReturnType<typeof fakeStore>, indexed = true) {
+  vi.resetModules();
+  const clock = await import("../src/next/tag-clock.mjs");
+  const handler = (await import("../src/next/use-cache-default.mjs")).default;
+  const CacheHandler = (await import("../src/next/cache-handler.mjs")).default;
+  clock.setTagClockStore(store);
+  CacheHandler.store = fakeIsrStore(indexed ? store : null);
+  return { tagClock: clock.tagClock, handler, isr: new CacheHandler() };
+}
+
+// Runs `fn` the way the membrane runs an invocation: work it defers is collected
+// rather than awaited, so a test can assert what the request itself paid for and
+// then settle the rest deliberately.
+async function invocation(fn: () => Promise<unknown>): Promise<Promise<unknown>[]> {
+  const { runWithWaitUntil } = await import("../src/shared/background.mjs");
+  const deferred: Promise<unknown>[] = [];
+  await runWithWaitUntil((task) => {
+    deferred.push(task);
+  }, fn);
+  return deferred;
 }
 
 function streamOf(body: string): ReadableStream<Uint8Array> {
@@ -625,4 +683,78 @@ test("works with no durable store bound at all", async () => {
   await expect(handler.updateTags(["products"])).resolves.toBeUndefined();
 
   expect(await handler.get("k", [])).toBeUndefined();
+});
+
+// The sync drain is what publishes, and on an app with no `use cache` anywhere
+// nothing calls into the clock at all: the singular handler's invalidation is
+// the only thing that can wake the publisher.
+
+test("an invalidation on the classic ISR model publishes a snapshot", async () => {
+  const store = fakeStore();
+  const { isr } = await loadBoth(store);
+
+  const deferred = await invocation(() => isr.revalidateTag("products"));
+  await Promise.all(deferred);
+
+  expect(store.snapshots!.current!.records.products!.expired).toBeGreaterThan(0);
+});
+
+// The index is eventually consistent, so a publish that only carried what the
+// drain read back would omit the very invalidation that woke it.
+test("publishes an invalidation the index has not caught up to", async () => {
+  const store = fakeStore();
+  const { isr } = await loadBoth(store, false);
+
+  const deferred = await invocation(() => isr.revalidateTag("products"));
+  await Promise.all(deferred);
+
+  expect(store.snapshots!.current!.records.products!.expired).toBeGreaterThan(0);
+});
+
+// Resolving while the write is stalled is the whole assertion: a publish on the
+// request path would hang here instead.
+test("the invalidating request does not wait for the publish", async () => {
+  const store = fakeStore();
+  const { isr } = await loadBoth(store);
+  const release = store.snapshots!.hold();
+
+  const deferred = await invocation(() => isr.revalidateTag("products"));
+  expect(store.snapshots!.current).toBeNull();
+
+  release();
+  await Promise.all(deferred);
+  expect(store.snapshots!.current).not.toBeNull();
+});
+
+// Next hands revalidateTag through with no try/catch, so anything the publish
+// can throw would fail the request that raised the invalidation.
+test("a failing publish cannot fail the invalidating request", async () => {
+  const store = fakeStore();
+  const { isr } = await loadBoth(store);
+  store.snapshots!.breakWrites();
+  store.breakQueries();
+
+  const deferred = await invocation(() => isr.revalidateTag("products"));
+
+  await expect(Promise.all(deferred)).resolves.toBeDefined();
+  expect(store.snapshots!.current).toBeNull();
+});
+
+// One clock and one publisher: an app that mixes the two caching models must not
+// have them racing each other with half the picture each.
+test("both caching models drive the same publisher", async () => {
+  const store = fakeStore();
+  const { tagClock, handler, isr } = await loadBoth(store);
+
+  await handler.updateTags(["reviews"]);
+  await handler.refreshTags();
+
+  const deferred = await invocation(() => isr.revalidateTag("products"));
+  await Promise.all(deferred);
+
+  expect(Object.keys(store.snapshots!.current!.records).sort()).toEqual([
+    "products",
+    "reviews",
+  ]);
+  expect(await tagClock.getExpiration(["products"])).toBeGreaterThan(0);
 });
