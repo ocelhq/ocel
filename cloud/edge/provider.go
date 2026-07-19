@@ -79,6 +79,23 @@ type Worker struct {
 	AssetBinding string
 	// Assets are the truly-static files served alongside the worker.
 	Assets []StaticAsset
+	// ObjectStore is the store the worker reads through an edge-native binding
+	// rather than signed HTTP. Empty when the worker reads no object store.
+	ObjectStore ObjectStore
+}
+
+// ObjectStore is a worker's binding to bulk storage the edge itself serves: the
+// env name the worker reads the store from, and the bucket bound there. Both
+// halves are named generically — an edge maps them onto whatever object store it
+// runs, exactly as it maps AssetBinding onto its own asset fetcher — so no
+// vendor's product enters the contract.
+//
+// A framework asks for a store by Binding alone; the edge fills Bucket with what
+// it provisioned. Neither half alone is a binding: an edge with no store for the
+// worker to read leaves Bucket empty and uploads no binding at all.
+type ObjectStore struct {
+	Binding string
+	Bucket  string
 }
 
 // WorkerModule is one module of a worker upload: a name (as the entrypoint's

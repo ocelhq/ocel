@@ -18,8 +18,9 @@ import (
 // this assembly and the worker's TypeScript (readInterceptionConfig and the
 // router), so both sides of it live here.
 const (
-	assetBinding    = "ASSETS"
-	functionURLsVar = "FUNCTION_URLS"
+	assetBinding       = "ASSETS"
+	objectStoreBinding = "OCEL_CACHE_STORE"
+	functionURLsVar    = "FUNCTION_URLS"
 
 	accessKeyIDVar   = "OCEL_EDGE_ACCESS_KEY_ID"
 	secretKeySecret  = "OCEL_EDGE_SECRET_KEY"
@@ -80,6 +81,9 @@ func AssembleCloudflare(src edge.WorkerSource, r edge.Resolver) (edge.Worker, er
 		Secrets:      secrets,
 		AssetBinding: assetBinding,
 		Assets:       assets,
+		// The worker always asks for its cache store; an edge with none to bind
+		// simply binds nothing and the worker falls back to the origin.
+		ObjectStore: edge.ObjectStore{Binding: objectStoreBinding},
 	}, nil
 }
 
