@@ -13,6 +13,11 @@ beforeEach(() => {
 afterEach(() => {
   vi.resetModules();
   vi.restoreAllMocks();
+  // Whether a store was adopted decides which bucket the store binds, so it has
+  // to be cleared between tests or one test's adoption leaks into the next.
+  for (const v of Object.keys(process.env)) {
+    if (v.startsWith("OCEL_ISR_STORE_")) delete process.env[v];
+  }
 });
 
 // Drives the store against a scripted DynamoDB: each entry is one send()
@@ -315,4 +320,115 @@ test("surfaces a read failure that is not an absent object", async () => {
   const { store } = await storeWithObjects([new Error("s3 is down")]);
 
   await expect(store.readEntry("k")).rejects.toThrow(/down/);
+});
+
+// The tag snapshot is the edge's replica of the clock. It lives in the adopted
+// store because that is the one the edge can read, and is written only under a
+// conditional PUT so two publishers racing cannot lose an invalidation.
+const adopted = {
+  OCEL_ISR_STORE_BUCKET: "isr",
+  OCEL_ISR_STORE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
+  OCEL_ISR_STORE_REGION: "auto",
+  OCEL_ISR_STORE_ACCESS_KEY_ID: "AK",
+  OCEL_ISR_STORE_SECRET_ACCESS_KEY: "s3cret",
+};
+
+const snapshot = {
+  version: 1 as const,
+  deployedAt: 1_000,
+  generatedAt: 2_000,
+  validUntil: 3_000,
+  records: { products: { expired: 1_500 } },
+};
+
+async function snapshotsWith(responses: any[], env: Record<string, string> = adopted) {
+  Object.assign(process.env, env);
+  const { store, sends } = await storeWithObjects(responses);
+  return { snapshots: store.snapshots, sends };
+}
+
+test("keys the snapshot beside the build's cache entries in the adopted store", async () => {
+  const { snapshots, sends } = await snapshotsWith([{}]);
+
+  await snapshots!.write(snapshot, null);
+
+  expect(sends[0].Bucket).toBe("isr");
+  expect(sends[0].Key).toBe("prod/proj/app/BID/tag-clock.json");
+  expect(sends[0].ContentType).toBe("application/json");
+  expect(JSON.parse(sends[0].Body)).toEqual(snapshot);
+});
+
+// Creating is conditional too, so a publisher that read "absent" cannot clobber
+// an object another publisher — or the deploy's own seed — created meanwhile.
+test("creates the snapshot only where none exists", async () => {
+  const { snapshots, sends } = await snapshotsWith([{}]);
+
+  await expect(snapshots!.write(snapshot, null)).resolves.toBe(true);
+
+  expect(sends[0].IfNoneMatch).toBe("*");
+  expect(sends[0].IfMatch).toBeUndefined();
+});
+
+test("replaces the snapshot only where it still carries the etag that was read", async () => {
+  const { snapshots, sends } = await snapshotsWith([{}]);
+
+  await expect(snapshots!.write(snapshot, '"abc"')).resolves.toBe(true);
+
+  expect(sends[0].IfMatch).toBe('"abc"');
+  expect(sends[0].IfNoneMatch).toBeUndefined();
+});
+
+// Two publishers racing is the ordinary path, not an error: the loser re-reads
+// the winner's snapshot and merges onto it.
+test("reports a failed precondition rather than throwing", async () => {
+  const rejected = Object.assign(new Error("precondition"), {
+    $metadata: { httpStatusCode: 412 },
+  });
+  const { snapshots } = await snapshotsWith([rejected]);
+
+  await expect(snapshots!.write(snapshot, '"abc"')).resolves.toBe(false);
+});
+
+// A lost grant must not read as "someone else won", which would leave the
+// replica permanently and invisibly stale.
+test("surfaces a write failure that is not a failed precondition", async () => {
+  const denied = Object.assign(new Error("denied"), {
+    $metadata: { httpStatusCode: 403 },
+  });
+  const { snapshots } = await snapshotsWith([denied]);
+
+  await expect(snapshots!.write(snapshot, '"abc"')).rejects.toThrow(/denied/);
+});
+
+test("reads the snapshot back with the etag the next write conditions on", async () => {
+  const { snapshots } = await snapshotsWith([
+    { ETag: '"abc"', Body: { transformToString: async () => JSON.stringify(snapshot) } },
+  ]);
+
+  await expect(snapshots!.read()).resolves.toEqual({ snapshot, etag: '"abc"' });
+});
+
+// A torn blob still has an etag, so it is replaced under the same
+// compare-and-swap rather than wedging the key for the life of the build.
+test("reports a torn snapshot as unusable while keeping its etag", async () => {
+  const { snapshots } = await snapshotsWith([
+    { ETag: '"abc"', Body: { transformToString: async () => "{not json" } },
+  ]);
+
+  await expect(snapshots!.read()).resolves.toEqual({ snapshot: null, etag: '"abc"' });
+});
+
+test("reports an absent snapshot as nothing to merge onto", async () => {
+  const missing = Object.assign(new Error("nope"), { name: "NoSuchKey" });
+  const { snapshots } = await snapshotsWith([missing]);
+
+  await expect(snapshots!.read()).resolves.toBeNull();
+});
+
+// No adopted store means no edge reading a replica, so there is nothing to
+// publish and the clock behaves exactly as it did before replication existed.
+test("has no snapshot store when the substrate adopted none", async () => {
+  const { snapshots } = await snapshotsWith([], {});
+
+  expect(snapshots).toBeNull();
 });

@@ -1,5 +1,6 @@
 import type { TagRecord } from "@ocel/next-cache";
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
+import { latest, publishTagSnapshot, snapshotRefreshMs } from "./tag-snapshot.mjs";
 import { now } from "./use-cache-entry.mjs";
 
 // Invalidations are recorded in the state table and synced back into a local
@@ -26,6 +27,13 @@ interface ClockState {
   hasSynced: boolean;
   lastAttemptAt: number;
   inflight: Promise<void> | null;
+  // Bumped whenever a record actually moves. Comparing it against what was last
+  // published is what lets an idle instance skip the snapshot read entirely,
+  // instead of paying a round trip every sync interval to discover nothing
+  // changed.
+  revision: number;
+  publishedRevision: number;
+  publishedAt: number;
 }
 
 // Throttled on the *attempt* rather than the success, so a persistently failing
@@ -61,6 +69,9 @@ function sharedState(): ClockState {
     hasSynced: false,
     lastAttemptAt: -Infinity,
     inflight: null,
+    revision: 0,
+    publishedRevision: 0,
+    publishedAt: -Infinity,
   });
 }
 
@@ -94,12 +105,21 @@ export function setTagClockStore(next: UseCacheStore | null): void {
   state.hasSynced = false;
   state.lastAttemptAt = -Infinity;
   state.inflight = null;
+  state.revision = 0;
+  state.publishedRevision = 0;
+  state.publishedAt = -Infinity;
 }
 
-function latest(a: number | undefined, b: number | undefined): number | undefined {
-  if (a === undefined) return b;
-  if (b === undefined) return a;
-  return Math.max(a, b);
+// Records the tag's new state and reports whether anything actually moved, which
+// is what the publisher reads as "there is something new to replicate". Every
+// steady-state sync re-reads the record on the cursor boundary, so counting
+// those as changes would republish every sync interval forever.
+function set(tag: string, record: TagRecord): void {
+  const existing = state.records.get(tag);
+  if (existing?.stale !== record.stale || existing?.expired !== record.expired) {
+    state.revision++;
+  }
+  state.records.set(tag, record);
 }
 
 // Merged rather than replaced, and always upwards: a record arriving from the
@@ -107,7 +127,7 @@ function latest(a: number | undefined, b: number | undefined): number | undefine
 // the index is too lagged to have seen yet.
 function observe(tag: string, incoming: TagRecord): void {
   const existing = state.records.get(tag);
-  state.records.set(tag, {
+  set(tag, {
     stale: latest(existing?.stale, incoming.stale),
     expired: latest(existing?.expired, incoming.expired),
   });
@@ -142,6 +162,30 @@ async function sync(): Promise<void> {
     // Next does not guard refreshTags, so a throw here fails the request. A
     // state table outage — or an index that does not exist yet — leaves the
     // handlers serving on their last known tag state instead.
+    return;
+  }
+
+  await publish(backend);
+}
+
+// Publishing from the sync drain rather than from updateTags is what makes the
+// replica whole: updateTags knows only its own event, while the drain holds
+// every invalidation this instance has merged from the index.
+async function publish(backend: UseCacheStore): Promise<void> {
+  const revision = state.revision;
+  const stale = now() - state.publishedAt >= snapshotRefreshMs;
+  if (revision === state.publishedRevision && !stale) return;
+
+  try {
+    // Only a confirmed write advances the marks, so a failed publish is retried
+    // by the next sync rather than mistaken for a live replica.
+    if (!(await publishTagSnapshot(backend, state.records))) return;
+    state.publishedRevision = revision;
+    state.publishedAt = now();
+  } catch {
+    // The replica is an optimization; DynamoDB remains the authoritative clock
+    // and the origin is still correct. A publish that cannot land costs the edge
+    // its trust window, which falls open and wakes a publisher.
   }
 }
 
@@ -158,7 +202,7 @@ export const tagClock: TagClock = {
     const at = now();
     for (const tag of tags) {
       const existing = state.records.get(tag) ?? {};
-      state.records.set(
+      set(
         tag,
         durations
           ? {

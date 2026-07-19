@@ -2,6 +2,9 @@ import { DynamoDBClient, QueryCommand, UpdateItemCommand } from "@aws-sdk/client
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 
+import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
+
+import { adoptedObjectStore } from "./object-store.mjs";
 import {
   isGuardRejection,
   tagRecordUpdate,
@@ -35,6 +38,26 @@ export interface TagRecordPage {
   cursor?: unknown;
 }
 
+// A snapshot as it was found, with the etag the next write conditions on. The
+// snapshot is null when the stored object could not be parsed: the etag is still
+// returned, so a torn blob is overwritten under the same compare-and-swap rather
+// than wedging the key forever.
+export interface StoredTagSnapshot {
+  snapshot: TagSnapshot | null;
+  etag: string;
+}
+
+// TagSnapshotStore is the edge's replica of the tag clock, addressed as one
+// object under compare-and-swap. Only ever written by the publisher and only
+// ever read by it to merge — the authoritative clock is the state table.
+export interface TagSnapshotStore {
+  read(): Promise<StoredTagSnapshot | null>;
+  // `etag` is the version this write replaces, or null to create the object
+  // where none existed. False means the precondition failed: another publisher
+  // got there first and the caller must re-read and merge onto their write.
+  write(snapshot: TagSnapshot, etag: string | null): Promise<boolean>;
+}
+
 // UseCacheStore is the plural cache handlers' whole view of their backing
 // services, so the cache semantics can be exercised without reaching AWS.
 export interface UseCacheStore {
@@ -42,6 +65,10 @@ export interface UseCacheStore {
   writeEntry(key: string, entry: UseCacheEntry): Promise<void>;
   queryTagRecords(since: number, cursor?: unknown): Promise<TagRecordPage>;
   writeTag(tag: string, record: TagRecordUpdate): Promise<boolean>;
+  // null when this substrate adopted no object store: there is no edge reading a
+  // replica, so the publisher stands down and the clock behaves exactly as it
+  // did before replication existed.
+  snapshots: TagSnapshotStore | null;
 }
 
 // One page is deliberately large: a cold instance drains the whole partition,
@@ -69,6 +96,76 @@ function env(name: string): string {
   return value;
 }
 
+function isNotFound(err: any): boolean {
+  return err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404;
+}
+
+// R2 returns 412 for a failed If-Match and 412 for a failed If-None-Match on
+// PUT, which is the ordinary outcome of two publishers racing rather than an
+// error. Nothing else may be swallowed here: a 403 means the token lost its
+// grant, and silently reporting that as "someone else won" would leave the
+// replica permanently and invisibly stale.
+function isPreconditionFailure(err: any): boolean {
+  return (
+    err?.name === "PreconditionFailed" || err?.$metadata?.httpStatusCode === 412
+  );
+}
+
+// The snapshot lives in the adopted store because that is the one the edge can
+// read. An unadopted substrate has no edge replica at all, so there is nothing
+// to publish and no bucket to publish it to.
+function tagSnapshotStore(prefix: string): TagSnapshotStore | null {
+  const store = adoptedObjectStore();
+  if (!store) return null;
+
+  const { client, bucket } = store;
+  const key = tagSnapshotKey(prefix);
+
+  return {
+    async read() {
+      try {
+        const out = await client.send(
+          new GetObjectCommand({ Bucket: bucket, Key: key }),
+        );
+        // Without an etag there is no version to condition the next write on,
+        // so the object is treated as absent rather than written over blindly.
+        if (!out.ETag) return null;
+        const body = await streamToString(out.Body);
+        try {
+          return { snapshot: JSON.parse(body) as TagSnapshot, etag: out.ETag };
+        } catch {
+          return { snapshot: null, etag: out.ETag };
+        }
+      } catch (err: any) {
+        if (isNotFound(err)) return null;
+        throw err;
+      }
+    },
+
+    async write(snapshot, etag) {
+      try {
+        await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: JSON.stringify(snapshot),
+            ContentType: "application/json",
+            // Creating and replacing are both conditional, so a publisher that
+            // read "absent" cannot clobber an object another publisher created
+            // in the meantime — including the deploy's own seed, which is what
+            // carries the build's pruning anchor.
+            ...(etag === null ? { IfNoneMatch: "*" } : { IfMatch: etag }),
+          }),
+        );
+        return true;
+      } catch (err: any) {
+        if (isPreconditionFailure(err)) return false;
+        throw err;
+      }
+    },
+  };
+}
+
 // awsUseCacheStore binds the store to the account-global state table. Tag keys
 // are namespaced by the deploy, which is also what the function's IAM policy is
 // scoped to — including on the index, whose partition key must therefore be the
@@ -90,6 +187,8 @@ export function awsUseCacheStore(): UseCacheStore {
   const objectKey = (key: string) => `${prefix}/use-cache/${objectName(key)}.json`;
 
   return {
+    snapshots: tagSnapshotStore(prefix),
+
     async readEntry(key) {
       try {
         const out = await s3.send(

@@ -24,6 +24,35 @@ export interface TagRecord {
   expired?: number;
 }
 
+// The tag clock as the edge reads it: a replica of the authoritative DynamoDB
+// clock, published per build by whichever Lambda last drained the index.
+//
+// `deployedAt` is the build's own deploy time and is set once, at genesis, then
+// carried forward unchanged. It is what makes pruning provable: every entry in a
+// build has lastModified >= deployedAt, so a record whose watermarks both sit at
+// or before it can no longer expire anything. Zero means the snapshot was never
+// anchored — created by a publisher rather than seeded by the deploy — and
+// nothing may be pruned from it.
+//
+// `validUntil` is the publisher's declaration of how long the replica may be
+// trusted. A reader past it must fall open to the origin rather than answer from
+// this map, which is what keeps the trust window tunable without redeploying
+// readers.
+export interface TagSnapshot {
+  version: 1;
+  deployedAt: number;
+  generatedAt: number;
+  validUntil: number;
+  records: Record<string, TagRecord>;
+}
+
+// Both sides address the snapshot by construction rather than by convention: it
+// sits beside the build's cache entries, under the same prefix the deploy scopes
+// every other object to.
+export function tagSnapshotKey(prefix: string): string {
+  return `${prefix}/tag-clock.json`;
+}
+
 // The header Next stamps a route's cache tags onto. For page and route kinds the
 // tags reach a reader only this way — the entry itself is the only record of
 // what it depends on.
