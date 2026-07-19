@@ -493,6 +493,24 @@ test("marks prerendered pathnames as prerender in dispatch", async () => {
   });
 });
 
+test("lists every prerender pathname (including .segment.rsc) so resolveRoutes can match it", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  // A segment prefetch resolves only if its pathname is in `pathnames`; it lives
+  // in `prerenders` alone (never in appPages), so it is the case the old
+  // pathnames list dropped — leaving it dispatchable but unresolvable (404).
+  expect(manifest.pathnames).toContain("/index.segments/_tree.segment.rsc");
+  // Every concrete prerender output must be resolvable, so pathnames is a
+  // superset of the prerender dispatch keys.
+  for (const p of args.outputs.prerenders) {
+    expect(manifest.pathnames).toContain(p.pathname);
+  }
+});
+
 test("projects a prerender's fallback down to its freshness windows and pprChain", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const root = args.outputs.prerenders[0] as Record<string, any>;
