@@ -117,6 +117,28 @@ describe("cacheKey", () => {
       "https://cache.ocel/b/blog?a=1&b=2",
     );
   });
+
+  it("keys the _rsc cache-buster even when the route allows no query", () => {
+    const url = new URL("https://app.example/blog?_rsc=abc123");
+    expect(cacheKey("b", "/blog", url, [])).toBe(
+      "https://cache.ocel/b/blog?_rsc=abc123",
+    );
+  });
+
+  it("gives an RSC request a different key than the HTML request", () => {
+    const html = new URL("https://app.example/blog");
+    const rsc = new URL("https://app.example/blog?_rsc=abc123");
+    expect(cacheKey("b", "/blog", rsc, [])).not.toBe(
+      cacheKey("b", "/blog", html, []),
+    );
+  });
+
+  it("leaves a request with no _rsc param unchanged", () => {
+    const url = new URL("https://app.example/blog.segments/_tree.segment.rsc");
+    expect(cacheKey("b", "/blog.segments/_tree.segment.rsc", url, [])).toBe(
+      "https://cache.ocel/b/blog.segments/_tree.segment.rsc",
+    );
+  });
 });
 
 describe("serveCached", () => {
