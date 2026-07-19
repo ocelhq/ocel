@@ -51,7 +51,7 @@ type recordingEdge struct {
 
 func (f *recordingEdge) Kind() edge.Kind { return edge.KindCloudflare }
 
-func (f *recordingEdge) Bootstrap(context.Context) (edge.BootstrapOutput, error) {
+func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
 }
 

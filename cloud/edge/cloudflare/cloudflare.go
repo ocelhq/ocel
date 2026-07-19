@@ -28,9 +28,13 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// envAccountID names the Cloudflare account workers are deployed into. The API
-// token is read by the SDK client from CLOUDFLARE_API_TOKEN.
-const envAccountID = "CLOUDFLARE_ACCOUNT_ID"
+// envAccountID names the Cloudflare account workers are deployed into.
+// envAPIToken is the token the SDK client authenticates with; it is read by the
+// client itself and named here only for diagnostics.
+const (
+	envAccountID = "CLOUDFLARE_ACCOUNT_ID"
+	envAPIToken  = "CLOUDFLARE_API_TOKEN"
+)
 
 // compatDate pins the Workers runtime compatibility date uploaded scripts are
 // built against (mirrors workers/nextjs/wrangler.jsonc). compatFlags enables the
@@ -67,12 +71,16 @@ func New() edge.Provider {
 
 func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }
 
-// Bootstrap reports Cloudflare's trust posture. Cloudflare runs in its own
-// account, outside any cloud provider's trust boundary, so the provider must
-// mint static credentials for it. It provisions nothing of its own and so
-// offers nothing.
-func (p *provider) Bootstrap(context.Context) (edge.BootstrapOutput, error) {
-	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
+// Bootstrap provisions the substrate class's R2 cache store and reports
+// Cloudflare's trust posture. Cloudflare runs in its own account, outside any
+// cloud provider's trust boundary, so the provider must mint static credentials
+// for it — and, now that the cache lives here, Cloudflare mints one back.
+func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.BootstrapOutput, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return edge.BootstrapOutput{}, fmt.Errorf("%s is not set; it is required to bootstrap the Cloudflare edge", envAccountID)
+	}
+	return newCacheStore(p.client).bootstrap(ctx, accountID, class)
 }
 
 // FindApp reports whether a Workers script exists under name. A 404 is the

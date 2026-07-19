@@ -14,6 +14,16 @@ type BootstrapOutput struct {
 	Offers []Offer
 }
 
+// Class is the substrate an edge is bootstrapping alongside. Production and
+// preview are separate substrates that must never share state, so anything an
+// edge provisions is provisioned once per class.
+type Class string
+
+const (
+	ClassProduction Class = "production"
+	ClassPreview    Class = "preview"
+)
+
 // TrustBoundary is where an edge runs relative to the provider's trust
 // boundary. An edge outside it can only be given static credentials; an edge
 // inside it uses the provider's native identity, so no long-lived credential is
@@ -43,3 +53,19 @@ type OfferKind string
 // OfferCacheStore offers an object store and tag clock the provider may back a
 // framework's incremental cache with.
 const OfferCacheStore OfferKind = "cache-store"
+
+// Keys of an OfferCacheStore's Values. They describe the store in
+// S3-compatible terms — endpoint, region, bucket, static keys — so a provider
+// adopts it with the object-store client it already has rather than learning
+// one edge's API.
+const (
+	OfferKeyBucket      = "bucket"
+	OfferKeyEndpoint    = "endpoint"
+	OfferKeyRegion      = "region"
+	OfferKeyAccessKeyID = "accessKeyId"
+	// OfferKeySecretAccessKey is present only when the edge minted the key on
+	// this run. An edge whose API cannot read a credential back reoffers the
+	// store without it, so the provider keeps the secret it already holds and can
+	// tell a reused credential from an unstored one by comparing access key ids.
+	OfferKeySecretAccessKey = "secretAccessKey"
+)
