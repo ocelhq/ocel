@@ -240,19 +240,12 @@ func TestDeployApp_MissingAccountID_Errors(t *testing.T) {
 	}
 }
 
-func TestBootstrap_ReportsExternalTrust(t *testing.T) {
-	out, err := New().Bootstrap(context.Background())
-	if err != nil {
-		t.Fatalf("Bootstrap: %v", err)
-	}
-	if out.Trust != edge.TrustExternal {
-		t.Errorf("Trust = %q, want %q", out.Trust, edge.TrustExternal)
-	}
-	if len(out.Offers) != 0 {
-		t.Errorf("Offers = %v, want none: Cloudflare provisions nothing of its own", out.Offers)
-	}
-	if len(out.Values) != 0 {
-		t.Errorf("Values = %v, want none: Cloudflare provisions nothing of its own", out.Values)
+func TestBootstrap_MissingAccountID_Errors(t *testing.T) {
+	t.Setenv(envAccountID, "")
+
+	_, err := New().Bootstrap(context.Background(), edge.ClassProduction)
+	if err == nil {
+		t.Fatalf("expected an error when %s is unset", envAccountID)
 	}
 }
 

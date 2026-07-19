@@ -73,12 +73,14 @@ type fakeEdge struct {
 	out        edge.BootstrapOutput
 	err        error
 	bootstraps int
+	class      edge.Class
 }
 
 func (f *fakeEdge) Kind() edge.Kind { return "fake" }
 
-func (f *fakeEdge) Bootstrap(context.Context) (edge.BootstrapOutput, error) {
+func (f *fakeEdge) Bootstrap(_ context.Context, class edge.Class) (edge.BootstrapOutput, error) {
 	f.bootstraps++
+	f.class = class
 	return f.out, f.err
 }
 
@@ -127,6 +129,29 @@ func TestRun_ExternalTrustProvisionsEdgeReader(t *testing.T) {
 	}
 	if _, ok := ssmc.params[EdgeCredentialsParamName]; !ok {
 		t.Errorf("no static key stored at %s", EdgeCredentialsParamName)
+	}
+}
+
+// TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass proves each substrate
+// bootstraps the edge for itself, so an edge provisioning per-class resources
+// never provisions preview's against production.
+func TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass(t *testing.T) {
+	for _, tc := range []struct {
+		run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, func(string), func(string)) error
+		want edge.Class
+	}{
+		{Run, edge.ClassProduction},
+		{RunPreview, edge.ClassPreview},
+	} {
+		t.Run(string(tc.want), func(t *testing.T) {
+			ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+			if err := tc.run(context.Background(), newFakeCFN(), newFakeSSM(), &fakeIAM{}, ed, nil, nil); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			if ed.class != tc.want {
+				t.Errorf("edge bootstrapped for class %q, want %q", ed.class, tc.want)
+			}
+		})
 	}
 }
 

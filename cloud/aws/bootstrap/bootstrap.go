@@ -232,7 +232,7 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	}
 
 	report(progress, fmt.Sprintf("Bootstrapping the %s edge", edgeProvider.Kind()))
-	edgeOut, err := edgeProvider.Bootstrap(ctx)
+	edgeOut, err := edgeProvider.Bootstrap(ctx, edge.Class(sub.class))
 	if err != nil {
 		return fmt.Errorf("bootstrap %s edge: %w", edgeProvider.Kind(), err)
 	}

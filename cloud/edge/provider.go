@@ -22,10 +22,11 @@ type Provider interface {
 	// framework registered for it without knowing what it configured.
 	Kind() Kind
 
-	// Bootstrap provisions whatever the edge needs to exist before any deploy,
-	// and reports its trust posture, its outputs, and any resources it offers
-	// the provider. It runs before the provider's own bootstrap.
-	Bootstrap(ctx context.Context) (BootstrapOutput, error)
+	// Bootstrap provisions whatever the edge needs to exist before any deploy of
+	// one substrate class, and reports its trust posture, its outputs, and any
+	// resources it offers the provider. It runs before the provider's own
+	// bootstrap.
+	Bootstrap(ctx context.Context, class Class) (BootstrapOutput, error)
 
 	// DeployApp uploads one app's assembled worker and returns where it is
 	// served. The edge receives exactly one app, already assembled, so it never
