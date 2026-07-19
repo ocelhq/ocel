@@ -12,17 +12,12 @@ import {
 
 describe("cacheKey", () => {
   it("maps root and empty to index", () => {
-    expect(cacheKey("/", undefined)).toBe("index");
-    expect(cacheKey("", undefined)).toBe("index");
+    expect(cacheKey("/")).toBe("index");
+    expect(cacheKey("")).toBe("index");
   });
 
   it("strips the leading slash", () => {
-    expect(cacheKey("/blog/a", undefined)).toBe("blog/a");
-  });
-
-  it("namespaces FETCH under __fetch__/", () => {
-    expect(cacheKey("/abc", "FETCH")).toBe("__fetch__/abc");
-    expect(cacheKey("abc", "FETCH")).toBe("__fetch__/abc");
+    expect(cacheKey("/blog/a")).toBe("blog/a");
   });
 });
 

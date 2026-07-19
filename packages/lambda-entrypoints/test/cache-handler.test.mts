@@ -12,17 +12,22 @@ import type {
 // versa — exactly the split the real backends have.
 function fakeStore() {
   const entries = new Map<string, CacheEntryFile>();
+  // Fetch entries live in a different bucket than route entries, so the fake
+  // keeps them apart too: a test that reads one must never see the other.
+  const fetches = new Map<string, CacheEntryFile>();
   const tags = new Map<string, TagRecord>();
   let failReads = false;
   let gate: Promise<void> | null = null;
 
   const store: CacheStore & {
     entries: typeof entries;
+    fetches: typeof fetches;
     tags: typeof tags;
     breakReads(): void;
     holdWrites(): () => void;
   } = {
     entries,
+    fetches,
     tags,
     breakReads() {
       failReads = true;
@@ -44,6 +49,14 @@ function fakeStore() {
     async writeEntry(key, entry) {
       if (gate) await gate;
       entries.set(key, entry);
+    },
+    async readFetch(hash) {
+      if (failReads) throw new Error("s3 is down");
+      return fetches.get(hash) ?? null;
+    },
+    async writeFetch(hash, entry) {
+      if (gate) await gate;
+      fetches.set(hash, entry);
     },
     async readTags(names) {
       const found = new Map<string, TagRecord>();
@@ -257,7 +270,7 @@ test("serializes the render result before deferring the write", async () => {
 // Fetch entries are told their tags per request, unlike page kinds.
 test("takes fetch tags from the request context", async () => {
   const store = fakeStore();
-  store.entries.set("__fetch__/abc", {
+  store.fetches.set("abc", {
     lastModified: 1_000,
     value: { kind: "FETCH", data: {}, tags: [] },
   });
@@ -269,6 +282,30 @@ test("takes fetch tags from the request context", async () => {
   });
 
   expect(entry).toBeNull();
+});
+
+// Fetch bodies are upstream response data and stay in the provider's own bucket,
+// which route entries do not when a substrate adopts an edge store. A write that
+// landed in the entry store would leak them to the edge, and would read back as
+// a miss besides — so assert the split explicitly in both directions.
+test("keeps fetch entries out of the route-entry store", async () => {
+  const store = fakeStore();
+  const handler = new OcelCacheHandler();
+
+  const deferred = await invocation(() =>
+    handler.set(
+      "deadbeef",
+      { kind: "FETCH", data: { body: "upstream" }, revalidate: 900 },
+      { fetchCache: true, tags: [] },
+    ),
+  );
+  await Promise.all(deferred);
+
+  expect(store.fetches.get("deadbeef")!.value.data.body).toBe("upstream");
+  expect(store.entries.size).toBe(0);
+
+  const back = await handler.get("deadbeef", { kind: "FETCH", tags: [] });
+  expect(back!.value.data.body).toBe("upstream");
 });
 
 // Next's own revalidateTag spreads the existing record before applying updates,

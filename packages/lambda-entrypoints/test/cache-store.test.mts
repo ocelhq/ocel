@@ -138,6 +138,42 @@ test("writes entries to the adopted cache store at the key the edge reads", asyn
   });
 });
 
+// Fetch entries hold upstream response bodies — origin-private data that must
+// not follow route entries into a third party's store. Adoption moves routes to
+// the edge and leaves fetch behind, so this asserts the one case where the two
+// backends diverge: same prefix, different bucket, different credentials.
+test("keeps fetch entries on the provider's bucket even when a store is adopted", async () => {
+  adoptStore();
+  const { store, built, sent } = await entryStore([
+    { Body: { transformToString: async () => `{"lastModified":9,"value":{}}` } },
+  ]);
+
+  expect(await store.readFetch("deadbeef")).toEqual({
+    lastModified: 9,
+    value: {},
+  });
+  expect(sent[0]).toMatchObject({
+    Bucket: "assets",
+    Key: "prod/proj/app/BID/fetch-cache/deadbeef.cache.json",
+  });
+  // The adopted client is built first; the fetch client is the plain one after
+  // it, on the function's own role rather than the edge's injected keys.
+  expect(built[1].endpoint).toBeUndefined();
+  expect(built[1].credentials).toBeUndefined();
+});
+
+test("writes fetch entries to the provider's bucket under the fetch prefix", async () => {
+  adoptStore();
+  const { store, sent } = await entryStore();
+
+  await store.writeFetch("deadbeef", { lastModified: 1, value: {} });
+
+  expect(sent[0]).toMatchObject({
+    Bucket: "assets",
+    Key: "prod/proj/app/BID/fetch-cache/deadbeef.cache.json",
+  });
+});
+
 // The rollback for the whole colocation: a substrate whose edge offered no store
 // injects nothing, and ISR stays exactly where it was, on the provider's own
 // bucket under the provider's own credential chain.

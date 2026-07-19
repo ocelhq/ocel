@@ -79,11 +79,11 @@ export function bytesToBase64(bytes: Uint8Array): string {
 }
 
 // cacheKey turns Next's key into the object name the adapter seeded at build
-// time. Fetch entries share the namespace with routes, so they are kept under
-// their own folder rather than risking a collision with a route of the same name.
-export function cacheKey(key: string, kind: string | undefined): string {
-  const normalized = key === "/" || key === "" ? "index" : key.replace(/^\//, "");
-  return kind === "FETCH" ? `__fetch__/${normalized}` : normalized;
+// time. Route entries only: fetch entries are keyed by their own hash into a
+// separate, AWS-private bucket, which no edge reader can reach — so their keying
+// lives with the Lambda store rather than in this shared module.
+export function cacheKey(key: string): string {
+  return key === "/" || key === "" ? "index" : key.replace(/^\//, "");
 }
 
 // tagsOf reports what a cached entry depends on. FETCH entries are told their

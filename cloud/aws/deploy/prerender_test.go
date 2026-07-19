@@ -457,3 +457,44 @@ func TestUploadPrerenderAssets_UploadsCacheEntries(t *testing.T) {
 		}
 	}
 }
+
+// TestUploadPrerenderAssets_FetchEntriesStayOnTheAssetBucket proves the split
+// that motivates a second upload target: route entries follow the substrate to
+// its adopted store, because the edge reads them there. Fetch entries hold
+// upstream response bodies — origin-private data — and must stay in the
+// provider's own bucket whatever the edge offered. Uploading them alongside the
+// route entries would hand a third party every API response the build cached.
+func TestUploadPrerenderAssets_FetchEntriesStayOnTheAssetBucket(t *testing.T) {
+	hash := "a1b2c3"
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json":  `{"buildId":"WEB1"}`,
+		"apps/web/cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		"apps/web/fetch-cache/" + hash + ".cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
+	})
+
+	asset := &fakeUploader{exists: map[string]bool{}}
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: asset,
+		CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+
+	// The hash is the handler's lookup key, so it must survive into the object
+	// name untouched.
+	want := "prod/proj/web/WEB1/fetch-cache/" + hash + ".cache.json"
+	if len(asset.puts) != 1 || asset.puts[0] != want {
+		t.Fatalf("asset bucket got %v, want exactly [%s]", asset.puts, want)
+	}
+	if asset.buckets[0] != "assets" {
+		t.Errorf("fetch entry landed in %q, want the provider's own %q", asset.buckets[0], "assets")
+	}
+	for _, k := range store.puts {
+		if strings.Contains(k, "fetch-cache") {
+			t.Errorf("fetch entry %q leaked into the adopted store", k)
+		}
+	}
+}
