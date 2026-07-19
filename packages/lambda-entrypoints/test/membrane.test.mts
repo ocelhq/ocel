@@ -5,6 +5,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { background, runWithWaitUntil } from "../src/shared/background.mjs";
 
 type Msg = { type: string; payload: any };
 
@@ -171,6 +172,36 @@ describe("invocation lifecycle", () => {
     await waitFor(() =>
       messages.some(
         (m) => m.type === "invocation-complete" && m.payload.requestId === "req-abort",
+      ),
+    );
+    expect(settled).toBe(true);
+  });
+
+  // How a cache handler defers work: it is bundled as its own module graph and
+  // cannot see the ocel context, so it reaches the invocation through the
+  // background bridge the Next entrypoint installs around the same waitUntil.
+  test("holds the invocation for work deferred through the background bridge", async () => {
+    let settled = false;
+    const invoke: Invoke = (_req, res, ocel) =>
+      runWithWaitUntil(ocel.waitUntil, async () => {
+        // Deep beneath the entrypoint and across an await, exactly where a
+        // handler's revalidateTag runs.
+        await Promise.resolve();
+        background(
+          () => new Promise<void>((r) => setTimeout(() => ((settled = true), r()), 80)),
+        );
+        res.end("ok");
+      });
+
+    const port = await start(invoke);
+
+    await request(port, "req-bridge");
+    // The response landed; the deferred work had not.
+    expect(settled).toBe(false);
+
+    await waitFor(() =>
+      messages.some(
+        (m) => m.type === "invocation-complete" && m.payload.requestId === "req-bridge",
       ),
     );
     expect(settled).toBe(true);

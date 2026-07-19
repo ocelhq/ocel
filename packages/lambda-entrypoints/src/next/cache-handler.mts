@@ -10,6 +10,8 @@ import {
   deserialize as deserializeBytes,
   tagsOf,
 } from "@ocel/next-cache";
+import { background } from "../shared/background.mjs";
+import { recordAndPublish } from "./tag-clock.mjs";
 
 // unchunk flattens whatever Next hands us as a body into something storable. On
 // `set` an html body is a RenderResult; on the way back out of S3 it is already
@@ -153,6 +155,12 @@ export default class OcelCacheHandler {
       : { expired: now };
 
     await this.store.writeTags(list, record);
+
+    // The shared clock is what publishes the edge's replica, and on an app with
+    // no `use cache` anywhere nothing else ever reaches it. Deferred onto the
+    // invocation so the request raising the invalidation does not pay for the
+    // publish, and unable to throw, because Next hands this method through raw.
+    background(() => recordAndPublish(list, record));
   }
 
   // No per-request memo is held, so there is nothing to reset.
