@@ -279,7 +279,7 @@ async function readFallbackShell(
 // readEntry fetches the entry object from the cache store, fronted by a
 // per-isolate memo. A hot entry is served from memory; a stale one is served
 // immediately and refreshed from R2 behind the request (or, without a waitUntil,
-// re-read blocking on the next request).
+// re-read synchronously on the request that finds it stale).
 async function readEntry(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
@@ -296,8 +296,9 @@ async function readEntry(
       refreshEntry(deps, key);
       return hit.entry;
     }
-    // No background scheduler: refresh blocking, but keep the prior entry if the
-    // re-read now misses so a transient store gap never strands a live route.
+    // No background scheduler: re-read the store now, on this request. A hit
+    // refreshes the memo; a miss evicts the stale entry and falls open to the
+    // Lambda, so a re-read gap is never papered over with stale bytes.
     const fresh = await fetchEntry(deps.store, key);
     if (fresh) memoSet(memo, key, { at: now, entry: fresh });
     else memo.delete(key);
