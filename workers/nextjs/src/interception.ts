@@ -7,9 +7,13 @@
 // snapshot sitting beside them, so an interception reads exactly one store and
 // never an AWS API.
 //
-// Interception is strictly additive: every miss, expiry, incomplete entry, or
-// error returns null so the caller falls open to the existing Lambda path. A bug
-// here can only ever cost the interception shortcut, never correctness.
+// Interception is strictly additive: every miss, incomplete entry, untrusted
+// tag snapshot, past-expiration entry, or error returns null so the caller falls
+// open to the existing Lambda path. A stale-but-servable entry (a lapsed
+// revalidate window or an invalidated tag, still inside expiration) is served
+// stale-while-revalidate, marked stale so the caller refreshes it behind the
+// request. A bug here can only ever cost the interception shortcut or serve one
+// extra stale response, never a wrong one.
 import {
   areTagsExpired,
   cacheKey,
@@ -46,7 +50,7 @@ export interface InterceptTarget {
 // its own; a PPR entry answers only its static half, and its shell has to be
 // composed with a resumed render before it is a response.
 export type Interception =
-  | { kind: "complete"; response: Response }
+  | { kind: "complete"; response: Response; stale: boolean }
   | { kind: "ppr"; shell: Response; postponed: string; stale: boolean };
 
 // One stored object, as the R2 binding hands it back.
@@ -177,7 +181,7 @@ export async function intercept(
       const response = reconstructSegment(value, segmentPath);
       if (!response) return null;
       response.headers.set("cache-control", `s-maxage=${window}`);
-      return { kind: "complete", response };
+      return { kind: "complete", response, stale: false };
     }
 
     // A full-route prefetch (Next's router prefetch, distinct from the segment
@@ -200,7 +204,7 @@ export async function intercept(
       const response = reconstruct(request, value);
       if (!response) return null;
       response.headers.set("cache-control", `s-maxage=${window}`);
-      return { kind: "complete", response };
+      return { kind: "complete", response, stale: false };
     }
 
     // Runtime prefetch (2/3) intentionally requests a dynamic response; never
@@ -210,35 +214,47 @@ export async function intercept(
     }
 
     // Everything past here is a real request whose response *is* the tagged
-    // content, so an invalidated tag must send it to the Lambda to re-render.
+    // content. An invalidated tag makes the entry stale, but — like a lapsed
+    // revalidate window — it still serves stale-while-revalidate; the caller
+    // wakes the Lambda in the background to rewrite it. Only an *untrusted* tag
+    // snapshot declines to serve, because then staleness is unknown, and unknown
+    // never serves.
+    let tagStale = false;
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
       const records = await snapshotRecords(cfg, deps, deps.store, now);
-      // The snapshot could not be trusted, so tag state is unknown — and unknown
-      // never serves.
       if (!records) return null;
-      if (areTagsExpired(tags, records, entry.lastModified, now)) return null;
+      tagStale = areTagsExpired(tags, records, entry.lastModified, now);
+    }
+    const isStale = stale || tagStale;
+
+    // A stale entry still serves, but only inside its expiration window; past
+    // that, even stale content is too old to serve and the request falls open.
+    // Freshness never trips this — a fresh entry is always younger than its
+    // expiration — so the gate only bites once the entry is already stale.
+    if (
+      isStale &&
+      typeof target.expiration === "number" &&
+      ageSeconds >= target.expiration
+    ) {
+      return null;
     }
 
     if (value.kind === "APP_PAGE" && value.postponed !== undefined) {
-      // A stale PPR pair still serves — its dynamic half is rendered fresh
-      // either way — until the expiration window closes on it entirely.
-      if (
-        typeof target.expiration === "number" &&
-        ageSeconds >= target.expiration
-      ) {
-        return null;
-      }
       const shell = reconstruct(request, value);
-      return shell && { kind: "ppr", shell, postponed: value.postponed, stale };
+      return (
+        shell && { kind: "ppr", shell, postponed: value.postponed, stale: isStale }
+      );
     }
-
-    if (stale) return null;
 
     const response = reconstruct(request, value);
     if (!response) return null;
-    response.headers.set("cache-control", `s-maxage=${window}`);
-    return { kind: "complete", response };
+    // A stale entry is served only until the background refresh rewrites it, so
+    // it must not be memoized as fresh for the whole (possibly still large, when
+    // only a tag invalidated it) remaining window — one second forces the next
+    // request to re-read the by-then-refreshed entry.
+    response.headers.set("cache-control", `s-maxage=${isStale ? 1 : window}`);
+    return { kind: "complete", response, stale: isStale };
   } catch {
     return null;
   }

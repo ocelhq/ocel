@@ -13,6 +13,7 @@ import {
   type InterceptDeps,
   type InterceptionConfig,
 } from "./interception";
+import path from "node:path";
 
 // The request headers a Next App Router response varies on. The colo cache key
 // is derived from these directly (see variantPath), and Next's own allowHeader
@@ -199,6 +200,7 @@ async function dispatchPrerender(
   if (!deps.cache) {
     return doFetch(forward(forwardUrl, request, request.headers));
   }
+  const cache = deps.cache;
 
   if (shouldBypass(request, url, target.config)) {
     const response = await doFetch(forward(forwardUrl, request, request.headers));
@@ -301,9 +303,15 @@ async function dispatchPrerender(
       // serveCached preserves that tier and memoizes the response so the next
       // request is a colo HIT. A miss falls open to the Lambda, an unstamped
       // MISS.
-      return hit?.kind === "complete"
-        ? withStatus(hit.response, "PRERENDER")
-        : origin();
+      if (hit?.kind !== "complete") return origin();
+      // A stale entry serves immediately; the Lambda regenerates it behind the
+      // request and rewrites the R2 entry, exactly as the PPR path above does.
+      if (hit.stale) {
+        refreshOnce(cache, refreshKey, async () =>
+          (await originBlocking()).body?.cancel(),
+        );
+      }
+      return withStatus(hit.response, "PRERENDER");
     };
   }
 
