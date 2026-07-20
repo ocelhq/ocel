@@ -16,12 +16,17 @@ import type { TagVerdict } from "../src/tag-clock";
 
 // A CacheDeps backed by the real workerd Cache, with a manual clock and a
 // waitUntil that records background work so tests can flush it deterministically.
-function testDeps(clock: { ms: number }): CacheDeps & {
+// `cache` defaults to caches.default but can be swapped for a wrapper (e.g.
+// countingCache) that still delegates to the real cache underneath.
+function testDeps(
+  clock: { ms: number },
+  cache: Cache = caches.default,
+): CacheDeps & {
   flush: () => Promise<void>;
 } {
   const pending: Promise<unknown>[] = [];
   return {
-    cache: caches.default,
+    cache,
     now: () => clock.ms,
     waitUntil: (promise) => {
       pending.push(promise);
@@ -30,6 +35,22 @@ function testDeps(clock: { ms: number }): CacheDeps & {
       await Promise.all(pending.splice(0));
     },
   };
+}
+
+// Delegates every call to the real workerd cache, only counting `put`s, so a
+// test can assert write cardinality without reimplementing the Cache API.
+function countingCache(): Cache & { puts: number } {
+  const real = caches.default;
+  const counting = {
+    puts: 0,
+    match: (...args: Parameters<Cache["match"]>) => real.match(...args),
+    put: (...args: Parameters<Cache["put"]>) => {
+      counting.puts++;
+      return real.put(...args);
+    },
+    delete: (...args: Parameters<Cache["delete"]>) => real.delete(...args),
+  };
+  return counting as unknown as Cache & { puts: number };
 }
 
 // An origin returning a fixed response and counting how often it was invoked.
@@ -455,19 +476,51 @@ describe("serveCached", () => {
 
   it("collapses a burst of concurrent misses to a single colo write", async () => {
     const clock = { ms: 0 };
-    const deps = testDeps(clock);
-    const store = countingOrigin("s-maxage=60");
+    const cache = countingCache();
+    const deps = testDeps(clock, cache);
     const t = target("populate", { revalidate: 60, expiration: 600 });
 
-    // Three concurrent misses on the same cold key.
-    await Promise.all([
+    // A release-gated origin: every call increments `calls` synchronously but
+    // blocks on `gate` until released, so we can hold all three requests just
+    // past their miss check (and short of refreshOnce) before letting any of
+    // them proceed. That's what makes the burst deterministic instead of
+    // depending on incidental Promise.all scheduling.
+    let calls = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const store = async () => {
+      calls++;
+      await gate;
+      return new Response("rendered", {
+        status: 200,
+        headers: { "cache-control": "s-maxage=60" },
+      });
+    };
+
+    const burst = Promise.all([
       serveCached(req(), t, deps, store, store),
       serveCached(req(), t, deps, store, store),
       serveCached(req(), t, deps, store, store),
     ]);
+
+    // Wait until all three requests are blocked inside origin() (i.e. have
+    // passed the miss check and not yet reached refreshOnce) before releasing
+    // them together.
+    while (calls < 3) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+    release();
+
+    const responses = await burst;
     await deps.flush();
 
-    // Each miss called origin to serve its own request, but only one populate ran.
+    // Each request was still served its own response...
+    for (const res of responses) {
+      expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    }
+    // ...but the concurrent populates collapsed to exactly one colo write.
+    expect(cache.puts).toBe(1);
+
     const stored = await caches.default.match(new Request(t.key));
     expect(stored).not.toBeUndefined();
     // A second-generation read is a HIT: the single write is intact.
