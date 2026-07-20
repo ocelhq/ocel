@@ -62,6 +62,27 @@ export function freshness(
   return "expired";
 }
 
+export interface EntryMeta {
+  lastModified: number;
+  revalidate?: number;
+  expiration?: number;
+}
+
+export type Freshness = "fresh" | "stale" | "expired";
+
+// The single stale-while-revalidate verdict, shared by the colo tier
+// (serveCached) and the R2 tier (intercept). tagStale folds both a truly
+// invalidated tag and an unreadable tag clock into "treat as stale"; the caller
+// decides that policy per tier. "expired" means too old to serve even stale —
+// the caller falls open to the tier below.
+export function evaluate(meta: EntryMeta, now: number, tagStale: boolean): Freshness {
+  const age = (now - meta.lastModified) / 1000;
+  const timeStale = meta.revalidate !== undefined && age >= meta.revalidate;
+  if (!timeStale && !tagStale) return "fresh";
+  if (meta.expiration !== undefined && age >= meta.expiration) return "expired";
+  return "stale";
+}
+
 export type CacheKeyResult =
   | { cacheable: true; key: string }
   | { cacheable: false };
