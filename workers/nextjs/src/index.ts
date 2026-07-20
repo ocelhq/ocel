@@ -14,11 +14,10 @@ import {
   type InterceptionConfig,
 } from "./interception";
 
-// The request headers a Next App Router response varies on. Next folds them
-// into the `_rsc` cache-buster (which keys the entry, see cache.ts) but its own
-// allowHeader for a prerender deliberately omits them. The origin still needs
-// them to render the right variant on a cache miss — safe to forward precisely
-// because `_rsc` keys the entry, so one variant can never poison another's slot.
+// The request headers a Next App Router response varies on. The colo cache key
+// is derived from these directly (see variantPath), and Next's own allowHeader
+// for a prerender omits them — so the origin still needs them forwarded to
+// render the right variant on a cache miss.
 const RSC_FORWARD_HEADERS = new Set([
   "rsc",
   "next-router-prefetch",
@@ -227,12 +226,18 @@ async function dispatchPrerender(
     url.pathname.startsWith((deps.manifest.basePath ?? "") + "/_next/data/") &&
     url.pathname.endsWith(".json");
 
-  const key = cacheKey(
+  const routePath = result.invocationTarget?.pathname ?? url.pathname;
+  const keyResult = cacheKey(
     deps.manifest.buildId,
     url.pathname,
     url,
+    request.headers,
+    target.config.renderingMode,
     target.allowQuery,
   );
+  // A stable per-route id for deduping background revalidations, independent of
+  // whether this particular variant is colo-cacheable.
+  const refreshKey = `${deps.manifest.buildId}:${routePath}`;
 
   // When edge cache coordinates are present, a prerender read is tried
   // directly against the cache first; any miss/expiry/error falls open to
@@ -246,7 +251,7 @@ async function dispatchPrerender(
       intercept(
         request,
         {
-          routePath: result.invocationTarget?.pathname ?? url.pathname,
+          routePath,
           fallbackPath: result.resolvedPathname ?? undefined,
           revalidate: target.fallback?.initialRevalidate,
           expiration: target.fallback?.initialExpiration,
@@ -269,7 +274,7 @@ async function dispatchPrerender(
       const hit = await read();
       if (hit?.kind === "ppr") {
         if (hit.stale) {
-          refreshOnce(deps.cache, key, async () =>
+          refreshOnce(deps.cache, refreshKey, async () =>
             (await originBlocking()).body?.cancel(),
           );
         }
@@ -299,9 +304,16 @@ async function dispatchPrerender(
     };
   }
 
+  if (!keyResult.cacheable) {
+    // A per-visitor dynamic variant (PPR navigation, runtime prefetch): never
+    // colo-cached. It goes straight to the Lambda under the same filtered
+    // headers a prerender miss uses today.
+    return withStatus(await origin(), "MISS");
+  }
+
   return serveCached(
     request,
-    { key, tags: target.tags },
+    { key: keyResult.key, tags: target.tags },
     deps.cache,
     cachingOrigin,
     originBlocking,

@@ -5,6 +5,7 @@ import {
   freshness,
   serveCached,
   storagePolicy,
+  variantPath,
   type CacheDeps,
   type CacheTarget,
 } from "../src/cache";
@@ -98,46 +99,91 @@ describe("freshness", () => {
   });
 });
 
+describe("variantPath", () => {
+  const H = (init?: Record<string, string>) => new Headers(init);
+
+  it("maps a plain (non-RSC) request to the document pathname", () => {
+    expect(variantPath("/blog", H(), "STATIC")).toBe("/blog");
+  });
+
+  it("maps a segment prefetch to an encoded .segment.rsc path", () => {
+    const h = H({
+      RSC: "1",
+      "next-router-prefetch": "1",
+      "next-router-segment-prefetch": "/blog/__PAGE__",
+    });
+    expect(variantPath("/blog", h, "PARTIALLY_STATIC")).toBe(
+      "/blog.segments/%2Fblog%2F__PAGE__.segment.rsc",
+    );
+  });
+
+  it("maps a full-route prefetch (prefetch: 1, no segment) to .prefetch.rsc", () => {
+    const h = H({ RSC: "1", "next-router-prefetch": "1" });
+    expect(variantPath("/blog", h, "PARTIALLY_STATIC")).toBe("/blog.prefetch.rsc");
+  });
+
+  it("maps bare RSC on a STATIC route to .rsc", () => {
+    expect(variantPath("/blog", H({ RSC: "1" }), "STATIC")).toBe("/blog.rsc");
+  });
+
+  it("is non-cacheable for bare RSC on a PPR route (dynamic navigation)", () => {
+    expect(variantPath("/blog", H({ RSC: "1" }), "PARTIALLY_STATIC")).toBeNull();
+  });
+
+  it("is non-cacheable for a runtime prefetch (prefetch: 2)", () => {
+    const h = H({ RSC: "1", "next-router-prefetch": "2" });
+    expect(variantPath("/blog", h, "STATIC")).toBeNull();
+  });
+});
+
 describe("cacheKey", () => {
+  const H = (init?: Record<string, string>) => new Headers(init);
+
   it("scopes the key by buildId so a redeploy misses", () => {
     const url = new URL("https://app.example/blog");
-    expect(cacheKey("build-a", "/blog", url, [])).not.toBe(
-      cacheKey("build-b", "/blog", url, []),
-    );
+    const a = cacheKey("build-a", "/blog", url, H(), "STATIC", []);
+    const b = cacheKey("build-b", "/blog", url, H(), "STATIC", []);
+    expect(a).toEqual({ cacheable: true, key: "https://cache.ocel/build-a/blog" });
+    expect(a).not.toEqual(b);
   });
 
   it("drops query params the route does not allow", () => {
     const url = new URL("https://app.example/blog?page=2&ref=x");
-    expect(cacheKey("b", "/blog", url, [])).toBe("https://cache.ocel/b/blog");
+    expect(cacheKey("b", "/blog", url, H(), "STATIC", [])).toEqual({
+      cacheable: true,
+      key: "https://cache.ocel/b/blog",
+    });
   });
 
   it("keeps allowed query params, normalized by name", () => {
     const url = new URL("https://app.example/blog?b=2&a=1");
-    expect(cacheKey("b", "/blog", url, ["a", "b"])).toBe(
-      "https://cache.ocel/b/blog?a=1&b=2",
-    );
+    expect(cacheKey("b", "/blog", url, H(), "STATIC", ["a", "b"])).toEqual({
+      cacheable: true,
+      key: "https://cache.ocel/b/blog?a=1&b=2",
+    });
   });
 
-  it("keys the _rsc cache-buster even when the route allows no query", () => {
+  it("strips _rsc from the key even when the route allows all query", () => {
     const url = new URL("https://app.example/blog?_rsc=abc123");
-    expect(cacheKey("b", "/blog", url, [])).toBe(
-      "https://cache.ocel/b/blog?_rsc=abc123",
-    );
+    // allowQuery undefined => default to all params, but _rsc is always dropped.
+    expect(cacheKey("b", "/blog", url, H(), "STATIC", undefined)).toEqual({
+      cacheable: true,
+      key: "https://cache.ocel/b/blog",
+    });
   });
 
   it("gives an RSC request a different key than the HTML request", () => {
-    const html = new URL("https://app.example/blog");
-    const rsc = new URL("https://app.example/blog?_rsc=abc123");
-    expect(cacheKey("b", "/blog", rsc, [])).not.toBe(
-      cacheKey("b", "/blog", html, []),
-    );
+    const url = new URL("https://app.example/blog");
+    const html = cacheKey("b", "/blog", url, H(), "STATIC", []);
+    const rsc = cacheKey("b", "/blog", url, H({ RSC: "1" }), "STATIC", []);
+    expect(html).not.toEqual(rsc);
   });
 
-  it("leaves a request with no _rsc param unchanged", () => {
-    const url = new URL("https://app.example/blog.segments/_tree.segment.rsc");
-    expect(cacheKey("b", "/blog.segments/_tree.segment.rsc", url, [])).toBe(
-      "https://cache.ocel/b/blog.segments/_tree.segment.rsc",
-    );
+  it("reports a per-visitor dynamic variant as non-cacheable", () => {
+    const url = new URL("https://app.example/blog");
+    expect(
+      cacheKey("b", "/blog", url, H({ RSC: "1" }), "PARTIALLY_STATIC", []),
+    ).toEqual({ cacheable: false });
   });
 });
 

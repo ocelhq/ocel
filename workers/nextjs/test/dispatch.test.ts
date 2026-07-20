@@ -362,6 +362,32 @@ describe("dispatchResult", () => {
     expect(lambdaCalls()).toBe(1);
   });
 
+  it("sends a runtime prefetch (next-router-prefetch: 2) to the Lambda, uncached", async () => {
+    const { deps, lambdaCalls } = interceptDeps("from-lambda", {
+      lastModified: 1_000,
+      value: {
+        kind: "APP_PAGE",
+        html: "<html>edge</html>",
+        rscData: btoa("RSC"),
+        status: 200,
+        headers: {},
+        postponed: "PP",
+      },
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+      new Request("https://app.example/blog", {
+        headers: { RSC: "1", "next-router-prefetch": "2" },
+      }),
+      deps,
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(await res.text()).toBe("from-lambda");
+    expect(lambdaCalls()).toBe(1);
+  });
+
   it("skips interception for a pages-router _next/data request (serves JSON via Lambda)", async () => {
     // A data request would resolve to the same /blog prerender target, but must
     // be answered with pageData JSON, not the html interception reconstructs.
