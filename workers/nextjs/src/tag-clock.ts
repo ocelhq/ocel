@@ -35,6 +35,10 @@ export interface TagClock {
   // true: a tag invalidated the entry. false: trusted, none did.
   // "untrusted": the snapshot could not be read/trusted, so staleness is unknown.
   expired(tags: string[], timestamp: number, now: number): Promise<TagVerdict>;
+  // Warms the isolate-shared snapshot memo so a following expired() in the
+  // same request needs no store round-trip. Route-independent; its result is
+  // consumed via expired(). Never throws to the caller.
+  prime(now: number): Promise<unknown>;
 }
 
 // The tag-clock replica is read on every tagged interception, so it is fronted
@@ -77,6 +81,13 @@ export function createTagClock(
         // A store error is a slower miss, not a wrong answer: unknown never
         // serves, same as an absent or untrusted snapshot.
         return "untrusted";
+      }
+    },
+    async prime(now) {
+      try {
+        return await snapshotRecords(cfg, deps, now);
+      } catch {
+        return null;
       }
     },
   };
