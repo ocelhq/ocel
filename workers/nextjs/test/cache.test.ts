@@ -177,6 +177,29 @@ describe("serveCached", () => {
     expect(origin.calls).toBe(1);
   });
 
+  it("preserves a PRERENDER status the origin already set, storing it for the next colo HIT", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    // The R2 store tier answers by returning a response already stamped
+    // PRERENDER (as dispatch's cachingOrigin does); serveCached must report that
+    // tier rather than overwriting it with MISS.
+    const origin = (async () =>
+      new Response("prerendered", {
+        headers: { "cache-control": "s-maxage=60", "x-ocel-cache": "PRERENDER" },
+      })) as CountingOrigin;
+    origin.calls = 0;
+
+    const first = await serveCached(req(), target("edge"), deps, origin, origin);
+    expect(first.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    await deps.flush();
+
+    // The prerendered response was memoized into the colo cache, so the next GET
+    // is a plain colo HIT.
+    clock.ms = 1_000;
+    const second = await serveCached(req(), target("edge"), deps, origin, origin);
+    expect(second.headers.get("x-ocel-cache")).toBe("HIT");
+  });
+
   it("misses without mutating an immutable origin response", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
@@ -284,7 +307,9 @@ describe("serveCached", () => {
     clock.ms = 5_000; // 5s old: past s-maxage=1, inside the 100s stale window
     const stale = await serveCached(req(), target("swr"), deps, origin, refresh);
 
-    expect(stale.headers.get("x-ocel-cache")).toBe("STALE");
+    // A colo serve is a HIT even when it is served stale; staleness only drives
+    // the background refresh.
+    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
     await deps.flush();
     expect(refresh.calls).toBe(1);
   });
@@ -337,7 +362,7 @@ describe("serveCached", () => {
       origin,
       failing,
     );
-    expect(stale.headers.get("x-ocel-cache")).toBe("STALE");
+    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
     await deps.flush(); // must not reject
 
     const again = await serveCached(
@@ -347,7 +372,7 @@ describe("serveCached", () => {
       origin,
       failing,
     );
-    expect(again.headers.get("x-ocel-cache")).toBe("STALE");
+    expect(again.headers.get("x-ocel-cache")).toBe("HIT");
     expect(await again.text()).toBe("rendered");
   });
 

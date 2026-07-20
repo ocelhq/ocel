@@ -7,7 +7,7 @@ function hit(over: Partial<PprHit> = {}): PprHit {
     kind: "ppr",
     shell: new Response("[shell]", {
       status: 200,
-      headers: { "content-type": "text/html", "x-ocel-isr": "HIT" },
+      headers: { "content-type": "text/html" },
     }),
     postponed: "POSTPONED",
     stale: false,
@@ -93,11 +93,11 @@ describe("composePpr", () => {
     expect(res.headers.get("content-length")).toBeNull();
   });
 
-  it("marks a stale pair STALE and a fresh one HIT", async () => {
+  it("marks the composed response PRERENDER whether the shell was fresh or stale", async () => {
     const fresh = composePpr(hit(), Promise.resolve(new Response("a")));
     const stale = composePpr(hit({ stale: true }), Promise.resolve(new Response("b")));
-    expect(fresh.headers.get("x-ocel-ppr")).toBe("HIT");
-    expect(stale.headers.get("x-ocel-ppr")).toBe("STALE");
+    expect(fresh.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(stale.headers.get("x-ocel-cache")).toBe("PRERENDER");
     await Promise.all([fresh.text(), stale.text()]);
   });
 

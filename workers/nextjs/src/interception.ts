@@ -3,23 +3,13 @@
 // using the shared @ocel/next-cache primitives, so the edge and the Lambda can
 // never disagree about whether an entry is still servable.
 //
-// There are two read paths, chosen by whether the deploy bound a cache store:
-//
-//   • Bound. Entries come from the binding and tag state from the tag-clock
-//     replica sitting beside them, so an interception calls exactly one service
-//     and never an AWS API.
-//   • Unbound. The original SigV4-signed S3 GET plus DynamoDB BatchGetItem, kept
-//     verbatim so a substrate that never adopted a store keeps intercepting
-//     rather than silently losing the shortcut.
-//
-// The second is a rollback path, not a fallback: a failed read on the bound path
-// falls open to the origin like every other failure here, and never reaches for
-// AWS behind the store's back.
+// Entries come from the bound R2 cache store, and tag state from the tag-clock
+// snapshot sitting beside them, so an interception reads exactly one store and
+// never an AWS API.
 //
 // Interception is strictly additive: every miss, expiry, incomplete entry, or
 // error returns null so the caller falls open to the existing Lambda path. A bug
 // here can only ever cost the interception shortcut, never correctness.
-import { AwsClient } from "aws4fetch";
 import {
   areTagsExpired,
   cacheKey,
@@ -31,21 +21,14 @@ import {
   type TagSnapshot,
 } from "@ocel/next-cache";
 
-// The signed-request bindings the worker deploy injects. All-or-nothing: absent
-// any one of them, interception is disabled and the worker forwards as before.
-// They are injected even on a substrate with a cache store, which is why the
-// binding rather than their absence is what selects the read path.
+// The one coordinate the store read needs: the build prefix the entry and
+// snapshot keys are rooted at. Interception is gated on the cache-store binding
+// plus this prefix; absent either, the worker forwards as before.
 export interface InterceptionConfig {
-  accessKeyId: string;
-  secretKey: string;
-  region: string;
-  bucket: string;
-  table: string;
   prefix: string;
-  tagNamespace: string;
 }
 
-// The prerender facts interception needs: the concrete pathname keying the S3
+// The prerender facts interception needs: the concrete pathname keying the store
 // entry, and the route's revalidate window (Next's Revalidate: seconds, or false
 // for a static entry with no time-based expiry).
 export interface InterceptTarget {
@@ -85,12 +68,9 @@ export interface SnapshotCache {
 }
 
 export interface InterceptDeps {
-  // A SigV4-signing fetch (aws4fetch's AwsClient.fetch in production, a fake in
-  // tests). Signs S3 GETs and DynamoDB BatchGetItem POSTs.
-  signedFetch: typeof fetch;
-  // The bound cache store. Present is what moves entries and tag state off AWS;
-  // absent leaves the signed path below in charge.
-  store?: ObjectStoreReader;
+  // The bound cache store entries and tag state are read from (the Cloudflare R2
+  // binding in production, a fake in tests).
+  store: ObjectStoreReader;
   // The PoP cache fronting the snapshot read. Absent, or inert as it is on
   // *.workers.dev, costs one store read per interception and nothing else.
   snapshotCache?: SnapshotCache;
@@ -101,18 +81,6 @@ export interface InterceptDeps {
 // A static entry (revalidate false/undefined) has no time-based expiry, only
 // tag-based; it is memoized for a year, matching Next's own fully-static TTL.
 const STATIC_WINDOW = 31536000;
-
-// Stamped on every response reconstructed from the S3/DynamoDB read so an
-// interception serve is distinguishable from a Lambda-origin one. Orthogonal to
-// x-ocel-cache (the colo cache status): its absence means the fill came from the
-// Lambda.
-const ISR_STATUS = "x-ocel-isr";
-
-// Tag reads sit on the request path, so the retry budget is deliberately small,
-// mirroring the Lambda store: 50/100/200ms, then give up (fail open).
-const batchGetMaxAttempts = 4;
-const batchGetBackoffMs = 50;
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // The tag-clock replica is read on every tagged interception, so it is fronted
 // by two layers: the PoP-shared Cache API, and a per-isolate memo covering the
@@ -134,43 +102,6 @@ const snapshotMemo = new WeakMap<
   ObjectStoreReader,
   { at: number; snapshot: TagSnapshot }
 >();
-
-// readInterceptionConfig reads the worker's edge bindings, returning null unless
-// every one is present so interception stays all-or-nothing.
-export function readInterceptionConfig(
-  env: Record<string, string | undefined>,
-): InterceptionConfig | null {
-  const accessKeyId = env.OCEL_EDGE_ACCESS_KEY_ID;
-  const secretKey = env.OCEL_EDGE_SECRET_KEY;
-  const region = env.OCEL_AWS_REGION;
-  const bucket = env.OCEL_ISR_BUCKET;
-  const table = env.OCEL_STATE_TABLE;
-  const prefix = env.OCEL_ISR_PREFIX;
-  const tagNamespace = env.OCEL_ISR_TAG_NAMESPACE;
-  if (
-    !accessKeyId ||
-    !secretKey ||
-    !region ||
-    !bucket ||
-    !table ||
-    !prefix ||
-    !tagNamespace
-  ) {
-    return null;
-  }
-  return { accessKeyId, secretKey, region, bucket, table, prefix, tagNamespace };
-}
-
-// signerFor builds the production signed-fetch from an interception config.
-export function signerFor(cfg: InterceptionConfig): typeof fetch {
-  const aws = new AwsClient({
-    accessKeyId: cfg.accessKeyId,
-    secretAccessKey: cfg.secretKey,
-    region: cfg.region,
-  });
-  return ((input: RequestInfo | URL, init?: RequestInit) =>
-    aws.fetch(input as string, init)) as typeof fetch;
-}
 
 // intercept attempts to answer a prerender target from the ISR cache. It returns
 // a complete response, a PPR shell awaiting a resumed render, or null to fail
@@ -251,11 +182,9 @@ export async function intercept(
     // content, so an invalidated tag must send it to the Lambda to re-render.
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
-      const records = deps.store
-        ? await snapshotRecords(cfg, deps, deps.store, now)
-        : await readTags(cfg, deps, tags);
-      // The replica could not be trusted, or the DynamoDB read failed or came
-      // back partial. Either way tag state is unknown, and unknown never serves.
+      const records = await snapshotRecords(cfg, deps, deps.store, now);
+      // The snapshot could not be trusted, so tag state is unknown — and unknown
+      // never serves.
       if (!records) return null;
       if (areTagsExpired(tags, records, entry.lastModified, now)) return null;
     }
@@ -316,18 +245,14 @@ async function readFallbackShell(
   return entry?.value?.postponed === undefined ? null : entry;
 }
 
-// readEntry fetches the entry object through whichever path is configured. The
-// key layout is identical either way, so the two stores hold the same objects
-// under the same names and a substrate can move between them without a backfill.
+// readEntry fetches the entry object from the cache store.
 async function readEntry(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
   routePath: string,
 ): Promise<CacheEntryFile | null> {
   const key = `${cfg.prefix}/cache/${cacheKey(routePath)}.cache.json`;
-  const body = deps.store
-    ? await storeText(deps.store, key)
-    : await signedText(cfg, deps, key);
+  const body = await storeText(deps.store, key);
   if (body === null) return null;
 
   const entry = parseJson<CacheEntryFile>(body);
@@ -345,15 +270,6 @@ async function storeText(
   return object ? object.text() : null;
 }
 
-async function signedText(
-  cfg: InterceptionConfig,
-  deps: InterceptDeps,
-  key: string,
-): Promise<string | null> {
-  const res = await deps.signedFetch(s3Url(cfg, key));
-  return res.ok ? res.text() : null;
-}
-
 function parseJson<T>(body: string): T | null {
   try {
     return JSON.parse(body) as T;
@@ -362,8 +278,8 @@ function parseJson<T>(body: string): T | null {
   }
 }
 
-// snapshotRecords is the bound path's answer to readTags: the tag clock as the
-// last publisher left it, rather than a live read of the authoritative one.
+// snapshotRecords resolves tag state from the tag clock as the last publisher
+// left it, rather than a live read of the authoritative one.
 async function snapshotRecords(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
@@ -442,51 +358,6 @@ function usableSnapshot(
     : null;
 }
 
-// readTags mirrors the Lambda store's BatchGetItem read: 100 keys per call, with
-// a bounded retry that drains UnprocessedKeys. Any error or an undrainable batch
-// returns null so the caller fails open rather than serving on a partial read —
-// a dropped tag record reads as "not invalidated", which would serve stale.
-async function readTags(
-  cfg: InterceptionConfig,
-  deps: InterceptDeps,
-  tags: string[],
-): Promise<Map<string, TagRecord> | null> {
-  const found = new Map<string, TagRecord>();
-  for (let i = 0; i < tags.length; i += 100) {
-    let keys = tags.slice(i, i + 100).map((tag) => ({
-      pk: { S: cfg.tagNamespace + tag },
-      sk: { S: "#META" },
-    }));
-
-    for (let attempt = 0; keys.length > 0; attempt++) {
-      if (attempt === batchGetMaxAttempts) return null;
-      if (attempt > 0) await sleep(batchGetBackoffMs << (attempt - 1));
-
-      const res = await deps.signedFetch(ddbUrl(cfg), {
-        method: "POST",
-        headers: {
-          "content-type": "application/x-amz-json-1.0",
-          "x-amz-target": "DynamoDB_20120810.BatchGetItem",
-        },
-        body: JSON.stringify({ RequestItems: { [cfg.table]: { Keys: keys } } }),
-      });
-      if (!res.ok) return null;
-      const json: any = await res.json();
-
-      for (const item of json.Responses?.[cfg.table] ?? []) {
-        const pk = item.pk?.S;
-        if (!pk) continue;
-        found.set(pk.slice(cfg.tagNamespace.length), {
-          stale: item.stale?.N ? Number(item.stale.N) : undefined,
-          expired: item.expired?.N ? Number(item.expired.N) : undefined,
-        });
-      }
-      keys = json.UnprocessedKeys?.[cfg.table]?.Keys ?? [];
-    }
-  }
-  return found;
-}
-
 // headersFrom rebuilds a Headers from a stored variant map, dropping the internal
 // tag header (the only header a client must never see). Every other header is
 // replayed verbatim, so whatever Next stamped on the variant at build — including
@@ -503,10 +374,10 @@ function headersFrom(map: Record<string, any> | undefined): Headers {
 // reconstruct rebuilds the HTTP response Next would have served for this entry,
 // negotiating RSC vs html and replaying that variant's stored headers verbatim:
 // the html variant from value.headers, the RSC variant from value.rscHeaders,
-// each captured at build from the prerender's own initialHeaders. An
-// x-ocel-isr: HIT marker is stamped so the serve is distinguishable from a
-// Lambda-origin one. Freshness is the caller's to declare: a complete entry gets
-// its remaining revalidate window, a PPR shell gets no shared cache at all. An
+// each captured at build from the prerender's own initialHeaders. Freshness is
+// the caller's to declare: a complete entry gets its remaining revalidate
+// window, a PPR shell gets no shared cache at all. The dispatch layer stamps the
+// x-ocel-cache tier (PRERENDER) once it decides how the entry is served. An
 // entry predating per-variant capture falls back to the negotiated content-type
 // so it still serves. Returns null on an incomplete entry.
 function reconstruct(
@@ -545,7 +416,6 @@ function reconstruct(
     }
   }
 
-  headers.set(ISR_STATUS, "HIT");
   return new Response(body, { status, headers });
 }
 
@@ -567,7 +437,6 @@ function reconstructSegment(
   if (!value.segmentHeaders) return null;
 
   const headers = headersFrom(value.segmentHeaders);
-  headers.set(ISR_STATUS, "HIT");
   return new Response(body, { status: 200, headers });
 }
 
@@ -582,12 +451,4 @@ function encodeKeyPath(key: string): string {
 // carries the build prefix, so two builds on one worker cannot collide.
 function snapshotCacheUrl(key: string): string {
   return `https://isr.ocel/${encodeKeyPath(key)}`;
-}
-
-function s3Url(cfg: InterceptionConfig, key: string): string {
-  return `https://${cfg.bucket}.s3.${cfg.region}.amazonaws.com/${encodeKeyPath(key)}`;
-}
-
-function ddbUrl(cfg: InterceptionConfig): string {
-  return `https://dynamodb.${cfg.region}.amazonaws.com/`;
 }

@@ -10,11 +10,10 @@
 // The commit point is the first shell byte: once it is written, an origin
 // failure can only truncate the document, never redirect or re-render it. That
 // is inherent to streaming, and it is the price of a shell at edge latency.
+import { CACHE_STATUS } from "./cache";
 import type { Interception } from "./interception";
 
 export type PprHit = Extract<Interception, { kind: "ppr" }>;
-
-const PPR_STATUS = "x-ocel-ppr";
 
 // Next's resume protocol, as its platform guide specifies it: a POST carrying
 // the postponed state as the raw body. The build declares the headers in
@@ -70,9 +69,12 @@ export function composePpr(hit: PprHit, resumed: Promise<Response>): Response {
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
   void pipe(hit.shell, resumed, writable);
 
+  // The cacheable half (the shell) came from the R2 ISR store, so the composed
+  // response is a PRERENDER serve — whether or not the shell was stale, which
+  // only decides the background refresh, not the header.
   const headers = new Headers(hit.shell.headers);
   headers.set("cache-control", "private, no-store");
-  headers.set(PPR_STATUS, hit.stale ? "STALE" : "HIT");
+  headers.set(CACHE_STATUS, "PRERENDER");
   headers.delete("content-length");
 
   return new Response(readable, { status: hit.shell.status, headers });

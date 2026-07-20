@@ -4,68 +4,12 @@ import { describe, expect, it } from "vitest";
 import genesisSnapshot from "../../../packages/next-cache/fixtures/genesis-tag-snapshot.json?raw";
 import {
   intercept,
-  readInterceptionConfig,
   type InterceptDeps,
   type InterceptionConfig,
   type InterceptTarget,
 } from "../src/interception";
 
-const cfg: InterceptionConfig = {
-  accessKeyId: "AKIA",
-  secretKey: "secret",
-  region: "us-east-1",
-  bucket: "assets",
-  table: "state",
-  prefix: "prod/proj/app/build",
-  tagNamespace: "TAG#prod#proj#app#build#",
-};
-
-// A fake AWS signer: routes by host, serving one canned S3 entry and canned DDB
-// tag records, and recording the calls so a test can assert what interception
-// read. Keys are the S3 object keys (without the .cache.json suffix stripped).
-function fakeAws(opts: {
-  entries?: Record<string, unknown>;
-  tags?: Record<string, { expired?: number; stale?: number }>;
-  s3Status?: number;
-  ddbStatus?: number;
-}): InterceptDeps & { s3Calls: string[]; ddbCalls: unknown[] } {
-  const s3Calls: string[] = [];
-  const ddbCalls: unknown[] = [];
-  const signedFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input.toString();
-    if (url.includes(".s3.")) {
-      const key = decodeURIComponent(new URL(url).pathname.slice(1));
-      s3Calls.push(key);
-      if (opts.s3Status && opts.s3Status !== 200) {
-        return new Response("", { status: opts.s3Status });
-      }
-      const entry = opts.entries?.[key];
-      if (!entry) return new Response("", { status: 404 });
-      return new Response(JSON.stringify(entry), { status: 200 });
-    }
-    // DynamoDB BatchGetItem.
-    const body = JSON.parse(String(init?.body));
-    ddbCalls.push(body);
-    if (opts.ddbStatus && opts.ddbStatus !== 200) {
-      return new Response("", { status: opts.ddbStatus });
-    }
-    const keys = body.RequestItems[cfg.table].Keys as { pk: { S: string } }[];
-    const items = [];
-    for (const k of keys) {
-      const tag = k.pk.S.slice(cfg.tagNamespace.length);
-      const rec = opts.tags?.[tag];
-      if (!rec) continue;
-      const item: Record<string, unknown> = { pk: { S: k.pk.S }, sk: { S: "#META" } };
-      if (rec.expired !== undefined) item.expired = { N: String(rec.expired) };
-      if (rec.stale !== undefined) item.stale = { N: String(rec.stale) };
-      items.push(item);
-    }
-    return new Response(JSON.stringify({ Responses: { [cfg.table]: items } }), {
-      status: 200,
-    });
-  }) as typeof fetch;
-  return { signedFetch, s3Calls, ddbCalls };
-}
+const cfg: InterceptionConfig = { prefix: "prod/proj/app/build" };
 
 // A fake object-store binding, shaped like the R2 bucket the deploy binds as
 // OCEL_CACHE_STORE: canned bodies by key, every get recorded so a test can
@@ -85,23 +29,36 @@ function fakeStore(objects: Record<string, string>, opts: { fail?: boolean } = {
   };
 }
 
+// Builds a store from entry values, JSON-encoding each the way the build writes
+// them, so tests can hand over plain objects.
+function stored(
+  entries: Record<string, unknown>,
+  opts: { fail?: boolean } = {},
+) {
+  const objects: Record<string, string> = {};
+  for (const [key, value] of Object.entries(entries)) {
+    objects[key] = JSON.stringify(value);
+  }
+  return fakeStore(objects, opts);
+}
+
 // A Map-backed stand-in for caches.default. `inert` models *.workers.dev, where
 // put() is silently discarded and match() never hits, so the snapshot read has
 // to degrade to a direct store GET.
 function fakeCache(opts: { inert?: boolean } = {}) {
-  const stored = new Map<string, string>();
+  const store = new Map<string, string>();
   const calls = { match: 0, put: 0 };
   return {
     calls,
     async match(request: Request): Promise<Response | undefined> {
       calls.match++;
-      const body = stored.get(request.url);
+      const body = store.get(request.url);
       return body === undefined ? undefined : new Response(body);
     },
     async put(request: Request, response: Response): Promise<void> {
       calls.put++;
       const body = await response.text();
-      if (!opts.inert) stored.set(request.url, body);
+      if (!opts.inert) store.set(request.url, body);
     },
   };
 }
@@ -117,7 +74,7 @@ const snapshot = (over: Partial<TagSnapshot> = {}): TagSnapshot => ({
   ...over,
 });
 
-const s3Key = (routePath: string) =>
+const entryKey = (routePath: string) =>
   `${cfg.prefix}/cache/${routePath === "/" ? "index" : routePath.replace(/^\//, "")}.cache.json`;
 
 // The build seeds identical segment headers across a group; the marker the
@@ -160,8 +117,13 @@ function appPage(
   };
 }
 
+const storeDeps = (
+  store: ReturnType<typeof fakeStore>,
+  over: Partial<InterceptDeps> = {},
+): InterceptDeps => ({ store, ...over });
+
 // Most cases here are about whether an entry serves at all, which is the
-// complete-entry contract; `served` narrows to that so they read as before. The
+// complete-entry contract; `served` narrows to that so they read plainly. The
 // PPR suite calls intercept directly.
 async function served(
   ...args: Parameters<typeof intercept>
@@ -177,40 +139,10 @@ const target = (over: Partial<InterceptTarget> = {}): InterceptTarget => ({
   ...over,
 });
 
-describe("readInterceptionConfig", () => {
-  it("is null unless every binding is present", () => {
-    expect(readInterceptionConfig({})).toBeNull();
-    expect(
-      readInterceptionConfig({
-        OCEL_EDGE_ACCESS_KEY_ID: "a",
-        OCEL_EDGE_SECRET_KEY: "s",
-        OCEL_AWS_REGION: "us-east-1",
-        OCEL_ISR_BUCKET: "b",
-        OCEL_STATE_TABLE: "t",
-        OCEL_ISR_PREFIX: "p",
-        // missing tag namespace
-      }),
-    ).toBeNull();
-  });
-
-  it("builds a config when all bindings are present", () => {
-    const c = readInterceptionConfig({
-      OCEL_EDGE_ACCESS_KEY_ID: "a",
-      OCEL_EDGE_SECRET_KEY: "s",
-      OCEL_AWS_REGION: "us-east-1",
-      OCEL_ISR_BUCKET: "b",
-      OCEL_STATE_TABLE: "t",
-      OCEL_ISR_PREFIX: "p",
-      OCEL_ISR_TAG_NAMESPACE: "TAG#p#",
-    });
-    expect(c).toMatchObject({ accessKeyId: "a", bucket: "b", tagNamespace: "TAG#p#" });
-  });
-});
-
-describe("intercept", () => {
-  it("serves html for a fresh untagged page and never reads DynamoDB", async () => {
-    const aws = fakeAws({ entries: { [s3Key("/blog")]: appPage() } });
-    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
+describe("intercept, complete entries", () => {
+  it("serves html for a fresh untagged page, reading only its one object", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage() });
+    const res = await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
 
     expect(res).not.toBeNull();
     expect(res!.status).toBe(200);
@@ -219,87 +151,51 @@ describe("intercept", () => {
     // Entry is 1s old (lastModified 1_000, now 2_000), so the CDN gets the
     // remaining window, not the full 60s.
     expect(res!.headers.get("cache-control")).toBe("s-maxage=59");
-    // Marks the serve as an interception hit, not a Lambda-origin fill.
-    expect(res!.headers.get("x-ocel-isr")).toBe("HIT");
-    expect(aws.ddbCalls.length).toBe(0);
+    // Untagged, so the snapshot is never read.
+    expect(store.gets).toEqual([entryKey("/blog")]);
   });
 
   it("serves the RSC payload when the request negotiates RSC", async () => {
-    const aws = fakeAws({ entries: { [s3Key("/blog")]: appPage() } });
+    const store = stored({ [entryKey("/blog")]: appPage() });
     const res = await served(
       req({ headers: { RSC: "1" } }),
       target(),
       cfg,
-      { ...aws, now: () => 2_000 },
+      storeDeps(store, { now: () => 2_000 }),
     );
 
     expect(res!.headers.get("content-type")).toBe("text/x-component");
     expect(await res!.text()).toBe("RSC-PAYLOAD");
   });
 
-  it("fails open (null) on an S3 miss", async () => {
-    const aws = fakeAws({ entries: {} });
-    expect(await served(req(), target(), cfg, { ...aws, now: () => 2_000 })).toBeNull();
+  it("fails open (null) on a store miss", async () => {
+    const store = stored({});
+    expect(await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }))).toBeNull();
+  });
+
+  it("fails open when the store errors", async () => {
+    const store = stored({}, { fail: true });
+    expect(await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }))).toBeNull();
   });
 
   it("fails open past the revalidate window (time-based expiry)", async () => {
-    const aws = fakeAws({ entries: { [s3Key("/blog")]: appPage({ lastModified: 1_000 }) } });
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
     // 61s later, revalidate is 60s.
     const res = await served(req(), target({ revalidate: 60 }), cfg, {
-      ...aws,
+      ...storeDeps(store),
       now: () => 1_000 + 61_000,
     });
     expect(res).toBeNull();
   });
 
   it("stays fresh within the window with a false (static) revalidate", async () => {
-    const aws = fakeAws({ entries: { [s3Key("/blog")]: appPage({ lastModified: 1_000 }) } });
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
     const res = await served(req(), target({ revalidate: false }), cfg, {
-      ...aws,
+      ...storeDeps(store),
       now: () => 1_000 + 10 * 365 * 86400_000,
     });
     expect(res).not.toBeNull();
     expect(res!.headers.get("cache-control")).toBe("s-maxage=31536000");
-  });
-
-  it("consults DynamoDB and fails open when a tag was revalidated after the entry", async () => {
-    const aws = fakeAws({
-      entries: { [s3Key("/blog")]: appPage({ tags: "products", lastModified: 1_000 }) },
-      tags: { products: { expired: 1_500 } },
-    });
-    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
-    expect(res).toBeNull();
-    expect(aws.ddbCalls.length).toBe(1);
-  });
-
-  it("serves a tagged page whose tag expired before the entry was written", async () => {
-    const aws = fakeAws({
-      entries: { [s3Key("/blog")]: appPage({ tags: "products", lastModified: 1_000 }) },
-      tags: { products: { expired: 500 } },
-    });
-    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
-    expect(res).not.toBeNull();
-  });
-
-  it("fails open when DynamoDB errors", async () => {
-    const aws = fakeAws({
-      entries: { [s3Key("/blog")]: appPage({ tags: "products", lastModified: 1_000 }) },
-      tags: {},
-      ddbStatus: 500,
-    });
-    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
-    expect(res).toBeNull();
-  });
-
-  it("returns a PPR shell — not a complete response — for a postponed page", async () => {
-    const aws = fakeAws({
-      entries: { [s3Key("/blog")]: appPage({ postponed: "STATE" }) },
-    });
-    const outcome = await intercept(req(), target(), cfg, {
-      ...aws,
-      now: () => 2_000,
-    });
-    expect(outcome?.kind).toBe("ppr");
   });
 
   it("serves an APP_ROUTE body with its stored headers verbatim", async () => {
@@ -307,84 +203,53 @@ describe("intercept", () => {
       lastModified: 1_000,
       value: {
         kind: "APP_ROUTE",
-        body: btoa("{\"ok\":true}"),
+        body: btoa('{"ok":true}'),
         status: 201,
         headers: { "content-type": "application/json" },
       },
     };
-    const aws = fakeAws({ entries: { [s3Key("/blog")]: entry } });
-    const res = await served(req(), target(), cfg, { ...aws, now: () => 2_000 });
+    const store = stored({ [entryKey("/blog")]: entry });
+    const res = await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
     expect(res!.status).toBe(201);
     expect(res!.headers.get("content-type")).toBe("application/json");
     expect(await res!.text()).toBe('{"ok":true}');
   });
+
+  it("returns a PPR shell — not a complete response — for a postponed page", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ postponed: "STATE" }) });
+    const outcome = await intercept(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
+    expect(outcome?.kind).toBe("ppr");
+  });
 });
 
-describe("intercept through the object-store binding", () => {
-  const storeDeps = (
-    store: ReturnType<typeof fakeStore>,
-    over: Partial<InterceptDeps> = {},
-  ): InterceptDeps & { s3Calls: string[]; ddbCalls: unknown[] } => ({
-    ...fakeAws({}),
-    store,
-    ...over,
-  });
-
-  it("serves a hit from the binding without making a single AWS call", async () => {
-    const store = fakeStore({ [s3Key("/blog")]: JSON.stringify(appPage()) });
-    const deps = storeDeps(store, { now: () => 2_000 });
-    const res = await served(req(), target(), cfg, deps);
-
-    expect(res!.status).toBe(200);
-    expect(await res!.text()).toBe("<html>hi</html>");
-    expect(res!.headers.get("x-ocel-isr")).toBe("HIT");
-    expect(store.gets).toEqual([s3Key("/blog")]);
-    expect(deps.s3Calls).toEqual([]);
-    expect(deps.ddbCalls).toEqual([]);
-  });
-
-  it("decides tag expiry from the snapshot, never DynamoDB", async () => {
-    const store = fakeStore({
-      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
-      [snapshotKey]: JSON.stringify(snapshot({ records: { products: { expired: 1_500 } } })),
+describe("intercept, tag state from the snapshot", () => {
+  it("fails open when a tag was revalidated after the entry", async () => {
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot({ records: { products: { expired: 1_500 } } }),
     });
     const deps = storeDeps(store, { now: () => 2_000 });
 
     expect(await served(req(), target(), cfg, deps)).toBeNull();
     expect(store.gets).toContain(snapshotKey);
-    expect(deps.ddbCalls).toEqual([]);
   });
 
-  it("serves when the snapshot's expiry predates the entry", async () => {
-    const store = fakeStore({
-      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
-      [snapshotKey]: JSON.stringify(snapshot({ records: { products: { expired: 500 } } })),
+  it("serves a tagged page whose tag expired before the entry was written", async () => {
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot({ records: { products: { expired: 500 } } }),
     });
     const res = await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
     expect(res).not.toBeNull();
   });
 
   it("serves a tagged page the snapshot has no record for", async () => {
-    const store = fakeStore({
-      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
-      [snapshotKey]: JSON.stringify(snapshot()),
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot(),
     });
     const res = await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
     expect(res).not.toBeNull();
-  });
-
-  it("falls open on a store miss for the entry", async () => {
-    const store = fakeStore({});
-    expect(
-      await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
-    ).toBeNull();
-  });
-
-  it("falls open when the store errors", async () => {
-    const store = fakeStore({}, { fail: true });
-    expect(
-      await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
-    ).toBeNull();
   });
 
   // Every unusable snapshot is a fall-open rather than a serve: waking the
@@ -402,20 +267,21 @@ describe("intercept through the object-store binding", () => {
   for (const [why, body] of Object.entries(unusable)) {
     it(`falls open on a snapshot that is ${why}`, async () => {
       const store = fakeStore({
-        [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
+        [entryKey("/blog")]: JSON.stringify(
+          appPage({ tags: "products", lastModified: 1_000 }),
+        ),
         ...(body ? { [snapshotKey]: body } : {}),
       });
-      const deps = storeDeps(store, { now: () => 2_000 });
-      expect(await served(req(), target(), cfg, deps)).toBeNull();
-      expect(deps.ddbCalls).toEqual([]);
+      expect(
+        await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 })),
+      ).toBeNull();
     });
   }
 
   it("reads the snapshot once across requests when the PoP cache works", async () => {
-    const entry = JSON.stringify(appPage({ tags: "products", lastModified: 1_000 }));
-    const store = fakeStore({
-      [s3Key("/blog")]: entry,
-      [snapshotKey]: JSON.stringify(snapshot()),
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot(),
     });
     const snapshotCache = fakeCache();
 
@@ -434,9 +300,9 @@ describe("intercept through the object-store binding", () => {
   });
 
   it("serves a burst from the in-isolate memo without touching the PoP cache", async () => {
-    const store = fakeStore({
-      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
-      [snapshotKey]: JSON.stringify(snapshot()),
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot(),
     });
     const snapshotCache = fakeCache();
 
@@ -448,9 +314,9 @@ describe("intercept through the object-store binding", () => {
   });
 
   it("stays correct with an inert PoP cache, paying a store read per request", async () => {
-    const store = fakeStore({
-      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
-      [snapshotKey]: JSON.stringify(snapshot({ records: { products: { expired: 1_500 } } })),
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot({ records: { products: { expired: 1_500 } } }),
     });
     const snapshotCache = fakeCache({ inert: true });
 
@@ -465,9 +331,9 @@ describe("intercept through the object-store binding", () => {
   });
 
   it("falls open rather than trusting a snapshot the PoP cache held past validUntil", async () => {
-    const store = fakeStore({
-      [s3Key("/blog")]: JSON.stringify(appPage({ tags: "products", lastModified: 1_000 })),
-      [snapshotKey]: JSON.stringify(snapshot({ validUntil: 10_000 })),
+    const store = stored({
+      [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
+      [snapshotKey]: snapshot({ validUntil: 10_000 }),
     });
     const snapshotCache = fakeCache();
 
@@ -490,11 +356,14 @@ describe("intercept, PPR entries", () => {
   const pprTarget = (over: Partial<InterceptTarget> = {}) =>
     target({ revalidate: 60, expiration: 3600, ...over });
 
-  const read = (t: InterceptTarget, entries: Record<string, unknown>, now: number) =>
-    intercept(req(), t, cfg, { ...fakeAws({ entries }), now: () => now });
+  const read = (
+    t: InterceptTarget,
+    entries: Record<string, unknown>,
+    now: number,
+  ) => intercept(req(), t, cfg, storeDeps(stored(entries), { now: () => now }));
 
   it("hands back the shell, the postponed state, and no shared-cache claim", async () => {
-    const outcome = await read(pprTarget(), { [s3Key("/blog")]: pprEntry() }, 2_000);
+    const outcome = await read(pprTarget(), { [entryKey("/blog")]: pprEntry() }, 2_000);
 
     expect(outcome).toMatchObject({ kind: "ppr", postponed: "STATE", stale: false });
     const shell = (outcome as { shell: Response }).shell;
@@ -508,7 +377,7 @@ describe("intercept, PPR entries", () => {
       req({ headers: { RSC: "1" } }),
       pprTarget(),
       cfg,
-      { ...fakeAws({ entries: { [s3Key("/blog")]: pprEntry() } }), now: () => 2_000 },
+      storeDeps(stored({ [entryKey("/blog")]: pprEntry() }), { now: () => 2_000 }),
     );
 
     expect(outcome).toMatchObject({ kind: "ppr", postponed: "STATE" });
@@ -520,7 +389,7 @@ describe("intercept, PPR entries", () => {
   it("still serves past initialRevalidate, marked stale", async () => {
     const outcome = await read(
       pprTarget(),
-      { [s3Key("/blog")]: pprEntry({ lastModified: 1_000 }) },
+      { [entryKey("/blog")]: pprEntry({ lastModified: 1_000 }) },
       1_000 + 61_000,
     );
 
@@ -530,7 +399,7 @@ describe("intercept, PPR entries", () => {
   it("falls open past initialExpiration", async () => {
     const outcome = await read(
       pprTarget({ expiration: 3600 }),
-      { [s3Key("/blog")]: pprEntry({ lastModified: 1_000 }) },
+      { [entryKey("/blog")]: pprEntry({ lastModified: 1_000 }) },
       1_000 + 3_600_000,
     );
 
@@ -538,19 +407,19 @@ describe("intercept, PPR entries", () => {
   });
 
   it("still refuses a PPR entry whose tags were invalidated", async () => {
-    const aws = fakeAws({
-      entries: { [s3Key("/blog")]: pprEntry({ tags: "posts" }) },
-      tags: { posts: { expired: 1_500 } },
+    const store = stored({
+      [entryKey("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
+      [snapshotKey]: snapshot({ records: { posts: { expired: 1_500 } } }),
     });
     expect(
-      await intercept(req(), pprTarget(), cfg, { ...aws, now: () => 2_000 }),
+      await intercept(req(), pprTarget(), cfg, storeDeps(store, { now: () => 2_000 })),
     ).toBeNull();
   });
 
   it("resumes a concrete path from the route's param-agnostic fallback shell", async () => {
     const outcome = await read(
       pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" }),
-      { [s3Key("/posts/[id]")]: pprEntry() },
+      { [entryKey("/posts/[id]")]: pprEntry() },
       2_000,
     );
 
@@ -561,7 +430,7 @@ describe("intercept, PPR entries", () => {
     // Without a postponed state that entry is some other path's rendered page.
     const outcome = await read(
       pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" }),
-      { [s3Key("/posts/[id]")]: appPage() },
+      { [entryKey("/posts/[id]")]: appPage() },
       2_000,
     );
 
@@ -572,8 +441,8 @@ describe("intercept, PPR entries", () => {
     const outcome = await read(
       pprTarget({ routePath: "/posts/7", fallbackPath: "/posts/[id]" }),
       {
-        [s3Key("/posts/7")]: appPage(),
-        [s3Key("/posts/[id]")]: pprEntry(),
+        [entryKey("/posts/7")]: appPage(),
+        [entryKey("/posts/[id]")]: pprEntry(),
       },
       2_000,
     );
@@ -592,16 +461,14 @@ describe("intercept, PPR entries", () => {
       }),
       pprTarget(),
       cfg,
-      {
-        ...fakeAws({
-          entries: {
-            [s3Key("/blog")]: pprEntry({
-              segmentData: { "/_tree": btoa("TREE-SEG") },
-            }),
-          },
+      storeDeps(
+        stored({
+          [entryKey("/blog")]: pprEntry({
+            segmentData: { "/_tree": btoa("TREE-SEG") },
+          }),
         }),
-        now: () => 2_000,
-      },
+        { now: () => 2_000 },
+      ),
     );
 
     expect(outcome?.kind).toBe("complete");
@@ -615,7 +482,6 @@ describe("intercept, PPR entries", () => {
     expect(res.headers.get("vary")).toBe(
       "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
     );
-    expect(res.headers.get("x-ocel-isr")).toBe("HIT");
     expect(await res.text()).toBe("TREE-SEG");
   });
 
@@ -624,17 +490,15 @@ describe("intercept, PPR entries", () => {
       req({ headers: { "next-router-segment-prefetch": "/_tree" } }),
       pprTarget(),
       cfg,
-      {
-        ...fakeAws({
-          entries: {
-            [s3Key("/blog")]: pprEntry({
-              segmentData: { "/_tree": btoa("TREE-SEG") },
-              segmentHeaders: { ...SEGMENT_HEADERS, "x-next-cache-tags": "posts" },
-            }),
-          },
+      storeDeps(
+        stored({
+          [entryKey("/blog")]: pprEntry({
+            segmentData: { "/_tree": btoa("TREE-SEG") },
+            segmentHeaders: { ...SEGMENT_HEADERS, "x-next-cache-tags": "posts" },
+          }),
         }),
-        now: () => 2_000,
-      },
+        { now: () => 2_000 },
+      ),
     );
 
     const res = (outcome as { response: Response }).response;
@@ -649,17 +513,15 @@ describe("intercept, PPR entries", () => {
       req({ headers: { "next-router-segment-prefetch": "/_tree" } }),
       pprTarget(),
       cfg,
-      {
-        ...fakeAws({
-          entries: {
-            [s3Key("/blog")]: pprEntry({
-              segmentData: { "/_tree": btoa("TREE-SEG") },
-              segmentHeaders: null,
-            }),
-          },
+      storeDeps(
+        stored({
+          [entryKey("/blog")]: pprEntry({
+            segmentData: { "/_tree": btoa("TREE-SEG") },
+            segmentHeaders: null,
+          }),
         }),
-        now: () => 2_000,
-      },
+        { now: () => 2_000 },
+      ),
     );
 
     expect(outcome).toBeNull();
@@ -678,10 +540,10 @@ describe("intercept, PPR entries", () => {
       req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
       pprTarget(),
       cfg,
-      {
-        ...fakeAws({ entries: { [s3Key("/blog")]: pprEntry({ rscHeaders }) } }),
-        now: () => 2_000,
-      },
+      storeDeps(
+        stored({ [entryKey("/blog")]: pprEntry({ rscHeaders }) }),
+        { now: () => 2_000 },
+      ),
     );
 
     expect(outcome?.kind).toBe("complete");
@@ -699,16 +561,14 @@ describe("intercept, PPR entries", () => {
     // navigation, which resumes the tagged half fresh — so the prefetch carries
     // no tagged content to be stale. An invalidated tag must not strand it on
     // the Lambda, which would starve the client's segment cache. The tag gate is
-    // bypassed entirely, so no tag read happens on the prefetch path.
-    const aws = fakeAws({
-      entries: {
-        [s3Key("/blog")]: pprEntry({
-          tags: "posts",
-          lastModified: 1_000,
-          segmentData: { "/_tree": btoa("TREE-SEG") },
-        }),
-      },
-      tags: { posts: { expired: 1_500 } },
+    // bypassed entirely, so the snapshot is never even read.
+    const store = stored({
+      [entryKey("/blog")]: pprEntry({
+        tags: "posts",
+        lastModified: 1_000,
+        segmentData: { "/_tree": btoa("TREE-SEG") },
+      }),
+      [snapshotKey]: snapshot({ records: { posts: { expired: 1_500 } } }),
     });
     const outcome = await intercept(
       req({
@@ -720,33 +580,31 @@ describe("intercept, PPR entries", () => {
       }),
       pprTarget(),
       cfg,
-      { ...aws, now: () => 2_000 },
+      storeDeps(store, { now: () => 2_000 }),
     );
 
     expect(outcome?.kind).toBe("complete");
     const res = (outcome as { response: Response }).response;
     expect(await res.text()).toBe("TREE-SEG");
-    expect(aws.ddbCalls.length).toBe(0);
+    expect(store.gets).not.toContain(snapshotKey);
   });
 
   it("serves a full-route prefetch even when the entry's tags were invalidated", async () => {
-    const aws = fakeAws({
-      entries: {
-        [s3Key("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
-      },
-      tags: { posts: { expired: 1_500 } },
+    const store = stored({
+      [entryKey("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
+      [snapshotKey]: snapshot({ records: { posts: { expired: 1_500 } } }),
     });
     const outcome = await intercept(
       req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
       pprTarget(),
       cfg,
-      { ...aws, now: () => 2_000 },
+      storeDeps(store, { now: () => 2_000 }),
     );
 
     expect(outcome?.kind).toBe("complete");
     const res = (outcome as { response: Response }).response;
     expect(await res.text()).toBe("RSC-PAYLOAD");
-    expect(aws.ddbCalls.length).toBe(0);
+    expect(store.gets).not.toContain(snapshotKey);
   });
 
   it("falls open when the requested segment is absent from the entry", async () => {
@@ -754,16 +612,14 @@ describe("intercept, PPR entries", () => {
       req({ headers: { "next-router-segment-prefetch": "/_missing" } }),
       pprTarget(),
       cfg,
-      {
-        ...fakeAws({
-          entries: {
-            [s3Key("/blog")]: pprEntry({
-              segmentData: { "/_tree": btoa("TREE-SEG") },
-            }),
-          },
+      storeDeps(
+        stored({
+          [entryKey("/blog")]: pprEntry({
+            segmentData: { "/_tree": btoa("TREE-SEG") },
+          }),
         }),
-        now: () => 2_000,
-      },
+        { now: () => 2_000 },
+      ),
     );
 
     expect(outcome).toBeNull();
@@ -782,28 +638,30 @@ describe("the published snapshot format", () => {
 
   it("is served, verbatim, by a worker reading it out of the store", async () => {
     const store = fakeStore({
-      [s3Key("/blog")]: JSON.stringify(
+      [entryKey("/blog")]: JSON.stringify(
         appPage({ tags: "products", lastModified: genesis.deployedAt }),
       ),
       [snapshotKey]: genesisSnapshot,
     });
-    const deps = { ...fakeAws({}), store, now: () => within };
 
-    const res = await served(req(), target({ revalidate: false }), cfg, deps);
+    const res = await served(
+      req(),
+      target({ revalidate: false }),
+      cfg,
+      storeDeps(store, { now: () => within }),
+    );
     expect(res).not.toBeNull();
-    expect(deps.ddbCalls).toEqual([]);
   });
 
   it("stops being trusted at the validity window the publisher declared", async () => {
     const store = fakeStore({
-      [s3Key("/blog")]: JSON.stringify(
+      [entryKey("/blog")]: JSON.stringify(
         appPage({ tags: "products", lastModified: genesis.deployedAt }),
       ),
       [snapshotKey]: genesisSnapshot,
     });
     const res = await served(req(), target({ revalidate: false }), cfg, {
-      ...fakeAws({}),
-      store,
+      ...storeDeps(store),
       now: () => genesis.validUntil,
     });
     expect(res).toBeNull();

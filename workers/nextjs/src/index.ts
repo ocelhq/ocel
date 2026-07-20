@@ -10,8 +10,6 @@ import {
 import { composePpr, resumeRequest } from "./ppr";
 import {
   intercept,
-  readInterceptionConfig,
-  signerFor,
   type InterceptDeps,
   type InterceptionConfig,
 } from "./interception";
@@ -32,16 +30,10 @@ const RSC_FORWARD_HEADERS = new Set([
 interface Env {
   ASSETS: Fetcher;
   FUNCTION_URLS: string;
-  // Bound only where the edge provisioned a cache store. Its presence is what
-  // moves the ISR read path off AWS entirely.
+  // Bound only where the edge provisioned a cache store; together with the build
+  // prefix, its presence is what lets the worker read the ISR cache directly.
   OCEL_CACHE_STORE?: R2Bucket;
-  OCEL_EDGE_ACCESS_KEY_ID?: string;
-  OCEL_EDGE_SECRET_KEY?: string;
-  OCEL_AWS_REGION?: string;
-  OCEL_ISR_BUCKET?: string;
-  OCEL_STATE_TABLE?: string;
   OCEL_ISR_PREFIX?: string;
-  OCEL_ISR_TAG_NAMESPACE?: string;
 }
 
 type RouteHas =
@@ -113,11 +105,11 @@ export interface RouteDeps {
   // to their origin uncached.
   cache?: CacheDeps;
 
-  // Present when the deploy injected edge cache coordinates: prerender routes
-  // then try reading the authoritative ISR cache directly — through the bound
-  // store when there is one, over signed S3+DynamoDB when there is not — before
-  // falling open to the Lambda origin. Absent leaves the Lambda path unchanged.
-  interception?: Pick<InterceptDeps, "signedFetch" | "store" | "snapshotCache" | "now"> & {
+  // Present when the deploy bound a cache store and injected its prefix:
+  // prerender routes then read the authoritative ISR cache directly from the
+  // store before falling open to the Lambda origin. Absent leaves the Lambda
+  // path unchanged.
+  interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now"> & {
     config: InterceptionConfig;
   };
 }
@@ -297,7 +289,13 @@ async function dispatchPrerender(
 
     cachingOrigin = async () => {
       const hit = await read();
-      return hit?.kind === "complete" ? hit.response : origin();
+      // A complete entry answered from the R2 store is a PRERENDER serve;
+      // serveCached preserves that tier and memoizes the response so the next
+      // request is a colo HIT. A miss falls open to the Lambda, an unstamped
+      // MISS.
+      return hit?.kind === "complete"
+        ? withStatus(hit.response, "PRERENDER")
+        : origin();
     };
   }
 
@@ -472,9 +470,11 @@ export default {
       },
     })) as RouteResult;
 
-    const interceptionConfig = readInterceptionConfig(
-      env as unknown as Record<string, string | undefined>,
-    );
+    // Interception is enabled only where both the cache store is bound and its
+    // build prefix is injected; either missing leaves prerender routes forwarding
+    // to the Lambda exactly as before.
+    const store = env.OCEL_CACHE_STORE;
+    const prefix = env.OCEL_ISR_PREFIX;
 
     return dispatchResult(result, request, {
       manifest,
@@ -485,16 +485,16 @@ export default {
         cache: caches.default,
         waitUntil: (promise) => ctx.waitUntil(promise),
       },
-      interception: interceptionConfig
-        ? {
-            config: interceptionConfig,
-            signedFetch: signerFor(interceptionConfig),
-            // Passed as the binding itself: it is one stable object per isolate,
-            // which is what the snapshot memo keys on.
-            store: env.OCEL_CACHE_STORE,
-            snapshotCache: caches.default,
-          }
-        : undefined,
+      interception:
+        store && prefix
+          ? {
+              config: { prefix },
+              // Passed as the binding itself: it is one stable object per
+              // isolate, which is what the snapshot memo keys on.
+              store,
+              snapshotCache: caches.default,
+            }
+          : undefined,
     });
   },
 } satisfies ExportedHandler<Env>;
