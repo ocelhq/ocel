@@ -76,6 +76,10 @@ export interface InterceptDeps {
   snapshotCache?: SnapshotCache;
   // Injected so freshness never depends on wall-clock time. Milliseconds.
   now?: () => number;
+  // Schedules the background R2 refresh of a stale in-memory entry so the R2
+  // round-trip never blocks the request that noticed the staleness. Absent
+  // (routing tests) degrades to a blocking re-read on the next request.
+  waitUntil?: (promise: Promise<unknown>) => void;
 }
 
 // A static entry (revalidate false/undefined) has no time-based expiry, only
@@ -102,6 +106,23 @@ const snapshotMemo = new WeakMap<
   ObjectStoreReader,
   { at: number; snapshot: TagSnapshot }
 >();
+
+// readEntry is the one R2 round-trip on the interception path, and a page's
+// client segment cache fires a burst of prefetches at the same route entry
+// within a colo. This memo, keyed by the store binding exactly like
+// snapshotMemo, collapses that burst to one read and then serves every variant
+// of a hot route from memory. Freshness and tag state are still evaluated per
+// request against the entry's real lastModified and the snapshot, so the memo
+// only freezes the entry bytes for one TTL — the same SWR contract serveCached
+// uses one tier up.
+const entryMemoTtlMs = 5_000;
+const entryMemoMax = 256;
+
+const entryMemo = new WeakMap<
+  ObjectStoreReader,
+  Map<string, { at: number; entry: CacheEntryFile }>
+>();
+const entryRefreshing = new WeakMap<ObjectStoreReader, Set<string>>();
 
 // intercept attempts to answer a prerender target from the ISR cache. It returns
 // a complete response, a PPR shell awaiting a resumed render, or null to fail
@@ -255,14 +276,93 @@ async function readFallbackShell(
   return entry?.value?.postponed === undefined ? null : entry;
 }
 
-// readEntry fetches the entry object from the cache store.
+// readEntry fetches the entry object from the cache store, fronted by a
+// per-isolate memo. A hot entry is served from memory; a stale one is served
+// immediately and refreshed from R2 behind the request (or, without a waitUntil,
+// re-read blocking on the next request).
 async function readEntry(
   cfg: InterceptionConfig,
   deps: InterceptDeps,
   routePath: string,
 ): Promise<CacheEntryFile | null> {
   const key = `${cfg.prefix}/cache/${cacheKey(routePath)}.cache.json`;
-  const body = await storeText(deps.store, key);
+  const now = (deps.now ?? Date.now)();
+  const memo = entryMap(deps.store);
+
+  const hit = memo.get(key);
+  if (hit) {
+    if (now - hit.at < entryMemoTtlMs) return hit.entry;
+    if (deps.waitUntil) {
+      refreshEntry(deps, key);
+      return hit.entry;
+    }
+    // No background scheduler: refresh blocking, but keep the prior entry if the
+    // re-read now misses so a transient store gap never strands a live route.
+    const fresh = await fetchEntry(deps.store, key);
+    if (fresh) memoSet(memo, key, { at: now, entry: fresh });
+    else memo.delete(key);
+    return fresh ?? null;
+  }
+
+  const entry = await fetchEntry(deps.store, key);
+  if (entry) memoSet(memo, key, { at: now, entry });
+  return entry;
+}
+
+function entryMap(
+  store: ObjectStoreReader,
+): Map<string, { at: number; entry: CacheEntryFile }> {
+  let map = entryMemo.get(store);
+  if (!map) entryMemo.set(store, (map = new Map()));
+  return map;
+}
+
+// Insertion-order LRU: re-inserting moves a key to the newest slot, so the
+// oldest is always at the front to evict once the bound is exceeded.
+function memoSet(
+  map: Map<string, { at: number; entry: CacheEntryFile }>,
+  key: string,
+  value: { at: number; entry: CacheEntryFile },
+): void {
+  map.delete(key);
+  map.set(key, value);
+  if (map.size > entryMemoMax) {
+    const oldest = map.keys().next().value;
+    if (oldest !== undefined) map.delete(oldest);
+  }
+}
+
+// refreshEntry re-reads one entry from R2 in the background, deduped per store so
+// a burst of stale reads schedules a single refresh. A refresh that now misses
+// evicts the memo, so the next request falls open to the Lambda.
+function refreshEntry(deps: InterceptDeps, key: string): void {
+  let pending = entryRefreshing.get(deps.store);
+  if (!pending) entryRefreshing.set(deps.store, (pending = new Set()));
+  if (pending.has(key)) return;
+  pending.add(key);
+
+  // The refresh must not touch the store on this tick — a macrotask boundary
+  // (rather than a microtask one) is what actually keeps the R2 read off the
+  // request that noticed the staleness, since the request's own promise chain
+  // finishes draining microtasks before this ever runs.
+  const run = new Promise<void>((resolve) => setTimeout(resolve, 0))
+    .then(async () => {
+      const entry = await fetchEntry(deps.store, key);
+      const map = entryMap(deps.store);
+      if (entry) memoSet(map, key, { at: (deps.now ?? Date.now)(), entry });
+      else map.delete(key);
+    })
+    .catch(() => {})
+    .finally(() => pending.delete(key));
+
+  deps.waitUntil?.(run);
+}
+
+async function fetchEntry(
+  store: ObjectStoreReader,
+  key: string,
+): Promise<CacheEntryFile | null> {
+  const body = await storeText(store, key);
   if (body === null) return null;
 
   const entry = parseJson<CacheEntryFile>(body);
