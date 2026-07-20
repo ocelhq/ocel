@@ -21,13 +21,13 @@ import {
   type CacheEntryFile,
 } from "@ocel/next-cache";
 
+import { evaluate } from "./cache";
 import {
   createTagClock,
   parseJson,
   storeText,
   type ObjectStoreReader,
   type SnapshotCache,
-  type StoredObject,
   type TagClock,
 } from "./tag-clock";
 
@@ -50,6 +50,10 @@ export interface InterceptTarget {
   // The route's dynamic dispatch pattern (e.g. /posts/[id]). A concrete path
   // with no entry of its own falls back to this route's param-agnostic shell.
   fallbackPath?: string;
+  // The route's manifest-declared cache tags. Present => prime the snapshot in
+  // parallel with the entry read. The actual tag-expiry check still uses the
+  // entry's own tags (tagsOf), which are authoritative.
+  tags?: string[];
 }
 
 // What a read of the ISR cache produced. A complete entry answers the request on
@@ -109,10 +113,20 @@ export async function intercept(
 ): Promise<Interception | null> {
   try {
     const now = (deps.now ?? Date.now)();
+    const clock = deps.tagClock ?? createTagClock(cfg, deps);
 
-    const entry =
-      (await readEntry(cfg, deps, target.routePath)) ??
-      (await readFallbackShell(cfg, deps, target));
+    const entryP = readEntry(cfg, deps, target.routePath).then(
+      (e) => e ?? readFallbackShell(cfg, deps, target),
+    );
+    // When the route's manifest declares tags, prime the isolate-shared
+    // snapshot memo in parallel with the entry read, so the tag check below
+    // (keyed on the entry's own tags, once known) hits the memo instead of a
+    // second serial store round-trip. Never awaited directly — errors are
+    // swallowed and surfaced only if the tag check itself needs the snapshot.
+    const primeP = target.tags?.length ? clock.prime(now) : undefined;
+    void primeP?.catch(() => {});
+
+    const entry = await entryP;
     if (!entry) return null;
 
     const value = entry.value;
@@ -121,7 +135,6 @@ export async function intercept(
     const ageSeconds = (now - entry.lastModified) / 1000;
     const revalidate =
       typeof target.revalidate === "number" ? target.revalidate : undefined;
-    const stale = revalidate !== undefined && ageSeconds >= revalidate;
     const window =
       revalidate !== undefined
         ? Math.max(1, revalidate - Math.floor(ageSeconds))
@@ -192,24 +205,21 @@ export async function intercept(
     let tagStale = false;
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
-      const clock = deps.tagClock ?? createTagClock(cfg, deps);
       const verdict = await clock.expired(tags, entry.lastModified, now);
       if (verdict === "untrusted") return null; // R2 tier: unknown never serves.
       tagStale = verdict;
     }
-    const isStale = stale || tagStale;
 
-    // A stale entry still serves, but only inside its expiration window; past
-    // that, even stale content is too old to serve and the request falls open.
-    // Freshness never trips this — a fresh entry is always younger than its
-    // expiration — so the gate only bites once the entry is already stale.
-    if (
-      isStale &&
-      typeof target.expiration === "number" &&
-      ageSeconds >= target.expiration
-    ) {
-      return null;
-    }
+    // The single stale-while-revalidate verdict: a fresh entry serves as-is; a
+    // stale one still serves stale-while-revalidate; past expiration is too
+    // old to serve even stale, so the request falls open to the Lambda.
+    const verdict = evaluate(
+      { lastModified: entry.lastModified, revalidate, expiration: target.expiration },
+      now,
+      tagStale,
+    );
+    if (verdict === "expired") return null;
+    const isStale = verdict === "stale";
 
     if (value.kind === "APP_PAGE" && value.postponed !== undefined) {
       const shell = reconstruct(request, value);
@@ -220,6 +230,7 @@ export async function intercept(
 
     const response = reconstruct(request, value);
     if (!response) return null;
+    response.headers.set("x-ocel-entry-modified", String(entry.lastModified));
     // A stale entry is served only until the background refresh rewrites it, so
     // it must not be memoized as fresh for the whole (possibly still large, when
     // only a tag invalidated it) remaining window — one second forces the next

@@ -736,6 +736,55 @@ describe("intercept, entry memo", () => {
   });
 });
 
+describe("intercept, entry-modified + parallel reads", () => {
+  it("stamps the entry's lastModified on a complete response", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
+    const res = await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }));
+    expect(res!.headers.get("x-ocel-entry-modified")).toBe("1000");
+  });
+
+  it("reads the entry and the tag snapshot concurrently, not in series", async () => {
+    let releaseEntry: () => void;
+    const entryGate = new Promise<void>((resolve) => {
+      releaseEntry = resolve;
+    });
+
+    const objects: Record<string, string> = {
+      [entryKey("/blog")]: JSON.stringify(appPage({ tags: "posts", lastModified: 1_000 })),
+      [snapshotKey]: JSON.stringify(snapshot()),
+    };
+    const store = {
+      gets: [] as string[],
+      async get(key: string) {
+        store.gets.push(key);
+        if (key === entryKey("/blog")) await entryGate;
+        const body = objects[key];
+        return body === undefined ? null : { etag: `"${key}"`, text: async () => body };
+      },
+    };
+
+    const result = served(
+      req(),
+      target({ revalidate: 60, tags: ["posts"] }),
+      cfg,
+      storeDeps(store, { now: () => 2_000 }),
+    );
+
+    // Yield microtasks so the prime read has a chance to run while the entry
+    // read is still gated.
+    for (let i = 0; i < 10; i++) await Promise.resolve();
+
+    expect(store.gets).toContain(snapshotKey);
+    expect(store.gets).toContain(entryKey("/blog"));
+    expect(store.gets.indexOf(entryKey("/blog"))).toBeGreaterThanOrEqual(0);
+
+    releaseEntry!();
+    await result;
+
+    expect(store.gets.filter((k) => k === snapshotKey).length).toBe(1);
+  });
+});
+
 // The snapshot format crosses a language boundary twice — the Go deploy seeds it
 // and the Lambda publisher rewrites it — so nothing but this one artifact stops
 // the three from drifting apart in silence. The deploy's test asserts it marshals
