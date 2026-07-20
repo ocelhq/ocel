@@ -1,10 +1,12 @@
 import { resolveRoutes } from "@next/routing";
 import {
   CacheDeps,
+  CacheTarget,
   cacheKey,
   hasDraftCookie,
   refreshOnce,
   serveCached,
+  storeInColo,
   withStatus,
 } from "./cache";
 import { composePpr, resumeRequest } from "./ppr";
@@ -13,7 +15,7 @@ import {
   type InterceptDeps,
   type InterceptionConfig,
 } from "./interception";
-import path from "node:path";
+import { createTagClock, type TagClock } from "./tag-clock";
 
 // The request headers a Next App Router response varies on. The colo cache key
 // is derived from these directly (see variantPath), and Next's own allowHeader
@@ -244,14 +246,26 @@ async function dispatchPrerender(
   // whether this particular variant is colo-cacheable.
   const refreshKey = `${deps.manifest.buildId}:${routePath}`;
 
+  const cacheTarget: CacheTarget = {
+    key: keyResult.cacheable ? keyResult.key : "",
+    tags: target.tags,
+    revalidate:
+      typeof target.fallback?.initialRevalidate === "number"
+        ? target.fallback.initialRevalidate
+        : undefined,
+    expiration: target.fallback?.initialExpiration,
+  };
+
   // When edge cache coordinates are present, a prerender read is tried
   // directly against the cache first; any miss/expiry/error falls open to
   // the Lambda origin. A complete interception hit carries the entry's
   // remaining window so serveCached memoizes it exactly as it would the
   // Lambda's response.
   let cachingOrigin = origin;
+  let tagClock: TagClock | undefined;
   if (deps.interception && !isNextData) {
     const { config, ...interceptDeps } = deps.interception;
+    tagClock = createTagClock(config, interceptDeps);
     const read = once(() =>
       intercept(
         request,
@@ -260,9 +274,10 @@ async function dispatchPrerender(
           fallbackPath: result.resolvedPathname ?? undefined,
           revalidate: target.fallback?.initialRevalidate,
           expiration: target.fallback?.initialExpiration,
+          tags: target.tags,
         },
         config,
-        interceptDeps,
+        { ...interceptDeps, tagClock },
       ),
     );
 
@@ -305,10 +320,13 @@ async function dispatchPrerender(
       // MISS.
       if (hit?.kind !== "complete") return origin();
       // A stale entry serves immediately; the Lambda regenerates it behind the
-      // request and rewrites the R2 entry, exactly as the PPR path above does.
+      // request, and this write mirrors that fresh response straight into colo
+      // so the next request is a colo HIT instead of another R2 round-trip.
       if (hit.stale) {
-        refreshOnce(cache, refreshKey, async () =>
-          (await originBlocking()).body?.cancel(),
+        refreshOnce(cache, refreshKey, () =>
+          originBlocking().then((response) =>
+            storeInColo(cacheTarget, cache, response),
+          ),
         );
       }
       return withStatus(hit.response, "PRERENDER");
@@ -324,10 +342,11 @@ async function dispatchPrerender(
 
   return serveCached(
     request,
-    { key: keyResult.key, tags: target.tags },
+    cacheTarget,
     deps.cache,
     cachingOrigin,
     originBlocking,
+    tagClock,
   );
 }
 
