@@ -256,7 +256,9 @@ export async function serveCached(
   tagClock?: TagClock,
 ): Promise<Response> {
   if (request.method !== "GET" || hasDraftCookie(request)) {
-    return withStatus(await origin(), "BYPASS");
+    const result = withStatus(await origin(), "BYPASS");
+    result.headers.delete(ENTRY_MODIFIED);
+    return result;
   }
 
   const keyRequest = new Request(target.key);
@@ -309,5 +311,6 @@ export async function serveCached(
   const result = withStatus(response, served);
   // client must always revalidate - no browser cache
   result.headers.set("cache-control", "public, max-age=0, must-revalidate");
+  result.headers.delete(ENTRY_MODIFIED);
   return result;
 }
