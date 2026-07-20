@@ -62,22 +62,58 @@ export function freshness(
   return "expired";
 }
 
+export type CacheKeyResult =
+  | { cacheable: true; key: string }
+  | { cacheable: false };
+
+// variantPath maps a request to the synthetic pathname that names its response
+// variant — the closed, self-describing set of shapes a prerendered route can
+// answer with. It returns null for a per-visitor dynamic variant, which must
+// never enter a shared cache. This replaces Next's `_rsc` cache-buster: we own
+// the Worker, so we key on the vary headers directly rather than on their hash.
+export function variantPath(
+  pathname: string,
+  headers: Headers,
+  renderingMode: "STATIC" | "PARTIALLY_STATIC" | undefined,
+): string | null {
+  if (headers.get("RSC") === null) return pathname; // HTML document / shell.
+
+  // A segment prefetch names one prerendered segment; it is static build output
+  // regardless of the prefetch value.
+  const segment = headers.get("next-router-segment-prefetch");
+  if (segment !== null) {
+    return `${pathname}.segments/${encodeURIComponent(segment)}.segment.rsc`;
+  }
+
+  // Only next-router-prefetch: 1 is a static full-route prefetch; 2/3 are
+  // runtime prefetches that intentionally perform a dynamic request.
+  const prefetch = headers.get("next-router-prefetch");
+  if (prefetch === "1") return `${pathname}.prefetch.rsc`;
+  if (prefetch !== null) return null;
+
+  // Bare RSC with no prefetch is a cacheable payload only on a fully static
+  // route; on a PPR route it is the dynamic navigation that fills the holes.
+  return renderingMode === "STATIC" ? `${pathname}.rsc` : null;
+}
+
 export function cacheKey(
   buildId: string,
-  identity: string,
+  pathname: string,
   url: URL,
+  headers: Headers,
+  renderingMode: "STATIC" | "PARTIALLY_STATIC" | undefined,
   allowQuery?: string[],
-): string {
-  const key = new URL(`https://cache.ocel/${buildId}${identity}`);
-  const names = new Set(allowQuery ?? [...url.searchParams.keys()]);
+): CacheKeyResult {
+  const variant = variantPath(pathname, headers, renderingMode);
+  if (variant === null) return { cacheable: false };
 
-  // `_rsc` is Next's cache-buster for the current CDN model: a hash of the
-  // rsc / next-router-* / next-url headers folded into one search param. It is
-  // never in a route's allowQuery, but it is exactly what separates an HTML
-  // response from its RSC and prefetch variants, so it must always key the entry
-  // when present. Absent — plain navigations, pathname-based segment routes —
-  // it changes nothing.
-  if (url.searchParams.has("_rsc")) names.add("_rsc");
+  const key = new URL(`https://cache.ocel/${buildId}${variant}`);
+  // `_rsc` is Next's cache-buster for path-keyed CDNs; we key on the headers it
+  // hashes instead, so it is always dropped from our key. The browser still
+  // sends it and the origin still receives it — this only excludes it here.
+  const names = (allowQuery ?? [...url.searchParams.keys()]).filter(
+    (name) => name !== "_rsc",
+  );
 
   for (const name of [...names].sort()) {
     for (const value of url.searchParams.getAll(name)) {
@@ -85,7 +121,7 @@ export function cacheKey(
     }
   }
 
-  return key.toString();
+  return { cacheable: true, key: key.toString() };
 }
 
 export function hasDraftCookie(request: Request): boolean {
