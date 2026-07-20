@@ -424,6 +424,15 @@ describe("dispatchResult", () => {
   it("refreshes the colo entry with the Lambda's fresh body after a stale R2 hit", async () => {
     const pending: Promise<unknown>[] = [];
     const stored = new Map<string, Response>();
+    // An externally-controlled deferred stands in for the Lambda round-trip:
+    // the test resolves it explicitly, after the stale serve (and its
+    // populate-on-serve colo write) has already completed, so the ordering
+    // between the two colo writes is driven by explicit control flow rather
+    // than a wall-clock delay.
+    let resolveLambda!: (response: Response) => void;
+    const lambdaResponse = new Promise<Response>((resolve) => {
+      resolveLambda = resolve;
+    });
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -440,26 +449,10 @@ describe("dispatchResult", () => {
         },
       },
       functionUrls: { "/blog": "https://fn.example.com" },
-      // A real Lambda round-trip is slower than a local cache.put — the delay
-      // here matters: it keeps this test honest about which write reaches colo
-      // last (an instant mock fetch would race ahead of the concurrent
-      // populate-on-serve write and mask the case this test exists to cover).
-      fetch: (() =>
-        new Promise<Response>((resolve) =>
-          setTimeout(
-            () =>
-              resolve(
-                new Response("fresh-lambda-body", {
-                  status: 200,
-                  headers: { "cache-control": "s-maxage=60" },
-                }),
-              ),
-            5,
-          ),
-        )) as unknown as typeof fetch,
+      fetch: (() => lambdaResponse) as unknown as typeof fetch,
       cache: {
         cache: {
-          match: async () => undefined,
+          match: async (req: Request) => stored.get(req.url)?.clone(),
           put: async (req: Request, res: Response) => {
             stored.set(req.url, res);
           },
@@ -483,17 +476,28 @@ describe("dispatchResult", () => {
 
     const res = await dispatchBlog(deps);
 
-    // Served immediately from the stale R2 entry.
+    // Served immediately from the stale R2 entry; the populate-on-serve write
+    // (of that same stale body) into colo has already run synchronously by
+    // this point, ahead of the still-pending background refresh.
     expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
     expect(await res.text()).toBe("<html>edge</html>");
 
+    // Now let the Lambda round-trip complete and drain the background refresh.
+    resolveLambda(
+      new Response("fresh-lambda-body", {
+        status: 200,
+        headers: { "cache-control": "s-maxage=60" },
+      }),
+    );
     await Promise.all(pending);
 
-    // The background refresh wrote the Lambda's fresh body into colo, not just
-    // discarded it.
-    expect(stored.size).toBe(1);
-    const coloEntry = [...stored.values()][0];
-    expect(await coloEntry.clone().text()).toBe("fresh-lambda-body");
+    // The self-healing invariant: a follow-up request converges on the fresh
+    // body straight from colo (a HIT, no further Lambda round-trip), proving
+    // the background refresh wrote the Lambda's fresh body into colo rather
+    // than discarding it.
+    const follow = await dispatchBlog(deps);
+    expect(follow.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(await follow.text()).toBe("fresh-lambda-body");
   });
 
   it("sends a runtime prefetch (next-router-prefetch: 2) to the Lambda, uncached", async () => {

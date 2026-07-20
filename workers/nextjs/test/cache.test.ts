@@ -288,6 +288,34 @@ describe("serveCached", () => {
     expect(second.headers.get("x-ocel-cache")).toBe("HIT");
   });
 
+  it("strips the internal entry-modified header from the response returned to the browser, while still storing it", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    // Mimics a PRERENDER intercept hit from dispatch's cachingOrigin, which
+    // stamps x-ocel-entry-modified (interception.ts) on the response it
+    // returns to serveCached. That header must never reach the browser, but
+    // forStorage still needs it off the cloned response to stamp the stored
+    // object's real lastModified.
+    const origin = (async () =>
+      new Response("prerendered", {
+        headers: {
+          "cache-control": "s-maxage=60",
+          "x-ocel-cache": "PRERENDER",
+          "x-ocel-entry-modified": "12345",
+        },
+      })) as CountingOrigin;
+    origin.calls = 0;
+
+    const t = target("leak");
+    const result = await serveCached(req(), t, deps, origin, origin);
+    expect(result.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(result.headers.get("x-ocel-entry-modified")).toBeNull();
+    await deps.flush();
+
+    const stored = await caches.default.match(new Request(t.key));
+    expect(stored?.headers.get("x-ocel-entry-modified")).toBe("12345");
+  });
+
   it("misses without mutating an immutable origin response", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
