@@ -15,15 +15,21 @@
 // request. A bug here can only ever cost the interception shortcut or serve one
 // extra stale response, never a wrong one.
 import {
-  areTagsExpired,
   cacheKey,
   deserialize,
-  tagSnapshotKey,
   tagsOf,
   type CacheEntryFile,
-  type TagRecord,
-  type TagSnapshot,
 } from "@ocel/next-cache";
+
+import {
+  createTagClock,
+  parseJson,
+  storeText,
+  type ObjectStoreReader,
+  type SnapshotCache,
+  type StoredObject,
+  type TagClock,
+} from "./tag-clock";
 
 // The one coordinate the store read needs: the build prefix the entry and
 // snapshot keys are rooted at. Interception is gated on the cache-store binding
@@ -53,24 +59,6 @@ export type Interception =
   | { kind: "complete"; response: Response; stale: boolean }
   | { kind: "ppr"; shell: Response; postponed: string; stale: boolean };
 
-// One stored object, as the R2 binding hands it back.
-export interface StoredObject {
-  etag?: string;
-  text(): Promise<string>;
-}
-
-// The cache store as this file needs it: keyed reads, null for a miss. The
-// Cloudflare R2 binding satisfies it directly, so nothing here names an edge.
-export interface ObjectStoreReader {
-  get(key: string): Promise<StoredObject | null>;
-}
-
-// The subset of the Cache API the snapshot read fronts itself with.
-export interface SnapshotCache {
-  match(request: Request): Promise<Response | undefined>;
-  put(request: Request, response: Response): Promise<void>;
-}
-
 export interface InterceptDeps {
   // The bound cache store entries and tag state are read from (the Cloudflare R2
   // binding in production, a fake in tests).
@@ -84,32 +72,14 @@ export interface InterceptDeps {
   // round-trip never blocks the request that noticed the staleness. Absent
   // (routing tests) degrades to a blocking re-read on the next request.
   waitUntil?: (promise: Promise<unknown>) => void;
+  // Overrides the tag clock built from the deps above. Absent, one is built
+  // per call from `store`/`snapshotCache`/`waitUntil` via createTagClock.
+  tagClock?: TagClock;
 }
 
 // A static entry (revalidate false/undefined) has no time-based expiry, only
 // tag-based; it is memoized for a year, matching Next's own fully-static TTL.
 const STATIC_WINDOW = 31536000;
-
-// The tag-clock replica is read on every tagged interception, so it is fronted
-// by two layers: the PoP-shared Cache API, and a per-isolate memo covering the
-// burst one isolate serves inside a second.
-//
-// The TTL is the entire delay this design adds to an invalidation, because the
-// publisher republishes on every revalidateTag — so an invalidation raised at
-// the origin reaches a PoP within one TTL of being raised. Ten seconds buys a
-// PoP's whole burst for one store read while staying far inside the publisher's
-// five-minute trust window, so the window, not the cache, remains what bounds
-// worst-case staleness.
-const snapshotTtlSeconds = 10;
-const snapshotMemoMs = 1_000;
-
-// Keyed by the binding itself, which is one stable object for the life of an
-// isolate. Keying on the binding rather than on module state is also what keeps
-// the memo from leaking between tests.
-const snapshotMemo = new WeakMap<
-  ObjectStoreReader,
-  { at: number; snapshot: TagSnapshot }
->();
 
 // readEntry is the one R2 round-trip on the interception path, and a page's
 // client segment cache fires a burst of prefetches at the same route entry
@@ -222,9 +192,10 @@ export async function intercept(
     let tagStale = false;
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
-      const records = await snapshotRecords(cfg, deps, deps.store, now);
-      if (!records) return null;
-      tagStale = areTagsExpired(tags, records, entry.lastModified, now);
+      const clock = deps.tagClock ?? createTagClock(cfg, deps);
+      const verdict = await clock.expired(tags, entry.lastModified, now);
+      if (verdict === "untrusted") return null; // R2 tier: unknown never serves.
+      tagStale = verdict;
     }
     const isStale = stale || tagStale;
 
@@ -389,102 +360,6 @@ async function fetchEntry(
   return entry;
 }
 
-async function storeText(
-  store: ObjectStoreReader,
-  key: string,
-): Promise<string | null> {
-  const object = await store.get(key);
-  return object ? object.text() : null;
-}
-
-function parseJson<T>(body: string): T | null {
-  try {
-    return JSON.parse(body) as T;
-  } catch {
-    return null;
-  }
-}
-
-// snapshotRecords resolves tag state from the tag clock as the last publisher
-// left it, rather than a live read of the authoritative one.
-async function snapshotRecords(
-  cfg: InterceptionConfig,
-  deps: InterceptDeps,
-  store: ObjectStoreReader,
-  now: number,
-): Promise<Map<string, TagRecord> | null> {
-  const snapshot = await readSnapshot(cfg, deps, store, now);
-  return snapshot && new Map(Object.entries(snapshot.records));
-}
-
-// readSnapshot returns the build's tag-clock replica, or null whenever it cannot
-// be trusted — missing, torn, stale, or written in a format this worker predates.
-// Every one of those falls open to the origin, which wakes a Lambda, which
-// republishes: the liveness loop repairs itself by being used.
-async function readSnapshot(
-  cfg: InterceptionConfig,
-  deps: InterceptDeps,
-  store: ObjectStoreReader,
-  now: number,
-): Promise<TagSnapshot | null> {
-  const memoized = snapshotMemo.get(store);
-  if (memoized && now - memoized.at < snapshotMemoMs) {
-    return usableSnapshot(memoized.snapshot, now);
-  }
-
-  const key = tagSnapshotKey(cfg.prefix);
-  const cacheRequest = new Request(snapshotCacheUrl(key));
-  const cached = await matchSnapshot(deps.snapshotCache, cacheRequest);
-
-  const body = cached ?? (await storeText(store, key));
-  if (body === null) return null;
-
-  const snapshot = usableSnapshot(parseJson<TagSnapshot>(body), now);
-  if (!snapshot) return null;
-
-  if (cached === null && deps.snapshotCache) {
-    await deps.snapshotCache.put(
-      cacheRequest,
-      new Response(body, {
-        headers: { "cache-control": `max-age=${snapshotTtlSeconds}` },
-      }),
-    );
-  }
-  snapshotMemo.set(store, { at: now, snapshot });
-  return snapshot;
-}
-
-// A PoP cache that is absent, inert, or erroring is a slower read, never a
-// wrong one, so a miss and a failure are the same answer: go to the store.
-async function matchSnapshot(
-  cache: SnapshotCache | undefined,
-  request: Request,
-): Promise<string | null> {
-  try {
-    const hit = await cache?.match(request);
-    return hit ? await hit.text() : null;
-  } catch {
-    return null;
-  }
-}
-
-// A replica is trusted only inside the window its publisher declared, and only
-// at a version this worker was written against. An unknown version is a format
-// this reader cannot claim to understand, so it declines to guess — which is
-// what lets the format change without a worker fleet misreading it.
-function usableSnapshot(
-  snapshot: TagSnapshot | null,
-  now: number,
-): TagSnapshot | null {
-  if (snapshot?.version !== 1) return null;
-  if (typeof snapshot.validUntil !== "number" || now >= snapshot.validUntil) {
-    return null;
-  }
-  return snapshot.records && typeof snapshot.records === "object"
-    ? snapshot
-    : null;
-}
-
 // headersFrom rebuilds a Headers from a stored variant map, dropping the internal
 // tag header (the only header a client must never see). Every other header is
 // replayed verbatim, so whatever Next stamped on the variant at build — including
@@ -565,17 +440,4 @@ function reconstructSegment(
 
   const headers = headersFrom(value.segmentHeaders);
   return new Response(body, { status: 200, headers });
-}
-
-// An object key's separators are path structure and have to survive into the
-// URL, so each segment is encoded on its own rather than the key as a whole.
-function encodeKeyPath(key: string): string {
-  return key.split("/").map(encodeURIComponent).join("/");
-}
-
-// The Cache API keys on a URL, and the snapshot has none: it is read through a
-// binding, not fetched. This synthesizes one from the object key, which already
-// carries the build prefix, so two builds on one worker cannot collide.
-function snapshotCacheUrl(key: string): string {
-  return `https://isr.ocel/${encodeKeyPath(key)}`;
 }
