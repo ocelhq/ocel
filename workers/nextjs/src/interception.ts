@@ -166,7 +166,11 @@ export async function intercept(
     // the shell instantly instead of blocking on a resumed render. Resuming here
     // would return a no-store body the client cannot cache, leaving the click
     // with no shell to reveal.
-    const isPrefetch = request.headers.get("next-router-prefetch") !== null;
+    // Only next-router-prefetch: 1 is a static prefetch. Next emits 2/3 for
+    // runtime prefetches that intentionally perform a dynamic request, so those
+    // must fall through to a real render rather than be handed the static shell.
+    const prefetchMode = request.headers.get("next-router-prefetch");
+    const isPrefetch = prefetchMode === "1";
     if (
       isPrefetch &&
       value.kind === "APP_PAGE" &&
@@ -176,6 +180,12 @@ export async function intercept(
       if (!response) return null;
       response.headers.set("cache-control", `s-maxage=${window}`);
       return { kind: "complete", response };
+    }
+
+    // Runtime prefetch (2/3) intentionally requests a dynamic response; never
+    // serve it from the cache.
+    if (prefetchMode === "2" || prefetchMode === "3") {
+      return null;
     }
 
     // Everything past here is a real request whose response *is* the tagged

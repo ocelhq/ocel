@@ -624,6 +624,36 @@ describe("intercept, PPR entries", () => {
 
     expect(outcome).toBeNull();
   });
+
+  describe("intercept, runtime prefetch values", () => {
+    it("serves the static shell for next-router-prefetch: 1", async () => {
+      const store = stored({
+        [entryKey("/blog")]: appPage({ postponed: "PP" }),
+      });
+      const outcome = await intercept(
+        req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
+        target(),
+        cfg,
+        storeDeps(store, { now: () => 2_000 }),
+      );
+      expect(outcome?.kind).toBe("complete");
+    });
+
+    it("falls open for a runtime prefetch (next-router-prefetch: 2)", async () => {
+      const store = stored({
+        [entryKey("/blog")]: appPage({ postponed: "PP" }),
+      });
+      // A '2' prefetch is a runtime dynamic request; it must NOT be handed the
+      // static shell, so with no other servable variant the read falls open.
+      const outcome = await intercept(
+        req({ headers: { RSC: "1", "next-router-prefetch": "2" } }),
+        target({ revalidate: false }),
+        cfg,
+        storeDeps(store, { now: () => 2_000 }),
+      );
+      expect(outcome).toBeNull();
+    });
+  });
 });
 
 // The snapshot format crosses a language boundary twice — the Go deploy seeds it
