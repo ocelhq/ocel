@@ -64,6 +64,31 @@ function serialize(data: any): Record<string, any> {
   return value;
 }
 
+// carryForwardVariantHeaders preserves the build-seeded per-variant headers
+// across a revalidation rewrite. They exist only in the prerender output, so a
+// fresh serialize() never has them; without this a revalidated APP_PAGE loses
+// its segment cache markers and the edge stops serving PPR. A missing or
+// unreadable prior entry just means the next build reseeds them — never fail the
+// write over it.
+async function carryForwardVariantHeaders(
+  store: CacheStore,
+  key: string,
+  value: Record<string, any>,
+): Promise<void> {
+  try {
+    const prior = (await store.readEntry(key))?.value;
+    if (!prior) return;
+    if (value.rscHeaders === undefined && prior.rscHeaders !== undefined) {
+      value.rscHeaders = prior.rscHeaders;
+    }
+    if (value.segmentHeaders === undefined && prior.segmentHeaders !== undefined) {
+      value.segmentHeaders = prior.segmentHeaders;
+    }
+  } catch {
+    // Read failed; write without the carried headers rather than dropping it.
+  }
+}
+
 // deserialize rebuilds the value Next expects from the stored JSON. The shared
 // codec restores the binary payloads as Uint8Array; Next wrote and expects Node
 // Buffers, so the bytes are re-wrapped (a Buffer view, no copy) to hand back
@@ -138,11 +163,19 @@ export default class OcelCacheHandler {
       const value = serialize(data);
       if (data.kind === "FETCH") value.tags = ctx?.tags ?? [];
       const entry = { lastModified: Date.now(), value };
-      background(() =>
-        ctx?.fetchCache || data.kind === "FETCH"
-          ? store.writeFetch(key, entry)
-          : store.writeEntry(cacheKey(key), entry),
-      );
+      const isFetch = ctx?.fetchCache || data.kind === "FETCH";
+      background(async () => {
+        if (isFetch) return store.writeFetch(key, entry);
+        // The per-variant rscHeaders/segmentHeaders live only in the build's
+        // prerender output — Next's runtime set() payload carries a single
+        // page-level headers map. Left alone, this rewrite would drop them and
+        // silently disable PPR at the edge, so carry the build-seeded values
+        // forward from the prior entry before overwriting it.
+        if (data.kind === "APP_PAGE") {
+          await carryForwardVariantHeaders(store, cacheKey(key), value);
+        }
+        return store.writeEntry(cacheKey(key), entry);
+      });
     } catch {
       // Swallowed deliberately: see above.
     }

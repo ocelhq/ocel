@@ -120,7 +120,30 @@ const snapshot = (over: Partial<TagSnapshot> = {}): TagSnapshot => ({
 const s3Key = (routePath: string) =>
   `${cfg.prefix}/cache/${routePath === "/" ? "index" : routePath.replace(/^\//, "")}.cache.json`;
 
-function appPage(opts: { tags?: string; lastModified?: number; postponed?: unknown } = {}) {
+// The build seeds identical segment headers across a group; the marker the
+// client gates PPR on is x-nextjs-postponed: 2. Tests default to it whenever they
+// supply segmentData, mirroring what emitCacheEntries writes.
+const SEGMENT_HEADERS = {
+  "content-type": "text/x-component",
+  vary: "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+  "x-nextjs-stale-time": "300",
+  "x-nextjs-postponed": "2",
+};
+
+function appPage(
+  opts: {
+    tags?: string;
+    lastModified?: number;
+    postponed?: unknown;
+    segmentData?: Record<string, string>;
+    segmentHeaders?: Record<string, string> | null;
+    rscHeaders?: Record<string, string>;
+  } = {},
+) {
+  const segmentHeaders =
+    opts.segmentHeaders === null
+      ? undefined
+      : (opts.segmentHeaders ?? (opts.segmentData ? SEGMENT_HEADERS : undefined));
   return {
     lastModified: opts.lastModified ?? 1_000,
     value: {
@@ -129,7 +152,10 @@ function appPage(opts: { tags?: string; lastModified?: number; postponed?: unkno
       rscData: btoa("RSC-PAYLOAD"),
       status: 200,
       headers: opts.tags ? { "x-next-cache-tags": opts.tags } : {},
+      ...(opts.rscHeaders ? { rscHeaders: opts.rscHeaders } : {}),
+      ...(segmentHeaders ? { segmentHeaders } : {}),
       ...(opts.postponed !== undefined ? { postponed: opts.postponed } : {}),
+      ...(opts.segmentData ? { segmentData: opts.segmentData } : {}),
     },
   };
 }
@@ -553,6 +579,194 @@ describe("intercept, PPR entries", () => {
     );
 
     expect(outcome?.kind).toBe("complete");
+  });
+
+  it("serves a segment prefetch from segmentData, not the composed shell", async () => {
+    const outcome = await intercept(
+      req({
+        headers: {
+          RSC: "1",
+          "next-router-prefetch": "1",
+          "next-router-segment-prefetch": "/_tree",
+        },
+      }),
+      pprTarget(),
+      cfg,
+      {
+        ...fakeAws({
+          entries: {
+            [s3Key("/blog")]: pprEntry({
+              segmentData: { "/_tree": btoa("TREE-SEG") },
+            }),
+          },
+        }),
+        now: () => 2_000,
+      },
+    );
+
+    expect(outcome?.kind).toBe("complete");
+    const res = (outcome as { response: Response }).response;
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/x-component");
+    // The marker the client gates PPR support on — its absence is what silently
+    // degrades a PPR route to a whole-page dynamic render.
+    expect(res.headers.get("x-nextjs-postponed")).toBe("2");
+    expect(res.headers.get("x-nextjs-stale-time")).toBe("300");
+    expect(res.headers.get("vary")).toBe(
+      "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+    );
+    expect(res.headers.get("x-ocel-isr")).toBe("HIT");
+    expect(await res.text()).toBe("TREE-SEG");
+  });
+
+  it("strips the internal tag header from a segment response", async () => {
+    const outcome = await intercept(
+      req({ headers: { "next-router-segment-prefetch": "/_tree" } }),
+      pprTarget(),
+      cfg,
+      {
+        ...fakeAws({
+          entries: {
+            [s3Key("/blog")]: pprEntry({
+              segmentData: { "/_tree": btoa("TREE-SEG") },
+              segmentHeaders: { ...SEGMENT_HEADERS, "x-next-cache-tags": "posts" },
+            }),
+          },
+        }),
+        now: () => 2_000,
+      },
+    );
+
+    const res = (outcome as { response: Response }).response;
+    expect(res.headers.get("x-next-cache-tags")).toBeNull();
+    expect(res.headers.get("x-nextjs-postponed")).toBe("2");
+  });
+
+  it("falls open on a segment prefetch when the entry predates header capture", async () => {
+    // An entry without segmentHeaders can only serve a segment missing the
+    // postponed marker, which the client reads as "not PPR" — worse than a miss.
+    const outcome = await intercept(
+      req({ headers: { "next-router-segment-prefetch": "/_tree" } }),
+      pprTarget(),
+      cfg,
+      {
+        ...fakeAws({
+          entries: {
+            [s3Key("/blog")]: pprEntry({
+              segmentData: { "/_tree": btoa("TREE-SEG") },
+              segmentHeaders: null,
+            }),
+          },
+        }),
+        now: () => 2_000,
+      },
+    );
+
+    expect(outcome).toBeNull();
+  });
+
+  it("serves a full-route prefetch as the cacheable shell, not a resume", async () => {
+    // A router prefetch (no segment header) must get the static shell as a
+    // complete, cacheable response — never a PPR pair that would resume a
+    // per-visitor render the client cannot cache.
+    const rscHeaders = {
+      "content-type": "text/x-component",
+      vary: "rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch",
+      "x-nextjs-stale-time": "300",
+    };
+    const outcome = await intercept(
+      req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
+      pprTarget(),
+      cfg,
+      {
+        ...fakeAws({ entries: { [s3Key("/blog")]: pprEntry({ rscHeaders }) } }),
+        now: () => 2_000,
+      },
+    );
+
+    expect(outcome?.kind).toBe("complete");
+    const res = (outcome as { response: Response }).response;
+    // The RSC variant's own stored headers are replayed verbatim.
+    expect(res.headers.get("content-type")).toBe("text/x-component");
+    expect(res.headers.get("x-nextjs-stale-time")).toBe("300");
+    expect(res.headers.get("vary")).toBe(rscHeaders.vary);
+    expect(res.headers.get("cache-control")).toMatch(/^s-maxage=\d+$/);
+    expect(await res.text()).toBe("RSC-PAYLOAD");
+  });
+
+  it("serves a segment prefetch even when the entry's tags were invalidated", async () => {
+    // A prefetch is speculative: its result is revealed only on a later
+    // navigation, which resumes the tagged half fresh — so the prefetch carries
+    // no tagged content to be stale. An invalidated tag must not strand it on
+    // the Lambda, which would starve the client's segment cache. The tag gate is
+    // bypassed entirely, so no tag read happens on the prefetch path.
+    const aws = fakeAws({
+      entries: {
+        [s3Key("/blog")]: pprEntry({
+          tags: "posts",
+          lastModified: 1_000,
+          segmentData: { "/_tree": btoa("TREE-SEG") },
+        }),
+      },
+      tags: { posts: { expired: 1_500 } },
+    });
+    const outcome = await intercept(
+      req({
+        headers: {
+          RSC: "1",
+          "next-router-prefetch": "1",
+          "next-router-segment-prefetch": "/_tree",
+        },
+      }),
+      pprTarget(),
+      cfg,
+      { ...aws, now: () => 2_000 },
+    );
+
+    expect(outcome?.kind).toBe("complete");
+    const res = (outcome as { response: Response }).response;
+    expect(await res.text()).toBe("TREE-SEG");
+    expect(aws.ddbCalls.length).toBe(0);
+  });
+
+  it("serves a full-route prefetch even when the entry's tags were invalidated", async () => {
+    const aws = fakeAws({
+      entries: {
+        [s3Key("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
+      },
+      tags: { posts: { expired: 1_500 } },
+    });
+    const outcome = await intercept(
+      req({ headers: { RSC: "1", "next-router-prefetch": "1" } }),
+      pprTarget(),
+      cfg,
+      { ...aws, now: () => 2_000 },
+    );
+
+    expect(outcome?.kind).toBe("complete");
+    const res = (outcome as { response: Response }).response;
+    expect(await res.text()).toBe("RSC-PAYLOAD");
+    expect(aws.ddbCalls.length).toBe(0);
+  });
+
+  it("falls open when the requested segment is absent from the entry", async () => {
+    const outcome = await intercept(
+      req({ headers: { "next-router-segment-prefetch": "/_missing" } }),
+      pprTarget(),
+      cfg,
+      {
+        ...fakeAws({
+          entries: {
+            [s3Key("/blog")]: pprEntry({
+              segmentData: { "/_tree": btoa("TREE-SEG") },
+            }),
+          },
+        }),
+        now: () => 2_000,
+      },
+    );
+
+    expect(outcome).toBeNull();
   });
 });
 

@@ -131,6 +131,8 @@ export async function dispatchResult(
   const doFetch = deps.fetch ?? fetch;
   const url = new URL(request.url);
 
+  request = await bufferBody(request);
+
   if (result.middlewareResponded) {
     return new Response(null, { status: result.status ?? 200 });
   }
@@ -320,17 +322,46 @@ function originUrl(fnUrl: string, url: URL, result: RouteResult): URL {
   return new URL(pathname + url.search, fnUrl);
 }
 
+// bufferBody reads a request's body into memory so every forward of it carries a
+// concrete Content-Length instead of a re-streamed (chunked) body. An AWS Lambda
+// Function URL rejects a chunked request body with a 502 before the function ever
+// runs — which flaps, because whether Cloudflare buffers a small body or streams
+// it is nondeterministic. Buffering here is what the PPR resume already does for
+// its own POST; doing it for the served request makes forwarded actions reliable.
+async function bufferBody(request: Request): Promise<Request> {
+  if (!request.body || request.method === "GET" || request.method === "HEAD") {
+    return request;
+  }
+  const body = await request.arrayBuffer();
+  return new Request(request.url, {
+    method: request.method,
+    headers: request.headers,
+    body,
+    redirect: "manual",
+  });
+}
+
 // forward rebuilds a request against an origin URL under a chosen header set,
 // keeping the method and body of the request being served.
+//
+// The origin sits behind a Function URL, so its `host` is that URL's host, not
+// the public one the browser addressed. Next's Server Action CSRF check compares
+// the `origin` header against `x-forwarded-host` (falling back to `host`), so the
+// public host is stamped here — as the reverse proxy, this worker is authoritative
+// for it — or every forwarded action would abort on a host/origin mismatch.
 export function forward(
   url: URL,
   request: Request,
   headers: HeadersInit,
   body: BodyInit | null = request.body,
 ): Request {
+  const publicUrl = new URL(request.url);
+  const forwarded = new Headers(headers);
+  forwarded.set("x-forwarded-host", publicUrl.host);
+  forwarded.set("x-forwarded-proto", publicUrl.protocol.replace(/:$/, ""));
   return new Request(url, {
     method: request.method,
-    headers,
+    headers: forwarded,
     body,
     redirect: "manual",
   });

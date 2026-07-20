@@ -320,6 +320,11 @@ async function synthPrerenderProject() {
           fallback: {
             filePath: join(appDir, "index.segments/_tree.segment.rsc"),
             initialRevalidate: false,
+            initialHeaders: {
+              "content-type": "text/x-component",
+              "x-nextjs-postponed": "2",
+              "x-nextjs-stale-time": "300",
+            },
           },
           config: richConfig,
         },
@@ -668,11 +673,10 @@ test("regroups a route's prerender outputs into one cache entry", async () => {
   expect(typeof entry.lastModified).toBe("number");
 });
 
-// The html variant carries the route's real response headers; the tags the
-// cache handler checks on every read ride in on x-next-cache-tags. Content-type
-// is dropped for an APP_PAGE — Next derives it per-variant at serve time, so a
-// stored text/html would mislabel the RSC and segment reads sharing this entry.
-test("carries the html variant's headers (sans content-type) and status onto an APP_PAGE entry", async () => {
+// The html variant carries the route's real response headers verbatim; the tags
+// the cache handler checks on every read ride in on x-next-cache-tags. Each
+// variant now owns its own headers map, so the html variant keeps its content-type.
+test("carries the html variant's headers and status onto an APP_PAGE entry", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   args.outputs.prerenders[0].fallback.initialHeaders = {
     "content-type": "text/html; charset=utf-8",
@@ -685,8 +689,27 @@ test("carries the html variant's headers (sans content-type) and status onto an 
 
   const entry = await readCacheEntry(projectDir, "index");
   expect(entry.value.headers["x-next-cache-tags"]).toBe("_N_T_/layout,_N_T_/");
-  expect(entry.value.headers["content-type"]).toBeUndefined();
+  expect(entry.value.headers["content-type"]).toBe("text/html; charset=utf-8");
   expect(entry.value.status).toBe(200);
+});
+
+// The client gates PPR support on per-variant response headers — above all the
+// segment cache's x-nextjs-postponed: 2 marker — so the adapter captures the rsc
+// and segment variants' own initialHeaders verbatim, storing the segment headers
+// once (they are identical across a group).
+test("captures the rsc and segment variants' headers onto an APP_PAGE entry", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const entry = await readCacheEntry(projectDir, "index");
+  expect(entry.value.rscHeaders).toEqual({ "content-type": "text/x-component" });
+  expect(entry.value.segmentHeaders).toEqual({
+    "content-type": "text/x-component",
+    "x-nextjs-postponed": "2",
+    "x-nextjs-stale-time": "300",
+  });
 });
 
 // An APP_ROUTE stores a single body whose type Next cannot re-derive, so its

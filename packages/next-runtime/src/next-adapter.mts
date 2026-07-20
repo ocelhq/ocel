@@ -367,18 +367,6 @@ async function readMaybe(filePath: string | undefined): Promise<Buffer | null> {
   }
 }
 
-// stripContentType drops the per-variant content-type Next injects into each
-// prerender output's headers. An APP_PAGE cache entry holds html, RSC and segment
-// bodies under one `headers`; Next derives each variant's content-type from the
-// body it serves, so a stored content-type would mislabel every non-html read.
-function stripContentType(
-  headers: Record<string, unknown> | undefined,
-): Record<string, unknown> | undefined {
-  if (!headers) return headers;
-  const { "content-type": _ct, ...rest } = headers;
-  return rest;
-}
-
 // emitCacheEntries seeds one cache entry per prerendered route from the build's
 // own output, so a deployed route serves its prerender instead of re-rendering
 // on the first request to every instance. Next surfaces a route's html, RSC and
@@ -430,10 +418,18 @@ async function emitCacheEntries(
         value.headers = html.fallback.initialHeaders;
         value.body = body.toString("base64");
       } else {
-        value.headers = stripContentType(html.fallback.initialHeaders);
+        // Each prerender variant (html, .rsc, per-segment) arrives with its own
+        // initialHeaders; storing them verbatim per variant is what lets the edge
+        // replay exactly what Next would have served — including the segment
+        // cache's x-nextjs-postponed: 2 marker, which lives only on the segment
+        // variants and is the header the client gates PPR support on.
+        value.headers = html.fallback.initialHeaders;
         value.html = body.toString("utf8");
         const rscBody = await readMaybe(rsc?.fallback?.filePath);
         if (rscBody) value.rscData = rscBody.toString("base64");
+        if (rsc?.fallback?.initialHeaders) {
+          value.rscHeaders = rsc.fallback.initialHeaders;
+        }
 
         const segments: Record<string, string> = {};
         for (const m of members) {
@@ -441,6 +437,11 @@ async function emitCacheEntries(
           if (!sp) continue;
           const segBody = await readMaybe(m.fallback?.filePath);
           if (segBody) segments[sp] = segBody.toString("base64");
+          // The segment variants' headers are identical across a group, so the
+          // first one seen stands for all of them — stored once, not per segment.
+          if (!value.segmentHeaders && m.fallback?.initialHeaders) {
+            value.segmentHeaders = m.fallback.initialHeaders;
+          }
         }
         if (Object.keys(segments).length > 0) value.segmentData = segments;
         if (html.fallback.postponedState !== undefined) {
