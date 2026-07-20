@@ -275,19 +275,27 @@ describe("dispatchResult", () => {
   // Interception is wired as an origin tried before the Lambda. These prove the
   // dispatch-level contract: a clean hit serves without touching the Lambda, and
   // any interception miss falls open to it.
-  const interceptionConfig = {
-    accessKeyId: "a",
-    secretKey: "s",
-    region: "us-east-1",
-    bucket: "assets",
-    table: "state",
-    prefix: "prod/p/app/build",
-    tagNamespace: "TAG#prod#p#app#build#",
-  };
+  const interceptionConfig = { prefix: "prod/p/app/build" };
+
+  // A cache store fronting canned entries keyed by their object name, matching
+  // the R2 binding the deploy provides as OCEL_CACHE_STORE.
+  function storeOf(entries: Record<string, unknown>) {
+    return {
+      async get(key: string) {
+        const entry = entries[key];
+        return entry === undefined
+          ? null
+          : { text: async () => JSON.stringify(entry) };
+      },
+    };
+  }
+
+  const entryKey = (routePath: string) =>
+    `${interceptionConfig.prefix}/cache/${routePath}.cache.json`;
 
   function interceptDeps(
     lambdaBody: string,
-    s3Entry: unknown | null,
+    storeEntry: unknown | null,
   ): { deps: RouteDeps; lambdaCalls: () => number } {
     let lambda = 0;
     const deps = baseDeps({
@@ -317,15 +325,7 @@ describe("dispatchResult", () => {
       interception: {
         config: interceptionConfig,
         now: () => 2_000,
-        signedFetch: (async (input: RequestInfo | URL) => {
-          const url = typeof input === "string" ? input : input.toString();
-          if (url.includes(".s3.")) {
-            return s3Entry
-              ? new Response(JSON.stringify(s3Entry), { status: 200 })
-              : new Response("", { status: 404 });
-          }
-          return new Response(JSON.stringify({ Responses: {} }), { status: 200 });
-        }) as typeof fetch,
+        store: storeOf(storeEntry ? { [entryKey("blog")]: storeEntry } : {}),
       },
     });
     return { deps, lambdaCalls: () => lambda };
@@ -346,16 +346,18 @@ describe("dispatchResult", () => {
 
     const res = await dispatchBlog(deps);
 
-    expect(res.headers.get("x-ocel-cache")).toBe("MISS"); // memo miss, served via edge
+    // Colo memo miss, served from the R2 store one tier down.
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
     expect(await res.text()).toBe("<html>edge</html>");
     expect(lambdaCalls()).toBe(0);
   });
 
-  it("falls open to the Lambda when interception misses in S3", async () => {
+  it("falls open to the Lambda when interception misses in the store", async () => {
     const { deps, lambdaCalls } = interceptDeps("from-lambda", null);
 
     const res = await dispatchBlog(deps);
 
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
     expect(await res.text()).toBe("from-lambda");
     expect(lambdaCalls()).toBe(1);
   });
@@ -422,17 +424,9 @@ describe("dispatchResult", () => {
       interception: {
         config: interceptionConfig,
         now: () => 2_000,
-        signedFetch: (async (input: RequestInfo | URL) => {
-          const url = typeof input === "string" ? input : input.toString();
-          if (url.includes(".s3.")) {
-            const key = decodeURIComponent(new URL(url).pathname.slice(1));
-            const want = `${interceptionConfig.prefix}/cache/${opts.entryPath ?? "ppr"}.cache.json`;
-            return opts.entry && key === want
-              ? new Response(JSON.stringify(opts.entry), { status: 200 })
-              : new Response("", { status: 404 });
-          }
-          return new Response(JSON.stringify({ Responses: {} }), { status: 200 });
-        }) as typeof fetch,
+        store: storeOf(
+          opts.entry ? { [entryKey(opts.entryPath ?? "ppr")]: opts.entry } : {},
+        ),
       },
     });
     return { deps, resumeRequests: () => resumeRequests, cachePuts: () => puts };
@@ -465,7 +459,7 @@ describe("dispatchResult", () => {
     const res = await dispatchPpr(deps);
 
     expect(await res.text()).toBe("[shell][dynamic]");
-    expect(res.headers.get("x-ocel-ppr")).toBe("HIT");
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
     const [resume] = resumeRequests();
     expect(resume.method).toBe("POST");
     expect(resume.headers.get("next-resume")).toBe("1");
@@ -495,7 +489,9 @@ describe("dispatchResult", () => {
     const res = await dispatchPpr(deps, { rsc: "1", "next-router-prefetch": "1" });
 
     expect(resumeRequests()).toHaveLength(0);
-    expect(res.headers.get("x-ocel-ppr")).toBeNull();
+    // A full-route prefetch served from the store is a PRERENDER, not a
+    // per-visitor PPR compose.
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
     expect(await res.text()).toBe("[rsc-shell]");
   });
 

@@ -1,10 +1,16 @@
 // The edge cache logic for prerendered routes.
 const ORIGIN_CACHE_CONTROL = "x-ocel-origin-cache-control";
 const STORED_AT = "x-ocel-stored-at";
-const CACHE_STATUS = "x-ocel-cache";
+
+// The one status header every served route carries, reporting which tier
+// answered: HIT (this colo's cache), PRERENDER (the R2 ISR store, one tier
+// down), MISS (neither — the Lambda origin rendered it), or BYPASS. A colo
+// serve is a HIT whether the entry was fresh or served stale-while-revalidate;
+// staleness drives the background refresh, not the header.
+export const CACHE_STATUS = "x-ocel-cache";
 const DRAFT_COOKIE = "__prerender_bypass";
 
-export type CacheStatus = "HIT" | "STALE" | "MISS" | "BYPASS";
+export type CacheStatus = "HIT" | "PRERENDER" | "MISS" | "BYPASS";
 
 export interface CacheDeps {
   cache: Cache;
@@ -205,15 +211,16 @@ export async function serveCached(
       const state = freshness((now() - storedAt) / 1000, policy);
       if (state === "fresh") return fromStorage(cached, "HIT");
       if (state === "stale") {
-        // origin will do own staleness check and might serve stale while revalidating
-        // force blocking response here
+        // A colo serve is a HIT even when stale; serving stale is what triggers
+        // the background refresh, which forces a blocking origin render so the
+        // entry is rewritten fresh for the next request.
         refreshOnce(deps, target.key, () =>
           originBlocking().then((response) =>
             store(keyRequest, target, deps, response),
           ),
         );
 
-        return fromStorage(cached, "STALE");
+        return fromStorage(cached, "HIT");
       }
     }
   }
@@ -224,7 +231,11 @@ export async function serveCached(
     store(keyRequest, target, deps, response.clone()).catch(() => {}),
   );
 
-  const result = withStatus(response, "MISS");
+  // The origin is either the R2 ISR store, which stamps PRERENDER, or the
+  // Lambda, which stamps nothing — and an unstamped response is a MISS.
+  const served: CacheStatus =
+    response.headers.get(CACHE_STATUS) === "PRERENDER" ? "PRERENDER" : "MISS";
+  const result = withStatus(response, served);
   // client must always revalidate - no browser cache
   result.headers.set("cache-control", "public, max-age=0, must-revalidate");
   return result;
