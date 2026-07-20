@@ -108,7 +108,10 @@ export interface RouteDeps {
   // prerender routes then read the authoritative ISR cache directly from the
   // store before falling open to the Lambda origin. Absent leaves the Lambda
   // path unchanged.
-  interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now"> & {
+  interception?: Pick<
+    InterceptDeps,
+    "store" | "snapshotCache" | "now" | "waitUntil"
+  > & {
     config: InterceptionConfig;
   };
 }
@@ -505,6 +508,7 @@ export default {
               // isolate, which is what the snapshot memo keys on.
               store,
               snapshotCache: caches.default,
+              waitUntil: (promise) => ctx.waitUntil(promise),
             }
           : undefined,
     });

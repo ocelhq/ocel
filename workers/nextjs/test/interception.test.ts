@@ -656,6 +656,54 @@ describe("intercept, PPR entries", () => {
   });
 });
 
+describe("intercept, entry memo", () => {
+  it("collapses a burst on one entry to a single store read", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
+    const deps = { store, now: () => 2_000 };
+
+    await served(req(), target(), cfg, deps);
+    await served(req(), target(), cfg, deps);
+    await served(req(), target(), cfg, deps);
+
+    // Three reads of the same route within the TTL, one store GET.
+    expect(store.gets).toEqual([entryKey("/blog")]);
+  });
+
+  it("re-reads the store once the memo TTL has elapsed (no waitUntil)", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
+    const clock = { ms: 2_000 };
+    const deps = { store, now: () => clock.ms };
+
+    await served(req(), target({ revalidate: false }), cfg, deps);
+    clock.ms = 2_000 + 6_000; // past the 5s entry-memo TTL
+    await served(req(), target({ revalidate: false }), cfg, deps);
+
+    expect(store.gets).toEqual([entryKey("/blog"), entryKey("/blog")]);
+  });
+
+  it("serves the stale entry immediately and refreshes via waitUntil", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
+    const clock = { ms: 2_000 };
+    const pending: Promise<unknown>[] = [];
+    const deps = {
+      store,
+      now: () => clock.ms,
+      waitUntil: (p: Promise<unknown>) => pending.push(p),
+    };
+
+    await served(req(), target({ revalidate: false }), cfg, deps);
+    expect(store.gets.length).toBe(1);
+
+    clock.ms = 2_000 + 6_000; // stale
+    await served(req(), target({ revalidate: false }), cfg, deps);
+    // The stale read served from memo; the store GET was deferred, not blocking.
+    expect(store.gets.length).toBe(1);
+
+    await Promise.all(pending.splice(0));
+    expect(store.gets.length).toBe(2);
+  });
+});
+
 // The snapshot format crosses a language boundary twice — the Go deploy seeds it
 // and the Lambda publisher rewrites it — so nothing but this one artifact stops
 // the three from drifting apart in silence. The deploy's test asserts it marshals
