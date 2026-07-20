@@ -6,11 +6,13 @@ import {
   freshness,
   serveCached,
   storagePolicy,
+  storeInColo,
   variantPath,
   type CacheDeps,
   type CacheTarget,
   type EntryMeta,
 } from "../src/cache";
+import type { TagVerdict } from "../src/tag-clock";
 
 // A CacheDeps backed by the real workerd Cache, with a manual clock and a
 // waitUntil that records background work so tests can flush it deterministically.
@@ -228,9 +230,12 @@ describe("cacheKey", () => {
 describe("serveCached", () => {
   // Distinct keys per test keep entries from bleeding across cases even if the
   // isolate's Cache is reused.
-  const target = (name: string, tags?: string[]): CacheTarget => ({
+  const target = (
+    name: string,
+    over: Partial<CacheTarget> = {},
+  ): CacheTarget => ({
     key: `https://cache.ocel/build/${name}`,
-    tags,
+    ...over,
   });
 
   it("misses, stores, then serves the second GET from cache without a re-fetch", async () => {
@@ -314,6 +319,7 @@ describe("serveCached", () => {
         "public, max-age=0, must-revalidate",
       );
       expect(res.headers.get("x-ocel-origin-cache-control")).toBeNull();
+      expect(res.headers.get("x-ocel-entry-modified")).toBeNull();
     }
   });
 
@@ -379,85 +385,112 @@ describe("serveCached", () => {
     expect(origin.calls).toBe(2);
   });
 
-  it("serves stale within the swr window and refreshes exactly once", async () => {
+  it("serves stale and refreshes once when the entry is past its revalidate window", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
-    const origin = countingOrigin("s-maxage=1, stale-while-revalidate=100");
-    const refresh = countingOrigin("s-maxage=1, stale-while-revalidate=100");
+    const origin = countingOrigin("s-maxage=1");
+    const refresh = countingOrigin("s-maxage=1");
+    const t = target("swr", { revalidate: 1, expiration: 100 });
 
-    await serveCached(req(), target("swr"), deps, origin, refresh);
+    await serveCached(req(), t, deps, origin, refresh);
     await deps.flush();
 
-    clock.ms = 5_000; // 5s old: past s-maxage=1, inside the 100s stale window
-    const stale = await serveCached(req(), target("swr"), deps, origin, refresh);
-
-    // A colo serve is a HIT even when it is served stale; staleness only drives
-    // the background refresh.
+    clock.ms = 5_000; // 5s old: past revalidate=1, inside expiration=100
+    const stale = await serveCached(req(), t, deps, origin, refresh);
     expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
     await deps.flush();
     expect(refresh.calls).toBe(1);
   });
 
-  it("dedupes concurrent stale refreshes to a single origin call", async () => {
+  it("falls through to origin (re-consults R2) once past expiration", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
-    const origin = countingOrigin("s-maxage=1, stale-while-revalidate=100");
-    // A refresh that stays pending until released, so both stale requests are
-    // in flight against it at once.
-    let release!: () => void;
-    const gate = new Promise<void>((r) => (release = r));
-    const refresh = (async () => {
-      refresh.calls++;
-      await gate;
-      return new Response("fresh", {
-        headers: { "cache-control": "s-maxage=1, stale-while-revalidate=100" },
-      });
-    }) as CountingOrigin;
-    refresh.calls = 0;
+    const origin = countingOrigin("s-maxage=1");
+    const t = target("exp", { revalidate: 1, expiration: 10 });
 
-    await serveCached(req(), target("dedupe"), deps, origin, refresh);
+    await serveCached(req(), t, deps, origin, origin);
     await deps.flush();
 
-    clock.ms = 5_000;
-    await serveCached(req(), target("dedupe"), deps, origin, refresh);
-    await serveCached(req(), target("dedupe"), deps, origin, refresh);
-
-    expect(refresh.calls).toBe(1);
-    release();
-    await deps.flush();
+    clock.ms = 20_000; // past expiration=10 => not servable stale, re-fetch.
+    const res = await serveCached(req(), t, deps, origin, origin);
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(origin.calls).toBe(2);
   });
 
-  it("keeps the prior entry servable when a background refresh throws", async () => {
+  it("serves a time-fresh but tag-invalidated hit stale and refreshes", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
-    const origin = countingOrigin("s-maxage=1, stale-while-revalidate=100");
-    const failing = async () => {
-      throw new Error("origin down");
-    };
+    const origin = countingOrigin("s-maxage=1");
+    const refresh = countingOrigin("s-maxage=1");
+    const t = target("tag-stale", { revalidate: 3600, expiration: 7200, tags: ["posts"] });
+    const clockTags = { async expired() { return true as const; } };
 
-    await serveCached(req(), target("poison"), deps, origin, failing);
+    await serveCached(req(), t, deps, origin, refresh, clockTags);
     await deps.flush();
 
-    clock.ms = 5_000;
-    const stale = await serveCached(
-      req(),
-      target("poison"),
-      deps,
-      origin,
-      failing,
-    );
-    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
-    await deps.flush(); // must not reject
+    clock.ms = 1_000; // time-fresh (age 1s << revalidate 3600) but tag says stale
+    const hit = await serveCached(req(), t, deps, origin, refresh, clockTags);
+    expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
+    await deps.flush();
+    expect(refresh.calls).toBe(1);
+  });
 
-    const again = await serveCached(
-      req(),
-      target("poison"),
-      deps,
-      origin,
-      failing,
-    );
-    expect(again.headers.get("x-ocel-cache")).toBe("HIT");
-    expect(await again.text()).toBe("rendered");
+  it("serves stale (not fall-through) when the tag snapshot is untrusted on a hit", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=1");
+    const refresh = countingOrigin("s-maxage=1");
+    const t = target("untrusted", { revalidate: 3600, expiration: 7200, tags: ["posts"] });
+    const clockUntrusted = { async expired() { return "untrusted" as const; } };
+
+    await serveCached(req(), t, deps, origin, refresh, clockUntrusted);
+    await deps.flush();
+
+    clock.ms = 1_000;
+    const hit = await serveCached(req(), t, deps, origin, refresh, clockUntrusted);
+    expect(hit.headers.get("x-ocel-cache")).toBe("HIT"); // served, not a miss
+    await deps.flush();
+    expect(refresh.calls).toBe(1);
+  });
+
+  it("collapses a burst of concurrent misses to a single colo write", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const store = countingOrigin("s-maxage=60");
+    const t = target("populate", { revalidate: 60, expiration: 600 });
+
+    // Three concurrent misses on the same cold key.
+    await Promise.all([
+      serveCached(req(), t, deps, store, store),
+      serveCached(req(), t, deps, store, store),
+      serveCached(req(), t, deps, store, store),
+    ]);
+    await deps.flush();
+
+    // Each miss called origin to serve its own request, but only one populate ran.
+    const stored = await caches.default.match(new Request(t.key));
+    expect(stored).not.toBeUndefined();
+    // A second-generation read is a HIT: the single write is intact.
+    clock.ms = 1_000;
+    const hit = await serveCached(req(), t, deps, store, store);
+    expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
+  });
+
+  it("storeInColo overwrites the entry with a fresh body and a new modified time", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const t = target("overwrite", { revalidate: 1, expiration: 100 });
+
+    const origin = countingOrigin("s-maxage=1", "old");
+    await serveCached(req(), t, deps, origin, origin);
+    await deps.flush();
+
+    clock.ms = 10_000;
+    await storeInColo(t, deps, new Response("new", { headers: { "cache-control": "s-maxage=1" } }));
+
+    const stored = await caches.default.match(new Request(t.key));
+    expect(await stored!.text()).toBe("new");
+    expect(stored!.headers.get("x-ocel-entry-modified")).toBe("10000");
   });
 
   it("does not store a non-200 origin response", async () => {
@@ -479,7 +512,7 @@ describe("serveCached", () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
     const origin = countingOrigin("s-maxage=60");
-    const t = target("tagged", ["a", "b"]);
+    const t = target("tagged", { tags: ["a", "b"] });
 
     await serveCached(req(), t, deps, origin, origin);
     await deps.flush();
