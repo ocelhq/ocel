@@ -1,0 +1,35 @@
+/**
+ * For more details on how to configure Wrangler, refer to:
+ * https://developers.cloudflare.com/workers/wrangler/configuration/
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "deployments-store",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-13",
+  "observability": {
+    "enabled": true,
+  },
+  "upload_source_maps": true,
+  "compatibility_flags": ["nodejs_compat"],
+  // Local-dev/test default only. The real per-project deploy mints this secret
+  // at root-tier creation and binds it as secret_text (cloudflare.go
+  // scriptBindings), never through this file.
+  "vars": {
+    "WRITE_SECRET": "dev-secret",
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "DEPLOYMENTS_DO",
+        "class_name": "DeploymentsStore",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["DeploymentsStore"],
+    },
+  ],
+}

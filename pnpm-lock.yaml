@@ -874,6 +874,24 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  workers/deployments-store:
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.12.4
+        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0))
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: ^5.5.2
+        version: 5.9.3
+      vitest:
+        specifier: ~3.2.0
+        version: 3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
+      wrangler:
+        specifier: ^4.110.0
+        version: 4.110.0
+
   workers/nextjs:
     dependencies:
       '@next/routing':
