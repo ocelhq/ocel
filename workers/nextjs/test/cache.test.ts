@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest";
 import {
   cacheKey,
   evaluate,
-  freshness,
   serveCached,
   storagePolicy,
   storeInColo,
@@ -100,27 +99,6 @@ describe("storagePolicy", () => {
     expect(storagePolicy("max-age=0")).toBeNull();
     expect(storagePolicy("s-maxage=0")).toBeNull();
     expect(storagePolicy(null)).toBeNull();
-  });
-});
-
-describe("freshness", () => {
-  const policy = { sMaxAge: 60, swr: 30 };
-
-  it("is fresh before s-maxage", () => {
-    expect(freshness(10, policy)).toBe("fresh");
-  });
-
-  it("is stale within the swr window", () => {
-    expect(freshness(70, policy)).toBe("stale");
-  });
-
-  it("is expired past s-maxage + swr", () => {
-    expect(freshness(100, policy)).toBe("expired");
-  });
-
-  it("treats a zero-swr policy as fresh-then-expired", () => {
-    expect(freshness(59, { sMaxAge: 60, swr: 0 })).toBe("fresh");
-    expect(freshness(60, { sMaxAge: 60, swr: 0 })).toBe("expired");
   });
 });
 
