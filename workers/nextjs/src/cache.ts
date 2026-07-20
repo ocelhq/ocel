@@ -57,15 +57,6 @@ export function storagePolicy(cacheControl: string | null): CachePolicy | null {
   return { sMaxAge, swr: Number.isFinite(swr) && swr > 0 ? swr : 0 };
 }
 
-export function freshness(
-  ageSeconds: number,
-  policy: CachePolicy,
-): "fresh" | "stale" | "expired" {
-  if (ageSeconds < policy.sMaxAge) return "fresh";
-  if (ageSeconds < policy.sMaxAge + policy.swr) return "stale";
-  return "expired";
-}
-
 export interface EntryMeta {
   lastModified: number;
   revalidate?: number;
