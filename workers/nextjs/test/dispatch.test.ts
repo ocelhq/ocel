@@ -362,6 +362,65 @@ describe("dispatchResult", () => {
     expect(lambdaCalls()).toBe(1);
   });
 
+  it("serves a stale complete entry from the store and refreshes via the Lambda behind the request", async () => {
+    let lambda = 0;
+    const pending: Promise<unknown>[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            config: {},
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async () => {
+        lambda++;
+        return new Response("regenerated", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        });
+      }) as unknown as typeof fetch,
+      cache: {
+        cache: {
+          match: async () => undefined,
+          put: async () => {},
+        } as unknown as Cache,
+        waitUntil: (p: Promise<unknown>) => {
+          pending.push(p);
+        },
+      },
+      interception: {
+        config: interceptionConfig,
+        // 61s after the entry was written: stale, but no expiration cutoff.
+        now: () => 1_000 + 61_000,
+        store: storeOf({
+          [entryKey("blog")]: {
+            lastModified: 1_000,
+            value: { kind: "APP_PAGE", html: "<html>edge</html>", status: 200, headers: {} },
+          },
+        }),
+      },
+    });
+
+    const res = await dispatchBlog(deps);
+
+    // Served stale from the store, never blocked on the Lambda.
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(await res.text()).toBe("<html>edge</html>");
+
+    await Promise.all(pending);
+    // Exactly one background regeneration — the deduped refresh, nothing more.
+    expect(lambda).toBe(1);
+  });
+
   it("sends a runtime prefetch (next-router-prefetch: 2) to the Lambda, uncached", async () => {
     const { deps, lambdaCalls } = interceptDeps("from-lambda", {
       lastModified: 1_000,

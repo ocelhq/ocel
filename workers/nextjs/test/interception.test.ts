@@ -178,12 +178,21 @@ describe("intercept, complete entries", () => {
     expect(await served(req(), target(), cfg, storeDeps(store, { now: () => 2_000 }))).toBeNull();
   });
 
-  it("fails open past the revalidate window (time-based expiry)", async () => {
+  it("serves stale past the revalidate window, marked stale, within expiration", async () => {
     const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
-    // 61s later, revalidate is 60s.
-    const res = await served(req(), target({ revalidate: 60 }), cfg, {
+    // 61s later, revalidate is 60s: stale, but no expiration cutoff set.
+    const outcome = await intercept(req(), target({ revalidate: 60 }), cfg, {
       ...storeDeps(store),
       now: () => 1_000 + 61_000,
+    });
+    expect(outcome).toMatchObject({ kind: "complete", stale: true });
+  });
+
+  it("fails open past the expiration window (hard cutoff)", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
+    const res = await served(req(), target({ revalidate: 60, expiration: 3600 }), cfg, {
+      ...storeDeps(store),
+      now: () => 1_000 + 3_600_000,
     });
     expect(res).toBeNull();
   });
@@ -223,14 +232,15 @@ describe("intercept, complete entries", () => {
 });
 
 describe("intercept, tag state from the snapshot", () => {
-  it("fails open when a tag was revalidated after the entry", async () => {
+  it("serves stale when a tag was revalidated after the entry", async () => {
     const store = stored({
       [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
       [snapshotKey]: snapshot({ records: { products: { expired: 1_500 } } }),
     });
     const deps = storeDeps(store, { now: () => 2_000 });
 
-    expect(await served(req(), target(), cfg, deps)).toBeNull();
+    const outcome = await intercept(req(), target(), cfg, deps);
+    expect(outcome).toMatchObject({ kind: "complete", stale: true });
     expect(store.gets).toContain(snapshotKey);
   });
 
@@ -320,12 +330,14 @@ describe("intercept, tag state from the snapshot", () => {
     });
     const snapshotCache = fakeCache({ inert: true });
 
+    // Tag invalidated: served stale, and the snapshot is re-read every request
+    // because the inert PoP cache never hits.
     expect(
       await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 2_000 })),
-    ).toBeNull();
+    ).not.toBeNull();
     expect(
       await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 20_000 })),
-    ).toBeNull();
+    ).not.toBeNull();
 
     expect(store.gets.filter((k) => k === snapshotKey).length).toBe(2);
   });
@@ -406,13 +418,33 @@ describe("intercept, PPR entries", () => {
     expect(outcome).toBeNull();
   });
 
-  it("still refuses a PPR entry whose tags were invalidated", async () => {
+  it("serves a PPR entry whose tags were invalidated stale, within expiration", async () => {
     const store = stored({
       [entryKey("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
       [snapshotKey]: snapshot({ records: { posts: { expired: 1_500 } } }),
     });
     expect(
       await intercept(req(), pprTarget(), cfg, storeDeps(store, { now: () => 2_000 })),
+    ).toMatchObject({ kind: "ppr", stale: true });
+  });
+
+  it("falls open when tags were invalidated past the expiration window", async () => {
+    const store = stored({
+      [entryKey("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
+      // validUntil kept ahead of `now` so the null comes from expiration, not an
+      // untrusted snapshot.
+      [snapshotKey]: snapshot({
+        validUntil: 10_000_000,
+        records: { posts: { expired: 1_500 } },
+      }),
+    });
+    expect(
+      await intercept(
+        req(),
+        pprTarget({ expiration: 3600 }),
+        cfg,
+        storeDeps(store, { now: () => 1_000 + 3_600_000 }),
+      ),
     ).toBeNull();
   });
 
