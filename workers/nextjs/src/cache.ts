@@ -1,6 +1,8 @@
 // The edge cache logic for prerendered routes.
-const ORIGIN_CACHE_CONTROL = "x-ocel-origin-cache-control";
-const STORED_AT = "x-ocel-stored-at";
+import type { TagClock, TagVerdict } from "./tag-clock";
+
+const ENTRY_MODIFIED = "x-ocel-entry-modified";
+const STATIC_WINDOW = 31536000;
 
 // The one status header every served route carries, reporting which tier
 // answered: HIT (this colo's cache), PRERENDER (the R2 ISR store, one tier
@@ -22,6 +24,8 @@ export interface CacheDeps {
 export interface CacheTarget {
   key: string;
   tags?: string[];
+  revalidate?: number;
+  expiration?: number;
 }
 
 export interface CachePolicy {
@@ -164,17 +168,16 @@ export function withStatus(response: Response, status: CacheStatus): Response {
 
 function forStorage(
   response: Response,
-  policy: CachePolicy,
   target: CacheTarget,
   storedAt: number,
 ): Response {
   const headers = new Headers(response.headers);
-  headers.set(
-    ORIGIN_CACHE_CONTROL,
-    response.headers.get("cache-control") ?? "",
-  );
-  headers.set(STORED_AT, String(storedAt));
-  headers.set("cache-control", `s-maxage=${policy.sMaxAge + policy.swr}`);
+  const modified = response.headers.get(ENTRY_MODIFIED) ?? String(storedAt);
+  headers.set(ENTRY_MODIFIED, modified);
+  // Physical retention is decoupled from logical freshness: keep the object as
+  // long as it could ever be served (through its expiration window, or a year
+  // for a static entry), and let evaluate decide fresh/stale/expired per hit.
+  headers.set("cache-control", `s-maxage=${target.expiration ?? STATIC_WINDOW}`);
   if (target.tags?.length) headers.set("cache-tag", target.tags.join(","));
 
   return new Response(response.body, {
@@ -189,8 +192,7 @@ function fromStorage(response: Response, status: CacheStatus): Response {
 
   // this is what is forwarded to browser
   headers.set("cache-control", "public, max-age=0, must-revalidate");
-  headers.delete(ORIGIN_CACHE_CONTROL);
-  headers.delete(STORED_AT);
+  headers.delete(ENTRY_MODIFIED);
   headers.delete("cache-tag");
   headers.set(CACHE_STATUS, status);
 
@@ -211,16 +213,25 @@ async function store(
     response.body?.cancel();
     return;
   }
-
-  const policy = storagePolicy(response.headers.get("cache-control"));
-
-  if (!policy) {
+  // storagePolicy is now only a storability gate: refuse no-store/private/no
+  // s-maxage responses. The retention window itself comes from the target.
+  if (!storagePolicy(response.headers.get("cache-control"))) {
     response.body?.cancel();
     return;
   }
-
   const now = deps.now ?? Date.now;
-  await deps.cache.put(keyRequest, forStorage(response, policy, target, now()));
+  await deps.cache.put(keyRequest, forStorage(response, target, now()));
+}
+
+// storeInColo lets a background refresh (which owns the fresh Lambda response)
+// write it straight into the colo cache. The R2 write is the Lambda's own side
+// effect; the worker only ever writes colo.
+export async function storeInColo(
+  target: CacheTarget,
+  deps: CacheDeps,
+  response: Response,
+): Promise<void> {
+  await store(new Request(target.key), target, deps, response);
 }
 
 // Every request arriving on a stale entry would otherwise start its own origin
@@ -250,7 +261,8 @@ export async function serveCached(
   target: CacheTarget,
   deps: CacheDeps,
   origin: () => Promise<Response>,
-  originBlocking: () => Promise<Response>
+  originBlocking: () => Promise<Response>,
+  tagClock?: TagClock,
 ): Promise<Response> {
   if (request.method !== "GET" || hasDraftCookie(request)) {
     return withStatus(await origin(), "BYPASS");
@@ -261,11 +273,23 @@ export async function serveCached(
   const cached = await deps.cache.match(keyRequest);
 
   if (cached) {
-    const policy = storagePolicy(cached.headers.get(ORIGIN_CACHE_CONTROL));
-    const storedAt = Number(cached.headers.get(STORED_AT));
-
-    if (policy && Number.isFinite(storedAt)) {
-      const state = freshness((now() - storedAt) / 1000, policy);
+    const modified = Number(cached.headers.get(ENTRY_MODIFIED));
+    if (Number.isFinite(modified)) {
+      const tags = target.tags ?? [];
+      let tagStale = false;
+      if (tags.length > 0 && tagClock) {
+        const verdict: TagVerdict = await tagClock.expired(tags, modified, now());
+        // Colo tier: an invalidated tag AND an untrusted snapshot both serve
+        // stale-while-revalidate — we already hold the content, and the refresh
+        // drives the Lambda to republish the tag clock. (intercept, one tier
+        // down, falls open on "untrusted" instead.)
+        tagStale = verdict !== false;
+      }
+      const state = evaluate(
+        { lastModified: modified, revalidate: target.revalidate, expiration: target.expiration },
+        now(),
+        tagStale,
+      );
       if (state === "fresh") return fromStorage(cached, "HIT");
       if (state === "stale") {
         // A colo serve is a HIT even when stale; serving stale is what triggers
@@ -276,22 +300,21 @@ export async function serveCached(
             store(keyRequest, target, deps, response),
           ),
         );
-
         return fromStorage(cached, "HIT");
       }
+      // "expired": fall through — R2 may already hold a fresher entry.
     }
   }
 
   const response = await origin();
-
-  deps.waitUntil(
-    store(keyRequest, target, deps, response.clone()).catch(() => {}),
-  );
-
-  // The origin is either the R2 ISR store, which stamps PRERENDER, or the
-  // Lambda, which stamps nothing — and an unstamped response is a MISS.
   const served: CacheStatus =
     response.headers.get(CACHE_STATUS) === "PRERENDER" ? "PRERENDER" : "MISS";
+  // Single-writer populate: a burst of concurrent misses collapses to one put.
+  // refreshOnce runs the thunk synchronously (so the clone precedes withStatus
+  // consuming the body) and dedups by key; a deduped caller never clones.
+  refreshOnce(deps, target.key, () =>
+    store(keyRequest, target, deps, response.clone()),
+  );
   const result = withStatus(response, served);
   // client must always revalidate - no browser cache
   result.headers.set("cache-control", "public, max-age=0, must-revalidate");
