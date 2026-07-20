@@ -192,6 +192,63 @@ export async function intercept(
     const value = entry.value;
     if (!isServable(value)) return null;
 
+    const ageSeconds = (now - entry.lastModified) / 1000;
+    const revalidate =
+      typeof target.revalidate === "number" ? target.revalidate : undefined;
+    const stale = revalidate !== undefined && ageSeconds >= revalidate;
+    const window =
+      revalidate !== undefined
+        ? Math.max(1, revalidate - Math.floor(ageSeconds))
+        : STATIC_WINDOW;
+
+    // Prefetches are answered before the tag check, and independently of it. A
+    // prefetch is speculative: its result is revealed only on a later
+    // navigation, which always resumes the dynamic (tagged) half fresh — so the
+    // prefetch itself carries no tagged content that an invalidation could make
+    // stale. Serving it from the prerender even when a tag it shares was
+    // invalidated is the stale-while-revalidate contract, and the real
+    // navigation below still gates on the tag and wakes the Lambda, which
+    // rewrites the entry. Gating prefetches on tags instead strands every route
+    // under an invalidated tag on the Lambda, starving the client's segment
+    // cache and blocking the very navigation the prefetch existed to make
+    // instant.
+
+    // A segment prefetch (Next's client segment cache) asks for one prerendered
+    // segment by path. It is static build output, held in the entry's
+    // segmentData — never composed and never resumed. Only the segment can
+    // answer it: an unknown path falls open rather than serving the whole-page
+    // shell, which is a different variant. This is the whole reason a PPR route
+    // can be prefetched at the edge — the Lambda carries no prerender output to
+    // serve it from, and would 404 the request.
+    const segmentPath = request.headers.get("next-router-segment-prefetch");
+    if (segmentPath !== null && value.kind === "APP_PAGE") {
+      const response = reconstructSegment(value, segmentPath);
+      if (!response) return null;
+      response.headers.set("cache-control", `s-maxage=${window}`);
+      return { kind: "complete", response };
+    }
+
+    // A full-route prefetch (Next's router prefetch, distinct from the segment
+    // cache above) wants only the static shell — never the per-visitor dynamic
+    // resume. A PPR entry answers it from its prerendered shell, served cacheable
+    // so the client's router cache holds it and the eventual navigation reveals
+    // the shell instantly instead of blocking on a resumed render. Resuming here
+    // would return a no-store body the client cannot cache, leaving the click
+    // with no shell to reveal.
+    const isPrefetch = request.headers.get("next-router-prefetch") !== null;
+    if (
+      isPrefetch &&
+      value.kind === "APP_PAGE" &&
+      value.postponed !== undefined
+    ) {
+      const response = reconstruct(request, value);
+      if (!response) return null;
+      response.headers.set("cache-control", `s-maxage=${window}`);
+      return { kind: "complete", response };
+    }
+
+    // Everything past here is a real request whose response *is* the tagged
+    // content, so an invalidated tag must send it to the Lambda to re-render.
     const tags = tagsOf(value, {});
     if (tags.length > 0) {
       const records = deps.store
@@ -202,11 +259,6 @@ export async function intercept(
       if (!records) return null;
       if (areTagsExpired(tags, records, entry.lastModified, now)) return null;
     }
-
-    const ageSeconds = (now - entry.lastModified) / 1000;
-    const revalidate =
-      typeof target.revalidate === "number" ? target.revalidate : undefined;
-    const stale = revalidate !== undefined && ageSeconds >= revalidate;
 
     if (value.kind === "APP_PAGE" && value.postponed !== undefined) {
       // A stale PPR pair still serves — its dynamic half is rendered fresh
@@ -225,10 +277,6 @@ export async function intercept(
 
     const response = reconstruct(request, value);
     if (!response) return null;
-    const window =
-      revalidate !== undefined
-        ? Math.max(1, revalidate - Math.floor(ageSeconds))
-        : STATIC_WINDOW;
     response.headers.set("cache-control", `s-maxage=${window}`);
     return { kind: "complete", response };
   } catch {
@@ -439,51 +487,88 @@ async function readTags(
   return found;
 }
 
+// headersFrom rebuilds a Headers from a stored variant map, dropping the internal
+// tag header (the only header a client must never see). Every other header is
+// replayed verbatim, so whatever Next stamped on the variant at build — including
+// headers this worker has never heard of — reaches the client unchanged.
+function headersFrom(map: Record<string, any> | undefined): Headers {
+  const headers = new Headers();
+  for (const [name, v] of Object.entries(map ?? {})) {
+    if (name.toLowerCase() === "x-next-cache-tags") continue;
+    headers.set(name, String(v));
+  }
+  return headers;
+}
+
 // reconstruct rebuilds the HTTP response Next would have served for this entry,
-// negotiating RSC vs html and deriving each variant's content-type the way Next
-// does (an APP_PAGE stores html and RSC under one entry with the content-type
-// stripped). The stored headers are carried through, minus the internal tag
-// header. An x-ocel-isr: HIT marker is stamped so the serve is distinguishable
-// from a Lambda-origin one. Freshness is the caller's to declare: a complete
-// entry gets its remaining revalidate window, a PPR shell gets no shared cache
-// at all. Returns null on an incomplete entry.
+// negotiating RSC vs html and replaying that variant's stored headers verbatim:
+// the html variant from value.headers, the RSC variant from value.rscHeaders,
+// each captured at build from the prerender's own initialHeaders. An
+// x-ocel-isr: HIT marker is stamped so the serve is distinguishable from a
+// Lambda-origin one. Freshness is the caller's to declare: a complete entry gets
+// its remaining revalidate window, a PPR shell gets no shared cache at all. An
+// entry predating per-variant capture falls back to the negotiated content-type
+// so it still serves. Returns null on an incomplete entry.
 function reconstruct(
   request: Request,
   value: Record<string, any>,
 ): Response | null {
   const restored = deserialize(value);
-  const headers = new Headers();
-  for (const [name, v] of Object.entries(value.headers ?? {})) {
-    if (name.toLowerCase() === "x-next-cache-tags") continue;
-    headers.set(name, String(v));
-  }
   const status = typeof value.status === "number" ? value.status : 200;
 
   let body: BodyInit;
+  let headers: Headers;
   if (value.kind === "APP_ROUTE") {
+    headers = headersFrom(value.headers);
     body = restored.body ?? new Uint8Array();
-    // APP_ROUTE keeps its own content-type from the stored headers verbatim.
   } else if (value.kind === "APP_PAGE") {
-    headers.set(
-      "vary",
-      "RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Url",
-    );
     if (request.headers.get("RSC") === "1") {
       if (!restored.rscData) return null; // Negotiated RSC but the entry has none.
       body = restored.rscData;
-      headers.set("content-type", "text/x-component");
+      headers = headersFrom(value.rscHeaders);
+      if (!headers.has("content-type")) {
+        headers.set("content-type", "text/x-component");
+      }
     } else {
       body = value.html ?? "";
-      headers.set("content-type", "text/html; charset=utf-8");
+      headers = headersFrom(value.headers);
+      if (!headers.has("content-type")) {
+        headers.set("content-type", "text/html; charset=utf-8");
+      }
     }
   } else {
     // PAGES.
+    headers = headersFrom(value.headers);
     body = value.html ?? "";
-    headers.set("content-type", "text/html; charset=utf-8");
+    if (!headers.has("content-type")) {
+      headers.set("content-type", "text/html; charset=utf-8");
+    }
   }
 
   headers.set(ISR_STATUS, "HIT");
   return new Response(body, { status, headers });
+}
+
+// reconstructSegment answers a segment prefetch from the entry's stored
+// segmentData, replaying the entry's segmentHeaders verbatim — the headers the
+// client gates PPR support on, above all x-nextjs-postponed: 2. An entry with no
+// segmentHeaders predates per-variant capture: rather than serve a segment
+// missing that marker (which the client silently reads as "not PPR"), fall open
+// so the next build or revalidation reseeds it. Returns null when the entry holds
+// no segment under that path, leaving the caller to fall open.
+function reconstructSegment(
+  value: Record<string, any>,
+  segmentPath: string,
+): Response | null {
+  const segments: Map<string, Uint8Array> | undefined =
+    deserialize(value).segmentData;
+  const body = segments?.get(segmentPath);
+  if (!body) return null;
+  if (!value.segmentHeaders) return null;
+
+  const headers = headersFrom(value.segmentHeaders);
+  headers.set(ISR_STATUS, "HIT");
+  return new Response(body, { status: 200, headers });
 }
 
 // An object key's separators are path structure and have to survive into the

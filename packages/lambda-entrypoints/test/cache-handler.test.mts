@@ -217,6 +217,77 @@ test("round-trips a page written by set through get", async () => {
   expect(entry?.value.segmentData.get("/_tree").toString()).toBe("TREE");
 });
 
+// The per-variant rscHeaders/segmentHeaders exist only in the build's prerender
+// output; Next's runtime set() payload has just a single page-level headers map.
+// A revalidation rewrite must carry the build-seeded values forward, or the edge
+// stops seeing the segment cache markers and silently drops PPR.
+test("preserves build-seeded variant headers across a revalidation write", async () => {
+  const store = fakeStore();
+  store.entries.set("blog", {
+    lastModified: 1_000,
+    value: {
+      kind: "APP_PAGE",
+      html: "<html>seed</html>",
+      status: 200,
+      headers: {},
+      rscHeaders: { "content-type": "text/x-component" },
+      segmentHeaders: {
+        "content-type": "text/x-component",
+        "x-nextjs-postponed": "2",
+      },
+    },
+  });
+  const handler = new OcelCacheHandler();
+
+  const deferred = await invocation(() =>
+    handler.set(
+      "/blog",
+      {
+        kind: "APP_PAGE",
+        html: { toUnchunkedString: () => "<html>fresh</html>" },
+        status: 200,
+        headers: { "x-next-cache-tags": "posts" },
+        segmentData: new Map([["/_tree", Buffer.from("TREE")]]),
+      },
+      {},
+    ),
+  );
+  await Promise.all(deferred);
+
+  const rewritten = store.entries.get("blog");
+  expect(rewritten?.value.html).toBe("<html>fresh</html>");
+  expect(rewritten?.value.rscHeaders).toEqual({ "content-type": "text/x-component" });
+  expect(rewritten?.value.segmentHeaders).toEqual({
+    "content-type": "text/x-component",
+    "x-nextjs-postponed": "2",
+  });
+});
+
+// A first-ever write for an on-demand route has no prior entry to carry from; it
+// must still write rather than fail on the missing read.
+test("writes without variant headers when no prior entry exists", async () => {
+  const store = fakeStore();
+  const handler = new OcelCacheHandler();
+
+  const deferred = await invocation(() =>
+    handler.set(
+      "/blog",
+      {
+        kind: "APP_PAGE",
+        html: { toUnchunkedString: () => "<html>fresh</html>" },
+        status: 200,
+        headers: {},
+      },
+      {},
+    ),
+  );
+  await Promise.all(deferred);
+
+  const written = store.entries.get("blog");
+  expect(written?.value.html).toBe("<html>fresh</html>");
+  expect(written?.value.segmentHeaders).toBeUndefined();
+});
+
 // The entry now lands in the store the edge reads, which is a cross-internet
 // PUT. Resolving while that write is stalled is the whole assertion: a write on
 // the request path would hang here instead.

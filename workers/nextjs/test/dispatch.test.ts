@@ -78,6 +78,75 @@ describe("dispatchResult", () => {
     expect(captured?.url).toBe("https://fn.example.com/api/documents?q=1");
   });
 
+  it("sets x-forwarded-host to the public host so Next's Server Action origin check passes", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+      },
+      functionUrls: { "/api/documents": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/api/documents",
+        invocationTarget: { pathname: "/api/documents" },
+      },
+      new Request("https://cachelab.ocel.dev/api/documents", {
+        method: "POST",
+        headers: { origin: "https://cachelab.ocel.dev" },
+      }),
+      deps,
+    );
+
+    expect(captured?.headers.get("x-forwarded-host")).toBe("cachelab.ocel.dev");
+    expect(captured?.headers.get("x-forwarded-proto")).toBe("https");
+  });
+
+  it("forwards a POST body intact after buffering it off the request stream", async () => {
+    let captured: Request | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+      },
+      functionUrls: { "/api/documents": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req;
+        return new Response("ok", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    const payload = "name=cachelab&value=1";
+    await dispatchResult(
+      {
+        resolvedPathname: "/api/documents",
+        invocationTarget: { pathname: "/api/documents" },
+      },
+      new Request("https://cachelab.ocel.dev/api/documents", {
+        method: "POST",
+        body: payload,
+      }),
+      deps,
+    );
+
+    // Buffering the body must not drop or corrupt it: the origin still gets the
+    // full payload. (The wire win — a fixed Content-Length instead of a chunked
+    // stream — is not observable on an in-process Request.)
+    expect(await captured?.text()).toBe(payload);
+  });
+
   it("invokes the parent function for a prerender route until ISR lands", async () => {
     const deps = baseDeps({
       manifest: {
@@ -401,6 +470,33 @@ describe("dispatchResult", () => {
     expect(resume.method).toBe("POST");
     expect(resume.headers.get("next-resume")).toBe("1");
     expect(await resume.text()).toBe("POSTPONED");
+  });
+
+  it("serves a PPR prefetch as the static shell, never a resume", async () => {
+    // A prefetch (Next-Router-Prefetch) wants only the cacheable static shell so
+    // the client's router cache holds it and the eventual click reveals it
+    // instantly. Resuming here renders per-visitor dynamic content the client
+    // cannot cache, so the navigation blocks on a full response instead.
+    const { deps, resumeRequests } = pprDeps({
+      resume: "[dynamic]",
+      entry: {
+        lastModified: 1_000,
+        value: {
+          kind: "APP_PAGE",
+          html: "[shell]",
+          rscData: btoa("[rsc-shell]"),
+          postponed: "POSTPONED",
+          status: 200,
+          headers: {},
+        },
+      },
+    });
+
+    const res = await dispatchPpr(deps, { rsc: "1", "next-router-prefetch": "1" });
+
+    expect(resumeRequests()).toHaveLength(0);
+    expect(res.headers.get("x-ocel-ppr")).toBeNull();
+    expect(await res.text()).toBe("[rsc-shell]");
   });
 
   it("never puts a composed PPR response into the colo cache", async () => {
