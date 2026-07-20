@@ -421,6 +421,81 @@ describe("dispatchResult", () => {
     expect(lambda).toBe(1);
   });
 
+  it("refreshes the colo entry with the Lambda's fresh body after a stale R2 hit", async () => {
+    const pending: Promise<unknown>[] = [];
+    const stored = new Map<string, Response>();
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            config: {},
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      // A real Lambda round-trip is slower than a local cache.put — the delay
+      // here matters: it keeps this test honest about which write reaches colo
+      // last (an instant mock fetch would race ahead of the concurrent
+      // populate-on-serve write and mask the case this test exists to cover).
+      fetch: (() =>
+        new Promise<Response>((resolve) =>
+          setTimeout(
+            () =>
+              resolve(
+                new Response("fresh-lambda-body", {
+                  status: 200,
+                  headers: { "cache-control": "s-maxage=60" },
+                }),
+              ),
+            5,
+          ),
+        )) as unknown as typeof fetch,
+      cache: {
+        cache: {
+          match: async () => undefined,
+          put: async (req: Request, res: Response) => {
+            stored.set(req.url, res);
+          },
+        } as unknown as Cache,
+        waitUntil: (p: Promise<unknown>) => {
+          pending.push(p);
+        },
+      },
+      interception: {
+        config: interceptionConfig,
+        // 61s after the entry was written: stale, but no expiration cutoff.
+        now: () => 1_000 + 61_000,
+        store: storeOf({
+          [entryKey("blog")]: {
+            lastModified: 1_000,
+            value: { kind: "APP_PAGE", html: "<html>edge</html>", status: 200, headers: {} },
+          },
+        }),
+      },
+    });
+
+    const res = await dispatchBlog(deps);
+
+    // Served immediately from the stale R2 entry.
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(await res.text()).toBe("<html>edge</html>");
+
+    await Promise.all(pending);
+
+    // The background refresh wrote the Lambda's fresh body into colo, not just
+    // discarded it.
+    expect(stored.size).toBe(1);
+    const coloEntry = [...stored.values()][0];
+    expect(await coloEntry.clone().text()).toBe("fresh-lambda-body");
+  });
+
   it("sends a runtime prefetch (next-router-prefetch: 2) to the Lambda, uncached", async () => {
     const { deps, lambdaCalls } = interceptDeps("from-lambda", {
       lastModified: 1_000,
