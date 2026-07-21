@@ -66,7 +66,7 @@ func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, 
 	}
 
 	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
+		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 

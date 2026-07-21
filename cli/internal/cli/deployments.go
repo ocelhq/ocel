@@ -85,7 +85,7 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 	}
 
 	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
+		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 
@@ -127,7 +127,7 @@ func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, std
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
+		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
 

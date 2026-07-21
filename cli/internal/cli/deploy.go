@@ -69,12 +69,14 @@ func init() {
 }
 
 // runDeploy resolves the project config, verifies auth, requires a
-// configured provider, confirms with the user, discovers and collects
-// declared resources, builds the deploy manifest, locates and spawns the
-// provider binary, drives its Deploy RPC to a terminal result, and tears
-// the provider down. Every pre-spawn error — not logged in, no provider
-// configured, malformed or missing config — is returned before anything is
-// spawned.
+// configured provider, spawns the provider binary, and preflights it —
+// authenticating the credentials the deploy needs and printing the "Running
+// with:" banner — before the user confirms and before the app build runs, so a
+// missing or invalid credential aborts up front rather than after paying for a
+// build. It then builds the deploy manifest, drives the provider's Deploy RPC
+// to a terminal result, and tears the provider down. Every pre-spawn error —
+// not logged in, no provider configured, malformed or missing config — is
+// returned before anything is spawned.
 //
 // Deploy makes no call to the Ocel API: the project id comes from the
 // resolved config, and the manifest is built entirely locally. Login is only
@@ -95,47 +97,45 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		return err
 	}
 
-	if !opts.yes && isReaderTTY(stdin) {
-		proceed, err := confirmDeploy(cfg.ProjectID, provider.Package, stdout, stdin)
-		if err != nil {
-			return err
-		}
-		if !proceed {
-			fmt.Fprintln(stdout, "Aborted.")
-			return nil
-		}
-	}
-
 	ui := deployui.New(stdout, cfg.Dir, "ocel deploy", verboseEnabled())
 	defer ui.Close()
 
-	ui.Building()
-	manifest, err := collectAndBuildManifest(ctx, cfg, ui.BuildWriter())
-	if err != nil {
-		return failSession(ctx, ui, err)
-	}
-	if manifest == nil {
-		ui.Finish("Nothing to deploy")
-		return nil
-	}
-	ui.BuildOK()
-
-	env := &deploymentsv1.Environment{
-		Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
-		Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
-	}
-
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
+		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
 			return err
 		}
+
+		if !opts.yes && isReaderTTY(stdin) {
+			proceed, err := confirmDeploy(cfg.ProjectID, provider.Package, stdout, stdin)
+			if err != nil {
+				return err
+			}
+			if !proceed {
+				fmt.Fprintln(stdout, "Aborted.")
+				return nil
+			}
+		}
+
+		ui.Building()
+		manifest, err := collectAndBuildManifest(ctx, cfg, ui.BuildWriter())
+		if err != nil {
+			return err
+		}
+		if manifest == nil {
+			ui.Finish("Nothing to deploy")
+			return nil
+		}
+		ui.BuildOK()
 
 		req := &deploymentsv1.DeployRequest{
 			Manifest:        manifest,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Environment:     env,
+			Environment: &deploymentsv1.Environment{
+				Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
+				Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
+			},
 		}
 
 		var stackOutputs []*deploymentsv1.ResourceOutput

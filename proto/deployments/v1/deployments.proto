@@ -362,6 +362,52 @@ message PreflightResponse {
   // infrastructure_present is false when the infrastructure the command needs
   // has not been bootstrapped yet.
   bool infrastructure_present = 2;
+
+  // identity is what the provider's ambient credentials resolve to, for the
+  // CLI's "Running with:" banner. Every field is best-effort: the provider
+  // fills what it could resolve and leaves the rest empty (e.g. the aws_*
+  // fields are empty when the AWS credentials failed to authenticate, which is
+  // reported as a credential_problems entry instead).
+  Identity identity = 3;
+
+  // credential_problems lists every credential the provider needs but could
+  // not authenticate, reported in-band so the CLI can show all of them in one
+  // block rather than failing on the first. Empty when all credentials
+  // authenticated. When non-empty the infra fields are unreliable (the
+  // provider may not have been able to read its own state) and the CLI aborts
+  // before provisioning.
+  repeated CredentialProblem credential_problems = 4;
+}
+
+// Identity is what a provider's ambient credentials resolve to, surfaced by
+// Preflight for the CLI's "Running with:" banner. Fields are best-effort: a
+// provider fronting more than one cloud (the AWS provider also drives the
+// Cloudflare edge) fills each cloud's fields only when that cloud's
+// credentials authenticated.
+message Identity {
+  // aws_account is the 12-digit AWS account id the ambient credentials belong
+  // to; aws_profile is the AWS_PROFILE name when one is set (empty for
+  // env-key/SSO/role credentials); aws_region is the resolved deploy region;
+  // aws_arn is the caller's ARN.
+  string aws_account = 1;
+  string aws_profile = 2;
+  string aws_region = 3;
+  string aws_arn = 4;
+
+  // cloudflare_account is the Cloudflare account id the edge deploys into.
+  string cloudflare_account = 5;
+}
+
+// CredentialProblem is one credential a provider needs but could not
+// authenticate. The CLI aggregates every problem into one block.
+message CredentialProblem {
+  // provider is the human label for the failing credential's cloud, e.g.
+  // "AWS" or "Cloudflare".
+  string provider = 1;
+  // message states what is wrong (missing, invalid, expired, wrong account).
+  string message = 2;
+  // hint tells the user how to fix it.
+  string hint = 3;
 }
 
 // Promotion is the project-wide unit one production deploy produces: a

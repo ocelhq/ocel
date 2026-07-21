@@ -42,6 +42,22 @@ type AppFinder interface {
 	FindApp(ctx context.Context, name string) (bool, error)
 }
 
+// CredentialVerifier is an optional Provider capability: proving the edge's
+// ambient credentials authenticate and reporting the account they resolve to,
+// so a preflight can validate them before any deploy rather than failing part
+// way through provisioning. An edge inside the cloud provider's trust boundary,
+// or one that cannot cheaply verify, simply does not implement it.
+type CredentialVerifier interface {
+	VerifyCredentials(ctx context.Context) (CredentialIdentity, error)
+}
+
+// CredentialIdentity is what an edge's credentials resolve to, surfaced by
+// VerifyCredentials for the CLI's preflight banner.
+type CredentialIdentity struct {
+	// Account is the edge account the credentials authenticate against.
+	Account string
+}
+
 // AppDeployment is one app's fully-resolved edge deployment: everything read off
 // disk and computed by the provider, so the edge only talks to its own API.
 type AppDeployment struct {

@@ -3,15 +3,21 @@ package server
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
 
 	connect "connectrpc.com/connect"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
+	"github.com/ocelhq/ocel/cloud/edge"
+	"github.com/ocelhq/ocel/cloud/edge/cloudflare"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -19,10 +25,14 @@ import (
 // for but no preview infrastructure exists in the account.
 var errPreviewInfraMissing = errors.New("preview infrastructure is not set up; run `ocel bootstrap --preview` first")
 
-// Preflight reports what the provider's ambient account/profile points at: the
-// class of the infrastructure present and whether any is present, so the CLI
-// can refuse a preview or deploy locally before provisioning. It reads both the
-// preview and production substrates and maps them via preflightResponse.
+// Preflight authenticates the ambient credentials this provider needs (its own
+// AWS credentials and the Cloudflare edge's), reports what they resolve to for
+// the CLI's "Running with:" banner, and — when the AWS credentials
+// authenticated — reports the class of the infrastructure present. The CLI
+// calls it before a preview or deploy so a missing or invalid credential is
+// refused before provisioning rather than part way through. Credential failures
+// are returned in-band (credential_problems) so every one is reported at once;
+// only a transport/read fault returns an error.
 func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequest) (*deploymentsv1.PreflightResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
@@ -32,17 +42,58 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	if err != nil {
 		return nil, err
 	}
-	cfn := cloudformation.NewFromConfig(awscfg)
 
-	preview, err := bootstrap.CheckDeployedPreview(ctx, cfn)
-	if err != nil {
-		return nil, err
+	resp := &deploymentsv1.PreflightResponse{Identity: &deploymentsv1.Identity{}}
+
+	// AWS: authenticate via STS. On failure the account's infrastructure can't
+	// be read, so the infra check below is skipped and the CLI aborts on the
+	// reported problem.
+	awsOK := true
+	if id, err := sts.NewFromConfig(awscfg).GetCallerIdentity(ctx, &sts.GetCallerIdentityInput{}); err != nil {
+		awsOK = false
+		resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
+			Provider: "AWS",
+			Message:  fmt.Sprintf("could not authenticate: %v", err),
+			Hint:     "configure AWS credentials (set AWS_PROFILE, run `aws sso login`, or export access keys)",
+		})
+	} else {
+		resp.Identity.AwsAccount = aws.ToString(id.Account)
+		resp.Identity.AwsArn = aws.ToString(id.Arn)
+		resp.Identity.AwsRegion = awscfg.Region
+		resp.Identity.AwsProfile = os.Getenv("AWS_PROFILE")
 	}
-	production, err := bootstrap.CheckDeployed(ctx, cfn)
-	if err != nil {
-		return nil, err
+
+	// Cloudflare edge: verify through the edge seam. Every production deploy
+	// reconciles the root stack on the edge, so its credentials are always
+	// required.
+	if v, ok := cloudflare.New().(edge.CredentialVerifier); ok {
+		if id, err := v.VerifyCredentials(ctx); err != nil {
+			resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
+				Provider: "Cloudflare",
+				Message:  err.Error(),
+				Hint:     "set CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID to a token with access to that account",
+			})
+		} else {
+			resp.Identity.CloudflareAccount = id.Account
+		}
 	}
-	return preflightResponse(req.GetRequiredClass(), preview, production), nil
+
+	if awsOK {
+		cfn := cloudformation.NewFromConfig(awscfg)
+		preview, err := bootstrap.CheckDeployedPreview(ctx, cfn)
+		if err != nil {
+			return nil, err
+		}
+		production, err := bootstrap.CheckDeployed(ctx, cfn)
+		if err != nil {
+			return nil, err
+		}
+		pf := preflightResponse(req.GetRequiredClass(), preview, production)
+		resp.InfraClass = pf.GetInfraClass()
+		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
+	}
+
+	return resp, nil
 }
 
 // preflightResponse maps the discovered substrates to a PreflightResponse for

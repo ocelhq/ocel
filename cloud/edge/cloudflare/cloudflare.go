@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/accounts"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	"github.com/cloudflare/cloudflare-go/v4/zones"
@@ -98,6 +99,25 @@ func (p *provider) FindApp(ctx context.Context, name string) (bool, error) {
 		return false, nil
 	}
 	return err == nil, err
+}
+
+// VerifyCredentials proves the configured API token authenticates and can
+// reach CLOUDFLARE_ACCOUNT_ID, and reports that account for the preflight
+// banner. It fetches the account: an unset/invalid/expired token or a token
+// without access to the account all surface here, before any deploy touches
+// the edge. It implements edge.CredentialVerifier.
+func (p *provider) VerifyCredentials(ctx context.Context) (edge.CredentialIdentity, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAccountID)
+	}
+	if os.Getenv(envAPIToken) == "" {
+		return edge.CredentialIdentity{}, fmt.Errorf("%s is not set", envAPIToken)
+	}
+	if _, err := p.client.Accounts.Get(ctx, accounts.AccountGetParams{AccountID: cf.F(accountID)}); err != nil {
+		return edge.CredentialIdentity{}, fmt.Errorf("Cloudflare rejected %s for account %s: %w", envAPIToken, accountID, err)
+	}
+	return edge.CredentialIdentity{Account: accountID}, nil
 }
 
 func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.AppResult, error) {
