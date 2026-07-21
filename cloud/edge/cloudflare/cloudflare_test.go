@@ -382,6 +382,29 @@ func TestBootstrap_MissingAccountID_Errors(t *testing.T) {
 	}
 }
 
+func TestVerifyCredentials_MissingAccountID_Errors(t *testing.T) {
+	t.Setenv(envAccountID, "")
+	t.Setenv(envAPIToken, "tok")
+
+	v, ok := New().(edge.CredentialVerifier)
+	if !ok {
+		t.Fatalf("cloudflare provider does not implement edge.CredentialVerifier")
+	}
+	if _, err := v.VerifyCredentials(context.Background()); err == nil {
+		t.Fatalf("expected an error when %s is unset", envAccountID)
+	}
+}
+
+func TestVerifyCredentials_MissingAPIToken_Errors(t *testing.T) {
+	t.Setenv(envAccountID, "acct-123")
+	t.Setenv(envAPIToken, "")
+
+	v := New().(edge.CredentialVerifier)
+	if _, err := v.VerifyCredentials(context.Background()); err == nil {
+		t.Fatalf("expected an error when %s is unset", envAPIToken)
+	}
+}
+
 func TestHashAsset_MatchesWranglerAlgorithm(t *testing.T) {
 	// Reference value computed independently:
 	//   sha256(base64("hello") + "txt").hex()[:32]

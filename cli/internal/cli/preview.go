@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -169,7 +170,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, runner, provider); err != nil {
+		if err := preflightPreview(ctx, runner, provider, stdout); err != nil {
 			return err
 		}
 
@@ -242,7 +243,7 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightPreview(ctx, runner, provider); err != nil {
+		if err := preflightPreview(ctx, runner, provider, stdout); err != nil {
 			return err
 		}
 
@@ -371,17 +372,18 @@ func confirmDestroyPreview(name string, stdout io.Writer, stdin io.Reader) (bool
 // preflightPreview refuses a preview command locally — before anything is
 // provisioned — when the preview infrastructure is missing or is the wrong
 // class.
-func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor) error {
-	return preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview")
+func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, out io.Writer) error {
+	return preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
 }
 
-// preflightClass asks the provider what its ambient account points at and
-// refuses locally — before anything is provisioned — when no infrastructure is
-// present (directing the user to bootstrapHint) or it is the wrong class for
-// the running command. The provider enforces the same class match
-// authoritatively; this is the fast local refuse `ocel deploy` and `ocel
-// preview` share.
-func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, bootstrapHint string) error {
+// preflightClass asks the provider to authenticate the credentials it needs and
+// report what its ambient account points at, prints the "Running with:" banner
+// to out, and refuses locally — before anything is provisioned — when a
+// credential failed, when no infrastructure is present (directing the user to
+// bootstrapHint), or when it is the wrong class for the running command. The
+// provider enforces credentials and class authoritatively; this is the fast
+// local refuse the deploy/preview/rollback/deployments commands share.
+func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
 	resp, err := runner.Preflight(ctx, &deploymentsv1.PreflightRequest{
 		Options:         []byte(provider.Options),
 		ProtocolVersion: manifestbuilder.SchemaVersion,
@@ -390,10 +392,90 @@ func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider
 	if err != nil {
 		return err
 	}
+	if banner := formatIdentityBanner(resp.GetIdentity()); banner != "" {
+		fmt.Fprint(out, banner)
+	}
+	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {
+		return err
+	}
 	if !resp.GetInfrastructurePresent() {
 		return fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
 	}
 	return deploymentsv1.CheckClass(resp.GetInfraClass(), required)
+}
+
+// formatIdentityBanner renders the "Running with:" block from the identity the
+// provider resolved, or "" when nothing resolved (every credential failed, so
+// the credential-problems block carries the detail instead). AWS shows its
+// profile when one is set, else the caller's principal from the ARN.
+func formatIdentityBanner(id *deploymentsv1.Identity) string {
+	if id == nil {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("Running with:\n")
+	wrote := false
+	if line := awsIdentityLine(id); line != "" {
+		fmt.Fprintf(&b, "  AWS         %s\n", line)
+		wrote = true
+	}
+	if acct := id.GetCloudflareAccount(); acct != "" {
+		fmt.Fprintf(&b, "  Cloudflare  account=%s\n", acct)
+		wrote = true
+	}
+	if !wrote {
+		return ""
+	}
+	return b.String()
+}
+
+// awsIdentityLine renders the AWS half of the banner, or "" when AWS did not
+// resolve (no account id).
+func awsIdentityLine(id *deploymentsv1.Identity) string {
+	if id.GetAwsAccount() == "" {
+		return ""
+	}
+	var parts []string
+	if p := id.GetAwsProfile(); p != "" {
+		parts = append(parts, "profile="+p)
+	} else if arn := id.GetAwsArn(); arn != "" {
+		parts = append(parts, "identity="+arnPrincipal(arn))
+	}
+	parts = append(parts, "account="+id.GetAwsAccount())
+	if r := id.GetAwsRegion(); r != "" {
+		parts = append(parts, "region="+r)
+	}
+	return strings.Join(parts, "  ")
+}
+
+// arnPrincipal is the trailing principal of an ARN — the user, role, or session
+// name — used as the banner's identity when no AWS_PROFILE names the source.
+func arnPrincipal(arn string) string {
+	if i := strings.LastIndex(arn, "/"); i >= 0 {
+		return arn[i+1:]
+	}
+	if i := strings.LastIndex(arn, ":"); i >= 0 {
+		return arn[i+1:]
+	}
+	return arn
+}
+
+// credentialProblems aggregates every reported credential failure into one
+// error, or nil when there are none. The identity of whatever did resolve is
+// already shown by the banner; this carries the ✗ side with a fix hint each.
+func credentialProblems(problems []*deploymentsv1.CredentialProblem) error {
+	if len(problems) == 0 {
+		return nil
+	}
+	var b strings.Builder
+	b.WriteString("credential check failed:")
+	for _, p := range problems {
+		fmt.Fprintf(&b, "\n  ✗ %s: %s", p.GetProvider(), p.GetMessage())
+		if h := p.GetHint(); h != "" {
+			fmt.Fprintf(&b, "\n    → %s", h)
+		}
+	}
+	return errors.New(b.String())
 }
 
 // renderEnvironments prints one line per preview environment: identity,

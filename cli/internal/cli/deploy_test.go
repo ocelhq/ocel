@@ -330,6 +330,72 @@ func TestRunDeploy_ConfirmSkippedWhenStdinNotATTY_ProceedsWithoutPrompting(t *te
 	waitForNoStaleSocket(t, sockPath)
 }
 
+// TestRunDeploy_PrintsIdentityBanner_BeforeBuildAndDeploy proves the preflight
+// identity banner is shown, and shown before the build and the Deploy — the
+// reordering that lets a user see which account they're about to hit, and lets
+// a bad credential abort before the build.
+func TestRunDeploy_PrintsIdentityBanner_BeforeBuildAndDeploy(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
+	t.Setenv(fakeIDAwsProfileEnvVar, "default")
+	t.Setenv(fakeIDAwsRegionEnvVar, "us-east-1")
+	t.Setenv(fakeIDCfAccountEnvVar, "abcd1234")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	for _, want := range []string{"Running with:", "profile=default", "account=123456789012", "region=us-east-1", "Cloudflare  account=abcd1234"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q:\n%s", want, out)
+		}
+	}
+	banner := strings.Index(out, "Running with:")
+	build := strings.Index(out, "Building project")
+	deploy := strings.Index(out, "DEPLOY ")
+	if banner < 0 || build < 0 || deploy < 0 {
+		t.Fatalf("expected banner, build, and deploy all present; banner=%d build=%d deploy=%d\n%s", banner, build, deploy, out)
+	}
+	if !(banner < build && build < deploy) {
+		t.Errorf("expected order banner < build < deploy; got banner=%d build=%d deploy=%d\n%s", banner, build, deploy, out)
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunDeploy_CredentialProblem_AbortsBeforeBuildAndDeploy proves a reported
+// credential failure aborts at preflight — before the build runs and before any
+// Deploy is driven — with the aggregated problem surfaced and the identity of
+// whatever resolved still shown.
+func TestRunDeploy_CredentialProblem_AbortsBeforeBuildAndDeploy(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
+	t.Setenv(fakeIDAwsProfileEnvVar, "default")
+	t.Setenv(fakeCredProblemEnvVar, "Cloudflare")
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want a credential-check error")
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "account=123456789012") {
+		t.Errorf("stdout = %q, want the resolved AWS identity still shown", out)
+	}
+	if !strings.Contains(out, "Cloudflare") {
+		t.Errorf("stdout = %q, want the Cloudflare credential problem surfaced", out)
+	}
+	if strings.Contains(out, "Building project") {
+		t.Errorf("stdout = %q, want the build to be skipped on a credential failure", out)
+	}
+	if strings.Contains(out, "DEPLOY ") {
+		t.Errorf("stdout = %q, want no Deploy to have been driven", out)
+	}
+}
+
 // setUpDeployFixture writes a project (ocel.config.ts declaring a provider,
 // and an ocel/main.ts discovery script declaring a single postgres resource
 // "main") and a fake provider binary resolvable via the real

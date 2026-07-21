@@ -40,6 +40,18 @@ const (
 	fakeInfraPresentEnvVar = "OCEL_TEST_FAKE_INFRA_PRESENT"
 )
 
+// fakeID*EnvVar populate the identity the fake provider reports from Preflight
+// (the CLI's "Running with:" banner); fakeCredProblemEnvVar, when set to a
+// provider label, makes Preflight report one credential problem for it so tests
+// can drive the CLI's credential-refuse path.
+const (
+	fakeIDAwsAccountEnvVar = "OCEL_TEST_FAKE_AWS_ACCOUNT"
+	fakeIDAwsProfileEnvVar = "OCEL_TEST_FAKE_AWS_PROFILE"
+	fakeIDAwsRegionEnvVar  = "OCEL_TEST_FAKE_AWS_REGION"
+	fakeIDCfAccountEnvVar  = "OCEL_TEST_FAKE_CF_ACCOUNT"
+	fakeCredProblemEnvVar  = "OCEL_TEST_FAKE_CRED_PROBLEM"
+)
+
 // runDeployFakeProvider binds a Unix socket, prints the readiness sentinel,
 // and serves DeploymentService.Deploy: it rejects a missing/mismatched
 // session token, rejects a manifest that doesn't look like what
@@ -154,10 +166,24 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	return &deploymentsv1.PreflightResponse{
+	resp := &deploymentsv1.PreflightResponse{
 		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
-	}, nil
+		Identity: &deploymentsv1.Identity{
+			AwsAccount:        os.Getenv(fakeIDAwsAccountEnvVar),
+			AwsProfile:        os.Getenv(fakeIDAwsProfileEnvVar),
+			AwsRegion:         os.Getenv(fakeIDAwsRegionEnvVar),
+			CloudflareAccount: os.Getenv(fakeIDCfAccountEnvVar),
+		},
+	}
+	if p := os.Getenv(fakeCredProblemEnvVar); p != "" {
+		resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
+			Provider: p,
+			Message:  "could not authenticate",
+			Hint:     "configure the credential and re-run",
+		})
+	}
+	return resp, nil
 }
 
 // Destroy echoes the Environment it was addressed with (so tests can assert the
