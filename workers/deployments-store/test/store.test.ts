@@ -9,9 +9,9 @@ declare module "cloudflare:test" {
 }
 
 // Every test gets a fresh DO instance (isolatedStorage snapshots storage per
-// test), so a stable name is fine to reuse across tests.
+// test), so a single fixed slug is fine to reuse across tests.
 function storeStub() {
-  const id = env.DEPLOYMENTS_DO.idFromName("root");
+  const id = env.DEPLOYMENTS_DO.idFromName("acme-web");
   return env.DEPLOYMENTS_DO.get(id);
 }
 
