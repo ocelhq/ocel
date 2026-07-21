@@ -384,11 +384,13 @@ func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provid
 // provider enforces credentials and class authoritatively; this is the fast
 // local refuse the deploy/preview/rollback/deployments commands share.
 func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
+	spinner := deployui.StartSpinner(out, "Checking credentials")
 	resp, err := runner.Preflight(ctx, &deploymentsv1.PreflightRequest{
 		Options:         []byte(provider.Options),
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		RequiredClass:   required,
 	})
+	spinner.Stop()
 	if err != nil {
 		return err
 	}
