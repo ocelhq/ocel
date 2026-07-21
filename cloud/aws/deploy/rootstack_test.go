@@ -29,6 +29,7 @@ type recordingRootStack struct {
 	staged     []edge.DeploymentRecord
 	promotions []edge.Promotion
 	pruned     []int
+	destroyed  int
 
 	history     []edge.HistoryEntry
 	pruneResult edge.PruneResult
@@ -90,6 +91,14 @@ func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state e
 	}
 	f.pruned = append(f.pruned, keepN)
 	return f.pruneResult, nil
+}
+
+func (f *recordingRootStack) DestroyRootStack(_ context.Context, state edge.RootStackState) error {
+	if err := f.checkAuth(state); err != nil {
+		return err
+	}
+	f.destroyed++
+	return nil
 }
 
 func TestRecordingRootStack_ReconcileIsANoOpWhenVersionUnchanged(t *testing.T) {

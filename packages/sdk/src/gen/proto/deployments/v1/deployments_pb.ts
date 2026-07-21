@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file deployments/v1/deployments.proto.
  */
 export const file_deployments_v1_deployments: GenFile = /*@__PURE__*/
-  fileDesc("CiBkZXBsb3ltZW50cy92MS9kZXBsb3ltZW50cy5wcm90bxIOZGVwbG95bWVudHMudjEihAQKC0Vudmlyb25tZW50EjAKBWNsYXNzGAEgASgOMiEuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQuQ2xhc3MSOAoJbGlmZWN5Y2xlGAIgASgOMiUuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEhAKCGlkZW50aXR5GAMgASgJEkMKD2lkZW50aXR5X3NvdXJjZRgEIAEoDjIqLmRlcGxveW1lbnRzLnYxLkVudmlyb25tZW50LklkZW50aXR5U291cmNlEg0KBWxhYmVsGAUgASgJIl4KBUNsYXNzEhUKEUNMQVNTX1VOU1BFQ0lGSUVEEAASFQoRQ0xBU1NfREVWRUxPUE1FTlQQARIRCg1DTEFTU19QUkVWSUVXEAISFAoQQ0xBU1NfUFJPRFVDVElPThADIlkKCUxpZmVjeWNsZRIZChVMSUZFQ1lDTEVfVU5TUEVDSUZJRUQQABIXChNMSUZFQ1lDTEVfRVBIRU1FUkFMEAESGAoUTElGRUNZQ0xFX1BFUlNJU1RFTlQQAiJoCg5JZGVudGl0eVNvdXJjZRIfChtJREVOVElUWV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIXChNJREVOVElUWV9TT1VSQ0VfR0lUEAESHAoYSURFTlRJVFlfU09VUkNFX0RFQ0xBUkVEEAIiswIKCE1hbmlmZXN0EhYKDnNjaGVtYV92ZXJzaW9uGAEgASgJEhIKCnByb2plY3RfaWQYAiABKAkSMwoJcmVzb3VyY2VzGAMgAygLMiAuZGVwbG95bWVudHMudjEuTWFuaWZlc3RSZXNvdXJjZRIzCglmdW5jdGlvbnMYBCADKAsyIC5kZXBsb3ltZW50cy52MS5NYW5pZmVzdEZ1bmN0aW9uEjYKB2RvbWFpbnMYBSADKAsyJS5kZXBsb3ltZW50cy52MS5NYW5pZmVzdC5Eb21haW5zRW50cnkSKQoEYXBwcxgGIAMoCzIbLmRlcGxveW1lbnRzLnYxLk1hbmlmZXN0QXBwGi4KDERvbWFpbnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIpkBCgtNYW5pZmVzdEFwcBIMCgRuYW1lGAEgASgJEhEKCWZyYW1ld29yaxgCIAEoCRI5Cgdkb21haW5zGAMgAygLMiguZGVwbG95bWVudHMudjEuTWFuaWZlc3RBcHAuRG9tYWluc0VudHJ5Gi4KDERvbWFpbnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIpMBChBNYW5pZmVzdEZ1bmN0aW9uEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIPCgdydW50aW1lGAIgASgJEg8KB2hhbmRsZXIYAyABKAkSFQoNYXJ0aWZhY3RfcGF0aBgEIAEoCRIRCglmcmFtZXdvcmsYBSABKAkSEAoIcm91dGVfaWQYBiABKAkSCwoDYXBwGAcgASgJIsYBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYBCABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIqUBCg1EZXBsb3lSZXF1ZXN0EioKCG1hbmlmZXN0GAEgASgLMhguZGVwbG95bWVudHMudjEuTWFuaWZlc3QSDwoHb3B0aW9ucxgCIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgJEjAKC2Vudmlyb25tZW50GAQgASgLMhsuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQSCwoDdGFnGAUgASgJIm8KEEJvb3RzdHJhcFJlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJEjAKBWNsYXNzGAMgASgOMiEuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQuQ2xhc3MigQEKDkRlc3Ryb3lSZXF1ZXN0EjAKC2Vudmlyb25tZW50GAEgASgLMhsuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQSDwoHb3B0aW9ucxgCIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgJEhIKCnByb2plY3RfaWQYBCABKAkiWAoXTGlzdEVudmlyb25tZW50c1JlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJEhIKCnByb2plY3RfaWQYAyABKAkiVAoYTGlzdEVudmlyb25tZW50c1Jlc3BvbnNlEjgKDGVudmlyb25tZW50cxgBIAMoCzIiLmRlcGxveW1lbnRzLnYxLlByZXZpZXdFbnZpcm9ubWVudCKXAQoSUHJldmlld0Vudmlyb25tZW50EhAKCGlkZW50aXR5GAEgASgJEjgKCWxpZmVjeWNsZRgCIAEoDjIlLmRlcGxveW1lbnRzLnYxLkVudmlyb25tZW50LkxpZmVjeWNsZRINCgVsYWJlbBgDIAEoCRISCgpjcmVhdGVkX2F0GAQgASgDEhIKCmV4cGlyZXNfYXQYBSABKAMieAoQUHJlZmxpZ2h0UmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSOQoOcmVxdWlyZWRfY2xhc3MYAyABKA4yIS5kZXBsb3ltZW50cy52MS5FbnZpcm9ubWVudC5DbGFzcyLXAQoRUHJlZmxpZ2h0UmVzcG9uc2USNgoLaW5mcmFfY2xhc3MYASABKA4yIS5kZXBsb3ltZW50cy52MS5FbnZpcm9ubWVudC5DbGFzcxIeChZpbmZyYXN0cnVjdHVyZV9wcmVzZW50GAIgASgIEioKCGlkZW50aXR5GAMgASgLMhguZGVwbG95bWVudHMudjEuSWRlbnRpdHkSPgoTY3JlZGVudGlhbF9wcm9ibGVtcxgEIAMoCzIhLmRlcGxveW1lbnRzLnYxLkNyZWRlbnRpYWxQcm9ibGVtInUKCElkZW50aXR5EhMKC2F3c19hY2NvdW50GAEgASgJEhMKC2F3c19wcm9maWxlGAIgASgJEhIKCmF3c19yZWdpb24YAyABKAkSDwoHYXdzX2FybhgEIAEoCRIaChJjbG91ZGZsYXJlX2FjY291bnQYBSABKAkiRAoRQ3JlZGVudGlhbFByb2JsZW0SEAoIcHJvdmlkZXIYASABKAkSDwoHbWVzc2FnZRgCIAEoCRIMCgRoaW50GAMgASgJIqABCglQcm9tb3Rpb24SFAoMcHJvbW90aW9uX2lkGAEgASgJEgoKAnRzGAIgASgDEjUKBmJ1aWxkcxgDIAMoCzIlLmRlcGxveW1lbnRzLnYxLlByb21vdGlvbi5CdWlsZHNFbnRyeRILCgN0YWcYBCABKAkaLQoLQnVpbGRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJVChVQcm9tb3Rpb25IaXN0b3J5RW50cnkSLAoJcHJvbW90aW9uGAEgASgLMhkuZGVwbG95bWVudHMudjEuUHJvbW90aW9uEg4KBmFjdGl2ZRgCIAEoCCJWChVMaXN0UHJvbW90aW9uc1JlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJEhIKCnByb2plY3RfaWQYAyABKAkiUwoWTGlzdFByb21vdGlvbnNSZXNwb25zZRI5Cgpwcm9tb3Rpb25zGAEgAygLMiUuZGVwbG95bWVudHMudjEuUHJvbW90aW9uSGlzdG9yeUVudHJ5ImkKD1JvbGxiYWNrUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCRIKCgJ0bxgEIAEoCRILCgN0YWcYBSABKAkiPwoQUm9sbGJhY2tSZXNwb25zZRIrCghwcm9tb3RlZBgBIAEoCzIZLmRlcGxveW1lbnRzLnYxLlByb21vdGlvbiJdCgxQcnVuZVJlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJEhIKCnByb2plY3RfaWQYAyABKAkSDgoGa2VlcF9uGAQgASgFIqEBCgtEZXBsb3lFdmVudBIxCghwcm9ncmVzcxgBIAEoCzIdLmRlcGxveW1lbnRzLnYxLlByb2dyZXNzRXZlbnRIABInCgNsb2cYAiABKAsyGC5kZXBsb3ltZW50cy52MS5Mb2dFdmVudEgAEi0KBnJlc3VsdBgDIAEoCzIbLmRlcGxveW1lbnRzLnYxLlJlc3VsdEV2ZW50SABCBwoFZXZlbnQihgEKDVByb2dyZXNzRXZlbnQSDwoHbWVzc2FnZRgBIAEoCRIkCgVwaGFzZRgCIAEoDjIVLmRlcGxveW1lbnRzLnYxLlBoYXNlEhQKB2N1cnJlbnQYAyABKA1IAIgBARISCgV0b3RhbBgEIAEoDUgBiAEBQgoKCF9jdXJyZW50QggKBl90b3RhbCIbCghMb2dFdmVudBIPCgdtZXNzYWdlGAEgASgJInAKC1Jlc3VsdEV2ZW50Eg8KB3N1Y2Nlc3MYASABKAgSDQoFZXJyb3IYAiABKAkSLwoHb3V0cHV0cxgDIAMoCzIeLmRlcGxveW1lbnRzLnYxLlJlc291cmNlT3V0cHV0EhAKCGFwcF91cmxzGAQgAygJIsgBCg5SZXNvdXJjZU91dHB1dBIUCgxsb2dpY2FsX25hbWUYASABKAkSMgoIcG9zdGdyZXMYAiABKAsyHi5kZXBsb3ltZW50cy52MS5Qb3N0Z3Jlc091dHB1dEgAEi4KBmJ1Y2tldBgDIAEoCzIcLmRlcGxveW1lbnRzLnYxLkJ1Y2tldE91dHB1dEgAEjIKCGZ1bmN0aW9uGAQgASgLMh4uZGVwbG95bWVudHMudjEuRnVuY3Rpb25PdXRwdXRIAEIICgZvdXRwdXQiZwoOUG9zdGdyZXNPdXRwdXQSDAoEaG9zdBgBIAEoCRIMCgRwb3J0GAIgASgFEhAKCGRhdGFiYXNlGAMgASgJEhAKCHVzZXJuYW1lGAQgASgJEhUKCHBhc3N3b3JkGAUgASgJQgOAAQEiLwoMQnVja2V0T3V0cHV0Eg8KB2FkZHJlc3MYASABKAkSDgoGYnVja2V0GAIgASgJIh0KDkZ1bmN0aW9uT3V0cHV0EgsKA3VybBgBIAEoCSp1CgVQaGFzZRIVChFQSEFTRV9VTlNQRUNJRklFRBAAEhIKDlBIQVNFX0JVSUxESU5HEAESEwoPUEhBU0VfVVBMT0FESU5HEAISFgoSUEhBU0VfUFJPVklTSU9OSU5HEAMSFAoQUEhBU0VfRklOQUxJWklORxAEMqIFChFEZXBsb3ltZW50U2VydmljZRJGCgZEZXBsb3kSHS5kZXBsb3ltZW50cy52MS5EZXBsb3lSZXF1ZXN0GhsuZGVwbG95bWVudHMudjEuRGVwbG95RXZlbnQwARJMCglCb290c3RyYXASIC5kZXBsb3ltZW50cy52MS5Cb290c3RyYXBSZXF1ZXN0GhsuZGVwbG95bWVudHMudjEuRGVwbG95RXZlbnQwARJICgdEZXN0cm95Eh4uZGVwbG95bWVudHMudjEuRGVzdHJveVJlcXVlc3QaGy5kZXBsb3ltZW50cy52MS5EZXBsb3lFdmVudDABEmUKEExpc3RFbnZpcm9ubWVudHMSJy5kZXBsb3ltZW50cy52MS5MaXN0RW52aXJvbm1lbnRzUmVxdWVzdBooLmRlcGxveW1lbnRzLnYxLkxpc3RFbnZpcm9ubWVudHNSZXNwb25zZRJQCglQcmVmbGlnaHQSIC5kZXBsb3ltZW50cy52MS5QcmVmbGlnaHRSZXF1ZXN0GiEuZGVwbG95bWVudHMudjEuUHJlZmxpZ2h0UmVzcG9uc2USXwoOTGlzdFByb21vdGlvbnMSJS5kZXBsb3ltZW50cy52MS5MaXN0UHJvbW90aW9uc1JlcXVlc3QaJi5kZXBsb3ltZW50cy52MS5MaXN0UHJvbW90aW9uc1Jlc3BvbnNlEk0KCFJvbGxiYWNrEh8uZGVwbG95bWVudHMudjEuUm9sbGJhY2tSZXF1ZXN0GiAuZGVwbG95bWVudHMudjEuUm9sbGJhY2tSZXNwb25zZRJECgVQcnVuZRIcLmRlcGxveW1lbnRzLnYxLlBydW5lUmVxdWVzdBobLmRlcGxveW1lbnRzLnYxLkRlcGxveUV2ZW50MAFCP1o9Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vZGVwbG95bWVudHMvdjE7ZGVwbG95bWVudHN2MWIGcHJvdG8z", [file_resources_v1_resources]);
+  fileDesc("CiBkZXBsb3ltZW50cy92MS9kZXBsb3ltZW50cy5wcm90bxIOZGVwbG95bWVudHMudjEihAQKC0Vudmlyb25tZW50EjAKBWNsYXNzGAEgASgOMiEuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQuQ2xhc3MSOAoJbGlmZWN5Y2xlGAIgASgOMiUuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEhAKCGlkZW50aXR5GAMgASgJEkMKD2lkZW50aXR5X3NvdXJjZRgEIAEoDjIqLmRlcGxveW1lbnRzLnYxLkVudmlyb25tZW50LklkZW50aXR5U291cmNlEg0KBWxhYmVsGAUgASgJIl4KBUNsYXNzEhUKEUNMQVNTX1VOU1BFQ0lGSUVEEAASFQoRQ0xBU1NfREVWRUxPUE1FTlQQARIRCg1DTEFTU19QUkVWSUVXEAISFAoQQ0xBU1NfUFJPRFVDVElPThADIlkKCUxpZmVjeWNsZRIZChVMSUZFQ1lDTEVfVU5TUEVDSUZJRUQQABIXChNMSUZFQ1lDTEVfRVBIRU1FUkFMEAESGAoUTElGRUNZQ0xFX1BFUlNJU1RFTlQQAiJoCg5JZGVudGl0eVNvdXJjZRIfChtJREVOVElUWV9TT1VSQ0VfVU5TUEVDSUZJRUQQABIXChNJREVOVElUWV9TT1VSQ0VfR0lUEAESHAoYSURFTlRJVFlfU09VUkNFX0RFQ0xBUkVEEAIiswIKCE1hbmlmZXN0EhYKDnNjaGVtYV92ZXJzaW9uGAEgASgJEhIKCnByb2plY3RfaWQYAiABKAkSMwoJcmVzb3VyY2VzGAMgAygLMiAuZGVwbG95bWVudHMudjEuTWFuaWZlc3RSZXNvdXJjZRIzCglmdW5jdGlvbnMYBCADKAsyIC5kZXBsb3ltZW50cy52MS5NYW5pZmVzdEZ1bmN0aW9uEjYKB2RvbWFpbnMYBSADKAsyJS5kZXBsb3ltZW50cy52MS5NYW5pZmVzdC5Eb21haW5zRW50cnkSKQoEYXBwcxgGIAMoCzIbLmRlcGxveW1lbnRzLnYxLk1hbmlmZXN0QXBwGi4KDERvbWFpbnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIpkBCgtNYW5pZmVzdEFwcBIMCgRuYW1lGAEgASgJEhEKCWZyYW1ld29yaxgCIAEoCRI5Cgdkb21haW5zGAMgAygLMiguZGVwbG95bWVudHMudjEuTWFuaWZlc3RBcHAuRG9tYWluc0VudHJ5Gi4KDERvbWFpbnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIpMBChBNYW5pZmVzdEZ1bmN0aW9uEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIPCgdydW50aW1lGAIgASgJEg8KB2hhbmRsZXIYAyABKAkSFQoNYXJ0aWZhY3RfcGF0aBgEIAEoCRIRCglmcmFtZXdvcmsYBSABKAkSEAoIcm91dGVfaWQYBiABKAkSCwoDYXBwGAcgASgJIsYBChBNYW5pZmVzdFJlc291cmNlEhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghyZXNvdXJjZRgCIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAyABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYBCABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIqUBCg1EZXBsb3lSZXF1ZXN0EioKCG1hbmlmZXN0GAEgASgLMhguZGVwbG95bWVudHMudjEuTWFuaWZlc3QSDwoHb3B0aW9ucxgCIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAMgASgJEjAKC2Vudmlyb25tZW50GAQgASgLMhsuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQSCwoDdGFnGAUgASgJIm8KEEJvb3RzdHJhcFJlcXVlc3QSDwoHb3B0aW9ucxgBIAEoDBIYChBwcm90b2NvbF92ZXJzaW9uGAIgASgJEjAKBWNsYXNzGAMgASgOMiEuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQuQ2xhc3MiiAEKFURlc3Ryb3lQcmV2aWV3UmVxdWVzdBIwCgtlbnZpcm9ubWVudBgBIAEoCzIbLmRlcGxveW1lbnRzLnYxLkVudmlyb25tZW50Eg8KB29wdGlvbnMYAiABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgDIAEoCRISCgpwcm9qZWN0X2lkGAQgASgJIlYKFURlc3Ryb3lQcm9qZWN0UmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCSJaChlQbGFuRGVzdHJveVByb2plY3RSZXF1ZXN0Eg8KB29wdGlvbnMYASABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJIlkKGlBsYW5EZXN0cm95UHJvamVjdFJlc3BvbnNlEhIKCmFwcF9zdGFja3MYASADKAkSEwoLaW5mcmFfc3RhY2sYAiABKAkSEgoKcm9vdF9zdGFjaxgDIAEoCCJYChdMaXN0RW52aXJvbm1lbnRzUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCSJUChhMaXN0RW52aXJvbm1lbnRzUmVzcG9uc2USOAoMZW52aXJvbm1lbnRzGAEgAygLMiIuZGVwbG95bWVudHMudjEuUHJldmlld0Vudmlyb25tZW50IpcBChJQcmV2aWV3RW52aXJvbm1lbnQSEAoIaWRlbnRpdHkYASABKAkSOAoJbGlmZWN5Y2xlGAIgASgOMiUuZGVwbG95bWVudHMudjEuRW52aXJvbm1lbnQuTGlmZWN5Y2xlEg0KBWxhYmVsGAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAMSEgoKZXhwaXJlc19hdBgFIAEoAyJ4ChBQcmVmbGlnaHRSZXF1ZXN0Eg8KB29wdGlvbnMYASABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgCIAEoCRI5Cg5yZXF1aXJlZF9jbGFzcxgDIAEoDjIhLmRlcGxveW1lbnRzLnYxLkVudmlyb25tZW50LkNsYXNzItcBChFQcmVmbGlnaHRSZXNwb25zZRI2CgtpbmZyYV9jbGFzcxgBIAEoDjIhLmRlcGxveW1lbnRzLnYxLkVudmlyb25tZW50LkNsYXNzEh4KFmluZnJhc3RydWN0dXJlX3ByZXNlbnQYAiABKAgSKgoIaWRlbnRpdHkYAyABKAsyGC5kZXBsb3ltZW50cy52MS5JZGVudGl0eRI+ChNjcmVkZW50aWFsX3Byb2JsZW1zGAQgAygLMiEuZGVwbG95bWVudHMudjEuQ3JlZGVudGlhbFByb2JsZW0idQoISWRlbnRpdHkSEwoLYXdzX2FjY291bnQYASABKAkSEwoLYXdzX3Byb2ZpbGUYAiABKAkSEgoKYXdzX3JlZ2lvbhgDIAEoCRIPCgdhd3NfYXJuGAQgASgJEhoKEmNsb3VkZmxhcmVfYWNjb3VudBgFIAEoCSJEChFDcmVkZW50aWFsUHJvYmxlbRIQCghwcm92aWRlchgBIAEoCRIPCgdtZXNzYWdlGAIgASgJEgwKBGhpbnQYAyABKAkioAEKCVByb21vdGlvbhIUCgxwcm9tb3Rpb25faWQYASABKAkSCgoCdHMYAiABKAMSNQoGYnVpbGRzGAMgAygLMiUuZGVwbG95bWVudHMudjEuUHJvbW90aW9uLkJ1aWxkc0VudHJ5EgsKA3RhZxgEIAEoCRotCgtCdWlsZHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIlUKFVByb21vdGlvbkhpc3RvcnlFbnRyeRIsCglwcm9tb3Rpb24YASABKAsyGS5kZXBsb3ltZW50cy52MS5Qcm9tb3Rpb24SDgoGYWN0aXZlGAIgASgIIlYKFUxpc3RQcm9tb3Rpb25zUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCSJTChZMaXN0UHJvbW90aW9uc1Jlc3BvbnNlEjkKCnByb21vdGlvbnMYASADKAsyJS5kZXBsb3ltZW50cy52MS5Qcm9tb3Rpb25IaXN0b3J5RW50cnkiaQoPUm9sbGJhY2tSZXF1ZXN0Eg8KB29wdGlvbnMYASABKAwSGAoQcHJvdG9jb2xfdmVyc2lvbhgCIAEoCRISCgpwcm9qZWN0X2lkGAMgASgJEgoKAnRvGAQgASgJEgsKA3RhZxgFIAEoCSI/ChBSb2xsYmFja1Jlc3BvbnNlEisKCHByb21vdGVkGAEgASgLMhkuZGVwbG95bWVudHMudjEuUHJvbW90aW9uIl0KDFBydW5lUmVxdWVzdBIPCgdvcHRpb25zGAEgASgMEhgKEHByb3RvY29sX3ZlcnNpb24YAiABKAkSEgoKcHJvamVjdF9pZBgDIAEoCRIOCgZrZWVwX24YBCABKAUioQEKC0RlcGxveUV2ZW50EjEKCHByb2dyZXNzGAEgASgLMh0uZGVwbG95bWVudHMudjEuUHJvZ3Jlc3NFdmVudEgAEicKA2xvZxgCIAEoCzIYLmRlcGxveW1lbnRzLnYxLkxvZ0V2ZW50SAASLQoGcmVzdWx0GAMgASgLMhsuZGVwbG95bWVudHMudjEuUmVzdWx0RXZlbnRIAEIHCgVldmVudCKGAQoNUHJvZ3Jlc3NFdmVudBIPCgdtZXNzYWdlGAEgASgJEiQKBXBoYXNlGAIgASgOMhUuZGVwbG95bWVudHMudjEuUGhhc2USFAoHY3VycmVudBgDIAEoDUgAiAEBEhIKBXRvdGFsGAQgASgNSAGIAQFCCgoIX2N1cnJlbnRCCAoGX3RvdGFsIhsKCExvZ0V2ZW50Eg8KB21lc3NhZ2UYASABKAkicAoLUmVzdWx0RXZlbnQSDwoHc3VjY2VzcxgBIAEoCBINCgVlcnJvchgCIAEoCRIvCgdvdXRwdXRzGAMgAygLMh4uZGVwbG95bWVudHMudjEuUmVzb3VyY2VPdXRwdXQSEAoIYXBwX3VybHMYBCADKAkiyAEKDlJlc291cmNlT3V0cHV0EhQKDGxvZ2ljYWxfbmFtZRgBIAEoCRIyCghwb3N0Z3JlcxgCIAEoCzIeLmRlcGxveW1lbnRzLnYxLlBvc3RncmVzT3V0cHV0SAASLgoGYnVja2V0GAMgASgLMhwuZGVwbG95bWVudHMudjEuQnVja2V0T3V0cHV0SAASMgoIZnVuY3Rpb24YBCABKAsyHi5kZXBsb3ltZW50cy52MS5GdW5jdGlvbk91dHB1dEgAQggKBm91dHB1dCJnCg5Qb3N0Z3Jlc091dHB1dBIMCgRob3N0GAEgASgJEgwKBHBvcnQYAiABKAUSEAoIZGF0YWJhc2UYAyABKAkSEAoIdXNlcm5hbWUYBCABKAkSFQoIcGFzc3dvcmQYBSABKAlCA4ABASIvCgxCdWNrZXRPdXRwdXQSDwoHYWRkcmVzcxgBIAEoCRIOCgZidWNrZXQYAiABKAkiHQoORnVuY3Rpb25PdXRwdXQSCwoDdXJsGAEgASgJKnUKBVBoYXNlEhUKEVBIQVNFX1VOU1BFQ0lGSUVEEAASEgoOUEhBU0VfQlVJTERJTkcQARITCg9QSEFTRV9VUExPQURJTkcQAhIWChJQSEFTRV9QUk9WSVNJT05JTkcQAxIUChBQSEFTRV9GSU5BTElaSU5HEAQy9QYKEURlcGxveW1lbnRTZXJ2aWNlEkYKBkRlcGxveRIdLmRlcGxveW1lbnRzLnYxLkRlcGxveVJlcXVlc3QaGy5kZXBsb3ltZW50cy52MS5EZXBsb3lFdmVudDABEkwKCUJvb3RzdHJhcBIgLmRlcGxveW1lbnRzLnYxLkJvb3RzdHJhcFJlcXVlc3QaGy5kZXBsb3ltZW50cy52MS5EZXBsb3lFdmVudDABElYKDkRlc3Ryb3lQcmV2aWV3EiUuZGVwbG95bWVudHMudjEuRGVzdHJveVByZXZpZXdSZXF1ZXN0GhsuZGVwbG95bWVudHMudjEuRGVwbG95RXZlbnQwARJWCg5EZXN0cm95UHJvamVjdBIlLmRlcGxveW1lbnRzLnYxLkRlc3Ryb3lQcm9qZWN0UmVxdWVzdBobLmRlcGxveW1lbnRzLnYxLkRlcGxveUV2ZW50MAESawoSUGxhbkRlc3Ryb3lQcm9qZWN0EikuZGVwbG95bWVudHMudjEuUGxhbkRlc3Ryb3lQcm9qZWN0UmVxdWVzdBoqLmRlcGxveW1lbnRzLnYxLlBsYW5EZXN0cm95UHJvamVjdFJlc3BvbnNlEmUKEExpc3RFbnZpcm9ubWVudHMSJy5kZXBsb3ltZW50cy52MS5MaXN0RW52aXJvbm1lbnRzUmVxdWVzdBooLmRlcGxveW1lbnRzLnYxLkxpc3RFbnZpcm9ubWVudHNSZXNwb25zZRJQCglQcmVmbGlnaHQSIC5kZXBsb3ltZW50cy52MS5QcmVmbGlnaHRSZXF1ZXN0GiEuZGVwbG95bWVudHMudjEuUHJlZmxpZ2h0UmVzcG9uc2USXwoOTGlzdFByb21vdGlvbnMSJS5kZXBsb3ltZW50cy52MS5MaXN0UHJvbW90aW9uc1JlcXVlc3QaJi5kZXBsb3ltZW50cy52MS5MaXN0UHJvbW90aW9uc1Jlc3BvbnNlEk0KCFJvbGxiYWNrEh8uZGVwbG95bWVudHMudjEuUm9sbGJhY2tSZXF1ZXN0GiAuZGVwbG95bWVudHMudjEuUm9sbGJhY2tSZXNwb25zZRJECgVQcnVuZRIcLmRlcGxveW1lbnRzLnYxLlBydW5lUmVxdWVzdBobLmRlcGxveW1lbnRzLnYxLkRlcGxveUV2ZW50MAFCP1o9Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vZGVwbG95bWVudHMvdjE7ZGVwbG95bWVudHN2MWIGcHJvdG8z", [file_resources_v1_resources]);
 
 /**
  * Environment is the fully resolved target a provisioning verb acts on. The
@@ -474,9 +474,9 @@ export const BootstrapRequestSchema: GenMessage<BootstrapRequest> = /*@__PURE__*
  * full Environment block as its addressing so the provider tears down exactly
  * the right environment.
  *
- * @generated from message deployments.v1.DestroyRequest
+ * @generated from message deployments.v1.DestroyPreviewRequest
  */
-export type DestroyRequest = Message<"deployments.v1.DestroyRequest"> & {
+export type DestroyPreviewRequest = Message<"deployments.v1.DestroyPreviewRequest"> & {
   /**
    * @generated from field: deployments.v1.Environment environment = 1;
    */
@@ -510,11 +510,136 @@ export type DestroyRequest = Message<"deployments.v1.DestroyRequest"> & {
 };
 
 /**
- * Describes the message deployments.v1.DestroyRequest.
- * Use `create(DestroyRequestSchema)` to create a new message.
+ * Describes the message deployments.v1.DestroyPreviewRequest.
+ * Use `create(DestroyPreviewRequestSchema)` to create a new message.
  */
-export const DestroyRequestSchema: GenMessage<DestroyRequest> = /*@__PURE__*/
+export const DestroyPreviewRequestSchema: GenMessage<DestroyPreviewRequest> = /*@__PURE__*/
   messageDesc(file_deployments_v1_deployments, 7);
+
+/**
+ * DestroyProjectRequest is the request for DeploymentService.DestroyProject. It
+ * names no environment: a whole production project is the unit, so the provider
+ * enumerates and tears down every stack the project owns. Like PruneRequest it
+ * is project-scoped, carrying only the provider's opaque options, the pinned
+ * protocol version, and the project id.
+ *
+ * @generated from message deployments.v1.DestroyProjectRequest
+ */
+export type DestroyProjectRequest = Message<"deployments.v1.DestroyProjectRequest"> & {
+  /**
+   * options is always UTF-8 JSON bytes: `{}` when the provider was given no
+   * options, never absent and never an empty string. The CLI never inspects
+   * this field; only the provider unmarshals it.
+   *
+   * @generated from field: bytes options = 1;
+   */
+  options: Uint8Array;
+
+  /**
+   * protocol_version pins the wire contract so a provider can reject a
+   * request it can't speak.
+   *
+   * @generated from field: string protocol_version = 2;
+   */
+  protocolVersion: string;
+
+  /**
+   * project_id scopes the teardown to one project. The Pulumi state backend is
+   * account-global, so the provider addresses this project's per-project stacks
+   * (root state, infra stack, and every app-deploy stack) with it.
+   *
+   * @generated from field: string project_id = 3;
+   */
+  projectId: string;
+};
+
+/**
+ * Describes the message deployments.v1.DestroyProjectRequest.
+ * Use `create(DestroyProjectRequestSchema)` to create a new message.
+ */
+export const DestroyProjectRequestSchema: GenMessage<DestroyProjectRequest> = /*@__PURE__*/
+  messageDesc(file_deployments_v1_deployments, 8);
+
+/**
+ * PlanDestroyProjectRequest is the request for
+ * DeploymentService.PlanDestroyProject. Like DestroyProjectRequest it is
+ * project-scoped and names no environment.
+ *
+ * @generated from message deployments.v1.PlanDestroyProjectRequest
+ */
+export type PlanDestroyProjectRequest = Message<"deployments.v1.PlanDestroyProjectRequest"> & {
+  /**
+   * options is always UTF-8 JSON bytes: `{}` when the provider was given no
+   * options, never absent and never an empty string. The CLI never inspects
+   * this field; only the provider unmarshals it.
+   *
+   * @generated from field: bytes options = 1;
+   */
+  options: Uint8Array;
+
+  /**
+   * protocol_version pins the wire contract so a provider can reject a
+   * request it can't speak.
+   *
+   * @generated from field: string protocol_version = 2;
+   */
+  protocolVersion: string;
+
+  /**
+   * project_id scopes the plan to one project.
+   *
+   * @generated from field: string project_id = 3;
+   */
+  projectId: string;
+};
+
+/**
+ * Describes the message deployments.v1.PlanDestroyProjectRequest.
+ * Use `create(PlanDestroyProjectRequestSchema)` to create a new message.
+ */
+export const PlanDestroyProjectRequestSchema: GenMessage<PlanDestroyProjectRequest> = /*@__PURE__*/
+  messageDesc(file_deployments_v1_deployments, 9);
+
+/**
+ * PlanDestroyProjectResponse is the reply from
+ * DeploymentService.PlanDestroyProject: the inventory a DestroyProject would
+ * remove. A project with no app stacks, no infra stack, and no root stack has
+ * nothing to destroy.
+ *
+ * @generated from message deployments.v1.PlanDestroyProjectResponse
+ */
+export type PlanDestroyProjectResponse = Message<"deployments.v1.PlanDestroyProjectResponse"> & {
+  /**
+   * app_stacks are the per-app-deploy Pulumi stacks the project owns, by name,
+   * including any orphaned by an aborted deploy.
+   *
+   * @generated from field: repeated string app_stacks = 1;
+   */
+  appStacks: string[];
+
+  /**
+   * infra_stack is the project's stable infra Pulumi stack, or empty when it
+   * has none yet.
+   *
+   * @generated from field: string infra_stack = 2;
+   */
+  infraStack: string;
+
+  /**
+   * root_stack reports whether the project has a reconciled root stack (edge
+   * workers, custom-domain binding, deployments store) to tear down.
+   *
+   * @generated from field: bool root_stack = 3;
+   */
+  rootStack: boolean;
+};
+
+/**
+ * Describes the message deployments.v1.PlanDestroyProjectResponse.
+ * Use `create(PlanDestroyProjectResponseSchema)` to create a new message.
+ */
+export const PlanDestroyProjectResponseSchema: GenMessage<PlanDestroyProjectResponse> = /*@__PURE__*/
+  messageDesc(file_deployments_v1_deployments, 10);
 
 /**
  * ListEnvironmentsRequest is the request for DeploymentService.ListEnvironments.
@@ -556,7 +681,7 @@ export type ListEnvironmentsRequest = Message<"deployments.v1.ListEnvironmentsRe
  * Use `create(ListEnvironmentsRequestSchema)` to create a new message.
  */
 export const ListEnvironmentsRequestSchema: GenMessage<ListEnvironmentsRequest> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 8);
+  messageDesc(file_deployments_v1_deployments, 11);
 
 /**
  * ListEnvironmentsResponse is the reply from DeploymentService.ListEnvironments:
@@ -576,7 +701,7 @@ export type ListEnvironmentsResponse = Message<"deployments.v1.ListEnvironmentsR
  * Use `create(ListEnvironmentsResponseSchema)` to create a new message.
  */
 export const ListEnvironmentsResponseSchema: GenMessage<ListEnvironmentsResponse> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 9);
+  messageDesc(file_deployments_v1_deployments, 12);
 
 /**
  * PreviewEnvironment is a single enumerated preview environment, carrying just
@@ -621,7 +746,7 @@ export type PreviewEnvironment = Message<"deployments.v1.PreviewEnvironment"> & 
  * Use `create(PreviewEnvironmentSchema)` to create a new message.
  */
 export const PreviewEnvironmentSchema: GenMessage<PreviewEnvironment> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 10);
+  messageDesc(file_deployments_v1_deployments, 13);
 
 /**
  * PreflightRequest is the request for DeploymentService.Preflight. Like
@@ -666,7 +791,7 @@ export type PreflightRequest = Message<"deployments.v1.PreflightRequest"> & {
  * Use `create(PreflightRequestSchema)` to create a new message.
  */
 export const PreflightRequestSchema: GenMessage<PreflightRequest> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 11);
+  messageDesc(file_deployments_v1_deployments, 14);
 
 /**
  * PreflightResponse tells the CLI what the provider's ambient account/profile
@@ -720,7 +845,7 @@ export type PreflightResponse = Message<"deployments.v1.PreflightResponse"> & {
  * Use `create(PreflightResponseSchema)` to create a new message.
  */
 export const PreflightResponseSchema: GenMessage<PreflightResponse> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 12);
+  messageDesc(file_deployments_v1_deployments, 15);
 
 /**
  * Identity is what a provider's ambient credentials resolve to, surfaced by
@@ -770,7 +895,7 @@ export type Identity = Message<"deployments.v1.Identity"> & {
  * Use `create(IdentitySchema)` to create a new message.
  */
 export const IdentitySchema: GenMessage<Identity> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 13);
+  messageDesc(file_deployments_v1_deployments, 16);
 
 /**
  * CredentialProblem is one credential a provider needs but could not
@@ -807,7 +932,7 @@ export type CredentialProblem = Message<"deployments.v1.CredentialProblem"> & {
  * Use `create(CredentialProblemSchema)` to create a new message.
  */
 export const CredentialProblemSchema: GenMessage<CredentialProblem> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 14);
+  messageDesc(file_deployments_v1_deployments, 17);
 
 /**
  * Promotion is the project-wide unit one production deploy produces: a
@@ -852,7 +977,7 @@ export type Promotion = Message<"deployments.v1.Promotion"> & {
  * Use `create(PromotionSchema)` to create a new message.
  */
 export const PromotionSchema: GenMessage<Promotion> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 15);
+  messageDesc(file_deployments_v1_deployments, 18);
 
 /**
  * PromotionHistoryEntry is one Promotion in the project's ordered promotion
@@ -877,7 +1002,7 @@ export type PromotionHistoryEntry = Message<"deployments.v1.PromotionHistoryEntr
  * Use `create(PromotionHistoryEntrySchema)` to create a new message.
  */
 export const PromotionHistoryEntrySchema: GenMessage<PromotionHistoryEntry> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 16);
+  messageDesc(file_deployments_v1_deployments, 19);
 
 /**
  * ListPromotionsRequest is the request for DeploymentService.ListPromotions.
@@ -915,7 +1040,7 @@ export type ListPromotionsRequest = Message<"deployments.v1.ListPromotionsReques
  * Use `create(ListPromotionsRequestSchema)` to create a new message.
  */
 export const ListPromotionsRequestSchema: GenMessage<ListPromotionsRequest> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 17);
+  messageDesc(file_deployments_v1_deployments, 20);
 
 /**
  * ListPromotionsResponse is the reply from DeploymentService.ListPromotions:
@@ -935,7 +1060,7 @@ export type ListPromotionsResponse = Message<"deployments.v1.ListPromotionsRespo
  * Use `create(ListPromotionsResponseSchema)` to create a new message.
  */
 export const ListPromotionsResponseSchema: GenMessage<ListPromotionsResponse> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 18);
+  messageDesc(file_deployments_v1_deployments, 21);
 
 /**
  * RollbackRequest is the request for DeploymentService.Rollback.
@@ -987,7 +1112,7 @@ export type RollbackRequest = Message<"deployments.v1.RollbackRequest"> & {
  * Use `create(RollbackRequestSchema)` to create a new message.
  */
 export const RollbackRequestSchema: GenMessage<RollbackRequest> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 19);
+  messageDesc(file_deployments_v1_deployments, 22);
 
 /**
  * RollbackResponse is the reply from DeploymentService.Rollback: the
@@ -1007,7 +1132,7 @@ export type RollbackResponse = Message<"deployments.v1.RollbackResponse"> & {
  * Use `create(RollbackResponseSchema)` to create a new message.
  */
 export const RollbackResponseSchema: GenMessage<RollbackResponse> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 20);
+  messageDesc(file_deployments_v1_deployments, 23);
 
 /**
  * PruneRequest is the request for DeploymentService.Prune.
@@ -1051,7 +1176,7 @@ export type PruneRequest = Message<"deployments.v1.PruneRequest"> & {
  * Use `create(PruneRequestSchema)` to create a new message.
  */
 export const PruneRequestSchema: GenMessage<PruneRequest> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 21);
+  messageDesc(file_deployments_v1_deployments, 24);
 
 /**
  * DeployEvent is a single item on the Deploy response stream: either
@@ -1089,7 +1214,7 @@ export type DeployEvent = Message<"deployments.v1.DeployEvent"> & {
  * Use `create(DeployEventSchema)` to create a new message.
  */
 export const DeployEventSchema: GenMessage<DeployEvent> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 22);
+  messageDesc(file_deployments_v1_deployments, 25);
 
 /**
  * ProgressEvent reports a discrete, human-readable step of deploy progress.
@@ -1130,7 +1255,7 @@ export type ProgressEvent = Message<"deployments.v1.ProgressEvent"> & {
  * Use `create(ProgressEventSchema)` to create a new message.
  */
 export const ProgressEventSchema: GenMessage<ProgressEvent> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 23);
+  messageDesc(file_deployments_v1_deployments, 26);
 
 /**
  * LogEvent carries diagnostic output that isn't a discrete progress step.
@@ -1149,7 +1274,7 @@ export type LogEvent = Message<"deployments.v1.LogEvent"> & {
  * Use `create(LogEventSchema)` to create a new message.
  */
 export const LogEventSchema: GenMessage<LogEvent> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 24);
+  messageDesc(file_deployments_v1_deployments, 27);
 
 /**
  * ResultEvent is always the last event on the stream: success, or failure
@@ -1195,7 +1320,7 @@ export type ResultEvent = Message<"deployments.v1.ResultEvent"> & {
  * Use `create(ResultEventSchema)` to create a new message.
  */
 export const ResultEventSchema: GenMessage<ResultEvent> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 25);
+  messageDesc(file_deployments_v1_deployments, 28);
 
 /**
  * ResourceOutput pairs a resource's logical name with its typed connection
@@ -1242,7 +1367,7 @@ export type ResourceOutput = Message<"deployments.v1.ResourceOutput"> & {
  * Use `create(ResourceOutputSchema)` to create a new message.
  */
 export const ResourceOutputSchema: GenMessage<ResourceOutput> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 26);
+  messageDesc(file_deployments_v1_deployments, 29);
 
 /**
  * PostgresOutput is the discrete connection detail for a provisioned
@@ -1286,7 +1411,7 @@ export type PostgresOutput = Message<"deployments.v1.PostgresOutput"> & {
  * Use `create(PostgresOutputSchema)` to create a new message.
  */
 export const PostgresOutputSchema: GenMessage<PostgresOutput> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 27);
+  messageDesc(file_deployments_v1_deployments, 30);
 
 /**
  * BucketOutput is the discrete connection detail for a provisioned bucket
@@ -1314,7 +1439,7 @@ export type BucketOutput = Message<"deployments.v1.BucketOutput"> & {
  * Use `create(BucketOutputSchema)` to create a new message.
  */
 export const BucketOutputSchema: GenMessage<BucketOutput> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 28);
+  messageDesc(file_deployments_v1_deployments, 31);
 
 /**
  * FunctionOutput is the connection detail for a realized function: its
@@ -1336,7 +1461,7 @@ export type FunctionOutput = Message<"deployments.v1.FunctionOutput"> & {
  * Use `create(FunctionOutputSchema)` to create a new message.
  */
 export const FunctionOutputSchema: GenMessage<FunctionOutput> = /*@__PURE__*/
-  messageDesc(file_deployments_v1_deployments, 29);
+  messageDesc(file_deployments_v1_deployments, 32);
 
 /**
  * Phase names the coarse stage a deploy is in, so the CLI can render a fixed
@@ -1446,19 +1571,52 @@ export const DeploymentService: GenService<{
     output: typeof DeployEventSchema;
   },
   /**
-   * Destroy tears down the environment addressed by DestroyRequest.environment.
-   * It is the inverse of Deploy and reuses the same DeployEvent stream:
-   * progress/log events, then a terminal ResultEvent (which carries no
-   * outputs). The provider selects exactly the environment named by the
-   * Environment block; the CLI never asks it to reverse-engineer how the
-   * teardown was invoked.
+   * DestroyPreview tears down the single preview environment addressed by
+   * DestroyPreviewRequest.environment. It is the inverse of a preview Deploy
+   * and reuses the same DeployEvent stream: progress/log events, then a
+   * terminal ResultEvent (which carries no outputs). The provider selects
+   * exactly the environment named by the Environment block; the CLI never
+   * asks it to reverse-engineer how the teardown was invoked. It backs
+   * `ocel preview rm`.
    *
-   * @generated from rpc deployments.v1.DeploymentService.Destroy
+   * @generated from rpc deployments.v1.DeploymentService.DestroyPreview
    */
-  destroy: {
+  destroyPreview: {
     methodKind: "server_streaming";
-    input: typeof DestroyRequestSchema;
+    input: typeof DestroyPreviewRequestSchema;
     output: typeof DeployEventSchema;
+  },
+  /**
+   * DestroyProject tears down an entire production project (ADR 0001): the
+   * imperative root stack, every app-deploy stack, and the stateful infra
+   * stack, plus the project's R2 assets and root-stack state. Unlike
+   * DestroyPreview it names no environment — a project is the unit — and it
+   * fans out across both systems (Pulumi/AWS + the imperative edge) rather
+   * than selecting one stack. It is best-effort: it continues past a failed
+   * step and reports what remains, so a re-run resumes idempotently. It
+   * reuses the DeployEvent stream (progress/log, then a terminal
+   * ResultEvent), and backs `ocel destroy`. Production-only.
+   *
+   * @generated from rpc deployments.v1.DeploymentService.DestroyProject
+   */
+  destroyProject: {
+    methodKind: "server_streaming";
+    input: typeof DestroyProjectRequestSchema;
+    output: typeof DeployEventSchema;
+  },
+  /**
+   * PlanDestroyProject enumerates, without removing anything, exactly what a
+   * DestroyProject would tear down: the project's app-deploy stacks, its
+   * infra stack, and whether it has a root stack. The CLI calls it to show
+   * the blast radius before asking the operator to type the project name, and
+   * to exit cleanly when there is nothing to destroy. Read-only and unary.
+   *
+   * @generated from rpc deployments.v1.DeploymentService.PlanDestroyProject
+   */
+  planDestroyProject: {
+    methodKind: "unary";
+    input: typeof PlanDestroyProjectRequestSchema;
+    output: typeof PlanDestroyProjectResponseSchema;
   },
   /**
    * ListEnvironments enumerates the preview environments the provider knows

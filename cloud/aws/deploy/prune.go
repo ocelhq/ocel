@@ -139,14 +139,7 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, l
 		if progress != nil {
 			progress(fmt.Sprintf("Reclaiming %s build %s", t.App, t.BuildID))
 		}
-		if err := Destroy(ctx, TeardownConfig{
-			Region:      cfg.Region,
-			BackendURL:  cfg.BackendURL,
-			Passphrase:  cfg.Passphrase,
-			ProjectName: cfg.ProjectName,
-			StackName:   t.Stack,
-			Pulumi:      cfg.Pulumi,
-		}, progress, log); err != nil {
+		if err := Destroy(ctx, teardownConfig(cfg, t.Stack), progress, log); err != nil {
 			return fmt.Errorf("destroy app-deploy stack %s: %w", t.Stack, err)
 		}
 

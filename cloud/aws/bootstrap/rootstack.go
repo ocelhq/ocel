@@ -65,3 +65,20 @@ func ReadRootStackState(ctx context.Context, ssmClient SSMAPI, projectID string)
 	}
 	return state, nil
 }
+
+// DeleteRootStackState removes a project's stored root-stack state, the last
+// step of `ocel destroy` once the root stack itself is gone. A project that has
+// no stored state (already deleted, or never deployed to production) is treated
+// as success so destroy stays idempotent.
+func DeleteRootStackState(ctx context.Context, ssmClient SSMAPI, projectID string) error {
+	if _, err := ssmClient.DeleteParameter(ctx, &ssm.DeleteParameterInput{
+		Name: aws.String(rootStackStateParamName(projectID)),
+	}); err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return nil
+		}
+		return fmt.Errorf("delete root-stack state parameter: %w", err)
+	}
+	return nil
+}

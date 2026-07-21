@@ -133,6 +133,10 @@ func (stubSSM) PutParameter(context.Context, *ssm.PutParameterInput, ...func(*ss
 	return &ssm.PutParameterOutput{}, nil
 }
 
+func (stubSSM) DeleteParameter(context.Context, *ssm.DeleteParameterInput, ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
+	return &ssm.DeleteParameterOutput{}, nil
+}
+
 func TestReadEdgeValues_ReturnsStoredValues(t *testing.T) {
 	got := readEdgeValues(context.Background(), stubSSM{value: `{"bucketName":"edge-cache-7f3"}`}, bootstrap.ClassProduction, "ocel bootstrap", func(string) {})
 	if len(got) != 1 || got["bucketName"] != "edge-cache-7f3" {

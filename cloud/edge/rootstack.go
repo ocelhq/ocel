@@ -37,6 +37,17 @@ type RootStack interface {
 	// it removed so the caller can reclaim the app-deploy stacks and R2
 	// assets those records named.
 	DeletePromotionArtifacts(ctx context.Context, state RootStackState, keepN int) (PruneResult, error)
+
+	// DestroyRootStack tears the whole root stack down — the imperative inverse
+	// of ReconcileRootStack: it deletes the generic worker(s) and the
+	// deployments-store worker (and, with it, the Durable Object storage that
+	// holds the promotion history), and detaches the custom-domain binding. It
+	// detaches the domain but never deletes DNS records the user owns. state is
+	// the RootStackState the last reconcile persisted, which carries the worker
+	// identities to remove (RootStackKeyGenericName / RootStackKeyStoreName);
+	// the host never calls this for a project that never reconciled a root
+	// stack. Backs the root-stack half of `ocel destroy`.
+	DestroyRootStack(ctx context.Context, state RootStackState) error
 }
 
 // RootStackSpec is what the host asks a RootStack to reconcile: the two worker
@@ -82,6 +93,12 @@ const (
 	// RootStackKeyWriteSecret is the project write-secret minted at root-stack
 	// creation, the credential every store operation authenticates with.
 	RootStackKeyWriteSecret = "writeSecret"
+	// RootStackKeyGenericName / RootStackKeyStoreName are the deployment
+	// identities the generic and deployments-store workers were deployed under,
+	// persisted so a later DestroyRootStack knows exactly which scripts to
+	// remove without reconstructing the reconcile spec.
+	RootStackKeyGenericName = "genericName"
+	RootStackKeyStoreName   = "storeName"
 )
 
 // DeploymentRecord is one app Deployment as the deployments store holds and

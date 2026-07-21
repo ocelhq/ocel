@@ -247,13 +247,13 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 			return err
 		}
 
-		req := &deploymentsv1.DestroyRequest{
+		req := &deploymentsv1.DestroyPreviewRequest{
 			Environment:     env,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			ProjectId:       cfg.ProjectID,
 		}
-		if err := runner.Destroy(ctx, req, ui.Event); err != nil {
+		if err := runner.DestroyPreview(ctx, req, ui.Event); err != nil {
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Preview %s torn down", env.GetIdentity()))
