@@ -69,6 +69,9 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	if err := uploadPrerenderAssets(ctx, cfg, manifest); err != nil {
 		return nil, nil, err
 	}
+	if err := uploadStaticAssets(ctx, cfg, manifest); err != nil {
+		return nil, nil, err
+	}
 
 	builds, err := assignBuildIDs(cfg, manifest)
 	if err != nil {
@@ -372,8 +375,10 @@ func nextBuildID(cfg Config, app string) (string, error) {
 // app-deploy stack's outputs: the routing manifest and tag namespace for a
 // Next app (nil/empty otherwise — the generic worker only dispatches
 // Next-shaped records today), and every function's URL keyed by route id.
-// Static assets are not uploaded here — a later R2/Cache-API pass will do
-// that; the asset prefix is recorded now so it has a stable key to land on.
+// AssetPrefix names exactly where uploadStaticAssets put this build's static
+// output in the R2 cache store (Next apps only — see below), so the frozen
+// worker can read it back with no project/app knowledge beyond what the
+// record itself carries.
 func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, buildID string, outs []*deploymentsv1.ResourceOutput) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
@@ -381,12 +386,15 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		App:          name,
 		BuildID:      buildID,
 		FunctionURLs: appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
-		AssetPrefix:  buildID,
 		CreatedAt:    time.Now().Unix(),
 	}
 	if app.GetFramework() != frameworkNext {
 		return record, nil
 	}
+	// Only a Next app ever has static output for uploadStaticAssets to have
+	// published; leaving AssetPrefix set for any other app would point at a
+	// prefix nothing was ever uploaded to.
+	record.AssetPrefix = appAssetR2Prefix(manifest.GetProjectId(), name, buildID)
 
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, name), "routing-manifest.json"))
 	if err != nil {
