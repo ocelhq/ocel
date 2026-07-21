@@ -56,7 +56,10 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 
 	report(progress, "Destroying resources (this can take several minutes)")
 	logWriter := lineWriter(log)
-	destroyOpts := []optdestroy.Option{}
+	// Refresh first so the destroy reconciles against real provider state — this
+	// clears the pending operations an interrupted earlier deploy can leave on a
+	// stack, which would otherwise make the destroy refuse.
+	destroyOpts := []optdestroy.Option{optdestroy.Refresh()}
 	if logWriter != nil {
 		destroyOpts = append(destroyOpts, optdestroy.ProgressStreams(logWriter))
 	}

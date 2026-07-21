@@ -110,45 +110,32 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	return edge.RootStackState{
 		edge.RootStackKeyEndpoint:    endpoint,
 		edge.RootStackKeyWriteSecret: secret,
-		edge.RootStackKeyGenericName: spec.GenericName,
-		edge.RootStackKeyStoreName:   spec.StoreName,
 	}, nil
 }
 
-// DestroyRootStack tears down a project's root stack: it detaches the generic
-// worker's custom-domain binding(s) — leaving the user's DNS untouched — then
-// deletes the generic and deployments-store workers. Deleting the store worker
-// with Force also removes its Durable Object storage (the promotion history),
-// which a plain delete would refuse. It is best-effort: a failure on one step
-// does not stop the others, and every failure is joined into the returned
-// error so the host can report exactly what remains.
-func (p *provider) DestroyRootStack(ctx context.Context, state edge.RootStackState) error {
+// DestroyRootStack deletes every worker in workers, detaching each one's
+// custom-domain binding(s) first — leaving the user's DNS untouched. Deleting
+// the deployments-store worker with Force also removes its Durable Object
+// storage (the promotion history), which a plain delete would refuse. It is
+// best-effort: a failure on one worker does not stop the others, and every
+// failure is joined into the returned error so the host can report exactly what
+// remains.
+func (p *provider) DestroyRootStack(ctx context.Context, workers []string) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to destroy the Cloudflare root stack", envAccountID)
 	}
-	genericName := state[edge.RootStackKeyGenericName]
-	storeName := state[edge.RootStackKeyStoreName]
-	// A reconciled root stack always persists both identities. Their absence
-	// from a non-empty state means we cannot know which workers to delete, so
-	// this is a failed teardown, not a no-op: reporting success here would let
-	// the host discard the state and orphan the workers and DO storage.
-	if genericName == "" && storeName == "" {
-		return fmt.Errorf("root-stack state carries no worker identities (%s/%s); refusing to report the root stack destroyed", edge.RootStackKeyGenericName, edge.RootStackKeyStoreName)
-	}
 
 	var errs []error
-	if genericName != "" {
-		if err := p.detachCustomDomains(ctx, accountID, genericName); err != nil {
+	for _, name := range workers {
+		if name == "" {
+			continue
+		}
+		if err := p.detachCustomDomains(ctx, accountID, name); err != nil {
 			errs = append(errs, err)
 		}
-		if err := p.deleteScript(ctx, accountID, genericName); err != nil {
-			errs = append(errs, fmt.Errorf("delete generic worker %q: %w", genericName, err))
-		}
-	}
-	if storeName != "" {
-		if err := p.deleteScript(ctx, accountID, storeName); err != nil {
-			errs = append(errs, fmt.Errorf("delete deployments-store worker %q: %w", storeName, err))
+		if err := p.deleteScript(ctx, accountID, name); err != nil {
+			errs = append(errs, fmt.Errorf("delete worker %q: %w", name, err))
 		}
 	}
 	return errors.Join(errs...)
