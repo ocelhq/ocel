@@ -26,7 +26,14 @@ export interface AppConfig {
 }
 
 export interface OcelConfig {
-  projectId: string;
+  // slug is the project's stable, human-authored deployment identity: a
+  // DNS-label string (^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$) that keys the
+  // project's own instance in the shared deployments-store worker. It is
+  // distinct from projectId (the ocel dev-cloud link, on its way out) and is
+  // treated as immutable — changing it forks a new project with fresh
+  // deployment history. ocel init pre-fills a sanitized directory-name default.
+  slug: string;
+  projectId?: string;
   discovery?: {
     paths?: string[];
   };
