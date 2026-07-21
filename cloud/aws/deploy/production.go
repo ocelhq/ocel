@@ -263,10 +263,10 @@ func finalizeProductionDeploy(ctx context.Context, stack edge.RootStack, specs [
 }
 
 // rootStackSpecs builds one edge.RootStackSpec per app needing a generic worker
-// (workerApps), plus a store-only fallback when a production project has
-// none — the store still has to exist for every app's Deployment record to be
-// staged into it, even one served straight off its own Function URL. Every
-// spec shares Version/StoreName/Store (one store per project); only
+// (workerApps), plus a no-app fallback when a production project has none — the
+// project's store instance still has to be seeded for every app's Deployment
+// record to be staged into it, even one served straight off its own Function
+// URL. Every spec shares the version, slug and shared-store coordinates; only
 // GenericName/Domain vary per app.
 func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string) ([]edge.RootStackSpec, error) {
 	generic, err := genericWorkerBundle(cfg)
