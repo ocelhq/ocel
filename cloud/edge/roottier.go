@@ -61,6 +61,11 @@ type RootTierSpec struct {
 	// Domain is the custom hostname Generic is attached to. Empty serves it
 	// on the edge's own vendor subdomain instead.
 	Domain string
+	// Values are what this edge reported at bootstrap, persisted verbatim by
+	// the host and handed back unread — the same contract AppDeployment.Values
+	// carries, so Generic's object-store binding can be sourced from it exactly
+	// like a regular app worker's.
+	Values map[string]string
 }
 
 // RootTierState is what ReconcileRootTier reports back: opaque to the caller,

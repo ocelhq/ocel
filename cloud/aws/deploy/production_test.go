@@ -2,11 +2,74 @@ package deploy
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
+
+// setStoreWorkerBundle writes a deployments-store worker bundle and exports
+// the manifest pointing Cloudflare at it, standing in for the npm launcher
+// (mirrors edgeworker_test.go's setWorkerBundle for the generic worker).
+func setStoreWorkerBundle(t *testing.T) {
+	t.Helper()
+	bundle := filepath.Join(t.TempDir(), "index.js")
+	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(edge.StoreBundleManifest{edge.KindCloudflare: bundle})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(edge.EnvStoreWorkerBundles, string(raw))
+}
+
+// TestRootTierSpecs_ThreadsEdgeValues guards ocelhq-f0e: the generic worker's
+// OCEL_CACHE_STORE R2 binding degrades to its no-store fallback in every
+// production deploy unless the bootstrap values carrying the cache bucket
+// name reach RootTierSpec, exactly like they already reach AppDeployment.Values
+// for a preview deploy (edgeworker.go's Values: cfg.EdgeValues).
+func TestRootTierSpecs_ThreadsEdgeValues(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	cfg := Config{Edge: &recordingEdge{}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
+
+	t.Run("no worker-fronted apps", func(t *testing.T) {
+		manifest := &deploymentsv1.Manifest{ProjectId: "proj"}
+		specs, err := rootTierSpecs(cfg, manifest, "v1")
+		if err != nil {
+			t.Fatalf("rootTierSpecs: %v", err)
+		}
+		if len(specs) != 1 {
+			t.Fatalf("specs = %d, want 1", len(specs))
+		}
+		if specs[0].Values["cacheBucket"] != "ocel-proj-cache" {
+			t.Errorf("specs[0].Values = %v, want cacheBucket=ocel-proj-cache", specs[0].Values)
+		}
+	})
+
+	t.Run("with a worker-fronted app", func(t *testing.T) {
+		manifest := &deploymentsv1.Manifest{
+			ProjectId: "proj",
+			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+		}
+		specs, err := rootTierSpecs(cfg, manifest, "v1")
+		if err != nil {
+			t.Fatalf("rootTierSpecs: %v", err)
+		}
+		if len(specs) != 1 {
+			t.Fatalf("specs = %d, want 1", len(specs))
+		}
+		if specs[0].Values["cacheBucket"] != "ocel-proj-cache" {
+			t.Errorf("specs[0].Values = %v, want cacheBucket=ocel-proj-cache", specs[0].Values)
+		}
+	})
+}
 
 func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testing.T) {
 	fake := &recordingRootTier{}
