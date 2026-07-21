@@ -43,7 +43,7 @@ interface Env {
   // up its active Deployment in the (project-wide) deployments store.
   OCEL_APP: string;
   // Bound only where the edge provisioned a cache store; together with the
-  // active Deployment's tag namespace, its presence is what lets the worker
+  // active Deployment's ISR prefix, its presence is what lets the worker
   // read the ISR cache directly.
   OCEL_CACHE_STORE?: R2Bucket;
 }
@@ -128,15 +128,15 @@ export interface RouteDeps {
     config: InterceptionConfig;
   };
 
-  // What resolveRouteDeps resolves manifest/functionUrls/interception's tag
-  // namespace from (ADR 0002). Not itself consumed by dispatchResult — kept
+  // What resolveRouteDeps resolves manifest/functionUrls/interception's ISR
+  // prefix from (ADR 0002). Not itself consumed by dispatchResult — kept
   // here only as the DI seam resolveRouteDeps takes, alongside cache /
   // interception.
   deployments?: DeploymentsDeps;
 }
 
 // resolveRouteDeps resolves this app's active Deployment (ADR 0002) via
-// `deployments` and wires its manifest/functionUrls/tag namespace/asset
+// `deployments` and wires its manifest/functionUrls/ISR prefix/asset
 // prefix into a RouteDeps ready for dispatchResult — or, when there is
 // nothing to serve, the terminal Response to return instead: the baked-in
 // 404 when no Deployment has ever gone live for this app, or 503 when the
@@ -145,7 +145,7 @@ export async function resolveRouteDeps(
   deployments: DeploymentsDeps,
   base: Omit<RouteDeps, "manifest" | "functionUrls" | "interception" | "deployments" | "assetStore"> & {
     interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
-    assetStore: Omit<AssetStoreDeps, "prefix">;
+    assetStore: Omit<AssetStoreDeps, "assetPrefix">;
   },
 ): Promise<RouteDeps | Response> {
   const resolution = await resolveDeployment(deployments);
@@ -160,9 +160,9 @@ export async function resolveRouteDeps(
     functionUrls: record.functionUrls,
     interception: base.interception && {
       ...base.interception,
-      config: { prefix: record.tagNamespace },
+      config: { isrPrefix: record.isrPrefix },
     },
-    assetStore: { ...base.assetStore, prefix: record.assetPrefix },
+    assetStore: { ...base.assetStore, assetPrefix: record.assetPrefix },
   };
 }
 
@@ -550,7 +550,7 @@ function cookieValue(header: string | null, key: string): string | undefined {
 export default {
   async fetch(request, env, ctx): Promise<Response> {
     // Interception and static-asset serving are both enabled only where a
-    // cache store is bound; the tag namespace and asset prefix they need come
+    // cache store is bound; the ISR prefix and asset prefix they need come
     // from the resolved Deployment below, so their config is filled in inside
     // resolveRouteDeps.
     const store = env.OCEL_CACHE_STORE;

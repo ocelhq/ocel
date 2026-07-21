@@ -15,8 +15,8 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
       dispatch: {},
     },
     functionUrls: { "/": "https://fn.example.com" },
-    tagNamespace: "ns-1",
     assetPrefix: "build-1",
+    isrPrefix: "prod/p1/web/build-1",
     createdAt: 1_000,
     ...over,
   };
@@ -74,11 +74,11 @@ describe("resolveRouteDeps", () => {
     );
 
     expect(deps).not.toBeInstanceOf(Response);
-    expect((deps as RouteDeps).assetStore.prefix).toBe("assets/p1/web/build-1");
+    expect((deps as RouteDeps).assetStore.assetPrefix).toBe("assets/p1/web/build-1");
   });
 
-  it("fills the interception config's prefix from the record's tag namespace", async () => {
-    const record = makeRecord({ tagNamespace: "prod/p1/web/build-1" });
+  it("fills the interception config's ISR prefix from the record's ISR prefix", async () => {
+    const record = makeRecord({ isrPrefix: "prod/p1/web/build-1" });
     const store = { get: async () => null };
     const deps = await resolveRouteDeps(
       { binding: bindingReturning("build-1", record), app: "web" },
@@ -87,7 +87,7 @@ describe("resolveRouteDeps", () => {
 
     expect(deps).not.toBeInstanceOf(Response);
     expect((deps as RouteDeps).interception?.config).toEqual({
-      prefix: "prod/p1/web/build-1",
+      isrPrefix: "prod/p1/web/build-1",
     });
   });
 

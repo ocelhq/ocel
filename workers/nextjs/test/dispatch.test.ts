@@ -16,7 +16,7 @@ function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore
   };
   return {
     store,
-    prefix: "",
+    assetPrefix: "",
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };
@@ -24,7 +24,7 @@ function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore
 
 function noAssets(): RouteDeps["assetStore"] {
   return {
-    prefix: "",
+    assetPrefix: "",
     cache: { match: async () => undefined, put: async () => {} },
     waitUntil: () => {},
   };
@@ -296,7 +296,7 @@ describe("dispatchResult", () => {
   // Interception is wired as an origin tried before the Lambda. These prove the
   // dispatch-level contract: a clean hit serves without touching the Lambda, and
   // any interception miss falls open to it.
-  const interceptionConfig = { prefix: "prod/p/app/build" };
+  const interceptionConfig = { isrPrefix: "prod/p/app/build" };
 
   // A cache store fronting canned entries keyed by their object name, matching
   // the R2 binding the deploy provides as OCEL_CACHE_STORE.
@@ -312,7 +312,7 @@ describe("dispatchResult", () => {
   }
 
   const entryKey = (routePath: string) =>
-    `${interceptionConfig.prefix}/cache/${routePath}.cache.json`;
+    `${interceptionConfig.isrPrefix}/cache/${routePath}.cache.json`;
 
   function interceptDeps(
     lambdaBody: string,

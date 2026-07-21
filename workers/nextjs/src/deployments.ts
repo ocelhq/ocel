@@ -19,8 +19,8 @@ export interface DeploymentRecord {
   buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
-  tagNamespace: string;
   assetPrefix: string;
+  isrPrefix: string;
   createdAt: number;
   edgeWorkers?: unknown;
 }

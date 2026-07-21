@@ -28,7 +28,7 @@ export interface AssetStoreDeps {
   store?: AssetBucket;
   // This Deployment's own R2 key root (record.assetPrefix), joined directly
   // with a request's pathname to form the object key.
-  prefix: string;
+  assetPrefix: string;
   // The PoP cache fronting the R2 read. Bound to caches.default in
   // production; a no-op on *.workers.dev (this feature never runs there) but
   // functional on the custom domain this feature targets.
@@ -90,7 +90,7 @@ export async function serveStaticAsset(
   const cached = await deps.cache.match(request);
   if (cached) return cached;
 
-  const key = `${deps.prefix}${url.pathname}`;
+  const key = `${deps.assetPrefix}${url.pathname}`;
   const object = await deps.store.get(key);
   if (!object?.body) return notFound();
 

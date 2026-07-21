@@ -32,11 +32,11 @@ import {
   type TagClock,
 } from "./tag-clock";
 
-// The one coordinate the store read needs: the build prefix the entry and
+// The one coordinate the store read needs: the ISR key root the entry and
 // snapshot keys are rooted at. Interception is gated on the cache-store binding
 // plus this prefix; absent either, the worker forwards as before.
 export interface InterceptionConfig {
-  prefix: string;
+  isrPrefix: string;
 }
 
 // The prerender facts interception needs: the concrete pathname keying the store
@@ -284,7 +284,7 @@ async function readEntry(
   deps: InterceptDeps,
   routePath: string,
 ): Promise<CacheEntryFile | null> {
-  const key = `${cfg.prefix}/cache/${cacheKey(routePath)}.cache.json`;
+  const key = `${cfg.isrPrefix}/cache/${cacheKey(routePath)}.cache.json`;
   const now = (deps.now ?? Date.now)();
   const memo = entryMap(deps.store);
 

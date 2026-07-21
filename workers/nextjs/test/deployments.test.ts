@@ -13,8 +13,8 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
     buildId: "build-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
-    tagNamespace: "ns-1",
     assetPrefix: "build-1",
+    isrPrefix: "prod/p1/web/build-1",
     createdAt: 1_000,
     ...over,
   };

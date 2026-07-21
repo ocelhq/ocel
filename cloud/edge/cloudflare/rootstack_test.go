@@ -183,7 +183,7 @@ func TestPutStaged_RoundTrips(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
 	record := edge.DeploymentRecord{
-		App: "web", BuildID: "b1", FunctionURLs: map[string]string{"/": "https://fn"}, TagNamespace: "ns", AssetPrefix: "b1", CreatedAt: 100,
+		App: "web", BuildID: "b1", FunctionURLs: map[string]string{"/": "https://fn"}, AssetPrefix: "b1", IsrPrefix: "prod/proj/web/b1", CreatedAt: 100,
 	}
 	if err := p.PutStaged(context.Background(), testState(srv.URL, "s3cr3t"), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)

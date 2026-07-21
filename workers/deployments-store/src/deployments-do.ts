@@ -13,12 +13,17 @@ import type { Env } from "./env";
 // method is RPC-callable on the stub; the class itself carries no auth logic
 // — index.ts decides who may call which method before it ever reaches here.
 export class DeploymentsStore extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    store.ensureSchema(ctx.storage);
+  }
+
   async putStaged(record: DeploymentRecord): Promise<void> {
-    await store.putStaged(this.ctx.storage, record);
+    store.putStaged(this.ctx.storage, record);
   }
 
   async promote(promotion: Promotion): Promise<void> {
-    await store.promote(this.ctx.storage, promotion);
+    store.promote(this.ctx.storage, promotion);
   }
 
   async activeBuildId(app: string): Promise<string | undefined> {
@@ -45,6 +50,6 @@ export class DeploymentsStore extends DurableObject<Env> {
   }
 
   async setVersionStamp(version: string): Promise<void> {
-    await store.setVersionStamp(this.ctx.storage, version);
+    store.setVersionStamp(this.ctx.storage, version);
   }
 }

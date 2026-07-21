@@ -93,14 +93,19 @@ type DeploymentRecord struct {
 	BuildID         string            `json:"buildId"`
 	RoutingManifest any               `json:"routingManifest"`
 	FunctionURLs    map[string]string `json:"functionUrls"`
-	TagNamespace    string            `json:"tagNamespace"`
 	// AssetPrefix is the full R2 key root this build's static assets were
 	// uploaded under (assets/<project>/<app>/<build id>, ADR 0002 — see
 	// uploadStaticAssets/appAssetR2Prefix). The frozen worker joins it
 	// directly with a request's pathname; it carries no other project/app
 	// identity of its own.
 	AssetPrefix string `json:"assetPrefix"`
-	CreatedAt   int64  `json:"createdAt"`
+	// IsrPrefix is the full R2 key root this build's ISR cache entries and tag
+	// snapshot live under (<env>/<project>/<app>/<build id>, ADR 0002 — see
+	// appCaches/isrConfig.Prefix). The frozen worker roots both the cache-entry
+	// reads and the tag-clock snapshot read at it. Disjoint from AssetPrefix so
+	// the two lifecycles never collide.
+	IsrPrefix string `json:"isrPrefix"`
+	CreatedAt int64  `json:"createdAt"`
 	// EdgeWorkers is a reserved, unused slot for future deployment-owned edge
 	// workers (Next edge routes/middleware), carried so wiring that later
 	// needs no record migration.

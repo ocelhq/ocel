@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest";
 
 import { createTagClock } from "../src/tag-clock";
 
-const cfg = { prefix: "prod/proj/app/build" };
-const snapshotKey = tagSnapshotKey(cfg.prefix);
+const cfg = { isrPrefix: "prod/proj/app/build" };
+const snapshotKey = tagSnapshotKey(cfg.isrPrefix);
 
 const snapshot = (over: Partial<TagSnapshot> = {}): TagSnapshot => ({
   version: 1,
