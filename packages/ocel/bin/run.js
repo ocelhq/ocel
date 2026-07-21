@@ -24,6 +24,13 @@ const workerBundles = {
   },
 };
 
+// The deployments-store worker bundle (ADR 0001/0002), keyed by edge: the
+// root tier's own worker, not a framework's — one per edge kind rather than
+// one per (framework, edge) pairing.
+const storeWorkerBundles = {
+  cloudflare: require.resolve("@ocel/worker-deployments-store"),
+};
+
 let packageName = "";
 
 switch (platform) {
@@ -58,6 +65,7 @@ try {
       OCEL_BUILDER_PATH: builderPath,
       NEXT_ADAPTER_PATH: nextAdapterPath,
       OCEL_WORKER_BUNDLES: JSON.stringify(workerBundles),
+      OCEL_STORE_WORKER_BUNDLES: JSON.stringify(storeWorkerBundles),
     },
   });
   process.exit(result.status);

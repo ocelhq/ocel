@@ -35,3 +35,34 @@ func TestLoadBundleManifest_UnsetEnvIsAnError(t *testing.T) {
 		t.Fatal("expected an error when the launcher exported no manifest")
 	}
 }
+
+func TestStoreBundleManifest_LoadsAndResolvesByEdge(t *testing.T) {
+	t.Setenv(EnvStoreWorkerBundles, `{"cloudflare":"/pkg/worker-deployments-store/index.js"}`)
+
+	m, err := LoadStoreBundleManifest()
+	if err != nil {
+		t.Fatalf("LoadStoreBundleManifest: %v", err)
+	}
+	got, err := m.Path(KindCloudflare)
+	if err != nil {
+		t.Fatalf("Path: %v", err)
+	}
+	if got != "/pkg/worker-deployments-store/index.js" {
+		t.Errorf("Path = %q", got)
+	}
+
+	_, err = m.Path("provider-native")
+	if err == nil {
+		t.Fatal("expected an error for an edge with no bundle")
+	}
+	if !strings.Contains(err.Error(), "provider-native") {
+		t.Errorf("error must name the edge, got %q", err)
+	}
+}
+
+func TestLoadStoreBundleManifest_UnsetEnvIsAnError(t *testing.T) {
+	t.Setenv(EnvStoreWorkerBundles, "")
+	if _, err := LoadStoreBundleManifest(); err == nil {
+		t.Fatal("expected an error when the launcher exported no manifest")
+	}
+}
