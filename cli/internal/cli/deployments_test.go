@@ -47,3 +47,42 @@ func TestRunDeploymentsLs_RefusesOnPreviewInfrastructure(t *testing.T) {
 		t.Errorf("err = %v, want the concrete class-mismatch message", err)
 	}
 }
+
+func TestRunDeploymentsPrune_ReportsReclaimedAndKeptPromotions(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "production")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploymentsPrune(context.Background(), root, 10, &stdout, &stderr); err != nil {
+		t.Fatalf("runDeploymentsPrune err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "Reclaimed 1 promotion(s): promo-1") {
+		t.Errorf("stdout = %q, want it to report the reclaimed promotion", out)
+	}
+	if !strings.Contains(out, "Kept 1 promotion(s).") {
+		t.Errorf("stdout = %q, want it to report the kept promotion count", out)
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+func TestRunDeploymentsPrune_RefusesOnPreviewInfrastructure(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploymentsPrune(context.Background(), root, 10, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runDeploymentsPrune err = nil, want a class-mismatch error")
+	}
+	if !strings.Contains(err.Error(), "ocel deploy can only run against production infrastructure") {
+		t.Errorf("err = %v, want the concrete class-mismatch message", err)
+	}
+	if strings.Contains(stdout.String(), "Reclaimed") {
+		t.Errorf("stdout = %q, want no prune to have been driven against preview infra", stdout.String())
+	}
+}

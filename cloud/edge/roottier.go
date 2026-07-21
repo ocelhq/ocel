@@ -125,8 +125,9 @@ type HistoryEntry struct {
 type PruneResult struct {
 	KeptPromotionIDs    []string `json:"keptPromotionIds"`
 	RemovedPromotionIDs []string `json:"removedPromotionIds"`
-	// RemovedRecordKeys are "app/buildId" pairs whose records were deleted,
-	// so the caller knows exactly which underlying artifacts (stacks, R2
-	// assets, ISR entries) it still needs to reclaim.
+	// RemovedRecordKeys are the store's own "record:<app>/<buildId>" keys for
+	// every record deleted (recordKey in store.ts), so the caller knows
+	// exactly which underlying artifacts (stacks, R2 assets, ISR entries) it
+	// still needs to reclaim.
 	RemovedRecordKeys []string `json:"removedRecordKeys"`
 }

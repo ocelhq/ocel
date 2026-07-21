@@ -85,6 +85,15 @@ service DeploymentService {
     // `ocel rollback` / `ocel rollback --to <promotionId>`. Production-only;
     // an unknown promotion id is rejected with a clear error.
     rpc Rollback(RollbackRequest) returns (RollbackResponse);
+
+    // Prune reclaims old Deployments: every Promotion outside a keep_n-deep
+    // window of a production project's promotion history, always pinning the
+    // currently active one. For each collected Promotion it destroys the
+    // app-deploy stacks its records named, deletes their R2/S3 static-asset
+    // and ISR/prerender prefixes, and deletes the store records themselves.
+    // It backs `ocel deployments prune`, a standalone command never run
+    // inline on deploy. Production-only.
+    rpc Prune(PruneRequest) returns (PruneResponse);
 }
 
 // Environment is the fully resolved target a provisioning verb acts on. The
@@ -412,6 +421,31 @@ message RollbackRequest {
 // Promotion that is now active.
 message RollbackResponse {
   Promotion promoted = 1;
+}
+
+// PruneRequest is the request for DeploymentService.Prune.
+message PruneRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+
+  string project_id = 3;
+
+  // keep_n is how many of the newest Promotions to keep, always additionally
+  // pinning the currently active one even if it falls outside this window.
+  int32 keep_n = 4;
+}
+
+// PruneResponse is the reply from DeploymentService.Prune: which Promotions
+// were kept and which were reclaimed.
+message PruneResponse {
+  repeated string kept_promotion_ids = 1;
+  repeated string removed_promotion_ids = 2;
 }
 
 // DeployEvent is a single item on the Deploy response stream: either

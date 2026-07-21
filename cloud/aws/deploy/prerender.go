@@ -46,9 +46,17 @@ func appAssetPrefix(cfg Config, projectID, app string) (string, error) {
 	if pm.BuildID == "" {
 		return "", fmt.Errorf("routing manifest for %s is missing buildId; rebuild the app", app)
 	}
-	// The app-id key segment reuses the worker-name sanitizer so it agrees with
-	// how the app is otherwise addressed, and stays a safe, stable path token.
-	return path.Join(cfg.Env, projectID, sanitizeWorkerName(app), pm.BuildID), nil
+	return appAssetPrefixFor(cfg.Env, projectID, app, pm.BuildID), nil
+}
+
+// appAssetPrefixFor is appAssetPrefix's pure half, once the build id is
+// already known rather than read off a build's routing manifest — what
+// prune needs, since the build it is reclaiming was never produced by the
+// deploy running it. The app-id key segment reuses the worker-name sanitizer
+// so it agrees with how the app is otherwise addressed, and stays a safe,
+// stable path token.
+func appAssetPrefixFor(env, projectID, app, buildID string) string {
+	return path.Join(env, projectID, sanitizeWorkerName(app), buildID)
 }
 
 // appCaches describes the ISR cache of every app in the manifest that keeps

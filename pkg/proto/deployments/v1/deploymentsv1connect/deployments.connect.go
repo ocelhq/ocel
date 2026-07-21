@@ -54,6 +54,8 @@ const (
 	// DeploymentServiceRollbackProcedure is the fully-qualified name of the DeploymentService's
 	// Rollback RPC.
 	DeploymentServiceRollbackProcedure = "/deployments.v1.DeploymentService/Rollback"
+	// DeploymentServicePruneProcedure is the fully-qualified name of the DeploymentService's Prune RPC.
+	DeploymentServicePruneProcedure = "/deployments.v1.DeploymentService/Prune"
 )
 
 // DeploymentServiceClient is a client for the deployments.v1.DeploymentService service.
@@ -97,6 +99,14 @@ type DeploymentServiceClient interface {
 	// `ocel rollback` / `ocel rollback --to <promotionId>`. Production-only;
 	// an unknown promotion id is rejected with a clear error.
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
+	// Prune reclaims old Deployments: every Promotion outside a keep_n-deep
+	// window of a production project's promotion history, always pinning the
+	// currently active one. For each collected Promotion it destroys the
+	// app-deploy stacks its records named, deletes their R2/S3 static-asset
+	// and ISR/prerender prefixes, and deletes the store records themselves.
+	// It backs `ocel deployments prune`, a standalone command never run
+	// inline on deploy. Production-only.
+	Prune(context.Context, *v1.PruneRequest) (*v1.PruneResponse, error)
 }
 
 // NewDeploymentServiceClient constructs a client for the deployments.v1.DeploymentService service.
@@ -152,6 +162,12 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(deploymentServiceMethods.ByName("Rollback")),
 			connect.WithClientOptions(opts...),
 		),
+		prune: connect.NewClient[v1.PruneRequest, v1.PruneResponse](
+			httpClient,
+			baseURL+DeploymentServicePruneProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("Prune")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -164,6 +180,7 @@ type deploymentServiceClient struct {
 	preflight        *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
 	listPromotions   *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback         *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
+	prune            *connect.Client[v1.PruneRequest, v1.PruneResponse]
 }
 
 // Deploy calls deployments.v1.DeploymentService.Deploy.
@@ -217,6 +234,15 @@ func (c *deploymentServiceClient) Rollback(ctx context.Context, req *v1.Rollback
 	return nil, err
 }
 
+// Prune calls deployments.v1.DeploymentService.Prune.
+func (c *deploymentServiceClient) Prune(ctx context.Context, req *v1.PruneRequest) (*v1.PruneResponse, error) {
+	response, err := c.prune.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // DeploymentServiceHandler is an implementation of the deployments.v1.DeploymentService service.
 type DeploymentServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
@@ -258,6 +284,14 @@ type DeploymentServiceHandler interface {
 	// `ocel rollback` / `ocel rollback --to <promotionId>`. Production-only;
 	// an unknown promotion id is rejected with a clear error.
 	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
+	// Prune reclaims old Deployments: every Promotion outside a keep_n-deep
+	// window of a production project's promotion history, always pinning the
+	// currently active one. For each collected Promotion it destroys the
+	// app-deploy stacks its records named, deletes their R2/S3 static-asset
+	// and ISR/prerender prefixes, and deletes the store records themselves.
+	// It backs `ocel deployments prune`, a standalone command never run
+	// inline on deploy. Production-only.
+	Prune(context.Context, *v1.PruneRequest) (*v1.PruneResponse, error)
 }
 
 // NewDeploymentServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -309,6 +343,12 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		connect.WithSchema(deploymentServiceMethods.ByName("Rollback")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deploymentServicePruneHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServicePruneProcedure,
+		svc.Prune,
+		connect.WithSchema(deploymentServiceMethods.ByName("Prune")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/deployments.v1.DeploymentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeploymentServiceDeployProcedure:
@@ -325,6 +365,8 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 			deploymentServiceListPromotionsHandler.ServeHTTP(w, r)
 		case DeploymentServiceRollbackProcedure:
 			deploymentServiceRollbackHandler.ServeHTTP(w, r)
+		case DeploymentServicePruneProcedure:
+			deploymentServicePruneHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -360,4 +402,8 @@ func (UnimplementedDeploymentServiceHandler) ListPromotions(context.Context, *v1
 
 func (UnimplementedDeploymentServiceHandler) Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Rollback is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) Prune(context.Context, *v1.PruneRequest) (*v1.PruneResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Prune is not implemented"))
 }
