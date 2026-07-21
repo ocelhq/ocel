@@ -126,6 +126,27 @@ func TestBuildDeploymentRecord_AssetPrefixIsTheFullR2KeyRoot(t *testing.T) {
 	}
 }
 
+// TestBuildDeploymentRecord_IsrPrefixIsTheIsrKeyRoot proves the record carries
+// the ISR cache's own key root (isrConfig.Prefix) — the <env>/<project>/<app>/
+// <build> root the frozen worker joins its cache-entry and tag-snapshot reads
+// onto — and not the DynamoDB tag namespace, which addresses nothing in R2.
+func TestBuildDeploymentRecord_IsrPrefixIsTheIsrKeyRoot(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+	})
+	cfg := Config{ArtifactRoot: root, Env: "prod"}
+	manifest := nextManifest()
+	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+
+	record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if want := "prod/proj/web/WEB1"; record.IsrPrefix != want {
+		t.Errorf("IsrPrefix = %q, want %q", record.IsrPrefix, want)
+	}
+}
+
 // TestBuildDeploymentRecord_NonNextAppHasNoAssetPrefix proves a non-Next
 // app's record carries no AssetPrefix: uploadStaticAssets never publishes
 // static output for anything but a Next app, so a prefix here would point at

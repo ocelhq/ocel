@@ -31,7 +31,7 @@ function countingDeps(
   const pending: Promise<unknown>[] = [];
   const deps = {
     store,
-    prefix,
+    assetPrefix: prefix,
     puts: 0,
     cache: {
       match: (...args: Parameters<Cache["match"]>) => real.match(...args),

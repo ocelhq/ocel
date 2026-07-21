@@ -67,7 +67,7 @@ const snapshotMemo = new WeakMap<
 // split. The memo is keyed on the store binding, so two clocks over the same
 // binding share it — the caller need not thread one instance everywhere.
 export function createTagClock(
-  cfg: { prefix: string },
+  cfg: { isrPrefix: string },
   deps: TagClockDeps,
 ): TagClock {
   return {
@@ -96,7 +96,7 @@ export function createTagClock(
 // snapshotRecords resolves tag state from the tag clock as the last publisher
 // left it, rather than a live read of the authoritative one.
 async function snapshotRecords(
-  cfg: { prefix: string },
+  cfg: { isrPrefix: string },
   deps: TagClockDeps,
   now: number,
 ): Promise<Map<string, TagRecord> | null> {
@@ -109,7 +109,7 @@ async function snapshotRecords(
 // Every one of those falls open to the origin, which wakes a Lambda, which
 // republishes: the liveness loop repairs itself by being used.
 async function readSnapshot(
-  cfg: { prefix: string },
+  cfg: { isrPrefix: string },
   deps: TagClockDeps,
   now: number,
 ): Promise<TagSnapshot | null> {
@@ -118,7 +118,7 @@ async function readSnapshot(
     return usableSnapshot(memoized.snapshot, now);
   }
 
-  const key = tagSnapshotKey(cfg.prefix);
+  const key = tagSnapshotKey(cfg.isrPrefix);
   const cacheRequest = new Request(snapshotCacheUrl(key));
   const cached = await matchSnapshot(deps.snapshotCache, cacheRequest);
 

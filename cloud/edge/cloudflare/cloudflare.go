@@ -304,11 +304,21 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
+// cacheStoreBinding is the name the Next.js worker reads its ISR cache store
+// under. Both worker paths bind it here: the preview worker assembled by the
+// framework and the frozen generic worker loaded from its compiled bundle, which
+// carries no ObjectStore of its own.
+const cacheStoreBinding = "OCEL_CACHE_STORE"
+
 // bindObjectStore points the worker's object-store binding at the bucket this
 // edge provisioned for the substrate class, as bootstrap reported it and the
-// provider handed it back. A substrate bootstrapped before there was a cache
-// bucket carries no such value, so the worker uploads without the binding.
+// provider handed it back. It supplies the binding name too: the frozen generic
+// worker arrives with an empty ObjectStore, and scriptBindings emits the R2
+// binding only when both name and bucket are set. A substrate bootstrapped
+// before there was a cache bucket carries no such value, so the worker still
+// uploads without the binding.
 func bindObjectStore(worker edge.Worker, values map[string]string) edge.Worker {
+	worker.ObjectStore.Binding = cacheStoreBinding
 	worker.ObjectStore.Bucket = values[valueKeyCacheBucket]
 	return worker
 }

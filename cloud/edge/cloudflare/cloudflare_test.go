@@ -211,6 +211,32 @@ func TestScriptBindings_MapsServicesToServiceBindings(t *testing.T) {
 	}
 }
 
+// Guards ocelhq-f0e regression: the frozen generic worker is loaded from its
+// compiled bundle (production.go's loadWorkerBundle) with an empty ObjectStore —
+// unlike the preview path, nothing pre-declares its binding name. bindObjectStore
+// must supply both the binding name and the bucket, or scriptBindings (which
+// needs both) silently drops the R2 binding and the deployed worker has no
+// OCEL_CACHE_STORE.
+func TestBindObjectStore_FrozenBundleStillGetsTheBinding(t *testing.T) {
+	frozen := edge.Worker{
+		Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+	}
+
+	composed := bindObjectStore(withService(frozen, "DEPLOYMENTS", "ocel-proj-store"), map[string]string{valueKeyCacheBucket: "ocel-edge-cache"})
+	meta := metadataFromMultipart(t, composed, "")
+
+	buckets := bindingsByType(meta, "r2_bucket")
+	if len(buckets) != 1 {
+		t.Fatalf("got %d r2_bucket bindings, want 1", len(buckets))
+	}
+	if buckets[0]["name"] != "OCEL_CACHE_STORE" {
+		t.Errorf("r2_bucket binding name = %v, want OCEL_CACHE_STORE", buckets[0]["name"])
+	}
+	if buckets[0]["bucket_name"] != "ocel-edge-cache" {
+		t.Errorf("r2_bucket bucket_name = %v, want ocel-edge-cache", buckets[0]["bucket_name"])
+	}
+}
+
 // The bucket is whatever this edge reported provisioning at bootstrap and got
 // handed back at deploy, never a name recomputed here.
 func TestBindObjectStore_TakesTheBucketFromBootstrapValues(t *testing.T) {

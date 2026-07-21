@@ -9,7 +9,7 @@ import {
   type InterceptTarget,
 } from "../src/interception";
 
-const cfg: InterceptionConfig = { prefix: "prod/proj/app/build" };
+const cfg: InterceptionConfig = { isrPrefix: "prod/proj/app/build" };
 
 // A fake object-store binding, shaped like the R2 bucket the deploy binds as
 // OCEL_CACHE_STORE: canned bodies by key, every get recorded so a test can
@@ -63,7 +63,7 @@ function fakeCache(opts: { inert?: boolean } = {}) {
   };
 }
 
-const snapshotKey = tagSnapshotKey(cfg.prefix);
+const snapshotKey = tagSnapshotKey(cfg.isrPrefix);
 
 const snapshot = (over: Partial<TagSnapshot> = {}): TagSnapshot => ({
   version: 1,
@@ -75,7 +75,7 @@ const snapshot = (over: Partial<TagSnapshot> = {}): TagSnapshot => ({
 });
 
 const entryKey = (routePath: string) =>
-  `${cfg.prefix}/cache/${routePath === "/" ? "index" : routePath.replace(/^\//, "")}.cache.json`;
+  `${cfg.isrPrefix}/cache/${routePath === "/" ? "index" : routePath.replace(/^\//, "")}.cache.json`;
 
 // The build seeds identical segment headers across a group; the marker the
 // client gates PPR on is x-nextjs-postponed: 2. Tests default to it whenever they
