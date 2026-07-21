@@ -213,8 +213,16 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// The root stack is production-only (ADR 0001); a preview keeps no
 	// root-stack state and reconciles nothing of the sort.
 	var priorRootStackState edge.RootStackState
+	var deploymentsStore bootstrap.DeploymentsStore
 	if !preview {
 		priorRootStackState, err = bootstrap.ReadRootStackState(ctx, ssmClient, manifest.GetProjectId())
+		if err != nil {
+			return nil, nil, err
+		}
+		// The shared deployments-store worker's coordinates, provisioned once at
+		// bootstrap. A bootstrap predating it reads the zero value, and the deploy
+		// runs without a root stack (so without rollback), exactly as before.
+		deploymentsStore, err = bootstrap.ReadDeploymentsStore(ctx, ssmClient)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -244,7 +252,13 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		EdgeAccessKeyID:  edgeCreds.AccessKeyID,
 		EdgeSecretKey:    edgeCreds.SecretAccessKey,
 		EdgeValues:       edgeValues,
-		Uploader:         s3.NewFromConfig(awscfg),
+
+		Slug:               manifest.GetSlug(),
+		StoreScriptName:    deploymentsStore.ScriptName,
+		StoreEndpoint:      deploymentsStore.Endpoint,
+		StoreBootstrapCred: deploymentsStore.BootstrapCred,
+
+		Uploader: s3.NewFromConfig(awscfg),
 		Edge:             cloudflare.New(),
 		Class:            env.GetClass(),
 		Lifecycle:        env.GetLifecycle(),

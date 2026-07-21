@@ -11,7 +11,7 @@ func TestRootStackState_WriteThenReadRoundTrips(t *testing.T) {
 	ssmc := newFakeSSM()
 	state := edge.RootStackState{
 		edge.RootStackKeyEndpoint:    "https://store.example",
-		edge.RootStackKeyWriteSecret: "s3cr3t",
+		edge.RootStackKeySecret: "s3cr3t",
 	}
 
 	if err := WriteRootStackState(context.Background(), ssmc, "proj_1", state); err != nil {
@@ -25,8 +25,8 @@ func TestRootStackState_WriteThenReadRoundTrips(t *testing.T) {
 	if got[edge.RootStackKeyEndpoint] != state[edge.RootStackKeyEndpoint] {
 		t.Errorf("endpoint = %q, want %q", got[edge.RootStackKeyEndpoint], state[edge.RootStackKeyEndpoint])
 	}
-	if got[edge.RootStackKeyWriteSecret] != state[edge.RootStackKeyWriteSecret] {
-		t.Errorf("write secret = %q, want %q", got[edge.RootStackKeyWriteSecret], state[edge.RootStackKeyWriteSecret])
+	if got[edge.RootStackKeySecret] != state[edge.RootStackKeySecret] {
+		t.Errorf("secret = %q, want %q", got[edge.RootStackKeySecret], state[edge.RootStackKeySecret])
 	}
 }
 

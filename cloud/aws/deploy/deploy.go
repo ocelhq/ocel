@@ -112,6 +112,20 @@ type Config struct {
 	// read a key from it. Empty when the edge provisioned nothing of its own.
 	EdgeValues map[string]string
 
+	// Slug is the project's stable deployment identity (Manifest.slug): it keys
+	// the project's own instance in the shared deployments-store worker.
+	Slug string
+	// StoreScriptName / StoreEndpoint / StoreBootstrapCred are the shared
+	// deployments-store worker's coordinates, adopted from account-level
+	// bootstrap state: the script name a project's generic worker service-binds
+	// to, the endpoint the host reaches every store op at, and the bootstrap
+	// credential that authorizes seeding a project's instance. Empty when the
+	// bootstrap predates the shared store, in which case a production deploy
+	// fails fast asking the user to re-run bootstrap.
+	StoreScriptName    string
+	StoreEndpoint      string
+	StoreBootstrapCred string
+
 	// Edge deploys the Next.js routing worker once its Lambdas exist and their
 	// Function URLs are known. Nil unless the project has a Next.js app; the
 	// concrete edge implementation is the end-to-end seam.

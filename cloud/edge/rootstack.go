@@ -7,15 +7,18 @@ import "context"
 // An edge that offers no store simply does not implement it, and the host
 // runs without rollback for that edge's apps.
 type RootStack interface {
-	// ReconcileRootStack brings the frozen root stack up to spec.Version: on a
-	// fresh project it deploys spec.Generic and spec.Store, attaches
-	// spec.Domain, and mints the write secret every store operation below
-	// authenticates with; on a later call it re-puts both workers only when
-	// the version already deployed is behind spec.Version — an up-to-date
-	// root stack is a no-op. prior is the RootStackState the last reconcile for
-	// this project returned, or nil the very first time; the caller persists
-	// whatever this returns, opaque, and hands it back unread here and to
-	// every store operation below.
+	// ReconcileRootStack brings the frozen root stack up to spec.Version: it
+	// deploys spec.Generic (service-bound to the shared deployments-store
+	// worker named spec.StoreScriptName and carrying spec.Slug) and attaches
+	// spec.Domain. On a fresh project it also mints an owner token and the
+	// per-project secret and seeds them into the project's store instance via
+	// spec's endpoint/bootstrap credential; a later call re-puts the generic
+	// worker only when the version already deployed is behind spec.Version — an
+	// up-to-date root stack is a no-op. The shared store worker itself is not
+	// deployed here (it is provisioned once at bootstrap). prior is the
+	// RootStackState the last reconcile for this project returned, or nil the
+	// very first time; the caller persists whatever this returns, opaque, and
+	// hands it back unread here and to every store operation below.
 	ReconcileRootStack(ctx context.Context, spec RootStackSpec, prior RootStackState) (RootStackState, error)
 
 	// PutStaged stages one Deployment record in the project's deployments
@@ -38,17 +41,25 @@ type RootStack interface {
 	// assets those records named.
 	DeletePromotionArtifacts(ctx context.Context, state RootStackState, keepN int) (PruneResult, error)
 
-	// DestroyRootStack tears the whole root stack down — the imperative inverse
-	// of ReconcileRootStack. It deletes every worker named in workers (the
-	// generic worker(s) and the deployments-store worker, whose deletion also
-	// reclaims the Durable Object storage that holds the promotion history) and
-	// detaches each worker's custom-domain binding first — detaching the domain
-	// but never deleting DNS records the user owns. workers is the exact,
+	// DestroyRootStack deletes every worker named in workers — the project's
+	// generic worker(s) — detaching each one's custom-domain binding first
+	// (detaching the domain but never deleting DNS records the user owns). The
+	// shared deployments-store worker is never among them: it is provisioned
+	// once at bootstrap and outlives any single project; a project's own store
+	// data is reclaimed by DestroyInstance instead. workers is the exact,
 	// caller-computed set to remove, so the edge deletes precisely those and
 	// never has to guess a project's workers from a name prefix; a name already
 	// gone is not an error, so a re-run resumes. Best-effort: it attempts every
 	// worker and joins any failures. Backs the root-stack half of `ocel destroy`.
 	DestroyRootStack(ctx context.Context, workers []string) error
+
+	// DestroyInstance wipes the project's own instance in the shared
+	// deployments-store worker — its promotion history, records, ownership and
+	// secret — leaving the shared worker and every other project's instance
+	// untouched, and freeing the slug for reuse. Authenticated with the
+	// project secret in state. A slug that was never initialized is not an
+	// error, so a re-run resumes. Backs the store half of `ocel destroy`.
+	DestroyInstance(ctx context.Context, state RootStackState) error
 }
 
 // RootStackSpec is what the host asks a RootStack to reconcile: the two worker
@@ -65,11 +76,20 @@ type RootStackSpec struct {
 	GenericName string
 	// Generic is the frozen generic app worker bundle.
 	Generic Worker
-	// StoreName is the deterministic deployment identity of the deployments
-	// store worker (ticket ocelhq-u8h.1).
-	StoreName string
-	// Store is the deployments-store worker bundle.
-	Store Worker
+	// Slug is the project's stable deployment identity: it keys the project's
+	// own instance in the shared deployments-store worker, and is bound onto
+	// the generic worker so its service-binding RPCs address that instance.
+	Slug string
+	// StoreScriptName is the shared deployments-store worker's script name
+	// (provisioned once at bootstrap), which Generic service-binds to.
+	StoreScriptName string
+	// StoreEndpoint is the shared deployments-store worker's HTTP endpoint,
+	// where Reconcile calls /<slug>/initialize to seed the project's instance.
+	StoreEndpoint string
+	// BootstrapCred is the account-level bootstrap credential Reconcile
+	// authenticates the one-time /<slug>/initialize call with. It authorizes
+	// nothing else.
+	BootstrapCred string
 	// Domain is the custom hostname Generic is attached to. Empty serves it
 	// on the edge's own vendor subdomain instead.
 	Domain string
@@ -88,12 +108,21 @@ type RootStackState map[string]string
 
 // Keys of a RootStackState.
 const (
-	// RootStackKeyEndpoint is the deployments store's HTTP endpoint, the
-	// address every store operation above calls.
+	// RootStackKeySlug is the project's slug, addressing its own instance in
+	// the shared deployments-store worker (idFromName) — the leading path
+	// segment of every store operation.
+	RootStackKeySlug = "slug"
+	// RootStackKeyEndpoint is the shared deployments store's HTTP endpoint, the
+	// address every store operation calls.
 	RootStackKeyEndpoint = "endpoint"
-	// RootStackKeyWriteSecret is the project write-secret minted at root-stack
-	// creation, the credential every store operation authenticates with.
-	RootStackKeyWriteSecret = "writeSecret"
+	// RootStackKeySecret is the per-project secret, minted on the project's
+	// first reconcile and seeded into its instance, that every store operation
+	// authenticates with.
+	RootStackKeySecret = "secret"
+	// RootStackKeyOwnerToken is the self-minted owner token seeded into the
+	// project's instance, presented on a later reconcile to distinguish
+	// legitimate recovery from a slug collision.
+	RootStackKeyOwnerToken = "ownerToken"
 )
 
 // DeploymentRecord is one app Deployment as the deployments store holds and

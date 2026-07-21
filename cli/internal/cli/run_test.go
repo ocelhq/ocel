@@ -61,6 +61,7 @@ func TestRunRun_NoLeader_StandaloneResolvesRunsAndTearsDownWithoutLockfile(t *te
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
+  slug: "test-app",
   projectId: %q,
 };
 `, projectID))
@@ -119,6 +120,7 @@ func TestRunRun_WithRunningLeader_ReusesLeaderEnvAndRunsOnce(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
+  slug: "test-app",
   projectId: %q,
 };
 `, projectID))
@@ -208,6 +210,7 @@ func TestRunRun_WithRunningLeader_DoesNotWaitOnFollowerUpdatesOrDisconnect(t *te
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
+  slug: "test-app",
   projectId: %q,
 };
 `, projectID))

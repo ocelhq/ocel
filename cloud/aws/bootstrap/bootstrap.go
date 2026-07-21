@@ -247,6 +247,11 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 			if err := adoptCacheStore(ctx, ssmClient, sub.class, edgeProvider.Kind(), offer.Values); err != nil {
 				return err
 			}
+		case edge.OfferDeploymentsStore:
+			report(progress, "Adopting the shared deployments-store worker (SSM SecureString)")
+			if err := adoptDeploymentsStore(ctx, ssmClient, offer.Values); err != nil {
+				return err
+			}
 		default:
 			report(log, fmt.Sprintf("ignoring edge offer %q: no provider resource adopts it", offer.Kind))
 		}

@@ -52,6 +52,7 @@ func TestResolve_ValidConfig(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   discovery: { paths: ["resources"] },
 };
@@ -73,6 +74,7 @@ func TestResolve_ParsesProductionDomain(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   domains: { production: "App.Acme.com" },
 };
@@ -91,6 +93,7 @@ func TestResolve_NoDomainsYieldsEmptyMap(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
 };
 `)
@@ -108,6 +111,7 @@ func TestResolve_ReturnsConfigDirectory(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
 };
 `)
@@ -125,6 +129,7 @@ func TestResolve_DefaultsDiscoveryPaths(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_456",
 };
 `)
@@ -154,6 +159,7 @@ func TestResolve_UnparseableConfig(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_789"
   this is not valid typescript +++
 `)
@@ -184,10 +190,60 @@ export default {
 	}
 }
 
+func TestResolve_MissingSlug(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  projectId: "proj_123",
+};
+`)
+
+	_, err := Resolve(root)
+	if err == nil || !strings.Contains(err.Error(), "slug") {
+		t.Fatalf("Resolve err = %v, want it to name the missing slug", err)
+	}
+}
+
+func TestResolve_InvalidSlugRejected(t *testing.T) {
+	for _, bad := range []string{"Has_Underscore", "UPPER", "-leading", "trailing-", "has space"} {
+		t.Run(bad, func(t *testing.T) {
+			root := t.TempDir()
+			writeConfig(t, root, `
+export default {
+  slug: "`+bad+`",
+  projectId: "proj_123",
+};
+`)
+			_, err := Resolve(root)
+			if err == nil || !strings.Contains(err.Error(), "slug") {
+				t.Fatalf("Resolve(slug=%q) err = %v, want a slug validation error", bad, err)
+			}
+		})
+	}
+}
+
+func TestResolve_ValidSlugAccepted(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "acme-web-1",
+  projectId: "proj_123",
+};
+`)
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.Slug != "acme-web-1" {
+		t.Errorf("Slug = %q, want acme-web-1", cfg.Slug)
+	}
+}
+
 func TestResolve_ParsesProviderDescriptor(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   provider: { package: "@ocel/provider-aws", options: { region: "us-east-1" } },
 };
@@ -212,6 +268,7 @@ func TestResolve_ProviderOptionsDefaultToEmptyObject(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   provider: { package: "@ocel/provider-aws" },
 };
@@ -230,6 +287,7 @@ func TestResolve_ProviderAbsentByDefault(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
 };
 `)
@@ -274,6 +332,7 @@ func TestResolve_ParsesApps(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   apps: [
     { name: "api", path: "services/api", framework: "express", entrypoint: "src/main.ts" },
@@ -305,6 +364,7 @@ func TestResolve_AppsAbsentByDefault(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
 };
 `)
@@ -322,6 +382,7 @@ func TestResolve_AppComputeDefaultsToServerless(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   apps: [{ name: "api", path: "services/api", framework: "express" }],
 };
@@ -340,6 +401,7 @@ func TestResolve_AppComputeNotSettableViaConfig(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   apps: [{ name: "api", path: "services/api", framework: "express", compute: "vm" }],
 };
@@ -358,6 +420,7 @@ func TestResolve_AppDuplicateNamesError(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   apps: [
     { name: "api", path: "services/api", framework: "express" },
@@ -386,6 +449,7 @@ func TestResolve_AppUnsafeNameErrors(t *testing.T) {
 			root := t.TempDir()
 			writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   apps: [{ name: "`+name+`", path: "services/api", framework: "express" }],
 };
@@ -410,6 +474,7 @@ func TestResolve_AppNameAllowsHarmlessPathSegments(t *testing.T) {
 			root := t.TempDir()
 			writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   apps: [{ name: "`+name+`", path: "services/api", framework: "express" }],
 };
@@ -430,6 +495,7 @@ func TestResolve_AppMissingPathErrors(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   apps: [{ name: "api", framework: "express" }],
 };
@@ -448,6 +514,7 @@ func TestResolve_WritesBuildArtifactsUnderOcelDir(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
 };
 `)
@@ -466,6 +533,7 @@ func TestResolve_ParsesPerAppDomain(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
   domains: { production: "acme.com" },
   apps: [

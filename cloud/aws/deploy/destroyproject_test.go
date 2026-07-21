@@ -8,7 +8,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-func TestRootStackWorkerNames_CoversStoreAndEveryAppFromHistory(t *testing.T) {
+func TestRootStackWorkerNames_CoversEveryAppFromHistoryNotTheSharedStore(t *testing.T) {
 	f := &recordingRootStack{
 		history: []edge.HistoryEntry{
 			{Promotion: edge.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2", "api": "b2"}}},
@@ -16,7 +16,7 @@ func TestRootStackWorkerNames_CoversStoreAndEveryAppFromHistory(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
+	state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "proj-x"}, nil)
 	if err != nil {
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
@@ -28,23 +28,24 @@ func TestRootStackWorkerNames_CoversStoreAndEveryAppFromHistory(t *testing.T) {
 
 	prod := "proj_x-prod"
 	// Every generic worker (one per app across all of history, plus the no-app
-	// "root" fallback and the legacy unqualified name) and the store must appear.
+	// "root" fallback and the legacy unqualified name) must appear.
 	for _, want := range []string{
 		legacyWorkerName(prod),
 		workerScriptName(prod, "root"),
 		workerScriptName(prod, "web"),
 		workerScriptName(prod, "api"),
-		storeWorkerName("proj_x"),
 	} {
 		if !contains(names, want) {
 			t.Errorf("worker names %v missing %q", names, want)
 		}
 	}
 
-	// The store worker is deleted last, so a partial failure leaves it (and the
-	// history a re-run reads) intact.
-	if names[len(names)-1] != storeWorkerName("proj_x") {
-		t.Errorf("last name = %q, want the store worker last", names[len(names)-1])
+	// The shared deployments-store worker outlives the project; it must never be
+	// in the delete set (its own instance is wiped by DestroyInstance instead).
+	for _, n := range names {
+		if n == "ocel-deployments-store" {
+			t.Errorf("worker names %v must not include the shared store worker", names)
+		}
 	}
 
 	// No duplicates — web appears in two promotions but is one worker.

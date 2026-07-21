@@ -81,13 +81,21 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 	result := DestroyProjectResult{RootTornDown: true}
 
 	if stack != nil && len(state) > 0 {
-		report("Destroying root stack (workers, custom domain, store)")
+		report("Destroying root stack (workers, custom domain)")
 		workers, err := rootStackWorkerNames(ctx, stack, state, projectID, cfg.Env)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("resolve root-stack workers: %w", err))
 			result.RootTornDown = false
 		} else if err := stack.DestroyRootStack(ctx, workers); err != nil {
 			errs = append(errs, fmt.Errorf("destroy root stack: %w", err))
+			result.RootTornDown = false
+		}
+		// The shared deployments-store worker outlives the project; only its own
+		// instance is wiped. Done after the workers so the promotion history the
+		// name enumeration read stays intact if that step failed and re-runs.
+		report("Wiping the project's deployments-store instance")
+		if err := stack.DestroyInstance(ctx, state); err != nil {
+			errs = append(errs, fmt.Errorf("destroy deployments-store instance: %w", err))
 			result.RootTornDown = false
 		}
 	}
@@ -122,13 +130,13 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 // rootStackWorkerNames resolves the exact set of edge workers a project's root
 // stack deployed, so DestroyRootStack deletes precisely those and never has to
 // guess a project's workers from a name prefix (which could collide with a
-// sibling project). The deployments-store worker and the no-app "root" generic
-// worker are deterministic from the project; the legacy unqualified name (from
-// before workers were named per app) is included so an old single-worker
-// project is reclaimed too. The per-app generic workers are named from the app
-// set, which the store's own promotion history carries, keyed by app. The
-// store worker is deleted last so a partial failure is more likely to leave it
-// — and the history a re-run reads — intact.
+// sibling project). The no-app "root" generic worker is deterministic from the
+// project; the legacy unqualified name (from before workers were named per app)
+// is included so an old single-worker project is reclaimed too. The per-app
+// generic workers are named from the app set, which the store's own promotion
+// history carries, keyed by app. The shared deployments-store worker is never
+// in this set — it outlives the project, and DestroyProject wipes only the
+// project's own instance of it (DestroyInstance).
 func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.RootStackState, projectID, env string) ([]string, error) {
 	prodStack := projectID + "-" + env
 
@@ -166,7 +174,6 @@ func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.
 	for _, app := range sortedApps {
 		add(workerScriptName(prodStack, app))
 	}
-	add(storeWorkerName(projectID)) // last: see doc comment.
 
 	return names, nil
 }

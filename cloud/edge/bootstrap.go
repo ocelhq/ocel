@@ -54,6 +54,23 @@ type OfferKind string
 // framework's incremental cache with.
 const OfferCacheStore OfferKind = "cache-store"
 
+// OfferDeploymentsStore offers the shared deployments-store worker the edge
+// provisioned once at bootstrap: the address, credential and script name every
+// project's root stack needs to seed and reach its own instance.
+const OfferDeploymentsStore OfferKind = "deployments-store"
+
+// Keys of an OfferDeploymentsStore's Values.
+const (
+	// OfferKeyStoreEndpoint is the shared store worker's HTTP endpoint.
+	OfferKeyStoreEndpoint = "endpoint"
+	// OfferKeyStoreScriptName is the shared store worker's script name, which a
+	// project's generic worker service-binds to.
+	OfferKeyStoreScriptName = "scriptName"
+	// OfferKeyStoreBootstrapCred is the account-level bootstrap credential that
+	// authorizes seeding/rotating a project's instance (/<slug>/initialize).
+	OfferKeyStoreBootstrapCred = "bootstrapCred"
+)
+
 // Keys of an OfferCacheStore's Values. They describe the store in
 // S3-compatible terms — endpoint, region, bucket, static keys — so a provider
 // adopts it with the object-store client it already has rather than learning
