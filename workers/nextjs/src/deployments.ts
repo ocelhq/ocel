@@ -29,12 +29,19 @@ export interface DeploymentRecord {
 // service binding (ADR 0002): unauthenticated — the binding itself, reachable
 // only from another Worker in the same account, is the trust boundary.
 export interface DeploymentsBinding {
-  activeBuildId(app: string): Promise<string | undefined>;
-  record(app: string, buildId: string): Promise<DeploymentRecord | undefined>;
+  activeBuildId(slug: string, app: string): Promise<string | undefined>;
+  record(
+    slug: string,
+    app: string,
+    buildId: string,
+  ): Promise<DeploymentRecord | undefined>;
 }
 
 export interface DeploymentsDeps {
   binding: DeploymentsBinding;
+  // The project slug addressing its own instance in the shared
+  // deployments-store worker (env.OCEL_SLUG).
+  slug: string;
   app: string;
   // Injectable so pointer-TTL expiry never depends on wall-clock time.
   // Milliseconds.
@@ -100,7 +107,7 @@ export async function resolveDeployment(
     buildId = cachedPointer.buildId;
   } else {
     try {
-      buildId = await deps.binding.activeBuildId(deps.app);
+      buildId = await deps.binding.activeBuildId(deps.slug, deps.app);
       pointers.set(deps.app, { buildId, at: now });
     } catch {
       // Store unreachable: fall back to the last known pointer, however
@@ -117,7 +124,7 @@ export async function resolveDeployment(
   if (cachedRecord) return { kind: "found", record: cachedRecord };
 
   try {
-    const record = await deps.binding.record(deps.app, buildId);
+    const record = await deps.binding.record(deps.slug, deps.app, buildId);
     // The pointer names a build the store holds no record for. Prune never
     // deletes the active Deployment, so this should never happen on a
     // healthy store; treat it as unavailable rather than guessing.

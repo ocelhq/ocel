@@ -340,6 +340,10 @@ type Manifest struct {
 	ProjectId     string              `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Resources     []*ManifestResource `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
 	Functions     []*ManifestFunction `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
+	// slug is the project's stable, human-authored deployment identity (a
+	// DNS-label string). It keys the project's own instance in the shared
+	// deployments-store worker, distinct from project_id (the dev-cloud link).
+	Slug string `protobuf:"bytes,7,opt,name=slug,proto3" json:"slug,omitempty"`
 	// domains maps a lowercased environment class ("production") to the custom
 	// hostname the web-facing worker is served on for that class. A provider
 	// reads only the entry matching DeployRequest.environment; absent entries
@@ -409,6 +413,13 @@ func (x *Manifest) GetFunctions() []*ManifestFunction {
 		return x.Functions
 	}
 	return nil
+}
+
+func (x *Manifest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
 }
 
 func (x *Manifest) GetDomains() map[string]string {
@@ -2736,13 +2747,14 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x0eIdentitySource\x12\x1f\n" +
 	"\x1bIDENTITY_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13IDENTITY_SOURCE_GIT\x10\x01\x12\x1c\n" +
-	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\xfe\x02\n" +
+	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\x92\x03\n" +
 	"\bManifest\x12%\n" +
 	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x02 \x01(\tR\tprojectId\x12>\n" +
 	"\tresources\x18\x03 \x03(\v2 .deployments.v1.ManifestResourceR\tresources\x12>\n" +
-	"\tfunctions\x18\x04 \x03(\v2 .deployments.v1.ManifestFunctionR\tfunctions\x12?\n" +
+	"\tfunctions\x18\x04 \x03(\v2 .deployments.v1.ManifestFunctionR\tfunctions\x12\x12\n" +
+	"\x04slug\x18\a \x01(\tR\x04slug\x12?\n" +
 	"\adomains\x18\x05 \x03(\v2%.deployments.v1.Manifest.DomainsEntryR\adomains\x12/\n" +
 	"\x04apps\x18\x06 \x03(\v2\x1b.deployments.v1.ManifestAppR\x04apps\x1a:\n" +
 	"\fDomainsEntry\x12\x10\n" +

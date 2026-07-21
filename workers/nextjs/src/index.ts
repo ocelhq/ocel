@@ -37,11 +37,14 @@ const RSC_FORWARD_HEADERS = new Set([
 ]);
 
 interface Env {
-  // The service binding to this project's deployments-store worker (ADR
-  // 0002), through which the active Deployment is resolved at request time.
+  // The service binding to the shared deployments-store worker (ADR 0002),
+  // through which the active Deployment is resolved at request time.
   DEPLOYMENTS: DeploymentsBinding;
+  // The project slug — addresses this project's own instance in the shared
+  // deployments-store worker (idFromName), carried on every resolve RPC.
+  OCEL_SLUG: string;
   // This frozen worker's own app identity — one script per app — used to look
-  // up its active Deployment in the (project-wide) deployments store.
+  // up its active Deployment in the project's deployments-store instance.
   OCEL_APP: string;
   // Bound only where the edge provisioned a cache store; together with the
   // active Deployment's ISR prefix, its presence is what lets the worker
@@ -594,7 +597,7 @@ export default {
     );
 
     const deps = await resolveRouteDeps(
-      { binding: env.DEPLOYMENTS, app: env.OCEL_APP },
+      { binding: env.DEPLOYMENTS, slug: env.OCEL_SLUG, app: env.OCEL_APP },
       {
         fetch,
         originFetch,
