@@ -33,7 +33,11 @@ export interface OcelConfig {
   // treated as immutable — changing it forks a new project with fresh
   // deployment history. ocel init pre-fills a sanitized directory-name default.
   slug: string;
-  projectId?: string;
+  // projectId links the project to the ocel dev cloud during dev mode, and
+  // still keys the AWS-side deploy state (SSM root-stack state, Pulumi stack
+  // names). It is slated to be phased out for account-less CLI use, but is
+  // required until that lands — the Go resolver still depends on it.
+  projectId: string;
   discovery?: {
     paths?: string[];
   };
