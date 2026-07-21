@@ -139,6 +139,13 @@ type Config struct {
 	// stack, so `ocel preview ls` can surface age/expiry and a future reaper can
 	// find orphans. 0 means no expiry (production and persistent previews).
 	ExpiresAt int64
+
+	// RootTierState is the project's prior root-tier reconcile state (ADR
+	// 0001), persisted by the caller across deploys exactly like EdgeValues —
+	// opaque, handed back unread. Nil on a project's first production deploy,
+	// and also nil until a caller wires up per-project persistence for it; every
+	// production deploy reconciles as if fresh until then.
+	RootTierState edge.RootTierState
 }
 
 // Progress reports a phase-tagged deploy step so the CLI can render a fixed
@@ -160,6 +167,14 @@ func (p Progress) report(phase deploymentsv1.Phase, message string, current, tot
 // reports phase-tagged steps and log forwards Pulumi engine output; both may be
 // nil. Run performs the real Pulumi up and is not exercised by unit tests.
 func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, error) {
+	// Production deploys realize the tiered model (ADR 0001): root reconcile,
+	// then a stable infra stack, then one parallel app-deploy stack per app,
+	// staged and promoted atomically. Preview keeps the single in-place stack
+	// below unchanged.
+	if cfg.Class == deploymentsv1.Environment_CLASS_PRODUCTION {
+		return runProduction(ctx, cfg, manifest, progress, log)
+	}
+
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
 	if err != nil {
 		return nil, nil, err

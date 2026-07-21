@@ -703,6 +703,9 @@ importers:
       '@ocel/next-runtime':
         specifier: workspace:^
         version: link:../next-runtime
+      '@ocel/worker-deployments-store':
+        specifier: workspace:^
+        version: link:../../workers/deployments-store
       '@ocel/worker-nextjs':
         specifier: workspace:^
         version: link:../../workers/nextjs
