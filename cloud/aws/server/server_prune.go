@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	connect "connectrpc.com/connect"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
+	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -22,33 +24,62 @@ import (
 // deploy.Prune, which enforces the keepN-deep retention window through the
 // project's already-reconciled root stack and reclaims what it collects. It
 // backs `ocel deployments prune` and never runs inline on a deploy.
-func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest) (*deploymentsv1.PruneResponse, error) {
+//
+// Like Deploy and Bootstrap it streams progress/log events — a reclaim's
+// per-stack destroys run for minutes — ending in a terminal ResultEvent. The
+// kept-vs-reclaimed summary rides the stream as the final progress lines.
+func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+	progress := func(m string) { _ = stream.Send(phaseProgressEvent(deploymentsv1.Phase_PHASE_PROVISIONING, m, 0, 0)) }
+	logf := func(m string) { _ = stream.Send(logEvent(m)) }
+
+	result, err := s.runPrune(ctx, req, progress, logf)
+	if err != nil {
+		return stream.Send(resultEvent(false, err.Error(), nil, nil))
+	}
+	for _, line := range pruneSummaryLines(result) {
+		if err := stream.Send(progressEvent(line)); err != nil {
+			return err
+		}
+	}
+	return stream.Send(resultEvent(true, "", nil, nil))
+}
+
+// runPrune resolves state and drives deploy.Prune, returning what it reclaimed.
+// A project that has never had a production deploy is not an error: it simply
+// has nothing to prune, reported as an empty result.
+func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, progress, logf func(string)) (edge.PruneResult, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return nil, connect.NewError(connect.CodeInvalidArgument, err)
+		return edge.PruneResult{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
 	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
-			return &deploymentsv1.PruneResponse{}, nil
+			return edge.PruneResult{}, nil
 		}
-		return nil, err
+		return edge.PruneResult{}, err
 	}
 
 	cfg, err := pruneConfig(ctx, opts)
 	if err != nil {
-		return nil, err
+		return edge.PruneResult{}, err
 	}
 
-	result, err := deploy.Prune(ctx, stack, state, cfg, req.GetProjectId(), int(req.GetKeepN()), nil, nil)
-	if err != nil {
-		return nil, err
+	return deploy.Prune(ctx, stack, state, cfg, req.GetProjectId(), int(req.GetKeepN()), progress, logf)
+}
+
+// pruneSummaryLines renders the kept-vs-reclaimed outcome as the human-readable
+// lines Prune streams as its final progress events, mirroring what the CLI used
+// to print from the (now removed) PruneResponse.
+func pruneSummaryLines(result edge.PruneResult) []string {
+	if len(result.RemovedPromotionIDs) == 0 {
+		return []string{"Nothing to prune."}
 	}
-	return &deploymentsv1.PruneResponse{
-		KeptPromotionIds:    result.KeptPromotionIDs,
-		RemovedPromotionIds: result.RemovedPromotionIDs,
-	}, nil
+	return []string{
+		fmt.Sprintf("Reclaimed %d promotion(s): %s", len(result.RemovedPromotionIDs), strings.Join(result.RemovedPromotionIDs, ", ")),
+		fmt.Sprintf("Kept %d promotion(s).", len(result.KeptPromotionIDs)),
+	}
 }
 
 // pruneConfig resolves the account-global state a prune needs to reclaim

@@ -77,12 +77,16 @@ func TestRunDeploymentsPrune_RefusesOnPreviewInfrastructure(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	err := runDeploymentsPrune(context.Background(), root, 10, &stdout, &stderr)
 	if err == nil {
-		t.Fatal("runDeploymentsPrune err = nil, want a class-mismatch error")
+		t.Fatal("runDeploymentsPrune err = nil, want a class-mismatch failure")
 	}
-	if !strings.Contains(err.Error(), "ocel deploy can only run against production infrastructure") {
-		t.Errorf("err = %v, want the concrete class-mismatch message", err)
+	// The refusal is rendered through the deploy UI (like deploy/bootstrap) and
+	// the command returns the sentinel exit error, so the concrete message lands
+	// in the rendered output rather than the returned error.
+	out := stdout.String()
+	if !strings.Contains(out, "ocel deploy can only run against production infrastructure") {
+		t.Errorf("stdout = %q, want the concrete class-mismatch message", out)
 	}
-	if strings.Contains(stdout.String(), "Reclaimed") {
-		t.Errorf("stdout = %q, want no prune to have been driven against preview infra", stdout.String())
+	if strings.Contains(out, "Reclaimed") {
+		t.Errorf("stdout = %q, want no prune to have been driven against preview infra", out)
 	}
 }

@@ -372,17 +372,17 @@ func (r *Runner) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	return resp, nil
 }
 
-// Prune calls the provider's unary Prune RPC and returns which Promotions
-// were kept and which were reclaimed. Ready must have succeeded first.
-func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest) (*deploymentsv1.PruneResponse, error) {
+// Prune calls the provider's Prune RPC and streams DeployEvents to onEvent
+// (which may be nil) as they arrive, including the terminal event. A reclaim's
+// per-stack destroys run for minutes, so Prune streams progress/log the same
+// way Deploy/Bootstrap/Destroy do and shares their driver; its result
+// semantics match theirs. Ready must have succeeded first.
+func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
-		return nil, errors.New("providerrunner: Prune called before a successful Ready")
+		return errors.New("providerrunner: Prune called before a successful Ready")
 	}
-	resp, err := r.client.Prune(ctx, req)
-	if err != nil {
-		return nil, fmt.Errorf("providerrunner: call Prune: %w", err)
-	}
-	return resp, nil
+	stream, err := r.client.Prune(ctx, req)
+	return r.driveStream("Prune", stream, err, onEvent)
 }
 
 // driveStream consumes a provider event stream to its terminal ResultEvent,
