@@ -16,6 +16,11 @@ import {
   type InterceptionConfig,
 } from "./interception";
 import { createTagClock, type TagClock } from "./tag-clock";
+import {
+  resolveDeployment,
+  type DeploymentsBinding,
+  type DeploymentsDeps,
+} from "./deployments";
 
 // The request headers a Next App Router response varies on. The colo cache key
 // is derived from these directly (see variantPath), and Next's own allowHeader
@@ -31,11 +36,16 @@ const RSC_FORWARD_HEADERS = new Set([
 
 interface Env {
   ASSETS: Fetcher;
-  FUNCTION_URLS: string;
-  // Bound only where the edge provisioned a cache store; together with the build
-  // prefix, its presence is what lets the worker read the ISR cache directly.
+  // The service binding to this project's deployments-store worker (ADR
+  // 0002), through which the active Deployment is resolved at request time.
+  DEPLOYMENTS: DeploymentsBinding;
+  // This frozen worker's own app identity — one script per app — used to look
+  // up its active Deployment in the (project-wide) deployments store.
+  OCEL_APP: string;
+  // Bound only where the edge provisioned a cache store; together with the
+  // active Deployment's tag namespace, its presence is what lets the worker
+  // read the ISR cache directly.
   OCEL_CACHE_STORE?: R2Bucket;
-  OCEL_ISR_PREFIX?: string;
 }
 
 type RouteHas =
@@ -117,6 +127,64 @@ export interface RouteDeps {
   > & {
     config: InterceptionConfig;
   };
+
+  // What resolveRouteDeps resolves manifest/functionUrls/interception's tag
+  // namespace from (ADR 0002). Not itself consumed by dispatchResult — kept
+  // here only as the DI seam resolveRouteDeps takes, alongside cache /
+  // interception.
+  deployments?: DeploymentsDeps;
+}
+
+// resolveRouteDeps resolves this app's active Deployment (ADR 0002) via
+// `deployments` and wires its manifest/functionUrls/tag namespace into a
+// RouteDeps ready for dispatchResult — or, when there is nothing to serve,
+// the terminal Response to return instead: the baked-in 404 when no
+// Deployment has ever gone live for this app, or 503 when the store is
+// unreachable and no cached Deployment can stand in.
+export async function resolveRouteDeps(
+  deployments: DeploymentsDeps,
+  base: Omit<RouteDeps, "manifest" | "functionUrls" | "interception" | "deployments"> & {
+    interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
+  },
+): Promise<RouteDeps | Response> {
+  const resolution = await resolveDeployment(deployments);
+
+  if (resolution.kind === "not-found") return deploymentNotFoundResponse();
+  if (resolution.kind === "unavailable") return unavailableResponse();
+
+  const { record } = resolution;
+  return {
+    ...base,
+    manifest: record.routingManifest as Manifest,
+    functionUrls: record.functionUrls,
+    interception: base.interception && {
+      ...base.interception,
+      config: { prefix: record.tagNamespace },
+    },
+  };
+}
+
+const DEPLOYMENT_NOT_FOUND_HTML = `<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Deployment not found</title></head>
+<body>
+<h1>No deployment yet</h1>
+<p>This project has not published a deployment for this app.</p>
+</body>
+</html>`;
+
+function deploymentNotFoundResponse(): Response {
+  return new Response(DEPLOYMENT_NOT_FOUND_HTML, {
+    status: 404,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
+}
+
+function unavailableResponse(): Response {
+  return new Response("Service temporarily unavailable — try again shortly.", {
+    status: 503,
+    headers: { "content-type": "text/plain; charset=utf-8", "retry-after": "5" },
+  });
 }
 
 export async function dispatchResult(
@@ -489,48 +557,22 @@ async function assetsOr404(
 
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    // The routing manifest is uploaded alongside the worker as a text module
-    // (Cloudflare's module upload has no JSON type), so its default export is the
-    // raw JSON string. The variable specifier keeps esbuild from trying to inline
-    // a file that only exists at deploy time.
-    const specifier = "./routing-manifest.json";
-    const manifest = JSON.parse((await import(specifier)).default) as Manifest;
-
-    const result = (await resolveRoutes({
-      url: new URL(request.url),
-      buildId: manifest.buildId,
-      basePath: manifest.basePath,
-      i18n: undefined,
-      headers: request.headers,
-      requestBody: request.body as ReadableStream,
-      pathnames: manifest.pathnames,
-      routes: manifest.routes as Parameters<typeof resolveRoutes>[0]["routes"],
-
-      // TODO: invoke user-defined middleware
-      invokeMiddleware: async () => {
-        return {};
-      },
-    })) as RouteResult;
-
-    // Interception is enabled only where both the cache store is bound and its
-    // build prefix is injected; either missing leaves prerender routes forwarding
-    // to the Lambda exactly as before.
+    // Interception is enabled only where a cache store is bound; the tag
+    // namespace it needs comes from the resolved Deployment below, so its
+    // config is filled in inside resolveRouteDeps.
     const store = env.OCEL_CACHE_STORE;
-    const prefix = env.OCEL_ISR_PREFIX;
 
-    return dispatchResult(result, request, {
-      manifest,
-      functionUrls: JSON.parse(env.FUNCTION_URLS) as Record<string, string>,
-      assets: env.ASSETS,
-      fetch,
-      cache: {
-        cache: caches.default,
-        waitUntil: (promise) => ctx.waitUntil(promise),
-      },
-      interception:
-        store && prefix
+    const deps = await resolveRouteDeps(
+      { binding: env.DEPLOYMENTS, app: env.OCEL_APP },
+      {
+        assets: env.ASSETS,
+        fetch,
+        cache: {
+          cache: caches.default,
+          waitUntil: (promise) => ctx.waitUntil(promise),
+        },
+        interception: store
           ? {
-              config: { prefix },
               // Passed as the binding itself: it is one stable object per
               // isolate, which is what the snapshot memo keys on.
               store,
@@ -538,6 +580,26 @@ export default {
               waitUntil: (promise) => ctx.waitUntil(promise),
             }
           : undefined,
-    });
+      },
+    );
+    if (deps instanceof Response) return deps;
+
+    const result = (await resolveRoutes({
+      url: new URL(request.url),
+      buildId: deps.manifest.buildId,
+      basePath: deps.manifest.basePath,
+      i18n: undefined,
+      headers: request.headers,
+      requestBody: request.body as ReadableStream,
+      pathnames: deps.manifest.pathnames,
+      routes: deps.manifest.routes as Parameters<typeof resolveRoutes>[0]["routes"],
+
+      // TODO: invoke user-defined middleware
+      invokeMiddleware: async () => {
+        return {};
+      },
+    })) as RouteResult;
+
+    return dispatchResult(result, request, deps);
   },
 } satisfies ExportedHandler<Env>;

@@ -16,9 +16,16 @@
     "__dirname": "\"/\"",
     "__filename": "\"/index.js\"",
   },
+  // Local-dev/test default only. A real deploy sets this per-app when the
+  // root tier provisions the generic worker (cloud/edge/cloudflare); see ADR
+  // 0002 — the worker no longer bakes a manifest, so it needs its own app
+  // identity to look itself up in the (project-wide) deployments store.
   "vars": {
-    "FUNCTION_URLS": "{}",
-  }
+    "OCEL_APP": "web",
+  },
+  "services": [
+    { "binding": "DEPLOYMENTS", "service": "deployments-store" },
+  ],
   /**
    * Smart Placement
    * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement
