@@ -82,6 +82,10 @@ type Worker struct {
 	// ObjectStore is the store the worker reads through an edge-native binding
 	// rather than signed HTTP. Empty when the worker reads no object store.
 	ObjectStore ObjectStore
+	// Services are the worker's bindings to other workers deployed under the
+	// same edge, keyed by the env name the worker reads each binding from and
+	// valued by the deployment identity (script name) it should resolve to.
+	Services map[string]string
 }
 
 // ObjectStore is a worker's binding to bulk storage the edge itself serves: the
