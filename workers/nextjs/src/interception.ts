@@ -22,6 +22,7 @@ import {
 } from "@ocel/next-cache";
 
 import { evaluate } from "./cache";
+import { lruSet } from "./lru";
 import {
   createTagClock,
   parseJson,
@@ -298,13 +299,13 @@ async function readEntry(
     // refreshes the memo; a miss evicts the stale entry and falls open to the
     // Lambda, so a re-read gap is never papered over with stale bytes.
     const fresh = await fetchEntry(deps.store, key);
-    if (fresh) memoSet(memo, key, { at: now, entry: fresh });
+    if (fresh) lruSet(memo, key, { at: now, entry: fresh }, entryMemoMax);
     else memo.delete(key);
     return fresh ?? null;
   }
 
   const entry = await fetchEntry(deps.store, key);
-  if (entry) memoSet(memo, key, { at: now, entry });
+  if (entry) lruSet(memo, key, { at: now, entry }, entryMemoMax);
   return entry;
 }
 
@@ -314,21 +315,6 @@ function entryMap(
   let map = entryMemo.get(store);
   if (!map) entryMemo.set(store, (map = new Map()));
   return map;
-}
-
-// Insertion-order LRU: re-inserting moves a key to the newest slot, so the
-// oldest is always at the front to evict once the bound is exceeded.
-function memoSet(
-  map: Map<string, { at: number; entry: CacheEntryFile }>,
-  key: string,
-  value: { at: number; entry: CacheEntryFile },
-): void {
-  map.delete(key);
-  map.set(key, value);
-  if (map.size > entryMemoMax) {
-    const oldest = map.keys().next().value;
-    if (oldest !== undefined) map.delete(oldest);
-  }
 }
 
 // refreshEntry re-reads one entry from R2 in the background, deduped per store so
@@ -348,7 +334,7 @@ function refreshEntry(deps: InterceptDeps, key: string): void {
     .then(async () => {
       const entry = await fetchEntry(deps.store, key);
       const map = entryMap(deps.store);
-      if (entry) memoSet(map, key, { at: (deps.now ?? Date.now)(), entry });
+      if (entry) lruSet(map, key, { at: (deps.now ?? Date.now)(), entry }, entryMemoMax);
       else map.delete(key);
     })
     .catch(() => {})
