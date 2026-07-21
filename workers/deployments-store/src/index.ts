@@ -1,16 +1,17 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 
-import { authorized } from "./auth";
+import { authorized, bearer } from "./auth";
 import { DeploymentsStore } from "./deployments-do";
 import type { DeploymentRecord, Promotion } from "./store";
 import type { Env } from "./env";
 
 export { DeploymentsStore };
 
-// One DO instance per project (this worker is deployed once per project), so
-// every stub resolves the same fixed name.
-function stub(env: Env) {
-  return env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName("root"));
+// One shared worker holds the DO namespace for the whole account; each project
+// addresses its own instance by its slug (idFromName). Every request names the
+// slug as the leading path segment (fetch) or the leading RPC argument.
+function stub(env: Env, slug: string) {
+  return env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(slug));
 }
 
 async function readJson<T>(request: Request): Promise<T | undefined> {
@@ -21,33 +22,64 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
   }
 }
 
-// The deployments store's two access paths (ADR 0002):
+// The deployments store's two access paths (ADR 0002), now against a shared
+// worker routed per project by slug:
 //
 // - fetch() is the authenticated write endpoint the deploy host calls over
-//   plain HTTP (it runs outside Cloudflare's network, so it can't use RPC):
-//   putStaged / promote / history / prune / the version stamp. Every route
-//   requires the project write-secret.
+//   plain HTTP. Routes are prefixed with the project slug (/<slug>/...). The
+//   /<slug>/initialize route is authorized by the account-level bootstrap
+//   credential (the only op that credential may perform); every other route
+//   authenticates against the addressed instance's own stored project secret.
 // - activeBuildId / record are RPC methods the frozen generic worker calls
-//   through its service binding to this worker. They carry no secret — the
-//   trust boundary is the binding itself, which is only ever reachable from
-//   another Worker in the same account, never over the public internet.
+//   through its service binding, each carrying the project slug. They stay
+//   secret-less — the trust boundary is the binding itself, only ever reachable
+//   from another Worker in the same account.
 export default class extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
-    if (!(await authorized(request, this.env.WRITE_SECRET))) {
+    const url = new URL(request.url);
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (segments.length < 2) return new Response("Not Found", { status: 404 });
+    const slug = segments[0];
+    const sub = "/" + segments.slice(1).join("/");
+    const store = stub(this.env, slug);
+
+    // Seeding/rotating a project's instance is the sole op the account-level
+    // bootstrap credential authorizes.
+    if (request.method === "POST" && sub === "/initialize") {
+      if (!(await authorized(request, this.env.BOOTSTRAP_SECRET))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const body = await readJson<{
+        ownerToken: string;
+        secret: string;
+        force?: boolean;
+      }>(request);
+      if (!body?.ownerToken || !body.secret) {
+        return new Response("Bad Request", { status: 400 });
+      }
+      const { conflict } = await store.initialize(
+        body.ownerToken,
+        body.secret,
+        body.force ?? false,
+      );
+      if (conflict) return new Response(conflict, { status: 409 });
+      return new Response(null, { status: 204 });
+    }
+
+    // Every other op authenticates against the instance's own project secret.
+    const token = bearer(request);
+    if (token === null || !(await store.authorized(token))) {
       return new Response("Unauthorized", { status: 401 });
     }
 
-    const url = new URL(request.url);
-    const store = stub(this.env);
-
-    if (request.method === "PUT" && url.pathname === "/staged") {
+    if (request.method === "PUT" && sub === "/staged") {
       const record = await readJson<DeploymentRecord>(request);
       if (!record) return new Response("Bad Request", { status: 400 });
       await store.putStaged(record);
       return new Response(null, { status: 204 });
     }
 
-    if (request.method === "POST" && url.pathname === "/promote") {
+    if (request.method === "POST" && sub === "/promote") {
       const body = await readJson<Promotion>(request);
       if (!body?.promotionId || !body.builds) {
         return new Response("Bad Request", { status: 400 });
@@ -57,11 +89,11 @@ export default class extends WorkerEntrypoint<Env> {
       return new Response(null, { status: 204 });
     }
 
-    if (request.method === "GET" && url.pathname === "/history") {
+    if (request.method === "GET" && sub === "/history") {
       return Response.json(await store.history());
     }
 
-    if (request.method === "POST" && url.pathname === "/prune") {
+    if (request.method === "POST" && sub === "/prune") {
       const body = await readJson<{ keepN: number }>(request);
       if (typeof body?.keepN !== "number") {
         return new Response("Bad Request", { status: 400 });
@@ -69,25 +101,34 @@ export default class extends WorkerEntrypoint<Env> {
       return Response.json(await store.prune(body.keepN));
     }
 
-    if (request.method === "GET" && url.pathname === "/version-stamp") {
+    if (request.method === "GET" && sub === "/version-stamp") {
       return Response.json({ version: (await store.versionStamp()) ?? null });
     }
 
-    if (request.method === "PUT" && url.pathname === "/version-stamp") {
+    if (request.method === "PUT" && sub === "/version-stamp") {
       const body = await readJson<{ version: string }>(request);
       if (!body?.version) return new Response("Bad Request", { status: 400 });
       await store.setVersionStamp(body.version);
       return new Response(null, { status: 204 });
     }
 
+    if (request.method === "POST" && sub === "/destroy") {
+      await store.destroy();
+      return new Response(null, { status: 204 });
+    }
+
     return new Response("Not Found", { status: 404 });
   }
 
-  async activeBuildId(app: string): Promise<string | undefined> {
-    return stub(this.env).activeBuildId(app);
+  async activeBuildId(slug: string, app: string): Promise<string | undefined> {
+    return stub(this.env, slug).activeBuildId(app);
   }
 
-  async record(app: string, buildId: string): Promise<DeploymentRecord | undefined> {
-    return stub(this.env).record(app, buildId);
+  async record(
+    slug: string,
+    app: string,
+    buildId: string,
+  ): Promise<DeploymentRecord | undefined> {
+    return stub(this.env, slug).record(app, buildId);
   }
 }

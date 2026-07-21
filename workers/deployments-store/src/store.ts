@@ -63,6 +63,17 @@ export interface PruneResult {
 
 const ACTIVE_KEY = "active";
 const VERSION_KEY = "versionStamp";
+// The instance's ownership keys: the self-minted owner token that distinguishes
+// legitimate recovery from a slug collision, and the per-project secret every
+// authenticated op is checked against (index.ts). Both live in the meta table,
+// so a destroy() that clears storage takes them with it and frees the slug.
+const OWNER_KEY = "ownerToken";
+const SECRET_KEY = "secret";
+
+// Thrown by initialize() when the instance is already owned by a different
+// project (a slug collision). The account-level bootstrap credential can force
+// past it to adopt an instance after total state loss; see index.ts.
+export class OwnershipConflictError extends Error {}
 
 function recordKey(app: string, buildId: string): string {
   return `record:${app}/${buildId}`;
@@ -279,6 +290,37 @@ export function prune(store: SqlStore, keepN: number): PruneResult {
       removedRecordKeys,
     };
   });
+}
+
+// Seeds (or rotates) this instance's ownership. The account-level bootstrap
+// credential authorizes the caller before this runs (index.ts); here we only
+// enforce that one project can't silently take over another's instance:
+// re-seeding with a matching owner token rotates the secret (recovery), a
+// mismatch is a collision and is refused — unless force adopts the instance
+// after total state loss, when only the human deploying can vouch for it.
+export function initialize(
+  store: SqlStore,
+  ownerToken: string,
+  secret: string,
+  force: boolean,
+): void {
+  const existing = getMeta(store, OWNER_KEY);
+  if (existing !== undefined && existing !== ownerToken && !force) {
+    throw new OwnershipConflictError(
+      "instance is already owned by a different project",
+    );
+  }
+  store.transactionSync(() => {
+    setMeta(store, OWNER_KEY, ownerToken);
+    setMeta(store, SECRET_KEY, secret);
+  });
+}
+
+// The instance's stored project secret, or undefined before it is initialized.
+// index.ts constant-time-compares an incoming bearer token against this to
+// authenticate every non-initialize op.
+export function storedSecret(store: SqlStore): string | undefined {
+  return getMeta(store, SECRET_KEY);
 }
 
 export function versionStamp(store: SqlStore): string | undefined {

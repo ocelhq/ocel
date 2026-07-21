@@ -12,11 +12,11 @@
   },
   "upload_source_maps": true,
   "compatibility_flags": ["nodejs_compat"],
-  // Local-dev/test default only. The real per-project deploy mints this secret
-  // at root-stack creation and binds it as secret_text (cloudflare.go
-  // scriptBindings), never through this file.
+  // Local-dev/test default only. The real deploy mints this account-level
+  // bootstrap credential when the shared store worker is provisioned at
+  // bootstrap and binds it as secret_text, never through this file.
   "vars": {
-    "WRITE_SECRET": "dev-secret",
+    "BOOTSTRAP_SECRET": "dev-secret",
   },
   "durable_objects": {
     "bindings": [

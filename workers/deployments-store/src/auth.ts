@@ -7,10 +7,19 @@ export async function authorized(
   request: Request,
   secret: string,
 ): Promise<boolean> {
+  const token = bearer(request);
+  if (token === null) return false;
+  return constantTimeEqual(token, secret);
+}
+
+// Extracts the bearer token from a request's Authorization header, or null when
+// it is missing or not a Bearer credential. The per-project auth path
+// (index.ts) pulls the token out here and hands it to the DO instance, which
+// compares it against its own stored secret.
+export function bearer(request: Request): string | null {
   const header = request.headers.get("authorization") ?? "";
   const match = /^Bearer (.+)$/.exec(header);
-  if (!match) return false;
-  return constantTimeEqual(match[1], secret);
+  return match ? match[1] : null;
 }
 
 export async function constantTimeEqual(a: string, b: string): Promise<boolean> {

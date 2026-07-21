@@ -255,3 +255,66 @@ describe("version stamp", () => {
     expect(await store.versionStamp()).toBe("v2");
   });
 });
+
+describe("initialize / authorized", () => {
+  it("seeds ownership and authenticates against the stored secret", async () => {
+    const store = storeStub();
+    expect(await store.authorized("s3cret")).toBe(false); // not seeded yet
+
+    expect(await store.initialize("owner-1", "s3cret", false)).toEqual({});
+
+    expect(await store.authorized("s3cret")).toBe(true);
+    expect(await store.authorized("wrong")).toBe(false);
+  });
+
+  it("rotates the secret when re-initialized with a matching owner token", async () => {
+    const store = storeStub();
+    await store.initialize("owner-1", "old", false);
+
+    expect(await store.initialize("owner-1", "new", false)).toEqual({});
+
+    expect(await store.authorized("new")).toBe(true);
+    expect(await store.authorized("old")).toBe(false);
+  });
+
+  it("refuses a mismatched owner token as a collision", async () => {
+    const store = storeStub();
+    await store.initialize("owner-1", "s3cret", false);
+
+    const { conflict } = await store.initialize("owner-2", "other", false);
+
+    expect(conflict).toMatch(/already owned by a different project/);
+    // The original owner's secret is untouched.
+    expect(await store.authorized("s3cret")).toBe(true);
+    expect(await store.authorized("other")).toBe(false);
+  });
+
+  it("adopts a mismatched instance when force is set", async () => {
+    const store = storeStub();
+    await store.initialize("owner-1", "s3cret", false);
+
+    expect(await store.initialize("owner-2", "other", true)).toEqual({});
+
+    expect(await store.authorized("other")).toBe(true);
+    expect(await store.authorized("s3cret")).toBe(false);
+  });
+});
+
+describe("destroy", () => {
+  it("clears history, records, ownership and secret, and frees the slug", async () => {
+    const store = storeStub();
+    await store.initialize("owner-1", "s3cret", false);
+    await store.putStaged(makeRecord());
+    await store.promote(makePromotion());
+
+    await store.destroy();
+
+    expect(await store.history()).toEqual([]);
+    expect(await store.record("web", "build-1")).toBeUndefined();
+    expect(await store.authorized("s3cret")).toBe(false);
+
+    // The emptied instance is immediately reusable by a fresh project.
+    await store.initialize("owner-2", "fresh", false);
+    expect(await store.authorized("fresh")).toBe(true);
+  });
+});
