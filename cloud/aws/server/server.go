@@ -220,8 +220,9 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 			return nil, nil, err
 		}
 		// The shared deployments-store worker's coordinates, provisioned once at
-		// bootstrap. A bootstrap predating it reads the zero value, and the deploy
-		// runs without a root stack (so without rollback), exactly as before.
+		// bootstrap. A bootstrap predating it reads the zero value, and a
+		// production deploy then fails fast asking for a re-bootstrap
+		// (runProduction, deploy/production.go).
 		deploymentsStore, err = bootstrap.ReadDeploymentsStore(ctx, ssmClient)
 		if err != nil {
 			return nil, nil, err
