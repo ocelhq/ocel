@@ -314,9 +314,10 @@ func bindObjectStore(worker edge.Worker, values map[string]string) edge.Worker {
 }
 
 // scriptBindings is the worker's binding set: the Assets Fetcher (only when
-// assets were uploaded), the object store as an R2 bucket, one plain-text
-// binding per var, and one secret_text binding per secret — values that must
-// never surface in plaintext metadata.
+// assets were uploaded), the object store as an R2 bucket, one service
+// binding per entry in Services, one plain-text binding per var, and one
+// secret_text binding per secret — values that must never surface in
+// plaintext metadata.
 func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 	bindings := []map[string]any{}
 	if includeAssets && worker.AssetBinding != "" {
@@ -330,6 +331,13 @@ func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 			"type":        "r2_bucket",
 			"name":        store.Binding,
 			"bucket_name": store.Bucket,
+		})
+	}
+	for name, service := range worker.Services {
+		bindings = append(bindings, map[string]any{
+			"type":    "service",
+			"name":    name,
+			"service": service,
 		})
 	}
 	for name, text := range worker.Vars {

@@ -193,6 +193,24 @@ func TestScriptBindings_NoObjectStoreEmitsNoBucketBinding(t *testing.T) {
 	}
 }
 
+func TestScriptBindings_MapsServicesToServiceBindings(t *testing.T) {
+	worker := edge.Worker{
+		Main:     edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+		Services: map[string]string{"DEPLOYMENTS": "ocel-proj-store"},
+	}
+
+	services := bindingsByType(metadataFromMultipart(t, worker, ""), "service")
+	if len(services) != 1 {
+		t.Fatalf("got %d service bindings, want 1", len(services))
+	}
+	if services[0]["name"] != "DEPLOYMENTS" {
+		t.Errorf("service binding name = %v, want DEPLOYMENTS", services[0]["name"])
+	}
+	if services[0]["service"] != "ocel-proj-store" {
+		t.Errorf("service binding service = %v, want ocel-proj-store", services[0]["service"])
+	}
+}
+
 // The bucket is whatever this edge reported provisioning at bootstrap and got
 // handed back at deploy, never a name recomputed here.
 func TestBindObjectStore_TakesTheBucketFromBootstrapValues(t *testing.T) {

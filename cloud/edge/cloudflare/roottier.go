@@ -44,6 +44,12 @@ const (
 	doMigrationTag = "v1"
 )
 
+// genericStoreBinding is the env name the frozen generic worker reads its
+// service binding to the deployments-store worker from
+// (workers/nextjs/src/index.ts Env.DEPLOYMENTS), through which it resolves
+// the active Deployment at request time.
+const genericStoreBinding = "DEPLOYMENTS"
+
 func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec, prior edge.RootTierState) (edge.RootTierState, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -81,7 +87,7 @@ func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec
 	}
 	endpoint = newEndpoint
 
-	genericUp := upload{accountID: accountID, scriptName: spec.GenericName, worker: spec.Generic}
+	genericUp := upload{accountID: accountID, scriptName: spec.GenericName, worker: withService(spec.Generic, genericStoreBinding, spec.StoreName)}
 	assetsJWT, err := p.uploadAssets(ctx, genericUp)
 	if err != nil {
 		return nil, fmt.Errorf("upload generic worker assets: %w", err)
@@ -284,5 +290,17 @@ func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	}
 	secrets[name] = value
 	worker.Secrets = secrets
+	return worker
+}
+
+// withService returns worker with one additional service binding, leaving
+// the caller's Worker untouched.
+func withService(worker edge.Worker, name, service string) edge.Worker {
+	services := make(map[string]string, len(worker.Services)+1)
+	for k, v := range worker.Services {
+		services[k] = v
+	}
+	services[name] = service
+	worker.Services = services
 	return worker
 }

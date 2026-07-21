@@ -295,6 +295,18 @@ func TestMintWriteSecret_UniqueAndNonEmpty(t *testing.T) {
 	}
 }
 
+func TestWithService_DoesNotMutateCallersWorker(t *testing.T) {
+	worker := edge.Worker{Services: map[string]string{"EXISTING": "x"}}
+	out := withService(worker, "DEPLOYMENTS", "ocel-proj-store")
+
+	if _, ok := worker.Services["DEPLOYMENTS"]; ok {
+		t.Error("withService mutated the caller's Worker.Services map")
+	}
+	if out.Services["DEPLOYMENTS"] != "ocel-proj-store" || out.Services["EXISTING"] != "x" {
+		t.Errorf("out.Services = %v", out.Services)
+	}
+}
+
 func TestWithSecret_DoesNotMutateCallersWorker(t *testing.T) {
 	worker := edge.Worker{Secrets: map[string]string{"EXISTING": "1"}}
 	out := withSecret(worker, "WRITE_SECRET", "s")
