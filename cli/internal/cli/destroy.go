@@ -86,11 +86,13 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 			return err
 		}
 
+		spinner := deployui.StartSpinner(stdout, "Enumerating what would be destroyed")
 		plan, err := runner.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			ProjectId:       cfg.ProjectID,
 		})
+		spinner.Stop()
 		if err != nil {
 			return err
 		}
