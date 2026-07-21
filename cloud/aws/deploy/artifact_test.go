@@ -128,10 +128,11 @@ type fakeUploader struct {
 	// errgroup), so what PutObject records is written from many goroutines at
 	// once and has to be guarded. Reading the fields back is safe unlocked:
 	// every caller waits for the uploads to finish first.
-	mu        sync.Mutex
-	puts      []string
-	buckets   []string
-	putBodies map[string]string
+	mu           sync.Mutex
+	puts         []string
+	buckets      []string
+	putBodies    map[string]string
+	contentTypes map[string]string
 }
 
 func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ ...func(*s3.Options)) (*s3.HeadObjectOutput, error) {
@@ -160,6 +161,12 @@ func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...
 	defer f.mu.Unlock()
 	f.puts = append(f.puts, key)
 	f.buckets = append(f.buckets, aws.ToString(in.Bucket))
+	if in.ContentType != nil {
+		if f.contentTypes == nil {
+			f.contentTypes = map[string]string{}
+		}
+		f.contentTypes[key] = aws.ToString(in.ContentType)
+	}
 	if in.Body != nil {
 		if f.putBodies == nil {
 			f.putBodies = map[string]string{}
@@ -184,7 +191,7 @@ func bodyFn(called *bool) func() ([]byte, error) {
 func TestUploadArtifact_SkipsWhenPresent(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{"k.zip": true}}
 	var zipped bool
-	if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", bodyFn(&zipped)); err != nil {
+	if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped)); err != nil {
 		t.Fatalf("uploadArtifact: %v", err)
 	}
 	if len(f.puts) != 0 {
@@ -201,7 +208,7 @@ func TestUploadArtifact_SkipsWhenPresent(t *testing.T) {
 func TestUploadArtifact_UploadsWhenMissing(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	var zipped bool
-	if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", bodyFn(&zipped)); err != nil {
+	if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped)); err != nil {
 		t.Fatalf("uploadArtifact: %v", err)
 	}
 	if len(f.puts) != 1 || f.puts[0] != "k.zip" {
@@ -210,6 +217,23 @@ func TestUploadArtifact_UploadsWhenMissing(t *testing.T) {
 	if !zipped {
 		t.Error("body (zip) was not invoked on a cache miss")
 	}
+	if ct, ok := f.contentTypes["k.zip"]; ok {
+		t.Errorf("content-type = %q, want unset when caller passes \"\"", ct)
+	}
+}
+
+// TestUploadArtifact_SetsContentTypeWhenGiven proves a non-empty content-type
+// is written onto the object, so a caller that knows the type (static assets)
+// makes the stored object self-describing.
+func TestUploadArtifact_SetsContentTypeWhenGiven(t *testing.T) {
+	f := &fakeUploader{exists: map[string]bool{}}
+	var invoked bool
+	if err := uploadArtifact(context.Background(), f, "bucket", "app.js", "text/javascript; charset=utf-8", bodyFn(&invoked)); err != nil {
+		t.Fatalf("uploadArtifact: %v", err)
+	}
+	if got := f.contentTypes["app.js"]; got != "text/javascript; charset=utf-8" {
+		t.Errorf("content-type = %q, want %q", got, "text/javascript; charset=utf-8")
+	}
 }
 
 // TestUploadArtifact_HeadErrorSurfaces proves a non-NotFound HeadObject error
@@ -217,7 +241,7 @@ func TestUploadArtifact_UploadsWhenMissing(t *testing.T) {
 func TestUploadArtifact_HeadErrorSurfaces(t *testing.T) {
 	f := &fakeUploader{headErr: errors.New("access denied")}
 	var zipped bool
-	if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", bodyFn(&zipped)); err == nil {
+	if err := uploadArtifact(context.Background(), f, "bucket", "k.zip", "", bodyFn(&zipped)); err == nil {
 		t.Fatal("uploadArtifact = nil, want the HeadObject error surfaced")
 	}
 	if len(f.puts) != 0 {

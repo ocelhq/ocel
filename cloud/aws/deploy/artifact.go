@@ -200,7 +200,12 @@ func copyFileInto(w io.Writer, path string) error {
 // invoked on a miss, so the caller's zip is not paid when the object is already
 // present. A HeadObject error other than "not found" aborts rather than masking
 // an outage as "missing".
-func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key string, body func() ([]byte, error)) error {
+//
+// contentType, when non-empty, is written onto the object so the store is
+// self-describing; callers whose objects are internal blobs (function zips) or
+// carry their own embedded metadata (prerender cache entries) pass "" and the
+// object keeps R2's default type.
+func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, body func() ([]byte, error)) error {
 	_, err := up.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
@@ -215,11 +220,15 @@ func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key string
 	if err != nil {
 		return err
 	}
-	if _, err := up.PutObject(ctx, &s3.PutObjectInput{
+	in := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 		Body:   bytes.NewReader(data),
-	}); err != nil {
+	}
+	if contentType != "" {
+		in.ContentType = aws.String(contentType)
+	}
+	if _, err := up.PutObject(ctx, in); err != nil {
 		return fmt.Errorf("upload artifact %s: %w", key, err)
 	}
 	return nil
@@ -275,7 +284,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 				return err
 			}
 			key := artifactKey(manifest.GetProjectId(), fn.GetLogicalName(), hash)
-			if err := uploadArtifact(ctx, cfg.Uploader, cfg.ArtifactBucket, key, func() ([]byte, error) {
+			if err := uploadArtifact(ctx, cfg.Uploader, cfg.ArtifactBucket, key, "", func() ([]byte, error) {
 				return zipDir(dir)
 			}); err != nil {
 				return err
