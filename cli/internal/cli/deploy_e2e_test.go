@@ -111,6 +111,7 @@ func setUpRealProviderFixture(t *testing.T) (root, binPath string) {
 	root = t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
+  slug: "test-app",
   projectId: "proj_deploy_e2e",
   provider: { package: "@ocel/provider-aws", options: {} },
 };
@@ -154,6 +155,7 @@ func setUpRealProviderExpressFixture(t *testing.T) (root, binPath, funcLogicalNa
 	const appName = "api"
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
+  slug: "test-app",
   projectId: "proj_express_e2e",
   provider: { package: "@ocel/provider-aws", options: {} },
   apps: [{ name: %q, path: %q, framework: "express" }],

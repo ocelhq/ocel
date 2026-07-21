@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
@@ -67,6 +68,9 @@ type App struct {
 // Config is the resolved, defaulted project configuration read from
 // ocel.config.ts.
 type Config struct {
+	// Slug is the project's stable, human-authored deployment identity: it keys
+	// the project's own instance in the shared deployments-store worker.
+	Slug      string
 	ProjectID string
 	Discovery Discovery
 	// Provider is nil when the config has no `provider` field configured.
@@ -94,6 +98,7 @@ func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
 // rawConfig mirrors the JSON shape emitted by executing the user's bundled
 // ocel.config.ts.
 type rawConfig struct {
+	Slug      string `json:"slug"`
 	ProjectID string `json:"projectId"`
 	Discovery struct {
 		Paths []string `json:"paths"`
@@ -157,6 +162,12 @@ func Resolve(startDir string) (*Config, error) {
 	if raw.ProjectID == "" {
 		return nil, fmt.Errorf("%s is missing required \"projectId\" — %s", configPath, initHint)
 	}
+	if raw.Slug == "" {
+		return nil, fmt.Errorf("%s is missing required \"slug\" — %s", configPath, initHint)
+	}
+	if !validSlug(raw.Slug) {
+		return nil, fmt.Errorf("%s has an invalid \"slug\" %q — it must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen", configPath, raw.Slug)
+	}
 
 	paths := raw.Discovery.Paths
 	if len(paths) == 0 {
@@ -182,6 +193,7 @@ func Resolve(startDir string) (*Config, error) {
 	domains := normalizeDomains(raw.Domains)
 
 	return &Config{
+		Slug:      raw.Slug,
 		ProjectID: raw.ProjectID,
 		Discovery: Discovery{Paths: paths},
 		Provider:  provider,
@@ -189,6 +201,17 @@ func Resolve(startDir string) (*Config, error) {
 		Domains:   domains,
 		Dir:       filepath.Dir(configPath),
 	}, nil
+}
+
+// slugPattern is the DNS-label shape a project slug must take: it keys the
+// project's own instance in the shared deployments-store worker (idFromName), a
+// URL path segment and an SSM parameter name, so it stays lowercase, digit and
+// hyphen only, 1–63 chars, not hyphen-bounded.
+var slugPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// validSlug reports whether s is a usable project slug.
+func validSlug(s string) bool {
+	return slugPattern.MatchString(s)
 }
 
 // validAppName reports whether a name is usable as an app's identity. Build

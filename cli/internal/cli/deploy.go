@@ -192,7 +192,7 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, bui
 		fmt.Fprintln(buildOut, "no functions to deploy; deploying infrastructure only")
 	}
 
-	return manifestbuilder.Build(cfg.ProjectID, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions)
+	return manifestbuilder.Build(cfg.ProjectID, cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions)
 }
 
 // toApps lowers the resolved config's apps into the manifest builder's input.

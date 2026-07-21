@@ -240,6 +240,68 @@ type CacheStore struct {
 	SecretAccessKey string `json:"secretAccessKey"`
 }
 
+// DeploymentsStoreParamName is the account-level SSM SecureString parameter
+// holding the shared deployments-store worker's adopted coordinates. Production
+// only — the deployments store has no preview counterpart.
+const DeploymentsStoreParamName = "/ocel/edge/deployments-store"
+
+// DeploymentsStore is the JSON payload stored in SSM: the shared
+// deployments-store worker's coordinates, read at deploy time so a project's
+// root stack can service-bind, seed and reach its own instance.
+type DeploymentsStore struct {
+	Endpoint      string `json:"endpoint"`
+	ScriptName    string `json:"scriptName"`
+	BootstrapCred string `json:"bootstrapCred"`
+}
+
+// adoptDeploymentsStore persists the edge's offered shared deployments-store
+// worker. Every coordinate — including the bootstrap credential — is the edge's
+// current state and is overwritten on every run: the credential is re-minted
+// each bootstrap and read fresh from here at deploy time, so there is no prior
+// secret to preserve.
+func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, values map[string]string) error {
+	payload, err := json.Marshal(DeploymentsStore{
+		Endpoint:      values[edge.OfferKeyStoreEndpoint],
+		ScriptName:    values[edge.OfferKeyStoreScriptName],
+		BootstrapCred: values[edge.OfferKeyStoreBootstrapCred],
+	})
+	if err != nil {
+		return fmt.Errorf("marshal deployments store: %w", err)
+	}
+	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:      aws.String(DeploymentsStoreParamName),
+		Value:     aws.String(string(payload)),
+		Type:      ssmtypes.ParameterTypeSecureString,
+		Overwrite: aws.Bool(true),
+	}); err != nil {
+		return fmt.Errorf("write deployments store parameter: %w", err)
+	}
+	return nil
+}
+
+// ReadDeploymentsStore returns the adopted shared deployments-store worker's
+// coordinates, decrypted. An account whose edge offered none (a bootstrap
+// predating the shared store) reads as the zero value rather than as a failure,
+// so the deploy path can tell "no store, skip the root stack" from an error.
+func ReadDeploymentsStore(ctx context.Context, ssmClient SSMAPI) (DeploymentsStore, error) {
+	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(DeploymentsStoreParamName),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return DeploymentsStore{}, nil
+		}
+		return DeploymentsStore{}, fmt.Errorf("read deployments store parameter: %w", err)
+	}
+	var store DeploymentsStore
+	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &store); err != nil {
+		return DeploymentsStore{}, fmt.Errorf("parse deployments store: %w", err)
+	}
+	return store, nil
+}
+
 // adoptCacheStore persists an edge's offered cache store for one substrate class.
 // Coordinates are the edge's current state and are overwritten on every run; the
 // secret is not, because an edge that cannot read a credential back reoffers the

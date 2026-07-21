@@ -81,7 +81,86 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	if accountID == "" {
 		return edge.BootstrapOutput{}, fmt.Errorf("%s is not set; it is required to bootstrap the Cloudflare edge", envAccountID)
 	}
-	return newCacheStore(p.client).bootstrap(ctx, accountID, class)
+	out, err := newCacheStore(p.client).bootstrap(ctx, accountID, class)
+	if err != nil {
+		return out, err
+	}
+	// The shared deployments-store worker is a production-class concept: the
+	// promotion history/rollback machinery only runs on the production deploy
+	// path. Preview keeps its request-time resolution and provisions no store.
+	if class == edge.ClassProduction {
+		storeOffer, err := p.bootstrapStore(ctx, accountID)
+		if err != nil {
+			return out, fmt.Errorf("bootstrap deployments-store worker: %w", err)
+		}
+		out.Offers = append(out.Offers, storeOffer)
+	}
+	return out, nil
+}
+
+// bootstrapStore provisions the single shared deployments-store worker for the
+// account and offers the address, credential and script name a project's root
+// stack needs to seed and reach its own instance. It re-uploads the bundle on
+// every bootstrap (so store-worker updates ship) and re-mints the bootstrap
+// credential, which is harmless: the credential authorizes only
+// /<slug>/initialize and is read fresh from the adopted param at deploy time,
+// never held long-term. The DO migration is declared only on the first
+// bootstrap (when no script exists yet); redeclaring it later is rejected.
+func (p *provider) bootstrapStore(ctx context.Context, accountID string) (edge.Offer, error) {
+	bundles, err := edge.LoadStoreBundleManifest()
+	if err != nil {
+		return edge.Offer{}, err
+	}
+	path, err := bundles.Path(edge.KindCloudflare)
+	if err != nil {
+		return edge.Offer{}, err
+	}
+	worker, err := readWorkerBundle(path)
+	if err != nil {
+		return edge.Offer{}, err
+	}
+
+	exists, err := p.FindApp(ctx, sharedStoreScriptName)
+	if err != nil {
+		return edge.Offer{}, fmt.Errorf("check deployments-store worker: %w", err)
+	}
+	cred, err := mintSecret()
+	if err != nil {
+		return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
+	}
+
+	up := upload{accountID: accountID, scriptName: sharedStoreScriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
+	if err := p.putStoreScript(ctx, up, !exists); err != nil {
+		return edge.Offer{}, fmt.Errorf("put deployments-store worker: %w", err)
+	}
+	endpoint, err := p.setSubdomain(ctx, up, true)
+	if err != nil {
+		return edge.Offer{}, fmt.Errorf("set deployments-store worker subdomain: %w", err)
+	}
+
+	return edge.Offer{
+		Kind: edge.OfferDeploymentsStore,
+		Values: map[string]string{
+			edge.OfferKeyStoreEndpoint:      endpoint,
+			edge.OfferKeyStoreScriptName:    sharedStoreScriptName,
+			edge.OfferKeyStoreBootstrapCred: cred,
+		},
+	}, nil
+}
+
+// readWorkerBundle reads a compiled worker entrypoint off disk into the
+// edge.Worker shape the upload machinery consumes: a single main module, no
+// per-deploy modules/vars/assets of its own.
+func readWorkerBundle(path string) (edge.Worker, error) {
+	main, err := os.ReadFile(path)
+	if err != nil {
+		return edge.Worker{}, fmt.Errorf("read worker bundle %s: %w", path, err)
+	}
+	return edge.Worker{Main: edge.WorkerModule{
+		Name:        "index.js",
+		ContentType: "application/javascript+module",
+		Content:     main,
+	}}, nil
 }
 
 // FindApp reports whether a Workers script exists under name. A 404 is the

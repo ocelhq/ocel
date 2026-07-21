@@ -26,11 +26,12 @@ type recordingRootStack struct {
 	secret     string
 	version    string
 
-	staged           []edge.DeploymentRecord
-	promotions       []edge.Promotion
-	pruned           []int
-	destroyed        int
-	destroyedWorkers []string
+	staged            []edge.DeploymentRecord
+	promotions        []edge.Promotion
+	pruned            []int
+	destroyed         int
+	destroyedWorkers  []string
+	destroyedInstance int
 
 	history     []edge.HistoryEntry
 	pruneResult edge.PruneResult
@@ -51,13 +52,14 @@ func (f *recordingRootStack) ReconcileRootStack(_ context.Context, spec edge.Roo
 		f.secret = "fake-secret"
 	}
 	return edge.RootStackState{
-		edge.RootStackKeyEndpoint:    fakeStoreEndpoint,
-		edge.RootStackKeyWriteSecret: f.secret,
+		edge.RootStackKeySlug:     spec.Slug,
+		edge.RootStackKeyEndpoint: fakeStoreEndpoint,
+		edge.RootStackKeySecret:   f.secret,
 	}, nil
 }
 
 func (f *recordingRootStack) checkAuth(state edge.RootStackState) error {
-	if f.secret == "" || state[edge.RootStackKeyWriteSecret] != f.secret {
+	if f.secret == "" || state[edge.RootStackKeySecret] != f.secret {
 		return fmt.Errorf("recordingRootStack: unauthenticated store call; reconcile the root stack first")
 	}
 	return nil
@@ -100,6 +102,14 @@ func (f *recordingRootStack) DestroyRootStack(_ context.Context, workers []strin
 	return nil
 }
 
+func (f *recordingRootStack) DestroyInstance(_ context.Context, state edge.RootStackState) error {
+	if err := f.checkAuth(state); err != nil {
+		return err
+	}
+	f.destroyedInstance++
+	return nil
+}
+
 func TestRecordingRootStack_ReconcileIsANoOpWhenVersionUnchanged(t *testing.T) {
 	f := &recordingRootStack{}
 	ctx := context.Background()
@@ -120,7 +130,7 @@ func TestRecordingRootStack_ReconcileIsANoOpWhenVersionUnchanged(t *testing.T) {
 	if f.redeploys != 1 {
 		t.Errorf("redeploys = %d, want 1: an unchanged version must be a no-op", f.redeploys)
 	}
-	if again[edge.RootStackKeyWriteSecret] != state[edge.RootStackKeyWriteSecret] {
+	if again[edge.RootStackKeySecret] != state[edge.RootStackKeySecret] {
 		t.Errorf("a no-op reconcile must hand back the same state unchanged")
 	}
 	if len(f.reconciles) != 2 {

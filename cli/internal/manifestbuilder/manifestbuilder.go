@@ -121,13 +121,13 @@ func normalizeLogicalName(s string) string {
 	return b.String()
 }
 
-// Build lowers declarations into a Manifest for projectID. Output is
-// deterministic: entries are emitted sorted by logical_name (not input
-// order), so reordering declarations or adding a new one never changes an
-// existing entry's logical name. Two declarations sharing the same
-// (type, id) are a hard error naming both declarations and their source
-// locations.
-func Build(projectID string, domains map[string]string, apps []App, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
+// Build lowers declarations into a Manifest for the project identified by
+// projectID and slug. Output is deterministic: entries are emitted sorted by
+// logical_name (not input order), so reordering declarations or adding a new
+// one never changes an existing entry's logical name. Two declarations sharing
+// the same (type, id) are a hard error naming both declarations and their
+// source locations.
+func Build(projectID, slug string, domains map[string]string, apps []App, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
 	type identity struct {
 		typ resourcesv1.ResourceType
 		id  string
@@ -195,6 +195,7 @@ func Build(projectID string, domains map[string]string, apps []App, declarations
 	return &deploymentsv1.Manifest{
 		SchemaVersion: SchemaVersion,
 		ProjectId:     projectID,
+		Slug:          slug,
 		Resources:     resources,
 		Functions:     manifestFunctions,
 		Domains:       domains,

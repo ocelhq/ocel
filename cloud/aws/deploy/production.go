@@ -61,6 +61,9 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	if !ok {
 		return nil, nil, nil, fmt.Errorf("production deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind())
 	}
+	if cfg.StoreEndpoint == "" {
+		return nil, nil, nil, fmt.Errorf("no shared deployments-store worker found for this account; re-run `ocel bootstrap` to provision it before a production deploy")
+	}
 
 	// Validate then check availability up front, before any artifact upload or
 	// provisioning, so a bad or duplicate tag never orphans infrastructure. The
@@ -274,22 +277,22 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	// AWS_IAM-gated) with the edge reader's key. The bundle is the same bytes
 	// for every app, so the credentials are bound once here.
 	generic = withEdgeSigningCreds(generic, cfg)
-	store, err := storeWorkerBundle(cfg)
-	if err != nil {
-		return nil, err
+
+	base := edge.RootStackSpec{
+		Version:         version,
+		Generic:         generic,
+		Slug:            cfg.Slug,
+		StoreScriptName: cfg.StoreScriptName,
+		StoreEndpoint:   cfg.StoreEndpoint,
+		BootstrapCred:   cfg.StoreBootstrapCred,
+		Values:          cfg.EdgeValues,
 	}
-	storeName := storeWorkerName(manifest.GetProjectId())
 
 	apps := workerApps(manifest)
 	if len(apps) == 0 {
-		return []edge.RootStackSpec{{
-			Version:     version,
-			GenericName: workerScriptName(cfg.StackName, "root"),
-			Generic:     generic,
-			StoreName:   storeName,
-			Store:       store,
-			Values:      cfg.EdgeValues,
-		}}, nil
+		spec := base
+		spec.GenericName = workerScriptName(cfg.StackName, "root")
+		return []edge.RootStackSpec{spec}, nil
 	}
 
 	domains, err := workerDomains(cfg, manifest, apps)
@@ -299,15 +302,11 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	specs := make([]edge.RootStackSpec, 0, len(apps))
 	for _, app := range apps {
 		name := app.GetName()
-		specs = append(specs, edge.RootStackSpec{
-			Version:     version,
-			GenericName: workerScriptName(cfg.StackName, name),
-			Generic:     withVar(generic, "OCEL_APP", name),
-			StoreName:   storeName,
-			Store:       store,
-			Domain:      domains[name],
-			Values:      cfg.EdgeValues,
-		})
+		spec := base
+		spec.GenericName = workerScriptName(cfg.StackName, name)
+		spec.Generic = withVar(generic, "OCEL_APP", name)
+		spec.Domain = domains[name]
+		specs = append(specs, spec)
 	}
 	return specs, nil
 }
@@ -361,23 +360,10 @@ func genericWorkerBundle(cfg Config) (edge.Worker, error) {
 	return loadWorkerBundle(path)
 }
 
-// storeWorkerBundle reads the deployments-store worker's compiled bundle.
-func storeWorkerBundle(cfg Config) (edge.Worker, error) {
-	bundles, err := edge.LoadStoreBundleManifest()
-	if err != nil {
-		return edge.Worker{}, err
-	}
-	path, err := bundles.Path(cfg.Edge.Kind())
-	if err != nil {
-		return edge.Worker{}, err
-	}
-	return loadWorkerBundle(path)
-}
-
 // loadWorkerBundle reads a compiled worker entrypoint off disk into the
-// edge.Worker shape ReconcileRootStack uploads: neither the generic nor the
-// store worker carries per-deploy modules/vars/assets — those belong to the
-// framework-assembled per-app worker previews still use.
+// edge.Worker shape ReconcileRootStack uploads: the generic worker carries no
+// per-deploy modules/vars/assets — those belong to the framework-assembled
+// per-app worker previews still use.
 func loadWorkerBundle(path string) (edge.Worker, error) {
 	main, err := os.ReadFile(path)
 	if err != nil {
@@ -388,13 +374,6 @@ func loadWorkerBundle(path string) (edge.Worker, error) {
 		ContentType: "application/javascript+module",
 		Content:     main,
 	}}, nil
-}
-
-// storeWorkerName is the deterministic, per-project deployment identity of
-// the deployments-store worker: one store per project, stable across every
-// deploy (never carries a build id).
-func storeWorkerName(projectID string) string {
-	return sanitizeWorkerName("ocel-" + projectID + "-store")
 }
 
 // newRandomID mints a fresh random identity: a production deploy's Promotion

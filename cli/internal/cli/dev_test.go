@@ -94,6 +94,7 @@ func TestRunDev_HappyPath_DiscoversDeclaresSyncsAndSpawnsWithExitCode(t *testing
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
+  slug: "test-app",
   projectId: "proj_123",
 };
 `)
@@ -164,6 +165,7 @@ func TestRunDev_SecondRunForSameProject_BecomesFollowerAndReceivesPushedEnv(t *t
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
+  slug: "test-app",
   projectId: %q,
 };
 `, projectID))
@@ -259,6 +261,7 @@ func TestRunDev_Leader_FileChangeReResolvesAndPushesUpdatedEnvToFollower(t *test
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
+  slug: "test-app",
   projectId: %q,
 };
 `, projectID))
@@ -344,6 +347,7 @@ func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZer
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
 export default {
+  slug: "test-app",
   projectId: %q,
 };
 `, projectID))

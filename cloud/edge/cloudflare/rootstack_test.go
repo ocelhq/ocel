@@ -111,7 +111,7 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 			h(w, r)
 		}
 	}
-	mux.HandleFunc("PUT /staged", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /{slug}/staged", authed(func(w http.ResponseWriter, r *http.Request) {
 		var rec edge.DeploymentRecord
 		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -120,7 +120,7 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		staged = append(staged, rec)
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	mux.HandleFunc("POST /promote", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /{slug}/promote", authed(func(w http.ResponseWriter, r *http.Request) {
 		var p edge.Promotion
 		if err := json.NewDecoder(r.Body).Decode(&p); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -132,10 +132,10 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	}))
-	mux.HandleFunc("GET /history", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{slug}/history", authed(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(history)
 	}))
-	mux.HandleFunc("POST /prune", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /{slug}/prune", authed(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			KeepN int `json:"keepN"`
 		}
@@ -153,10 +153,10 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		}
 		json.NewEncoder(w).Encode(result)
 	}))
-	mux.HandleFunc("GET /version-stamp", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("GET /{slug}/version-stamp", authed(func(w http.ResponseWriter, r *http.Request) {
 		json.NewEncoder(w).Encode(map[string]*string{"version": version})
 	}))
-	mux.HandleFunc("PUT /version-stamp", authed(func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("PUT /{slug}/version-stamp", authed(func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			Version string `json:"version"`
 		}
@@ -167,6 +167,10 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		version = &body.Version
 		w.WriteHeader(http.StatusNoContent)
 	}))
+	mux.HandleFunc("POST /{slug}/destroy", authed(func(w http.ResponseWriter, r *http.Request) {
+		staged, history, version = nil, nil, nil
+		w.WriteHeader(http.StatusNoContent)
+	}))
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv
@@ -174,8 +178,9 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 
 func testState(endpoint, secret string) edge.RootStackState {
 	return edge.RootStackState{
-		edge.RootStackKeyEndpoint:    endpoint,
-		edge.RootStackKeyWriteSecret: secret,
+		edge.RootStackKeySlug:     "acme-web",
+		edge.RootStackKeyEndpoint: endpoint,
+		edge.RootStackKeySecret:   secret,
 	}
 }
 
@@ -263,7 +268,7 @@ func TestDeletePromotionArtifacts_KeepsWindowAndPinsActive(t *testing.T) {
 func TestGetVersionStamp_UnsetReadsEmpty(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
-	v, err := p.getVersionStamp(context.Background(), srv.URL, "s3cr3t")
+	v, err := p.getVersionStamp(context.Background(), srv.URL, "acme-web", "s3cr3t")
 	if err != nil {
 		t.Fatalf("getVersionStamp: %v", err)
 	}
@@ -276,10 +281,10 @@ func TestPutThenGetVersionStamp_RoundTrips(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
 	ctx := context.Background()
-	if err := p.putVersionStamp(ctx, srv.URL, "s3cr3t", "v2"); err != nil {
+	if err := p.putVersionStamp(ctx, srv.URL, "acme-web", "s3cr3t", "v2"); err != nil {
 		t.Fatalf("putVersionStamp: %v", err)
 	}
-	v, err := p.getVersionStamp(ctx, srv.URL, "s3cr3t")
+	v, err := p.getVersionStamp(ctx, srv.URL, "acme-web", "s3cr3t")
 	if err != nil {
 		t.Fatalf("getVersionStamp: %v", err)
 	}
@@ -296,20 +301,48 @@ func TestStoreRequest_NoEndpointErrors(t *testing.T) {
 	}
 }
 
-func TestMintWriteSecret_UniqueAndNonEmpty(t *testing.T) {
-	a, err := mintWriteSecret()
+func TestMintSecret_UniqueAndNonEmpty(t *testing.T) {
+	a, err := mintSecret()
 	if err != nil {
-		t.Fatalf("mintWriteSecret: %v", err)
+		t.Fatalf("mintSecret: %v", err)
 	}
-	b, err := mintWriteSecret()
+	b, err := mintSecret()
 	if err != nil {
-		t.Fatalf("mintWriteSecret: %v", err)
+		t.Fatalf("mintSecret: %v", err)
 	}
 	if a == "" || b == "" {
 		t.Fatal("expected non-empty secrets")
 	}
 	if a == b {
 		t.Fatal("two mints produced the same secret")
+	}
+}
+
+func TestDestroyInstance_NoSecretIsNoOp(t *testing.T) {
+	p := &provider{}
+	// No secret in state means the project never deployed to production; wiping
+	// its instance must not reach the store (srv-less) — a clean no-op.
+	if err := p.DestroyInstance(context.Background(), edge.RootStackState{}); err != nil {
+		t.Fatalf("DestroyInstance(empty) err = %v, want nil", err)
+	}
+}
+
+func TestDestroyInstance_WipesTheInstance(t *testing.T) {
+	srv := fakeStoreServer(t, "s3cr3t")
+	p := &provider{}
+	state := testState(srv.URL, "s3cr3t")
+	if err := p.Promote(context.Background(), state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}); err != nil {
+		t.Fatalf("Promote: %v", err)
+	}
+	if err := p.DestroyInstance(context.Background(), state); err != nil {
+		t.Fatalf("DestroyInstance: %v", err)
+	}
+	history, err := p.History(context.Background(), state)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	if len(history) != 0 {
+		t.Errorf("history after destroy = %v, want empty", history)
 	}
 }
 

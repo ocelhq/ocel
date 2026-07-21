@@ -1,8 +1,10 @@
-// Root-stack reconcile and deployments-store operations (ADR 0001/0002): the
-// generic + DO worker upload reuses the same script-upload machinery
-// cloudflare.go's DeployApp already exercises; the store operations are
-// authenticated HTTP calls to the DO worker's fetch() surface
-// (workers/deployments-store/src/index.ts).
+// Root-stack reconcile and deployments-store operations (ADR 0001/0002). The
+// deployments-store worker is a single shared worker provisioned once at
+// bootstrap (see bootstrapStore in cloudflare.go); reconcile here deploys only
+// a project's generic worker, service-bound to that shared store and carrying
+// the project slug, and seeds the project's own store instance. The store
+// operations are authenticated HTTP calls to the shared worker's fetch()
+// surface, routed per project by slug (workers/deployments-store/src/index.ts).
 package cloudflare
 
 import (
@@ -25,20 +27,25 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// writeSecretBinding is the env name the deployments-store worker reads its
-// project write-secret from (workers/deployments-store/src/env.ts Env.WRITE_SECRET).
-const writeSecretBinding = "WRITE_SECRET"
+// bootstrapSecretBinding is the env name the shared deployments-store worker
+// reads its account-level bootstrap credential from
+// (workers/deployments-store/src/env.ts Env.BOOTSTRAP_SECRET).
+const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
 
-// writeSecretBytes is the byte length of a freshly minted project
-// write-secret, hex-encoded on the wire.
-const writeSecretBytes = 32
+// secretBytes is the byte length of a freshly minted credential (the bootstrap
+// credential, a project secret, or an owner token), hex-encoded on the wire.
+const secretBytes = 32
 
-// The deployments-store worker's own Durable Object binding (mirroring its
-// wrangler.jsonc: workers/deployments-store/wrangler.jsonc), which putScript's
-// generic edge.Worker-driven binding set has no concept of — every deployment
-// of this specific worker binds its own DeploymentsStore class under this
-// name, and declares the class's one migration exactly once, on the deploy
-// that first creates it.
+// sharedStoreScriptName is the shared deployments-store worker's script name,
+// provisioned once at bootstrap and service-bound by every project's generic
+// worker. One per account (production class only).
+const sharedStoreScriptName = "ocel-deployments-store"
+
+// The shared deployments-store worker's own Durable Object binding (mirroring
+// its wrangler.jsonc: workers/deployments-store/wrangler.jsonc), which
+// putScript's generic edge.Worker-driven binding set has no concept of — the
+// worker binds its own DeploymentsStore class under this name and declares the
+// class's one migration exactly once, on the bootstrap that first creates it.
 const (
 	doBindingName  = "DEPLOYMENTS_DO"
 	doClassName    = "DeploymentsStore"
@@ -46,10 +53,15 @@ const (
 )
 
 // genericStoreBinding is the env name the frozen generic worker reads its
-// service binding to the deployments-store worker from
-// (workers/nextjs/src/index.ts Env.DEPLOYMENTS), through which it resolves
-// the active Deployment at request time.
+// service binding to the shared deployments-store worker from
+// (workers/nextjs/src/index.ts Env.DEPLOYMENTS), through which it resolves the
+// active Deployment at request time.
 const genericStoreBinding = "DEPLOYMENTS"
+
+// genericSlugBinding is the env name the frozen generic worker reads the
+// project slug from (workers/nextjs/src/index.ts Env.OCEL_SLUG), which it
+// passes on every resolve RPC to address the project's own store instance.
+const genericSlugBinding = "OCEL_SLUG"
 
 func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
 	accountID := os.Getenv(envAccountID)
@@ -57,19 +69,31 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		return nil, fmt.Errorf("%s is not set; it is required to reconcile the Cloudflare root stack", envAccountID)
 	}
 
-	secret := prior[edge.RootStackKeyWriteSecret]
-	endpoint := prior[edge.RootStackKeyEndpoint]
-	fresh := secret == ""
-	if fresh {
-		minted, err := mintWriteSecret()
-		if err != nil {
-			return nil, fmt.Errorf("mint root-stack write secret: %w", err)
-		}
-		secret = minted
-	}
+	slug := spec.Slug
+	endpoint := spec.StoreEndpoint
+	secret := prior[edge.RootStackKeySecret]
+	ownerToken := prior[edge.RootStackKeyOwnerToken]
+	// A project's first reconcile has no secret; a renamed project's prior
+	// names a different slug. Either way we mint fresh ownership and seed a new
+	// instance — the slug is the project's durable identity, so renaming it
+	// forks a new project (fresh history), leaving the old instance orphaned.
+	fresh := secret == "" || prior[edge.RootStackKeySlug] != slug
 
-	if !fresh {
-		current, err := p.getVersionStamp(ctx, endpoint, secret)
+	if fresh {
+		mintedSecret, err := mintSecret()
+		if err != nil {
+			return nil, fmt.Errorf("mint project store secret: %w", err)
+		}
+		mintedOwner, err := mintSecret()
+		if err != nil {
+			return nil, fmt.Errorf("mint project store owner token: %w", err)
+		}
+		secret, ownerToken = mintedSecret, mintedOwner
+		if err := p.initializeInstance(ctx, endpoint, slug, spec.BootstrapCred, ownerToken, secret); err != nil {
+			return nil, fmt.Errorf("initialize project store instance: %w", err)
+		}
+	} else {
+		current, err := p.getVersionStamp(ctx, endpoint, slug, secret)
 		if err != nil {
 			return nil, fmt.Errorf("read root-stack version stamp: %w", err)
 		}
@@ -78,17 +102,11 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		}
 	}
 
-	storeUp := upload{accountID: accountID, scriptName: spec.StoreName, worker: withSecret(spec.Store, writeSecretBinding, secret)}
-	if err := p.putStoreScript(ctx, storeUp, fresh); err != nil {
-		return nil, fmt.Errorf("put deployments-store worker: %w", err)
-	}
-	newEndpoint, err := p.setSubdomain(ctx, storeUp, true)
-	if err != nil {
-		return nil, fmt.Errorf("set deployments-store worker subdomain: %w", err)
-	}
-	endpoint = newEndpoint
-
-	genericUp := upload{accountID: accountID, scriptName: spec.GenericName, worker: bindObjectStore(withService(spec.Generic, genericStoreBinding, spec.StoreName), spec.Values)}
+	generic := bindObjectStore(
+		withVar(withService(spec.Generic, genericStoreBinding, spec.StoreScriptName), genericSlugBinding, slug),
+		spec.Values,
+	)
+	genericUp := upload{accountID: accountID, scriptName: spec.GenericName, worker: generic}
 	assetsJWT, err := p.uploadAssets(ctx, genericUp)
 	if err != nil {
 		return nil, fmt.Errorf("upload generic worker assets: %w", err)
@@ -103,23 +121,25 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
 
-	if err := p.putVersionStamp(ctx, endpoint, secret, spec.Version); err != nil {
+	if err := p.putVersionStamp(ctx, endpoint, slug, secret, spec.Version); err != nil {
 		return nil, fmt.Errorf("set root-stack version stamp: %w", err)
 	}
 
 	return edge.RootStackState{
-		edge.RootStackKeyEndpoint:    endpoint,
-		edge.RootStackKeyWriteSecret: secret,
+		edge.RootStackKeySlug:       slug,
+		edge.RootStackKeyEndpoint:   endpoint,
+		edge.RootStackKeySecret:     secret,
+		edge.RootStackKeyOwnerToken: ownerToken,
 	}, nil
 }
 
-// DestroyRootStack deletes every worker in workers, detaching each one's
-// custom-domain binding(s) first — leaving the user's DNS untouched. Deleting
-// the deployments-store worker with Force also removes its Durable Object
-// storage (the promotion history), which a plain delete would refuse. It is
-// best-effort: a failure on one worker does not stop the others, and every
-// failure is joined into the returned error so the host can report exactly what
-// remains.
+// DestroyRootStack deletes every worker in workers — a project's generic
+// worker(s) — detaching each one's custom-domain binding(s) first, leaving the
+// user's DNS untouched. The shared deployments-store worker is never among
+// them (it outlives any single project; a project's store data is reclaimed by
+// DestroyInstance). It is best-effort: a failure on one worker does not stop
+// the others, and every failure is joined into the returned error so the host
+// can report exactly what remains.
 func (p *provider) DestroyRootStack(ctx context.Context, workers []string) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
@@ -139,6 +159,19 @@ func (p *provider) DestroyRootStack(ctx context.Context, workers []string) error
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// DestroyInstance wipes the project's own instance in the shared
+// deployments-store worker, authenticated with the project secret in state.
+// A project that never deployed to production (no secret in state) is a no-op,
+// which also makes `ocel destroy` safe to re-run: the per-project state is
+// deleted after this succeeds, so a re-run reads empty state and skips.
+func (p *provider) DestroyInstance(ctx context.Context, state edge.RootStackState) error {
+	if state[edge.RootStackKeySecret] == "" {
+		return nil
+	}
+	_, err := p.storeRequest(ctx, state, http.MethodPost, "/destroy", nil, nil)
+	return err
 }
 
 // detachCustomDomains removes every custom-domain binding attached to a worker
@@ -165,9 +198,8 @@ func (p *provider) detachCustomDomains(ctx context.Context, accountID, scriptNam
 }
 
 // deleteScript removes a worker script, forcing deletion through any bindings
-// or Durable Objects it owns so a store worker's DO storage is reclaimed too. A
-// script that is already gone is treated as success, so DestroyRootStack is
-// safe to re-run.
+// it owns. A script that is already gone is treated as success, so
+// DestroyRootStack is safe to re-run.
 func (p *provider) deleteScript(ctx context.Context, accountID, scriptName string) error {
 	_, err := p.client.Workers.Scripts.Delete(ctx, scriptName, workers.ScriptDeleteParams{
 		AccountID: cf.F(accountID),
@@ -179,14 +211,14 @@ func (p *provider) deleteScript(ctx context.Context, accountID, scriptName strin
 	return err
 }
 
-// putStoreScript uploads the deployments-store worker: like putScript, but it
-// additionally binds the worker's own DeploymentsStore Durable Object class —
-// a binding no plain edge.Worker carries, since it names a class the script
-// itself exports rather than an external resource — and, only when migrate is
-// true (the deploy that first creates the class), declares its one
-// SQLite-backed migration. Redeclaring that migration on a later deploy would
-// be at best redundant and at worst rejected, so every reconcile after the
-// first omits it.
+// putStoreScript uploads the shared deployments-store worker (bootstrapStore in
+// cloudflare.go): like putScript, but it additionally binds the worker's own
+// DeploymentsStore Durable Object class — a binding no plain edge.Worker
+// carries, since it names a class the script itself exports rather than an
+// external resource — and, only when migrate is true (the bootstrap that first
+// creates the class), declares its one SQLite-backed migration. Redeclaring
+// that migration on a later bootstrap would be at best redundant and at worst
+// rejected, so every bootstrap after the first omits it.
 func (p *provider) putStoreScript(ctx context.Context, up upload, migrate bool) error {
 	body, contentType, err := buildStoreScriptMultipart(up.worker, migrate)
 	if err != nil {
@@ -199,7 +231,7 @@ func (p *provider) putStoreScript(ctx context.Context, up upload, migrate bool) 
 }
 
 // buildStoreScriptMultipart is buildScriptMultipart's counterpart for the
-// deployments-store worker: the same module/binding shape, plus the
+// shared deployments-store worker: the same module/binding shape, plus the
 // DeploymentsStore Durable Object binding and, when migrate is true, its
 // migration declaration.
 func buildStoreScriptMultipart(worker edge.Worker, migrate bool) ([]byte, string, error) {
@@ -268,11 +300,22 @@ func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.Root
 	return result, nil
 }
 
-func (p *provider) getVersionStamp(ctx context.Context, endpoint, secret string) (string, error) {
+// initializeInstance seeds the project's own instance in the shared
+// deployments-store worker with its owner token and secret, authenticated with
+// the account-level bootstrap credential. force is false: the deploy host
+// never silently adopts an instance already owned by a different project (a
+// slug collision), which the store surfaces as a 409.
+func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred, ownerToken, secret string) error {
+	body := map[string]any{"ownerToken": ownerToken, "secret": secret, "force": false}
+	_, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, nil)
+	return err
+}
+
+func (p *provider) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, error) {
 	var out struct {
 		Version *string `json:"version"`
 	}
-	if _, err := p.storeRequestTo(ctx, endpoint, secret, http.MethodGet, "/version-stamp", nil, &out); err != nil {
+	if _, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodGet, "/version-stamp", nil, &out); err != nil {
 		return "", err
 	}
 	if out.Version == nil {
@@ -281,25 +324,30 @@ func (p *provider) getVersionStamp(ctx context.Context, endpoint, secret string)
 	return *out.Version, nil
 }
 
-func (p *provider) putVersionStamp(ctx context.Context, endpoint, secret, version string) error {
-	_, err := p.storeRequestTo(ctx, endpoint, secret, http.MethodPut, "/version-stamp", map[string]string{"version": version}, nil)
+func (p *provider) putVersionStamp(ctx context.Context, endpoint, slug, secret, version string) error {
+	_, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodPut, "/version-stamp", map[string]string{"version": version}, nil)
 	return err
 }
 
-// storeRequest issues an authenticated call against state's deployments-store
-// endpoint and write secret.
-func (p *provider) storeRequest(ctx context.Context, state edge.RootStackState, method, path string, body, out any) (*http.Response, error) {
-	return p.storeRequestTo(ctx, state[edge.RootStackKeyEndpoint], state[edge.RootStackKeyWriteSecret], method, path, body, out)
+// storeRequest issues an authenticated call against the project's own instance
+// in the shared deployments-store worker, addressed by the endpoint, slug and
+// secret in state.
+func (p *provider) storeRequest(ctx context.Context, state edge.RootStackState, method, subpath string, body, out any) (*http.Response, error) {
+	return p.storeRequestTo(ctx, state[edge.RootStackKeyEndpoint], state[edge.RootStackKeySlug], state[edge.RootStackKeySecret], method, subpath, body, out)
 }
 
-// storeRequestTo issues one authenticated HTTP call to the deployments-store
-// worker's fetch() surface, matching workers/deployments-store/src/index.ts:
-// a Bearer write-secret, a JSON body when body is non-nil, and a JSON
-// response decoded into out when out is non-nil. A non-2xx status is an
-// error naming the path and status.
-func (p *provider) storeRequestTo(ctx context.Context, endpoint, secret, method, path string, body, out any) (*http.Response, error) {
+// storeRequestTo issues one authenticated HTTP call to the shared
+// deployments-store worker's fetch() surface, routed to one project's instance
+// by slug (/<slug>/<subpath>), matching workers/deployments-store/src/index.ts:
+// a Bearer credential, a JSON body when body is non-nil, and a JSON response
+// decoded into out when out is non-nil. A non-2xx status is an error naming the
+// path and status.
+func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
 	if endpoint == "" {
-		return nil, fmt.Errorf("deployments store: no endpoint in root-stack state; reconcile the root stack first")
+		return nil, fmt.Errorf("deployments store: no endpoint; bootstrap the edge first")
+	}
+	if slug == "" {
+		return nil, fmt.Errorf("deployments store: no project slug")
 	}
 
 	var reader io.Reader
@@ -311,7 +359,7 @@ func (p *provider) storeRequestTo(ctx context.Context, endpoint, secret, method,
 		reader = bytes.NewReader(encoded)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, method, endpoint+path, reader)
+	req, err := http.NewRequestWithContext(ctx, method, endpoint+"/"+slug+subpath, reader)
 	if err != nil {
 		return nil, fmt.Errorf("build deployments-store request: %w", err)
 	}
@@ -322,26 +370,27 @@ func (p *provider) storeRequestTo(ctx context.Context, endpoint, secret, method,
 
 	res, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("call deployments store %s %s: %w", method, path, err)
+		return nil, fmt.Errorf("call deployments store %s %s: %w", method, subpath, err)
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		respBody, _ := io.ReadAll(res.Body)
-		return res, fmt.Errorf("deployments store %s %s: status %d: %s", method, path, res.StatusCode, string(respBody))
+		return res, fmt.Errorf("deployments store %s %s: status %d: %s", method, subpath, res.StatusCode, string(respBody))
 	}
 	if out != nil {
 		if err := json.NewDecoder(res.Body).Decode(out); err != nil {
-			return res, fmt.Errorf("decode deployments store %s %s response: %w", method, path, err)
+			return res, fmt.Errorf("decode deployments store %s %s response: %w", method, subpath, err)
 		}
 	}
 	return res, nil
 }
 
-// mintWriteSecret generates the project write-secret minted once at root-stack
-// creation, hex-encoded so it is safe to carry as a plain HTTP header value.
-func mintWriteSecret() (string, error) {
-	buf := make([]byte, writeSecretBytes)
+// mintSecret generates a fresh random credential (the account-level bootstrap
+// credential, a per-project secret, or an owner token), hex-encoded so it is
+// safe to carry as a plain HTTP header value.
+func mintSecret() (string, error) {
+	buf := make([]byte, secretBytes)
 	if _, err := rand.Read(buf); err != nil {
 		return "", err
 	}
@@ -369,5 +418,17 @@ func withService(worker edge.Worker, name, service string) edge.Worker {
 	}
 	services[name] = service
 	worker.Services = services
+	return worker
+}
+
+// withVar returns worker with one additional plain-text var binding, leaving
+// the caller's Worker untouched.
+func withVar(worker edge.Worker, name, value string) edge.Worker {
+	vars := make(map[string]string, len(worker.Vars)+1)
+	for k, v := range worker.Vars {
+		vars[k] = v
+	}
+	vars[name] = value
+	worker.Vars = vars
 	return worker
 }
