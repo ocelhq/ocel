@@ -13,8 +13,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
+
+	cf "github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/option"
+	"github.com/cloudflare/cloudflare-go/v4/workers"
 
 	"github.com/ocelhq/ocel/cloud/edge"
 )
@@ -26,6 +31,18 @@ const writeSecretBinding = "WRITE_SECRET"
 // writeSecretBytes is the byte length of a freshly minted project
 // write-secret, hex-encoded on the wire.
 const writeSecretBytes = 32
+
+// The deployments-store worker's own Durable Object binding (mirroring its
+// wrangler.jsonc: workers/deployments-store/wrangler.jsonc), which putScript's
+// generic edge.Worker-driven binding set has no concept of — every deployment
+// of this specific worker binds its own DeploymentsStore class under this
+// name, and declares the class's one migration exactly once, on the deploy
+// that first creates it.
+const (
+	doBindingName  = "DEPLOYMENTS_DO"
+	doClassName    = "DeploymentsStore"
+	doMigrationTag = "v1"
+)
 
 func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec, prior edge.RootTierState) (edge.RootTierState, error) {
 	accountID := os.Getenv(envAccountID)
@@ -55,7 +72,7 @@ func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec
 	}
 
 	storeUp := upload{accountID: accountID, scriptName: spec.StoreName, worker: withSecret(spec.Store, writeSecretBinding, secret)}
-	if err := p.putScript(ctx, storeUp, ""); err != nil {
+	if err := p.putStoreScript(ctx, storeUp, fresh); err != nil {
 		return nil, fmt.Errorf("put deployments-store worker: %w", err)
 	}
 	newEndpoint, err := p.setSubdomain(ctx, storeUp, true)
@@ -87,6 +104,69 @@ func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec
 		edge.RootTierKeyEndpoint:    endpoint,
 		edge.RootTierKeyWriteSecret: secret,
 	}, nil
+}
+
+// putStoreScript uploads the deployments-store worker: like putScript, but it
+// additionally binds the worker's own DeploymentsStore Durable Object class —
+// a binding no plain edge.Worker carries, since it names a class the script
+// itself exports rather than an external resource — and, only when migrate is
+// true (the deploy that first creates the class), declares its one
+// SQLite-backed migration. Redeclaring that migration on a later deploy would
+// be at best redundant and at worst rejected, so every reconcile after the
+// first omits it.
+func (p *provider) putStoreScript(ctx context.Context, up upload, migrate bool) error {
+	body, contentType, err := buildStoreScriptMultipart(up.worker, migrate)
+	if err != nil {
+		return err
+	}
+	_, err = p.client.Workers.Scripts.Update(ctx, up.scriptName, workers.ScriptUpdateParams{
+		AccountID: cf.F(up.accountID),
+	}, option.WithRequestBody(contentType, body))
+	return err
+}
+
+// buildStoreScriptMultipart is buildScriptMultipart's counterpart for the
+// deployments-store worker: the same module/binding shape, plus the
+// DeploymentsStore Durable Object binding and, when migrate is true, its
+// migration declaration.
+func buildStoreScriptMultipart(worker edge.Worker, migrate bool) ([]byte, string, error) {
+	bindings := append(scriptBindings(worker, false), map[string]any{
+		"type":       "durable_object_namespace",
+		"name":       doBindingName,
+		"class_name": doClassName,
+	})
+	metadata := map[string]any{
+		"main_module":         worker.Main.Name,
+		"compatibility_date":  compatDate,
+		"compatibility_flags": compatFlags,
+		"observability":       observability,
+		"bindings":            bindings,
+	}
+	if migrate {
+		metadata["migrations"] = map[string]any{
+			"tag":                doMigrationTag,
+			"new_sqlite_classes": []string{doClassName},
+		}
+	}
+	metadataJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal deployments-store worker metadata: %w", err)
+	}
+
+	buf := &bytes.Buffer{}
+	w := multipart.NewWriter(buf)
+	if err := writePart(w, "metadata", "", "application/json", metadataJSON); err != nil {
+		return nil, "", err
+	}
+	for _, mod := range append([]edge.WorkerModule{worker.Main}, worker.Modules...) {
+		if err := writePart(w, mod.Name, mod.Name, mod.ContentType, mod.Content); err != nil {
+			return nil, "", err
+		}
+	}
+	if err := w.Close(); err != nil {
+		return nil, "", err
+	}
+	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
 func (p *provider) PutStaged(ctx context.Context, state edge.RootTierState, record edge.DeploymentRecord) error {
