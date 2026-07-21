@@ -1,14 +1,94 @@
 package cloudflare
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"mime"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
 )
+
+// storeMetadataFromMultipart mirrors cloudflare_test.go's
+// metadataFromMultipart, for buildStoreScriptMultipart's body.
+func storeMetadataFromMultipart(t *testing.T, worker edge.Worker, migrate bool) map[string]any {
+	t.Helper()
+	body, contentType, err := buildStoreScriptMultipart(worker, migrate)
+	if err != nil {
+		t.Fatalf("buildStoreScriptMultipart: %v", err)
+	}
+	_, params, err := mime.ParseMediaType(contentType)
+	if err != nil {
+		t.Fatalf("parse content type: %v", err)
+	}
+	mr := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	for {
+		part, err := mr.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			t.Fatalf("read part: %v", err)
+		}
+		if part.FormName() != "metadata" {
+			continue
+		}
+		data, _ := io.ReadAll(part)
+		var meta map[string]any
+		if err := json.Unmarshal(data, &meta); err != nil {
+			t.Fatalf("unmarshal metadata: %v", err)
+		}
+		return meta
+	}
+	t.Fatal("no metadata part in multipart body")
+	return nil
+}
+
+func testStoreWorker() edge.Worker {
+	return edge.Worker{Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")}}
+}
+
+func TestBuildStoreScriptMultipart_BindsItsOwnDurableObjectClass(t *testing.T) {
+	meta := storeMetadataFromMultipart(t, testStoreWorker(), false)
+	bindings, _ := meta["bindings"].([]any)
+	var found map[string]any
+	for _, b := range bindings {
+		if m, ok := b.(map[string]any); ok && m["type"] == "durable_object_namespace" {
+			found = m
+		}
+	}
+	if found == nil {
+		t.Fatalf("no durable_object_namespace binding in %v", bindings)
+	}
+	if found["name"] != "DEPLOYMENTS_DO" || found["class_name"] != "DeploymentsStore" {
+		t.Errorf("DO binding = %v, want name DEPLOYMENTS_DO class_name DeploymentsStore", found)
+	}
+}
+
+func TestBuildStoreScriptMultipart_DeclaresMigrationOnlyWhenMigrateTrue(t *testing.T) {
+	fresh := storeMetadataFromMultipart(t, testStoreWorker(), true)
+	migrations, ok := fresh["migrations"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected a migrations object on a fresh deploy, got %v", fresh["migrations"])
+	}
+	if migrations["tag"] != "v1" {
+		t.Errorf("migrations.tag = %v, want v1", migrations["tag"])
+	}
+	classes, _ := migrations["new_sqlite_classes"].([]any)
+	if len(classes) != 1 || classes[0] != "DeploymentsStore" {
+		t.Errorf("migrations.new_sqlite_classes = %v, want [DeploymentsStore]", classes)
+	}
+
+	notFresh := storeMetadataFromMultipart(t, testStoreWorker(), false)
+	if _, present := notFresh["migrations"]; present {
+		t.Errorf("expected no migrations on a non-first reconcile, got %v", notFresh["migrations"])
+	}
+}
 
 // fakeStoreServer stands in for workers/deployments-store/src/index.ts's
 // fetch() surface, close enough to exercise the Go-side HTTP client without
