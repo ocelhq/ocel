@@ -159,9 +159,6 @@ func TestDeployEdgeWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	if len(up.Worker.Assets) != 1 || up.Worker.Assets[0].Path != "/next.svg" {
 		t.Errorf("expected the static asset, got %v", up.Worker.Assets)
 	}
-	if got, want := up.Worker.Vars["FUNCTION_URLS"], `{"/api/documents":"https://fn.lambda-url.aws/"}`; got != want {
-		t.Errorf("FUNCTION_URLS = %q, want %q", got, want)
-	}
 	if len(out) != 1 || out[0].GetFunction().GetUrl() != "https://ocel-proj-1-prod-web.acme.workers.dev" {
 		t.Errorf("expected the worker URL output, got %v", out)
 	}
@@ -201,14 +198,7 @@ func TestDeployEdgeWorker_FullyConfiguredBindingSet(t *testing.T) {
 	}
 
 	wantVars := map[string]string{
-		"FUNCTION_URLS":           `{"/":"https://fn.lambda-url.aws/"}`,
 		"OCEL_EDGE_ACCESS_KEY_ID": "AKIAEDGE",
-		"OCEL_AWS_REGION":         "us-west-2",
-		"OCEL_ISR_BUCKET":         "ocel-assets",
-		"OCEL_ISR_PREFIX":         "prod/proj/web/b1",
-		"OCEL_STATE_TABLE":        "ocel-state",
-		"OCEL_STATE_TABLE_INDEX":  "gsi1",
-		"OCEL_ISR_TAG_NAMESPACE":  "TAG#prod#proj#web#b1#",
 	}
 	up := fake.only(t)
 	if len(up.Worker.Vars) != len(wantVars) {
@@ -247,36 +237,37 @@ func TestDeployEdgeWorker_NoCacheBindingsWithoutEdgeCreds(t *testing.T) {
 	if up.Worker.Secrets != nil {
 		t.Errorf("expected no secrets without edge creds, got %v", up.Worker.Secrets)
 	}
-	if len(up.Worker.Vars) != 1 || up.Worker.Vars["FUNCTION_URLS"] == "" {
-		t.Errorf("expected only FUNCTION_URLS, got %v", up.Worker.Vars)
+	if len(up.Worker.Vars) != 0 {
+		t.Errorf("expected no vars without edge creds, got %v", up.Worker.Vars)
 	}
 }
 
-// The two ways a cache legitimately does not exist. Both must read as
-// not-configured, never as an error, or the deploy would fail where today it
-// degrades to forwarding.
-func TestDeployResolver_CacheStoreNotConfigured(t *testing.T) {
+// A substrate whose bootstrap predates edge credentials reads as
+// not-configured, never an error, so the deploy still succeeds (the worker then
+// forwards unsigned).
+func TestDeployResolver_EdgeCredentialsNotConfigured(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
-	withCreds := Config{ArtifactRoot: artifactRoot, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"}
-	nextApp := &deploymentsv1.Manifest{
-		ProjectId: "proj",
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
+	r := &deployResolver{
+		cfg:      Config{ArtifactRoot: artifactRoot},
+		manifest: &deploymentsv1.Manifest{ProjectId: "proj"},
 	}
+	if creds, ok := r.EdgeCredentials(); ok {
+		t.Errorf("expected not-configured, got %+v", creds)
+	}
+}
 
-	cases := map[string]*deployResolver{
-		"substrate predates edge credentials": {cfg: Config{ArtifactRoot: artifactRoot}, manifest: nextApp},
-		"app has no prerendered content":      {cfg: withCreds, manifest: &deploymentsv1.Manifest{ProjectId: "proj"}},
+// With both keys present, the resolver hands the worker the credentials it
+// signs its Function-URL forwards with.
+func TestDeployResolver_EdgeCredentialsConfigured(t *testing.T) {
+	r := &deployResolver{
+		cfg: Config{EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"},
 	}
-	for name, r := range cases {
-		t.Run(name, func(t *testing.T) {
-			store, configured, err := r.CacheStore()
-			if err != nil {
-				t.Fatalf("not-configured must not be an error: %v", err)
-			}
-			if configured {
-				t.Errorf("expected not-configured, got %+v", store)
-			}
-		})
+	creds, ok := r.EdgeCredentials()
+	if !ok {
+		t.Fatal("expected configured credentials")
+	}
+	if creds.AccessKeyID != "AKIAEDGE" || creds.SecretKey != "secret-edge" {
+		t.Errorf("creds = %+v, want the edge reader's key pair", creds)
 	}
 }
 
@@ -430,13 +421,9 @@ func TestDeployEdgeWorker_OneWorkerPerApp(t *testing.T) {
 	if got := fake.names(); !slicesEqual(got, want) {
 		t.Fatalf("deployed script names = %v, want %v", got, want)
 	}
-	// Each worker routes only to its own app's function.
-	for _, d := range fake.deployed {
-		app := strings.TrimPrefix(d.Name, "ocel-proj-prod-")
-		if got, want := d.Worker.Vars["FUNCTION_URLS"], `{"/":"https://`+app+`-fn.lambda-url.aws/"}`; got != want {
-			t.Errorf("%s FUNCTION_URLS = %q, want %q", d.Name, got, want)
-		}
-	}
+	// One worker is deployed per app, each assembled from only its own app's
+	// routes (the Function URLs themselves now travel in the Deployment record,
+	// not as a worker binding).
 	if len(out) != 2 {
 		t.Fatalf("expected one output per worker, got %v", out)
 	}

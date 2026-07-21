@@ -39,7 +39,7 @@ import (
 // ReconcileRootStack is a no-op once a project's root stack already carries it;
 // bump it only when the frozen generic/store worker bundles change shape in a
 // way that needs re-deploying.
-const rootStackVersion = "4"
+const rootStackVersion = "6"
 
 // appDeployResult is one app's app-deploy-stack outcome, fed into
 // finalizeProductionDeploy after Run has driven that stack (Pulumi) to
@@ -216,6 +216,10 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	if err != nil {
 		return nil, err
 	}
+	// The generic worker signs its Function-URL forwards (the Lambdas are
+	// AWS_IAM-gated) with the edge reader's key. The bundle is the same bytes
+	// for every app, so the credentials are bound once here.
+	generic = withEdgeSigningCreds(generic, cfg)
 	store, err := storeWorkerBundle(cfg)
 	if err != nil {
 		return nil, err
@@ -264,6 +268,25 @@ func withVar(worker edge.Worker, name, value string) edge.Worker {
 	}
 	vars[name] = value
 	worker.Vars = vars
+	return worker
+}
+
+// withEdgeSigningCreds binds the edge reader's IAM credentials onto the generic
+// worker: the access key as a plain var and the secret key as a secret, under
+// the names the worker reads to sign its Function-URL forwards. A substrate
+// predating edge credentials adds neither — the worker then forwards unsigned,
+// reaching only a Lambda that is still public.
+func withEdgeSigningCreds(worker edge.Worker, cfg Config) edge.Worker {
+	if cfg.EdgeAccessKeyID == "" || cfg.EdgeSecretKey == "" {
+		return worker
+	}
+	worker = withVar(worker, edge.EdgeAccessKeyIDVar, cfg.EdgeAccessKeyID)
+	secrets := make(map[string]string, len(worker.Secrets)+1)
+	for k, v := range worker.Secrets {
+		secrets[k] = v
+	}
+	secrets[edge.EdgeSecretKeyVar] = cfg.EdgeSecretKey
+	worker.Secrets = secrets
 	return worker
 }
 
@@ -503,7 +526,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 			return err
 		}
 		for _, fn := range functions {
-			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], role.Arn); err != nil {
+			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(name, cfg.Env, manifest.GetProjectId()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], role.Arn); err != nil {
 				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}

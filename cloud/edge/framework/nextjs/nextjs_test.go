@@ -11,10 +11,9 @@ import (
 // stubResolver answers exactly what a test configures, so an assembly's pulls
 // are asserted through the worker it produces.
 type stubResolver struct {
-	urls       map[string]string
-	store      edge.CacheStore
-	configured bool
-	storeErr   error
+	urls     map[string]string
+	creds    edge.Credentials
+	hasCreds bool
 }
 
 func (s stubResolver) FunctionURL(routeID string) (string, error) {
@@ -25,8 +24,8 @@ func (s stubResolver) FunctionURL(routeID string) (string, error) {
 	return url, nil
 }
 
-func (s stubResolver) CacheStore() (edge.CacheStore, bool, error) {
-	return s.store, s.configured, s.storeErr
+func (s stubResolver) EdgeCredentials() (edge.Credentials, bool) {
+	return s.creds, s.hasCreds
 }
 
 type errNoURL struct{ route string }
@@ -52,25 +51,13 @@ func writeNextArtifacts(t *testing.T) edge.WorkerSource {
 	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle}
 }
 
-func fullCacheStore() edge.CacheStore {
-	return edge.CacheStore{
-		Bucket:        "ocel-assets",
-		Prefix:        "prod/proj/web/b1",
-		Region:        "us-west-2",
-		TagTable:      "ocel-state",
-		TagTableIndex: "gsi1",
-		TagNamespace:  "TAG#prod#proj#web#b1#",
-		Credentials:   edge.Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
-	}
-}
-
 func TestAssembleCloudflare_FullyConfigured(t *testing.T) {
 	src := writeNextArtifacts(t)
 	src.Routes = []string{"/api/documents"}
 	r := stubResolver{
-		urls:       map[string]string{"/api/documents": "https://fn.lambda-url.aws/"},
-		store:      fullCacheStore(),
-		configured: true,
+		urls:     map[string]string{"/api/documents": "https://fn.lambda-url.aws/"},
+		creds:    edge.Credentials{AccessKeyID: "AKIAEDGE", SecretKey: "secret-edge"},
+		hasCreds: true,
 	}
 
 	w, err := AssembleCloudflare(src, r)
@@ -78,15 +65,10 @@ func TestAssembleCloudflare_FullyConfigured(t *testing.T) {
 		t.Fatalf("assemble: %v", err)
 	}
 
+	// The worker resolves Function URLs and ISR coordinates from its Deployment
+	// record; the only binding it reads here is the signing access key.
 	wantVars := map[string]string{
-		"FUNCTION_URLS":           `{"/api/documents":"https://fn.lambda-url.aws/"}`,
 		"OCEL_EDGE_ACCESS_KEY_ID": "AKIAEDGE",
-		"OCEL_AWS_REGION":         "us-west-2",
-		"OCEL_ISR_BUCKET":         "ocel-assets",
-		"OCEL_ISR_PREFIX":         "prod/proj/web/b1",
-		"OCEL_STATE_TABLE":        "ocel-state",
-		"OCEL_STATE_TABLE_INDEX":  "gsi1",
-		"OCEL_ISR_TAG_NAMESPACE":  "TAG#prod#proj#web#b1#",
 	}
 	if len(w.Vars) != len(wantVars) {
 		t.Errorf("got %d vars, want %d: %v", len(w.Vars), len(wantVars), w.Vars)
@@ -117,20 +99,20 @@ func TestAssembleCloudflare_FullyConfigured(t *testing.T) {
 	}
 }
 
-func TestAssembleCloudflare_UnconfiguredCacheOmitsBindings(t *testing.T) {
+func TestAssembleCloudflare_NoCredentialsOmitsSigningBindings(t *testing.T) {
 	src := writeNextArtifacts(t)
 	src.Routes = []string{"/"}
 	r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
 
 	w, err := AssembleCloudflare(src, r)
 	if err != nil {
-		t.Fatalf("an unconfigured cache must not fail the deploy: %v", err)
+		t.Fatalf("a substrate predating edge credentials must not fail the deploy: %v", err)
 	}
 	if w.Secrets != nil {
 		t.Errorf("Secrets = %v, want none", w.Secrets)
 	}
-	if len(w.Vars) != 1 || w.Vars["FUNCTION_URLS"] == "" {
-		t.Errorf("Vars = %v, want only FUNCTION_URLS", w.Vars)
+	if len(w.Vars) != 0 {
+		t.Errorf("Vars = %v, want none without edge credentials", w.Vars)
 	}
 }
 

@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/edge"
 	"github.com/ocelhq/ocel/cloud/edge/framework"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -215,35 +214,19 @@ func (d *deployResolver) FunctionURL(routeID string) (string, error) {
 	return url, nil
 }
 
-// CacheStore describes this app's ISR cache as an object store plus a tag clock.
-// It reports not-configured — never an error — when the substrate predates edge
-// credentials or the app has no prerendered content, so the worker degrades to
-// forwarding prerender routes to the Lambda and the deploy still succeeds.
-func (d *deployResolver) CacheStore() (edge.CacheStore, bool, error) {
+// EdgeCredentials returns the edge reader's IAM credentials for the worker to
+// sign its Function-URL forwards with, and whether they are configured. Both
+// empty — a substrate whose bootstrap predates edge credentials — reads as
+// not-configured, never an error: such a worker forwards unsigned, which only
+// reaches a Lambda that is still public.
+func (d *deployResolver) EdgeCredentials() (edge.Credentials, bool) {
 	if d.cfg.EdgeAccessKeyID == "" || d.cfg.EdgeSecretKey == "" {
-		return edge.CacheStore{}, false, nil
+		return edge.Credentials{}, false
 	}
-	caches, err := appCaches(d.cfg, d.manifest)
-	if err != nil {
-		return edge.CacheStore{}, false, err
-	}
-	isr := caches[d.app]
-	if isr == nil {
-		return edge.CacheStore{}, false, nil
-	}
-
-	return edge.CacheStore{
-		Bucket:        isr.Bucket,
-		Prefix:        isr.Prefix,
-		Region:        d.cfg.Region,
-		TagTable:      isr.Table,
-		TagTableIndex: bootstrap.StateTableIndexName,
-		TagNamespace:  isr.tagNamespace(),
-		Credentials: edge.Credentials{
-			AccessKeyID: d.cfg.EdgeAccessKeyID,
-			SecretKey:   d.cfg.EdgeSecretKey,
-		},
-	}, true, nil
+	return edge.Credentials{
+		AccessKeyID: d.cfg.EdgeAccessKeyID,
+		SecretKey:   d.cfg.EdgeSecretKey,
+	}, true
 }
 
 // domainClassKey is the Manifest.domains key an environment class reads its

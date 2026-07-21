@@ -5,35 +5,32 @@ package edge
 // a missing value fails the deploy instead of silently producing a worker that
 // cannot route.
 type Resolver interface {
-	// FunctionURL returns the public URL serving a framework-native route id.
+	// FunctionURL returns the URL serving a framework-native route id. The
+	// Lambda behind it is provisioned with AWS_IAM auth, so the worker signs its
+	// forwards with the edge credentials below.
 	FunctionURL(routeID string) (string, error)
-	// CacheStore returns where this app's incremental cache lives, and whether it
-	// is configured at all. Not-configured is not an error: a provider whose
-	// bootstrap predates edge credentials, or an app with no prerendered content,
-	// simply has no cache for the edge to read, and the worker forwards to the
-	// provider's compute exactly as it otherwise would.
-	CacheStore() (CacheStore, bool, error)
+	// EdgeCredentials returns the edge reader's IAM credentials, and whether they
+	// are configured. The worker signs every Function-URL forward with them
+	// (SigV4). Not-configured is not an error: an edge inside the provider's
+	// trust boundary needs none, and its Function URLs are not IAM-gated.
+	EdgeCredentials() (Credentials, bool)
 }
 
-// CacheStore describes a framework's incremental cache in terms any provider
-// able to supply an object store and a tag clock can satisfy: a bucket and key
-// prefix holding the entries, and a table plus namespace holding the tag
-// records that invalidate them.
-type CacheStore struct {
-	Bucket        string
-	Prefix        string
-	Region        string
-	TagTable      string
-	TagTableIndex string
-	TagNamespace  string
-	// Credentials sign the edge's direct reads. Zero when the edge runs inside
-	// the provider's trust boundary and needs none.
-	Credentials Credentials
-}
-
-// Credentials are the static keys an edge outside the provider's trust boundary
-// signs its direct cache reads with.
+// Credentials are the static IAM keys an edge outside the provider's trust
+// boundary signs its Function-URL forwards with. Zero when the edge runs inside
+// the provider's trust boundary and needs none.
 type Credentials struct {
 	AccessKeyID string
 	SecretKey   string
 }
+
+// Worker binding names for the edge reader's IAM credentials, read by the
+// worker to SigV4-sign its Function-URL forwards (workers/nextjs/src/index.ts
+// Env). The access key rides as a plain var; the secret key as a secret binding
+// so it never appears in plaintext upload metadata. This is the contract shared
+// by the framework-assembled worker (AssembleCloudflare) and the frozen generic
+// worker (the production root stack), so it lives here rather than in either.
+const (
+	EdgeAccessKeyIDVar = "OCEL_EDGE_ACCESS_KEY_ID"
+	EdgeSecretKeyVar   = "OCEL_EDGE_SECRET_KEY"
+)
