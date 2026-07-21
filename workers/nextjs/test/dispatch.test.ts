@@ -1,11 +1,32 @@
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
+import type { AssetBucket } from "../src/assets";
 
-// A Fetcher-like stub returning a fixed status/body for every request.
-function assetsReturning(status: number, body = ""): RouteDeps["assets"] {
+// An in-memory R2-bucket-shaped store, keyed by "<prefix><pathname>" exactly as
+// serveStaticAsset composes it, fronting no real Cache API (match always
+// misses) so every call is a fresh store read.
+function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
+  const store: AssetBucket = {
+    async get(key) {
+      const body = files[key];
+      if (body === undefined) return null;
+      return { body: new Blob([body]).stream() };
+    },
+  };
   return {
-    fetch: async () => new Response(body, { status }),
+    store,
+    prefix: "",
+    cache: { match: async () => undefined, put: async () => {} },
+    waitUntil: () => {},
+  };
+}
+
+function noAssets(): RouteDeps["assetStore"] {
+  return {
+    prefix: "",
+    cache: { match: async () => undefined, put: async () => {} },
+    waitUntil: () => {},
   };
 }
 
@@ -19,13 +40,13 @@ function baseDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
       dispatch: {},
     },
     functionUrls: {},
-    assets: assetsReturning(404),
+    assetStore: noAssets(),
     ...overrides,
   };
 }
 
 describe("dispatchResult", () => {
-  it("serves a static route from the Assets binding", async () => {
+  it("serves a static route from the R2 asset store", async () => {
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -34,7 +55,7 @@ describe("dispatchResult", () => {
         routes: {},
         dispatch: { "/next.svg": { kind: "static" } },
       },
-      assets: assetsReturning(200, "<svg/>"),
+      assetStore: assetStoreServing({ "/next.svg": "<svg/>" }),
     });
 
     const res = await dispatchResult(
@@ -734,8 +755,10 @@ describe("dispatchResult", () => {
     expect(res.status).toBe(502);
   });
 
-  it("falls back to the Assets binding when the path is not in the manifest", async () => {
-    const deps = baseDeps({ assets: assetsReturning(200, "found") });
+  it("falls back to the R2 asset store when the path is not in the manifest", async () => {
+    const deps = baseDeps({
+      assetStore: assetStoreServing({ "/unenumerated.txt": "found" }),
+    });
 
     const res = await dispatchResult(
       { resolvedPathname: "/unenumerated.txt" },
@@ -747,8 +770,8 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("found");
   });
 
-  it("returns 404 when neither the manifest nor the Assets binding has the path", async () => {
-    const deps = baseDeps({ assets: assetsReturning(404) });
+  it("returns 404 when neither the manifest nor the R2 asset store has the path", async () => {
+    const deps = baseDeps({ assetStore: assetStoreServing({}) });
 
     const res = await dispatchResult(
       { resolvedPathname: "/missing" },
@@ -759,8 +782,10 @@ describe("dispatchResult", () => {
     expect(res.status).toBe(404);
   });
 
-  it("falls back to Assets when routing produced no resolved pathname", async () => {
-    const deps = baseDeps({ assets: assetsReturning(200, "asset") });
+  it("falls back to the R2 asset store when routing produced no resolved pathname", async () => {
+    const deps = baseDeps({
+      assetStore: assetStoreServing({ "/whatever": "asset" }),
+    });
 
     const res = await dispatchResult(
       { resolvedPathname: null },

@@ -47,14 +47,17 @@ function failingBinding(): DeploymentsBinding {
   };
 }
 
-const assets: RouteDeps["assets"] = { fetch: async () => new Response("", { status: 404 }) };
+const assetStore: RouteDeps["assetStore"] = {
+  cache: { match: async () => undefined, put: async () => {} },
+  waitUntil: () => {},
+};
 
 describe("resolveRouteDeps", () => {
   it("wires the resolved Deployment's manifest and functionUrls into RouteDeps", async () => {
     const record = makeRecord();
     const deps = await resolveRouteDeps(
       { binding: bindingReturning("build-1", record), app: "web" },
-      { assets },
+      { assetStore },
     );
 
     expect(deps).not.toBeInstanceOf(Response);
@@ -63,12 +66,23 @@ describe("resolveRouteDeps", () => {
     expect(routeDeps.functionUrls).toEqual(record.functionUrls);
   });
 
+  it("fills the asset store's prefix from the record's asset prefix", async () => {
+    const record = makeRecord({ assetPrefix: "assets/p1/web/build-1" });
+    const deps = await resolveRouteDeps(
+      { binding: bindingReturning("build-1", record), app: "web" },
+      { assetStore },
+    );
+
+    expect(deps).not.toBeInstanceOf(Response);
+    expect((deps as RouteDeps).assetStore.prefix).toBe("assets/p1/web/build-1");
+  });
+
   it("fills the interception config's prefix from the record's tag namespace", async () => {
     const record = makeRecord({ tagNamespace: "prod/p1/web/build-1" });
     const store = { get: async () => null };
     const deps = await resolveRouteDeps(
       { binding: bindingReturning("build-1", record), app: "web" },
-      { assets, interception: { store } },
+      { assetStore, interception: { store } },
     );
 
     expect(deps).not.toBeInstanceOf(Response);
@@ -81,7 +95,7 @@ describe("resolveRouteDeps", () => {
     const record = makeRecord();
     const deps = await resolveRouteDeps(
       { binding: bindingReturning("build-1", record), app: "web" },
-      { assets },
+      { assetStore },
     );
 
     expect((deps as RouteDeps).interception).toBeUndefined();
@@ -90,7 +104,7 @@ describe("resolveRouteDeps", () => {
   it("returns the baked-in 404 when the app has no active pointer", async () => {
     const deps = await resolveRouteDeps(
       { binding: bindingReturning(undefined, undefined), app: "web" },
-      { assets },
+      { assetStore },
     );
 
     expect(deps).toBeInstanceOf(Response);
@@ -102,7 +116,7 @@ describe("resolveRouteDeps", () => {
   it("returns 503 when the store is unreachable on a cold isolate", async () => {
     const deps = await resolveRouteDeps(
       { binding: failingBinding(), app: "web" },
-      { assets },
+      { assetStore },
     );
 
     expect(deps).toBeInstanceOf(Response);

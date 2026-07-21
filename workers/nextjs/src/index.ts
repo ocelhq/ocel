@@ -1,4 +1,5 @@
 import { resolveRoutes } from "@next/routing";
+import { serveStaticAsset, type AssetStoreDeps } from "./assets";
 import {
   CacheDeps,
   CacheTarget,
@@ -35,7 +36,6 @@ const RSC_FORWARD_HEADERS = new Set([
 ]);
 
 interface Env {
-  ASSETS: Fetcher;
   // The service binding to this project's deployments-store worker (ADR
   // 0002), through which the active Deployment is resolved at request time.
   DEPLOYMENTS: DeploymentsBinding;
@@ -108,8 +108,8 @@ interface RouteResult {
 export interface RouteDeps {
   manifest: Manifest;
   functionUrls: Record<string, string>;
-  // The Workers Assets binding (or any Fetcher) serving this app's static output.
-  assets: Pick<Fetcher, "fetch">;
+  // Serves this Deployment's static output (see assets.ts).
+  assetStore: AssetStoreDeps;
   // Injectable so lambda/external forwarding can be observed in tests.
   fetch?: typeof fetch;
 
@@ -136,15 +136,16 @@ export interface RouteDeps {
 }
 
 // resolveRouteDeps resolves this app's active Deployment (ADR 0002) via
-// `deployments` and wires its manifest/functionUrls/tag namespace into a
-// RouteDeps ready for dispatchResult — or, when there is nothing to serve,
-// the terminal Response to return instead: the baked-in 404 when no
-// Deployment has ever gone live for this app, or 503 when the store is
-// unreachable and no cached Deployment can stand in.
+// `deployments` and wires its manifest/functionUrls/tag namespace/asset
+// prefix into a RouteDeps ready for dispatchResult — or, when there is
+// nothing to serve, the terminal Response to return instead: the baked-in
+// 404 when no Deployment has ever gone live for this app, or 503 when the
+// store is unreachable and no cached Deployment can stand in.
 export async function resolveRouteDeps(
   deployments: DeploymentsDeps,
-  base: Omit<RouteDeps, "manifest" | "functionUrls" | "interception" | "deployments"> & {
+  base: Omit<RouteDeps, "manifest" | "functionUrls" | "interception" | "deployments" | "assetStore"> & {
     interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
+    assetStore: Omit<AssetStoreDeps, "prefix">;
   },
 ): Promise<RouteDeps | Response> {
   const resolution = await resolveDeployment(deployments);
@@ -161,6 +162,7 @@ export async function resolveRouteDeps(
       ...base.interception,
       config: { prefix: record.tagNamespace },
     },
+    assetStore: { ...base.assetStore, prefix: record.assetPrefix },
   };
 }
 
@@ -192,7 +194,7 @@ export async function dispatchResult(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  const { manifest, functionUrls, assets } = deps;
+  const { manifest, functionUrls } = deps;
   const doFetch = deps.fetch ?? fetch;
   const url = new URL(request.url);
 
@@ -211,21 +213,21 @@ export async function dispatchResult(
     return doFetch(new Request(result.externalRewrite, request));
   }
   if (!result.resolvedPathname) {
-    return assetsOr404(request, assets);
+    return serveStaticAsset(request, url, deps.assetStore);
   }
 
   const target = manifest.dispatch[result.resolvedPathname];
   if (!target) {
-    // Not in the manifest — fall back to the Assets binding before giving up,
-    // so any file present in static/ is still served even if unenumerated.
-    return assetsOr404(request, assets);
+    // Not in the manifest — fall back to the asset store before giving up, so
+    // any file present in static/ is still served even if unenumerated.
+    return serveStaticAsset(request, url, deps.assetStore);
   }
 
   switch (target.kind) {
     case "static":
-      // Workers Assets serves _next/static, public/, and the other truly-static
-      // files. Use the ORIGINAL request so the asset path matches.
-      return assetsOr404(request, assets);
+      // _next/static, public/, and the other truly-static files. Use the
+      // ORIGINAL request/URL so the asset path matches.
+      return serveStaticAsset(request, url, deps.assetStore);
 
     case "lambda": {
       const fnUrl = functionUrls[target.id];
@@ -247,7 +249,7 @@ export async function dispatchResult(
       return new Response("Edge runtime not wired yet", { status: 501 });
 
     default:
-      return assetsOr404(request, assets);
+      return serveStaticAsset(request, url, deps.assetStore);
   }
 }
 
@@ -545,28 +547,23 @@ function cookieValue(header: string | null, key: string): string | undefined {
   return undefined;
 }
 
-// assetsOr404 serves a request from the Assets binding, mapping the binding's
-// own 404 to a plain 404 so callers can treat a miss uniformly.
-async function assetsOr404(
-  request: Request,
-  assets: Pick<Fetcher, "fetch">,
-): Promise<Response> {
-  const res = await assets.fetch(request);
-  return res.status === 404 ? new Response("Not Found", { status: 404 }) : res;
-}
-
 export default {
   async fetch(request, env, ctx): Promise<Response> {
-    // Interception is enabled only where a cache store is bound; the tag
-    // namespace it needs comes from the resolved Deployment below, so its
-    // config is filled in inside resolveRouteDeps.
+    // Interception and static-asset serving are both enabled only where a
+    // cache store is bound; the tag namespace and asset prefix they need come
+    // from the resolved Deployment below, so their config is filled in inside
+    // resolveRouteDeps.
     const store = env.OCEL_CACHE_STORE;
 
     const deps = await resolveRouteDeps(
       { binding: env.DEPLOYMENTS, app: env.OCEL_APP },
       {
-        assets: env.ASSETS,
         fetch,
+        assetStore: {
+          store,
+          cache: caches.default,
+          waitUntil: (promise) => ctx.waitUntil(promise),
+        },
         cache: {
           cache: caches.default,
           waitUntil: (promise) => ctx.waitUntil(promise),
