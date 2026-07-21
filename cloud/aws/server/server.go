@@ -152,16 +152,19 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	}
 
 	// The edge reader credentials are injected into the Next.js worker so it can
-	// read ISR directly from S3+DynamoDB. Read best-effort: an account bootstrapped
-	// before edge credentials existed simply deploys without interception, and the
-	// worker forwards prerender routes to the Lambda as before.
+	// sign its Function-URL forwards (the Lambdas are AWS_IAM-gated) and read ISR
+	// directly from S3+DynamoDB. Read best-effort so an account bootstrapped
+	// before edge credentials existed still reaches the deploy — but a worker
+	// without them cannot sign, so every Lambda route 403s until bootstrap mints
+	// the key. The warning has to name that, not just interception.
 	edgeClass := bootstrap.ClassProduction
 	if preview {
 		edgeClass = bootstrap.ClassPreview
 	}
 	edgeCreds, err := bootstrap.ReadEdgeCredentials(ctx, ssmClient, edgeClass)
 	if err != nil {
-		logf("edge cache interception disabled: " + err.Error() + " (re-run `" + bootstrapCmd + "` to enable)")
+		logf("edge reader credentials unavailable: " + err.Error() +
+			" — the worker cannot sign its Function-URL forwards, so every route will 403; re-run `" + bootstrapCmd + "` to mint the edge key")
 		edgeCreds = bootstrap.EdgeCredentials{}
 	}
 
@@ -247,7 +250,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),
 		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
-		RootStackState:    priorRootStackState,
+		RootStackState:   priorRootStackState,
 	}, manifest, progress, logf)
 
 	// Persist whatever root-stack state was reconciled — even when a later

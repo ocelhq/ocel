@@ -603,16 +603,23 @@ func assetBucketOutput() string {
 
 // edgeUserResource renders the per-substrate edge reader IAM user shared by both
 // substrate templates: the single principal the Cloudflare worker signs its
-// direct ISR reads with. It carries an inline policy scoped to exactly the
-// account-global stores this stack provisions — s3:GetObject on the whole asset
-// bucket and dynamodb:BatchGetItem on the state table, the latter bounded to the
-// TAG# tag partitions so the edge key can never read the upload-session items
-// (which carry HMAC secrets) sharing the table. The lambda:Invoke* grant is
-// dormant: Function URLs are public today, but scoping it here now means turning
-// on AWS_IAM auth later needs no bootstrap change. userName is the deterministic
-// name the imperative access-key step (ensureEdgeCredentials, which also carries
-// the credential rotation runbook) looks the user up by. The block is a
-// Resources child, so it is emitted before the template's Outputs: line.
+// requests with. It carries an inline policy scoped to exactly the account-global
+// stores this stack provisions — s3:GetObject on the whole asset bucket and
+// dynamodb:BatchGetItem on the state table, the latter bounded to the TAG# tag
+// partitions so the edge key can never read the upload-session items (which carry
+// HMAC secrets) sharing the table.
+//
+// The lambda:Invoke* grant is what authorizes the worker's signed Function-URL
+// forwards (the Lambdas are provisioned with AWS_IAM auth). It cannot be scoped
+// by name — functions are Pulumi-autonamed, not prefixed — so it is scoped by
+// attribute instead: any function carrying an ocel:app tag, which every deployed
+// function does and nothing else in the account is expected to. Both actions are
+// required since AWS's October 2025 change, and both honor aws:ResourceTag.
+//
+// userName is the deterministic name the imperative access-key step
+// (ensureEdgeCredentials, which also carries the credential rotation runbook)
+// looks the user up by. The block is a Resources child, so it is emitted before
+// the template's Outputs: line.
 //
 // It renders nothing for an edge inside the provider's trust boundary: such an
 // edge reads under the provider's native identity, so a user whose only purpose
@@ -644,7 +651,10 @@ func edgeUserResource(userName string, trust edge.TrustBoundary) string {
                 Action:
                   - lambda:InvokeFunctionUrl
                   - lambda:InvokeFunction
-                Resource: !Sub 'arn:aws:lambda:*:${AWS::AccountId}:function:ocel-*'
+                Resource: !Sub 'arn:aws:lambda:*:${AWS::AccountId}:function:*'
+                Condition:
+                  'Null':
+                    'aws:ResourceTag/ocel:app': 'false'
 `, userName)
 }
 

@@ -5,7 +5,6 @@
 package nextjs
 
 import (
-	"encoding/json"
 	"fmt"
 	"io/fs"
 	"os"
@@ -15,21 +14,15 @@ import (
 )
 
 // The bindings the compiled Next.js worker reads. They are the contract between
-// this assembly and the worker's TypeScript (readInterceptionConfig and the
-// router), so both sides of it live here.
+// this assembly and the worker's TypeScript (the router and its signer), so
+// both sides of it live here. The worker resolves an app's Function URLs and
+// ISR coordinates from its active Deployment record (ADR 0002) and its cache
+// store from the OCEL_CACHE_STORE object-store binding, so the only bindings it
+// still reads here are the edge credentials it signs its Function-URL forwards
+// with.
 const (
 	assetBinding       = "ASSETS"
 	objectStoreBinding = "OCEL_CACHE_STORE"
-	functionURLsVar    = "FUNCTION_URLS"
-
-	accessKeyIDVar   = "OCEL_EDGE_ACCESS_KEY_ID"
-	secretKeySecret  = "OCEL_EDGE_SECRET_KEY"
-	regionVar        = "OCEL_AWS_REGION"
-	bucketVar        = "OCEL_ISR_BUCKET"
-	prefixVar        = "OCEL_ISR_PREFIX"
-	tagTableVar      = "OCEL_STATE_TABLE"
-	tagTableIndexVar = "OCEL_STATE_TABLE_INDEX"
-	tagNamespaceVar  = "OCEL_ISR_TAG_NAMESPACE"
 )
 
 // routingManifest is the build output the worker dispatches from. It ships as a
@@ -57,14 +50,10 @@ func AssembleCloudflare(src edge.WorkerSource, r edge.Resolver) (edge.Worker, er
 		return edge.Worker{}, fmt.Errorf("collect static assets: %w", err)
 	}
 
-	vars, err := routeVars(src.Routes, r)
-	if err != nil {
+	if err := validateRoutes(src.Routes, r); err != nil {
 		return edge.Worker{}, err
 	}
-	secrets, err := cacheBindings(r, vars)
-	if err != nil {
-		return edge.Worker{}, err
-	}
+	vars, secrets := signingBindings(r)
 
 	return edge.Worker{
 		Main: edge.WorkerModule{
@@ -87,48 +76,33 @@ func AssembleCloudflare(src edge.WorkerSource, r edge.Resolver) (edge.Worker, er
 	}, nil
 }
 
-// routeVars builds the route-id -> Function URL map the worker dispatches with.
-// Every route the app serves must resolve: a worker missing one would answer
-// that route with an error rather than reaching the origin.
-func routeVars(routes []string, r edge.Resolver) (map[string]string, error) {
-	urls := make(map[string]string, len(routes))
+// validateRoutes fails the deploy if any route the app serves cannot be
+// resolved to a Function URL, so a worker is never assembled that would answer
+// a route with an error rather than reaching its origin. The URLs themselves
+// travel to the worker in its active Deployment record (ADR 0002), not as a
+// binding.
+func validateRoutes(routes []string, r edge.Resolver) error {
 	for _, route := range routes {
-		url, err := r.FunctionURL(route)
-		if err != nil {
-			return nil, err
+		if _, err := r.FunctionURL(route); err != nil {
+			return err
 		}
-		urls[route] = url
 	}
-	encoded, err := json.Marshal(urls)
-	if err != nil {
-		return nil, fmt.Errorf("marshal function urls: %w", err)
-	}
-	return map[string]string{functionURLsVar: string(encoded)}, nil
+	return nil
 }
 
-// cacheBindings adds the coordinates the worker serves ISR directly from,
-// returning the signing secret as a secret binding so it never appears as
-// plaintext in the upload metadata. An unconfigured cache adds nothing and is
-// not an error: the worker then forwards prerender routes to the origin exactly
-// as it otherwise would, so interception stays strictly additive.
-func cacheBindings(r edge.Resolver, vars map[string]string) (map[string]string, error) {
-	store, configured, err := r.CacheStore()
-	if err != nil {
-		return nil, err
-	}
-	if !configured {
+// signingBindings injects the edge reader's IAM credentials the worker signs
+// its Function-URL forwards with (the app's Lambdas require AWS_IAM auth). The
+// secret is returned as a secret binding so it never appears as plaintext in
+// the upload metadata. No credentials — a substrate whose bootstrap predates
+// them — adds nothing and is not an error: the worker then forwards unsigned,
+// which only reaches a Lambda that is still public.
+func signingBindings(r edge.Resolver) (vars, secrets map[string]string) {
+	creds, ok := r.EdgeCredentials()
+	if !ok {
 		return nil, nil
 	}
-
-	vars[bucketVar] = store.Bucket
-	vars[prefixVar] = store.Prefix
-	vars[regionVar] = store.Region
-	vars[tagTableVar] = store.TagTable
-	vars[tagTableIndexVar] = store.TagTableIndex
-	vars[tagNamespaceVar] = store.TagNamespace
-	vars[accessKeyIDVar] = store.Credentials.AccessKeyID
-
-	return map[string]string{secretKeySecret: store.Credentials.SecretKey}, nil
+	return map[string]string{edge.EdgeAccessKeyIDVar: creds.AccessKeyID},
+		map[string]string{edge.EdgeSecretKeyVar: creds.SecretKey}
 }
 
 // collectStaticAssets reads every file under dir into a StaticAsset carrying its

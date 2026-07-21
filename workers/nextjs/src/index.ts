@@ -22,6 +22,7 @@ import {
   type DeploymentsBinding,
   type DeploymentsDeps,
 } from "./deployments";
+import { edgeOriginFetch } from "./signing";
 
 // The request headers a Next App Router response varies on. The colo cache key
 // is derived from these directly (see variantPath), and Next's own allowHeader
@@ -46,6 +47,12 @@ interface Env {
   // active Deployment's ISR prefix, its presence is what lets the worker
   // read the ISR cache directly.
   OCEL_CACHE_STORE?: R2Bucket;
+  // The edge reader's IAM credentials. The app's Lambdas are provisioned with
+  // AWS_IAM Function URL auth, so the worker signs every origin forward with
+  // these (SigV4). Absent only on a substrate whose edge runs inside the
+  // provider's trust boundary — where the Function URLs are not IAM-gated.
+  OCEL_EDGE_ACCESS_KEY_ID?: string;
+  OCEL_EDGE_SECRET_KEY?: string;
 }
 
 type RouteHas =
@@ -112,6 +119,13 @@ export interface RouteDeps {
   assetStore: AssetStoreDeps;
   // Injectable so lambda/external forwarding can be observed in tests.
   fetch?: typeof fetch;
+
+  // The SigV4-signing fetch used for Function-URL forwards only: the app's
+  // Lambdas require AWS_IAM auth, so every origin call goes through this. Falls
+  // back to `fetch` when no edge credentials are bound. Never used for external
+  // rewrites or static assets — signing those would leak credentials to hosts
+  // that are not the app's own Lambdas.
+  originFetch?: typeof fetch;
 
   // Absent outside a Worker request (and in routing tests): routes then forward
   // to their origin uncached.
@@ -196,6 +210,9 @@ export async function dispatchResult(
 ): Promise<Response> {
   const { manifest, functionUrls } = deps;
   const doFetch = deps.fetch ?? fetch;
+  // Function-URL forwards are signed; external rewrites and static assets are
+  // not (they reach arbitrary hosts, so must never carry AWS credentials).
+  const doOrigin = deps.originFetch ?? doFetch;
   const url = new URL(request.url);
 
   request = await bufferBody(request);
@@ -232,7 +249,7 @@ export async function dispatchResult(
     case "lambda": {
       const fnUrl = functionUrls[target.id];
       if (!fnUrl) return noFunctionUrl(target.id);
-      return doFetch(
+      return doOrigin(
         forward(originUrl(fnUrl, url, result), request, request.headers),
       );
     }
@@ -266,7 +283,9 @@ async function dispatchPrerender(
   fnUrl: string,
   deps: RouteDeps,
 ): Promise<Response> {
-  const doFetch = deps.fetch ?? fetch;
+  // Every call this function makes is a forward to the app's own Function URL,
+  // so all of them are signed when edge credentials are bound.
+  const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
   const forwardUrl = originUrl(fnUrl, url, result);
 
   if (!deps.cache) {
@@ -554,11 +573,16 @@ export default {
     // from the resolved Deployment below, so their config is filled in inside
     // resolveRouteDeps.
     const store = env.OCEL_CACHE_STORE;
+    const originFetch = edgeOriginFetch(
+      env.OCEL_EDGE_ACCESS_KEY_ID,
+      env.OCEL_EDGE_SECRET_KEY,
+    );
 
     const deps = await resolveRouteDeps(
       { binding: env.DEPLOYMENTS, app: env.OCEL_APP },
       {
         fetch,
+        originFetch,
         assetStore: {
           store,
           cache: caches.default,

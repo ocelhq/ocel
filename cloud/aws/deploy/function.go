@@ -54,9 +54,21 @@ const (
 	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:11"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
-	// A function in the manifest is web-facing (an express framework implies
-	// it), so its Function URL is public this iteration — no IAM in front.
-	functionURLAuthNone = "NONE"
+	// A Next-fronted function's Function URL is IAM-gated: the edge worker signs
+	// its forwards (SigV4) with the edge reader's key, whose identity-based grant
+	// authorizes invoke on any function tagged ocel:app. This removes the public
+	// resource-based grants a NONE URL needs.
+	functionURLAuthIAM = "AWS_IAM"
+
+	// The ocel resource tags. tagApp names the app a function belongs to and is
+	// the one the edge reader's invoke grant is conditioned on (bootstrap's
+	// edgeUserResource), so a function without it cannot be invoked through a
+	// signed Function URL — the two literals are an implicit contract. tagEnv and
+	// tagProject are constant across a deploy; all three are stamped on every
+	// function by ocelTags.
+	tagApp     = "ocel:app"
+	tagEnv     = "ocel:env"
+	tagProject = "ocel:project"
 
 	// functionURLInvokeModeStream deploys every Function URL in response-stream
 	// mode: the service invokes via InvokeWithResponseStream and the lambdanode
@@ -244,6 +256,20 @@ func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	}
 }
 
+// ocelTags is the tag set every function carries: the app it belongs to (which
+// the edge reader's invoke grant is conditioned on) plus the deploy's constant
+// env and project. Empty env/project are skipped rather than stamped blank.
+func ocelTags(app, env, project string) pulumi.StringMap {
+	tags := pulumi.StringMap{tagApp: pulumi.String(app)}
+	if env != "" {
+		tags[tagEnv] = pulumi.String(env)
+	}
+	if project != "" {
+		tags[tagProject] = pulumi.String(project)
+	}
+	return tags
+}
+
 // functionEnvKey is the environment variable a resource is injected onto every
 // function under: OCEL_RESOURCE_<TYPE>_<id>, where <TYPE> is the resource
 // type's canonical uppercase token and <id> is the resource's user id. It
@@ -364,7 +390,7 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 // functions. isr is the app's cache, nil when it keeps none; it injects the
 // cache handler's env, and the grant backing it lives on that same app's role.
 // The Function URL is exported under logicalName for collectFunctionOutput.
-func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs, artifact artifactRef, env pulumi.StringMap, isr *isrConfig, roleArn pulumi.StringInput) error {
+func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, env pulumi.StringMap, isr *isrConfig, roleArn pulumi.StringInput) error {
 	// env is shared across every function in the deploy, so per-function
 	// additions are made on a copy.
 	env = maps.Clone(env)
@@ -393,6 +419,10 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 			Variables: env,
 		},
 
+		// ocel:app is what the edge reader's invoke grant is conditioned on;
+		// ocel:env / ocel:project ride alongside it (see ocelTags).
+		Tags: tags,
+
 		Layers: pulumi.StringArray{
 			pulumi.String(membraneLayerARN()),
 		},
@@ -401,36 +431,16 @@ func registerFunction(ctx *pulumi.Context, logicalName string, args functionArgs
 		return err
 	}
 
+	// AWS_IAM auth: the function is invoked only by a caller signing with
+	// credentials IAM authorizes, so it needs no resource-based grant at all —
+	// the edge reader's identity-based grant (conditioned on the ocel:app tag) is
+	// the whole authorization. The public NONE grants are gone with it.
 	url, err := lambda.NewFunctionUrl(ctx, logicalName+"-url", &lambda.FunctionUrlArgs{
 		FunctionName:      fn.Name,
-		AuthorizationType: pulumi.String(functionURLAuthNone),
+		AuthorizationType: pulumi.String(functionURLAuthIAM),
 		InvokeMode:        pulumi.String(functionURLInvokeModeStream),
 	})
 	if err != nil {
-		return err
-	}
-
-	// An auth-type NONE Function URL is only publicly invokable with a
-	// resource-based policy granting public access. As of October 2025 AWS
-	// requires BOTH lambda:InvokeFunctionUrl and lambda:InvokeFunction on the
-	// policy; without both, unauthenticated requests get a 403.
-	if _, err := lambda.NewPermission(ctx, logicalName+"-url-invoke", &lambda.PermissionArgs{
-		Action:              pulumi.String("lambda:InvokeFunctionUrl"),
-		Function:            fn.Name,
-		Principal:           pulumi.String("*"),
-		FunctionUrlAuthType: pulumi.String(functionURLAuthNone),
-	}); err != nil {
-		return err
-	}
-	// The second required grant, scoped with lambda:InvokedViaFunctionUrl so the
-	// function is only publicly invokable through its URL, not the plain Invoke
-	// API.
-	if _, err := lambda.NewPermission(ctx, logicalName+"-invoke", &lambda.PermissionArgs{
-		Action:                pulumi.String("lambda:InvokeFunction"),
-		Function:              fn.Name,
-		Principal:             pulumi.String("*"),
-		InvokedViaFunctionUrl: pulumi.Bool(true),
-	}); err != nil {
 		return err
 	}
 

@@ -250,7 +250,7 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 
 		for _, fn := range manifest.GetFunctions() {
 			app := fn.GetApp()
-			if err := registerFunction(pctx, fn.GetLogicalName(), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[app], roleArns[app]); err != nil {
+			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(app, cfg.Env, manifest.GetProjectId()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[app], roleArns[app]); err != nil {
 				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}

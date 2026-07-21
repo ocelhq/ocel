@@ -71,6 +71,52 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 	})
 }
 
+// The generic worker is AWS_IAM-gated behind its Lambdas, so it must be handed
+// the edge reader's key to sign forwards — the access key as a plain var, the
+// secret key as a secret binding (never plaintext).
+func TestRootStackSpecs_BindsEdgeSigningCredentials(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+	}
+
+	t.Run("bound when the substrate has edge credentials", func(t *testing.T) {
+		cfg := Config{Edge: &recordingEdge{}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"}
+		specs, err := rootStackSpecs(cfg, manifest, "v1")
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		g := specs[0].Generic
+		if g.Vars[edge.EdgeAccessKeyIDVar] != "AKIAEDGE" {
+			t.Errorf("generic Vars[%s] = %q, want AKIAEDGE", edge.EdgeAccessKeyIDVar, g.Vars[edge.EdgeAccessKeyIDVar])
+		}
+		if g.Secrets[edge.EdgeSecretKeyVar] != "secret-edge" {
+			t.Errorf("generic Secrets[%s] = %q, want secret-edge", edge.EdgeSecretKeyVar, g.Secrets[edge.EdgeSecretKeyVar])
+		}
+		if _, leaked := g.Vars[edge.EdgeSecretKeyVar]; leaked {
+			t.Error("the signing secret must never appear in plain-text Vars")
+		}
+	})
+
+	t.Run("absent on a substrate predating edge credentials", func(t *testing.T) {
+		cfg := Config{Edge: &recordingEdge{}}
+		specs, err := rootStackSpecs(cfg, manifest, "v1")
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		g := specs[0].Generic
+		if _, ok := g.Vars[edge.EdgeAccessKeyIDVar]; ok {
+			t.Error("no access-key var expected without edge credentials")
+		}
+		if g.Secrets[edge.EdgeSecretKeyVar] != "" {
+			t.Error("no secret expected without edge credentials")
+		}
+	})
+}
+
 func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testing.T) {
 	fake := &recordingRootStack{}
 	ctx := context.Background()

@@ -168,6 +168,67 @@ describe("dispatchResult", () => {
     expect(await captured?.text()).toBe(payload);
   });
 
+  it("forwards a lambda route through originFetch (signed), not plain fetch", async () => {
+    let signedUrl: string | undefined;
+    let plainCalled = false;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+      },
+      functionUrls: { "/api/documents": "https://fn.example.com" },
+      fetch: (async () => {
+        plainCalled = true;
+        return new Response("plain", { status: 200 });
+      }) as unknown as typeof fetch,
+      originFetch: (async (req: Request) => {
+        signedUrl = req.url;
+        return new Response("signed", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      {
+        resolvedPathname: "/api/documents",
+        invocationTarget: { pathname: "/api/documents" },
+      },
+      new Request("https://app.example/api/documents"),
+      deps,
+    );
+
+    expect(await res.text()).toBe("signed");
+    expect(signedUrl).toBe("https://fn.example.com/api/documents");
+    expect(plainCalled).toBe(false);
+  });
+
+  it("forwards an external rewrite through plain fetch, never originFetch", async () => {
+    let plainUrl: string | undefined;
+    let signedCalled = false;
+    const deps = baseDeps({
+      fetch: (async (req: Request) => {
+        plainUrl = req.url;
+        return new Response("external", { status: 200 });
+      }) as unknown as typeof fetch,
+      originFetch: (async () => {
+        signedCalled = true;
+        return new Response("signed", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { externalRewrite: "https://other.example/proxied" },
+      new Request("https://app.example/x"),
+      deps,
+    );
+
+    expect(await res.text()).toBe("external");
+    expect(plainUrl).toBe("https://other.example/proxied");
+    expect(signedCalled).toBe(false);
+  });
+
   it("invokes the parent function for a prerender route until ISR lands", async () => {
     const deps = baseDeps({
       manifest: {

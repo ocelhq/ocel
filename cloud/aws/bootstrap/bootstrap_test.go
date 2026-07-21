@@ -372,7 +372,8 @@ type edgeUserTemplate struct {
 // reader IAM user with an inline policy scoped to this stack's own stores: read
 // on the asset bucket, BatchGetItem on the state table bounded to the TAG#
 // partitions (so the edge key can never reach the upload-session HMAC secrets
-// sharing the table), and the dormant lambda:Invoke* grant.
+// sharing the table), and the lambda:Invoke* grant scoped by the ocel:app tag
+// (functions are autonamed, so the grant is attribute-based, not name-based).
 func TestEdgeUser(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -402,7 +403,7 @@ func TestEdgeUser(t *testing.T) {
 			}
 
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var s3, ddb, invoke bool
+			var s3, ddb, invoke, invokeTagged bool
 			for _, st := range stmts {
 				if st.Resource == "${AssetBucket.Arn}/*" {
 					s3 = st.Action == "s3:GetObject"
@@ -416,6 +417,14 @@ func TestEdgeUser(t *testing.T) {
 					for _, a := range actions {
 						if a == "lambda:InvokeFunctionUrl" {
 							invoke = true
+							// The grant is scoped by attribute, not name: any
+							// function carrying an ocel:app tag, gated by a Null
+							// presence check on that tag.
+							if null, ok := st.Condition["Null"].(map[string]any); ok {
+								if null["aws:ResourceTag/ocel:app"] == "false" {
+									invokeTagged = true
+								}
+							}
 						}
 					}
 				}
@@ -427,7 +436,10 @@ func TestEdgeUser(t *testing.T) {
 				t.Error("missing dynamodb:BatchGetItem bounded to the TAG# LeadingKeys")
 			}
 			if !invoke {
-				t.Error("missing the dormant lambda:Invoke* grant")
+				t.Error("missing the lambda:Invoke* grant")
+			}
+			if !invokeTagged {
+				t.Error("lambda:Invoke* grant must be gated on the ocel:app tag's presence")
 			}
 		})
 	}
