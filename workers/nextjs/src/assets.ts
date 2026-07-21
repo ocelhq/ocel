@@ -8,11 +8,16 @@
 
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
-// One object as the R2 binding hands it back: a stream and (when present) its
-// etag, exactly the shape serveStaticAsset needs.
+// One object as the R2 binding hands it back: a stream, (when present) its
+// etag, and the metadata it was written with — exactly the shape
+// serveStaticAsset needs. The deploy now stamps each object's content-type at
+// upload (via mime.TypeByExtension), so httpMetadata.contentType is the
+// authoritative type; contentTypeFor is the fallback for legacy objects
+// uploaded before that, and for extensions the deploy left unset.
 export interface AssetObject {
   body: ReadableStream | null;
   httpEtag?: string;
+  httpMetadata?: { contentType?: string };
 }
 
 // The R2 bucket as this file needs it — the Cloudflare R2 binding satisfies
@@ -95,7 +100,7 @@ export async function serveStaticAsset(
   if (!object?.body) return notFound();
 
   const headers = new Headers({
-    "content-type": contentTypeFor(url.pathname),
+    "content-type": object.httpMetadata?.contentType || contentTypeFor(url.pathname),
     "cache-control": IMMUTABLE_CACHE_CONTROL,
   });
   if (object.httpEtag) headers.set("etag", object.httpEtag);

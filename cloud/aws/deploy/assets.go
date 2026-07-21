@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"mime"
 	"os"
 	"path"
 	"path/filepath"
@@ -72,7 +73,10 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 	g.SetLimit(8) // bounded R2/S3 conns, same budget uploadPrerenderAssets uses
 	for _, u := range uploads {
 		g.Go(func() error {
-			return uploadArtifact(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, u.key, func() ([]byte, error) {
+			// An extension mime can't resolve stays "" so the worker's own
+			// fallback decides, rather than a clobbering octet-stream here.
+			ct := mime.TypeByExtension(path.Ext(u.key))
+			return uploadArtifact(ctx, cfg.CacheStoreUploader, cfg.CacheStoreBucket, u.key, ct, func() ([]byte, error) {
 				return os.ReadFile(u.src)
 			})
 		})

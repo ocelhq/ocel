@@ -9,12 +9,18 @@ import {
 
 // A fake R2 bucket, keyed exactly as serveStaticAsset composes its key:
 // "<prefix><pathname>".
-function bucketServing(files: Record<string, { body: string; etag?: string }>): AssetBucket {
+function bucketServing(
+  files: Record<string, { body: string; etag?: string; contentType?: string }>,
+): AssetBucket {
   return {
     async get(key) {
       const file = files[key];
       if (!file) return null;
-      return { body: new Blob([file.body]).stream(), httpEtag: file.etag };
+      return {
+        body: new Blob([file.body]).stream(),
+        httpEtag: file.etag,
+        httpMetadata: file.contentType ? { contentType: file.contentType } : undefined,
+      };
     },
   };
 }
@@ -78,6 +84,34 @@ describe("serveStaticAsset", () => {
     expect(res.headers.get("content-type")).toBe("image/svg+xml");
     expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
     expect(res.headers.get("etag")).toBe("abc");
+  });
+
+  it("serves the object's stored content-type when R2 carries one", async () => {
+    const url = new URL("https://serve-ct-1.example/download");
+    const deps = countingDeps(
+      // A path with no extension the fallback could resolve: only the stored
+      // metadata can produce the right type.
+      bucketServing({ "assets/p/app/b1/download": { body: "hi", contentType: "application/pdf" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/pdf");
+  });
+
+  it("falls back to extension inference when the object carries no content-type", async () => {
+    const url = new URL("https://serve-ct-2.example/styles.css");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/styles.css": { body: "body{}" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/css; charset=utf-8");
   });
 
   it("returns a plain 404 when the object is not in the store", async () => {

@@ -69,6 +69,45 @@ func TestUploadStaticAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 	}
 }
 
+// TestUploadStaticAssets_SetsContentType proves each static object is written
+// with the content-type its extension implies (so the R2 store is
+// self-describing), and an extension the standard library can't resolve is
+// left unset for the worker's own fallback to decide.
+func TestUploadStaticAssets_SetsContentType(t *testing.T) {
+	store := &fakeUploader{exists: map[string]bool{}}
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
+		"apps/web/static/next.svg":              "<svg/>",
+		"apps/web/static/_next/static/chunk.js": "console.log(1)",
+		"apps/web/static/styles.css":            "body{}",
+		"apps/web/static/chunk.js.map":          `{"version":3}`,
+	})
+	cfg := Config{
+		ArtifactRoot: root, AssetBucket: "assets", Env: "prod",
+		Uploader:         &fakeUploader{exists: map[string]bool{}},
+		CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+
+	if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		t.Fatalf("uploadStaticAssets: %v", err)
+	}
+
+	want := map[string]string{
+		"assets/proj/web/WEB1/next.svg":              "image/svg+xml",
+		"assets/proj/web/WEB1/_next/static/chunk.js": "text/javascript; charset=utf-8",
+		"assets/proj/web/WEB1/styles.css":            "text/css; charset=utf-8",
+	}
+	for key, ct := range want {
+		if got := store.contentTypes[key]; got != ct {
+			t.Errorf("content-type for %q = %q, want %q", key, got, ct)
+		}
+	}
+	// An unresolvable extension is left unset so the worker fallback decides.
+	if got, ok := store.contentTypes["assets/proj/web/WEB1/chunk.js.map"]; ok {
+		t.Errorf("content-type for .map = %q, want unset", got)
+	}
+}
+
 // TestUploadStaticAssets_UnadoptedStoreUploadsNothing proves a substrate whose
 // edge offered no cache store uploads no assets at all: there is nowhere for
 // the frozen worker to read them back from, so uploading into the provider's
