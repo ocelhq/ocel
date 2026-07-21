@@ -129,20 +129,20 @@ func classToEnum(class string) deploymentsv1.Environment_Class {
 	}
 }
 
-// Destroy tears down the preview environment addressed by req.Environment and
-// streams progress, ending in a terminal ResultEvent. It reuses the DeployEvent
-// stream.
-func (s *Server) Destroy(ctx context.Context, req *deploymentsv1.DestroyRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+// DestroyPreview tears down the preview environment addressed by req.Environment
+// and streams progress, ending in a terminal ResultEvent. It reuses the
+// DeployEvent stream.
+func (s *Server) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	progress := func(m string) { _ = stream.Send(progressEvent(m)) }
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
-	if err := s.runDestroy(ctx, req, progress, logf); err != nil {
+	if err := s.runDestroyPreview(ctx, req, progress, logf); err != nil {
 		return stream.Send(resultEvent(false, err.Error(), nil, nil))
 	}
 	return stream.Send(resultEvent(true, "", nil, nil))
 }
 
-func (s *Server) runDestroy(ctx context.Context, req *deploymentsv1.DestroyRequest, progress, logf func(string)) error {
+func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, progress, logf func(string)) error {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return err

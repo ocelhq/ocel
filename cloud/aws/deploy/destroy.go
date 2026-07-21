@@ -110,7 +110,7 @@ const previewStackInfix = "-preview-"
 // enumerated stack reports its identity with an unspecified lifecycle and no
 // label.
 func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, error) {
-	ws, err := previewWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
+	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
 	if err != nil {
 		return nil, err
 	}
@@ -131,9 +131,10 @@ func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, err
 	return stacks, nil
 }
 
-// previewWorkspace opens a Pulumi Automation API workspace over the given
+// backendWorkspace opens a Pulumi Automation API workspace over the given
 // self-managed backend, for stack enumeration/selection (no inline program).
-func previewWorkspace(ctx context.Context, project, backendURL, passphrase, region string, pulumiCmd auto.PulumiCommand) (auto.Workspace, error) {
+// Shared by preview enumeration and whole-project teardown.
+func backendWorkspace(ctx context.Context, project, backendURL, passphrase, region string, pulumiCmd auto.PulumiCommand) (auto.Workspace, error) {
 	ws, err := auto.NewLocalWorkspace(ctx,
 		auto.Project(workspace.Project{
 			Name:    tokens.PackageName(project),

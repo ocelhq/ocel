@@ -39,9 +39,15 @@ const (
 	// DeploymentServiceBootstrapProcedure is the fully-qualified name of the DeploymentService's
 	// Bootstrap RPC.
 	DeploymentServiceBootstrapProcedure = "/deployments.v1.DeploymentService/Bootstrap"
-	// DeploymentServiceDestroyProcedure is the fully-qualified name of the DeploymentService's Destroy
-	// RPC.
-	DeploymentServiceDestroyProcedure = "/deployments.v1.DeploymentService/Destroy"
+	// DeploymentServiceDestroyPreviewProcedure is the fully-qualified name of the DeploymentService's
+	// DestroyPreview RPC.
+	DeploymentServiceDestroyPreviewProcedure = "/deployments.v1.DeploymentService/DestroyPreview"
+	// DeploymentServiceDestroyProjectProcedure is the fully-qualified name of the DeploymentService's
+	// DestroyProject RPC.
+	DeploymentServiceDestroyProjectProcedure = "/deployments.v1.DeploymentService/DestroyProject"
+	// DeploymentServicePlanDestroyProjectProcedure is the fully-qualified name of the
+	// DeploymentService's PlanDestroyProject RPC.
+	DeploymentServicePlanDestroyProjectProcedure = "/deployments.v1.DeploymentService/PlanDestroyProject"
 	// DeploymentServiceListEnvironmentsProcedure is the fully-qualified name of the DeploymentService's
 	// ListEnvironments RPC.
 	DeploymentServiceListEnvironmentsProcedure = "/deployments.v1.DeploymentService/ListEnvironments"
@@ -69,13 +75,30 @@ type DeploymentServiceClient interface {
 	// progress/log events, then a terminal ResultEvent. Bootstrap carries no
 	// outputs on its result.
 	Bootstrap(context.Context, *v1.BootstrapRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
-	// Destroy tears down the environment addressed by DestroyRequest.environment.
-	// It is the inverse of Deploy and reuses the same DeployEvent stream:
-	// progress/log events, then a terminal ResultEvent (which carries no
-	// outputs). The provider selects exactly the environment named by the
-	// Environment block; the CLI never asks it to reverse-engineer how the
-	// teardown was invoked.
-	Destroy(context.Context, *v1.DestroyRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	// DestroyPreview tears down the single preview environment addressed by
+	// DestroyPreviewRequest.environment. It is the inverse of a preview Deploy
+	// and reuses the same DeployEvent stream: progress/log events, then a
+	// terminal ResultEvent (which carries no outputs). The provider selects
+	// exactly the environment named by the Environment block; the CLI never
+	// asks it to reverse-engineer how the teardown was invoked. It backs
+	// `ocel preview rm`.
+	DestroyPreview(context.Context, *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	// DestroyProject tears down an entire production project (ADR 0001): the
+	// imperative root stack, every app-deploy stack, and the stateful infra
+	// stack, plus the project's R2 assets and root-stack state. Unlike
+	// DestroyPreview it names no environment — a project is the unit — and it
+	// fans out across both systems (Pulumi/AWS + the imperative edge) rather
+	// than selecting one stack. It is best-effort: it continues past a failed
+	// step and reports what remains, so a re-run resumes idempotently. It
+	// reuses the DeployEvent stream (progress/log, then a terminal
+	// ResultEvent), and backs `ocel destroy`. Production-only.
+	DestroyProject(context.Context, *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
+	// PlanDestroyProject enumerates, without removing anything, exactly what a
+	// DestroyProject would tear down: the project's app-deploy stacks, its
+	// infra stack, and whether it has a root stack. The CLI calls it to show
+	// the blast radius before asking the operator to type the project name, and
+	// to exit cleanly when there is nothing to destroy. Read-only and unary.
+	PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error)
 	// ListEnvironments enumerates the preview environments the provider knows
 	// about from its own authoritative state, one entry per environment. It
 	// backs `ocel preview ls`.
@@ -138,10 +161,22 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(deploymentServiceMethods.ByName("Bootstrap")),
 			connect.WithClientOptions(opts...),
 		),
-		destroy: connect.NewClient[v1.DestroyRequest, v1.DeployEvent](
+		destroyPreview: connect.NewClient[v1.DestroyPreviewRequest, v1.DeployEvent](
 			httpClient,
-			baseURL+DeploymentServiceDestroyProcedure,
-			connect.WithSchema(deploymentServiceMethods.ByName("Destroy")),
+			baseURL+DeploymentServiceDestroyPreviewProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("DestroyPreview")),
+			connect.WithClientOptions(opts...),
+		),
+		destroyProject: connect.NewClient[v1.DestroyProjectRequest, v1.DeployEvent](
+			httpClient,
+			baseURL+DeploymentServiceDestroyProjectProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("DestroyProject")),
+			connect.WithClientOptions(opts...),
+		),
+		planDestroyProject: connect.NewClient[v1.PlanDestroyProjectRequest, v1.PlanDestroyProjectResponse](
+			httpClient,
+			baseURL+DeploymentServicePlanDestroyProjectProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("PlanDestroyProject")),
 			connect.WithClientOptions(opts...),
 		),
 		listEnvironments: connect.NewClient[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse](
@@ -179,14 +214,16 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 
 // deploymentServiceClient implements DeploymentServiceClient.
 type deploymentServiceClient struct {
-	deploy           *connect.Client[v1.DeployRequest, v1.DeployEvent]
-	bootstrap        *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
-	destroy          *connect.Client[v1.DestroyRequest, v1.DeployEvent]
-	listEnvironments *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
-	preflight        *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
-	listPromotions   *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
-	rollback         *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
-	prune            *connect.Client[v1.PruneRequest, v1.DeployEvent]
+	deploy             *connect.Client[v1.DeployRequest, v1.DeployEvent]
+	bootstrap          *connect.Client[v1.BootstrapRequest, v1.DeployEvent]
+	destroyPreview     *connect.Client[v1.DestroyPreviewRequest, v1.DeployEvent]
+	destroyProject     *connect.Client[v1.DestroyProjectRequest, v1.DeployEvent]
+	planDestroyProject *connect.Client[v1.PlanDestroyProjectRequest, v1.PlanDestroyProjectResponse]
+	listEnvironments   *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
+	preflight          *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
+	listPromotions     *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
+	rollback           *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
+	prune              *connect.Client[v1.PruneRequest, v1.DeployEvent]
 }
 
 // Deploy calls deployments.v1.DeploymentService.Deploy.
@@ -199,9 +236,23 @@ func (c *deploymentServiceClient) Bootstrap(ctx context.Context, req *v1.Bootstr
 	return c.bootstrap.CallServerStream(ctx, connect.NewRequest(req))
 }
 
-// Destroy calls deployments.v1.DeploymentService.Destroy.
-func (c *deploymentServiceClient) Destroy(ctx context.Context, req *v1.DestroyRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
-	return c.destroy.CallServerStream(ctx, connect.NewRequest(req))
+// DestroyPreview calls deployments.v1.DeploymentService.DestroyPreview.
+func (c *deploymentServiceClient) DestroyPreview(ctx context.Context, req *v1.DestroyPreviewRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+	return c.destroyPreview.CallServerStream(ctx, connect.NewRequest(req))
+}
+
+// DestroyProject calls deployments.v1.DeploymentService.DestroyProject.
+func (c *deploymentServiceClient) DestroyProject(ctx context.Context, req *v1.DestroyProjectRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+	return c.destroyProject.CallServerStream(ctx, connect.NewRequest(req))
+}
+
+// PlanDestroyProject calls deployments.v1.DeploymentService.PlanDestroyProject.
+func (c *deploymentServiceClient) PlanDestroyProject(ctx context.Context, req *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error) {
+	response, err := c.planDestroyProject.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
 }
 
 // ListEnvironments calls deployments.v1.DeploymentService.ListEnvironments.
@@ -256,13 +307,30 @@ type DeploymentServiceHandler interface {
 	// progress/log events, then a terminal ResultEvent. Bootstrap carries no
 	// outputs on its result.
 	Bootstrap(context.Context, *v1.BootstrapRequest, *connect.ServerStream[v1.DeployEvent]) error
-	// Destroy tears down the environment addressed by DestroyRequest.environment.
-	// It is the inverse of Deploy and reuses the same DeployEvent stream:
-	// progress/log events, then a terminal ResultEvent (which carries no
-	// outputs). The provider selects exactly the environment named by the
-	// Environment block; the CLI never asks it to reverse-engineer how the
-	// teardown was invoked.
-	Destroy(context.Context, *v1.DestroyRequest, *connect.ServerStream[v1.DeployEvent]) error
+	// DestroyPreview tears down the single preview environment addressed by
+	// DestroyPreviewRequest.environment. It is the inverse of a preview Deploy
+	// and reuses the same DeployEvent stream: progress/log events, then a
+	// terminal ResultEvent (which carries no outputs). The provider selects
+	// exactly the environment named by the Environment block; the CLI never
+	// asks it to reverse-engineer how the teardown was invoked. It backs
+	// `ocel preview rm`.
+	DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v1.DeployEvent]) error
+	// DestroyProject tears down an entire production project (ADR 0001): the
+	// imperative root stack, every app-deploy stack, and the stateful infra
+	// stack, plus the project's R2 assets and root-stack state. Unlike
+	// DestroyPreview it names no environment — a project is the unit — and it
+	// fans out across both systems (Pulumi/AWS + the imperative edge) rather
+	// than selecting one stack. It is best-effort: it continues past a failed
+	// step and reports what remains, so a re-run resumes idempotently. It
+	// reuses the DeployEvent stream (progress/log, then a terminal
+	// ResultEvent), and backs `ocel destroy`. Production-only.
+	DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v1.DeployEvent]) error
+	// PlanDestroyProject enumerates, without removing anything, exactly what a
+	// DestroyProject would tear down: the project's app-deploy stacks, its
+	// infra stack, and whether it has a root stack. The CLI calls it to show
+	// the blast radius before asking the operator to type the project name, and
+	// to exit cleanly when there is nothing to destroy. Read-only and unary.
+	PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error)
 	// ListEnvironments enumerates the preview environments the provider knows
 	// about from its own authoritative state, one entry per environment. It
 	// backs `ocel preview ls`.
@@ -321,10 +389,22 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		connect.WithSchema(deploymentServiceMethods.ByName("Bootstrap")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServiceDestroyHandler := connect.NewServerStreamHandlerSimple(
-		DeploymentServiceDestroyProcedure,
-		svc.Destroy,
-		connect.WithSchema(deploymentServiceMethods.ByName("Destroy")),
+	deploymentServiceDestroyPreviewHandler := connect.NewServerStreamHandlerSimple(
+		DeploymentServiceDestroyPreviewProcedure,
+		svc.DestroyPreview,
+		connect.WithSchema(deploymentServiceMethods.ByName("DestroyPreview")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deploymentServiceDestroyProjectHandler := connect.NewServerStreamHandlerSimple(
+		DeploymentServiceDestroyProjectProcedure,
+		svc.DestroyProject,
+		connect.WithSchema(deploymentServiceMethods.ByName("DestroyProject")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deploymentServicePlanDestroyProjectHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServicePlanDestroyProjectProcedure,
+		svc.PlanDestroyProject,
+		connect.WithSchema(deploymentServiceMethods.ByName("PlanDestroyProject")),
 		connect.WithHandlerOptions(opts...),
 	)
 	deploymentServiceListEnvironmentsHandler := connect.NewUnaryHandlerSimple(
@@ -363,8 +443,12 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 			deploymentServiceDeployHandler.ServeHTTP(w, r)
 		case DeploymentServiceBootstrapProcedure:
 			deploymentServiceBootstrapHandler.ServeHTTP(w, r)
-		case DeploymentServiceDestroyProcedure:
-			deploymentServiceDestroyHandler.ServeHTTP(w, r)
+		case DeploymentServiceDestroyPreviewProcedure:
+			deploymentServiceDestroyPreviewHandler.ServeHTTP(w, r)
+		case DeploymentServiceDestroyProjectProcedure:
+			deploymentServiceDestroyProjectHandler.ServeHTTP(w, r)
+		case DeploymentServicePlanDestroyProjectProcedure:
+			deploymentServicePlanDestroyProjectHandler.ServeHTTP(w, r)
 		case DeploymentServiceListEnvironmentsProcedure:
 			deploymentServiceListEnvironmentsHandler.ServeHTTP(w, r)
 		case DeploymentServicePreflightProcedure:
@@ -392,8 +476,16 @@ func (UnimplementedDeploymentServiceHandler) Bootstrap(context.Context, *v1.Boot
 	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Bootstrap is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) Destroy(context.Context, *v1.DestroyRequest, *connect.ServerStream[v1.DeployEvent]) error {
-	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Destroy is not implemented"))
+func (UnimplementedDeploymentServiceHandler) DestroyPreview(context.Context, *v1.DestroyPreviewRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.DestroyPreview is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) DestroyProject(context.Context, *v1.DestroyProjectRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.DestroyProject is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) PlanDestroyProject(context.Context, *v1.PlanDestroyProjectRequest) (*v1.PlanDestroyProjectResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.PlanDestroyProject is not implemented"))
 }
 
 func (UnimplementedDeploymentServiceHandler) ListEnvironments(context.Context, *v1.ListEnvironmentsRequest) (*v1.ListEnvironmentsResponse, error) {

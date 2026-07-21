@@ -11,6 +11,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -109,7 +110,86 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	return edge.RootStackState{
 		edge.RootStackKeyEndpoint:    endpoint,
 		edge.RootStackKeyWriteSecret: secret,
+		edge.RootStackKeyGenericName: spec.GenericName,
+		edge.RootStackKeyStoreName:   spec.StoreName,
 	}, nil
+}
+
+// DestroyRootStack tears down a project's root stack: it detaches the generic
+// worker's custom-domain binding(s) — leaving the user's DNS untouched — then
+// deletes the generic and deployments-store workers. Deleting the store worker
+// with Force also removes its Durable Object storage (the promotion history),
+// which a plain delete would refuse. It is best-effort: a failure on one step
+// does not stop the others, and every failure is joined into the returned
+// error so the host can report exactly what remains.
+func (p *provider) DestroyRootStack(ctx context.Context, state edge.RootStackState) error {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return fmt.Errorf("%s is not set; it is required to destroy the Cloudflare root stack", envAccountID)
+	}
+	genericName := state[edge.RootStackKeyGenericName]
+	storeName := state[edge.RootStackKeyStoreName]
+	// A reconciled root stack always persists both identities. Their absence
+	// from a non-empty state means we cannot know which workers to delete, so
+	// this is a failed teardown, not a no-op: reporting success here would let
+	// the host discard the state and orphan the workers and DO storage.
+	if genericName == "" && storeName == "" {
+		return fmt.Errorf("root-stack state carries no worker identities (%s/%s); refusing to report the root stack destroyed", edge.RootStackKeyGenericName, edge.RootStackKeyStoreName)
+	}
+
+	var errs []error
+	if genericName != "" {
+		if err := p.detachCustomDomains(ctx, accountID, genericName); err != nil {
+			errs = append(errs, err)
+		}
+		if err := p.deleteScript(ctx, accountID, genericName); err != nil {
+			errs = append(errs, fmt.Errorf("delete generic worker %q: %w", genericName, err))
+		}
+	}
+	if storeName != "" {
+		if err := p.deleteScript(ctx, accountID, storeName); err != nil {
+			errs = append(errs, fmt.Errorf("delete deployments-store worker %q: %w", storeName, err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// detachCustomDomains removes every custom-domain binding attached to a worker
+// script, unbinding the worker from those hostnames without deleting the DNS
+// records the account owns for them (Workers.Domains.Delete detaches the
+// route only).
+func (p *provider) detachCustomDomains(ctx context.Context, accountID, scriptName string) error {
+	attached := p.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
+		AccountID: cf.F(accountID),
+		Service:   cf.F(scriptName),
+	})
+	for attached.Next() {
+		dom := attached.Current()
+		if err := p.client.Workers.Domains.Delete(ctx, dom.ID, workers.DomainDeleteParams{
+			AccountID: cf.F(accountID),
+		}); err != nil {
+			return fmt.Errorf("detach custom domain %q: %w", dom.Hostname, err)
+		}
+	}
+	if err := attached.Err(); err != nil {
+		return fmt.Errorf("list custom domains for %q: %w", scriptName, err)
+	}
+	return nil
+}
+
+// deleteScript removes a worker script, forcing deletion through any bindings
+// or Durable Objects it owns so a store worker's DO storage is reclaimed too. A
+// script that is already gone is treated as success, so DestroyRootStack is
+// safe to re-run.
+func (p *provider) deleteScript(ctx context.Context, accountID, scriptName string) error {
+	_, err := p.client.Workers.Scripts.Delete(ctx, scriptName, workers.ScriptDeleteParams{
+		AccountID: cf.F(accountID),
+		Force:     cf.F(true),
+	})
+	if hasStatus(err, http.StatusNotFound) {
+		return nil
+	}
+	return err
 }
 
 // putStoreScript uploads the deployments-store worker: like putScript, but it

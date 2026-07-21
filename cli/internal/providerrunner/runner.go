@@ -305,18 +305,45 @@ func (r *Runner) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	return r.driveStream("Bootstrap", stream, err, onEvent)
 }
 
-// Destroy calls the provider's Destroy RPC and streams DeployEvents to onEvent
-// (which may be nil) as they arrive, including the terminal event. Its result
-// semantics match Deploy: nil on ResultEvent{Success: true}, a
-// *DeployFailedError on failure, or a connection error. Destroy reuses the
-// DeployEvent stream by contract, so it shares the same driver. Ready must
-// have succeeded first.
-func (r *Runner) Destroy(ctx context.Context, req *deploymentsv1.DestroyRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
+// DestroyPreview calls the provider's DestroyPreview RPC and streams
+// DeployEvents to onEvent (which may be nil) as they arrive, including the
+// terminal event. Its result semantics match Deploy: nil on
+// ResultEvent{Success: true}, a *DeployFailedError on failure, or a connection
+// error. DestroyPreview reuses the DeployEvent stream by contract, so it shares
+// the same driver. Ready must have succeeded first.
+func (r *Runner) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
 	if r.client == nil {
-		return errors.New("providerrunner: Destroy called before a successful Ready")
+		return errors.New("providerrunner: DestroyPreview called before a successful Ready")
 	}
-	stream, err := r.client.Destroy(ctx, req)
-	return r.driveStream("Destroy", stream, err, onEvent)
+	stream, err := r.client.DestroyPreview(ctx, req)
+	return r.driveStream("DestroyPreview", stream, err, onEvent)
+}
+
+// DestroyProject calls the provider's DestroyProject RPC and streams
+// DeployEvents to onEvent (which may be nil) as they arrive, including the
+// terminal event. Like DestroyPreview it reuses the DeployEvent stream and
+// shares the same driver; unlike it, it tears down a whole production project
+// rather than one environment. Ready must have succeeded first.
+func (r *Runner) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, onEvent func(*deploymentsv1.DeployEvent)) error {
+	if r.client == nil {
+		return errors.New("providerrunner: DestroyProject called before a successful Ready")
+	}
+	stream, err := r.client.DestroyProject(ctx, req)
+	return r.driveStream("DestroyProject", stream, err, onEvent)
+}
+
+// PlanDestroyProject calls the provider's unary PlanDestroyProject RPC and
+// returns the inventory a DestroyProject would tear down, so the CLI can show
+// the blast radius before prompting. Ready must have succeeded first.
+func (r *Runner) PlanDestroyProject(ctx context.Context, req *deploymentsv1.PlanDestroyProjectRequest) (*deploymentsv1.PlanDestroyProjectResponse, error) {
+	if r.client == nil {
+		return nil, errors.New("providerrunner: PlanDestroyProject called before a successful Ready")
+	}
+	resp, err := r.client.PlanDestroyProject(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("providerrunner: call PlanDestroyProject: %w", err)
+	}
+	return resp, nil
 }
 
 // ListEnvironments calls the provider's unary ListEnvironments RPC and returns

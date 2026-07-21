@@ -42,6 +42,32 @@ func TestRootStackState_ReadAbsentReturnsNilNotError(t *testing.T) {
 	}
 }
 
+func TestDeleteRootStackState_RemovesThenReadsAbsent(t *testing.T) {
+	ssmc := newFakeSSM()
+	if err := WriteRootStackState(context.Background(), ssmc, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://store"}); err != nil {
+		t.Fatalf("WriteRootStackState: %v", err)
+	}
+
+	if err := DeleteRootStackState(context.Background(), ssmc, "proj_1"); err != nil {
+		t.Fatalf("DeleteRootStackState: %v", err)
+	}
+
+	got, err := ReadRootStackState(context.Background(), ssmc, "proj_1")
+	if err != nil {
+		t.Fatalf("ReadRootStackState after delete: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("state after delete = %v, want empty", got)
+	}
+}
+
+func TestDeleteRootStackState_AbsentIsIdempotentSuccess(t *testing.T) {
+	ssmc := newFakeSSM()
+	if err := DeleteRootStackState(context.Background(), ssmc, "proj_never_deployed"); err != nil {
+		t.Fatalf("DeleteRootStackState on an absent parameter: %v, want nil (idempotent)", err)
+	}
+}
+
 func TestRootStackState_ScopedPerProject(t *testing.T) {
 	ssmc := newFakeSSM()
 	if err := WriteRootStackState(context.Background(), ssmc, "proj_a", edge.RootStackState{edge.RootStackKeyEndpoint: "https://a"}); err != nil {

@@ -42,6 +42,15 @@ func (f *fakeSSM) PutParameter(_ context.Context, in *ssm.PutParameterInput, _ .
 	return &ssm.PutParameterOutput{}, nil
 }
 
+func (f *fakeSSM) DeleteParameter(_ context.Context, in *ssm.DeleteParameterInput, _ ...func(*ssm.Options)) (*ssm.DeleteParameterOutput, error) {
+	name := aws.ToString(in.Name)
+	if _, exists := f.params[name]; !exists {
+		return nil, &ssmtypes.ParameterNotFound{}
+	}
+	delete(f.params, name)
+	return &ssm.DeleteParameterOutput{}, nil
+}
+
 // fakeIAM records the users it minted a key for and hands back a deterministic
 // key so the stored payload can be asserted. existingKeys is the number of keys
 // ListAccessKeys reports before any mint, so tests can drive the 2-key guard.

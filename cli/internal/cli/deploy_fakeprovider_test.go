@@ -186,9 +186,10 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	return resp, nil
 }
 
-// Destroy echoes the Environment it was addressed with (so tests can assert the
-// CLI resolved the right teardown target) and streams a terminal success.
-func (s *deployFakeProviderServer) Destroy(ctx context.Context, req *deploymentsv1.DestroyRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+// DestroyPreview echoes the Environment it was addressed with (so tests can
+// assert the CLI resolved the right teardown target) and streams a terminal
+// success.
+func (s *deployFakeProviderServer) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
 	if err := s.checkToken(ctx); err != nil {
 		return err
 	}

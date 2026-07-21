@@ -51,13 +51,32 @@ service DeploymentService {
     // outputs on its result.
     rpc Bootstrap(BootstrapRequest) returns (stream DeployEvent);
 
-    // Destroy tears down the environment addressed by DestroyRequest.environment.
-    // It is the inverse of Deploy and reuses the same DeployEvent stream:
-    // progress/log events, then a terminal ResultEvent (which carries no
-    // outputs). The provider selects exactly the environment named by the
-    // Environment block; the CLI never asks it to reverse-engineer how the
-    // teardown was invoked.
-    rpc Destroy(DestroyRequest) returns (stream DeployEvent);
+    // DestroyPreview tears down the single preview environment addressed by
+    // DestroyPreviewRequest.environment. It is the inverse of a preview Deploy
+    // and reuses the same DeployEvent stream: progress/log events, then a
+    // terminal ResultEvent (which carries no outputs). The provider selects
+    // exactly the environment named by the Environment block; the CLI never
+    // asks it to reverse-engineer how the teardown was invoked. It backs
+    // `ocel preview rm`.
+    rpc DestroyPreview(DestroyPreviewRequest) returns (stream DeployEvent);
+
+    // DestroyProject tears down an entire production project (ADR 0001): the
+    // imperative root stack, every app-deploy stack, and the stateful infra
+    // stack, plus the project's R2 assets and root-stack state. Unlike
+    // DestroyPreview it names no environment — a project is the unit — and it
+    // fans out across both systems (Pulumi/AWS + the imperative edge) rather
+    // than selecting one stack. It is best-effort: it continues past a failed
+    // step and reports what remains, so a re-run resumes idempotently. It
+    // reuses the DeployEvent stream (progress/log, then a terminal
+    // ResultEvent), and backs `ocel destroy`. Production-only.
+    rpc DestroyProject(DestroyProjectRequest) returns (stream DeployEvent);
+
+    // PlanDestroyProject enumerates, without removing anything, exactly what a
+    // DestroyProject would tear down: the project's app-deploy stacks, its
+    // infra stack, and whether it has a root stack. The CLI calls it to show
+    // the blast radius before asking the operator to type the project name, and
+    // to exit cleanly when there is nothing to destroy. Read-only and unary.
+    rpc PlanDestroyProject(PlanDestroyProjectRequest) returns (PlanDestroyProjectResponse);
 
     // ListEnvironments enumerates the preview environments the provider knows
     // about from its own authoritative state, one entry per environment. It
@@ -278,7 +297,7 @@ message BootstrapRequest {
 // DestroyRequest is the request for DeploymentService.Destroy. It carries the
 // full Environment block as its addressing so the provider tears down exactly
 // the right environment.
-message DestroyRequest {
+message DestroyPreviewRequest {
   Environment environment = 1;
 
   // options is always UTF-8 JSON bytes: `{}` when the provider was given no
@@ -294,6 +313,62 @@ message DestroyRequest {
   // account-global, so identity alone is ambiguous across projects; the
   // provider addresses the exact per-project stack with it.
   string project_id = 4;
+}
+
+// DestroyProjectRequest is the request for DeploymentService.DestroyProject. It
+// names no environment: a whole production project is the unit, so the provider
+// enumerates and tears down every stack the project owns. Like PruneRequest it
+// is project-scoped, carrying only the provider's opaque options, the pinned
+// protocol version, and the project id.
+message DestroyProjectRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+
+  // project_id scopes the teardown to one project. The Pulumi state backend is
+  // account-global, so the provider addresses this project's per-project stacks
+  // (root state, infra stack, and every app-deploy stack) with it.
+  string project_id = 3;
+}
+
+// PlanDestroyProjectRequest is the request for
+// DeploymentService.PlanDestroyProject. Like DestroyProjectRequest it is
+// project-scoped and names no environment.
+message PlanDestroyProjectRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+
+  // project_id scopes the plan to one project.
+  string project_id = 3;
+}
+
+// PlanDestroyProjectResponse is the reply from
+// DeploymentService.PlanDestroyProject: the inventory a DestroyProject would
+// remove. A project with no app stacks, no infra stack, and no root stack has
+// nothing to destroy.
+message PlanDestroyProjectResponse {
+  // app_stacks are the per-app-deploy Pulumi stacks the project owns, by name,
+  // including any orphaned by an aborted deploy.
+  repeated string app_stacks = 1;
+
+  // infra_stack is the project's stable infra Pulumi stack, or empty when it
+  // has none yet.
+  string infra_stack = 2;
+
+  // root_stack reports whether the project has a reconciled root stack (edge
+  // workers, custom-domain binding, deployments store) to tear down.
+  bool root_stack = 3;
 }
 
 // ListEnvironmentsRequest is the request for DeploymentService.ListEnvironments.
