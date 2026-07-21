@@ -6,11 +6,11 @@ import (
 	"io"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
@@ -122,34 +122,30 @@ func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, std
 		return err
 	}
 
-	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+	ui := deployui.New(stdout, cfg.Dir, "ocel deployments prune", verboseEnabled())
+	defer ui.Close()
+
+	provW := ui.BuildWriter()
+	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
 		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
 			return err
 		}
 
-		resp, err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
+		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			ProjectId:       cfg.ProjectID,
 			KeepN:           int32(keepN),
-		})
-		if err != nil {
+		}, ui.Event); err != nil {
 			return err
 		}
-		renderPruneResult(stdout, resp)
+		ui.Finish("Pruned")
 		return nil
 	})
-}
-
-// renderPruneResult reports how many promotions were kept versus reclaimed.
-func renderPruneResult(stdout io.Writer, resp *deploymentsv1.PruneResponse) {
-	removed := resp.GetRemovedPromotionIds()
-	if len(removed) == 0 {
-		fmt.Fprintln(stdout, "Nothing to prune.")
-		return
+	if err != nil {
+		return failSession(ctx, ui, err)
 	}
-	fmt.Fprintf(stdout, "Reclaimed %d promotion(s): %s\n", len(removed), strings.Join(removed, ", "))
-	fmt.Fprintf(stdout, "Kept %d promotion(s).\n", len(resp.GetKeptPromotionIds()))
+	return nil
 }
 
 // renderPromotions prints one line per promotion, newest-first, marking the

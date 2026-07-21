@@ -106,7 +106,13 @@ type DeploymentServiceClient interface {
 	// and ISR/prerender prefixes, and deletes the store records themselves.
 	// It backs `ocel deployments prune`, a standalone command never run
 	// inline on deploy. Production-only.
-	Prune(context.Context, *v1.PruneRequest) (*v1.PruneResponse, error)
+	//
+	// Prune streams progress/log events as it destroys each stack (a reclaim
+	// can run for minutes), then a terminal ResultEvent - the same DeployEvent
+	// contract Deploy/Bootstrap/Destroy speak. The kept-vs-reclaimed summary
+	// is delivered as the final progress lines before the result, so it carries
+	// no dedicated response message.
+	Prune(context.Context, *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error)
 }
 
 // NewDeploymentServiceClient constructs a client for the deployments.v1.DeploymentService service.
@@ -162,7 +168,7 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(deploymentServiceMethods.ByName("Rollback")),
 			connect.WithClientOptions(opts...),
 		),
-		prune: connect.NewClient[v1.PruneRequest, v1.PruneResponse](
+		prune: connect.NewClient[v1.PruneRequest, v1.DeployEvent](
 			httpClient,
 			baseURL+DeploymentServicePruneProcedure,
 			connect.WithSchema(deploymentServiceMethods.ByName("Prune")),
@@ -180,7 +186,7 @@ type deploymentServiceClient struct {
 	preflight        *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
 	listPromotions   *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
 	rollback         *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
-	prune            *connect.Client[v1.PruneRequest, v1.PruneResponse]
+	prune            *connect.Client[v1.PruneRequest, v1.DeployEvent]
 }
 
 // Deploy calls deployments.v1.DeploymentService.Deploy.
@@ -235,12 +241,8 @@ func (c *deploymentServiceClient) Rollback(ctx context.Context, req *v1.Rollback
 }
 
 // Prune calls deployments.v1.DeploymentService.Prune.
-func (c *deploymentServiceClient) Prune(ctx context.Context, req *v1.PruneRequest) (*v1.PruneResponse, error) {
-	response, err := c.prune.CallUnary(ctx, connect.NewRequest(req))
-	if response != nil {
-		return response.Msg, err
-	}
-	return nil, err
+func (c *deploymentServiceClient) Prune(ctx context.Context, req *v1.PruneRequest) (*connect.ServerStreamForClient[v1.DeployEvent], error) {
+	return c.prune.CallServerStream(ctx, connect.NewRequest(req))
 }
 
 // DeploymentServiceHandler is an implementation of the deployments.v1.DeploymentService service.
@@ -291,7 +293,13 @@ type DeploymentServiceHandler interface {
 	// and ISR/prerender prefixes, and deletes the store records themselves.
 	// It backs `ocel deployments prune`, a standalone command never run
 	// inline on deploy. Production-only.
-	Prune(context.Context, *v1.PruneRequest) (*v1.PruneResponse, error)
+	//
+	// Prune streams progress/log events as it destroys each stack (a reclaim
+	// can run for minutes), then a terminal ResultEvent - the same DeployEvent
+	// contract Deploy/Bootstrap/Destroy speak. The kept-vs-reclaimed summary
+	// is delivered as the final progress lines before the result, so it carries
+	// no dedicated response message.
+	Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error
 }
 
 // NewDeploymentServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -343,7 +351,7 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		connect.WithSchema(deploymentServiceMethods.ByName("Rollback")),
 		connect.WithHandlerOptions(opts...),
 	)
-	deploymentServicePruneHandler := connect.NewUnaryHandlerSimple(
+	deploymentServicePruneHandler := connect.NewServerStreamHandlerSimple(
 		DeploymentServicePruneProcedure,
 		svc.Prune,
 		connect.WithSchema(deploymentServiceMethods.ByName("Prune")),
@@ -404,6 +412,6 @@ func (UnimplementedDeploymentServiceHandler) Rollback(context.Context, *v1.Rollb
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Rollback is not implemented"))
 }
 
-func (UnimplementedDeploymentServiceHandler) Prune(context.Context, *v1.PruneRequest) (*v1.PruneResponse, error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Prune is not implemented"))
+func (UnimplementedDeploymentServiceHandler) Prune(context.Context, *v1.PruneRequest, *connect.ServerStream[v1.DeployEvent]) error {
+	return connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Prune is not implemented"))
 }

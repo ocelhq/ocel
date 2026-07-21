@@ -93,7 +93,13 @@ service DeploymentService {
     // and ISR/prerender prefixes, and deletes the store records themselves.
     // It backs `ocel deployments prune`, a standalone command never run
     // inline on deploy. Production-only.
-    rpc Prune(PruneRequest) returns (PruneResponse);
+    //
+    // Prune streams progress/log events as it destroys each stack (a reclaim
+    // can run for minutes), then a terminal ResultEvent - the same DeployEvent
+    // contract Deploy/Bootstrap/Destroy speak. The kept-vs-reclaimed summary
+    // is delivered as the final progress lines before the result, so it carries
+    // no dedicated response message.
+    rpc Prune(PruneRequest) returns (stream DeployEvent);
 }
 
 // Environment is the fully resolved target a provisioning verb acts on. The
@@ -439,13 +445,6 @@ message PruneRequest {
   // keep_n is how many of the newest Promotions to keep, always additionally
   // pinning the currently active one even if it falls outside this window.
   int32 keep_n = 4;
-}
-
-// PruneResponse is the reply from DeploymentService.Prune: which Promotions
-// were kept and which were reclaimed.
-message PruneResponse {
-  repeated string kept_promotion_ids = 1;
-  repeated string removed_promotion_ids = 2;
 }
 
 // DeployEvent is a single item on the Deploy response stream: either
