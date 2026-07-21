@@ -634,9 +634,22 @@ describe("dispatchResult", () => {
     entryPath?: string;
     entry: Record<string, unknown> | null;
     dispatch?: Record<string, unknown>;
-  }): { deps: RouteDeps; resumeRequests: () => Request[]; cachePuts: () => number } {
+    // When set, the resume must ride the signed origin seam: bind an originFetch
+    // spy and leave plain fetch as a tripwire that must never be called.
+    signed?: boolean;
+  }): {
+    deps: RouteDeps;
+    resumeRequests: () => Request[];
+    cachePuts: () => number;
+    plainCalled: () => boolean;
+  } {
     const resumeRequests: Request[] = [];
     let puts = 0;
+    let plainCalled = false;
+    const record = (async (req: Request) => {
+      resumeRequests.push(req);
+      return new Response(opts.resume, { status: 200 });
+    }) as unknown as typeof fetch;
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -654,10 +667,13 @@ describe("dispatchResult", () => {
         },
       },
       functionUrls: { "/ppr": "https://fn.example.com", "/posts/[id]": "https://fn.example.com" },
-      fetch: (async (req: Request) => {
-        resumeRequests.push(req);
-        return new Response(opts.resume, { status: 200 });
-      }) as unknown as typeof fetch,
+      fetch: opts.signed
+        ? ((async (req: Request) => {
+            plainCalled = true;
+            return record(req);
+          }) as unknown as typeof fetch)
+        : record,
+      originFetch: opts.signed ? record : undefined,
       cache: {
         cache: {
           match: async () => undefined,
@@ -675,7 +691,12 @@ describe("dispatchResult", () => {
         ),
       },
     });
-    return { deps, resumeRequests: () => resumeRequests, cachePuts: () => puts };
+    return {
+      deps,
+      resumeRequests: () => resumeRequests,
+      cachePuts: () => puts,
+      plainCalled: () => plainCalled,
+    };
   }
 
   const pprShellEntry = {
@@ -710,6 +731,25 @@ describe("dispatchResult", () => {
     expect(resume.method).toBe("POST");
     expect(resume.headers.get("next-resume")).toBe("1");
     expect(await resume.text()).toBe("POSTPONED");
+  });
+
+  it("POSTs the resume through the signed origin seam, never plain fetch", async () => {
+    // The resume is a Function-URL forward like any other, so it must be signed
+    // when edge credentials are bound. It shares dispatchPrerender's origin fetch
+    // with every other forward, so this asserts it rides that seam rather than
+    // leaking out as an unsigned POST that the AWS_IAM Function URL would 403.
+    const { deps, resumeRequests, plainCalled } = pprDeps({
+      resume: "[dynamic]",
+      entry: pprShellEntry,
+      signed: true,
+    });
+
+    const res = await dispatchPpr(deps);
+
+    expect(await res.text()).toBe("[shell][dynamic]");
+    expect(resumeRequests()).toHaveLength(1);
+    expect(resumeRequests()[0].method).toBe("POST");
+    expect(plainCalled()).toBe(false);
   });
 
   it("serves a PPR prefetch as the static shell, never a resume", async () => {
@@ -867,5 +907,41 @@ describe("dispatchResult", () => {
 
     expect(res.status).toBe(308);
     expect(res.headers.get("location")).toBe("https://app.example/new");
+  });
+
+  it("tags a matched route with x-matched-path using the resolved template", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/posts/[id]": { kind: "lambda", id: "/posts/[id]" } },
+      },
+      functionUrls: { "/posts/[id]": "https://fn.example.com" },
+      fetch: (async () => new Response("ok", { status: 200 })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/posts/[id]", invocationTarget: { pathname: "/posts/7" } },
+      new Request("https://app.example/posts/7"),
+      deps,
+    );
+
+    expect(res.headers.get("x-matched-path")).toBe("/posts/[id]");
+  });
+
+  it("omits x-matched-path when routing produced no resolved pathname", async () => {
+    const deps = baseDeps({
+      assetStore: assetStoreServing({ "/whatever": "asset" }),
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: null },
+      new Request("https://app.example/whatever"),
+      deps,
+    );
+
+    expect(res.headers.has("x-matched-path")).toBe(false);
   });
 });

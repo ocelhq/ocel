@@ -58,6 +58,39 @@ describe("edgeOriginFetch", () => {
     expect(signed?.headers.get("cookie")).toBe("session=abc");
   });
 
+  it("signs a POST body (the PPR resume shape), forwarding method and body intact", async () => {
+    let signed: Request | undefined;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      signed = new Request(input as RequestInfo, init);
+      return new Response("ok");
+    }) as typeof fetch;
+    try {
+      const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
+      await origin(
+        new Request("https://abc123.lambda-url.us-east-1.on.aws/resume", {
+          method: "POST",
+          headers: { "next-resume": "1", "content-type": "text/plain;charset=UTF-8" },
+          body: "POSTPONED",
+        }),
+      );
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+
+    // The body must reach the origin verbatim: the signature covers its hash, so a
+    // re-streamed or mutated body would 403 at the Function URL.
+    expect(signed?.method).toBe("POST");
+    expect(await signed?.text()).toBe("POSTPONED");
+    const auth = signed?.headers.get("authorization") ?? "";
+    expect(auth).toContain("/us-east-1/lambda/aws4_request");
+    // The app's own headers ride along unsigned, exactly as on the GET path.
+    const signedHeaders = /SignedHeaders=([^,]+)/.exec(auth)?.[1] ?? "";
+    expect(signedHeaders).toContain("host");
+    expect(signedHeaders).not.toContain("next-resume");
+    expect(signed?.headers.get("next-resume")).toBe("1");
+  });
+
   it("fails loudly rather than mis-signing a non-Function-URL host", async () => {
     const origin = edgeOriginFetch("AKIAEXAMPLE", "secretkey")!;
     await expect(
