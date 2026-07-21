@@ -56,34 +56,34 @@ type appDeployResult struct {
 // records, and a single atomic promote. It is Run's production branch and,
 // like Run, is exercised only by opt-in e2e — the sequencing and atomicity it
 // drives are unit-tested directly against finalizeProductionDeploy below.
-func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, error) {
+func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootTierState, error) {
 	tier, ok := cfg.Edge.(edge.RootTier)
 	if !ok {
-		return nil, nil, fmt.Errorf("production deploys require an edge that supports the root tier (instant rollback); %s does not", cfg.Edge.Kind())
+		return nil, nil, nil, fmt.Errorf("production deploys require an edge that supports the root tier (instant rollback); %s does not", cfg.Edge.Kind())
 	}
 
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := uploadPrerenderAssets(ctx, cfg, manifest); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if err := uploadStaticAssets(ctx, cfg, manifest); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	builds, err := assignBuildIDs(cfg, manifest)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	promotionID, err := newRandomID()
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	plan, err := BuildPlan(manifest, &deploymentsv1.Environment{Class: cfg.Class}, promotionID, builds)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// Root reconcile runs before any AWS provisioning: a broken root tier
@@ -92,17 +92,17 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root tier", 0, 0)
 	specs, err := rootTierSpecs(cfg, manifest, rootTierVersion)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	state, err := reconcileRootTier(ctx, tier, specs, cfg.RootTierState)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra tier", 0, 0)
 	infraOutputs, err := runInfraStack(ctx, cfg, manifest, plan, log)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, state, err
 	}
 	resourceEnv := resourceEnvValues(manifest, infraOutputs)
 
@@ -129,10 +129,8 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	wg.Wait()
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
-	// A future caller persists state (see Config.RootTierState) so the next
-	// deploy reconciles against it instead of starting fresh every time.
 	if err := stageAndPromote(ctx, tier, state, promotionID, time.Now().Unix(), results); err != nil {
-		return nil, nil, err
+		return nil, nil, state, err
 	}
 
 	outputs := append([]*deploymentsv1.ResourceOutput{}, infraOutputs...)
@@ -140,7 +138,7 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		outputs = append(outputs, outs...)
 	}
 	outputs = append(outputs, workerURLOutputs(cfg, manifest)...)
-	return outputs, appURLs(manifest, outputs), nil
+	return outputs, appURLs(manifest, outputs), state, nil
 }
 
 // reconcileRootTier reconciles the root tier once per spec, threading the

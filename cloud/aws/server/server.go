@@ -28,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
+	"github.com/ocelhq/ocel/cloud/edge"
 	"github.com/ocelhq/ocel/cloud/edge/cloudflare"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -206,7 +207,17 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return nil, nil, err
 	}
 
-	return deploy.Run(ctx, deploy.Config{
+	// The root tier is production-only (ADR 0001); a preview keeps no
+	// root-tier state and reconciles nothing of the sort.
+	var priorRootTierState edge.RootTierState
+	if !preview {
+		priorRootTierState, err = bootstrap.ReadRootTierState(ctx, ssmClient, manifest.GetProjectId())
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	outputs, urls, rootTierState, err := deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
 		BackendURL:    "s3://" + deployed.StateBucket,
 		Passphrase:    passphrase,
@@ -236,7 +247,24 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),
 		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
+		RootTierState:    priorRootTierState,
 	}, manifest, progress, logf)
+
+	// Persist whatever root-tier state was reconciled — even when a later
+	// step of this same deploy failed — so the next deploy (and
+	// rollback/deployments-ls) reconciles against it instead of starting
+	// fresh and orphaning the root tier this run just reconciled. Nil for a
+	// preview, which carries no root tier, and nil when reconcile itself
+	// never ran (an error before it).
+	if rootTierState != nil {
+		if writeErr := bootstrap.WriteRootTierState(ctx, ssmClient, manifest.GetProjectId(), rootTierState); writeErr != nil {
+			if err != nil {
+				return outputs, urls, fmt.Errorf("%w (additionally failed to persist root-tier state: %v)", err, writeErr)
+			}
+			return outputs, urls, writeErr
+		}
+	}
+	return outputs, urls, err
 }
 
 // previewTTL is how long an ephemeral preview lives before it is considered

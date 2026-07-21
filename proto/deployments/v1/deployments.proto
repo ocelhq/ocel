@@ -71,6 +71,20 @@ service DeploymentService {
     // wrong class, before anything is provisioned. It is authoritative: the
     // provider enforces the same class match itself.
     rpc Preflight(PreflightRequest) returns (PreflightResponse);
+
+    // ListPromotions enumerates a production project's promotion history,
+    // newest first, each entry marked with whether it is the currently active
+    // one. It backs `ocel deployments ls`. Production-only: a project with no
+    // root tier (never deployed to production) returns an empty list rather
+    // than an error.
+    rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
+
+    // Rollback atomically re-points a production project's active-deployment
+    // pointer at a prior Promotion: the immediately previous one when
+    // RollbackRequest.to is empty, or a specific one when set. It backs
+    // `ocel rollback` / `ocel rollback --to <promotionId>`. Production-only;
+    // an unknown promotion id is rejected with a clear error.
+    rpc Rollback(RollbackRequest) returns (RollbackResponse);
 }
 
 // Environment is the fully resolved target a provisioning verb acts on. The
@@ -333,6 +347,71 @@ message PreflightResponse {
   // infrastructure_present is false when the infrastructure the command needs
   // has not been bootstrapped yet.
   bool infrastructure_present = 2;
+}
+
+// Promotion is the project-wide unit one production deploy produces: a
+// promotion id grouping the per-app build ids it made active. Mirrors
+// edge.Promotion in cloud/edge/roottier.go, which is itself mirrored from
+// workers/deployments-store/src/store.ts.
+message Promotion {
+  string promotion_id = 1;
+  // ts is the epoch-seconds time this promotion was created.
+  int64 ts = 2;
+  // builds maps app name to the build id this promotion made active.
+  map<string, string> builds = 3;
+}
+
+// PromotionHistoryEntry is one Promotion in the project's ordered promotion
+// history, annotated with whether it is the currently active one.
+message PromotionHistoryEntry {
+  Promotion promotion = 1;
+  bool active = 2;
+}
+
+// ListPromotionsRequest is the request for DeploymentService.ListPromotions.
+// It is project-scoped and carries no environment: promotion history exists
+// only for the production class.
+message ListPromotionsRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+
+  string project_id = 3;
+}
+
+// ListPromotionsResponse is the reply from DeploymentService.ListPromotions:
+// the project's promotion history, newest first.
+message ListPromotionsResponse {
+  repeated PromotionHistoryEntry promotions = 1;
+}
+
+// RollbackRequest is the request for DeploymentService.Rollback.
+message RollbackRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+
+  string project_id = 3;
+
+  // to is the promotion id to roll back to. Empty means "the promotion
+  // immediately before the currently active one".
+  string to = 4;
+}
+
+// RollbackResponse is the reply from DeploymentService.Rollback: the
+// Promotion that is now active.
+message RollbackResponse {
+  Promotion promoted = 1;
 }
 
 // DeployEvent is a single item on the Deploy response stream: either

@@ -346,6 +346,32 @@ func (r *Runner) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	return resp, nil
 }
 
+// ListPromotions calls the provider's unary ListPromotions RPC and returns the
+// project's promotion history. Ready must have succeeded first.
+func (r *Runner) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
+	if r.client == nil {
+		return nil, errors.New("providerrunner: ListPromotions called before a successful Ready")
+	}
+	resp, err := r.client.ListPromotions(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("providerrunner: call ListPromotions: %w", err)
+	}
+	return resp, nil
+}
+
+// Rollback calls the provider's unary Rollback RPC and returns the Promotion
+// that is now active. Ready must have succeeded first.
+func (r *Runner) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
+	if r.client == nil {
+		return nil, errors.New("providerrunner: Rollback called before a successful Ready")
+	}
+	resp, err := r.client.Rollback(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("providerrunner: call Rollback: %w", err)
+	}
+	return resp, nil
+}
+
 // driveStream consumes a provider event stream to its terminal ResultEvent,
 // forwarding every event to onEvent. rpc names the call for error messages.
 // It is shared by Deploy, Bootstrap, and Destroy, which speak the same
