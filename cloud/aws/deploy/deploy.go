@@ -163,10 +163,13 @@ func (p Progress) report(phase deploymentsv1.Phase, message string, current, tot
 }
 
 // Run provisions every resource in manifest against AWS and returns the
-// whole-stack connection outputs plus the user-facing app URLs. progress
-// reports phase-tagged steps and log forwards Pulumi engine output; both may be
-// nil. Run performs the real Pulumi up and is not exercised by unit tests.
-func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, error) {
+// whole-stack connection outputs, the user-facing app URLs, and — for a
+// production deploy only — the root-tier state the caller must persist so the
+// next deploy (and rollback) reconciles against it instead of starting fresh;
+// nil for a preview. progress reports phase-tagged steps and log forwards
+// Pulumi engine output; both may be nil. Run performs the real Pulumi up and
+// is not exercised by unit tests.
+func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootTierState, error) {
 	// Production deploys realize the tiered model (ADR 0001): root reconcile,
 	// then a stable infra stack, then one parallel app-deploy stack per app,
 	// staged and promoted atomically. Preview keeps the single in-place stack
@@ -177,13 +180,13 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// A Next app's prerender configs + fallbacks ride to the asset bucket
 	// alongside the function artifacts, keyed by build id. No-op otherwise.
 	if err := uploadPrerenderAssets(ctx, cfg, manifest); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	program := func(pctx *pulumi.Context) error {
@@ -268,11 +271,11 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 		}),
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("prepare stack %s: %w", cfg.StackName, err)
+		return nil, nil, nil, fmt.Errorf("prepare stack %s: %w", cfg.StackName, err)
 	}
 
 	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning resources (this can take several minutes)", 0, 0)
@@ -285,13 +288,13 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 	res, err := stack.Up(ctx, upOpts...)
 	logWriter.Flush() // emit any final, un-newline-terminated engine line
 	if err != nil {
-		return nil, nil, fmt.Errorf("provision stack %s: %w", cfg.StackName, err)
+		return nil, nil, nil, fmt.Errorf("provision stack %s: %w", cfg.StackName, err)
 	}
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Collecting outputs", 0, 0)
 	outputs, err := collectOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 
 	// The edge worker fronts the just-provisioned Lambdas, so it deploys last —
@@ -301,10 +304,10 @@ func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, prog
 		progress.report(deploymentsv1.Phase_PHASE_FINALIZING, msg, 0, 0)
 	})
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	outputs = append(outputs, workerOutputs...)
-	return outputs, appURLs(manifest, outputs), nil
+	return outputs, appURLs(manifest, outputs), nil, nil
 }
 
 // appURLs returns the user-facing URLs to feature on the success screen: for

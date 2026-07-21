@@ -48,6 +48,12 @@ const (
 	// DeploymentServicePreflightProcedure is the fully-qualified name of the DeploymentService's
 	// Preflight RPC.
 	DeploymentServicePreflightProcedure = "/deployments.v1.DeploymentService/Preflight"
+	// DeploymentServiceListPromotionsProcedure is the fully-qualified name of the DeploymentService's
+	// ListPromotions RPC.
+	DeploymentServiceListPromotionsProcedure = "/deployments.v1.DeploymentService/ListPromotions"
+	// DeploymentServiceRollbackProcedure is the fully-qualified name of the DeploymentService's
+	// Rollback RPC.
+	DeploymentServiceRollbackProcedure = "/deployments.v1.DeploymentService/Rollback"
 )
 
 // DeploymentServiceClient is a client for the deployments.v1.DeploymentService service.
@@ -79,6 +85,18 @@ type DeploymentServiceClient interface {
 	// wrong class, before anything is provisioned. It is authoritative: the
 	// provider enforces the same class match itself.
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
+	// ListPromotions enumerates a production project's promotion history,
+	// newest first, each entry marked with whether it is the currently active
+	// one. It backs `ocel deployments ls`. Production-only: a project with no
+	// root tier (never deployed to production) returns an empty list rather
+	// than an error.
+	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
+	// Rollback atomically re-points a production project's active-deployment
+	// pointer at a prior Promotion: the immediately previous one when
+	// RollbackRequest.to is empty, or a specific one when set. It backs
+	// `ocel rollback` / `ocel rollback --to <promotionId>`. Production-only;
+	// an unknown promotion id is rejected with a clear error.
+	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
 }
 
 // NewDeploymentServiceClient constructs a client for the deployments.v1.DeploymentService service.
@@ -122,6 +140,18 @@ func NewDeploymentServiceClient(httpClient connect.HTTPClient, baseURL string, o
 			connect.WithSchema(deploymentServiceMethods.ByName("Preflight")),
 			connect.WithClientOptions(opts...),
 		),
+		listPromotions: connect.NewClient[v1.ListPromotionsRequest, v1.ListPromotionsResponse](
+			httpClient,
+			baseURL+DeploymentServiceListPromotionsProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("ListPromotions")),
+			connect.WithClientOptions(opts...),
+		),
+		rollback: connect.NewClient[v1.RollbackRequest, v1.RollbackResponse](
+			httpClient,
+			baseURL+DeploymentServiceRollbackProcedure,
+			connect.WithSchema(deploymentServiceMethods.ByName("Rollback")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -132,6 +162,8 @@ type deploymentServiceClient struct {
 	destroy          *connect.Client[v1.DestroyRequest, v1.DeployEvent]
 	listEnvironments *connect.Client[v1.ListEnvironmentsRequest, v1.ListEnvironmentsResponse]
 	preflight        *connect.Client[v1.PreflightRequest, v1.PreflightResponse]
+	listPromotions   *connect.Client[v1.ListPromotionsRequest, v1.ListPromotionsResponse]
+	rollback         *connect.Client[v1.RollbackRequest, v1.RollbackResponse]
 }
 
 // Deploy calls deployments.v1.DeploymentService.Deploy.
@@ -167,6 +199,24 @@ func (c *deploymentServiceClient) Preflight(ctx context.Context, req *v1.Preflig
 	return nil, err
 }
 
+// ListPromotions calls deployments.v1.DeploymentService.ListPromotions.
+func (c *deploymentServiceClient) ListPromotions(ctx context.Context, req *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error) {
+	response, err := c.listPromotions.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// Rollback calls deployments.v1.DeploymentService.Rollback.
+func (c *deploymentServiceClient) Rollback(ctx context.Context, req *v1.RollbackRequest) (*v1.RollbackResponse, error) {
+	response, err := c.rollback.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // DeploymentServiceHandler is an implementation of the deployments.v1.DeploymentService service.
 type DeploymentServiceHandler interface {
 	Deploy(context.Context, *v1.DeployRequest, *connect.ServerStream[v1.DeployEvent]) error
@@ -196,6 +246,18 @@ type DeploymentServiceHandler interface {
 	// wrong class, before anything is provisioned. It is authoritative: the
 	// provider enforces the same class match itself.
 	Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error)
+	// ListPromotions enumerates a production project's promotion history,
+	// newest first, each entry marked with whether it is the currently active
+	// one. It backs `ocel deployments ls`. Production-only: a project with no
+	// root tier (never deployed to production) returns an empty list rather
+	// than an error.
+	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
+	// Rollback atomically re-points a production project's active-deployment
+	// pointer at a prior Promotion: the immediately previous one when
+	// RollbackRequest.to is empty, or a specific one when set. It backs
+	// `ocel rollback` / `ocel rollback --to <promotionId>`. Production-only;
+	// an unknown promotion id is rejected with a clear error.
+	Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error)
 }
 
 // NewDeploymentServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -235,6 +297,18 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 		connect.WithSchema(deploymentServiceMethods.ByName("Preflight")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deploymentServiceListPromotionsHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceListPromotionsProcedure,
+		svc.ListPromotions,
+		connect.WithSchema(deploymentServiceMethods.ByName("ListPromotions")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deploymentServiceRollbackHandler := connect.NewUnaryHandlerSimple(
+		DeploymentServiceRollbackProcedure,
+		svc.Rollback,
+		connect.WithSchema(deploymentServiceMethods.ByName("Rollback")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/deployments.v1.DeploymentService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DeploymentServiceDeployProcedure:
@@ -247,6 +321,10 @@ func NewDeploymentServiceHandler(svc DeploymentServiceHandler, opts ...connect.H
 			deploymentServiceListEnvironmentsHandler.ServeHTTP(w, r)
 		case DeploymentServicePreflightProcedure:
 			deploymentServicePreflightHandler.ServeHTTP(w, r)
+		case DeploymentServiceListPromotionsProcedure:
+			deploymentServiceListPromotionsHandler.ServeHTTP(w, r)
+		case DeploymentServiceRollbackProcedure:
+			deploymentServiceRollbackHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -274,4 +352,12 @@ func (UnimplementedDeploymentServiceHandler) ListEnvironments(context.Context, *
 
 func (UnimplementedDeploymentServiceHandler) Preflight(context.Context, *v1.PreflightRequest) (*v1.PreflightResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Preflight is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.ListPromotions is not implemented"))
+}
+
+func (UnimplementedDeploymentServiceHandler) Rollback(context.Context, *v1.RollbackRequest) (*v1.RollbackResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("deployments.v1.DeploymentService.Rollback is not implemented"))
 }

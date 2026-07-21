@@ -1264,6 +1264,362 @@ func (x *PreflightResponse) GetInfrastructurePresent() bool {
 	return false
 }
 
+// Promotion is the project-wide unit one production deploy produces: a
+// promotion id grouping the per-app build ids it made active. Mirrors
+// edge.Promotion in cloud/edge/roottier.go, which is itself mirrored from
+// workers/deployments-store/src/store.ts.
+type Promotion struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	PromotionId string                 `protobuf:"bytes,1,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
+	// ts is the epoch-seconds time this promotion was created.
+	Ts int64 `protobuf:"varint,2,opt,name=ts,proto3" json:"ts,omitempty"`
+	// builds maps app name to the build id this promotion made active.
+	Builds        map[string]string `protobuf:"bytes,3,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Promotion) Reset() {
+	*x = Promotion{}
+	mi := &file_deployments_v1_deployments_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Promotion) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Promotion) ProtoMessage() {}
+
+func (x *Promotion) ProtoReflect() protoreflect.Message {
+	mi := &file_deployments_v1_deployments_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Promotion.ProtoReflect.Descriptor instead.
+func (*Promotion) Descriptor() ([]byte, []int) {
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *Promotion) GetPromotionId() string {
+	if x != nil {
+		return x.PromotionId
+	}
+	return ""
+}
+
+func (x *Promotion) GetTs() int64 {
+	if x != nil {
+		return x.Ts
+	}
+	return 0
+}
+
+func (x *Promotion) GetBuilds() map[string]string {
+	if x != nil {
+		return x.Builds
+	}
+	return nil
+}
+
+// PromotionHistoryEntry is one Promotion in the project's ordered promotion
+// history, annotated with whether it is the currently active one.
+type PromotionHistoryEntry struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Promotion     *Promotion             `protobuf:"bytes,1,opt,name=promotion,proto3" json:"promotion,omitempty"`
+	Active        bool                   `protobuf:"varint,2,opt,name=active,proto3" json:"active,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PromotionHistoryEntry) Reset() {
+	*x = PromotionHistoryEntry{}
+	mi := &file_deployments_v1_deployments_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PromotionHistoryEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PromotionHistoryEntry) ProtoMessage() {}
+
+func (x *PromotionHistoryEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_deployments_v1_deployments_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PromotionHistoryEntry.ProtoReflect.Descriptor instead.
+func (*PromotionHistoryEntry) Descriptor() ([]byte, []int) {
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *PromotionHistoryEntry) GetPromotion() *Promotion {
+	if x != nil {
+		return x.Promotion
+	}
+	return nil
+}
+
+func (x *PromotionHistoryEntry) GetActive() bool {
+	if x != nil {
+		return x.Active
+	}
+	return false
+}
+
+// ListPromotionsRequest is the request for DeploymentService.ListPromotions.
+// It is project-scoped and carries no environment: promotion history exists
+// only for the production class.
+type ListPromotionsRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
+	// options, never absent and never an empty string. The CLI never inspects
+	// this field; only the provider unmarshals it.
+	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	// protocol_version pins the wire contract so a provider can reject a
+	// request it can't speak.
+	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	ProjectId       string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *ListPromotionsRequest) Reset() {
+	*x = ListPromotionsRequest{}
+	mi := &file_deployments_v1_deployments_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPromotionsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPromotionsRequest) ProtoMessage() {}
+
+func (x *ListPromotionsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_deployments_v1_deployments_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPromotionsRequest.ProtoReflect.Descriptor instead.
+func (*ListPromotionsRequest) Descriptor() ([]byte, []int) {
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *ListPromotionsRequest) GetOptions() []byte {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *ListPromotionsRequest) GetProtocolVersion() string {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return ""
+}
+
+func (x *ListPromotionsRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+// ListPromotionsResponse is the reply from DeploymentService.ListPromotions:
+// the project's promotion history, newest first.
+type ListPromotionsResponse struct {
+	state         protoimpl.MessageState   `protogen:"open.v1"`
+	Promotions    []*PromotionHistoryEntry `protobuf:"bytes,1,rep,name=promotions,proto3" json:"promotions,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListPromotionsResponse) Reset() {
+	*x = ListPromotionsResponse{}
+	mi := &file_deployments_v1_deployments_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListPromotionsResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListPromotionsResponse) ProtoMessage() {}
+
+func (x *ListPromotionsResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_deployments_v1_deployments_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListPromotionsResponse.ProtoReflect.Descriptor instead.
+func (*ListPromotionsResponse) Descriptor() ([]byte, []int) {
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *ListPromotionsResponse) GetPromotions() []*PromotionHistoryEntry {
+	if x != nil {
+		return x.Promotions
+	}
+	return nil
+}
+
+// RollbackRequest is the request for DeploymentService.Rollback.
+type RollbackRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
+	// options, never absent and never an empty string. The CLI never inspects
+	// this field; only the provider unmarshals it.
+	Options []byte `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	// protocol_version pins the wire contract so a provider can reject a
+	// request it can't speak.
+	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	ProjectId       string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// to is the promotion id to roll back to. Empty means "the promotion
+	// immediately before the currently active one".
+	To            string `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RollbackRequest) Reset() {
+	*x = RollbackRequest{}
+	mi := &file_deployments_v1_deployments_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RollbackRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RollbackRequest) ProtoMessage() {}
+
+func (x *RollbackRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_deployments_v1_deployments_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RollbackRequest.ProtoReflect.Descriptor instead.
+func (*RollbackRequest) Descriptor() ([]byte, []int) {
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *RollbackRequest) GetOptions() []byte {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *RollbackRequest) GetProtocolVersion() string {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return ""
+}
+
+func (x *RollbackRequest) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *RollbackRequest) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+// RollbackResponse is the reply from DeploymentService.Rollback: the
+// Promotion that is now active.
+type RollbackResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Promoted      *Promotion             `protobuf:"bytes,1,opt,name=promoted,proto3" json:"promoted,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RollbackResponse) Reset() {
+	*x = RollbackResponse{}
+	mi := &file_deployments_v1_deployments_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RollbackResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RollbackResponse) ProtoMessage() {}
+
+func (x *RollbackResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_deployments_v1_deployments_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RollbackResponse.ProtoReflect.Descriptor instead.
+func (*RollbackResponse) Descriptor() ([]byte, []int) {
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *RollbackResponse) GetPromoted() *Promotion {
+	if x != nil {
+		return x.Promoted
+	}
+	return nil
+}
+
 // DeployEvent is a single item on the Deploy response stream: either
 // progress/log output, or - always the final event - the terminal outcome.
 type DeployEvent struct {
@@ -1280,7 +1636,7 @@ type DeployEvent struct {
 
 func (x *DeployEvent) Reset() {
 	*x = DeployEvent{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[13]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1292,7 +1648,7 @@ func (x *DeployEvent) String() string {
 func (*DeployEvent) ProtoMessage() {}
 
 func (x *DeployEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[13]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1305,7 +1661,7 @@ func (x *DeployEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeployEvent.ProtoReflect.Descriptor instead.
 func (*DeployEvent) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{13}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *DeployEvent) GetEvent() isDeployEvent_Event {
@@ -1382,7 +1738,7 @@ type ProgressEvent struct {
 
 func (x *ProgressEvent) Reset() {
 	*x = ProgressEvent{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[14]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1394,7 +1750,7 @@ func (x *ProgressEvent) String() string {
 func (*ProgressEvent) ProtoMessage() {}
 
 func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[14]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1407,7 +1763,7 @@ func (x *ProgressEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProgressEvent.ProtoReflect.Descriptor instead.
 func (*ProgressEvent) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{14}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ProgressEvent) GetMessage() string {
@@ -1448,7 +1804,7 @@ type LogEvent struct {
 
 func (x *LogEvent) Reset() {
 	*x = LogEvent{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[15]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1460,7 +1816,7 @@ func (x *LogEvent) String() string {
 func (*LogEvent) ProtoMessage() {}
 
 func (x *LogEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[15]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1473,7 +1829,7 @@ func (x *LogEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogEvent.ProtoReflect.Descriptor instead.
 func (*LogEvent) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{15}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *LogEvent) GetMessage() string {
@@ -1504,7 +1860,7 @@ type ResultEvent struct {
 
 func (x *ResultEvent) Reset() {
 	*x = ResultEvent{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[16]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1516,7 +1872,7 @@ func (x *ResultEvent) String() string {
 func (*ResultEvent) ProtoMessage() {}
 
 func (x *ResultEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[16]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1529,7 +1885,7 @@ func (x *ResultEvent) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResultEvent.ProtoReflect.Descriptor instead.
 func (*ResultEvent) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{16}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *ResultEvent) GetSuccess() bool {
@@ -1580,7 +1936,7 @@ type ResourceOutput struct {
 
 func (x *ResourceOutput) Reset() {
 	*x = ResourceOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[17]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1592,7 +1948,7 @@ func (x *ResourceOutput) String() string {
 func (*ResourceOutput) ProtoMessage() {}
 
 func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[17]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1605,7 +1961,7 @@ func (x *ResourceOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResourceOutput.ProtoReflect.Descriptor instead.
 func (*ResourceOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{17}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *ResourceOutput) GetLogicalName() string {
@@ -1689,7 +2045,7 @@ type PostgresOutput struct {
 
 func (x *PostgresOutput) Reset() {
 	*x = PostgresOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[18]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1701,7 +2057,7 @@ func (x *PostgresOutput) String() string {
 func (*PostgresOutput) ProtoMessage() {}
 
 func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[18]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1714,7 +2070,7 @@ func (x *PostgresOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PostgresOutput.ProtoReflect.Descriptor instead.
 func (*PostgresOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{18}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *PostgresOutput) GetHost() string {
@@ -1767,7 +2123,7 @@ type BucketOutput struct {
 
 func (x *BucketOutput) Reset() {
 	*x = BucketOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[19]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1779,7 +2135,7 @@ func (x *BucketOutput) String() string {
 func (*BucketOutput) ProtoMessage() {}
 
 func (x *BucketOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[19]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1792,7 +2148,7 @@ func (x *BucketOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BucketOutput.ProtoReflect.Descriptor instead.
 func (*BucketOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{19}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *BucketOutput) GetAddress() string {
@@ -1822,7 +2178,7 @@ type FunctionOutput struct {
 
 func (x *FunctionOutput) Reset() {
 	*x = FunctionOutput{}
-	mi := &file_deployments_v1_deployments_proto_msgTypes[20]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1834,7 +2190,7 @@ func (x *FunctionOutput) String() string {
 func (*FunctionOutput) ProtoMessage() {}
 
 func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_deployments_v1_deployments_proto_msgTypes[20]
+	mi := &file_deployments_v1_deployments_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1847,7 +2203,7 @@ func (x *FunctionOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FunctionOutput.ProtoReflect.Descriptor instead.
 func (*FunctionOutput) Descriptor() ([]byte, []int) {
-	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{20}
+	return file_deployments_v1_deployments_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *FunctionOutput) GetUrl() string {
@@ -1951,6 +2307,33 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\vinfra_class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\n" +
 	"infraClass\x125\n" +
 	"\x16infrastructure_present\x18\x02 \x01(\bR\x15infrastructurePresent\"\xb8\x01\n" +
+	"\tPromotion\x12!\n" +
+	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12\x0e\n" +
+	"\x02ts\x18\x02 \x01(\x03R\x02ts\x12=\n" +
+	"\x06builds\x18\x03 \x03(\v2%.deployments.v1.Promotion.BuildsEntryR\x06builds\x1a9\n" +
+	"\vBuildsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"h\n" +
+	"\x15PromotionHistoryEntry\x127\n" +
+	"\tpromotion\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\tpromotion\x12\x16\n" +
+	"\x06active\x18\x02 \x01(\bR\x06active\"{\n" +
+	"\x15ListPromotionsRequest\x12\x18\n" +
+	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x03 \x01(\tR\tprojectId\"_\n" +
+	"\x16ListPromotionsResponse\x12E\n" +
+	"\n" +
+	"promotions\x18\x01 \x03(\v2%.deployments.v1.PromotionHistoryEntryR\n" +
+	"promotions\"\x85\x01\n" +
+	"\x0fRollbackRequest\x12\x18\n" +
+	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x0e\n" +
+	"\x02to\x18\x04 \x01(\tR\x02to\"I\n" +
+	"\x10RollbackResponse\x125\n" +
+	"\bpromoted\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\bpromoted\"\xb8\x01\n" +
 	"\vDeployEvent\x12;\n" +
 	"\bprogress\x18\x01 \x01(\v2\x1d.deployments.v1.ProgressEventH\x00R\bprogress\x12,\n" +
 	"\x03log\x18\x02 \x01(\v2\x18.deployments.v1.LogEventH\x00R\x03log\x125\n" +
@@ -1993,13 +2376,15 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x0ePHASE_BUILDING\x10\x01\x12\x13\n" +
 	"\x0fPHASE_UPLOADING\x10\x02\x12\x16\n" +
 	"\x12PHASE_PROVISIONING\x10\x03\x12\x14\n" +
-	"\x10PHASE_FINALIZING\x10\x042\xac\x03\n" +
+	"\x10PHASE_FINALIZING\x10\x042\xdc\x04\n" +
 	"\x11DeploymentService\x12F\n" +
 	"\x06Deploy\x12\x1d.deployments.v1.DeployRequest\x1a\x1b.deployments.v1.DeployEvent0\x01\x12L\n" +
 	"\tBootstrap\x12 .deployments.v1.BootstrapRequest\x1a\x1b.deployments.v1.DeployEvent0\x01\x12H\n" +
 	"\aDestroy\x12\x1e.deployments.v1.DestroyRequest\x1a\x1b.deployments.v1.DeployEvent0\x01\x12e\n" +
 	"\x10ListEnvironments\x12'.deployments.v1.ListEnvironmentsRequest\x1a(.deployments.v1.ListEnvironmentsResponse\x12P\n" +
-	"\tPreflight\x12 .deployments.v1.PreflightRequest\x1a!.deployments.v1.PreflightResponseB?Z=github.com/ocelhq/ocel/pkg/proto/deployments/v1;deploymentsv1b\x06proto3"
+	"\tPreflight\x12 .deployments.v1.PreflightRequest\x1a!.deployments.v1.PreflightResponse\x12_\n" +
+	"\x0eListPromotions\x12%.deployments.v1.ListPromotionsRequest\x1a&.deployments.v1.ListPromotionsResponse\x12M\n" +
+	"\bRollback\x12\x1f.deployments.v1.RollbackRequest\x1a .deployments.v1.RollbackResponseB?Z=github.com/ocelhq/ocel/pkg/proto/deployments/v1;deploymentsv1b\x06proto3"
 
 var (
 	file_deployments_v1_deployments_proto_rawDescOnce sync.Once
@@ -2014,7 +2399,7 @@ func file_deployments_v1_deployments_proto_rawDescGZIP() []byte {
 }
 
 var file_deployments_v1_deployments_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
+var file_deployments_v1_deployments_proto_msgTypes = make([]protoimpl.MessageInfo, 30)
 var file_deployments_v1_deployments_proto_goTypes = []any{
 	(Phase)(0),                       // 0: deployments.v1.Phase
 	(Environment_Class)(0),           // 1: deployments.v1.Environment.Class
@@ -2033,19 +2418,26 @@ var file_deployments_v1_deployments_proto_goTypes = []any{
 	(*PreviewEnvironment)(nil),       // 14: deployments.v1.PreviewEnvironment
 	(*PreflightRequest)(nil),         // 15: deployments.v1.PreflightRequest
 	(*PreflightResponse)(nil),        // 16: deployments.v1.PreflightResponse
-	(*DeployEvent)(nil),              // 17: deployments.v1.DeployEvent
-	(*ProgressEvent)(nil),            // 18: deployments.v1.ProgressEvent
-	(*LogEvent)(nil),                 // 19: deployments.v1.LogEvent
-	(*ResultEvent)(nil),              // 20: deployments.v1.ResultEvent
-	(*ResourceOutput)(nil),           // 21: deployments.v1.ResourceOutput
-	(*PostgresOutput)(nil),           // 22: deployments.v1.PostgresOutput
-	(*BucketOutput)(nil),             // 23: deployments.v1.BucketOutput
-	(*FunctionOutput)(nil),           // 24: deployments.v1.FunctionOutput
-	nil,                              // 25: deployments.v1.Manifest.DomainsEntry
-	nil,                              // 26: deployments.v1.ManifestApp.DomainsEntry
-	(*v1.ResourceIdentifier)(nil),    // 27: resources.v1.ResourceIdentifier
-	(*v1.PostgresConfig)(nil),        // 28: resources.v1.PostgresConfig
-	(*v1.BucketConfig)(nil),          // 29: resources.v1.BucketConfig
+	(*Promotion)(nil),                // 17: deployments.v1.Promotion
+	(*PromotionHistoryEntry)(nil),    // 18: deployments.v1.PromotionHistoryEntry
+	(*ListPromotionsRequest)(nil),    // 19: deployments.v1.ListPromotionsRequest
+	(*ListPromotionsResponse)(nil),   // 20: deployments.v1.ListPromotionsResponse
+	(*RollbackRequest)(nil),          // 21: deployments.v1.RollbackRequest
+	(*RollbackResponse)(nil),         // 22: deployments.v1.RollbackResponse
+	(*DeployEvent)(nil),              // 23: deployments.v1.DeployEvent
+	(*ProgressEvent)(nil),            // 24: deployments.v1.ProgressEvent
+	(*LogEvent)(nil),                 // 25: deployments.v1.LogEvent
+	(*ResultEvent)(nil),              // 26: deployments.v1.ResultEvent
+	(*ResourceOutput)(nil),           // 27: deployments.v1.ResourceOutput
+	(*PostgresOutput)(nil),           // 28: deployments.v1.PostgresOutput
+	(*BucketOutput)(nil),             // 29: deployments.v1.BucketOutput
+	(*FunctionOutput)(nil),           // 30: deployments.v1.FunctionOutput
+	nil,                              // 31: deployments.v1.Manifest.DomainsEntry
+	nil,                              // 32: deployments.v1.ManifestApp.DomainsEntry
+	nil,                              // 33: deployments.v1.Promotion.BuildsEntry
+	(*v1.ResourceIdentifier)(nil),    // 34: resources.v1.ResourceIdentifier
+	(*v1.PostgresConfig)(nil),        // 35: resources.v1.PostgresConfig
+	(*v1.BucketConfig)(nil),          // 36: resources.v1.BucketConfig
 }
 var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	1,  // 0: deployments.v1.Environment.class:type_name -> deployments.v1.Environment.Class
@@ -2053,12 +2445,12 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	3,  // 2: deployments.v1.Environment.identity_source:type_name -> deployments.v1.Environment.IdentitySource
 	8,  // 3: deployments.v1.Manifest.resources:type_name -> deployments.v1.ManifestResource
 	7,  // 4: deployments.v1.Manifest.functions:type_name -> deployments.v1.ManifestFunction
-	25, // 5: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
+	31, // 5: deployments.v1.Manifest.domains:type_name -> deployments.v1.Manifest.DomainsEntry
 	6,  // 6: deployments.v1.Manifest.apps:type_name -> deployments.v1.ManifestApp
-	26, // 7: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
-	27, // 8: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
-	28, // 9: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
-	29, // 10: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
+	32, // 7: deployments.v1.ManifestApp.domains:type_name -> deployments.v1.ManifestApp.DomainsEntry
+	34, // 8: deployments.v1.ManifestResource.resource:type_name -> resources.v1.ResourceIdentifier
+	35, // 9: deployments.v1.ManifestResource.postgres:type_name -> resources.v1.PostgresConfig
+	36, // 10: deployments.v1.ManifestResource.bucket:type_name -> resources.v1.BucketConfig
 	5,  // 11: deployments.v1.DeployRequest.manifest:type_name -> deployments.v1.Manifest
 	4,  // 12: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
 	1,  // 13: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
@@ -2067,29 +2459,37 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	2,  // 16: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
 	1,  // 17: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
 	1,  // 18: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
-	18, // 19: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
-	19, // 20: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
-	20, // 21: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
-	0,  // 22: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
-	21, // 23: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
-	22, // 24: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
-	23, // 25: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
-	24, // 26: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
-	9,  // 27: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
-	10, // 28: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
-	11, // 29: deployments.v1.DeploymentService.Destroy:input_type -> deployments.v1.DestroyRequest
-	12, // 30: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
-	15, // 31: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
-	17, // 32: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
-	17, // 33: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
-	17, // 34: deployments.v1.DeploymentService.Destroy:output_type -> deployments.v1.DeployEvent
-	13, // 35: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
-	16, // 36: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
-	32, // [32:37] is the sub-list for method output_type
-	27, // [27:32] is the sub-list for method input_type
-	27, // [27:27] is the sub-list for extension type_name
-	27, // [27:27] is the sub-list for extension extendee
-	0,  // [0:27] is the sub-list for field type_name
+	33, // 19: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
+	17, // 20: deployments.v1.PromotionHistoryEntry.promotion:type_name -> deployments.v1.Promotion
+	18, // 21: deployments.v1.ListPromotionsResponse.promotions:type_name -> deployments.v1.PromotionHistoryEntry
+	17, // 22: deployments.v1.RollbackResponse.promoted:type_name -> deployments.v1.Promotion
+	24, // 23: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
+	25, // 24: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
+	26, // 25: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
+	0,  // 26: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
+	27, // 27: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
+	28, // 28: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
+	29, // 29: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
+	30, // 30: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
+	9,  // 31: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
+	10, // 32: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
+	11, // 33: deployments.v1.DeploymentService.Destroy:input_type -> deployments.v1.DestroyRequest
+	12, // 34: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
+	15, // 35: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
+	19, // 36: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
+	21, // 37: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
+	23, // 38: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
+	23, // 39: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
+	23, // 40: deployments.v1.DeploymentService.Destroy:output_type -> deployments.v1.DeployEvent
+	13, // 41: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
+	16, // 42: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
+	20, // 43: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
+	22, // 44: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
+	38, // [38:45] is the sub-list for method output_type
+	31, // [31:38] is the sub-list for method input_type
+	31, // [31:31] is the sub-list for extension type_name
+	31, // [31:31] is the sub-list for extension extendee
+	0,  // [0:31] is the sub-list for field type_name
 }
 
 func init() { file_deployments_v1_deployments_proto_init() }
@@ -2101,13 +2501,13 @@ func file_deployments_v1_deployments_proto_init() {
 		(*ManifestResource_Postgres)(nil),
 		(*ManifestResource_Bucket)(nil),
 	}
-	file_deployments_v1_deployments_proto_msgTypes[13].OneofWrappers = []any{
+	file_deployments_v1_deployments_proto_msgTypes[19].OneofWrappers = []any{
 		(*DeployEvent_Progress)(nil),
 		(*DeployEvent_Log)(nil),
 		(*DeployEvent_Result)(nil),
 	}
-	file_deployments_v1_deployments_proto_msgTypes[14].OneofWrappers = []any{}
-	file_deployments_v1_deployments_proto_msgTypes[17].OneofWrappers = []any{
+	file_deployments_v1_deployments_proto_msgTypes[20].OneofWrappers = []any{}
+	file_deployments_v1_deployments_proto_msgTypes[23].OneofWrappers = []any{
 		(*ResourceOutput_Postgres)(nil),
 		(*ResourceOutput_Bucket)(nil),
 		(*ResourceOutput_Function)(nil),
@@ -2118,7 +2518,7 @@ func file_deployments_v1_deployments_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_deployments_v1_deployments_proto_rawDesc), len(file_deployments_v1_deployments_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   23,
+			NumMessages:   30,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
