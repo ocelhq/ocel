@@ -90,7 +90,7 @@ type DeploymentServiceClient interface {
 	// ListPromotions enumerates a production project's promotion history,
 	// newest first, each entry marked with whether it is the currently active
 	// one. It backs `ocel deployments ls`. Production-only: a project with no
-	// root tier (never deployed to production) returns an empty list rather
+	// root stack (never deployed to production) returns an empty list rather
 	// than an error.
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	// Rollback atomically re-points a production project's active-deployment
@@ -275,7 +275,7 @@ type DeploymentServiceHandler interface {
 	// ListPromotions enumerates a production project's promotion history,
 	// newest first, each entry marked with whether it is the currently active
 	// one. It backs `ocel deployments ls`. Production-only: a project with no
-	// root tier (never deployed to production) returns an empty list rather
+	// root stack (never deployed to production) returns an empty list rather
 	// than an error.
 	ListPromotions(context.Context, *v1.ListPromotionsRequest) (*v1.ListPromotionsResponse, error)
 	// Rollback atomically re-points a production project's active-deployment

@@ -692,7 +692,7 @@ export const PreflightResponseSchema: GenMessage<PreflightResponse> = /*@__PURE_
 /**
  * Promotion is the project-wide unit one production deploy produces: a
  * promotion id grouping the per-app build ids it made active. Mirrors
- * edge.Promotion in cloud/edge/roottier.go, which is itself mirrored from
+ * edge.Promotion in cloud/edge/rootstack.go, which is itself mirrored from
  * workers/deployments-store/src/store.ts.
  *
  * @generated from message deployments.v1.Promotion
@@ -1379,7 +1379,7 @@ export const DeploymentService: GenService<{
    * ListPromotions enumerates a production project's promotion history,
    * newest first, each entry marked with whether it is the currently active
    * one. It backs `ocel deployments ls`. Production-only: a project with no
-   * root tier (never deployed to production) returns an empty list rather
+   * root stack (never deployed to production) returns an empty list rather
    * than an error.
    *
    * @generated from rpc deployments.v1.DeploymentService.ListPromotions

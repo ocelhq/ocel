@@ -140,12 +140,12 @@ type Config struct {
 	// find orphans. 0 means no expiry (production and persistent previews).
 	ExpiresAt int64
 
-	// RootTierState is the project's prior root-tier reconcile state (ADR
+	// RootStackState is the project's prior root-stack reconcile state (ADR
 	// 0001), persisted by the caller across deploys exactly like EdgeValues —
 	// opaque, handed back unread. Nil on a project's first production deploy,
 	// and also nil until a caller wires up per-project persistence for it; every
 	// production deploy reconciles as if fresh until then.
-	RootTierState edge.RootTierState
+	RootStackState edge.RootStackState
 }
 
 // Progress reports a phase-tagged deploy step so the CLI can render a fixed
@@ -164,13 +164,13 @@ func (p Progress) report(phase deploymentsv1.Phase, message string, current, tot
 
 // Run provisions every resource in manifest against AWS and returns the
 // whole-stack connection outputs, the user-facing app URLs, and — for a
-// production deploy only — the root-tier state the caller must persist so the
+// production deploy only — the root-stack state the caller must persist so the
 // next deploy (and rollback) reconciles against it instead of starting fresh;
 // nil for a preview. progress reports phase-tagged steps and log forwards
 // Pulumi engine output; both may be nil. Run performs the real Pulumi up and
 // is not exercised by unit tests.
-func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootTierState, error) {
-	// Production deploys realize the tiered model (ADR 0001): root reconcile,
+func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootStackState, error) {
+	// Production deploys realize the stacked model (ADR 0001): root reconcile,
 	// then a stable infra stack, then one parallel app-deploy stack per app,
 	// staged and promoted atomically. Preview keeps the single in-place stack
 	// below unchanged.

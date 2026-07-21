@@ -1,4 +1,4 @@
-// Root-tier reconcile and deployments-store operations (ADR 0001/0002): the
+// Root-stack reconcile and deployments-store operations (ADR 0001/0002): the
 // generic + DO worker upload reuses the same script-upload machinery
 // cloudflare.go's DeployApp already exercises; the store operations are
 // authenticated HTTP calls to the DO worker's fetch() surface
@@ -50,19 +50,19 @@ const (
 // the active Deployment at request time.
 const genericStoreBinding = "DEPLOYMENTS"
 
-func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec, prior edge.RootTierState) (edge.RootTierState, error) {
+func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
-		return nil, fmt.Errorf("%s is not set; it is required to reconcile the Cloudflare root tier", envAccountID)
+		return nil, fmt.Errorf("%s is not set; it is required to reconcile the Cloudflare root stack", envAccountID)
 	}
 
-	secret := prior[edge.RootTierKeyWriteSecret]
-	endpoint := prior[edge.RootTierKeyEndpoint]
+	secret := prior[edge.RootStackKeyWriteSecret]
+	endpoint := prior[edge.RootStackKeyEndpoint]
 	fresh := secret == ""
 	if fresh {
 		minted, err := mintWriteSecret()
 		if err != nil {
-			return nil, fmt.Errorf("mint root-tier write secret: %w", err)
+			return nil, fmt.Errorf("mint root-stack write secret: %w", err)
 		}
 		secret = minted
 	}
@@ -70,7 +70,7 @@ func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec
 	if !fresh {
 		current, err := p.getVersionStamp(ctx, endpoint, secret)
 		if err != nil {
-			return nil, fmt.Errorf("read root-tier version stamp: %w", err)
+			return nil, fmt.Errorf("read root-stack version stamp: %w", err)
 		}
 		if current == spec.Version {
 			return prior, nil
@@ -103,12 +103,12 @@ func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec
 	}
 
 	if err := p.putVersionStamp(ctx, endpoint, secret, spec.Version); err != nil {
-		return nil, fmt.Errorf("set root-tier version stamp: %w", err)
+		return nil, fmt.Errorf("set root-stack version stamp: %w", err)
 	}
 
-	return edge.RootTierState{
-		edge.RootTierKeyEndpoint:    endpoint,
-		edge.RootTierKeyWriteSecret: secret,
+	return edge.RootStackState{
+		edge.RootStackKeyEndpoint:    endpoint,
+		edge.RootStackKeyWriteSecret: secret,
 	}, nil
 }
 
@@ -175,17 +175,17 @@ func buildStoreScriptMultipart(worker edge.Worker, migrate bool) ([]byte, string
 	return buf.Bytes(), w.FormDataContentType(), nil
 }
 
-func (p *provider) PutStaged(ctx context.Context, state edge.RootTierState, record edge.DeploymentRecord) error {
+func (p *provider) PutStaged(ctx context.Context, state edge.RootStackState, record edge.DeploymentRecord) error {
 	_, err := p.storeRequest(ctx, state, http.MethodPut, "/staged", record, nil)
 	return err
 }
 
-func (p *provider) Promote(ctx context.Context, state edge.RootTierState, promotion edge.Promotion) error {
+func (p *provider) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion) error {
 	_, err := p.storeRequest(ctx, state, http.MethodPost, "/promote", promotion, nil)
 	return err
 }
 
-func (p *provider) History(ctx context.Context, state edge.RootTierState) ([]edge.HistoryEntry, error) {
+func (p *provider) History(ctx context.Context, state edge.RootStackState) ([]edge.HistoryEntry, error) {
 	var history []edge.HistoryEntry
 	if _, err := p.storeRequest(ctx, state, http.MethodGet, "/history", nil, &history); err != nil {
 		return nil, err
@@ -193,7 +193,7 @@ func (p *provider) History(ctx context.Context, state edge.RootTierState) ([]edg
 	return history, nil
 }
 
-func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.RootTierState, keepN int) (edge.PruneResult, error) {
+func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.RootStackState, keepN int) (edge.PruneResult, error) {
 	var result edge.PruneResult
 	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/prune", map[string]int{"keepN": keepN}, &result); err != nil {
 		return edge.PruneResult{}, err
@@ -221,8 +221,8 @@ func (p *provider) putVersionStamp(ctx context.Context, endpoint, secret, versio
 
 // storeRequest issues an authenticated call against state's deployments-store
 // endpoint and write secret.
-func (p *provider) storeRequest(ctx context.Context, state edge.RootTierState, method, path string, body, out any) (*http.Response, error) {
-	return p.storeRequestTo(ctx, state[edge.RootTierKeyEndpoint], state[edge.RootTierKeyWriteSecret], method, path, body, out)
+func (p *provider) storeRequest(ctx context.Context, state edge.RootStackState, method, path string, body, out any) (*http.Response, error) {
+	return p.storeRequestTo(ctx, state[edge.RootStackKeyEndpoint], state[edge.RootStackKeyWriteSecret], method, path, body, out)
 }
 
 // storeRequestTo issues one authenticated HTTP call to the deployments-store
@@ -232,7 +232,7 @@ func (p *provider) storeRequest(ctx context.Context, state edge.RootTierState, m
 // error naming the path and status.
 func (p *provider) storeRequestTo(ctx context.Context, endpoint, secret, method, path string, body, out any) (*http.Response, error) {
 	if endpoint == "" {
-		return nil, fmt.Errorf("deployments store: no endpoint in root-tier state; reconcile the root tier first")
+		return nil, fmt.Errorf("deployments store: no endpoint in root-stack state; reconcile the root stack first")
 	}
 
 	var reader io.Reader
@@ -271,7 +271,7 @@ func (p *provider) storeRequestTo(ctx context.Context, endpoint, secret, method,
 	return res, nil
 }
 
-// mintWriteSecret generates the project write-secret minted once at root-tier
+// mintWriteSecret generates the project write-secret minted once at root-stack
 // creation, hex-encoded so it is safe to carry as a plain HTTP header value.
 func mintWriteSecret() (string, error) {
 	buf := make([]byte, writeSecretBytes)

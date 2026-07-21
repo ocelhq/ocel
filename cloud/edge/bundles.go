@@ -41,7 +41,7 @@ func (m BundleManifest) Path(f Framework, k Kind) (string, error) {
 // exports the deployments-store worker's bundle manifest in (ADR 0001): a JSON
 // object of edge -> path to that edge's compiled deployments-store
 // entrypoint. Separate from EnvWorkerBundles because the store worker is not a
-// framework's worker — it is the root tier's own, one per edge kind rather
+// framework's worker — it is the root stack's own, one per edge kind rather
 // than one per (framework, edge) pairing.
 const EnvStoreWorkerBundles = "OCEL_STORE_WORKER_BUNDLES"
 

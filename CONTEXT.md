@@ -27,7 +27,7 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
   the prior project promotion). "Instant" (< 5s) because the old Deployments
   are retained and only the pointer moves.
 
-- **Restorable rollback** — (future, container-backed apps) a slower tier where
+- **Restorable rollback** — (future, container-backed apps) a slower stack where
   old compute is not kept live; only the artifacts needed to *restore* a
   deployment are retained. Out of scope for the serverless work.
 
@@ -41,26 +41,26 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
   both operate in promotions. See also the verb sense of *Promotion* under
   Deployment & Rollback.
 
-## Provisioning tiers
+## Provisioning stacks
 
-- **Root tier** (a.k.a. root/prod stack) — the per-project, frozen, generic
+- **Root stack** (a.k.a. root/prod stack) — the per-project, frozen, generic
   infrastructure: the generic app worker(s), their custom domain(s), and the
   deployments-store worker. Created once per project and reconciled only on an
   ocel version upgrade — never mutated by a user `ocel deploy`. Managed
   imperatively via the edge provider's API (not a Pulumi stack).
 
-- **Infra tier** (infra stack) — the per-project Pulumi stack holding SDK-declared
-  resources (postgres, bucket, …). Runs before app tiers that depend on its
+- **Infra stack** (infra stack) — the per-project Pulumi stack holding SDK-declared
+  resources (postgres, bucket, …). Runs before app stacks that depend on its
   outputs. Untouched by rollback.
 
-- **App-deploy tier** (app-deploy stack) — a per-app, per-deploy Pulumi stack
+- **App-deploy stack** (app-deploy stack) — a per-app, per-deploy Pulumi stack
   that produces a Deployment's immutable compute artifacts (Lambda functions).
   Its stack name is unique on every deploy (unlike root/infra, which are
   stable). Parallelizable across apps.
 
 ## Deployments store
 
-- **Deployments store** — the deployments-DO worker in the root tier, one per
+- **Deployments store** — the deployments-DO worker in the root stack, one per
   project. Holds a single Durable Object instance for the whole project: every
   app's Deployment records keyed by (app, build id), plus the active-deployment
   pointer map (app → build id). Framework workers read it via a service binding
@@ -84,14 +84,14 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
   immutable headers and content-type inferred from the path — replacing the old
   per-script Workers Assets binding, which cannot survive a frozen worker.
 
-- **Root-tier version stamp** — a version marker (held in the deployments store)
-  recording which ocel root-tier revision is deployed. A deploy reconciles the
-  otherwise-frozen root tier (re-puts the generic + DO workers, migrates the DO
+- **Root-stack version stamp** — a version marker (held in the deployments store)
+  recording which ocel root-stack revision is deployed. A deploy reconciles the
+  otherwise-frozen root stack (re-puts the generic + DO workers, migrates the DO
   schema) only when the running ocel expects a newer revision; otherwise it
   touches nothing.
 
 - **Project-scoped write secret** — the credential the deploy host presents to
-  the DO worker to write records and flip the pointer. Minted when the root tier
+  the DO worker to write records and flip the pointer. Minted when the root stack
   is created, bound as a secret on the DO worker, and persisted in the provider's
   per-project state. The frozen worker needs none — it reads via a service
   binding. Note: this feature is production-only; previews keep the existing

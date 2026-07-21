@@ -21,9 +21,9 @@ type Promotion struct {
 	Builds      map[string]string // app -> build id
 }
 
-// Plan is the tier/stack plan one production deploy realizes: the stable
-// infra-tier stack, one app-deploy stack per app, and the Promotion those
-// app-deploy stacks' Deployments belong to. The root tier is not part of the
+// Plan is the stack plan one production deploy realizes: the stable
+// infra stack, one app-deploy stack per app, and the Promotion those
+// app-deploy stacks' Deployments belong to. The root stack is not part of the
 // plan — it is reconciled imperatively through edge.Provider, not a Pulumi
 // stack.
 type Plan struct {
@@ -33,7 +33,7 @@ type Plan struct {
 }
 
 // InfraStackName returns the stable, per-project Pulumi stack name for the
-// infra tier: SDK-declared resources (postgres, bucket, …). It never varies
+// infra stack: SDK-declared resources (postgres, bucket, …). It never varies
 // across a project's production deploys — a deploy realizes it in place —
 // so unlike an app-deploy stack it carries no build id. Pure.
 func InfraStackName(projectID string) string {
@@ -41,7 +41,7 @@ func InfraStackName(projectID string) string {
 }
 
 // AppDeployStackName returns the deterministic, per-deploy Pulumi stack name
-// for one app's app-deploy tier: unique per (project, app, build id), so
+// for one app's app-deploy stack: unique per (project, app, build id), so
 // every deploy of an app gets its own stack instead of mutating the last one
 // — the prior stack, and the Deployment it produced, stays live until prune
 // reclaims it. Each segment runs through safeName before joining, so no
@@ -53,8 +53,8 @@ func AppDeployStackName(projectID, app, buildID string) string {
 }
 
 // BuildPlan turns a manifest, its production environment, a promotion id,
-// and the per-app build ids this deploy produced into the tier/stack Plan
-// the deploy and prune paths consume. Production-only: tiers and rollback
+// and the per-app build ids this deploy produced into the stack Plan
+// the deploy and prune paths consume. Production-only: stacks and rollback
 // don't exist for previews, which keep the single in-place stack model. Pure
 // — no Pulumi, AWS, or Cloudflare calls. Every app the manifest declares
 // must have an entry in builds, else BuildPlan errors rather than silently

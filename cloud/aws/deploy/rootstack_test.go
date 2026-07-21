@@ -9,7 +9,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// recordingRootTier is recordingEdge's edge.RootTier counterpart (ADR
+// recordingRootStack is recordingEdge's edge.RootStack counterpart (ADR
 // 0001/0002): it records every reconcile and store call so host
 // orchestration tests (ticket ocelhq-u8h.5) can assert the reconcile-then-
 // stage-then-promote sequence without any Cloudflare API. Reconcile
@@ -17,11 +17,11 @@ import (
 // in-memory state — a no-op unless spec.Version differs from what the last
 // reconcile "deployed" — and every store call rejects a write-secret that
 // doesn't match what reconcile last minted, catching a host that calls a
-// store operation before reconciling the root tier.
-type recordingRootTier struct {
+// store operation before reconciling the root stack.
+type recordingRootStack struct {
 	recordingEdge
 
-	reconciles []edge.RootTierSpec
+	reconciles []edge.RootStackSpec
 	redeploys  int
 	secret     string
 	version    string
@@ -34,11 +34,11 @@ type recordingRootTier struct {
 	pruneResult edge.PruneResult
 }
 
-var _ edge.RootTier = (*recordingRootTier)(nil)
+var _ edge.RootStack = (*recordingRootStack)(nil)
 
 const fakeStoreEndpoint = "https://store.fake"
 
-func (f *recordingRootTier) ReconcileRootTier(_ context.Context, spec edge.RootTierSpec, prior edge.RootTierState) (edge.RootTierState, error) {
+func (f *recordingRootStack) ReconcileRootStack(_ context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
 	f.reconciles = append(f.reconciles, spec)
 	if prior != nil && f.version == spec.Version {
 		return prior, nil
@@ -48,20 +48,20 @@ func (f *recordingRootTier) ReconcileRootTier(_ context.Context, spec edge.RootT
 	if f.secret == "" {
 		f.secret = "fake-secret"
 	}
-	return edge.RootTierState{
-		edge.RootTierKeyEndpoint:    fakeStoreEndpoint,
-		edge.RootTierKeyWriteSecret: f.secret,
+	return edge.RootStackState{
+		edge.RootStackKeyEndpoint:    fakeStoreEndpoint,
+		edge.RootStackKeyWriteSecret: f.secret,
 	}, nil
 }
 
-func (f *recordingRootTier) checkAuth(state edge.RootTierState) error {
-	if f.secret == "" || state[edge.RootTierKeyWriteSecret] != f.secret {
-		return fmt.Errorf("recordingRootTier: unauthenticated store call; reconcile the root tier first")
+func (f *recordingRootStack) checkAuth(state edge.RootStackState) error {
+	if f.secret == "" || state[edge.RootStackKeyWriteSecret] != f.secret {
+		return fmt.Errorf("recordingRootStack: unauthenticated store call; reconcile the root stack first")
 	}
 	return nil
 }
 
-func (f *recordingRootTier) PutStaged(_ context.Context, state edge.RootTierState, record edge.DeploymentRecord) error {
+func (f *recordingRootStack) PutStaged(_ context.Context, state edge.RootStackState, record edge.DeploymentRecord) error {
 	if err := f.checkAuth(state); err != nil {
 		return err
 	}
@@ -69,7 +69,7 @@ func (f *recordingRootTier) PutStaged(_ context.Context, state edge.RootTierStat
 	return nil
 }
 
-func (f *recordingRootTier) Promote(_ context.Context, state edge.RootTierState, promotion edge.Promotion) error {
+func (f *recordingRootStack) Promote(_ context.Context, state edge.RootStackState, promotion edge.Promotion) error {
 	if err := f.checkAuth(state); err != nil {
 		return err
 	}
@@ -77,14 +77,14 @@ func (f *recordingRootTier) Promote(_ context.Context, state edge.RootTierState,
 	return nil
 }
 
-func (f *recordingRootTier) History(_ context.Context, state edge.RootTierState) ([]edge.HistoryEntry, error) {
+func (f *recordingRootStack) History(_ context.Context, state edge.RootStackState) ([]edge.HistoryEntry, error) {
 	if err := f.checkAuth(state); err != nil {
 		return nil, err
 	}
 	return f.history, nil
 }
 
-func (f *recordingRootTier) DeletePromotionArtifacts(_ context.Context, state edge.RootTierState, keepN int) (edge.PruneResult, error) {
+func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state edge.RootStackState, keepN int) (edge.PruneResult, error) {
 	if err := f.checkAuth(state); err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -92,27 +92,27 @@ func (f *recordingRootTier) DeletePromotionArtifacts(_ context.Context, state ed
 	return f.pruneResult, nil
 }
 
-func TestRecordingRootTier_ReconcileIsANoOpWhenVersionUnchanged(t *testing.T) {
-	f := &recordingRootTier{}
+func TestRecordingRootStack_ReconcileIsANoOpWhenVersionUnchanged(t *testing.T) {
+	f := &recordingRootStack{}
 	ctx := context.Background()
-	spec := edge.RootTierSpec{Version: "v1"}
+	spec := edge.RootStackSpec{Version: "v1"}
 
-	state, err := f.ReconcileRootTier(ctx, spec, nil)
+	state, err := f.ReconcileRootStack(ctx, spec, nil)
 	if err != nil {
-		t.Fatalf("ReconcileRootTier: %v", err)
+		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 	if f.redeploys != 1 {
 		t.Fatalf("redeploys = %d, want 1 after the first reconcile", f.redeploys)
 	}
 
-	again, err := f.ReconcileRootTier(ctx, spec, state)
+	again, err := f.ReconcileRootStack(ctx, spec, state)
 	if err != nil {
-		t.Fatalf("ReconcileRootTier: %v", err)
+		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 	if f.redeploys != 1 {
 		t.Errorf("redeploys = %d, want 1: an unchanged version must be a no-op", f.redeploys)
 	}
-	if again[edge.RootTierKeyWriteSecret] != state[edge.RootTierKeyWriteSecret] {
+	if again[edge.RootStackKeyWriteSecret] != state[edge.RootStackKeyWriteSecret] {
 		t.Errorf("a no-op reconcile must hand back the same state unchanged")
 	}
 	if len(f.reconciles) != 2 {
@@ -120,28 +120,28 @@ func TestRecordingRootTier_ReconcileIsANoOpWhenVersionUnchanged(t *testing.T) {
 	}
 }
 
-func TestRecordingRootTier_ReconcileRedeploysOnVersionBump(t *testing.T) {
-	f := &recordingRootTier{}
+func TestRecordingRootStack_ReconcileRedeploysOnVersionBump(t *testing.T) {
+	f := &recordingRootStack{}
 	ctx := context.Background()
 
-	state, err := f.ReconcileRootTier(ctx, edge.RootTierSpec{Version: "v1"}, nil)
+	state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
 	if err != nil {
-		t.Fatalf("ReconcileRootTier: %v", err)
+		t.Fatalf("ReconcileRootStack: %v", err)
 	}
-	if _, err := f.ReconcileRootTier(ctx, edge.RootTierSpec{Version: "v2"}, state); err != nil {
-		t.Fatalf("ReconcileRootTier: %v", err)
+	if _, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v2"}, state); err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 	if f.redeploys != 2 {
 		t.Errorf("redeploys = %d, want 2: a version bump must not be a no-op", f.redeploys)
 	}
 }
 
-func TestRecordingRootTier_StoreOpsRejectAnUnreconciledState(t *testing.T) {
-	f := &recordingRootTier{}
+func TestRecordingRootStack_StoreOpsRejectAnUnreconciledState(t *testing.T) {
+	f := &recordingRootStack{}
 	ctx := context.Background()
 	record := edge.DeploymentRecord{App: "web", BuildID: "b1"}
 
-	if err := f.PutStaged(ctx, edge.RootTierState{}, record); err == nil {
+	if err := f.PutStaged(ctx, edge.RootStackState{}, record); err == nil {
 		t.Error("expected PutStaged to reject a state no reconcile ever produced")
 	}
 	if len(f.staged) != 0 {
@@ -149,16 +149,16 @@ func TestRecordingRootTier_StoreOpsRejectAnUnreconciledState(t *testing.T) {
 	}
 }
 
-func TestRecordingRootTier_StoreOpsRecordCallsAfterReconcile(t *testing.T) {
-	f := &recordingRootTier{
+func TestRecordingRootStack_StoreOpsRecordCallsAfterReconcile(t *testing.T) {
+	f := &recordingRootStack{
 		history:     []edge.HistoryEntry{{Promotion: edge.Promotion{PromotionID: "p1"}, Active: true}},
 		pruneResult: edge.PruneResult{RemovedPromotionIDs: []string{"p0"}},
 	}
 	ctx := context.Background()
 
-	state, err := f.ReconcileRootTier(ctx, edge.RootTierSpec{Version: "v1"}, nil)
+	state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
 	if err != nil {
-		t.Fatalf("ReconcileRootTier: %v", err)
+		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
 	record := edge.DeploymentRecord{App: "web", BuildID: "b1"}

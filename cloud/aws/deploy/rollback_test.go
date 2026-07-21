@@ -72,16 +72,16 @@ func TestRollbackTarget_NoArgErrorsWhenNoActivePromotion(t *testing.T) {
 }
 
 func TestRollback_PromotesTheTargetUnderAFreshTimestamp(t *testing.T) {
-	fake := &recordingRootTier{
+	fake := &recordingRootStack{
 		history: []edge.HistoryEntry{
 			{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200, Builds: map[string]string{"web": "b2"}}, Active: true},
 			{Promotion: edge.Promotion{PromotionID: "promo-1", Ts: 100, Builds: map[string]string{"web": "b1"}}, Active: false},
 		},
 	}
 	ctx := context.Background()
-	state, err := fake.ReconcileRootTier(ctx, edge.RootTierSpec{Version: "v1"}, nil)
+	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
 	if err != nil {
-		t.Fatalf("ReconcileRootTier: %v", err)
+		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
 	promoted, err := Rollback(ctx, fake, state, "", 999)
@@ -104,7 +104,7 @@ func TestRollback_PromotesTheTargetUnderAFreshTimestamp(t *testing.T) {
 }
 
 func TestRollback_ToASpecificPromotion(t *testing.T) {
-	fake := &recordingRootTier{
+	fake := &recordingRootStack{
 		history: []edge.HistoryEntry{
 			{Promotion: edge.Promotion{PromotionID: "promo-3", Ts: 300}, Active: true},
 			{Promotion: edge.Promotion{PromotionID: "promo-2", Ts: 200}, Active: false},
@@ -112,9 +112,9 @@ func TestRollback_ToASpecificPromotion(t *testing.T) {
 		},
 	}
 	ctx := context.Background()
-	state, err := fake.ReconcileRootTier(ctx, edge.RootTierSpec{Version: "v1"}, nil)
+	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
 	if err != nil {
-		t.Fatalf("ReconcileRootTier: %v", err)
+		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
 	promoted, err := Rollback(ctx, fake, state, "promo-1", 999)
@@ -127,15 +127,15 @@ func TestRollback_ToASpecificPromotion(t *testing.T) {
 }
 
 func TestRollback_UnknownToErrorsAndNeverPromotes(t *testing.T) {
-	fake := &recordingRootTier{
+	fake := &recordingRootStack{
 		history: []edge.HistoryEntry{
 			{Promotion: edge.Promotion{PromotionID: "promo-1"}, Active: true},
 		},
 	}
 	ctx := context.Background()
-	state, err := fake.ReconcileRootTier(ctx, edge.RootTierSpec{Version: "v1"}, nil)
+	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
 	if err != nil {
-		t.Fatalf("ReconcileRootTier: %v", err)
+		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
 	if _, err := Rollback(ctx, fake, state, "no-such-promotion", 999); err == nil {
