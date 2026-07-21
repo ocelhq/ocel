@@ -22,6 +22,7 @@
   // identity to look itself up in the (project-wide) deployments store.
   "vars": {
     "OCEL_APP": "web",
+    "OCEL_SLUG": "dev",
   },
   "services": [
     { "binding": "DEPLOYMENTS", "service": "deployments-store" },

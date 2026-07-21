@@ -35,12 +35,12 @@ function countingBinding(opts: {
     activeBuildIdCalls: 0,
     recordCalls: 0,
     down: false,
-    async activeBuildId(app: string) {
+    async activeBuildId(_slug: string, app: string) {
       this.activeBuildIdCalls++;
       if (this.down) throw new Error("store unreachable");
       return opts.activeBuildId[app];
     },
-    async record(app: string, buildId: string) {
+    async record(_slug: string, app: string, buildId: string) {
       this.recordCalls++;
       if (this.down) throw new Error("store unreachable");
       return opts.records[`${app}/${buildId}`];
@@ -53,7 +53,7 @@ function deps(
   clock: { ms: number },
   app = "web",
 ): DeploymentsDeps {
-  return { binding, app, now: () => clock.ms };
+  return { binding, slug: "acme-web", app, now: () => clock.ms };
 }
 
 describe("resolveDeployment", () => {

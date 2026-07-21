@@ -180,6 +180,11 @@ message Manifest {
   repeated ManifestResource resources = 3;
   repeated ManifestFunction functions = 4;
 
+  // slug is the project's stable, human-authored deployment identity (a
+  // DNS-label string). It keys the project's own instance in the shared
+  // deployments-store worker, distinct from project_id (the dev-cloud link).
+  string slug = 7;
+
   // domains maps a lowercased environment class ("production") to the custom
   // hostname the web-facing worker is served on for that class. A provider
   // reads only the entry matching DeployRequest.environment; absent entries
