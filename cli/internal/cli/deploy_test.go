@@ -96,6 +96,17 @@ func TestRunDeploy_NotLoggedIn_ReturnsExitErrorWithLoginInstruction(t *testing.T
 	}
 }
 
+func TestRunDeploy_InvalidTag_ErrorsBeforeAnything(t *testing.T) {
+	var stderr bytes.Buffer
+	err := runDeploy(context.Background(), t.TempDir(), deployOptions{tag: "feature/x"}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want an error for an invalid tag")
+	}
+	if !strings.Contains(err.Error(), "invalid character") {
+		t.Errorf("err = %v, want it to explain the invalid character", err)
+	}
+}
+
 func TestRunDeploy_MissingConfig_ErrorsBeforeAnySpawn(t *testing.T) {
 	setLoggedIn(t)
 

@@ -15,7 +15,7 @@ import (
 // ("previous promotion") and --to paths without a real deployments store.
 var fakePromotions = []*deploymentsv1.PromotionHistoryEntry{
 	{Promotion: &deploymentsv1.Promotion{PromotionId: "promo-2", Ts: 2000, Builds: map[string]string{"web": "build-2"}}, Active: true},
-	{Promotion: &deploymentsv1.Promotion{PromotionId: "promo-1", Ts: 1000, Builds: map[string]string{"web": "build-1"}}, Active: false},
+	{Promotion: &deploymentsv1.Promotion{PromotionId: "promo-1", Ts: 1000, Tag: "v1.0.0", Builds: map[string]string{"web": "build-1"}}, Active: false},
 }
 
 // ListPromotions returns the canned promotion history so `ocel deployments
@@ -27,12 +27,21 @@ func (s *deployFakeProviderServer) ListPromotions(ctx context.Context, req *depl
 	return &deploymentsv1.ListPromotionsResponse{Promotions: fakePromotions}, nil
 }
 
-// Rollback promotes fakePromotions' entry immediately before the active one
-// when req.To is empty, or the named entry otherwise; an unknown id is
-// rejected, mirroring the real provider's clear-error contract.
+// Rollback promotes fakePromotions' entry carrying req.Tag, else the entry
+// named by req.To, else the one immediately before the active one; an unknown
+// target is rejected, mirroring the real provider's clear-error contract.
 func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
+	}
+
+	if tag := req.GetTag(); tag != "" {
+		for _, entry := range fakePromotions {
+			if entry.GetPromotion().GetTag() == tag {
+				return rollbackResponseFor(entry), nil
+			}
+		}
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no promotion tagged %q in this project's history", tag))
 	}
 
 	to := req.GetTo()
@@ -41,14 +50,22 @@ func (s *deployFakeProviderServer) Rollback(ctx context.Context, req *deployment
 	}
 	for _, entry := range fakePromotions {
 		if entry.GetPromotion().GetPromotionId() == to {
-			return &deploymentsv1.RollbackResponse{
-				Promoted: &deploymentsv1.Promotion{
-					PromotionId: entry.GetPromotion().GetPromotionId(),
-					Ts:          9999,
-					Builds:      entry.GetPromotion().GetBuilds(),
-				},
-			}, nil
+			return rollbackResponseFor(entry), nil
 		}
 	}
 	return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no promotion %q in this project's history", to))
+}
+
+// rollbackResponseFor re-promotes an entry under a fresh ts, carrying its tag
+// through exactly as the real Rollback does.
+func rollbackResponseFor(entry *deploymentsv1.PromotionHistoryEntry) *deploymentsv1.RollbackResponse {
+	p := entry.GetPromotion()
+	return &deploymentsv1.RollbackResponse{
+		Promoted: &deploymentsv1.Promotion{
+			PromotionId: p.GetPromotionId(),
+			Ts:          9999,
+			Builds:      p.GetBuilds(),
+			Tag:         p.GetTag(),
+		},
+	}
 }

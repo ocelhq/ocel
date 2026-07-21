@@ -248,6 +248,12 @@ message DeployRequest {
   // environment is the fully resolved target this deploy acts on. `ocel
   // deploy` and `ocel preview` both drive this RPC and diverge only here.
   Environment environment = 4;
+
+  // tag is an optional immutable label stamped on the promotion this deploy
+  // produces (production only), later usable as `ocel rollback --tag <tag>`.
+  // Empty means untagged. A tag already in use by another live promotion is
+  // rejected before any infrastructure is created.
+  string tag = 5;
 }
 
 // BootstrapRequest is the request for DeploymentService.Bootstrap. Bootstrap
@@ -420,6 +426,10 @@ message Promotion {
   int64 ts = 2;
   // builds maps app name to the build id this promotion made active.
   map<string, string> builds = 3;
+  // tag is the optional immutable label stamped at deploy time. Empty when the
+  // promotion was deployed without one. Unique across a project's live
+  // promotions, so it addresses exactly one of them for rollback.
+  string tag = 4;
 }
 
 // PromotionHistoryEntry is one Promotion in the project's ordered promotion
@@ -467,6 +477,10 @@ message RollbackRequest {
   // to is the promotion id to roll back to. Empty means "the promotion
   // immediately before the currently active one".
   string to = 4;
+
+  // tag rolls back to the promotion carrying this tag. Mutually exclusive with
+  // to; the CLI rejects both being set. Empty means "not selecting by tag".
+  string tag = 5;
 }
 
 // RollbackResponse is the reply from DeploymentService.Rollback: the

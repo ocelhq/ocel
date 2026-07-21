@@ -36,11 +36,20 @@ export interface Promotion {
   promotionId: string;
   ts: number;
   builds: Record<string, string>;
+  // Optional immutable label stamped at deploy time, unique across a project's
+  // live promotions. Absent when the promotion was deployed without one.
+  tag?: string;
 }
 
 export interface HistoryEntry extends Promotion {
   active: boolean;
 }
+
+// Thrown by promote() when a deploy's tag is already held by a different live
+// promotion. The host also fails such a deploy up front (before creating any
+// infrastructure); this is the atomic backstop that closes the window between
+// that check and promote, e.g. two concurrent deploys claiming the same tag.
+export class TagConflictError extends Error {}
 
 export interface PruneResult {
   keptPromotionIds: string[];
@@ -73,12 +82,28 @@ export function ensureSchema(store: SqlStore): void {
        promotion_id TEXT PRIMARY KEY,
        ts INTEGER NOT NULL,
        builds TEXT NOT NULL,
-       seq INTEGER NOT NULL
+       seq INTEGER NOT NULL,
+       tag TEXT
      );
      CREATE TABLE IF NOT EXISTS meta (
        key TEXT PRIMARY KEY,
        value TEXT NOT NULL
      );`,
+  );
+
+  // Migrate a promotions table created before tags existed: add the column,
+  // then enforce tag uniqueness across live promotions (partial so the many
+  // untagged rows never collide on NULL).
+  const hasTag = store.sql
+    .exec<{ name: string }>(`PRAGMA table_info(promotions)`)
+    .toArray()
+    .some((c) => c.name === "tag");
+  if (!hasTag) {
+    store.sql.exec(`ALTER TABLE promotions ADD COLUMN tag TEXT`);
+  }
+  store.sql.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS promotions_tag_unique
+       ON promotions(tag) WHERE tag IS NOT NULL`,
   );
 }
 
@@ -133,17 +158,35 @@ export function promote(store: SqlStore, promotion: Promotion): void {
   // in one transaction, so a crash mid-promote can never leave the active
   // pointer naming a promotion that isn't in the table, or vice versa.
   store.transactionSync(() => {
+    // A tag addresses exactly one promotion, so reject one already held by a
+    // different promotion. A rollback re-promotes an existing id carrying its
+    // own tag unchanged, so it never clashes with itself (promotion_id != ?).
+    if (promotion.tag) {
+      const clash = store.sql
+        .exec<{ promotion_id: string }>(
+          `SELECT promotion_id FROM promotions WHERE tag = ? AND promotion_id != ?`,
+          promotion.tag,
+          promotion.promotionId,
+        )
+        .toArray()[0];
+      if (clash) {
+        throw new TagConflictError(
+          `tag "${promotion.tag}" is already used by promotion ${clash.promotion_id}`,
+        );
+      }
+    }
     const nextSeq = store.sql
       .exec<{ n: number }>(`SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM promotions`)
       .one().n;
     store.sql.exec(
-      `INSERT INTO promotions (promotion_id, ts, builds, seq) VALUES (?, ?, ?, ?)
+      `INSERT INTO promotions (promotion_id, ts, builds, seq, tag) VALUES (?, ?, ?, ?, ?)
        ON CONFLICT(promotion_id) DO UPDATE SET
-         ts = excluded.ts, builds = excluded.builds, seq = excluded.seq`,
+         ts = excluded.ts, builds = excluded.builds, seq = excluded.seq, tag = excluded.tag`,
       promotion.promotionId,
       promotion.ts,
       JSON.stringify(promotion.builds),
       nextSeq,
+      promotion.tag ?? null,
     );
     setMeta(store, ACTIVE_KEY, promotion.promotionId);
   });
@@ -170,16 +213,20 @@ export function history(store: SqlStore): HistoryEntry[] {
   // Ordered newest-first by seq (promote assigns an increasing seq) per the
   // acceptance criteria, with the active promotion marked.
   return store.sql
-    .exec<{ promotion_id: string; ts: number; builds: string }>(
-      `SELECT promotion_id, ts, builds FROM promotions ORDER BY seq DESC`,
+    .exec<{ promotion_id: string; ts: number; builds: string; tag: string | null }>(
+      `SELECT promotion_id, ts, builds, tag FROM promotions ORDER BY seq DESC`,
     )
     .toArray()
-    .map((r) => ({
-      promotionId: r.promotion_id,
-      ts: r.ts,
-      builds: JSON.parse(r.builds) as Record<string, string>,
-      active: r.promotion_id === activeId,
-    }));
+    .map((r) => {
+      const entry: HistoryEntry = {
+        promotionId: r.promotion_id,
+        ts: r.ts,
+        builds: JSON.parse(r.builds) as Record<string, string>,
+        active: r.promotion_id === activeId,
+      };
+      if (r.tag) entry.tag = r.tag;
+      return entry;
+    });
 }
 
 export function prune(store: SqlStore, keepN: number): PruneResult {

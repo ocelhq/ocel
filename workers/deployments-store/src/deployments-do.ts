@@ -22,8 +22,17 @@ export class DeploymentsStore extends DurableObject<Env> {
     store.putStaged(this.ctx.storage, record);
   }
 
-  async promote(promotion: Promotion): Promise<void> {
-    store.promote(this.ctx.storage, promotion);
+  // Returns { conflict } instead of throwing so the tag-collision signal
+  // survives the RPC boundary (custom error prototypes do not): index.ts turns
+  // a conflict into a 409 the deploy host surfaces verbatim.
+  async promote(promotion: Promotion): Promise<{ conflict?: string }> {
+    try {
+      store.promote(this.ctx.storage, promotion);
+      return {};
+    } catch (e) {
+      if (e instanceof store.TagConflictError) return { conflict: e.message };
+      throw e;
+    }
   }
 
   async activeBuildId(app: string): Promise<string | undefined> {

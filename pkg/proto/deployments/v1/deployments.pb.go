@@ -721,7 +721,12 @@ type DeployRequest struct {
 	ProtocolVersion string `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	// environment is the fully resolved target this deploy acts on. `ocel
 	// deploy` and `ocel preview` both drive this RPC and diverge only here.
-	Environment   *Environment `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	Environment *Environment `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
+	// tag is an optional immutable label stamped on the promotion this deploy
+	// produces (production only), later usable as `ocel rollback --tag <tag>`.
+	// Empty means untagged. A tag already in use by another live promotion is
+	// rejected before any infrastructure is created.
+	Tag           string `protobuf:"bytes,5,opt,name=tag,proto3" json:"tag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -782,6 +787,13 @@ func (x *DeployRequest) GetEnvironment() *Environment {
 		return x.Environment
 	}
 	return nil
+}
+
+func (x *DeployRequest) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
 }
 
 // BootstrapRequest is the request for DeploymentService.Bootstrap. Bootstrap
@@ -1453,7 +1465,11 @@ type Promotion struct {
 	// ts is the epoch-seconds time this promotion was created.
 	Ts int64 `protobuf:"varint,2,opt,name=ts,proto3" json:"ts,omitempty"`
 	// builds maps app name to the build id this promotion made active.
-	Builds        map[string]string `protobuf:"bytes,3,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Builds map[string]string `protobuf:"bytes,3,rep,name=builds,proto3" json:"builds,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// tag is the optional immutable label stamped at deploy time. Empty when the
+	// promotion was deployed without one. Unique across a project's live
+	// promotions, so it addresses exactly one of them for rollback.
+	Tag           string `protobuf:"bytes,4,opt,name=tag,proto3" json:"tag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1507,6 +1523,13 @@ func (x *Promotion) GetBuilds() map[string]string {
 		return x.Builds
 	}
 	return nil
+}
+
+func (x *Promotion) GetTag() string {
+	if x != nil {
+		return x.Tag
+	}
+	return ""
 }
 
 // PromotionHistoryEntry is one Promotion in the project's ordered promotion
@@ -1690,7 +1713,10 @@ type RollbackRequest struct {
 	ProjectId       string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	// to is the promotion id to roll back to. Empty means "the promotion
 	// immediately before the currently active one".
-	To            string `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	To string `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
+	// tag rolls back to the promotion carrying this tag. Mutually exclusive with
+	// to; the CLI rejects both being set. Empty means "not selecting by tag".
+	Tag           string `protobuf:"bytes,5,opt,name=tag,proto3" json:"tag,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1749,6 +1775,13 @@ func (x *RollbackRequest) GetProjectId() string {
 func (x *RollbackRequest) GetTo() string {
 	if x != nil {
 		return x.To
+	}
+	return ""
+}
+
+func (x *RollbackRequest) GetTag() string {
+	if x != nil {
+		return x.Tag
 	}
 	return ""
 }
@@ -2523,12 +2556,13 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\bresource\x18\x02 \x01(\v2 .resources.v1.ResourceIdentifierR\bresource\x12:\n" +
 	"\bpostgres\x18\x03 \x01(\v2\x1c.resources.v1.PostgresConfigH\x00R\bpostgres\x124\n" +
 	"\x06bucket\x18\x04 \x01(\v2\x1a.resources.v1.BucketConfigH\x00R\x06bucketB\b\n" +
-	"\x06config\"\xc9\x01\n" +
+	"\x06config\"\xdb\x01\n" +
 	"\rDeployRequest\x124\n" +
 	"\bmanifest\x18\x01 \x01(\v2\x18.deployments.v1.ManifestR\bmanifest\x12\x18\n" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12=\n" +
-	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"\x90\x01\n" +
+	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12\x10\n" +
+	"\x03tag\x18\x05 \x01(\tR\x03tag\"\x90\x01\n" +
 	"\x10BootstrapRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
@@ -2576,11 +2610,12 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x11CredentialProblem\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
-	"\x04hint\x18\x03 \x01(\tR\x04hint\"\xb8\x01\n" +
+	"\x04hint\x18\x03 \x01(\tR\x04hint\"\xca\x01\n" +
 	"\tPromotion\x12!\n" +
 	"\fpromotion_id\x18\x01 \x01(\tR\vpromotionId\x12\x0e\n" +
 	"\x02ts\x18\x02 \x01(\x03R\x02ts\x12=\n" +
-	"\x06builds\x18\x03 \x03(\v2%.deployments.v1.Promotion.BuildsEntryR\x06builds\x1a9\n" +
+	"\x06builds\x18\x03 \x03(\v2%.deployments.v1.Promotion.BuildsEntryR\x06builds\x12\x10\n" +
+	"\x03tag\x18\x04 \x01(\tR\x03tag\x1a9\n" +
 	"\vBuildsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"h\n" +
@@ -2595,13 +2630,14 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x16ListPromotionsResponse\x12E\n" +
 	"\n" +
 	"promotions\x18\x01 \x03(\v2%.deployments.v1.PromotionHistoryEntryR\n" +
-	"promotions\"\x85\x01\n" +
+	"promotions\"\x97\x01\n" +
 	"\x0fRollbackRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x0e\n" +
-	"\x02to\x18\x04 \x01(\tR\x02to\"I\n" +
+	"\x02to\x18\x04 \x01(\tR\x02to\x12\x10\n" +
+	"\x03tag\x18\x05 \x01(\tR\x03tag\"I\n" +
 	"\x10RollbackResponse\x125\n" +
 	"\bpromoted\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\bpromoted\"\x89\x01\n" +
 	"\fPruneRequest\x12\x18\n" +

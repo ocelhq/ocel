@@ -42,6 +42,7 @@ var buildAppFunctions = appbuilder.Build
 // deployOptions holds the flags accepted by `ocel deploy`.
 type deployOptions struct {
 	yes bool
+	tag string
 }
 
 var deployOpts deployOptions
@@ -66,6 +67,7 @@ var deployCmd = &cobra.Command{
 
 func init() {
 	deployCmd.Flags().BoolVarP(&deployOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
+	deployCmd.Flags().StringVar(&deployOpts.tag, "tag", "", "Stamp this deploy with an immutable label to roll back to later (`ocel rollback --tag <tag>`)")
 }
 
 // runDeploy resolves the project config, verifies auth, requires a
@@ -82,6 +84,10 @@ func init() {
 // resolved config, and the manifest is built entirely locally. Login is only
 // gated to confirm the user is authenticated.
 func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
+	if err := validateTag(opts.tag); err != nil {
+		return err
+	}
+
 	if _, err := loadCredentials(); err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &ExitError{Code: 1}
@@ -136,6 +142,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 				Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
 				Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
 			},
+			Tag: opts.tag,
 		}
 
 		var stackOutputs []*deploymentsv1.ResourceOutput
@@ -286,4 +293,3 @@ func toDeclarations(resources []declare.Resource) []manifestbuilder.Declaration 
 	}
 	return decls
 }
-

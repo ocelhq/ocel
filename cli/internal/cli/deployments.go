@@ -7,7 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"text/tabwriter"
+	"time"
 
+	"github.com/fatih/color"
+	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/deployui"
@@ -148,19 +152,52 @@ func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, std
 	return nil
 }
 
-// renderPromotions prints one line per promotion, newest-first, marking the
-// active one.
+// renderPromotions prints the promotion history as an aligned ID/TAG/CREATED/
+// STATUS table, newest-first (the order the store returns), with the active
+// promotion's STATUS shown as a green "active". The colored cell is last so its
+// ANSI escapes — which tabwriter counts as width — never misalign a later
+// column, and color is emitted only to a terminal.
 func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHistoryEntry) {
 	if len(promotions) == 0 {
 		fmt.Fprintln(stdout, "No promotions yet. Run `ocel deploy` first.")
 		return
 	}
-	for _, entry := range promotions {
-		marker := " "
-		if entry.GetActive() {
-			marker = "*"
-		}
-		p := entry.GetPromotion()
-		fmt.Fprintf(stdout, "%s %s\tcreated %s\n", marker, p.GetPromotionId(), epochOrDash(p.GetTs()))
+
+	activeStatus := "active"
+	if isWriterTTY(stdout) {
+		activeStatus = color.New(color.FgGreen).Sprint("active")
 	}
+
+	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "ID\tTAG\tCREATED\tSTATUS")
+	for _, entry := range promotions {
+		p := entry.GetPromotion()
+		tag := p.GetTag()
+		if tag == "" {
+			tag = "—"
+		}
+		status := ""
+		if entry.GetActive() {
+			status = activeStatus
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, epochTimestamp(p.GetTs()), status)
+	}
+	_ = tw.Flush()
+}
+
+// isWriterTTY reports whether w is an interactive terminal, so table output
+// only emits ANSI color when a human will see it (never into a pipe or file).
+func isWriterTTY(w io.Writer) bool {
+	f, ok := w.(*os.File)
+	return ok && isatty.IsTerminal(f.Fd())
+}
+
+// epochTimestamp renders an epoch-seconds time as a full UTC timestamp, or "—"
+// when the provider reported 0 (unknown). Distinct from epochOrDash (date
+// only), which the preview commands still use.
+func epochTimestamp(sec int64) string {
+	if sec == 0 {
+		return "—"
+	}
+	return time.Unix(sec, 0).UTC().Format("2006-01-02 15:04:05 UTC")
 }

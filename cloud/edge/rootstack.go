@@ -119,6 +119,10 @@ type Promotion struct {
 	PromotionID string            `json:"promotionId"`
 	Ts          int64             `json:"ts"`
 	Builds      map[string]string `json:"builds"`
+	// Tag is the optional immutable label stamped at deploy time, unique across
+	// a project's live promotions. Empty when the promotion was deployed
+	// without one.
+	Tag string `json:"tag,omitempty"`
 }
 
 // HistoryEntry is one Promotion in the store's ordered history, annotated
