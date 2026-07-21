@@ -87,7 +87,7 @@ func (p *provider) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec
 	}
 	endpoint = newEndpoint
 
-	genericUp := upload{accountID: accountID, scriptName: spec.GenericName, worker: withService(spec.Generic, genericStoreBinding, spec.StoreName)}
+	genericUp := upload{accountID: accountID, scriptName: spec.GenericName, worker: bindObjectStore(withService(spec.Generic, genericStoreBinding, spec.StoreName), spec.Values)}
 	assetsJWT, err := p.uploadAssets(ctx, genericUp)
 	if err != nil {
 		return nil, fmt.Errorf("upload generic worker assets: %w", err)

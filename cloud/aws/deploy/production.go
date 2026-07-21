@@ -230,6 +230,7 @@ func rootTierSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string)
 			Generic:     generic,
 			StoreName:   storeName,
 			Store:       store,
+			Values:      cfg.EdgeValues,
 		}}, nil
 	}
 
@@ -247,6 +248,7 @@ func rootTierSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string)
 			StoreName:   storeName,
 			Store:       store,
 			Domain:      domains[name],
+			Values:      cfg.EdgeValues,
 		})
 	}
 	return specs, nil

@@ -227,6 +227,30 @@ func TestBindObjectStore_TakesTheBucketFromBootstrapValues(t *testing.T) {
 	}
 }
 
+// Guards ocelhq-f0e: ReconcileRootTier composes withService then
+// bindObjectStore on the generic worker (mirroring DeployApp's
+// bindObjectStore(app.Worker, app.Values)) — this exercises that composition
+// end to end through the same scriptBindings/metadata path a real upload
+// takes, rather than each function in isolation.
+func TestBindObjectStoreThenWithService_BothBindingsSurvive(t *testing.T) {
+	worker := edge.Worker{
+		Main:        edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+		ObjectStore: edge.ObjectStore{Binding: "OCEL_CACHE_STORE"},
+	}
+
+	composed := bindObjectStore(withService(worker, "DEPLOYMENTS", "ocel-proj-store"), map[string]string{valueKeyCacheBucket: "ocel-edge-cache"})
+	meta := metadataFromMultipart(t, composed, "")
+
+	buckets := bindingsByType(meta, "r2_bucket")
+	if len(buckets) != 1 || buckets[0]["bucket_name"] != "ocel-edge-cache" {
+		t.Errorf("r2_bucket bindings = %v, want one bound to ocel-edge-cache", buckets)
+	}
+	services := bindingsByType(meta, "service")
+	if len(services) != 1 || services[0]["service"] != "ocel-proj-store" {
+		t.Errorf("service bindings = %v, want one bound to ocel-proj-store", services)
+	}
+}
+
 func TestBuildScriptMultipart_UploadsMainAndSiblingModules(t *testing.T) {
 	worker := edge.Worker{
 		Main:    edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
