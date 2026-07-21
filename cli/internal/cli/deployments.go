@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -38,8 +39,31 @@ var deploymentsLsCmd = &cobra.Command{
 	},
 }
 
+// defaultPruneKeepN is `ocel deployments prune`'s default retention window
+// (in Promotions) when --keep is not given.
+const defaultPruneKeepN = 10
+
+var pruneKeepN int
+
+var deploymentsPruneCmd = &cobra.Command{
+	Use:   "prune",
+	Short: "Reclaim old production deployments",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine working directory: %w", err)
+		}
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return runDeploymentsPrune(ctx, cwd, pruneKeepN, cmd.OutOrStdout(), cmd.ErrOrStderr())
+	},
+}
+
 func init() {
 	deploymentsCmd.AddCommand(deploymentsLsCmd)
+	deploymentsPruneCmd.Flags().IntVar(&pruneKeepN, "keep", defaultPruneKeepN, "Number of most recent promotions to keep, always additionally pinning the active one")
+	deploymentsCmd.AddCommand(deploymentsPruneCmd)
 }
 
 // runDeploymentsLs resolves the project, preflights production infrastructure,
@@ -76,6 +100,56 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 		renderPromotions(stdout, resp.GetPromotions())
 		return nil
 	})
+}
+
+// runDeploymentsPrune resolves the project, preflights production
+// infrastructure, and drives the provider's Prune RPC: keepN is how many of
+// the most recent promotions to keep, always additionally pinning the
+// active one. It never runs as part of `ocel deploy` — it is a standalone
+// command the user runs explicitly.
+func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, stderr io.Writer) error {
+	if _, err := loadCredentials(); err != nil {
+		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
+		return &ExitError{Code: 1}
+	}
+
+	cfg, err := projectconfig.Resolve(cwd)
+	if err != nil {
+		return err
+	}
+	provider, err := cfg.RequireProvider()
+	if err != nil {
+		return err
+	}
+
+	return runProviderSession(ctx, cfg, provider, stdout, stderr, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap"); err != nil {
+			return err
+		}
+
+		resp, err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			ProjectId:       cfg.ProjectID,
+			KeepN:           int32(keepN),
+		})
+		if err != nil {
+			return err
+		}
+		renderPruneResult(stdout, resp)
+		return nil
+	})
+}
+
+// renderPruneResult reports how many promotions were kept versus reclaimed.
+func renderPruneResult(stdout io.Writer, resp *deploymentsv1.PruneResponse) {
+	removed := resp.GetRemovedPromotionIds()
+	if len(removed) == 0 {
+		fmt.Fprintln(stdout, "Nothing to prune.")
+		return
+	}
+	fmt.Fprintf(stdout, "Reclaimed %d promotion(s): %s\n", len(removed), strings.Join(removed, ", "))
+	fmt.Fprintf(stdout, "Kept %d promotion(s).\n", len(resp.GetKeptPromotionIds()))
 }
 
 // renderPromotions prints one line per promotion, newest-first, marking the

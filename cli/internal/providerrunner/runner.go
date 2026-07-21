@@ -372,6 +372,19 @@ func (r *Runner) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	return resp, nil
 }
 
+// Prune calls the provider's unary Prune RPC and returns which Promotions
+// were kept and which were reclaimed. Ready must have succeeded first.
+func (r *Runner) Prune(ctx context.Context, req *deploymentsv1.PruneRequest) (*deploymentsv1.PruneResponse, error) {
+	if r.client == nil {
+		return nil, errors.New("providerrunner: Prune called before a successful Ready")
+	}
+	resp, err := r.client.Prune(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("providerrunner: call Prune: %w", err)
+	}
+	return resp, nil
+}
+
 // driveStream consumes a provider event stream to its terminal ResultEvent,
 // forwarding every event to onEvent. rpc names the call for error messages.
 // It is shared by Deploy, Bootstrap, and Destroy, which speak the same
