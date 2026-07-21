@@ -1,5 +1,5 @@
-// Production deploy orchestration (ADR 0001): the tiered sequence — reconcile
-// the frozen root tier, run the stable infra stack, run one app-deploy stack
+// Production deploy orchestration (ADR 0001): the stacked sequence — reconcile
+// the frozen root stack, run the stable infra stack, run one app-deploy stack
 // per app in parallel, stage each app's Deployment record, and issue a single
 // atomic promote only once every app succeeded. Any app failure aborts the
 // promote; the previous Deployment keeps serving and the failed stack/record
@@ -9,7 +9,7 @@
 // exercised only by opt-in e2e, like Run itself. finalizeProductionDeploy and
 // the plan/record/spec builders around it take already-computed results as
 // plain data, so they have no Pulumi/AWS dependency and are what unit tests
-// exercise directly against the edge.RootTier fake to assert the reconcile ->
+// exercise directly against the edge.RootStack fake to assert the reconcile ->
 // stage -> promote sequence and the abort-on-failure behavior.
 package deploy
 
@@ -35,11 +35,11 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// rootTierVersion is the ocel root-tier revision this build expects.
-// ReconcileRootTier is a no-op once a project's root tier already carries it;
+// rootStackVersion is the ocel root-stack revision this build expects.
+// ReconcileRootStack is a no-op once a project's root stack already carries it;
 // bump it only when the frozen generic/store worker bundles change shape in a
 // way that needs re-deploying.
-const rootTierVersion = "1"
+const rootStackVersion = "1"
 
 // appDeployResult is one app's app-deploy-stack outcome, fed into
 // finalizeProductionDeploy after Run has driven that stack (Pulumi) to
@@ -51,15 +51,15 @@ type appDeployResult struct {
 	Err     error
 }
 
-// runProduction realizes one production deploy under the tiered model: root
+// runProduction realizes one production deploy under the stacked model: root
 // reconcile, the infra stack, N app-deploy stacks in parallel, staged
 // records, and a single atomic promote. It is Run's production branch and,
 // like Run, is exercised only by opt-in e2e — the sequencing and atomicity it
 // drives are unit-tested directly against finalizeProductionDeploy below.
-func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootTierState, error) {
-	tier, ok := cfg.Edge.(edge.RootTier)
+func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootStackState, error) {
+	stack, ok := cfg.Edge.(edge.RootStack)
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("production deploys require an edge that supports the root tier (instant rollback); %s does not", cfg.Edge.Kind())
+		return nil, nil, nil, fmt.Errorf("production deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind())
 	}
 
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
@@ -86,20 +86,20 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		return nil, nil, nil, err
 	}
 
-	// Root reconcile runs before any AWS provisioning: a broken root tier
+	// Root reconcile runs before any AWS provisioning: a broken root stack
 	// aborts the deploy up front rather than after paying for infra and every
 	// app-deploy stack.
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root tier", 0, 0)
-	specs, err := rootTierSpecs(cfg, manifest, rootTierVersion)
+	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, 0)
+	specs, err := rootStackSpecs(cfg, manifest, rootStackVersion)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	state, err := reconcileRootTier(ctx, tier, specs, cfg.RootTierState)
+	state, err := reconcileRootStack(ctx, stack, specs, cfg.RootStackState)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra tier", 0, 0)
+	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
 	infraOutputs, err := runInfraStack(ctx, cfg, manifest, plan, log)
 	if err != nil {
 		return nil, nil, state, err
@@ -129,7 +129,7 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	wg.Wait()
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
-	if err := stageAndPromote(ctx, tier, state, promotionID, time.Now().Unix(), results); err != nil {
+	if err := stageAndPromote(ctx, stack, state, promotionID, time.Now().Unix(), results); err != nil {
 		return nil, nil, state, err
 	}
 
@@ -141,16 +141,16 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	return outputs, appURLs(manifest, outputs), state, nil
 }
 
-// reconcileRootTier reconciles the root tier once per spec, threading the
+// reconcileRootStack reconciles the root stack once per spec, threading the
 // resulting state forward so a project with several worker-fronted apps
 // reconciles its (shared) store once and each app's generic-worker deployment
-// in turn. Pure of Pulumi/AWS: only edge.RootTier is called.
-func reconcileRootTier(ctx context.Context, tier edge.RootTier, specs []edge.RootTierSpec, prior edge.RootTierState) (edge.RootTierState, error) {
+// in turn. Pure of Pulumi/AWS: only edge.RootStack is called.
+func reconcileRootStack(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
 	state := prior
 	for _, spec := range specs {
-		next, err := tier.ReconcileRootTier(ctx, spec, state)
+		next, err := stack.ReconcileRootStack(ctx, spec, state)
 		if err != nil {
-			return state, fmt.Errorf("reconcile root tier %q: %w", spec.GenericName, err)
+			return state, fmt.Errorf("reconcile root stack %q: %w", spec.GenericName, err)
 		}
 		state = next
 	}
@@ -158,14 +158,14 @@ func reconcileRootTier(ctx context.Context, tier edge.RootTier, specs []edge.Roo
 }
 
 // stageAndPromote stages every successful app's Deployment record into an
-// already-reconciled root tier, and — only if every app succeeded — issues
+// already-reconciled root stack, and — only if every app succeeded — issues
 // the single atomic promote that makes them all live together. Any app
 // failure aborts before Promote is ever called: the store still holds
 // whatever it staged (harmless — never promoted, swept by a later prune) but
 // the active pointer never moves and the previous Deployment keeps serving.
 // Pure of Pulumi/AWS/Cloudflare: the caller has already reconciled the root
-// tier and run every app-deploy stack.
-func stageAndPromote(ctx context.Context, tier edge.RootTier, state edge.RootTierState, promotionID string, now int64, results []appDeployResult) error {
+// stack and run every app-deploy stack.
+func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootStackState, promotionID string, now int64, results []appDeployResult) error {
 	var failed []string
 	builds := make(map[string]string, len(results))
 	for _, r := range results {
@@ -173,7 +173,7 @@ func stageAndPromote(ctx context.Context, tier edge.RootTier, state edge.RootTie
 			failed = append(failed, fmt.Sprintf("%s: %v", r.App, r.Err))
 			continue
 		}
-		if err := tier.PutStaged(ctx, state, r.Record); err != nil {
+		if err := stack.PutStaged(ctx, state, r.Record); err != nil {
 			return fmt.Errorf("stage deployment for %s: %w", r.App, err)
 		}
 		builds[r.App] = r.BuildID
@@ -182,36 +182,36 @@ func stageAndPromote(ctx context.Context, tier edge.RootTier, state edge.RootTie
 		return fmt.Errorf("app-deploy failed for %s; promote aborted, the previous Deployment keeps serving", strings.Join(failed, "; "))
 	}
 
-	if err := tier.Promote(ctx, state, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds}); err != nil {
+	if err := stack.Promote(ctx, state, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds}); err != nil {
 		return fmt.Errorf("promote %s: %w", promotionID, err)
 	}
 	return nil
 }
 
-// finalizeProductionDeploy composes reconcileRootTier and stageAndPromote —
+// finalizeProductionDeploy composes reconcileRootStack and stageAndPromote —
 // the same order runProduction drives them in, just without any AWS
 // provisioning between the two. Pure of Pulumi/AWS/Cloudflare, so this is
-// what unit tests exercise directly against the edge.RootTier fake to assert
+// what unit tests exercise directly against the edge.RootStack fake to assert
 // the reconcile -> stage -> promote sequence and the abort-on-failure
 // behavior.
-func finalizeProductionDeploy(ctx context.Context, tier edge.RootTier, specs []edge.RootTierSpec, prior edge.RootTierState, promotionID string, now int64, results []appDeployResult) (edge.RootTierState, error) {
-	state, err := reconcileRootTier(ctx, tier, specs, prior)
+func finalizeProductionDeploy(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID string, now int64, results []appDeployResult) (edge.RootStackState, error) {
+	state, err := reconcileRootStack(ctx, stack, specs, prior)
 	if err != nil {
 		return prior, err
 	}
-	if err := stageAndPromote(ctx, tier, state, promotionID, now, results); err != nil {
+	if err := stageAndPromote(ctx, stack, state, promotionID, now, results); err != nil {
 		return state, err
 	}
 	return state, nil
 }
 
-// rootTierSpecs builds one edge.RootTierSpec per app needing a generic worker
+// rootStackSpecs builds one edge.RootStackSpec per app needing a generic worker
 // (workerApps), plus a store-only fallback when a production project has
 // none — the store still has to exist for every app's Deployment record to be
 // staged into it, even one served straight off its own Function URL. Every
 // spec shares Version/StoreName/Store (one store per project); only
 // GenericName/Domain vary per app.
-func rootTierSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string) ([]edge.RootTierSpec, error) {
+func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string) ([]edge.RootStackSpec, error) {
 	generic, err := genericWorkerBundle(cfg)
 	if err != nil {
 		return nil, err
@@ -224,7 +224,7 @@ func rootTierSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string)
 
 	apps := workerApps(manifest)
 	if len(apps) == 0 {
-		return []edge.RootTierSpec{{
+		return []edge.RootStackSpec{{
 			Version:     version,
 			GenericName: workerScriptName(cfg.StackName, "root"),
 			Generic:     generic,
@@ -238,10 +238,10 @@ func rootTierSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string)
 	if err != nil {
 		return nil, err
 	}
-	specs := make([]edge.RootTierSpec, 0, len(apps))
+	specs := make([]edge.RootStackSpec, 0, len(apps))
 	for _, app := range apps {
 		name := app.GetName()
-		specs = append(specs, edge.RootTierSpec{
+		specs = append(specs, edge.RootStackSpec{
 			Version:     version,
 			GenericName: workerScriptName(cfg.StackName, name),
 			Generic:     withVar(generic, "OCEL_APP", name),
@@ -298,7 +298,7 @@ func storeWorkerBundle(cfg Config) (edge.Worker, error) {
 }
 
 // loadWorkerBundle reads a compiled worker entrypoint off disk into the
-// edge.Worker shape ReconcileRootTier uploads: neither the generic nor the
+// edge.Worker shape ReconcileRootStack uploads: neither the generic nor the
 // store worker carries per-deploy modules/vars/assets — those belong to the
 // framework-assembled per-app worker previews still use.
 func loadWorkerBundle(path string) (edge.Worker, error) {
@@ -419,7 +419,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 // workerURLOutputs reports each worker-fronted app's production URL: its
 // custom domain when it has one, under the same workerOutputName appURLs
 // already reads. An app with no custom domain is served off the edge's own
-// vendor subdomain, which the root tier does not report back today — that app
+// vendor subdomain, which the root stack does not report back today — that app
 // falls back to its own Function URLs, same as a non-worker app.
 func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymentsv1.ResourceOutput {
 	apps := workerApps(manifest)
@@ -440,7 +440,7 @@ func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymen
 }
 
 // runInfraStack provisions the project's SDK-declared resources (postgres,
-// bucket) into the stable, per-project infra-tier stack. Untouched by
+// bucket) into the stable, per-project infra stack. Untouched by
 // rollback. Opt-in-e2e only, like Run's single-stack program.
 func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
 	program := func(pctx *pulumi.Context) error {
@@ -529,7 +529,7 @@ func appFunctions(manifest *deploymentsv1.Manifest, app string) []*deploymentsv1
 	return fns
 }
 
-// upStack is the Pulumi automation-API call every tier (infra, app-deploy)
+// upStack is the Pulumi automation-API call every stack (infra, app-deploy)
 // drives a stack through: prepare, then up. Identical to Run's single-stack
 // preparation, just parameterized by stack name and program.
 func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.RunFunc, log func(string)) (auto.UpResult, error) {

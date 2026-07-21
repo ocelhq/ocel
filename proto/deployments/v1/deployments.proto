@@ -75,7 +75,7 @@ service DeploymentService {
     // ListPromotions enumerates a production project's promotion history,
     // newest first, each entry marked with whether it is the currently active
     // one. It backs `ocel deployments ls`. Production-only: a project with no
-    // root tier (never deployed to production) returns an empty list rather
+    // root stack (never deployed to production) returns an empty list rather
     // than an error.
     rpc ListPromotions(ListPromotionsRequest) returns (ListPromotionsResponse);
 
@@ -360,7 +360,7 @@ message PreflightResponse {
 
 // Promotion is the project-wide unit one production deploy produces: a
 // promotion id grouping the per-app build ids it made active. Mirrors
-// edge.Promotion in cloud/edge/roottier.go, which is itself mirrored from
+// edge.Promotion in cloud/edge/rootstack.go, which is itself mirrored from
 // workers/deployments-store/src/store.ts.
 message Promotion {
   string promotion_id = 1;

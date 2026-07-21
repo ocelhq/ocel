@@ -20,7 +20,7 @@ import (
 // Prune reclaims a production project's old Deployments (ADR 0001): it
 // resolves the same account-global state Deploy does, then drives
 // deploy.Prune, which enforces the keepN-deep retention window through the
-// project's already-reconciled root tier and reclaims what it collects. It
+// project's already-reconciled root stack and reclaims what it collects. It
 // backs `ocel deployments prune` and never runs inline on a deploy.
 func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest) (*deploymentsv1.PruneResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
@@ -28,7 +28,7 @@ func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest) (*d
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	tier, state, err := s.rootTier(ctx, opts, req.GetProjectId())
+	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return &deploymentsv1.PruneResponse{}, nil
@@ -41,7 +41,7 @@ func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest) (*d
 		return nil, err
 	}
 
-	result, err := deploy.Prune(ctx, tier, state, cfg, req.GetProjectId(), int(req.GetKeepN()), nil, nil)
+	result, err := deploy.Prune(ctx, stack, state, cfg, req.GetProjectId(), int(req.GetKeepN()), nil, nil)
 	if err != nil {
 		return nil, err
 	}

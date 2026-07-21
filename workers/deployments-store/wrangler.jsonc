@@ -13,7 +13,7 @@
   "upload_source_maps": true,
   "compatibility_flags": ["nodejs_compat"],
   // Local-dev/test default only. The real per-project deploy mints this secret
-  // at root-tier creation and binds it as secret_text (cloudflare.go
+  // at root-stack creation and binds it as secret_text (cloudflare.go
   // scriptBindings), never through this file.
   "vars": {
     "WRITE_SECRET": "dev-secret",

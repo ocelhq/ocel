@@ -13,43 +13,43 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// RootTierStateParamPrefix is the SSM SecureString parameter path prefix a
-// project's root-tier state (ADR 0001) is stored under, one parameter per
-// project: RootTierStateParamPrefix + projectID. Root tiers exist only for
+// RootStackStateParamPrefix is the SSM SecureString parameter path prefix a
+// project's root-stack state (ADR 0001) is stored under, one parameter per
+// project: RootStackStateParamPrefix + projectID. Root stacks exist only for
 // production, so unlike the edge params there is no preview counterpart.
-const RootTierStateParamPrefix = "/ocel/roottier/"
+const RootStackStateParamPrefix = "/ocel/rootstack/"
 
-func rootTierStateParamName(projectID string) string {
-	return RootTierStateParamPrefix + projectID
+func rootStackStateParamName(projectID string) string {
+	return RootStackStateParamPrefix + projectID
 }
 
-// WriteRootTierState persists a project's root-tier state so the next
+// WriteRootStackState persists a project's root-stack state so the next
 // production deploy — and rollback/deployments-ls — reconcile against it
 // instead of reconciling from scratch. It is the project's current state and
 // is overwritten on every deploy, exactly like writeEdgeValues.
-func WriteRootTierState(ctx context.Context, ssmClient SSMAPI, projectID string, state edge.RootTierState) error {
+func WriteRootStackState(ctx context.Context, ssmClient SSMAPI, projectID string, state edge.RootStackState) error {
 	payload, err := json.Marshal(state)
 	if err != nil {
-		return fmt.Errorf("marshal root-tier state: %w", err)
+		return fmt.Errorf("marshal root-stack state: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(rootTierStateParamName(projectID)),
+		Name:      aws.String(rootStackStateParamName(projectID)),
 		Value:     aws.String(string(payload)),
 		Type:      ssmtypes.ParameterTypeSecureString,
 		Overwrite: aws.Bool(true),
 	}); err != nil {
-		return fmt.Errorf("write root-tier state parameter: %w", err)
+		return fmt.Errorf("write root-stack state parameter: %w", err)
 	}
 	return nil
 }
 
-// ReadRootTierState returns a project's stored root-tier state, decrypted. A
+// ReadRootStackState returns a project's stored root-stack state, decrypted. A
 // project that has never produced one (no production deploy yet) reads as nil
-// rather than as a failure, which ReconcileRootTier reads as "reconcile from
+// rather than as a failure, which ReconcileRootStack reads as "reconcile from
 // scratch".
-func ReadRootTierState(ctx context.Context, ssmClient SSMAPI, projectID string) (edge.RootTierState, error) {
+func ReadRootStackState(ctx context.Context, ssmClient SSMAPI, projectID string) (edge.RootStackState, error) {
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(rootTierStateParamName(projectID)),
+		Name:           aws.String(rootStackStateParamName(projectID)),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {
@@ -57,11 +57,11 @@ func ReadRootTierState(ctx context.Context, ssmClient SSMAPI, projectID string) 
 		if errors.As(err, &notFound) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read root-tier state parameter: %w", err)
+		return nil, fmt.Errorf("read root-stack state parameter: %w", err)
 	}
-	var state edge.RootTierState
+	var state edge.RootStackState
 	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &state); err != nil {
-		return nil, fmt.Errorf("parse root-tier state: %w", err)
+		return nil, fmt.Errorf("parse root-stack state: %w", err)
 	}
 	return state, nil
 }

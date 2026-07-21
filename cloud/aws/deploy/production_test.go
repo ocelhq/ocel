@@ -28,21 +28,21 @@ func setStoreWorkerBundle(t *testing.T) {
 	t.Setenv(edge.EnvStoreWorkerBundles, string(raw))
 }
 
-// TestRootTierSpecs_ThreadsEdgeValues guards ocelhq-f0e: the generic worker's
+// TestRootStackSpecs_ThreadsEdgeValues guards ocelhq-f0e: the generic worker's
 // OCEL_CACHE_STORE R2 binding degrades to its no-store fallback in every
 // production deploy unless the bootstrap values carrying the cache bucket
-// name reach RootTierSpec, exactly like they already reach AppDeployment.Values
+// name reach RootStackSpec, exactly like they already reach AppDeployment.Values
 // for a preview deploy (edgeworker.go's Values: cfg.EdgeValues).
-func TestRootTierSpecs_ThreadsEdgeValues(t *testing.T) {
+func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 	cfg := Config{Edge: &recordingEdge{}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
 
 	t.Run("no worker-fronted apps", func(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{ProjectId: "proj"}
-		specs, err := rootTierSpecs(cfg, manifest, "v1")
+		specs, err := rootStackSpecs(cfg, manifest, "v1")
 		if err != nil {
-			t.Fatalf("rootTierSpecs: %v", err)
+			t.Fatalf("rootStackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1", len(specs))
@@ -58,9 +58,9 @@ func TestRootTierSpecs_ThreadsEdgeValues(t *testing.T) {
 			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		}
-		specs, err := rootTierSpecs(cfg, manifest, "v1")
+		specs, err := rootStackSpecs(cfg, manifest, "v1")
 		if err != nil {
-			t.Fatalf("rootTierSpecs: %v", err)
+			t.Fatalf("rootStackSpecs: %v", err)
 		}
 		if len(specs) != 1 {
 			t.Fatalf("specs = %d, want 1", len(specs))
@@ -72,9 +72,9 @@ func TestRootTierSpecs_ThreadsEdgeValues(t *testing.T) {
 }
 
 func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testing.T) {
-	fake := &recordingRootTier{}
+	fake := &recordingRootStack{}
 	ctx := context.Background()
-	specs := []edge.RootTierSpec{{Version: "v1", GenericName: "web-generic"}}
+	specs := []edge.RootStackSpec{{Version: "v1", GenericName: "web-generic"}}
 	results := []appDeployResult{
 		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
 		{App: "api", BuildID: "b2", Record: edge.DeploymentRecord{App: "api", BuildID: "b2"}},
@@ -106,19 +106,19 @@ func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testin
 			t.Errorf("promotion.Builds[%q] = %q, want %q", app, got, buildID)
 		}
 	}
-	if state[edge.RootTierKeyEndpoint] == "" {
+	if state[edge.RootStackKeyEndpoint] == "" {
 		t.Error("expected a reconciled state to be returned")
 	}
 }
 
 func TestFinalizeProductionDeploy_StagesBeforeAnyPromote(t *testing.T) {
-	fake := &orderTrackingRootTier{recordingRootTier: &recordingRootTier{}}
+	fake := &orderTrackingRootStack{recordingRootStack: &recordingRootStack{}}
 	ctx := context.Background()
 	results := []appDeployResult{
 		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
 	}
 
-	if _, err := finalizeProductionDeploy(ctx, fake, []edge.RootTierSpec{{Version: "v1"}}, nil, "promo1", 100, results); err != nil {
+	if _, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", 100, results); err != nil {
 		t.Fatalf("finalizeProductionDeploy: %v", err)
 	}
 
@@ -134,14 +134,14 @@ func TestFinalizeProductionDeploy_StagesBeforeAnyPromote(t *testing.T) {
 }
 
 func TestFinalizeProductionDeploy_AppFailureAbortsPromote(t *testing.T) {
-	fake := &recordingRootTier{}
+	fake := &recordingRootStack{}
 	ctx := context.Background()
 	results := []appDeployResult{
 		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
 		{App: "api", Err: errors.New("app-deploy stack failed")},
 	}
 
-	_, err := finalizeProductionDeploy(ctx, fake, []edge.RootTierSpec{{Version: "v1"}}, nil, "promo1", 100, results)
+	_, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", 100, results)
 	if err == nil {
 		t.Fatal("expected an error when one app's deploy failed")
 	}
@@ -155,9 +155,9 @@ func TestFinalizeProductionDeploy_AppFailureAbortsPromote(t *testing.T) {
 }
 
 func TestFinalizeProductionDeploy_SecondDeployProducesNewPromotionRetainingPrior(t *testing.T) {
-	fake := &recordingRootTier{}
+	fake := &recordingRootStack{}
 	ctx := context.Background()
-	specs := []edge.RootTierSpec{{Version: "v1"}}
+	specs := []edge.RootStackSpec{{Version: "v1"}}
 	results := []appDeployResult{{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}}}
 
 	state, err := finalizeProductionDeploy(ctx, fake, specs, nil, "promo1", 100, results)
@@ -178,62 +178,62 @@ func TestFinalizeProductionDeploy_SecondDeployProducesNewPromotionRetainingPrior
 	}
 }
 
-// orderTrackingRootTier wraps recordingRootTier to additionally record the
-// relative order of reconcile/stage/promote calls, which recordingRootTier's
+// orderTrackingRootStack wraps recordingRootStack to additionally record the
+// relative order of reconcile/stage/promote calls, which recordingRootStack's
 // own per-kind slices cannot express on their own.
-type orderTrackingRootTier struct {
-	*recordingRootTier
+type orderTrackingRootStack struct {
+	*recordingRootStack
 	calls []string
 }
 
-func (f *orderTrackingRootTier) ReconcileRootTier(ctx context.Context, spec edge.RootTierSpec, prior edge.RootTierState) (edge.RootTierState, error) {
+func (f *orderTrackingRootStack) ReconcileRootStack(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
 	f.calls = append(f.calls, "reconcile")
-	return f.recordingRootTier.ReconcileRootTier(ctx, spec, prior)
+	return f.recordingRootStack.ReconcileRootStack(ctx, spec, prior)
 }
 
-func (f *orderTrackingRootTier) PutStaged(ctx context.Context, state edge.RootTierState, record edge.DeploymentRecord) error {
+func (f *orderTrackingRootStack) PutStaged(ctx context.Context, state edge.RootStackState, record edge.DeploymentRecord) error {
 	f.calls = append(f.calls, "stage")
-	return f.recordingRootTier.PutStaged(ctx, state, record)
+	return f.recordingRootStack.PutStaged(ctx, state, record)
 }
 
-func (f *orderTrackingRootTier) Promote(ctx context.Context, state edge.RootTierState, promotion edge.Promotion) error {
+func (f *orderTrackingRootStack) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion) error {
 	f.calls = append(f.calls, "promote")
-	return f.recordingRootTier.Promote(ctx, state, promotion)
+	return f.recordingRootStack.Promote(ctx, state, promotion)
 }
 
-func TestReconcileRootTier_ThreadsStateAcrossMultipleSpecs(t *testing.T) {
-	fake := &recordingRootTier{}
+func TestReconcileRootStack_ThreadsStateAcrossMultipleSpecs(t *testing.T) {
+	fake := &recordingRootStack{}
 	ctx := context.Background()
-	specs := []edge.RootTierSpec{
+	specs := []edge.RootStackSpec{
 		{Version: "v1", GenericName: "web-generic"},
 		{Version: "v1", GenericName: "admin-generic"},
 	}
 
-	state, err := reconcileRootTier(ctx, fake, specs, nil)
+	state, err := reconcileRootStack(ctx, fake, specs, nil)
 	if err != nil {
-		t.Fatalf("reconcileRootTier: %v", err)
+		t.Fatalf("reconcileRootStack: %v", err)
 	}
 	if len(fake.reconciles) != 2 {
 		t.Fatalf("reconciles = %d, want 2 (one per spec)", len(fake.reconciles))
 	}
-	if state[edge.RootTierKeyEndpoint] == "" {
+	if state[edge.RootStackKeyEndpoint] == "" {
 		t.Error("expected a non-empty reconciled state")
 	}
 }
 
-func TestReconcileRootTier_NoSpecsReturnsPriorUnchanged(t *testing.T) {
-	fake := &recordingRootTier{}
+func TestReconcileRootStack_NoSpecsReturnsPriorUnchanged(t *testing.T) {
+	fake := &recordingRootStack{}
 	ctx := context.Background()
-	prior := edge.RootTierState{edge.RootTierKeyEndpoint: "https://prior"}
+	prior := edge.RootStackState{edge.RootStackKeyEndpoint: "https://prior"}
 
-	state, err := reconcileRootTier(ctx, fake, nil, prior)
+	state, err := reconcileRootStack(ctx, fake, nil, prior)
 	if err != nil {
-		t.Fatalf("reconcileRootTier: %v", err)
+		t.Fatalf("reconcileRootStack: %v", err)
 	}
 	if len(fake.reconciles) != 0 {
 		t.Errorf("reconciles = %d, want 0", len(fake.reconciles))
 	}
-	if state[edge.RootTierKeyEndpoint] != "https://prior" {
+	if state[edge.RootStackKeyEndpoint] != "https://prior" {
 		t.Errorf("state = %v, want prior unchanged", state)
 	}
 }

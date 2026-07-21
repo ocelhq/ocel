@@ -18,21 +18,21 @@ import (
 
 // errNoProductionDeploy is returned by ListPromotions/Rollback when a project
 // has never had a successful production deploy: rollback and promotion
-// history exist only once a root tier has been reconciled (ADR 0001).
+// history exist only once a root stack has been reconciled (ADR 0001).
 var errNoProductionDeploy = errors.New("this project has no production deploys yet; run `ocel deploy` first")
 
-// rootTier resolves the reconciled edge.RootTier state a project's production
+// rootStack resolves the reconciled edge.RootStack state a project's production
 // deploys have persisted, erroring clearly when none exists yet. Shared by
 // ListPromotions and Rollback, both of which only ever read/act on an
-// already-reconciled root tier — neither ever reconciles one itself.
-func (s *Server) rootTier(ctx context.Context, opts options, projectID string) (edge.RootTier, edge.RootTierState, error) {
+// already-reconciled root stack — neither ever reconciles one itself.
+func (s *Server) rootStack(ctx context.Context, opts options, projectID string) (edge.RootStack, edge.RootStackState, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, nil, err
 	}
 	ssmClient := ssm.NewFromConfig(awscfg)
 
-	state, err := bootstrap.ReadRootTierState(ctx, ssmClient, projectID)
+	state, err := bootstrap.ReadRootStackState(ctx, ssmClient, projectID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -40,21 +40,21 @@ func (s *Server) rootTier(ctx context.Context, opts options, projectID string) (
 		return nil, nil, errNoProductionDeploy
 	}
 
-	tier, ok := cloudflare.New().(edge.RootTier)
+	stack, ok := cloudflare.New().(edge.RootStack)
 	if !ok {
-		return nil, nil, errors.New("this edge does not support the root tier (instant rollback)")
+		return nil, nil, errors.New("this edge does not support the root stack (instant rollback)")
 	}
-	return tier, state, nil
+	return stack, state, nil
 }
 
 // ListPromotions enumerates a production project's promotion history via its
-// already-reconciled root tier. It backs `ocel deployments ls`.
+// already-reconciled root stack. It backs `ocel deployments ls`.
 func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListPromotionsRequest) (*deploymentsv1.ListPromotionsResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	tier, state, err := s.rootTier(ctx, opts, req.GetProjectId())
+	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return &deploymentsv1.ListPromotionsResponse{}, nil
@@ -62,7 +62,7 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 		return nil, err
 	}
 
-	history, err := tier.History(ctx, state)
+	history, err := stack.History(ctx, state)
 	if err != nil {
 		return nil, err
 	}
@@ -78,12 +78,12 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	tier, state, err := s.rootTier(ctx, opts, req.GetProjectId())
+	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
 	if err != nil {
 		return nil, err
 	}
 
-	promoted, err := deploy.Rollback(ctx, tier, state, req.GetTo(), time.Now().Unix())
+	promoted, err := deploy.Rollback(ctx, stack, state, req.GetTo(), time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}

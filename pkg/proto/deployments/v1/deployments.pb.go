@@ -1266,7 +1266,7 @@ func (x *PreflightResponse) GetInfrastructurePresent() bool {
 
 // Promotion is the project-wide unit one production deploy produces: a
 // promotion id grouping the per-app build ids it made active. Mirrors
-// edge.Promotion in cloud/edge/roottier.go, which is itself mirrored from
+// edge.Promotion in cloud/edge/rootstack.go, which is itself mirrored from
 // workers/deployments-store/src/store.ts.
 type Promotion struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`

@@ -14,7 +14,7 @@ import (
 )
 
 // RollbackTarget selects, from a project's promotion history (newest-first,
-// exactly what edge.RootTier.History returns), the Promotion rollback should
+// exactly what edge.RootStack.History returns), the Promotion rollback should
 // re-promote: the one named by to when it is non-empty, else the one
 // immediately after the currently active entry (the "previous" Promotion).
 // Pure.
@@ -49,10 +49,10 @@ func RollbackTarget(history []edge.HistoryEntry, to string) (edge.Promotion, err
 // (immediately previous when to is empty, else the one named by to), then a
 // fresh Promote call — carrying the target's builds under a new timestamp —
 // makes it the newest history entry and the active one. Pure of AWS: only
-// edge.RootTier is called, and it is exercised directly against the
-// edge.RootTier fake in tests.
-func Rollback(ctx context.Context, tier edge.RootTier, state edge.RootTierState, to string, now int64) (edge.Promotion, error) {
-	history, err := tier.History(ctx, state)
+// edge.RootStack is called, and it is exercised directly against the
+// edge.RootStack fake in tests.
+func Rollback(ctx context.Context, stack edge.RootStack, state edge.RootStackState, to string, now int64) (edge.Promotion, error) {
+	history, err := stack.History(ctx, state)
 	if err != nil {
 		return edge.Promotion{}, fmt.Errorf("read promotion history: %w", err)
 	}
@@ -62,7 +62,7 @@ func Rollback(ctx context.Context, tier edge.RootTier, state edge.RootTierState,
 	}
 
 	promoted := edge.Promotion{PromotionID: target.PromotionID, Ts: now, Builds: target.Builds}
-	if err := tier.Promote(ctx, state, promoted); err != nil {
+	if err := stack.Promote(ctx, state, promoted); err != nil {
 		return edge.Promotion{}, fmt.Errorf("promote %s: %w", promoted.PromotionID, err)
 	}
 	return promoted, nil

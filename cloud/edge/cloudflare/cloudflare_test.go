@@ -227,7 +227,7 @@ func TestBindObjectStore_TakesTheBucketFromBootstrapValues(t *testing.T) {
 	}
 }
 
-// Guards ocelhq-f0e: ReconcileRootTier composes withService then
+// Guards ocelhq-f0e: ReconcileRootStack composes withService then
 // bindObjectStore on the generic worker (mirroring DeployApp's
 // bindObjectStore(app.Worker, app.Values)) — this exercises that composition
 // end to end through the same scriptBindings/metadata path a real upload

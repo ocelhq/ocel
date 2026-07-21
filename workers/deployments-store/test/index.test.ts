@@ -109,7 +109,7 @@ describe("authenticated write endpoint", () => {
     expect(result.removedPromotionIds).toEqual(["promo-build-2", "promo-build-1"]);
   });
 
-  it("reads and updates the root-tier version stamp", async () => {
+  it("reads and updates the root-stack version stamp", async () => {
     const initial = await SELF.fetch(authedReq("/version-stamp"));
     expect(await initial.json()).toEqual({ version: null });
 

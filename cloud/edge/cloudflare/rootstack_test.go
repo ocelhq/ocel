@@ -172,10 +172,10 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	return srv
 }
 
-func testState(endpoint, secret string) edge.RootTierState {
-	return edge.RootTierState{
-		edge.RootTierKeyEndpoint:    endpoint,
-		edge.RootTierKeyWriteSecret: secret,
+func testState(endpoint, secret string) edge.RootStackState {
+	return edge.RootStackState{
+		edge.RootStackKeyEndpoint:    endpoint,
+		edge.RootStackKeyWriteSecret: secret,
 	}
 }
 
@@ -272,9 +272,9 @@ func TestPutThenGetVersionStamp_RoundTrips(t *testing.T) {
 
 func TestStoreRequest_NoEndpointErrors(t *testing.T) {
 	p := &provider{}
-	err := p.PutStaged(context.Background(), edge.RootTierState{}, edge.DeploymentRecord{App: "web", BuildID: "b1"})
+	err := p.PutStaged(context.Background(), edge.RootStackState{}, edge.DeploymentRecord{App: "web", BuildID: "b1"})
 	if err == nil {
-		t.Fatal("expected an error when the root-tier state carries no endpoint")
+		t.Fatal("expected an error when the root-stack state carries no endpoint")
 	}
 }
 

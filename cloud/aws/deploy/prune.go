@@ -1,6 +1,6 @@
 // Prune (ticket ocelhq-u8h.8): reclaiming the app-deploy stacks and R2/S3
 // objects a Promotion left behind once it falls outside the retention
-// window edge.RootTier.DeletePromotionArtifacts enforces. It is a standalone
+// window edge.RootStack.DeletePromotionArtifacts enforces. It is a standalone
 // command, never run inline on a deploy — an aborted deploy's abandoned
 // stack/record is exactly what a later prune sweeps up (see production.go).
 //
@@ -121,7 +121,7 @@ func deletePrefix(ctx context.Context, deleter PrefixDeleter, bucket, prefix str
 // carries at runtime: the real aws-sdk-go-v2 S3 client (and R2's compatible
 // client) always implements both, so this only ever fails a fake configured
 // with just the narrower interface — the same capability-check pattern
-// cfg.Edge.(edge.RootTier) already uses.
+// cfg.Edge.(edge.RootStack) already uses.
 func asPrefixDeleter(up ArtifactUploader) PrefixDeleter {
 	d, _ := up.(PrefixDeleter)
 	return d
@@ -163,14 +163,14 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, l
 	return nil
 }
 
-// Prune reclaims a production project's old Deployments (ADR 0001): tier's
+// Prune reclaims a production project's old Deployments (ADR 0001): stack's
 // own DeletePromotionArtifacts enforces the keepN-deep retention window
 // (always pinning the active Promotion) and deletes the store records, then
 // Reclaim sweeps up what those records named — the app-deploy stacks and
 // R2/S3 objects. It backs `ocel deployments prune` and is never run inline on
 // a deploy.
-func Prune(ctx context.Context, tier edge.RootTier, state edge.RootTierState, cfg Config, projectID string, keepN int, progress, log func(string)) (edge.PruneResult, error) {
-	result, err := tier.DeletePromotionArtifacts(ctx, state, keepN)
+func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, keepN int, progress, log func(string)) (edge.PruneResult, error) {
+	result, err := stack.DeletePromotionArtifacts(ctx, state, keepN)
 	if err != nil {
 		return edge.PruneResult{}, fmt.Errorf("delete promotion artifacts: %w", err)
 	}

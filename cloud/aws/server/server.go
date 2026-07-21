@@ -207,17 +207,17 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return nil, nil, err
 	}
 
-	// The root tier is production-only (ADR 0001); a preview keeps no
-	// root-tier state and reconciles nothing of the sort.
-	var priorRootTierState edge.RootTierState
+	// The root stack is production-only (ADR 0001); a preview keeps no
+	// root-stack state and reconciles nothing of the sort.
+	var priorRootStackState edge.RootStackState
 	if !preview {
-		priorRootTierState, err = bootstrap.ReadRootTierState(ctx, ssmClient, manifest.GetProjectId())
+		priorRootStackState, err = bootstrap.ReadRootStackState(ctx, ssmClient, manifest.GetProjectId())
 		if err != nil {
 			return nil, nil, err
 		}
 	}
 
-	outputs, urls, rootTierState, err := deploy.Run(ctx, deploy.Config{
+	outputs, urls, rootStackState, err := deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
 		BackendURL:    "s3://" + deployed.StateBucket,
 		Passphrase:    passphrase,
@@ -247,19 +247,19 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Lifecycle:        env.GetLifecycle(),
 		Identity:         env.GetIdentity(),
 		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
-		RootTierState:    priorRootTierState,
+		RootStackState:    priorRootStackState,
 	}, manifest, progress, logf)
 
-	// Persist whatever root-tier state was reconciled — even when a later
+	// Persist whatever root-stack state was reconciled — even when a later
 	// step of this same deploy failed — so the next deploy (and
 	// rollback/deployments-ls) reconciles against it instead of starting
-	// fresh and orphaning the root tier this run just reconciled. Nil for a
-	// preview, which carries no root tier, and nil when reconcile itself
+	// fresh and orphaning the root stack this run just reconciled. Nil for a
+	// preview, which carries no root stack, and nil when reconcile itself
 	// never ran (an error before it).
-	if rootTierState != nil {
-		if writeErr := bootstrap.WriteRootTierState(ctx, ssmClient, manifest.GetProjectId(), rootTierState); writeErr != nil {
+	if rootStackState != nil {
+		if writeErr := bootstrap.WriteRootStackState(ctx, ssmClient, manifest.GetProjectId(), rootStackState); writeErr != nil {
 			if err != nil {
-				return outputs, urls, fmt.Errorf("%w (additionally failed to persist root-tier state: %v)", err, writeErr)
+				return outputs, urls, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
 			}
 			return outputs, urls, writeErr
 		}
