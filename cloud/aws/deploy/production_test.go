@@ -126,7 +126,7 @@ func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testin
 		{App: "api", BuildID: "b2", Record: edge.DeploymentRecord{App: "api", BuildID: "b2"}},
 	}
 
-	state, err := finalizeProductionDeploy(ctx, fake, specs, nil, "promo1", 100, results)
+	state, err := finalizeProductionDeploy(ctx, fake, specs, nil, "promo1", "", 100, results)
 	if err != nil {
 		t.Fatalf("finalizeProductionDeploy: %v", err)
 	}
@@ -157,6 +157,88 @@ func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testin
 	}
 }
 
+func TestFinalizeProductionDeploy_StampsTheTagOntoThePromotion(t *testing.T) {
+	fake := &recordingRootStack{}
+	ctx := context.Background()
+	results := []appDeployResult{
+		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
+	}
+
+	if _, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", 100, results); err != nil {
+		t.Fatalf("finalizeProductionDeploy: %v", err)
+	}
+
+	if len(fake.promotions) != 1 || fake.promotions[0].Tag != "v1.2.3" {
+		t.Errorf("promotions = %v, want the promote to carry tag %q", fake.promotions, "v1.2.3")
+	}
+}
+
+func TestValidateTag_RejectsMalformedTagsHostSide(t *testing.T) {
+	if err := validateTag(""); err != nil {
+		t.Errorf("validateTag(\"\") = %v, want nil (untagged default)", err)
+	}
+	if err := validateTag("v1.2.3"); err != nil {
+		t.Errorf("validateTag(%q) = %v, want nil", "v1.2.3", err)
+	}
+	for _, bad := range []string{"feature/x", "has space", "über"} {
+		if err := validateTag(bad); err == nil {
+			t.Errorf("validateTag(%q) = nil, want an error", bad)
+		}
+	}
+}
+
+func TestCheckTagAvailable_RejectsATagAlreadyInUse(t *testing.T) {
+	fake := &recordingRootStack{
+		history: []edge.HistoryEntry{
+			{Promotion: edge.Promotion{PromotionID: "promo-1", Tag: "v1.2.3"}, Active: true},
+		},
+	}
+	ctx := context.Background()
+	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
+	if err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	if err := checkTagAvailable(ctx, fake, state, "v1.2.3"); err == nil {
+		t.Fatal("expected a duplicate tag to be rejected")
+	}
+}
+
+func TestCheckTagAvailable_AllowsAFreshTag(t *testing.T) {
+	fake := &recordingRootStack{
+		history: []edge.HistoryEntry{
+			{Promotion: edge.Promotion{PromotionID: "promo-1", Tag: "v1.2.3"}, Active: true},
+		},
+	}
+	ctx := context.Background()
+	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
+	if err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	if err := checkTagAvailable(ctx, fake, state, "v2.0.0"); err != nil {
+		t.Errorf("checkTagAvailable rejected a fresh tag: %v", err)
+	}
+}
+
+func TestCheckTagAvailable_NoOpForUntaggedOrFirstDeploy(t *testing.T) {
+	fake := &recordingRootStack{
+		history: []edge.HistoryEntry{
+			{Promotion: edge.Promotion{PromotionID: "promo-1", Tag: "v1.2.3"}, Active: true},
+		},
+	}
+	ctx := context.Background()
+
+	// Untagged deploy: no check regardless of history.
+	if err := checkTagAvailable(ctx, fake, edge.RootStackState{edge.RootStackKeyEndpoint: "http://store"}, ""); err != nil {
+		t.Errorf("untagged deploy should never fail the tag check: %v", err)
+	}
+	// First-ever deploy: no store yet (no endpoint), so no history to read.
+	if err := checkTagAvailable(ctx, fake, nil, "v1.2.3"); err != nil {
+		t.Errorf("first deploy (no store) should never fail the tag check: %v", err)
+	}
+}
+
 func TestFinalizeProductionDeploy_StagesBeforeAnyPromote(t *testing.T) {
 	fake := &orderTrackingRootStack{recordingRootStack: &recordingRootStack{}}
 	ctx := context.Background()
@@ -164,7 +246,7 @@ func TestFinalizeProductionDeploy_StagesBeforeAnyPromote(t *testing.T) {
 		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
 	}
 
-	if _, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", 100, results); err != nil {
+	if _, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", 100, results); err != nil {
 		t.Fatalf("finalizeProductionDeploy: %v", err)
 	}
 
@@ -187,7 +269,7 @@ func TestFinalizeProductionDeploy_AppFailureAbortsPromote(t *testing.T) {
 		{App: "api", Err: errors.New("app-deploy stack failed")},
 	}
 
-	_, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", 100, results)
+	_, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", 100, results)
 	if err == nil {
 		t.Fatal("expected an error when one app's deploy failed")
 	}
@@ -206,13 +288,13 @@ func TestFinalizeProductionDeploy_SecondDeployProducesNewPromotionRetainingPrior
 	specs := []edge.RootStackSpec{{Version: "v1"}}
 	results := []appDeployResult{{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}}}
 
-	state, err := finalizeProductionDeploy(ctx, fake, specs, nil, "promo1", 100, results)
+	state, err := finalizeProductionDeploy(ctx, fake, specs, nil, "promo1", "", 100, results)
 	if err != nil {
 		t.Fatalf("first finalizeProductionDeploy: %v", err)
 	}
 
 	results2 := []appDeployResult{{App: "web", BuildID: "b2", Record: edge.DeploymentRecord{App: "web", BuildID: "b2"}}}
-	if _, err := finalizeProductionDeploy(ctx, fake, specs, state, "promo2", 200, results2); err != nil {
+	if _, err := finalizeProductionDeploy(ctx, fake, specs, state, "promo2", "", 200, results2); err != nil {
 		t.Fatalf("second finalizeProductionDeploy: %v", err)
 	}
 

@@ -112,6 +112,74 @@ describe("history", () => {
       { promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" }, active: false },
     ]);
   });
+
+  it("carries a promotion's tag through history", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord());
+    await store.promote(makePromotion({ tag: "v1.2.3" }));
+
+    expect(await store.history()).toEqual([
+      { promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" }, tag: "v1.2.3", active: true },
+    ]);
+  });
+});
+
+describe("tags", () => {
+  it("rejects a tag already held by a different promotion", async () => {
+    const store = storeStub();
+    await store.promote(makePromotion({ promotionId: "promo-1", tag: "v1.2.3" }));
+
+    const { conflict } = await store.promote(
+      makePromotion({ promotionId: "promo-2", tag: "v1.2.3" }),
+    );
+
+    expect(conflict).toMatch(/already used by promotion promo-1/);
+    // The clashing deploy never became active; the original still serves.
+    expect((await store.history()).map((h) => h.promotionId)).toEqual(["promo-1"]);
+    expect(await store.activeBuildId("web")).toBe("build-1");
+  });
+
+  it("lets a rollback re-promote its own tagged id without a self-conflict", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "build-1" }));
+    await store.putStaged(makeRecord({ buildId: "build-2" }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-1", ts: 1_000, tag: "v1", builds: { web: "build-1" } }),
+    );
+    await store.promote(
+      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "build-2" } }),
+    );
+
+    // Rollback re-promotes promo-1, carrying its tag, under a fresh ts.
+    const { conflict } = await store.promote(
+      makePromotion({ promotionId: "promo-1", ts: 3_000, tag: "v1", builds: { web: "build-1" } }),
+    );
+
+    expect(conflict).toBeUndefined();
+    expect(await store.activeBuildId("web")).toBe("build-1");
+    expect((await store.history()).map((h) => h.promotionId)).toEqual(["promo-1", "promo-2"]);
+  });
+
+  it("frees a tag once its promotion is pruned", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "build-1" }));
+    await store.putStaged(makeRecord({ buildId: "build-2" }));
+    await store.putStaged(makeRecord({ buildId: "build-3" }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-1", ts: 1_000, tag: "v1", builds: { web: "build-1" } }),
+    );
+    await store.promote(
+      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "build-2" } }),
+    );
+    await store.prune(1); // keeps promo-2 (active); removes promo-1 and frees "v1"
+
+    const { conflict } = await store.promote(
+      makePromotion({ promotionId: "promo-3", ts: 3_000, tag: "v1", builds: { web: "build-3" } }),
+    );
+
+    expect(conflict).toBeUndefined();
+    expect((await store.history()).find((h) => h.tag === "v1")?.promotionId).toBe("promo-3");
+  });
 });
 
 describe("prune", () => {

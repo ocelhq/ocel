@@ -62,6 +62,17 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		return nil, nil, nil, fmt.Errorf("production deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind())
 	}
 
+	// Validate then check availability up front, before any artifact upload or
+	// provisioning, so a bad or duplicate tag never orphans infrastructure. The
+	// store's promote re-applies the uniqueness check atomically (the
+	// concurrent-deploy backstop); these exist to fail fast with a clear message.
+	if err := validateTag(cfg.Tag); err != nil {
+		return nil, nil, nil, err
+	}
+	if err := checkTagAvailable(ctx, stack, cfg.RootStackState, cfg.Tag); err != nil {
+		return nil, nil, nil, err
+	}
+
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
 	if err != nil {
 		return nil, nil, nil, err
@@ -129,7 +140,7 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	wg.Wait()
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
-	if err := stageAndPromote(ctx, stack, state, promotionID, time.Now().Unix(), results); err != nil {
+	if err := stageAndPromote(ctx, stack, state, promotionID, cfg.Tag, time.Now().Unix(), results); err != nil {
 		return nil, nil, state, err
 	}
 
@@ -139,6 +150,49 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	}
 	outputs = append(outputs, workerURLOutputs(cfg, manifest)...)
 	return outputs, appURLs(manifest, outputs), state, nil
+}
+
+// maxTagLen bounds a deployment tag, mirroring the CLI's own limit.
+const maxTagLen = 64
+
+// validateTag re-checks the deployment-tag format host-side — the CLI validates
+// too, but the RPC is a trust boundary a non-CLI caller could cross, so a
+// malformed tag must never reach the store. Empty is the untagged default.
+func validateTag(tag string) error {
+	if tag == "" {
+		return nil
+	}
+	if len(tag) > maxTagLen {
+		return fmt.Errorf("tag must be at most %d characters (got %d)", maxTagLen, len(tag))
+	}
+	for _, r := range tag {
+		if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
+			r == '.' || r == '_' || r == '-' {
+			continue
+		}
+		return fmt.Errorf("tag %q has an invalid character %q; use only letters, digits, '.', '_' and '-'", tag, r)
+	}
+	return nil
+}
+
+// checkTagAvailable rejects a deploy whose tag is already held by a live
+// promotion. A no-op for an untagged deploy and for a project with no store yet
+// (no prior state to read a history from). Pure of AWS — only edge.RootStack is
+// called.
+func checkTagAvailable(ctx context.Context, stack edge.RootStack, state edge.RootStackState, tag string) error {
+	if tag == "" || state[edge.RootStackKeyEndpoint] == "" {
+		return nil
+	}
+	history, err := stack.History(ctx, state)
+	if err != nil {
+		return fmt.Errorf("check tag availability: %w", err)
+	}
+	for _, h := range history {
+		if h.Tag == tag {
+			return fmt.Errorf("tag %q is already used by promotion %s; pick another tag, or roll back to it with `ocel rollback --tag %s`", tag, h.PromotionID, tag)
+		}
+	}
+	return nil
 }
 
 // reconcileRootStack reconciles the root stack once per spec, threading the
@@ -165,7 +219,7 @@ func reconcileRootStack(ctx context.Context, stack edge.RootStack, specs []edge.
 // the active pointer never moves and the previous Deployment keeps serving.
 // Pure of Pulumi/AWS/Cloudflare: the caller has already reconciled the root
 // stack and run every app-deploy stack.
-func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootStackState, promotionID string, now int64, results []appDeployResult) error {
+func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootStackState, promotionID, tag string, now int64, results []appDeployResult) error {
 	var failed []string
 	builds := make(map[string]string, len(results))
 	for _, r := range results {
@@ -182,7 +236,7 @@ func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootS
 		return fmt.Errorf("app-deploy failed for %s; promote aborted, the previous Deployment keeps serving", strings.Join(failed, "; "))
 	}
 
-	if err := stack.Promote(ctx, state, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds}); err != nil {
+	if err := stack.Promote(ctx, state, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds, Tag: tag}); err != nil {
 		return fmt.Errorf("promote %s: %w", promotionID, err)
 	}
 	return nil
@@ -194,12 +248,12 @@ func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootS
 // what unit tests exercise directly against the edge.RootStack fake to assert
 // the reconcile -> stage -> promote sequence and the abort-on-failure
 // behavior.
-func finalizeProductionDeploy(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID string, now int64, results []appDeployResult) (edge.RootStackState, error) {
+func finalizeProductionDeploy(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID, tag string, now int64, results []appDeployResult) (edge.RootStackState, error) {
 	state, err := reconcileRootStack(ctx, stack, specs, prior)
 	if err != nil {
 		return prior, err
 	}
-	if err := stageAndPromote(ctx, stack, state, promotionID, now, results); err != nil {
+	if err := stageAndPromote(ctx, stack, state, promotionID, tag, now, results); err != nil {
 		return state, err
 	}
 	return state, nil

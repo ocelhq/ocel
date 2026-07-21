@@ -140,6 +140,12 @@ type Config struct {
 	// find orphans. 0 means no expiry (production and persistent previews).
 	ExpiresAt int64
 
+	// Tag is the optional immutable label to stamp on the promotion this
+	// production deploy produces (production only; ignored for previews). Empty
+	// for an untagged deploy. A tag already held by a live promotion fails the
+	// deploy before any infrastructure is created.
+	Tag string
+
 	// RootStackState is the project's prior root-stack reconcile state (ADR
 	// 0001), persisted by the caller across deploys exactly like EdgeValues —
 	// opaque, handed back unread. Nil on a project's first production deploy,

@@ -11,8 +11,9 @@ require (
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c
 	github.com/spf13/cobra v1.10.2
 	github.com/zalando/go-keyring v0.2.8
-	google.golang.org/protobuf v1.36.11
 )
+
+require google.golang.org/protobuf v1.36.11 // indirect
 
 require (
 	dario.cat/mergo v1.0.2 // indirect
@@ -21,7 +22,7 @@ require (
 	github.com/bep/godartsass/v2 v2.5.0 // indirect
 	github.com/bep/golibsass v1.2.0 // indirect
 	github.com/danieljoos/wincred v1.2.3 // indirect
-	github.com/fatih/color v1.18.0 // indirect
+	github.com/fatih/color v1.18.0
 	github.com/gobwas/glob v0.2.3 // indirect
 	github.com/godbus/dbus/v5 v5.2.2 // indirect
 	github.com/gohugoio/hugo v0.149.1 // indirect
@@ -48,4 +49,5 @@ tool (
 )
 
 replace github.com/ocelhq/ocel/pkg/channel => ../pkg/channel
+
 replace github.com/ocelhq/ocel/pkg/proto => ../pkg/proto

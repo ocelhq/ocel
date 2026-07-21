@@ -52,7 +52,8 @@ export default class extends WorkerEntrypoint<Env> {
       if (!body?.promotionId || !body.builds) {
         return new Response("Bad Request", { status: 400 });
       }
-      await store.promote(body);
+      const { conflict } = await store.promote(body);
+      if (conflict) return new Response(conflict, { status: 409 });
       return new Response(null, { status: 204 });
     }
 

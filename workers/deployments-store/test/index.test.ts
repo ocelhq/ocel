@@ -81,6 +81,25 @@ describe("authenticated write endpoint", () => {
     ]);
   });
 
+  it("rejects a promote whose tag is already in use with 409", async () => {
+    await SELF.fetch(
+      authedReq("/promote", {
+        method: "POST",
+        body: JSON.stringify({ promotionId: "promo-1", ts: 1_000, builds: { web: "b1" }, tag: "v1.2.3" }),
+      }),
+    );
+
+    const clashRes = await SELF.fetch(
+      authedReq("/promote", {
+        method: "POST",
+        body: JSON.stringify({ promotionId: "promo-2", ts: 2_000, builds: { web: "b2" }, tag: "v1.2.3" }),
+      }),
+    );
+
+    expect(clashRes.status).toBe(409);
+    expect(await clashRes.text()).toMatch(/already used by promotion promo-1/);
+  });
+
   it("prunes and reports what was removed", async () => {
     for (const buildId of ["build-1", "build-2", "build-3"]) {
       await SELF.fetch(

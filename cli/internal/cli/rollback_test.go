@@ -41,6 +41,53 @@ func TestRunRollback_To_RollsBackToNamedPromotion(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
+func TestRunRollback_Tag_RollsBackToTaggedPromotion(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "production")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	if err := runRollback(context.Background(), root, rollbackOptions{tag: "v1.0.0"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runRollback err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "Rolled back to promotion promo-1") {
+		t.Errorf("stdout = %q, want it to report rolling back to promo-1", out)
+	}
+	if !strings.Contains(out, "tag v1.0.0") {
+		t.Errorf("stdout = %q, want it to echo the target's tag", out)
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+func TestRunRollback_ToAndTag_AreMutuallyExclusive(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+
+	var stdout, stderr bytes.Buffer
+	err := runRollback(context.Background(), root, rollbackOptions{to: "promo-1", tag: "v1.0.0"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runRollback err = nil, want an error when both --to and --tag are set")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("err = %v, want it to report mutual exclusivity", err)
+	}
+}
+
+func TestRunRollback_InvalidTag_Errors(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+
+	var stdout, stderr bytes.Buffer
+	err := runRollback(context.Background(), root, rollbackOptions{tag: "feature/x"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runRollback err = nil, want an error for an invalid tag")
+	}
+	if !strings.Contains(err.Error(), "invalid character") {
+		t.Errorf("err = %v, want it to explain the invalid character", err)
+	}
+}
+
 func TestRunRollback_UnknownTo_ErrorsClearly(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "production")

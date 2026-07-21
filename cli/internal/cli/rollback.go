@@ -18,7 +18,8 @@ import (
 
 // rollbackOptions holds the flags accepted by `ocel rollback`.
 type rollbackOptions struct {
-	to string
+	to  string
+	tag string
 }
 
 var rollbackOpts rollbackOptions
@@ -43,14 +44,23 @@ var rollbackCmd = &cobra.Command{
 
 func init() {
 	rollbackCmd.Flags().StringVar(&rollbackOpts.to, "to", "", "Roll back to a specific promotion id instead of the immediately previous one")
+	rollbackCmd.Flags().StringVar(&rollbackOpts.tag, "tag", "", "Roll back to the promotion carrying this tag (mutually exclusive with --to)")
 }
 
 // runRollback resolves the project, preflights production infrastructure, and
-// drives the provider's Rollback RPC: no --to rolls back to the promotion
+// drives the provider's Rollback RPC: no flag rolls back to the promotion
 // immediately before the currently active one; --to <promotionId> targets a
-// specific one. A rolled-back promotion is itself still in history, so
-// running rollback again rolls forward.
+// specific one; --tag <tag> targets the promotion carrying that tag. --to and
+// --tag are mutually exclusive. A rolled-back promotion is itself still in
+// history, so running rollback again rolls forward.
 func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, stderr io.Writer) error {
+	if opts.to != "" && opts.tag != "" {
+		return fmt.Errorf("--to and --tag are mutually exclusive; pass just one")
+	}
+	if err := validateTag(opts.tag); err != nil {
+		return err
+	}
+
 	if _, err := loadCredentials(); err != nil {
 		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
 		return &ExitError{Code: 1}
@@ -75,13 +85,18 @@ func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, 
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			ProjectId:       cfg.ProjectID,
 			To:              opts.to,
+			Tag:             opts.tag,
 		})
 		if err != nil {
 			return err
 		}
 
 		promoted := resp.GetPromoted()
-		fmt.Fprintf(stdout, "Rolled back to promotion %s (created %s)\n", promoted.GetPromotionId(), epochOrDash(promoted.GetTs()))
+		tagSuffix := ""
+		if promoted.GetTag() != "" {
+			tagSuffix = fmt.Sprintf(", tag %s", promoted.GetTag())
+		}
+		fmt.Fprintf(stdout, "Rolled back to promotion %s (created %s%s)\n", promoted.GetPromotionId(), epochOrDash(promoted.GetTs()), tagSuffix)
 		return nil
 	})
 }

@@ -251,6 +251,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Identity:         env.GetIdentity(),
 		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
 		RootStackState:   priorRootStackState,
+		Tag:              req.GetTag(),
 	}, manifest, progress, logf)
 
 	// Persist whatever root-stack state was reconciled — even when a later

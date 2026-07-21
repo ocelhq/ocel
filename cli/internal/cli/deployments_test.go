@@ -18,7 +18,7 @@ func TestRunDeploymentsLs_RendersPromotionsNewestFirstWithActiveMarker(t *testin
 	}
 
 	out := stdout.String()
-	for _, sub := range []string{"promo-2", "promo-1", "*"} {
+	for _, sub := range []string{"ID", "TAG", "CREATED", "STATUS", "promo-2", "promo-1", "v1.0.0", "active"} {
 		if !strings.Contains(out, sub) {
 			t.Errorf("stdout = %q, want it to contain %q", out, sub)
 		}

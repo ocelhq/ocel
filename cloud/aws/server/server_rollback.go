@@ -70,9 +70,9 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 }
 
 // Rollback re-points a production project's active-deployment pointer at a
-// prior Promotion: the immediately previous one when req.To is empty, else
-// the one named by req.To. It backs `ocel rollback` / `ocel rollback --to
-// <promotionId>`.
+// prior Promotion: the one tagged req.Tag, else the one named by req.To, else
+// the immediately previous one. It backs `ocel rollback` / `ocel rollback --to
+// <promotionId>` / `ocel rollback --tag <tag>`.
 func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackRequest) (*deploymentsv1.RollbackResponse, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
@@ -83,7 +83,7 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 		return nil, err
 	}
 
-	promoted, err := deploy.Rollback(ctx, stack, state, req.GetTo(), time.Now().Unix())
+	promoted, err := deploy.Rollback(ctx, stack, state, req.GetTo(), req.GetTag(), time.Now().Unix())
 	if err != nil {
 		return nil, err
 	}
@@ -109,5 +109,6 @@ func toPromotionProto(p edge.Promotion) *deploymentsv1.Promotion {
 		PromotionId: p.PromotionID,
 		Ts:          p.Ts,
 		Builds:      p.Builds,
+		Tag:         p.Tag,
 	}
 }
