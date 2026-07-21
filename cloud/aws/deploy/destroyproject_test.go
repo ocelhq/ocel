@@ -1,9 +1,80 @@
 package deploy
 
 import (
+	"context"
 	"reflect"
 	"testing"
+
+	"github.com/ocelhq/ocel/cloud/edge"
 )
+
+func TestRootStackWorkerNames_CoversStoreAndEveryAppFromHistory(t *testing.T) {
+	f := &recordingRootStack{
+		history: []edge.HistoryEntry{
+			{Promotion: edge.Promotion{PromotionID: "p2", Builds: map[string]string{"web": "b2", "api": "b2"}}},
+			{Promotion: edge.Promotion{PromotionID: "p1", Builds: map[string]string{"web": "b1"}}},
+		},
+	}
+	ctx := context.Background()
+	state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
+	if err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	names, err := rootStackWorkerNames(ctx, f, state, "proj_x", "prod")
+	if err != nil {
+		t.Fatalf("rootStackWorkerNames: %v", err)
+	}
+
+	prod := "proj_x-prod"
+	// Every generic worker (one per app across all of history, plus the no-app
+	// "root" fallback and the legacy unqualified name) and the store must appear.
+	for _, want := range []string{
+		legacyWorkerName(prod),
+		workerScriptName(prod, "root"),
+		workerScriptName(prod, "web"),
+		workerScriptName(prod, "api"),
+		storeWorkerName("proj_x"),
+	} {
+		if !contains(names, want) {
+			t.Errorf("worker names %v missing %q", names, want)
+		}
+	}
+
+	// The store worker is deleted last, so a partial failure leaves it (and the
+	// history a re-run reads) intact.
+	if names[len(names)-1] != storeWorkerName("proj_x") {
+		t.Errorf("last name = %q, want the store worker last", names[len(names)-1])
+	}
+
+	// No duplicates — web appears in two promotions but is one worker.
+	seen := map[string]bool{}
+	for _, n := range names {
+		if seen[n] {
+			t.Errorf("duplicate worker name %q in %v", n, names)
+		}
+		seen[n] = true
+	}
+}
+
+func TestRootStackWorkerNames_PropagatesHistoryError(t *testing.T) {
+	// An unreconciled state makes the fake's History reject; the resolver must
+	// surface that rather than silently returning an incomplete worker set (the
+	// caller then leaves the root stack marked not-torn-down).
+	_, err := rootStackWorkerNames(context.Background(), &recordingRootStack{}, edge.RootStackState{}, "proj_x", "prod")
+	if err == nil {
+		t.Fatal("rootStackWorkerNames with an unreadable store err = nil, want the history error")
+	}
+}
+
+func contains(xs []string, want string) bool {
+	for _, x := range xs {
+		if x == want {
+			return true
+		}
+	}
+	return false
+}
 
 func TestClassifyProjectStacks_SplitsInfraFromAppStacks(t *testing.T) {
 	got := classifyProjectStacks("shop", []string{

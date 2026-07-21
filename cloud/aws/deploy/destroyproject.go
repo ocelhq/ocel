@@ -16,6 +16,7 @@ import (
 	"errors"
 	"fmt"
 	"path"
+	"sort"
 	"strings"
 
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -81,7 +82,11 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 
 	if stack != nil && len(state) > 0 {
 		report("Destroying root stack (workers, custom domain, store)")
-		if err := stack.DestroyRootStack(ctx, state); err != nil {
+		workers, err := rootStackWorkerNames(ctx, stack, state, projectID, cfg.Env)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("resolve root-stack workers: %w", err))
+			result.RootTornDown = false
+		} else if err := stack.DestroyRootStack(ctx, workers); err != nil {
 			errs = append(errs, fmt.Errorf("destroy root stack: %w", err))
 			result.RootTornDown = false
 		}
@@ -112,6 +117,58 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 	}
 
 	return result, errors.Join(errs...)
+}
+
+// rootStackWorkerNames resolves the exact set of edge workers a project's root
+// stack deployed, so DestroyRootStack deletes precisely those and never has to
+// guess a project's workers from a name prefix (which could collide with a
+// sibling project). The deployments-store worker and the no-app "root" generic
+// worker are deterministic from the project; the legacy unqualified name (from
+// before workers were named per app) is included so an old single-worker
+// project is reclaimed too. The per-app generic workers are named from the app
+// set, which the store's own promotion history carries, keyed by app. The
+// store worker is deleted last so a partial failure is more likely to leave it
+// — and the history a re-run reads — intact.
+func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.RootStackState, projectID, env string) ([]string, error) {
+	prodStack := projectID + "-" + env
+
+	history, err := stack.History(ctx, state)
+	if err != nil {
+		return nil, err
+	}
+	apps := map[string]struct{}{}
+	for _, h := range history {
+		for app := range h.Builds {
+			apps[app] = struct{}{}
+		}
+	}
+
+	seen := map[string]struct{}{}
+	var names []string
+	add := func(name string) {
+		if name == "" {
+			return
+		}
+		if _, dup := seen[name]; dup {
+			return
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+
+	add(legacyWorkerName(prodStack))
+	add(workerScriptName(prodStack, "root"))
+	sortedApps := make([]string, 0, len(apps))
+	for app := range apps {
+		sortedApps = append(sortedApps, app)
+	}
+	sort.Strings(sortedApps)
+	for _, app := range sortedApps {
+		add(workerScriptName(prodStack, app))
+	}
+	add(storeWorkerName(projectID)) // last: see doc comment.
+
+	return names, nil
 }
 
 // PlanProjectTeardown lists the account-global backend's stacks and classifies

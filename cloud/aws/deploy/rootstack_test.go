@@ -26,10 +26,11 @@ type recordingRootStack struct {
 	secret     string
 	version    string
 
-	staged     []edge.DeploymentRecord
-	promotions []edge.Promotion
-	pruned     []int
-	destroyed  int
+	staged           []edge.DeploymentRecord
+	promotions       []edge.Promotion
+	pruned           []int
+	destroyed        int
+	destroyedWorkers []string
 
 	history     []edge.HistoryEntry
 	pruneResult edge.PruneResult
@@ -93,10 +94,8 @@ func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state e
 	return f.pruneResult, nil
 }
 
-func (f *recordingRootStack) DestroyRootStack(_ context.Context, state edge.RootStackState) error {
-	if err := f.checkAuth(state); err != nil {
-		return err
-	}
+func (f *recordingRootStack) DestroyRootStack(_ context.Context, workers []string) error {
+	f.destroyedWorkers = append(f.destroyedWorkers, workers...)
 	f.destroyed++
 	return nil
 }

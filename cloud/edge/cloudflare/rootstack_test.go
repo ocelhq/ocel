@@ -9,7 +9,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -180,18 +179,21 @@ func testState(endpoint, secret string) edge.RootStackState {
 	}
 }
 
-func TestDestroyRootStack_RefusesStateWithoutWorkerIdentities(t *testing.T) {
+func TestDestroyRootStack_EmptyListIsNoOp(t *testing.T) {
 	t.Setenv(envAccountID, "acct-1")
 	p := &provider{}
-	// A state carrying an endpoint but no generic/store names (e.g. one written
-	// by an ocel predating the identity keys) must fail rather than silently
-	// report the root stack gone — otherwise the host would orphan the workers.
-	err := p.DestroyRootStack(context.Background(), testState("https://store", "s3cr3t"))
-	if err == nil {
-		t.Fatal("DestroyRootStack with no worker identities err = nil, want a refusal")
+	// No workers to remove must not reach the Cloudflare client (p.client is nil
+	// here) — an empty teardown is a clean no-op.
+	if err := p.DestroyRootStack(context.Background(), nil); err != nil {
+		t.Fatalf("DestroyRootStack(nil) err = %v, want nil", err)
 	}
-	if !strings.Contains(err.Error(), "worker identities") {
-		t.Errorf("err = %v, want it to explain the missing worker identities", err)
+}
+
+func TestDestroyRootStack_RequiresAccountID(t *testing.T) {
+	t.Setenv(envAccountID, "")
+	p := &provider{}
+	if err := p.DestroyRootStack(context.Background(), []string{"ocel-proj-prod-web"}); err == nil {
+		t.Fatal("DestroyRootStack without an account id err = nil, want an error")
 	}
 }
 
