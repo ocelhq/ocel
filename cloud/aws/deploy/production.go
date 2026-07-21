@@ -39,7 +39,7 @@ import (
 // ReconcileRootStack is a no-op once a project's root stack already carries it;
 // bump it only when the frozen generic/store worker bundles change shape in a
 // way that needs re-deploying.
-const rootStackVersion = "6"
+const rootStackVersion = "8"
 
 // appDeployResult is one app's app-deploy-stack outcome, fed into
 // finalizeProductionDeploy after Run has driven that stack (Pulumi) to

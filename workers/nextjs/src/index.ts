@@ -208,6 +208,21 @@ export async function dispatchResult(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
+  const response = await dispatch(result, request, deps);
+  // x-matched-path mirrors Next.js: the matched route template with dynamic
+  // segments left un-substituted (e.g. /posts/[id]). Set only when routing
+  // resolved to a route — unmatched assets, 404s, and redirects carry none.
+  if (!result.resolvedPathname) return response;
+  const tagged = new Response(response.body, response);
+  tagged.headers.set("x-matched-path", result.resolvedPathname);
+  return tagged;
+}
+
+async function dispatch(
+  result: RouteResult,
+  request: Request,
+  deps: RouteDeps,
+): Promise<Response> {
   const { manifest, functionUrls } = deps;
   const doFetch = deps.fetch ?? fetch;
   // Function-URL forwards are signed; external rewrites and static assets are
