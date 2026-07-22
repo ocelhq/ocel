@@ -45,18 +45,19 @@ type EdgeCredentials struct {
 }
 
 // edgeNames are the identities the edge step addresses for one substrate class:
-// its IAM user and the SSM parameters holding its credentials, values and
-// adopted cache store.
+// its IAM user and the SSM parameters holding its credentials, values, adopted
+// cache store and adopted deployments store.
 type edgeNames struct {
-	user             string
-	credentialsParam string
-	valuesParam      string
-	cacheStoreParam  string
+	user                  string
+	credentialsParam      string
+	valuesParam           string
+	cacheStoreParam       string
+	deploymentsStoreParam string
 }
 
 var edgeNamesByClass = map[string]edgeNames{
-	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName},
-	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName},
+	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName, DeploymentsStoreParamName},
+	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName, DeploymentsStorePreviewParamName},
 }
 
 func edgeNamesFor(class string) (edgeNames, error) {
@@ -77,6 +78,17 @@ func CacheStoreParamFor(class string) (string, error) {
 		return "", err
 	}
 	return names.cacheStoreParam, nil
+}
+
+// DeploymentsStoreParamFor returns the SSM parameter a substrate class's adopted
+// deployments-store worker coordinates live in. Production and preview each
+// bootstrap their own store worker, so the parameter is class-keyed.
+func DeploymentsStoreParamFor(class string) (string, error) {
+	names, err := edgeNamesFor(class)
+	if err != nil {
+		return "", err
+	}
+	return names.deploymentsStoreParam, nil
 }
 
 // writeEdgeValues stores the edge's own bootstrap outputs so the deploy path can
@@ -240,10 +252,15 @@ type CacheStore struct {
 	SecretAccessKey string `json:"secretAccessKey"`
 }
 
-// DeploymentsStoreParamName is the account-level SSM SecureString parameter
-// holding the shared deployments-store worker's adopted coordinates. Production
-// only — the deployments store has no preview counterpart.
-const DeploymentsStoreParamName = "/ocel/edge/deployments-store"
+// DeploymentsStoreParamName / DeploymentsStorePreviewParamName are the
+// account-level SSM SecureString parameters holding each substrate's
+// deployments-store worker coordinates. Production and preview bootstrap
+// separate store workers so the two substrates never share promotion history or
+// Durable Object state.
+const (
+	DeploymentsStoreParamName        = "/ocel/edge/deployments-store"
+	DeploymentsStorePreviewParamName = "/ocel/edge/deployments-store-preview"
+)
 
 // DeploymentsStore is the JSON payload stored in SSM: the shared
 // deployments-store worker's coordinates, read at deploy time so a project's
@@ -254,12 +271,16 @@ type DeploymentsStore struct {
 	BootstrapCred string `json:"bootstrapCred"`
 }
 
-// adoptDeploymentsStore persists the edge's offered shared deployments-store
-// worker. Every coordinate — including the bootstrap credential — is the edge's
-// current state and is overwritten on every run: the credential is re-minted
-// each bootstrap and read fresh from here at deploy time, so there is no prior
-// secret to preserve.
-func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, values map[string]string) error {
+// adoptDeploymentsStore persists the edge's offered deployments-store worker for
+// one substrate class. Every coordinate — including the bootstrap credential —
+// is the edge's current state and is overwritten on every run: the credential is
+// re-minted each bootstrap and read fresh from here at deploy time, so there is
+// no prior secret to preserve.
+func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, values map[string]string) error {
+	paramName, err := DeploymentsStoreParamFor(class)
+	if err != nil {
+		return err
+	}
 	payload, err := json.Marshal(DeploymentsStore{
 		Endpoint:      values[edge.OfferKeyStoreEndpoint],
 		ScriptName:    values[edge.OfferKeyStoreScriptName],
@@ -269,7 +290,7 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, values map[str
 		return fmt.Errorf("marshal deployments store: %w", err)
 	}
 	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
-		Name:      aws.String(DeploymentsStoreParamName),
+		Name:      aws.String(paramName),
 		Value:     aws.String(string(payload)),
 		Type:      ssmtypes.ParameterTypeSecureString,
 		Overwrite: aws.Bool(true),
@@ -279,13 +300,29 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, values map[str
 	return nil
 }
 
-// ReadDeploymentsStore returns the adopted shared deployments-store worker's
-// coordinates, decrypted. An account whose edge offered none (a bootstrap
-// predating the shared store) reads as the zero value rather than as a failure,
-// so the deploy path can tell "no store, skip the root stack" from an error.
+// ReadDeploymentsStore returns the production substrate's adopted
+// deployments-store worker coordinates, decrypted.
 func ReadDeploymentsStore(ctx context.Context, ssmClient SSMAPI) (DeploymentsStore, error) {
+	return ReadDeploymentsStoreFor(ctx, ssmClient, ClassProduction)
+}
+
+// ReadDeploymentsStorePreview returns the preview substrate's adopted
+// deployments-store worker coordinates, decrypted.
+func ReadDeploymentsStorePreview(ctx context.Context, ssmClient SSMAPI) (DeploymentsStore, error) {
+	return ReadDeploymentsStoreFor(ctx, ssmClient, ClassPreview)
+}
+
+// ReadDeploymentsStoreFor returns a substrate class's adopted deployments-store
+// worker coordinates, decrypted. An account whose edge offered none (a bootstrap
+// predating the store) reads as the zero value rather than as a failure, so the
+// deploy path can tell "no store, skip the root stack" from an error.
+func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, class string) (DeploymentsStore, error) {
+	paramName, err := DeploymentsStoreParamFor(class)
+	if err != nil {
+		return DeploymentsStore{}, err
+	}
 	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
-		Name:           aws.String(DeploymentsStoreParamName),
+		Name:           aws.String(paramName),
 		WithDecryption: aws.Bool(true),
 	})
 	if err != nil {

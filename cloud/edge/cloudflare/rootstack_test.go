@@ -53,6 +53,26 @@ func testStoreWorker() edge.Worker {
 	return edge.Worker{Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")}}
 }
 
+func TestStoreScriptNameFor(t *testing.T) {
+	prod, err := storeScriptNameFor(edge.ClassProduction)
+	if err != nil {
+		t.Fatalf("storeScriptNameFor(production): %v", err)
+	}
+	preview, err := storeScriptNameFor(edge.ClassPreview)
+	if err != nil {
+		t.Fatalf("storeScriptNameFor(preview): %v", err)
+	}
+	if prod != sharedStoreScriptName || preview != previewStoreScriptName {
+		t.Errorf("script names = (%q, %q), want (%q, %q)", prod, preview, sharedStoreScriptName, previewStoreScriptName)
+	}
+	if prod == preview {
+		t.Error("production and preview deployments-store scripts must differ so their DO namespaces do not collide")
+	}
+	if _, err := storeScriptNameFor(edge.Class("nonsense")); err == nil {
+		t.Error("storeScriptNameFor(unknown class) = nil error, want an error")
+	}
+}
+
 func TestBuildStoreScriptMultipart_BindsItsOwnDurableObjectClass(t *testing.T) {
 	meta := storeMetadataFromMultipart(t, testStoreWorker(), false)
 	bindings, _ := meta["bindings"].([]any)

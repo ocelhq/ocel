@@ -248,8 +248,8 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 				return err
 			}
 		case edge.OfferDeploymentsStore:
-			report(progress, "Adopting the shared deployments-store worker (SSM SecureString)")
-			if err := adoptDeploymentsStore(ctx, ssmClient, offer.Values); err != nil {
+			report(progress, "Adopting the deployments-store worker (SSM SecureString)")
+			if err := adoptDeploymentsStore(ctx, ssmClient, sub.class, offer.Values); err != nil {
 				return err
 			}
 		default:

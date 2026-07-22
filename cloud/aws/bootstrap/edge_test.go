@@ -308,6 +308,82 @@ func TestReadCacheStore_AbsentIsNotAnError(t *testing.T) {
 	}
 }
 
+func offeredDeploymentsStore() map[string]string {
+	return map[string]string{
+		edge.OfferKeyStoreEndpoint:      "https://ocel-deployments-store.acct.workers.dev",
+		edge.OfferKeyStoreScriptName:    "ocel-deployments-store",
+		edge.OfferKeyStoreBootstrapCred: "cred-prod",
+	}
+}
+
+func TestDeploymentsStoreParamFor(t *testing.T) {
+	for _, tc := range []struct {
+		class string
+		want  string
+	}{
+		{ClassProduction, DeploymentsStoreParamName},
+		{ClassPreview, DeploymentsStorePreviewParamName},
+	} {
+		got, err := DeploymentsStoreParamFor(tc.class)
+		if err != nil {
+			t.Fatalf("DeploymentsStoreParamFor(%q): %v", tc.class, err)
+		}
+		if got != tc.want {
+			t.Errorf("DeploymentsStoreParamFor(%q) = %q, want %q", tc.class, got, tc.want)
+		}
+	}
+	if _, err := DeploymentsStoreParamFor("nonsense"); err == nil {
+		t.Error("DeploymentsStoreParamFor(unknown class) = nil error, want an error")
+	}
+	if DeploymentsStoreParamName == DeploymentsStorePreviewParamName {
+		t.Error("production and preview deployments-store parameters must differ")
+	}
+}
+
+func TestAdoptDeploymentsStore_PreviewStoresSeparately(t *testing.T) {
+	ssmc := newFakeSSM()
+	preview := offeredDeploymentsStore()
+	preview[edge.OfferKeyStoreEndpoint] = "https://ocel-deployments-store-preview.acct.workers.dev"
+	preview[edge.OfferKeyStoreScriptName] = "ocel-deployments-store-preview"
+	preview[edge.OfferKeyStoreBootstrapCred] = "cred-preview"
+
+	if err := adoptDeploymentsStore(context.Background(), ssmc, ClassProduction, offeredDeploymentsStore()); err != nil {
+		t.Fatalf("production adopt: %v", err)
+	}
+	if err := adoptDeploymentsStore(context.Background(), ssmc, ClassPreview, preview); err != nil {
+		t.Fatalf("preview adopt: %v", err)
+	}
+
+	prod, err := ReadDeploymentsStore(context.Background(), ssmc)
+	if err != nil {
+		t.Fatalf("ReadDeploymentsStore: %v", err)
+	}
+	prev, err := ReadDeploymentsStorePreview(context.Background(), ssmc)
+	if err != nil {
+		t.Fatalf("ReadDeploymentsStorePreview: %v", err)
+	}
+	wantProd := DeploymentsStore{Endpoint: "https://ocel-deployments-store.acct.workers.dev", ScriptName: "ocel-deployments-store", BootstrapCred: "cred-prod"}
+	wantPrev := DeploymentsStore{Endpoint: "https://ocel-deployments-store-preview.acct.workers.dev", ScriptName: "ocel-deployments-store-preview", BootstrapCred: "cred-preview"}
+	if prod != wantProd {
+		t.Errorf("production store = %+v, want %+v", prod, wantProd)
+	}
+	if prev != wantPrev {
+		t.Errorf("preview store = %+v, want %+v", prev, wantPrev)
+	}
+}
+
+func TestReadDeploymentsStore_AbsentIsNotAnError(t *testing.T) {
+	for _, class := range []string{ClassProduction, ClassPreview} {
+		got, err := ReadDeploymentsStoreFor(context.Background(), newFakeSSM(), class)
+		if err != nil {
+			t.Fatalf("ReadDeploymentsStoreFor(%q) on an absent parameter: %v", class, err)
+		}
+		if got != (DeploymentsStore{}) {
+			t.Errorf("ReadDeploymentsStoreFor(%q) = %+v, want the zero store", class, got)
+		}
+	}
+}
+
 func TestAdoptCacheStore_UnknownClass(t *testing.T) {
 	if err := adoptCacheStore(context.Background(), newFakeSSM(), "nonsense", "fake", offeredStore()); err == nil {
 		t.Error("expected an error for an unknown substrate class")
