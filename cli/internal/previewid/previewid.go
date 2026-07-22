@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -16,13 +17,18 @@ import (
 // keeping this module dependency-free.
 const SourceGit = "git"
 
-// maxBaseLen caps the sanitized ref token so the full key stays comfortably
-// within Postgres identifier and stack-name limits once the hash is appended.
-const maxBaseLen = 40
-
 // hashLen is how many hex characters of the ref's sha256 are appended to
 // disambiguate refs that sanitize to the same base token.
 const hashLen = 8
+
+// maxLabelLen is the DNS label limit (RFC 1035). Key is used as a subdomain
+// label (the preview store pointer), so the sanitized base is capped to leave
+// room for the "-" separator and the hash.
+const maxLabelLen = 63
+
+// maxBaseLen caps the sanitized base so base + "-" + hash stays within a DNS
+// label.
+const maxBaseLen = maxLabelLen - 1 - hashLen
 
 // Identity is a resolved preview environment key.
 type Identity struct {
@@ -32,12 +38,14 @@ type Identity struct {
 }
 
 // Resolve derives a preview Identity from a git ref and an optional PR number.
-// Key is a substrate-safe canonical key: the sanitized ref plus a short
-// deterministic hash of the full ref. It is a valid UNQUOTED Postgres
-// identifier and Pulumi stack-name token (matches `^[a-z_][a-z0-9_]*$`), so it
-// can be used directly as an ephemeral logical database name. Label is the PR
-// number formatted for display (e.g. "pr-482"), or empty when prNumber is
-// empty.
+// Key is a DNS-label-safe canonical slug: the sanitized ref plus a short
+// deterministic hash of the full ref, joined by a hyphen. It is a valid DNS
+// label (lowercase, [a-z0-9-], not hyphen-bounded, <=63 chars, non-digit
+// start), so it can be used directly as the preview subdomain label and the
+// store pointer within the project's preview instance. Deterministic: the same
+// ref always resolves to the same Key, so up/rm/ls all re-derive it from the
+// branch. Label is the PR number formatted for display (e.g. "pr-482"), or
+// empty when prNumber is empty.
 func Resolve(ref string, prNumber string) (Identity, error) {
 	if ref == "" {
 		return Identity{}, fmt.Errorf("previewid: empty ref")
@@ -45,18 +53,23 @@ func Resolve(ref string, prNumber string) (Identity, error) {
 
 	base := sanitize(ref)
 	if len(base) > maxBaseLen {
-		base = strings.Trim(base[:maxBaseLen], "_")
+		base = strings.Trim(base[:maxBaseLen], "-")
 	}
 
 	sum := sha256.Sum256([]byte(ref))
 	hash := hex.EncodeToString(sum[:])[:hashLen]
 
-	// A valid unquoted Postgres identifier must start with a letter or
-	// underscore, so an empty or digit-leading base is prefixed with "env_".
-	if base == "" || !(base[0] >= 'a' && base[0] <= 'z') {
-		base = "env_" + base
+	// A DNS label must start with a letter or digit, but a label that is all
+	// digits (or digit-led) is unsuitable as an identity stem and some
+	// resolvers reject an all-numeric leftmost label, so an empty or
+	// non-letter-leading base is given the "env" stem.
+	switch {
+	case base == "":
+		base = "env"
+	case !(base[0] >= 'a' && base[0] <= 'z'):
+		base = "env-" + base
 	}
-	key := base + "_" + hash
+	key := base + "-" + hash
 
 	label := ""
 	if prNumber != "" {
@@ -66,23 +79,33 @@ func Resolve(ref string, prNumber string) (Identity, error) {
 	return Identity{Key: key, Label: label, Source: SourceGit}, nil
 }
 
-// sanitize lowercases the ref and reduces it to alphanumerics and underscores:
-// every other run of characters collapses to a single underscore, and leading
-// and trailing underscores are trimmed. Underscore is valid unquoted in both
-// Postgres identifiers and Pulumi stack names.
+// sanitize lowercases the ref and reduces it to a DNS-label-safe token:
+// alphanumerics pass through, every other run of characters collapses to a
+// single hyphen, and leading and trailing hyphens are trimmed.
 func sanitize(ref string) string {
 	var b strings.Builder
-	prevUnderscore := false
+	prevDash := false
 	for _, r := range strings.ToLower(ref) {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
 			b.WriteRune(r)
-			prevUnderscore = false
+			prevDash = false
 			continue
 		}
-		if !prevUnderscore {
-			b.WriteByte('_')
-			prevUnderscore = true
+		if !prevDash {
+			b.WriteByte('-')
+			prevDash = true
 		}
 	}
-	return strings.Trim(b.String(), "_")
+	return strings.Trim(b.String(), "-")
+}
+
+// dnsLabelPattern is a valid DNS label: lowercase letter start, then letters,
+// digits and hyphens, not ending in a hyphen, 1–63 chars.
+var dnsLabelPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
+
+// ValidLabel reports whether s is usable as a preview subdomain label and store
+// pointer: the shape Resolve produces, and the shape a persistent preview's
+// --name must take. It is the single validator both paths share.
+func ValidLabel(s string) bool {
+	return dnsLabelPattern.MatchString(s)
 }

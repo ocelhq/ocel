@@ -5,9 +5,10 @@ import (
 	"testing"
 )
 
-// validKey matches a valid UNQUOTED Postgres identifier and Pulumi stack-name
-// token: leading letter/underscore, then letters, digits, underscores.
-var validKey = regexp.MustCompile(`^[a-z_][a-z0-9_]*$`)
+// validKey matches a valid DNS label: leading lowercase letter, then letters,
+// digits and hyphens, not ending in a hyphen, 1–63 chars. Key is used as a
+// preview subdomain label and store pointer.
+var validKey = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 func TestResolve_KeyIsStable(t *testing.T) {
 	a, err := Resolve("feature/login", "")
@@ -121,5 +122,46 @@ func TestResolve_RefThatSanitizesToNothing(t *testing.T) {
 	}
 	if !validKey.MatchString(id.Key) {
 		t.Errorf("Key = %q, not a substrate-safe key", id.Key)
+	}
+}
+
+func TestResolve_KeyHasNoUnderscore(t *testing.T) {
+	// The slug is now a DNS label, so an underscore (valid only in the old
+	// Postgres-identifier form) must never appear.
+	id, err := Resolve("feature/Fix_Bug", "")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	for _, r := range id.Key {
+		if r == '_' {
+			t.Fatalf("Key = %q contains an underscore, not DNS-label-safe", id.Key)
+		}
+	}
+}
+
+func TestValidLabel(t *testing.T) {
+	valid := []string{"staging", "feature-login", "web-1", "a"}
+	for _, s := range valid {
+		if !ValidLabel(s) {
+			t.Errorf("ValidLabel(%q) = false, want true", s)
+		}
+	}
+	invalid := []string{"", "Staging", "1web", "-x", "x-", "foo_bar", "a.b", "*"}
+	for _, s := range invalid {
+		if ValidLabel(s) {
+			t.Errorf("ValidLabel(%q) = true, want false", s)
+		}
+	}
+}
+
+func TestResolve_KeyIsValidLabel(t *testing.T) {
+	for _, ref := range []string{"feature/login", "482-hotfix", "///", "USER/Fix_Bug#42"} {
+		id, err := Resolve(ref, "")
+		if err != nil {
+			t.Fatalf("Resolve(%q) error = %v", ref, err)
+		}
+		if !ValidLabel(id.Key) {
+			t.Errorf("Resolve(%q).Key = %q, ValidLabel = false", ref, id.Key)
+		}
 	}
 }
