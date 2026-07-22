@@ -44,11 +44,7 @@ func PreviewInfraStackFor(projectID, pointer string, persistent bool) string {
 // (nothing was ever deployed under this pointer), in which case there is nothing
 // store-side to remove and only a stray infra/app stack, if any, is swept.
 func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID, pointer string, persistent bool, progress, log func(string)) error {
-	report := func(msg string) {
-		if progress != nil {
-			progress(msg)
-		}
-	}
+	report := nilSafe(progress)
 
 	var errs []error
 	var removedRecordKeys []string
@@ -144,11 +140,7 @@ func classifyPreviewStacks(projectID string, stackNames []string) PreviewProject
 // reconciled a preview root stack, in which case only stray stacks/assets are
 // swept.
 func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, progress, log func(string)) error {
-	report := func(msg string) {
-		if progress != nil {
-			progress(msg)
-		}
-	}
+	report := nilSafe(progress)
 
 	plan, err := planPreviewProjectTeardown(ctx, cfg, projectID)
 	var errs []error

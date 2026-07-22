@@ -71,11 +71,7 @@ type DestroyProjectResult struct {
 // never reconciled a root stack, in which case there is nothing edge-side to
 // remove and RootTornDown is reported true. Best-effort throughout.
 func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, progress, log func(string)) (DestroyProjectResult, error) {
-	report := func(msg string) {
-		if progress != nil {
-			progress(msg)
-		}
-	}
+	report := nilSafe(progress)
 
 	var errs []error
 	result := DestroyProjectResult{RootTornDown: true}

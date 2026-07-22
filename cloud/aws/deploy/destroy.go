@@ -30,6 +30,16 @@ type TeardownConfig struct {
 	Pulumi      auto.PulumiCommand
 }
 
+// nilSafe wraps a progress callback so callers can report unconditionally: a
+// nil callback makes reporting a no-op.
+func nilSafe(progress func(string)) func(string) {
+	return func(msg string) {
+		if progress != nil {
+			progress(msg)
+		}
+	}
+}
+
 // Destroy tears down one stack — a `pulumi destroy` followed by removing the
 // stack from the backend — and streams progress. progress and log may be nil.
 // Destroy performs the real teardown and is not exercised by unit tests.
