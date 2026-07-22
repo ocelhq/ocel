@@ -10,6 +10,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
@@ -142,44 +143,90 @@ func (s *Server) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyP
 	return stream.Send(resultEvent(true, "", nil, nil))
 }
 
+// runDestroyPreview tears one preview pointer down in full (ADR 0001): every
+// app-deploy stack the pointer's builds live in, the pointer and its records in
+// the preview store, the pointer's R2/S3 assets, and — for a persistent preview
+// only — its per-name infra stack. It resolves the preview substrate's backend
+// and root-stack state, then drives deploy.RemovePreview. Best-effort like
+// DestroyProject; it retains nothing.
 func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, progress, logf func(string)) error {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return err
 	}
-	awscfg, err := loadAWS(ctx, opts.Region)
+	env := req.GetEnvironment()
+	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetProjectId(), env)
 	if err != nil {
 		return err
+	}
+
+	pointer := env.GetIdentity()
+	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
+	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetProjectId(), pointer, persistent, progress, logf)
+}
+
+// previewTeardownContext resolves everything a preview teardown (rm/prune/
+// destroy) needs against the preview substrate: the reclaim Config (preview
+// Pulumi backend, preview cache store, the env segment for the pointer), the
+// preview root stack, and the project's persisted preview root-stack state. A
+// missing preview substrate is refused up front. state is nil when the project
+// never deployed a preview — the caller treats that as "nothing store-side to
+// remove", not an error.
+func (s *Server) previewTeardownContext(ctx context.Context, opts options, projectID string, env *deploymentsv1.Environment) (deploy.Config, edge.RootStack, edge.RootStackState, error) {
+	awscfg, err := loadAWS(ctx, opts.Region)
+	if err != nil {
+		return deploy.Config{}, nil, nil, err
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
 
-	progress("Checking preview infrastructure")
 	deployed, err := bootstrap.CheckDeployedPreview(ctx, cfn)
 	if err != nil {
-		return err
+		return deploy.Config{}, nil, nil, err
 	}
 	if !deployed.Present || deployed.StateBucket == "" {
-		return errPreviewInfraMissing
+		return deploy.Config{}, nil, nil, errPreviewInfraMissing
 	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
-		return err
+		return deploy.Config{}, nil, nil, err
 	}
-	pulumiCmd, err := pulumirt.Ensure(ctx, progress)
+	pulumiCmd, err := pulumirt.Ensure(ctx, nil)
 	if err != nil {
-		return err
+		return deploy.Config{}, nil, nil, err
 	}
 
-	return deploy.Destroy(ctx, deploy.TeardownConfig{
-		Region:      awscfg.Region,
-		BackendURL:  "s3://" + deployed.StateBucket,
-		Passphrase:  passphrase,
-		ProjectName: pulumiProjectName,
-		StackName:   stackName(req.GetProjectId(), req.GetEnvironment()),
-		Pulumi:      pulumiCmd,
-	}, progress, logf)
+	// Best-effort, like the production prune's read: a preview whose edge never
+	// adopted a cache store reclaims nothing from CacheStoreBucket.
+	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, bootstrap.ClassPreview)
+	if err != nil {
+		cacheStore = bootstrap.CacheStore{}
+	}
+
+	state, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, projectID)
+	if err != nil {
+		return deploy.Config{}, nil, nil, err
+	}
+	stack, ok := cloudflare.New().(edge.RootStack)
+	if !ok {
+		return deploy.Config{}, nil, nil, fmt.Errorf("this edge does not support the root stack")
+	}
+
+	cfg := deploy.Config{
+		Region:             awscfg.Region,
+		BackendURL:         "s3://" + deployed.StateBucket,
+		Passphrase:         passphrase,
+		ProjectName:        pulumiProjectName,
+		Pulumi:             pulumiCmd,
+		AssetBucket:        deployed.AssetBucket,
+		Uploader:           s3.NewFromConfig(awscfg),
+		CacheStoreBucket:   cacheStore.Bucket,
+		CacheStoreUploader: cacheStoreUploader(cacheStore),
+		Env:                envSegment(env),
+		Slug:               env.GetIdentity(),
+	}
+	return cfg, stack, state, nil
 }
 
 // ListEnvironments enumerates the preview environments from the preview

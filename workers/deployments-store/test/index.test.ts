@@ -191,6 +191,39 @@ describe("authenticated write endpoint", () => {
     expect(result.removedPromotionIds).toEqual(["promo-build-2", "promo-build-1"]);
   });
 
+  it("removes a whole pointer and reports what was reclaimed", async () => {
+    await initialize();
+    await SELF.fetch(
+      authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord({ buildId: "pr-1" })) }),
+    );
+    await SELF.fetch(
+      authedReq("/promote", {
+        method: "POST",
+        body: JSON.stringify({ promotionId: "promo-pr-1", ts: 1_000, builds: { web: "pr-1" }, pointer: "pr-42" }),
+      }),
+    );
+
+    const res = await SELF.fetch(
+      authedReq("/remove-pointer", { method: "POST", body: JSON.stringify({ pointer: "pr-42" }) }),
+    );
+    expect(res.status).toBe(200);
+    const result = (await res.json()) as { removedPromotionIds: string[]; removedRecordKeys: string[] };
+    expect(result.removedPromotionIds).toEqual(["promo-pr-1"]);
+    expect(result.removedRecordKeys).toEqual(["record:web/pr-1"]);
+
+    // The pointer is gone.
+    const history = await (await SELF.fetch(authedReq("/history?pointer=pr-42"))).json();
+    expect(history).toEqual([]);
+  });
+
+  it("rejects a remove-pointer with no pointer (never wipes production implicitly)", async () => {
+    await initialize();
+    const res = await SELF.fetch(
+      authedReq("/remove-pointer", { method: "POST", body: JSON.stringify({}) }),
+    );
+    expect(res.status).toBe(400);
+  });
+
   it("reads and updates the root-stack version stamp", async () => {
     await initialize();
     const initial = await SELF.fetch(authedReq("/version-stamp"));

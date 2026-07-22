@@ -53,6 +53,19 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		return edge.PruneResult{}, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
+	// A preview environment prunes that named pointer's history in the preview
+	// store/substrate; anything else prunes production.
+	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+		cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetProjectId(), env)
+		if err != nil {
+			return edge.PruneResult{}, err
+		}
+		if len(state) == 0 {
+			return edge.PruneResult{}, nil
+		}
+		return deploy.Prune(ctx, stack, state, cfg, req.GetProjectId(), int(req.GetKeepN()), env.GetIdentity(), progress, logf)
+	}
+
 	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {

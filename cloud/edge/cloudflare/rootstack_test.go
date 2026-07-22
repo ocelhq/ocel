@@ -358,6 +358,32 @@ func TestStoreOps_TransmitPointer(t *testing.T) {
 	}
 }
 
+func TestRemovePointer_SendsThePointerAndReturnsReclaimTargets(t *testing.T) {
+	var body map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /{slug}/remove-pointer", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		json.NewEncoder(w).Encode(edge.PruneResult{
+			RemovedPromotionIDs: []string{"promo-1"},
+			RemovedRecordKeys:   []string{"record:web/b1"},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	p := &provider{}
+	result, err := p.RemovePointer(context.Background(), testState(srv.URL, "s3cr3t"), "pr-42")
+	if err != nil {
+		t.Fatalf("RemovePointer: %v", err)
+	}
+	if body["pointer"] != "pr-42" {
+		t.Errorf("remove-pointer body = %v, want the pointer pr-42", body)
+	}
+	if len(result.RemovedRecordKeys) != 1 || result.RemovedRecordKeys[0] != "record:web/b1" {
+		t.Errorf("result = %+v, want the removed record keys to reclaim", result)
+	}
+}
+
 func TestGetVersionStamp_UnsetReadsEmpty(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}

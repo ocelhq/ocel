@@ -121,6 +121,15 @@ export default class extends WorkerEntrypoint<Env> {
       return new Response(null, { status: 204 });
     }
 
+    if (request.method === "POST" && sub === "/remove-pointer") {
+      // Full teardown of one pointer (a `preview rm`): unlike /prune it pins
+      // nothing. The pointer to remove is required — an absent one would wipe
+      // the reserved production default, which this op must never do implicitly.
+      const body = await readJson<{ pointer?: string }>(request);
+      if (!body?.pointer) return new Response("Bad Request", { status: 400 });
+      return Response.json(await store.removePointer(body.pointer));
+    }
+
     if (request.method === "POST" && sub === "/destroy") {
       await store.destroy();
       return new Response(null, { status: 204 });

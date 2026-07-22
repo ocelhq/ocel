@@ -388,6 +388,53 @@ export function prune(
   });
 }
 
+// Removes a pointer outright: every promotion scoped to it, the records those
+// promotions name, and the pointer row itself. Unlike prune(), it pins nothing
+// — a `preview rm` tears the whole preview down, so its active promotion goes
+// with the rest. It returns the removed promotion ids and record keys so the
+// host reclaims the app-deploy stacks and R2/S3 objects those records named,
+// exactly like prune(). Scoped by pointer, so it never touches production or
+// another preview. Removing an unknown pointer is a clean no-op.
+export function removePointer(
+  store: SqlStore,
+  pointer: string = DEFAULT_POINTER,
+): PruneResult {
+  return store.transactionSync(() => {
+    const rows = store.sql
+      .exec<{ promotion_id: string; builds: string }>(
+        `SELECT promotion_id, builds FROM promotions WHERE pointer = ? ORDER BY seq DESC`,
+        pointer,
+      )
+      .toArray();
+
+    const removed = rows.map((r) => ({
+      promotionId: r.promotion_id,
+      builds: JSON.parse(r.builds) as Record<string, string>,
+    }));
+    const removedRecordKeys = removed.flatMap((p) =>
+      Object.entries(p.builds).map(([app, buildId]) => recordKey(app, buildId)),
+    );
+
+    for (const p of removed) {
+      store.sql.exec(`DELETE FROM promotions WHERE promotion_id = ?`, p.promotionId);
+      for (const [app, buildId] of Object.entries(p.builds)) {
+        store.sql.exec(
+          `DELETE FROM records WHERE app = ? AND build_id = ?`,
+          app,
+          buildId,
+        );
+      }
+    }
+    store.sql.exec(`DELETE FROM pointers WHERE name = ?`, pointer);
+
+    return {
+      keptPromotionIds: [],
+      removedPromotionIds: removed.map((p) => p.promotionId),
+      removedRecordKeys,
+    };
+  });
+}
+
 // Seeds (or rotates) this instance's ownership. The account-level bootstrap
 // credential authorizes the caller before this runs (index.ts); here we only
 // enforce that one project can't silently take over another's instance:

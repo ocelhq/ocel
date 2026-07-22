@@ -392,6 +392,47 @@ describe("prune", () => {
   });
 });
 
+describe("removePointer", () => {
+  it("removes a whole pointer (active included) and reports what to reclaim", async () => {
+    const store = storeStub();
+    // A production history and a staging preview history interleaved.
+    for (let i = 1; i <= 2; i++) {
+      await store.putStaged(makeRecord({ buildId: `prod-${i}` }));
+      await store.promote(
+        makePromotion({ promotionId: `prod-${i}`, ts: i * 1_000, builds: { web: `prod-${i}` } }),
+      );
+      await store.putStaged(makeRecord({ buildId: `prev-${i}` }));
+      await store.promote(
+        makePromotion({ promotionId: `prev-${i}`, ts: i * 1_000 + 500, builds: { web: `prev-${i}` } }),
+        "staging",
+      );
+    }
+
+    const result = await store.removePointer("staging");
+
+    // Every staging promotion goes (nothing pinned), newest-first, and the
+    // record keys come back so the host can reclaim the app-deploy stacks/R2.
+    expect(result.keptPromotionIds).toEqual([]);
+    expect(result.removedPromotionIds).toEqual(["prev-2", "prev-1"]);
+    expect(result.removedRecordKeys.sort()).toEqual(
+      ["record:web/prev-1", "record:web/prev-2"].sort(),
+    );
+    // The pointer and its records are gone; production is untouched.
+    expect(await store.history("staging")).toEqual([]);
+    expect(await store.pointerBuildId("web", "staging")).toBeUndefined();
+    expect(await store.record("web", "prev-1")).toBeUndefined();
+    expect((await store.history()).map((h) => h.promotionId)).toEqual(["prod-2", "prod-1"]);
+    expect(await store.record("web", "prod-1")).toBeDefined();
+  });
+
+  it("removing an unknown pointer is a clean no-op", async () => {
+    const store = storeStub();
+    const result = await store.removePointer("never-existed");
+    expect(result.removedPromotionIds).toEqual([]);
+    expect(result.removedRecordKeys).toEqual([]);
+  });
+});
+
 describe("pointer-scoped history", () => {
   it("returns only the given pointer's promotions, active marked per pointer", async () => {
     const store = storeStub();

@@ -325,6 +325,14 @@ func (p *provider) History(ctx context.Context, state edge.RootStackState, point
 	return history, nil
 }
 
+func (p *provider) RemovePointer(ctx context.Context, state edge.RootStackState, pointer string) (edge.PruneResult, error) {
+	var result edge.PruneResult
+	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
+		return edge.PruneResult{}, err
+	}
+	return result, nil
+}
+
 func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.RootStackState, keepN int, pointer string) (edge.PruneResult, error) {
 	body := map[string]any{"keepN": keepN}
 	if pointer != "" {

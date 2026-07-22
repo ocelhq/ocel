@@ -55,10 +55,21 @@ type previewRmOptions struct {
 	yes  bool
 }
 
+// previewPruneOptions holds the flags accepted by `ocel preview prune`.
+type previewPruneOptions struct {
+	name string
+	keep int
+}
+
 var (
-	previewUpOpts previewUpOptions
-	previewRmOpts previewRmOptions
+	previewUpOpts    previewUpOptions
+	previewRmOpts    previewRmOptions
+	previewPruneOpts previewPruneOptions
 )
+
+// defaultPreviewPruneKeepN is `ocel preview prune`'s default retention window
+// (in promotions of the named preview) when --keep is not given.
+const defaultPreviewPruneKeepN = 3
 
 // previewCmd stands up, tears down, and lists preview environments. Bare
 // `ocel preview` is an alias for `ocel preview up`.
@@ -116,6 +127,21 @@ func runPreviewUpCmd(cmd *cobra.Command, args []string) error {
 	return runPreviewUp(ctx, cwd, previewUpOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 }
 
+var previewPruneCmd = &cobra.Command{
+	Use:   "prune",
+	Short: "Reclaim a named persistent preview's old deployments",
+	Args:  cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return fmt.Errorf("determine working directory: %w", err)
+		}
+		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		return runPreviewPrune(ctx, cwd, previewPruneOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+	},
+}
+
 func init() {
 	previewUpCmd.Flags().StringVar(&previewUpOpts.name, "name", "", "Name a persistent (staging-like) preview instead of the branch's ephemeral one")
 	previewCmd.Flags().StringVar(&previewUpOpts.name, "name", "", "Name a persistent (staging-like) preview instead of the branch's ephemeral one")
@@ -124,9 +150,13 @@ func init() {
 	previewRmCmd.Flags().StringVar(&previewRmOpts.name, "name", "", "Tear down the named persistent preview")
 	previewRmCmd.Flags().BoolVarP(&previewRmOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
 
+	previewPruneCmd.Flags().StringVar(&previewPruneOpts.name, "name", "", "Name of the persistent preview to prune (required — ephemeral previews are not pruned)")
+	previewPruneCmd.Flags().IntVar(&previewPruneOpts.keep, "keep", defaultPreviewPruneKeepN, "Number of most recent deployments to keep, always additionally pinning the active one")
+
 	previewCmd.AddCommand(previewUpCmd)
 	previewCmd.AddCommand(previewRmCmd)
 	previewCmd.AddCommand(previewLsCmd)
+	previewCmd.AddCommand(previewPruneCmd)
 }
 
 // runPreviewUp resolves the target Environment, preflights the preview
@@ -294,6 +324,65 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 		renderEnvironments(stdout, resp.GetEnvironments())
 		return nil
 	})
+}
+
+// runPreviewPrune reclaims a named persistent preview's superseded deployments:
+// it validates the name, preflights the preview infrastructure, and drives the
+// provider's Prune RPC scoped to that preview pointer (Environment carries the
+// preview class + persistent lifecycle + the name). Ephemeral previews have no
+// prune — they are torn down whole with `ocel preview rm`, never trimmed.
+func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, stdout, stderr io.Writer) error {
+	if _, err := loadCredentials(); err != nil {
+		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
+		return &ExitError{Code: 1}
+	}
+	if opts.name == "" {
+		return fmt.Errorf("`ocel preview prune` requires --name: only persistent previews are pruned")
+	}
+	if !previewid.ValidLabel(opts.name) {
+		return fmt.Errorf("invalid preview name %q: use a DNS-label-safe name (lowercase letters, digits and hyphens)", opts.name)
+	}
+
+	cfg, err := projectconfig.Resolve(cwd)
+	if err != nil {
+		return err
+	}
+	provider, err := cfg.RequireProvider()
+	if err != nil {
+		return err
+	}
+
+	env := &deploymentsv1.Environment{
+		Class:          deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle:      deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
+		Identity:       opts.name,
+		IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_DECLARED,
+	}
+
+	ui := deployui.New(stdout, cfg.Dir, "ocel preview prune", verboseEnabled())
+	defer ui.Close()
+
+	provW := ui.BuildWriter()
+	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightPreview(ctx, runner, provider, stdout); err != nil {
+			return err
+		}
+		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			ProjectId:       cfg.ProjectID,
+			KeepN:           int32(opts.keep),
+			Environment:     env,
+		}, ui.Event); err != nil {
+			return err
+		}
+		ui.Finish(fmt.Sprintf("Pruned preview %q", opts.name))
+		return nil
+	})
+	if err != nil {
+		return failSession(ctx, ui, err)
+	}
+	return nil
 }
 
 // resolveUpEnvironment builds the Environment `ocel preview up` provisions: a
@@ -524,4 +613,3 @@ func epochOrDash(sec int64) string {
 	}
 	return time.Unix(sec, 0).UTC().Format("2006-01-02")
 }
-

@@ -43,11 +43,19 @@ var destroyCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
+		if destroyPreview {
+			return runDestroyPreviewProject(ctx, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		}
 		return runDestroy(ctx, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
+// destroyPreview selects the whole-project preview footprint instead of
+// production for `ocel destroy`.
+var destroyPreview bool
+
 func init() {
+	destroyCmd.Flags().BoolVar(&destroyPreview, "preview", false, "Destroy this project's entire preview footprint instead of production (leaves account-level preview bootstrap intact)")
 	rootCmd.AddCommand(destroyCmd)
 }
 
@@ -120,6 +128,71 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 			return err
 		}
 		ui.Finish(fmt.Sprintf("Destroyed project %s", cfg.ProjectID))
+		return nil
+	})
+	if err != nil {
+		return failSession(ctx, ui, err)
+	}
+	return nil
+}
+
+// runDestroyPreviewProject tears down a project's entire preview footprint: every
+// preview pointer's app-deploy and per-name infra stacks, the preview store
+// instance, the preview root worker(s), the R2 assets and the preview root-stack
+// state — leaving the account-level preview bootstrap intact. Like production
+// destroy it refuses without a terminal and requires typing the project name.
+func runDestroyPreviewProject(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
+	if _, err := loadCredentials(); err != nil {
+		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
+		return &ExitError{Code: 1}
+	}
+	if !isReaderTTY(stdin) {
+		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; it cannot be run non-interactively")
+	}
+
+	cfg, err := projectconfig.Resolve(cwd)
+	if err != nil {
+		return err
+	}
+	provider, err := cfg.RequireProvider()
+	if err != nil {
+		return err
+	}
+
+	ui := deployui.New(stdout, cfg.Dir, "ocel destroy --preview", verboseEnabled())
+	defer ui.Close()
+
+	provW := ui.BuildWriter()
+	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
+		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", stdout); err != nil {
+			return err
+		}
+
+		fmt.Fprintf(stdout, "This will permanently destroy the ENTIRE preview footprint of project %q:\n", cfg.ProjectID)
+		fmt.Fprintln(stdout, "  • every preview (persistent and ephemeral): app-deploy stacks, per-name infra stacks INCLUDING ALL DATA")
+		fmt.Fprintln(stdout, "  • the project's preview deployments-store instance and preview edge worker(s)")
+		fmt.Fprintln(stdout, "  • all stored preview assets belonging to this project")
+		fmt.Fprintln(stdout, "The account-level preview bootstrap is left intact. This cannot be undone.")
+
+		confirmed, err := confirmDestroyProject(cfg.ProjectID, stdout, stdin)
+		if err != nil {
+			return err
+		}
+		if !confirmed {
+			fmt.Fprintln(stdout, "Aborted.")
+			return nil
+		}
+
+		req := &deploymentsv1.DestroyProjectRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			ProjectId:       cfg.ProjectID,
+			Environment:     &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
+		}
+		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
+			return err
+		}
+		ui.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.ProjectID))
 		return nil
 	})
 	if err != nil {

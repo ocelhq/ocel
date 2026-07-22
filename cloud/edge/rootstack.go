@@ -46,6 +46,15 @@ type RootStack interface {
 	// caller can reclaim the app-deploy stacks and R2 assets those records named.
 	DeletePromotionArtifacts(ctx context.Context, state RootStackState, keepN int, pointer string) (PruneResult, error)
 
+	// RemovePointer tears one pointer down outright: every promotion scoped to
+	// it, the records those promotions name, and the pointer itself — pinning
+	// nothing, so its active promotion goes too. It backs `ocel preview rm`,
+	// which removes a whole preview. It reports the removed record keys so the
+	// caller can reclaim the app-deploy stacks and R2 assets those records named,
+	// exactly like DeletePromotionArtifacts. An empty pointer is refused by the
+	// store so production can never be torn down implicitly.
+	RemovePointer(ctx context.Context, state RootStackState, pointer string) (PruneResult, error)
+
 	// DestroyRootStack deletes every worker named in workers — the project's
 	// generic worker(s) — detaching each one's custom-domain binding first
 	// (detaching the domain but never deleting DNS records the user owns). The
