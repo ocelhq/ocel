@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -36,9 +37,11 @@ type recordingRootStack struct {
 	destroyed         int
 	destroyedWorkers  []string
 	destroyedInstance int
+	listedPrefixes    []string
 
-	history     []edge.HistoryEntry
-	pruneResult edge.PruneResult
+	history         []edge.HistoryEntry
+	deployedWorkers []string
+	pruneResult     edge.PruneResult
 }
 
 var _ edge.RootStack = (*recordingRootStack)(nil)
@@ -115,6 +118,17 @@ func (f *recordingRootStack) DestroyRootStack(_ context.Context, workers []strin
 	f.destroyedWorkers = append(f.destroyedWorkers, workers...)
 	f.destroyed++
 	return nil
+}
+
+func (f *recordingRootStack) ListDeployedWorkers(_ context.Context, prefix string) ([]string, error) {
+	f.listedPrefixes = append(f.listedPrefixes, prefix)
+	var names []string
+	for _, name := range f.deployedWorkers {
+		if strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	return names, nil
 }
 
 func (f *recordingRootStack) DestroyInstance(_ context.Context, state edge.RootStackState) error {

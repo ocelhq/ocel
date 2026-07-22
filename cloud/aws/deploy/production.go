@@ -101,7 +101,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	plan, err := BuildPlan(manifest, &deploymentsv1.Environment{Class: cfg.Class}, promotionID, builds)
+	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, builds)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -257,6 +257,18 @@ func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootS
 	return nil
 }
 
+// planEnvironment is the environment identity BuildPlan plans against: it
+// carries the class, lifecycle, and identity from the deploy Config so a
+// preview's stacks are scoped by its store pointer (an ephemeral preview also
+// keys off its lifecycle). Production leaves lifecycle and identity empty.
+func planEnvironment(cfg Config) *deploymentsv1.Environment {
+	return &deploymentsv1.Environment{
+		Class:     cfg.Class,
+		Lifecycle: cfg.Lifecycle,
+		Identity:  cfg.Identity,
+	}
+}
+
 // promotePointer is the store pointer this deploy's promote moves: empty for
 // production (the store's reserved default pointer), the environment identity
 // (the DNS-safe preview slug/name) for a preview.
@@ -382,6 +394,22 @@ func withPreviewVars(worker edge.Worker, baseDomain string) edge.Worker {
 // root worker ("ocel-<project>-<app>") in the same account.
 func previewGenericName(slug, app string) string {
 	return workerScriptName(slug+"-preview", app)
+}
+
+// previewWorkerPrefix is the name stem every one of a project's preview generic
+// workers shares — the un-clamped stack segment of previewGenericName, so
+// previewGenericName(slug, app) == previewWorkerPrefix(slug)+"-"+<app segment>
+// for every app (see workerScriptName, which only clamps this stem when an
+// unusually long app segment leaves it no budget). Preview teardown sweeps every
+// deployed worker under this prefix, which is how it reclaims the shared,
+// pointer-independent generic worker after the store history that named it is
+// gone (a prior `ocel preview rm` dropped it). The "-preview" segment keeps the
+// prefix off this project's own production workers ("ocel-<slug>-production-…").
+// It cannot, by name alone, tell a sibling project slugged "<slug>-preview-…"
+// apart — the same prefix-collision caveat classifyProjectStacks carries — but
+// slugs are unique per org and that shape is pathological. Pure.
+func previewWorkerPrefix(slug string) string {
+	return sanitizeWorkerName("ocel-" + slug + "-preview")
 }
 
 // previewBaseDomain strips the leading "*." from a preview wildcard domain —
@@ -555,11 +583,13 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	return record, nil
 }
 
-// workerURLOutputs reports each worker-fronted app's production URL: its
-// custom domain when it has one, under the same workerOutputName appURLs
-// already reads. An app with no custom domain is served off the edge's own
-// vendor subdomain, which the root stack does not report back today — that app
-// falls back to its own Function URLs, same as a non-worker app.
+// workerURLOutputs reports each worker-fronted app's user-facing URL under the
+// same workerOutputName appURLs already reads: its custom domain for production,
+// and for a preview the concrete per-pointer subdomain (the ref under the
+// wildcard's base domain) this deploy actually serves — never the wildcard
+// itself. An app with no domain is served off the edge's own vendor subdomain,
+// which the root stack does not report back today — that app falls back to its
+// own Function URLs, same as a non-worker app.
 func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymentsv1.ResourceOutput {
 	apps := workerApps(manifest)
 	if len(apps) == 0 {
@@ -571,11 +601,28 @@ func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymen
 	}
 	var outs []*deploymentsv1.ResourceOutput
 	for _, app := range apps {
-		if domain := domains[app.GetName()]; domain != "" {
-			outs = append(outs, collectFunctionOutput(workerOutputName(app.GetName()), "https://"+domain))
+		if url := workerAppURL(cfg, domains[app.GetName()]); url != "" {
+			outs = append(outs, collectFunctionOutput(workerOutputName(app.GetName()), url))
 		}
 	}
 	return outs
+}
+
+// workerAppURL turns an app's resolved domain into the URL to feature. For a
+// preview it substitutes the deploy's pointer (cfg.Identity) for the wildcard's
+// "*" label — the actual subdomain this ref is served on — so the success screen
+// shows a URL that resolves, not the wildcard pattern. Production returns the
+// domain verbatim. Empty domain (vendor-subdomain app) yields no URL.
+func workerAppURL(cfg Config, domain string) string {
+	if domain == "" {
+		return ""
+	}
+	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
+		if base := previewBaseDomain(domain); base != "" {
+			return "https://" + cfg.Identity + "." + base
+		}
+	}
+	return "https://" + domain
 }
 
 // runInfraStack provisions the project's SDK-declared resources (postgres,

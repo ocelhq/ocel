@@ -22,6 +22,7 @@ import (
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
 	"github.com/cloudflare/cloudflare-go/v4/accounts"
+	"github.com/cloudflare/cloudflare-go/v4/dns"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
 	"github.com/cloudflare/cloudflare-go/v4/zones"
@@ -43,6 +44,18 @@ const (
 const compatDate = "2026-07-13"
 
 var compatFlags = []string{"nodejs_compat"}
+
+// A worker route is only a match rule: unlike a custom domain it creates no DNS
+// record, and a hostname with no proxied record never reaches Cloudflare's edge
+// for the route to fire (it returns ERR_NAME_NOT_RESOLVED). So the route path
+// also plants a proxied placeholder for the pattern's hostname — an AAAA to the
+// IPv6 discard prefix, Cloudflare's canonical "the Worker is the origin" record.
+// The content doubles as Ocel's ownership marker, so teardown removes only the
+// records it planted and never one the user manages at the same name.
+const (
+	routeRecordContent = "100::"
+	routeRecordComment = "managed by ocel — worker route placeholder"
+)
 
 // observability is the Workers observability settings every deployed worker
 // ships with: logs (with per-invocation summaries) and OTel traces, both at 100%
@@ -218,7 +231,7 @@ func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.
 		return edge.AppResult{}, fmt.Errorf("put worker script: %w", err)
 	}
 
-	if err := p.reconcileCustomDomains(ctx, up, app.Domain); err != nil {
+	if err := p.reconcileWorkerHostname(ctx, up, app.Domain); err != nil {
 		return edge.AppResult{}, err
 	}
 	url, err := p.setSubdomain(ctx, up, app.Domain == "")
@@ -508,6 +521,104 @@ func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (s
 		return "", err
 	}
 	return fmt.Sprintf("https://%s.%s.workers.dev", up.scriptName, account.Subdomain), nil
+}
+
+// reconcileWorkerHostname attaches the worker to desired by whichever Cloudflare
+// mechanism its shape calls for: a wildcard (e.g. "*.preview.app.com", which
+// cannot be a custom domain) becomes a worker route "<wildcard>/*", and a plain
+// hostname becomes a custom domain. Empty attaches neither. Production passes a
+// plain hostname; a preview passes its base-domain wildcard, whose per-request
+// subdomains the frozen preview worker routes internally.
+func (p *provider) reconcileWorkerHostname(ctx context.Context, up upload, desired string) error {
+	if strings.HasPrefix(desired, "*.") {
+		return p.reconcileWorkerRoute(ctx, up, desired)
+	}
+	return p.reconcileCustomDomains(ctx, up, desired)
+}
+
+// reconcileWorkerRoute attaches the worker to a wildcard hostname, idempotently:
+// it routes "<wildcard>/*" to the script and plants the proxied placeholder DNS
+// record that makes the hostname resolve — a route without that record never
+// fires. The pattern's zone is resolved from the account's zones by the
+// wildcard's base domain. Its counterpart on teardown is detachRouteRecords.
+func (p *provider) reconcileWorkerRoute(ctx context.Context, up upload, wildcard string) error {
+	zoneID, err := p.resolveZoneID(ctx, up.accountID, strings.TrimPrefix(wildcard, "*."))
+	if err != nil {
+		return err
+	}
+	if err := p.ensureRoute(ctx, zoneID, wildcard+"/*", up.scriptName); err != nil {
+		return err
+	}
+	return p.ensureProxiedRecord(ctx, zoneID, wildcard)
+}
+
+// ensureRoute makes the zone route pattern to scriptName: it reuses an existing
+// route for that pattern (repointing it at this script if a different one holds
+// it) and otherwise creates it, leaving routes for other patterns alone.
+func (p *provider) ensureRoute(ctx context.Context, zoneID, pattern, scriptName string) error {
+	existing := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
+	for existing.Next() {
+		route := existing.Current()
+		if route.Pattern != pattern {
+			continue
+		}
+		if route.Script == scriptName {
+			return nil
+		}
+		if _, err := p.client.Workers.Routes.Update(ctx, route.ID, workers.RouteUpdateParams{
+			ZoneID:  cf.F(zoneID),
+			Pattern: cf.F(pattern),
+			Script:  cf.F(scriptName),
+		}); err != nil {
+			return fmt.Errorf("repoint worker route %q: %w", pattern, err)
+		}
+		return nil
+	}
+	if err := existing.Err(); err != nil {
+		return fmt.Errorf("list worker routes: %w", err)
+	}
+
+	if _, err := p.client.Workers.Routes.New(ctx, workers.RouteNewParams{
+		ZoneID:  cf.F(zoneID),
+		Pattern: cf.F(pattern),
+		Script:  cf.F(scriptName),
+	}); err != nil {
+		return fmt.Errorf("attach worker route %q: %w", pattern, err)
+	}
+	return nil
+}
+
+// ensureProxiedRecord plants the proxied placeholder record for hostname so the
+// wildcard resolves to Cloudflare's edge, where the route fires. It is
+// conservative: if any record already exists at that name — Ocel's own
+// placeholder on a redeploy, or one the user manages — it leaves it untouched
+// rather than add a duplicate or a conflicting record.
+func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname string) error {
+	existing := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
+		ZoneID: cf.F(zoneID),
+		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(hostname)}),
+	})
+	if existing.Next() {
+		return nil
+	}
+	if err := existing.Err(); err != nil {
+		return fmt.Errorf("list DNS records for %q: %w", hostname, err)
+	}
+
+	if _, err := p.client.DNS.Records.New(ctx, dns.RecordNewParams{
+		ZoneID: cf.F(zoneID),
+		Body: dns.AAAARecordParam{
+			Name:    cf.F(hostname),
+			Type:    cf.F(dns.AAAARecordTypeAAAA),
+			Content: cf.F(routeRecordContent),
+			Proxied: cf.F(true),
+			TTL:     cf.F(dns.TTL(1)),
+			Comment: cf.F(routeRecordComment),
+		},
+	}); err != nil {
+		return fmt.Errorf("plant proxied DNS record for %q: %w", hostname, err)
+	}
+	return nil
 }
 
 // reconcileCustomDomains makes the worker's attached custom domains exactly
