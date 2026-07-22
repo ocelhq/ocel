@@ -38,20 +38,28 @@ type Identity struct {
 }
 
 // Resolve derives a preview Identity from a git ref and an optional PR number.
-// Key is a DNS-label-safe canonical slug: the sanitized ref plus a short
-// deterministic hash of the full ref, joined by a hyphen. It is a valid DNS
-// label (lowercase, [a-z0-9-], not hyphen-bounded, <=63 chars, non-digit
-// start), so it can be used directly as the preview subdomain label and the
-// store pointer within the project's preview instance. Deterministic: the same
-// ref always resolves to the same Key, so up/rm/ls all re-derive it from the
-// branch. Label is the PR number formatted for display (e.g. "pr-482"), or
-// empty when prNumber is empty.
+// Key is the sanitized ref plus a short deterministic hash of the full ref,
+// joined by a hyphen, always a valid DNS label (see ValidLabel) so it doubles
+// as the preview subdomain label and the store pointer. The same ref always
+// resolves to the same Key. Label is the PR number formatted for display (e.g.
+// "pr-482"), or empty when prNumber is empty.
 func Resolve(ref string, prNumber string) (Identity, error) {
 	if ref == "" {
 		return Identity{}, fmt.Errorf("previewid: empty ref")
 	}
 
 	base := sanitize(ref)
+
+	// A DNS label must start with a letter, so an empty or non-letter-leading
+	// base is given the "env" stem. The stem is applied before the length cap so
+	// the cap bounds the final base — a digit-led ref must not blow past 63 once
+	// "env-" is prepended.
+	switch {
+	case base == "":
+		base = "env"
+	case !(base[0] >= 'a' && base[0] <= 'z'):
+		base = "env-" + base
+	}
 	if len(base) > maxBaseLen {
 		base = strings.Trim(base[:maxBaseLen], "-")
 	}
@@ -59,16 +67,6 @@ func Resolve(ref string, prNumber string) (Identity, error) {
 	sum := sha256.Sum256([]byte(ref))
 	hash := hex.EncodeToString(sum[:])[:hashLen]
 
-	// A DNS label must start with a letter or digit, but a label that is all
-	// digits (or digit-led) is unsuitable as an identity stem and some
-	// resolvers reject an all-numeric leftmost label, so an empty or
-	// non-letter-leading base is given the "env" stem.
-	switch {
-	case base == "":
-		base = "env"
-	case !(base[0] >= 'a' && base[0] <= 'z'):
-		base = "env-" + base
-	}
 	key := base + "-" + hash
 
 	label := ""

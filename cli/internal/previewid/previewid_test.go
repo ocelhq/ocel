@@ -2,6 +2,7 @@ package previewid
 
 import (
 	"regexp"
+	"strings"
 	"testing"
 )
 
@@ -151,6 +152,31 @@ func TestValidLabel(t *testing.T) {
 		if ValidLabel(s) {
 			t.Errorf("ValidLabel(%q) = true, want false", s)
 		}
+	}
+}
+
+func TestResolve_KeyStaysWithinDNSLabelLimit(t *testing.T) {
+	cases := []struct {
+		name string
+		ref  string
+	}{
+		{"long digit-leading ref", "4" + strings.Repeat("2", 200)},
+		{"long ref sanitizing to empty", strings.Repeat("/", 200)},
+		{"long letter-leading ref", "feature/" + strings.Repeat("x", 200)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id, err := Resolve(tc.ref, "")
+			if err != nil {
+				t.Fatalf("Resolve(%q) error = %v", tc.ref, err)
+			}
+			if len(id.Key) > maxLabelLen {
+				t.Errorf("len(Key) = %d (%q), want <= %d", len(id.Key), id.Key, maxLabelLen)
+			}
+			if !ValidLabel(id.Key) {
+				t.Errorf("ValidLabel(%q) = false, want true", id.Key)
+			}
+		})
 	}
 }
 
