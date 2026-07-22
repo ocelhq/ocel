@@ -219,6 +219,36 @@ export function activeBuildId(
   return (JSON.parse(row.builds) as Record<string, string>)[app];
 }
 
+// The active-Deployment resolution the frozen generic worker consumes, folding
+// pointer read and record read into one call (ADR 0002). knownBuildId lets a
+// caller that already holds a record skip re-transferring it: when the active
+// build still matches, the (potentially large) record is omitted and only the
+// build id comes back.
+//
+// - no-pointer  no active promotion for the app (fresh project).
+// - unchanged   active build id equals knownBuildId; record deliberately omitted.
+// - record      active build id differs (or knownBuildId absent); record included.
+// - dangling    the pointer names a build the store holds no record for — an
+//               invariant violation the caller surfaces rather than papering over.
+export type ActiveRecordResult =
+  | { kind: "no-pointer" }
+  | { kind: "unchanged"; buildId: string }
+  | { kind: "record"; buildId: string; record: DeploymentRecord }
+  | { kind: "dangling"; buildId: string };
+
+export function activeRecord(
+  store: SqlStore,
+  app: string,
+  knownBuildId?: string,
+): ActiveRecordResult {
+  const buildId = activeBuildId(store, app);
+  if (!buildId) return { kind: "no-pointer" };
+  if (buildId === knownBuildId) return { kind: "unchanged", buildId };
+  const rec = record(store, app, buildId);
+  if (!rec) return { kind: "dangling", buildId };
+  return { kind: "record", buildId, record: rec };
+}
+
 export function history(store: SqlStore): HistoryEntry[] {
   const activeId = getMeta(store, ACTIVE_KEY);
   // Ordered newest-first by seq (promote assigns an increasing seq) per the

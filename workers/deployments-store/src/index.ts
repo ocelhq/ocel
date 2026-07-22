@@ -2,7 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { authorized, bearer } from "./auth";
 import { DeploymentsStore } from "./deployments-do";
-import type { DeploymentRecord, Promotion } from "./store";
+import type { ActiveRecordResult, DeploymentRecord, Promotion } from "./store";
 import type { Env } from "./env";
 
 export { DeploymentsStore };
@@ -30,8 +30,10 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
 //   /<slug>/initialize route is authorized by the account-level bootstrap
 //   credential (the only op that credential may perform); every other route
 //   authenticates against the addressed instance's own stored project secret.
-// - activeBuildId / record are RPC methods the frozen generic worker calls
-//   through its service binding, each carrying the project slug. They stay
+// - activeRecord is the single RPC method the frozen generic worker calls
+//   through its service binding, carrying the project slug: it resolves the
+//   app's active build id and record in one round trip, echoing the caller's
+//   knownBuildId back unchanged to skip re-sending an unchanged record. It stays
 //   secret-less — the trust boundary is the binding itself, only ever reachable
 //   from another Worker in the same account.
 export default class extends WorkerEntrypoint<Env> {
@@ -120,15 +122,11 @@ export default class extends WorkerEntrypoint<Env> {
     return new Response("Not Found", { status: 404 });
   }
 
-  async activeBuildId(slug: string, app: string): Promise<string | undefined> {
-    return stub(this.env, slug).activeBuildId(app);
-  }
-
-  async record(
+  async activeRecord(
     slug: string,
     app: string,
-    buildId: string,
-  ): Promise<DeploymentRecord | undefined> {
-    return stub(this.env, slug).record(app, buildId);
+    knownBuildId?: string,
+  ): Promise<ActiveRecordResult> {
+    return stub(this.env, slug).activeRecord(app, knownBuildId);
   }
 }

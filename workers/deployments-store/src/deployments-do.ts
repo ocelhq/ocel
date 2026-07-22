@@ -82,6 +82,13 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.record(this.ctx.storage, app, buildId);
   }
 
+  async activeRecord(
+    app: string,
+    knownBuildId?: string,
+  ): Promise<store.ActiveRecordResult> {
+    return store.activeRecord(this.ctx.storage, app, knownBuildId);
+  }
+
   async history(): Promise<HistoryEntry[]> {
     return store.history(this.ctx.storage);
   }

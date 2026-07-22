@@ -242,7 +242,7 @@ describe("authenticated write endpoint", () => {
 });
 
 describe("service-binding read path", () => {
-  it("needs no secret to resolve the active build id and record", async () => {
+  it("needs no secret to resolve the active record", async () => {
     const store = env.DEPLOYMENTS_DO.get(env.DEPLOYMENTS_DO.idFromName(SLUG));
     await store.putStaged(makeRecord());
     await store.promote({ promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" } });
@@ -255,7 +255,16 @@ describe("service-binding read path", () => {
       createExecutionContext(),
       env,
     );
-    expect(await entry.activeBuildId(SLUG, "web")).toBe("build-1");
-    expect(await entry.record(SLUG, "web", "build-1")).toEqual(makeRecord());
+    expect(await entry.activeRecord(SLUG, "web")).toEqual({
+      kind: "record",
+      buildId: "build-1",
+      record: makeRecord(),
+    });
+    // A caller that already holds the active build gets it echoed back with the
+    // record omitted.
+    expect(await entry.activeRecord(SLUG, "web", "build-1")).toEqual({
+      kind: "unchanged",
+      buildId: "build-1",
+    });
   });
 });
