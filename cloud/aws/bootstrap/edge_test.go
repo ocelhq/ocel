@@ -354,13 +354,13 @@ func TestAdoptDeploymentsStore_PreviewStoresSeparately(t *testing.T) {
 		t.Fatalf("preview adopt: %v", err)
 	}
 
-	prod, err := ReadDeploymentsStore(context.Background(), ssmc)
+	prod, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassProduction)
 	if err != nil {
-		t.Fatalf("ReadDeploymentsStore: %v", err)
+		t.Fatalf("ReadDeploymentsStoreFor(production): %v", err)
 	}
-	prev, err := ReadDeploymentsStorePreview(context.Background(), ssmc)
+	prev, err := ReadDeploymentsStoreFor(context.Background(), ssmc, ClassPreview)
 	if err != nil {
-		t.Fatalf("ReadDeploymentsStorePreview: %v", err)
+		t.Fatalf("ReadDeploymentsStoreFor(preview): %v", err)
 	}
 	wantProd := DeploymentsStore{Endpoint: "https://ocel-deployments-store.acct.workers.dev", ScriptName: "ocel-deployments-store", BootstrapCred: "cred-prod"}
 	wantPrev := DeploymentsStore{Endpoint: "https://ocel-deployments-store-preview.acct.workers.dev", ScriptName: "ocel-deployments-store-preview", BootstrapCred: "cred-preview"}

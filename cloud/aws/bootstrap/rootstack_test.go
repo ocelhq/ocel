@@ -14,8 +14,8 @@ func TestRootStackState_WriteThenReadRoundTrips(t *testing.T) {
 		edge.RootStackKeySecret:   "s3cr3t",
 	}
 
-	if err := WriteRootStackState(context.Background(), ssmc, "proj_1", state); err != nil {
-		t.Fatalf("WriteRootStackState: %v", err)
+	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj_1", state); err != nil {
+		t.Fatalf("WriteRootStackStateFor: %v", err)
 	}
 
 	got, err := ReadRootStackState(context.Background(), ssmc, "proj_1")
@@ -44,8 +44,8 @@ func TestRootStackState_ReadAbsentReturnsNilNotError(t *testing.T) {
 
 func TestDeleteRootStackState_RemovesThenReadsAbsent(t *testing.T) {
 	ssmc := newFakeSSM()
-	if err := WriteRootStackState(context.Background(), ssmc, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://store"}); err != nil {
-		t.Fatalf("WriteRootStackState: %v", err)
+	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://store"}); err != nil {
+		t.Fatalf("WriteRootStackStateFor: %v", err)
 	}
 
 	if err := DeleteRootStackState(context.Background(), ssmc, "proj_1"); err != nil {
@@ -70,8 +70,8 @@ func TestDeleteRootStackState_AbsentIsIdempotentSuccess(t *testing.T) {
 
 func TestRootStackState_ScopedPerProject(t *testing.T) {
 	ssmc := newFakeSSM()
-	if err := WriteRootStackState(context.Background(), ssmc, "proj_a", edge.RootStackState{edge.RootStackKeyEndpoint: "https://a"}); err != nil {
-		t.Fatalf("WriteRootStackState(proj_a): %v", err)
+	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj_a", edge.RootStackState{edge.RootStackKeyEndpoint: "https://a"}); err != nil {
+		t.Fatalf("WriteRootStackStateFor(proj_a): %v", err)
 	}
 
 	got, err := ReadRootStackState(context.Background(), ssmc, "proj_b")
@@ -133,11 +133,11 @@ func TestRootStackStateFor_UnknownClassErrors(t *testing.T) {
 func TestRootStackState_OverwritesOnRewrite(t *testing.T) {
 	ssmc := newFakeSSM()
 	ctx := context.Background()
-	if err := WriteRootStackState(ctx, ssmc, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://old"}); err != nil {
-		t.Fatalf("first WriteRootStackState: %v", err)
+	if err := WriteRootStackStateFor(ctx, ssmc, ClassProduction, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://old"}); err != nil {
+		t.Fatalf("first WriteRootStackStateFor: %v", err)
 	}
-	if err := WriteRootStackState(ctx, ssmc, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://new"}); err != nil {
-		t.Fatalf("second WriteRootStackState: %v", err)
+	if err := WriteRootStackStateFor(ctx, ssmc, ClassProduction, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://new"}); err != nil {
+		t.Fatalf("second WriteRootStackStateFor: %v", err)
 	}
 
 	got, err := ReadRootStackState(ctx, ssmc, "proj_1")

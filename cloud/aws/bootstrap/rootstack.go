@@ -40,11 +40,6 @@ func rootStackStateParamName(prefix, projectID string) string {
 	return prefix + projectID
 }
 
-// WriteRootStackState persists a production project's root-stack state.
-func WriteRootStackState(ctx context.Context, ssmClient SSMAPI, projectID string, state edge.RootStackState) error {
-	return WriteRootStackStateFor(ctx, ssmClient, ClassProduction, projectID, state)
-}
-
 // WriteRootStackStateFor persists a project's root-stack state for a substrate
 // class so the next deploy — and rollback/deployments-ls — reconcile against it
 // instead of reconciling from scratch. It is the project's current state and is
