@@ -61,7 +61,12 @@ export interface PruneResult {
   removedRecordKeys: string[];
 }
 
-const ACTIVE_KEY = "active";
+// The reserved default pointer. The primary domain resolves it, and a promote
+// that names no pointer moves it. Its leading "@" can never appear in a DNS
+// label, so it can never collide with a preview pointer named after a subdomain
+// slug. It is an implementation detail of this module: callers omit the pointer
+// to address it, and never name it themselves.
+const DEFAULT_POINTER = "@production";
 const VERSION_KEY = "versionStamp";
 // The instance's ownership keys: the self-minted owner token that distinguishes
 // legitimate recovery from a slug collision, and the per-project secret every
@@ -95,6 +100,10 @@ export function ensureSchema(store: SqlStore): void {
        builds TEXT NOT NULL,
        seq INTEGER NOT NULL,
        tag TEXT
+     );
+     CREATE TABLE IF NOT EXISTS pointers (
+       name TEXT PRIMARY KEY,
+       promotion_id TEXT NOT NULL
      );
      CREATE TABLE IF NOT EXISTS meta (
        key TEXT PRIMARY KEY,
@@ -134,9 +143,31 @@ function setMeta(store: SqlStore, key: string, value: string): void {
   );
 }
 
+// A pointer names the promotion a domain serves. There are arbitrarily many,
+// keyed by name; the reserved DEFAULT_POINTER is the one the primary domain
+// resolves, and preview pointers are named after their subdomain slug.
+function getPointer(store: SqlStore, name: string): string | undefined {
+  const row = store.sql
+    .exec<{ promotion_id: string }>(
+      `SELECT promotion_id FROM pointers WHERE name = ?`,
+      name,
+    )
+    .toArray()[0];
+  return row?.promotion_id;
+}
+
+function setPointer(store: SqlStore, name: string, promotionId: string): void {
+  store.sql.exec(
+    `INSERT INTO pointers (name, promotion_id) VALUES (?, ?)
+     ON CONFLICT(name) DO UPDATE SET promotion_id = excluded.promotion_id`,
+    name,
+    promotionId,
+  );
+}
+
 export function putStaged(store: SqlStore, record: DeploymentRecord): void {
-  // Only ever writes the (app, build id) record. The active pointer lives in
-  // the meta table, so staging can never change what's currently serving.
+  // Only ever writes the (app, build id) record. Pointers live in their own
+  // table, so staging can never change what any domain is currently serving.
   store.sql.exec(
     `INSERT INTO records (app, build_id, data) VALUES (?, ?, ?)
      ON CONFLICT(app, build_id) DO UPDATE SET data = excluded.data`,
@@ -161,13 +192,17 @@ export function record(
   return row ? (JSON.parse(row.data) as DeploymentRecord) : undefined;
 }
 
-export function promote(store: SqlStore, promotion: Promotion): void {
+export function promote(
+  store: SqlStore,
+  promotion: Promotion,
+  pointer: string = DEFAULT_POINTER,
+): void {
   // Bumping seq to a fresh maximum on every promote — including a rollback's
   // re-promote of an existing id — is what makes the promoted entry the newest
   // in history(), so the previously-active promotion becomes the "immediately
   // previous" one that a further rollback rolls back to. The whole thing runs
-  // in one transaction, so a crash mid-promote can never leave the active
-  // pointer naming a promotion that isn't in the table, or vice versa.
+  // in one transaction, so a crash mid-promote can never leave a pointer naming
+  // a promotion that isn't in the table, or vice versa.
   store.transactionSync(() => {
     // A tag addresses exactly one promotion, so reject one already held by a
     // different promotion. A rollback re-promotes an existing id carrying its
@@ -199,49 +234,52 @@ export function promote(store: SqlStore, promotion: Promotion): void {
       nextSeq,
       promotion.tag ?? null,
     );
-    setMeta(store, ACTIVE_KEY, promotion.promotionId);
+    setPointer(store, pointer, promotion.promotionId);
   });
 }
 
-export function activeBuildId(
+export function pointerBuildId(
   store: SqlStore,
   app: string,
+  pointer: string = DEFAULT_POINTER,
 ): string | undefined {
-  const activeId = getMeta(store, ACTIVE_KEY);
-  if (!activeId) return undefined;
+  const promotionId = getPointer(store, pointer);
+  if (!promotionId) return undefined;
   const row = store.sql
     .exec<{ builds: string }>(
       `SELECT builds FROM promotions WHERE promotion_id = ?`,
-      activeId,
+      promotionId,
     )
     .toArray()[0];
   if (!row) return undefined;
   return (JSON.parse(row.builds) as Record<string, string>)[app];
 }
 
-// The active-Deployment resolution the frozen generic worker consumes, folding
-// pointer read and record read into one call (ADR 0002). knownBuildId lets a
-// caller that already holds a record skip re-transferring it: when the active
-// build still matches, the (potentially large) record is omitted and only the
-// build id comes back.
+// The Deployment resolution the frozen generic worker consumes for a given
+// pointer, folding pointer read and record read into one call (ADR 0002).
+// knownBuildId lets a caller that already holds a record skip re-transferring
+// it: when the pointer's build still matches, the (potentially large) record is
+// omitted and only the build id comes back.
 //
-// - no-pointer  no active promotion for the app (fresh project).
-// - unchanged   active build id equals knownBuildId; record deliberately omitted.
-// - record      active build id differs (or knownBuildId absent); record included.
+// - no-pointer  the pointer names no promotion for the app (fresh project, or
+//               an unknown preview).
+// - unchanged   pointer build id equals knownBuildId; record deliberately omitted.
+// - record      pointer build id differs (or knownBuildId absent); record included.
 // - dangling    the pointer names a build the store holds no record for — an
 //               invariant violation the caller surfaces rather than papering over.
-export type ActiveRecordResult =
+export type PointerRecordResult =
   | { kind: "no-pointer" }
   | { kind: "unchanged"; buildId: string }
   | { kind: "record"; buildId: string; record: DeploymentRecord }
   | { kind: "dangling"; buildId: string };
 
-export function activeRecord(
+export function pointerRecord(
   store: SqlStore,
   app: string,
+  pointer: string = DEFAULT_POINTER,
   knownBuildId?: string,
-): ActiveRecordResult {
-  const buildId = activeBuildId(store, app);
+): PointerRecordResult {
+  const buildId = pointerBuildId(store, app, pointer);
   if (!buildId) return { kind: "no-pointer" };
   if (buildId === knownBuildId) return { kind: "unchanged", buildId };
   const rec = record(store, app, buildId);
@@ -250,7 +288,7 @@ export function activeRecord(
 }
 
 export function history(store: SqlStore): HistoryEntry[] {
-  const activeId = getMeta(store, ACTIVE_KEY);
+  const activeId = getPointer(store, DEFAULT_POINTER);
   // Ordered newest-first by seq (promote assigns an increasing seq) per the
   // acceptance criteria, with the active promotion marked.
   return store.sql
@@ -272,7 +310,7 @@ export function history(store: SqlStore): HistoryEntry[] {
 
 export function prune(store: SqlStore, keepN: number): PruneResult {
   return store.transactionSync(() => {
-    const activeId = getMeta(store, ACTIVE_KEY);
+    const activeId = getPointer(store, DEFAULT_POINTER);
     const rows = store.sql
       .exec<{ promotion_id: string; builds: string }>(
         `SELECT promotion_id, builds FROM promotions ORDER BY seq DESC`,

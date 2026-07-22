@@ -22,6 +22,7 @@ import {
   type DeploymentsBinding,
   type DeploymentsDeps,
 } from "./deployments";
+import { normalizeBaseDomain, previewPointer } from "./preview";
 import { edgeOriginFetch } from "./signing";
 
 // The request headers a Next App Router response varies on. The colo cache key
@@ -44,8 +45,14 @@ interface Env {
   // deployments-store worker (idFromName), carried on every resolve RPC.
   OCEL_SLUG: string;
   // This frozen worker's own app identity — one script per app — used to look
-  // up its active Deployment in the project's deployments-store instance.
+  // up its Deployment in the project's deployments-store instance.
   OCEL_APP: string;
+  // Preview mode: when OCEL_PREVIEW is "1" and a base domain is set, the worker
+  // is deployed behind a wildcard route and resolves the deployment pointer
+  // named by each request's subdomain instead of the default one. Both must be
+  // present and well-formed; a partial config degrades to normal mode.
+  OCEL_PREVIEW?: string;
+  OCEL_PREVIEW_BASE_DOMAIN?: string;
   // Bound only where the edge provisioned a cache store; together with the
   // active Deployment's ISR prefix, its presence is what lets the worker
   // read the ISR cache directly.
@@ -596,8 +603,24 @@ export default {
       env.OCEL_EDGE_SECRET_KEY,
     );
 
+    // In preview mode the deployment pointer is named by the request's
+    // subdomain; a host that yields no valid preview label has nothing to serve.
+    // Preview mode is on only when OCEL_PREVIEW is "1" and a well-formed base
+    // domain is configured — a missing or malformed one degrades to normal
+    // serving rather than 404-ing every request.
+    let pointer: string | undefined;
+    const baseDomain =
+      env.OCEL_PREVIEW === "1"
+        ? normalizeBaseDomain(env.OCEL_PREVIEW_BASE_DOMAIN)
+        : "";
+    if (baseDomain) {
+      const label = previewPointer(new URL(request.url).host, baseDomain);
+      if (label === null) return deploymentNotFoundResponse();
+      pointer = label;
+    }
+
     const deps = await resolveRouteDeps(
-      { binding: env.DEPLOYMENTS, slug: env.OCEL_SLUG, app: env.OCEL_APP },
+      { binding: env.DEPLOYMENTS, slug: env.OCEL_SLUG, app: env.OCEL_APP, pointer },
       {
         fetch,
         originFetch,

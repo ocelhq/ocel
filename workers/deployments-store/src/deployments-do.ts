@@ -61,9 +61,12 @@ export class DeploymentsStore extends DurableObject<Env> {
   // Returns { conflict } instead of throwing so the tag-collision signal
   // survives the RPC boundary (custom error prototypes do not): index.ts turns
   // a conflict into a 409 the deploy host surfaces verbatim.
-  async promote(promotion: Promotion): Promise<{ conflict?: string }> {
+  async promote(
+    promotion: Promotion,
+    pointer?: string,
+  ): Promise<{ conflict?: string }> {
     try {
-      store.promote(this.ctx.storage, promotion);
+      store.promote(this.ctx.storage, promotion, pointer);
       return {};
     } catch (e) {
       if (e instanceof store.TagConflictError) return { conflict: e.message };
@@ -71,8 +74,11 @@ export class DeploymentsStore extends DurableObject<Env> {
     }
   }
 
-  async activeBuildId(app: string): Promise<string | undefined> {
-    return store.activeBuildId(this.ctx.storage, app);
+  async pointerBuildId(
+    app: string,
+    pointer?: string,
+  ): Promise<string | undefined> {
+    return store.pointerBuildId(this.ctx.storage, app, pointer);
   }
 
   async record(
@@ -82,11 +88,12 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.record(this.ctx.storage, app, buildId);
   }
 
-  async activeRecord(
+  async pointerRecord(
     app: string,
+    pointer?: string,
     knownBuildId?: string,
-  ): Promise<store.ActiveRecordResult> {
-    return store.activeRecord(this.ctx.storage, app, knownBuildId);
+  ): Promise<store.PointerRecordResult> {
+    return store.pointerRecord(this.ctx.storage, app, pointer, knownBuildId);
   }
 
   async history(): Promise<HistoryEntry[]> {

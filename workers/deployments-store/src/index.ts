@@ -2,7 +2,7 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { authorized, bearer } from "./auth";
 import { DeploymentsStore } from "./deployments-do";
-import type { ActiveRecordResult, DeploymentRecord, Promotion } from "./store";
+import type { DeploymentRecord, PointerRecordResult, Promotion } from "./store";
 import type { Env } from "./env";
 
 export { DeploymentsStore };
@@ -30,12 +30,13 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
 //   /<slug>/initialize route is authorized by the account-level bootstrap
 //   credential (the only op that credential may perform); every other route
 //   authenticates against the addressed instance's own stored project secret.
-// - activeRecord is the single RPC method the frozen generic worker calls
+// - pointerRecord is the single RPC method the frozen generic worker calls
 //   through its service binding, carrying the project slug: it resolves the
-//   app's active build id and record in one round trip, echoing the caller's
-//   knownBuildId back unchanged to skip re-sending an unchanged record. It stays
-//   secret-less — the trust boundary is the binding itself, only ever reachable
-//   from another Worker in the same account.
+//   app's build id and record for a pointer (the reserved default, or a named
+//   preview pointer) in one round trip, echoing the caller's knownBuildId back
+//   unchanged to skip re-sending an unchanged record. It stays secret-less — the
+//   trust boundary is the binding itself, only ever reachable from another
+//   Worker in the same account.
 export default class extends WorkerEntrypoint<Env> {
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
@@ -82,11 +83,14 @@ export default class extends WorkerEntrypoint<Env> {
     }
 
     if (request.method === "POST" && sub === "/promote") {
-      const body = await readJson<Promotion>(request);
+      const body = await readJson<Promotion & { pointer?: string }>(request);
       if (!body?.promotionId || !body.builds) {
         return new Response("Bad Request", { status: 400 });
       }
-      const { conflict } = await store.promote(body);
+      // The pointer to move is an argument to the promote operation, not part of
+      // the persisted Promotion; the store defaults it when absent.
+      const { pointer, ...promotion } = body;
+      const { conflict } = await store.promote(promotion, pointer);
       if (conflict) return new Response(conflict, { status: 409 });
       return new Response(null, { status: 204 });
     }
@@ -122,11 +126,16 @@ export default class extends WorkerEntrypoint<Env> {
     return new Response("Not Found", { status: 404 });
   }
 
-  async activeRecord(
-    slug: string,
-    app: string,
-    knownBuildId?: string,
-  ): Promise<ActiveRecordResult> {
-    return stub(this.env, slug).activeRecord(app, knownBuildId);
+  async pointerRecord(args: {
+    slug: string;
+    app: string;
+    pointer?: string;
+    knownBuildId?: string;
+  }): Promise<PointerRecordResult> {
+    return stub(this.env, args.slug).pointerRecord(
+      args.app,
+      args.pointer,
+      args.knownBuildId,
+    );
   }
 }

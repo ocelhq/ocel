@@ -255,16 +255,56 @@ describe("service-binding read path", () => {
       createExecutionContext(),
       env,
     );
-    expect(await entry.activeRecord(SLUG, "web")).toEqual({
+    expect(await entry.pointerRecord({ slug: SLUG, app: "web" })).toEqual({
       kind: "record",
       buildId: "build-1",
       record: makeRecord(),
     });
     // A caller that already holds the active build gets it echoed back with the
     // record omitted.
-    expect(await entry.activeRecord(SLUG, "web", "build-1")).toEqual({
+    expect(
+      await entry.pointerRecord({ slug: SLUG, app: "web", knownBuildId: "build-1" }),
+    ).toEqual({
       kind: "unchanged",
       buildId: "build-1",
+    });
+  });
+
+  it("routes a promote's pointer through to a named pointer", async () => {
+    await initialize();
+    await SELF.fetch(
+      authedReq("/staged", {
+        method: "PUT",
+        body: JSON.stringify(makeRecord({ buildId: "preview-build" })),
+      }),
+    );
+    const promoteRes = await SELF.fetch(
+      authedReq("/promote", {
+        method: "POST",
+        body: JSON.stringify({
+          promotionId: "prev-1",
+          ts: 1_000,
+          builds: { web: "preview-build" },
+          pointer: "flaky-web-2626",
+        }),
+      }),
+    );
+    expect(promoteRes.status).toBe(204);
+
+    const entry = new (await import("../src/index")).default(
+      createExecutionContext(),
+      env,
+    );
+    // The named pointer resolves the preview build; the default pointer never moved.
+    expect(
+      await entry.pointerRecord({ slug: SLUG, app: "web", pointer: "flaky-web-2626" }),
+    ).toEqual({
+      kind: "record",
+      buildId: "preview-build",
+      record: makeRecord({ buildId: "preview-build" }),
+    });
+    expect(await entry.pointerRecord({ slug: SLUG, app: "web" })).toEqual({
+      kind: "no-pointer",
     });
   });
 });
