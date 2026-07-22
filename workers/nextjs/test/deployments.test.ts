@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   resolveDeployment,
-  type ActiveRecordResult,
+  type PointerRecordResult,
   type DeploymentRecord,
   type DeploymentsBinding,
   type DeploymentsDeps,
@@ -21,40 +21,43 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   };
 }
 
-// A binding stub whose activeRecord calls are counted and can be switched to
-// throwing (simulating a store outage). It resolves each app's active build id
-// and records from injected maps, and honours knownBuildId the same way the
-// real store does — omitting the record when the caller's build is still live.
+// A binding stub whose pointerRecord calls are counted and can be switched to
+// throwing (simulating a store outage). It resolves each pointer's build id and
+// records from injected maps, and honours knownBuildId the same way the real
+// store does — omitting the record when the caller's build is still live. Build
+// ids are keyed by "<app>/<pointer>" so a preview pointer resolves independently
+// of the default one; an absent pointer arg keys as the empty string.
 function countingBinding(opts: {
-  activeBuildId: Record<string, string | undefined>;
+  pointerBuildId: Record<string, string | undefined>;
   records: Record<string, DeploymentRecord>;
 }): DeploymentsBinding & {
-  activeRecordCalls: number;
+  pointerRecordCalls: number;
   // Whether the last answered call carried a record (vs. an "unchanged" echo).
   lastCarriedRecord: boolean;
   down: boolean;
 } {
   return {
-    activeRecordCalls: 0,
+    pointerRecordCalls: 0,
     lastCarriedRecord: false,
     down: false,
-    async activeRecord(
-      _slug: string,
-      app: string,
-      knownBuildId?: string,
-    ): Promise<ActiveRecordResult> {
-      this.activeRecordCalls++;
+    async pointerRecord(args: {
+      slug: string;
+      app: string;
+      pointer?: string;
+      knownBuildId?: string;
+    }): Promise<PointerRecordResult> {
+      this.pointerRecordCalls++;
       if (this.down) throw new Error("store unreachable");
-      const buildId = opts.activeBuildId[app];
+      const buildId = opts.pointerBuildId[`${args.app}/${args.pointer ?? ""}`];
       if (!buildId) {
         this.lastCarriedRecord = false;
         return { kind: "no-pointer" };
       }
-      if (buildId === knownBuildId) {
+      if (buildId === args.knownBuildId) {
         this.lastCarriedRecord = false;
         return { kind: "unchanged", buildId };
       }
-      const record = opts.records[`${app}/${buildId}`];
+      const record = opts.records[`${args.app}/${buildId}`];
       if (!record) {
         this.lastCarriedRecord = false;
         return { kind: "dangling", buildId };
@@ -76,7 +79,7 @@ function deps(
 describe("resolveDeployment", () => {
   it("resolves and returns the active Deployment record", async () => {
     const binding = countingBinding({
-      activeBuildId: { web: "build-1" },
+      pointerBuildId: { "web/": "build-1" },
       records: { "web/build-1": makeRecord() },
     });
     const clock = { ms: 0 };
@@ -87,7 +90,7 @@ describe("resolveDeployment", () => {
   });
 
   it("returns not-found when no active pointer exists for the app", async () => {
-    const binding = countingBinding({ activeBuildId: {}, records: {} });
+    const binding = countingBinding({ pointerBuildId: {}, records: {} });
     const clock = { ms: 0 };
 
     const resolution = await resolveDeployment(deps(binding, clock));
@@ -97,7 +100,7 @@ describe("resolveDeployment", () => {
 
   it("serves the cached record within the TTL without calling the store", async () => {
     const binding = countingBinding({
-      activeBuildId: { web: "build-1" },
+      pointerBuildId: { "web/": "build-1" },
       records: { "web/build-1": makeRecord() },
     });
     const clock = { ms: 0 };
@@ -107,12 +110,12 @@ describe("resolveDeployment", () => {
     await resolveDeployment(d);
 
     // The record is still within its TTL on the second call, so no RPC fires.
-    expect(binding.activeRecordCalls).toBe(1);
+    expect(binding.pointerRecordCalls).toBe(1);
   });
 
   it("revalidates after the TTL without re-transferring an unchanged record", async () => {
     const binding = countingBinding({
-      activeBuildId: { web: "build-1" },
+      pointerBuildId: { "web/": "build-1" },
       records: { "web/build-1": makeRecord() },
     });
     const clock = { ms: 0 };
@@ -121,11 +124,11 @@ describe("resolveDeployment", () => {
     await resolveDeployment(d);
     clock.ms = 4_000; // still within the 5s TTL
     await resolveDeployment(d);
-    expect(binding.activeRecordCalls).toBe(1);
+    expect(binding.pointerRecordCalls).toBe(1);
 
     clock.ms = 5_001; // TTL elapsed
     const resolution = await resolveDeployment(d);
-    expect(binding.activeRecordCalls).toBe(2);
+    expect(binding.pointerRecordCalls).toBe(2);
     // The build is unchanged, so the store echoed it back without the record;
     // the cached record still stands.
     expect(binding.lastCarriedRecord).toBe(false);
@@ -133,9 +136,9 @@ describe("resolveDeployment", () => {
   });
 
   it("re-reads the record when the build moves (promotion/rollback)", async () => {
-    const activeBuildId: Record<string, string> = { web: "build-1" };
+    const pointerBuildId: Record<string, string> = { "web/": "build-1" };
     const binding = countingBinding({
-      activeBuildId,
+      pointerBuildId,
       records: {
         "web/build-1": makeRecord(),
         "web/build-2": makeRecord({ buildId: "build-2" }),
@@ -149,7 +152,7 @@ describe("resolveDeployment", () => {
 
     // A rollback/promotion re-points the app at build-2; the TTL has to elapse
     // before this worker notices.
-    activeBuildId.web = "build-2";
+    pointerBuildId["web/"] = "build-2";
     clock.ms = 5_001;
     const second = await resolveDeployment(d);
 
@@ -162,7 +165,7 @@ describe("resolveDeployment", () => {
 
   it("serves the cached record during a transient store outage", async () => {
     const binding = countingBinding({
-      activeBuildId: { web: "build-1" },
+      pointerBuildId: { "web/": "build-1" },
       records: { "web/build-1": makeRecord() },
     });
     const clock = { ms: 0 };
@@ -178,7 +181,7 @@ describe("resolveDeployment", () => {
   });
 
   it("returns unavailable on a cold isolate when the store is unreachable", async () => {
-    const binding = countingBinding({ activeBuildId: {}, records: {} });
+    const binding = countingBinding({ pointerBuildId: {}, records: {} });
     binding.down = true;
     const clock = { ms: 0 };
 
@@ -189,7 +192,7 @@ describe("resolveDeployment", () => {
 
   it("returns unavailable when the pointer names a build with no record", async () => {
     const binding = countingBinding({
-      activeBuildId: { web: "build-1" },
+      pointerBuildId: { "web/": "build-1" },
       records: {},
     });
     const clock = { ms: 0 };
@@ -201,7 +204,7 @@ describe("resolveDeployment", () => {
 
   it("keeps caches independent across apps", async () => {
     const binding = countingBinding({
-      activeBuildId: { web: "build-1", admin: "build-9" },
+      pointerBuildId: { "web/": "build-1", "admin/": "build-9" },
       records: {
         "web/build-1": makeRecord(),
         "admin/build-9": makeRecord({ app: "admin", buildId: "build-9" }),
@@ -217,5 +220,34 @@ describe("resolveDeployment", () => {
       kind: "found",
       record: makeRecord({ app: "admin", buildId: "build-9" }),
     });
+  });
+
+  it("resolves a named preview pointer independently of the default", async () => {
+    const previewRecord = makeRecord({ buildId: "preview-build" });
+    const binding = countingBinding({
+      pointerBuildId: {
+        "web/": "build-1",
+        "web/flaky-web-2626": "preview-build",
+      },
+      records: {
+        "web/build-1": makeRecord(),
+        "web/preview-build": previewRecord,
+      },
+    });
+    const clock = { ms: 0 };
+
+    const production = await resolveDeployment(deps(binding, clock));
+    const preview = await resolveDeployment({
+      binding,
+      slug: "acme-web",
+      app: "web",
+      pointer: "flaky-web-2626",
+      now: () => clock.ms,
+    });
+
+    expect(production).toEqual({ kind: "found", record: makeRecord() });
+    expect(preview).toEqual({ kind: "found", record: previewRecord });
+    // Two distinct pointers, so two distinct store round trips (no cross-serve).
+    expect(binding.pointerRecordCalls).toBe(2);
   });
 });

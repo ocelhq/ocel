@@ -43,7 +43,7 @@ describe("putStaged", () => {
     await store.putStaged(makeRecord());
 
     expect(await store.record("web", "build-1")).toEqual(makeRecord());
-    expect(await store.activeBuildId("web")).toBeUndefined();
+    expect(await store.pointerBuildId("web")).toBeUndefined();
     expect(await store.history()).toEqual([]);
   });
 });
@@ -55,7 +55,7 @@ describe("promote", () => {
 
     await store.promote(makePromotion());
 
-    expect(await store.activeBuildId("web")).toBe("build-1");
+    expect(await store.pointerBuildId("web")).toBe("build-1");
     expect(await store.history()).toEqual([
       { promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" }, active: true },
     ]);
@@ -69,24 +69,86 @@ describe("promote", () => {
     await store.promote(makePromotion({ promotionId: "promo-1", ts: 1_000, builds: { web: "build-1" } }));
     await store.promote(makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "build-2" } }));
 
-    expect(await store.activeBuildId("web")).toBe("build-2");
+    expect(await store.pointerBuildId("web")).toBe("build-2");
   });
 });
 
-describe("activeBuildId / record", () => {
+describe("named pointers", () => {
+  it("promotes to a named pointer without moving the default one", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "prod-build" }));
+    await store.putStaged(makeRecord({ buildId: "preview-build" }));
+
+    await store.promote(
+      makePromotion({ promotionId: "prod", builds: { web: "prod-build" } }),
+    );
+    await store.promote(
+      makePromotion({ promotionId: "prev", builds: { web: "preview-build" } }),
+      "flaky-web-2626",
+    );
+
+    // The default pointer (production) still resolves the production build.
+    expect(await store.pointerBuildId("web")).toBe("prod-build");
+    // The named pointer resolves its own build.
+    expect(await store.pointerBuildId("web", "flaky-web-2626")).toBe(
+      "preview-build",
+    );
+  });
+
+  it("resolves a named pointer's record through pointerRecord", async () => {
+    const store = storeStub();
+    const record = makeRecord({ buildId: "preview-build" });
+    await store.putStaged(record);
+    await store.promote(
+      makePromotion({ promotionId: "prev", builds: { web: "preview-build" } }),
+      "flaky-web-2626",
+    );
+
+    expect(await store.pointerRecord("web", "flaky-web-2626")).toEqual({
+      kind: "record",
+      buildId: "preview-build",
+      record,
+    });
+    // An unknown pointer resolves to no-pointer, exactly like a fresh project.
+    expect(await store.pointerRecord("web", "no-such-preview")).toEqual({
+      kind: "no-pointer",
+    });
+  });
+
+  it("re-promoting a named pointer moves only that pointer", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "preview-1" }));
+    await store.putStaged(makeRecord({ buildId: "preview-2" }));
+
+    await store.promote(
+      makePromotion({ promotionId: "p1", builds: { web: "preview-1" } }),
+      "preview",
+    );
+    await store.promote(
+      makePromotion({ promotionId: "p2", builds: { web: "preview-2" } }),
+      "preview",
+    );
+
+    expect(await store.pointerBuildId("web", "preview")).toBe("preview-2");
+    // No production promotion ever ran, so the default pointer stays empty.
+    expect(await store.pointerBuildId("web")).toBeUndefined();
+  });
+});
+
+describe("pointerBuildId / record", () => {
   it("derives the active build id from the active promotion", async () => {
     const store = storeStub();
     await store.putStaged(makeRecord({ app: "web", buildId: "build-1" }));
     await store.putStaged(makeRecord({ app: "docs", buildId: "build-9" }));
     await store.promote(makePromotion({ builds: { web: "build-1", docs: "build-9" } }));
 
-    expect(await store.activeBuildId("web")).toBe("build-1");
-    expect(await store.activeBuildId("docs")).toBe("build-9");
+    expect(await store.pointerBuildId("web")).toBe("build-1");
+    expect(await store.pointerBuildId("docs")).toBe("build-9");
   });
 
   it("returns undefined for an app with no active promotion", async () => {
     const store = storeStub();
-    expect(await store.activeBuildId("nonexistent")).toBeUndefined();
+    expect(await store.pointerBuildId("nonexistent")).toBeUndefined();
   });
 
   it("returns the stored record for a given app and build id", async () => {
@@ -99,10 +161,10 @@ describe("activeBuildId / record", () => {
   });
 });
 
-describe("activeRecord", () => {
+describe("pointerRecord", () => {
   it("returns no-pointer when the app has no active promotion", async () => {
     const store = storeStub();
-    expect(await store.activeRecord("web")).toEqual({ kind: "no-pointer" });
+    expect(await store.pointerRecord("web")).toEqual({ kind: "no-pointer" });
   });
 
   it("returns the active build id and record when no build is known", async () => {
@@ -110,7 +172,7 @@ describe("activeRecord", () => {
     await store.putStaged(makeRecord());
     await store.promote(makePromotion());
 
-    expect(await store.activeRecord("web")).toEqual({
+    expect(await store.pointerRecord("web")).toEqual({
       kind: "record",
       buildId: "build-1",
       record: makeRecord(),
@@ -122,7 +184,7 @@ describe("activeRecord", () => {
     await store.putStaged(makeRecord());
     await store.promote(makePromotion());
 
-    expect(await store.activeRecord("web", "build-1")).toEqual({
+    expect(await store.pointerRecord("web", undefined, "build-1")).toEqual({
       kind: "unchanged",
       buildId: "build-1",
     });
@@ -135,7 +197,7 @@ describe("activeRecord", () => {
     await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "build-1" } }));
     await store.promote(makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "build-2" } }));
 
-    expect(await store.activeRecord("web", "build-1")).toEqual({
+    expect(await store.pointerRecord("web", undefined, "build-1")).toEqual({
       kind: "record",
       buildId: "build-2",
       record: makeRecord({ buildId: "build-2" }),
@@ -148,7 +210,7 @@ describe("activeRecord", () => {
     // record read misses.
     await store.promote(makePromotion({ builds: { web: "ghost-build" } }));
 
-    expect(await store.activeRecord("web")).toEqual({
+    expect(await store.pointerRecord("web")).toEqual({
       kind: "dangling",
       buildId: "ghost-build",
     });
@@ -192,7 +254,7 @@ describe("tags", () => {
     expect(conflict).toMatch(/already used by promotion promo-1/);
     // The clashing deploy never became active; the original still serves.
     expect((await store.history()).map((h) => h.promotionId)).toEqual(["promo-1"]);
-    expect(await store.activeBuildId("web")).toBe("build-1");
+    expect(await store.pointerBuildId("web")).toBe("build-1");
   });
 
   it("lets a rollback re-promote its own tagged id without a self-conflict", async () => {
@@ -212,7 +274,7 @@ describe("tags", () => {
     );
 
     expect(conflict).toBeUndefined();
-    expect(await store.activeBuildId("web")).toBe("build-1");
+    expect(await store.pointerBuildId("web")).toBe("build-1");
     expect((await store.history()).map((h) => h.promotionId)).toEqual(["promo-1", "promo-2"]);
   });
 
