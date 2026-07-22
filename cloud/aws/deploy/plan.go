@@ -70,14 +70,10 @@ func AppDeployStackName(projectID, app, buildID string) string {
 }
 
 // BuildPlan turns a manifest, its environment, a promotion id, and the per-app
-// build ids this deploy produced into the stack Plan the deploy and prune paths
-// consume. It handles both production and preview: preview stacks are scoped by
-// the environment identity (the store pointer), a persistent preview gets a
-// per-name infra stack while an ephemeral one gets none (InfraStack is ""), and
-// preview stack names can never collide with production's. Pure — no Pulumi,
-// AWS, or Cloudflare calls. Every app the manifest declares must have an entry
-// in builds, else BuildPlan errors rather than silently planning a partial
-// deploy.
+// build ids into the stack Plan the deploy and prune paths consume. Preview
+// stacks are scoped by the environment identity (the store pointer); an
+// ephemeral preview gets no infra stack (InfraStack is ""). Every app the
+// manifest declares must have an entry in builds, else BuildPlan errors.
 func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, promotionID string, builds BuildIDs) (Plan, error) {
 	projectID := manifest.GetProjectId()
 	apps := manifest.GetApps()
@@ -99,8 +95,7 @@ func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment,
 			return Plan{}, fmt.Errorf("preview deploy plan requires an environment identity (the store pointer)")
 		}
 		ephemeral = env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL
-		// Ephemeral previews skip the infra stack entirely (no per-name db/bucket
-		// — see the deploy orchestration); persistent previews get a per-name one.
+		// Ephemeral previews get no infra stack; persistent ones get a per-name one.
 		if !ephemeral {
 			infraStack = PreviewInfraStackName(projectID, pointer)
 		}

@@ -107,8 +107,6 @@ export default class extends WorkerEntrypoint<Env> {
       if (typeof body?.keepN !== "number") {
         return new Response("Bad Request", { status: 400 });
       }
-      // The pointer to scope the prune to is optional; absent means the reserved
-      // default (production).
       return Response.json(await store.prune(body.keepN, body.pointer));
     }
 
