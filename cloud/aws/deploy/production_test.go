@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -85,6 +86,31 @@ func TestPreviewBaseDomain(t *testing.T) {
 	}
 }
 
+func TestWorkerAppURL(t *testing.T) {
+	prod := Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+	preview := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42-a1b2c3d4"}
+
+	cases := []struct {
+		name   string
+		cfg    Config
+		domain string
+		want   string
+	}{
+		{"production custom domain", prod, "app.acme.com", "https://app.acme.com"},
+		{"production no domain", prod, "", ""},
+		{"preview resolves wildcard to the ref subdomain", preview, "*.preview.acme.com", "https://pr-42-a1b2c3d4.preview.acme.com"},
+		{"preview no domain", preview, "", ""},
+		{"preview non-wildcard domain falls back verbatim", preview, "app.acme.com", "https://app.acme.com"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := workerAppURL(tc.cfg, tc.domain); got != tc.want {
+				t.Errorf("workerAppURL(%q) = %q, want %q", tc.domain, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestPreviewGenericName_DistinctFromProduction(t *testing.T) {
 	prod := workerScriptName("proj-production", "web")
 	preview := previewGenericName("proj", "web")
@@ -93,6 +119,27 @@ func TestPreviewGenericName_DistinctFromProduction(t *testing.T) {
 	}
 	if want := "ocel-proj-preview-web"; preview != want {
 		t.Errorf("previewGenericName = %q, want %q", preview, want)
+	}
+}
+
+func TestPreviewWorkerPrefix_PrefixesEveryPreviewWorkerAndNotProduction(t *testing.T) {
+	prefix := previewWorkerPrefix("shop")
+	if want := "ocel-shop-preview"; prefix != want {
+		t.Fatalf("previewWorkerPrefix = %q, want %q", prefix, want)
+	}
+	// Every worker a preview deploys — the per-app generic workers and the
+	// no-app "root" fallback — must sit under the prefix teardown sweeps, so a
+	// teardown finds them without the store history that named them.
+	for _, app := range []string{"web", "api", "root"} {
+		name := previewGenericName("shop", app)
+		if !strings.HasPrefix(name, prefix+"-") {
+			t.Errorf("previewGenericName(%q) = %q, not under prefix %q-", app, name, prefix)
+		}
+	}
+	// The prefix must never reach a production worker of the same project, or a
+	// destroy --preview would take production down.
+	if prod := workerScriptName("shop-production", "web"); strings.HasPrefix(prod, previewWorkerPrefix("shop")+"-") {
+		t.Errorf("production worker %q matches the preview prefix %q-", prod, previewWorkerPrefix("shop"))
 	}
 }
 
@@ -267,6 +314,24 @@ func TestPromotePointer_EmptyForProductionIdentityForPreview(t *testing.T) {
 	}
 	if got := promotePointer(Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}); got != "pr-42" {
 		t.Errorf("promotePointer(preview) = %q, want pr-42", got)
+	}
+}
+
+func TestPlanEnvironment_ThreadsClassLifecycleIdentity(t *testing.T) {
+	cfg := Config{
+		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
+		Identity:  "pr-42",
+	}
+	env := planEnvironment(cfg)
+	if env.GetClass() != deploymentsv1.Environment_CLASS_PREVIEW {
+		t.Errorf("class = %s, want preview", env.GetClass())
+	}
+	if env.GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
+		t.Errorf("lifecycle = %s, want ephemeral", env.GetLifecycle())
+	}
+	if env.GetIdentity() != "pr-42" {
+		t.Errorf("identity = %q, want pr-42", env.GetIdentity())
 	}
 }
 

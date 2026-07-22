@@ -67,6 +67,17 @@ type RootStack interface {
 	// worker and joins any failures. Backs the root-stack half of `ocel destroy`.
 	DestroyRootStack(ctx context.Context, workers []string) error
 
+	// ListDeployedWorkers returns the script names of every worker the edge has
+	// deployed whose name begins with prefix — a project-scoped worker-name stem
+	// the caller computes. It lets a whole-project teardown find a project's
+	// workers when its own record of them is gone: a shared generic worker fronts
+	// every preview pointer and outlives them, so once a pointer's promotion
+	// history (which names the worker) has been removed by `ocel preview rm`,
+	// enumerating from the store can no longer name it. Listing from the edge
+	// closes that gap. Best-effort and read-only; an edge with nothing under the
+	// prefix returns an empty slice, not an error.
+	ListDeployedWorkers(ctx context.Context, prefix string) ([]string, error)
+
 	// DestroyInstance wipes the project's own instance in the shared
 	// deployments-store worker — its promotion history, records, ownership and
 	// secret — leaving the shared worker and every other project's instance

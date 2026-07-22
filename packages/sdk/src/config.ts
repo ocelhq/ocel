@@ -12,6 +12,7 @@ export interface ProviderDescriptor {
 // for that app.
 export interface DomainConfig {
   production?: string;
+  preview?: string;
 }
 
 // AppConfig declares an application Ocel builds and deploys. `framework` is

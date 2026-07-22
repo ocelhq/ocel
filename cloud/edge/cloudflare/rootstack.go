@@ -20,10 +20,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/dns"
 	"github.com/cloudflare/cloudflare-go/v4/option"
 	"github.com/cloudflare/cloudflare-go/v4/workers"
+	"github.com/cloudflare/cloudflare-go/v4/zones"
 
 	"github.com/ocelhq/ocel/cloud/edge"
 )
@@ -134,7 +137,7 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	if err := p.putScript(ctx, genericUp, assetsJWT); err != nil {
 		return nil, fmt.Errorf("put generic worker: %w", err)
 	}
-	if err := p.reconcileCustomDomains(ctx, genericUp, spec.Domain); err != nil {
+	if err := p.reconcileWorkerHostname(ctx, genericUp, spec.Domain); err != nil {
 		return nil, err
 	}
 	if _, err := p.setSubdomain(ctx, genericUp, spec.Domain == ""); err != nil {
@@ -153,25 +156,30 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	}, nil
 }
 
-// DestroyRootStack deletes every worker in workers — a project's generic
-// worker(s) — detaching each one's custom-domain binding(s) first, leaving the
-// user's DNS untouched. The shared deployments-store worker is never among
-// them (it outlives any single project; a project's store data is reclaimed by
-// DestroyInstance). It is best-effort: a failure on one worker does not stop
-// the others, and every failure is joined into the returned error so the host
-// can report exactly what remains.
-func (p *provider) DestroyRootStack(ctx context.Context, workers []string) error {
+// DestroyRootStack deletes every worker in names — a project's generic
+// worker(s) — first undoing each one's hostname attachments: detaching its
+// custom-domain binding(s), and deleting the placeholder DNS records the route
+// path planted (script deletion drops the routes themselves, but not those
+// records). Records the user manages are left untouched. The shared
+// deployments-store worker is never among them (it outlives any single project;
+// a project's store data is reclaimed by DestroyInstance). It is best-effort: a
+// failure on one worker does not stop the others, and every failure is joined
+// into the returned error so the host can report exactly what remains.
+func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
 		return fmt.Errorf("%s is not set; it is required to destroy the Cloudflare root stack", envAccountID)
 	}
 
 	var errs []error
-	for _, name := range workers {
+	for _, name := range names {
 		if name == "" {
 			continue
 		}
 		if err := p.detachCustomDomains(ctx, accountID, name); err != nil {
+			errs = append(errs, err)
+		}
+		if err := p.detachRouteRecords(ctx, accountID, name); err != nil {
 			errs = append(errs, err)
 		}
 		if err := p.deleteScript(ctx, accountID, name); err != nil {
@@ -179,6 +187,88 @@ func (p *provider) DestroyRootStack(ctx context.Context, workers []string) error
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// ListDeployedWorkers returns the account's worker script names beginning with
+// prefix. It pages the account's full script list and filters by name — the
+// only project scoping a bare list offers — so the caller's prefix carries
+// whatever collision guarantees the naming gives (edge.RootStack).
+func (p *provider) ListDeployedWorkers(ctx context.Context, prefix string) ([]string, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("%s is not set; it is required to list deployed workers", envAccountID)
+	}
+	var names []string
+	iter := p.client.Workers.Scripts.ListAutoPaging(ctx, workers.ScriptListParams{AccountID: cf.F(accountID)})
+	for iter.Next() {
+		if name := iter.Current().ID; strings.HasPrefix(name, prefix) {
+			names = append(names, name)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("list workers: %w", err)
+	}
+	return names, nil
+}
+
+// detachRouteRecords deletes the proxied placeholder DNS records the route path
+// planted for a worker script. Worker routes are zone-scoped and dropped when
+// the script is deleted, but the records that make their wildcard hostnames
+// resolve are not — so, before the script goes, this finds every route bound to
+// the script across the account's zones and deletes the Ocel-owned placeholder
+// (a proxied AAAA to the discard prefix) for each route's hostname. A record the
+// user manages at the same name is left in place.
+func (p *provider) detachRouteRecords(ctx context.Context, accountID, scriptName string) error {
+	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
+		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
+	})
+	var errs []error
+	for owned.Next() {
+		zoneID := owned.Current().ID
+		routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
+		for routes.Next() {
+			route := routes.Current()
+			if route.Script != scriptName {
+				continue
+			}
+			hostname := strings.TrimSuffix(route.Pattern, "/*")
+			if err := p.deleteProxiedRecord(ctx, zoneID, hostname); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		if err := routes.Err(); err != nil {
+			errs = append(errs, fmt.Errorf("list worker routes in zone %s: %w", zoneID, err))
+		}
+	}
+	if err := owned.Err(); err != nil {
+		errs = append(errs, fmt.Errorf("list zones: %w", err))
+	}
+	return errors.Join(errs...)
+}
+
+// deleteProxiedRecord removes the Ocel-owned placeholder record at hostname: the
+// proxied AAAA to the discard prefix that ensureProxiedRecord plants. It matches
+// on that content so a record the user manages at the same name is never
+// deleted.
+func (p *provider) deleteProxiedRecord(ctx context.Context, zoneID, hostname string) error {
+	records := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
+		ZoneID: cf.F(zoneID),
+		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(hostname)}),
+		Type:   cf.F(dns.RecordListParamsTypeAAAA),
+	})
+	for records.Next() {
+		rec := records.Current()
+		if rec.Content != routeRecordContent {
+			continue
+		}
+		if _, err := p.client.DNS.Records.Delete(ctx, rec.ID, dns.RecordDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+			return fmt.Errorf("delete DNS record %q: %w", hostname, err)
+		}
+	}
+	if err := records.Err(); err != nil {
+		return fmt.Errorf("list DNS records for %q: %w", hostname, err)
+	}
+	return nil
 }
 
 // DestroyInstance wipes the project's own instance in the shared

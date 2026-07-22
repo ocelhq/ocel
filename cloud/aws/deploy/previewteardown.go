@@ -147,11 +147,13 @@ func classifyPreviewStacks(projectID string, stackNames []string) PreviewProject
 // preview deploy still has a substrate to land on. Best-effort throughout; every
 // failure is joined so the host can report what remains and a re-run resumes.
 //
-// The project's preview store slug — which roots the preview generic worker
-// names — is read from the persisted root-stack state (RootStackKeySlug), so the
-// caller needs no manifest. stack/state may be zero when the project never
-// reconciled a preview root stack, in which case only stray stacks/assets are
-// swept.
+// The preview generic workers are found by listing the edge for every worker
+// under the project's preview name prefix (previewWorkerPrefix, rooted at the
+// slug in the persisted root-stack state), not from the store's promotion
+// history: a shared generic worker fronts every pointer and outlives them, so a
+// prior `ocel preview rm` can leave it standing with no history left to name it.
+// stack/state may be zero when the project never reconciled a preview root
+// stack, in which case only stray stacks/assets are swept.
 func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, progress, log func(string)) error {
 	report := nilSafe(progress)
 
@@ -163,7 +165,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 
 	if stack != nil && len(state) > 0 {
 		report("Destroying preview root worker(s)")
-		workers, wErr := previewRootWorkerNames(ctx, stack, state, state[edge.RootStackKeySlug], plan.Pointers)
+		workers, wErr := stack.ListDeployedWorkers(ctx, previewWorkerPrefix(state[edge.RootStackKeySlug]))
 		if wErr != nil {
 			errs = append(errs, fmt.Errorf("resolve preview root workers: %w", wErr))
 		} else if err := stack.DestroyRootStack(ctx, workers); err != nil {
@@ -216,51 +218,6 @@ func planPreviewProjectTeardown(ctx context.Context, cfg Config, projectID strin
 		names[i] = s.Name
 	}
 	return classifyPreviewStacks(projectID, names), nil
-}
-
-// previewRootWorkerNames resolves the preview generic workers a project deployed
-// across every pointer. The generic worker name carries no pointer (one worker
-// per app fronts all of a project's previews, resolving the pointer per request
-// from the subdomain), so the app set is unioned across every pointer's store
-// history — the authoritative source of app names, exactly like the production
-// rootStackWorkerNames. The shared preview store worker is never in this set: it
-// outlives the project and is left for the account-level bootstrap.
-func previewRootWorkerNames(ctx context.Context, stack edge.RootStack, state edge.RootStackState, slug string, pointers []string) ([]string, error) {
-	apps := map[string]struct{}{}
-	for _, pointer := range pointers {
-		history, err := stack.History(ctx, state, pointer)
-		if err != nil {
-			return nil, err
-		}
-		for _, h := range history {
-			for app := range h.Builds {
-				apps[app] = struct{}{}
-			}
-		}
-	}
-
-	seen := map[string]struct{}{}
-	var names []string
-	add := func(name string) {
-		if name == "" {
-			return
-		}
-		if _, dup := seen[name]; dup {
-			return
-		}
-		seen[name] = struct{}{}
-		names = append(names, name)
-	}
-	add(previewGenericName(slug, "root"))
-	sortedApps := make([]string, 0, len(apps))
-	for app := range apps {
-		sortedApps = append(sortedApps, app)
-	}
-	sort.Strings(sortedApps)
-	for _, app := range sortedApps {
-		add(previewGenericName(slug, app))
-	}
-	return names, nil
 }
 
 // purgePreviewAssets deletes a project's whole preview R2/S3 footprint: its
