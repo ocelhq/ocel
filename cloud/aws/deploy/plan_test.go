@@ -106,15 +106,91 @@ func TestBuildPlan_MissingBuildIDErrors(t *testing.T) {
 	}
 }
 
-func TestBuildPlan_RejectsNonProduction(t *testing.T) {
+func TestBuildPlan_RejectsUnspecifiedClass(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		ProjectId: "proj",
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
-	previewEnv := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-1"}
+	env := &deploymentsv1.Environment{} // CLASS_UNSPECIFIED
 
-	if _, err := BuildPlan(manifest, previewEnv, "promo1", BuildIDs{"web": "b"}); err == nil {
-		t.Fatal("BuildPlan for a preview environment should error, got nil")
+	if _, err := BuildPlan(manifest, env, "promo1", BuildIDs{"web": "b"}); err == nil {
+		t.Fatal("BuildPlan for an unspecified class should error, got nil")
+	}
+}
+
+func previewEnv(lifecycle deploymentsv1.Environment_Lifecycle) *deploymentsv1.Environment {
+	return &deploymentsv1.Environment{
+		Class:     deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle: lifecycle,
+		Identity:  "staging",
+	}
+}
+
+func TestBuildPlan_PersistentPreviewHasPerNameInfraStack(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}},
+	}
+
+	plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "promo1", BuildIDs{"web": "b"})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if plan.InfraStack != PreviewInfraStackName("proj", "staging") {
+		t.Errorf("InfraStack = %q, want %q", plan.InfraStack, PreviewInfraStackName("proj", "staging"))
+	}
+	// A persistent preview's infra stack must not collide with production's.
+	if plan.InfraStack == InfraStackName("proj") {
+		t.Error("persistent preview infra stack collides with production infra stack")
+	}
+	// Preview app-deploy stacks must not collide with production's.
+	if plan.AppStacks["web"] == AppDeployStackName("proj", "web", "b") {
+		t.Error("preview app-deploy stack collides with the production one for the same build")
+	}
+}
+
+func TestBuildPlan_EphemeralPreviewHasNoInfraStack(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}},
+	}
+
+	plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_EPHEMERAL), "promo1", BuildIDs{"web": "b"})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if plan.InfraStack != "" {
+		t.Errorf("ephemeral preview InfraStack = %q, want empty (infra stack skipped)", plan.InfraStack)
+	}
+	if plan.AppStacks["web"] == "" {
+		t.Error("ephemeral preview must still plan an app-deploy stack so the URL serves")
+	}
+}
+
+func TestBuildPlan_PreviewRequiresIdentity(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}},
+	}
+	env := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW} // no identity
+
+	if _, err := BuildPlan(manifest, env, "promo1", BuildIDs{"web": "b"}); err == nil {
+		t.Fatal("BuildPlan for a preview with no identity should error, got nil")
+	}
+}
+
+func TestBuildPlan_TwoPersistentPreviewsDoNotCollide(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{ProjectId: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
+	staging := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "staging"}
+	demo := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "demo"}
+
+	a, _ := BuildPlan(manifest, staging, "p", BuildIDs{"web": "b"})
+	b, _ := BuildPlan(manifest, demo, "p", BuildIDs{"web": "b"})
+	if a.InfraStack == b.InfraStack {
+		t.Errorf("two persistent previews share an infra stack: %q", a.InfraStack)
+	}
+	if a.AppStacks["web"] == b.AppStacks["web"] {
+		t.Errorf("two persistent previews share an app-deploy stack: %q", a.AppStacks["web"])
 	}
 }
 

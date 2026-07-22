@@ -229,20 +229,29 @@ func (d *deployResolver) EdgeCredentials() (edge.Credentials, bool) {
 	}, true
 }
 
-// domainClassKey is the Manifest.domains key an environment class reads its
-// custom hostname from. Only production has one: a preview is served on the
-// edge's own vendor subdomain.
-const domainClassKey = "production"
+// domainClassKeyFor is the Manifest.domains key an environment class reads its
+// custom hostname from: production reads a plain hostname, preview reads a
+// wildcard (e.g. "*.preview.app.com") its per-pointer subdomains live under.
+func domainClassKeyFor(class deploymentsv1.Environment_Class) string {
+	if class == deploymentsv1.Environment_CLASS_PREVIEW {
+		return "preview"
+	}
+	return "production"
+}
 
 // workerDomains resolves the custom hostname each worker-backed app is served
 // on, keyed by app name and absent where the app takes the edge's vendor
 // subdomain. An app's own domain wins; the project-level domain applies only
-// when the project has exactly one worker-backed app, because an apex domain
-// cannot be split between two apps and Ocel does not guess which owns it.
+// when the project has exactly one worker-backed app, because a single hostname
+// (a production apex or a preview wildcard) cannot be split between two apps and
+// Ocel does not guess which owns it. For preview the resolved value is the
+// wildcard pattern; the frozen preview worker routes per-subdomain within it.
 func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (map[string]string, error) {
-	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION {
+	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION &&
+		cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return nil, nil
 	}
+	domainClassKey := domainClassKeyFor(cfg.Class)
 
 	domains := map[string]string{}
 	var undeclared []string
