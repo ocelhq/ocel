@@ -92,30 +92,43 @@ type PreviewProjectTeardownPlan struct {
 // lets a project's previews be told apart from its production stacks by name.
 const previewStackNameInfix = "--preview-"
 
-// classifyPreviewStacks splits the preview backend's stack names into one
-// project's whole-preview teardown plan. A preview stack is named
-// "<safeName(projectID)>--preview-<pointer>--…"; the "…--infra" ones are
-// per-name infra stacks and the rest are app-deploy stacks. The pointer segment
-// is recovered so the caller can purge each pointer's env-scoped ISR assets.
-// Pure.
-func classifyPreviewStacks(projectID string, stackNames []string) PreviewProjectTeardownPlan {
+// previewStackPointer recovers a preview stack's pointer from its name, or
+// reports ok=false for anything that isn't a preview of projectID (production
+// stacks, another project's previews, a sibling whose id merely prefixes ours,
+// the retired single-stack shape). A preview stack is named
+// "<safeName(projectID)>--preview-<pointer>--…"; the "…--infra" tail marks the
+// pointer's per-name infra stack. This is the single shared parse `ocel preview
+// ls` and preview teardown both build on, so their view of the naming can never
+// drift. Pure.
+func previewStackPointer(projectID, name string) (pointer string, infra, ok bool) {
 	prefix := safeName(projectID) + previewStackNameInfix
+	if !strings.HasPrefix(name, prefix) {
+		return "", false, false
+	}
+	pointer, _, ok = strings.Cut(strings.TrimPrefix(name, prefix), "--")
+	if !ok || pointer == "" {
+		return "", false, false
+	}
+	return pointer, strings.HasSuffix(name, "--infra"), true
+}
+
+// classifyPreviewStacks splits the preview backend's stack names into one
+// project's whole-preview teardown plan: per-name infra stacks, app-deploy
+// stacks, and the distinct pointers they belong to (recovered so the caller can
+// purge each pointer's env-scoped ISR assets). Pure.
+func classifyPreviewStacks(projectID string, stackNames []string) PreviewProjectTeardownPlan {
 	var plan PreviewProjectTeardownPlan
 	seenPointer := map[string]struct{}{}
 	for _, name := range stackNames {
-		if !strings.HasPrefix(name, prefix) {
-			continue
-		}
-		rest := strings.TrimPrefix(name, prefix)
-		pointer, _, ok := strings.Cut(rest, "--")
-		if !ok || pointer == "" {
+		pointer, infra, ok := previewStackPointer(projectID, name)
+		if !ok {
 			continue
 		}
 		if _, dup := seenPointer[pointer]; !dup {
 			seenPointer[pointer] = struct{}{}
 			plan.Pointers = append(plan.Pointers, pointer)
 		}
-		if strings.HasSuffix(name, "--infra") {
+		if infra {
 			plan.InfraStacks = append(plan.InfraStacks, name)
 		} else {
 			plan.AppStacks = append(plan.AppStacks, name)

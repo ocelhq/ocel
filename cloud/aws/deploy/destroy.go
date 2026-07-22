@@ -6,7 +6,6 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -108,20 +107,11 @@ type ListConfig struct {
 	Pulumi      auto.PulumiCommand
 }
 
-// previewStackInfix marks a preview-class stack name: "<projectID>-preview-<identity>".
-const previewStackInfix = "-preview-"
-
-// ListPreviewStacks enumerates one project's preview-class stacks in the
-// account-global Pulumi backend, one PreviewStack each. It filters to
+// ListPreviewStacks enumerates one project's preview ENVIRONMENTS from the
+// preview Pulumi backend — one PreviewStack per distinct pointer, filtered to
 // cfg.ProjectID so it never lists another project's previews. It reads the real
-// Pulumi backend and is not exercised by unit tests; the pure name→identity
-// extraction it relies on is (previewIdentityFromStack).
-//
-// The Pulumi stack summary carries the stack name and last-update time but not
-// an environment's lifecycle or PR label — those are stamped as stack tags at
-// deploy time. Reading those tags is the opt-in-e2e seam; until it lands, an
-// enumerated stack reports its identity with an unspecified lifecycle and no
-// label.
+// Pulumi backend and is not exercised by unit tests; the pure pointer
+// enumeration and lifecycle inference it relies on is previewStacksFromNames.
 func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, error) {
 	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
 	if err != nil {
@@ -133,15 +123,40 @@ func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, err
 		return nil, fmt.Errorf("list stacks: %w", err)
 	}
 
-	var stacks []PreviewStack
-	for _, s := range summaries {
-		identity, ok := previewIdentityFromStack(cfg.ProjectID, s.Name)
-		if !ok {
-			continue
-		}
-		stacks = append(stacks, PreviewStack{Identity: identity})
+	names := make([]string, len(summaries))
+	for i, s := range summaries {
+		names[i] = s.Name
 	}
-	return stacks, nil
+	return previewStacksFromNames(cfg.ProjectID, names), nil
+}
+
+// previewStacksFromNames collapses a project's preview stack names into one
+// PreviewStack per distinct pointer (a preview instance holds many pointers,
+// each owning several stacks). Lifecycle is inferred from the stack list alone:
+// a pointer that owns a per-name "--infra" stack is persistent, one with only
+// app-deploy stacks is ephemeral. Entries come back sorted by pointer.
+//
+// Label, CreatedAt, and ExpiresAt are not recoverable from stack names — they
+// are stamped as stack tags at deploy time, whose reading is the opt-in-e2e
+// seam (bd ocelhq-d7u); until it lands, those fields stay zero. Pure.
+func previewStacksFromNames(projectID string, stackNames []string) []PreviewStack {
+	plan := classifyPreviewStacks(projectID, stackNames)
+	persistent := map[string]struct{}{}
+	for _, infra := range plan.InfraStacks {
+		if pointer, _, ok := previewStackPointer(projectID, infra); ok {
+			persistent[pointer] = struct{}{}
+		}
+	}
+
+	stacks := make([]PreviewStack, 0, len(plan.Pointers))
+	for _, pointer := range plan.Pointers {
+		lifecycle := deploymentsv1.Environment_LIFECYCLE_EPHEMERAL
+		if _, ok := persistent[pointer]; ok {
+			lifecycle = deploymentsv1.Environment_LIFECYCLE_PERSISTENT
+		}
+		stacks = append(stacks, PreviewStack{Identity: pointer, Lifecycle: lifecycle})
+	}
+	return stacks
 }
 
 // backendWorkspace opens a Pulumi Automation API workspace over the given
@@ -165,20 +180,4 @@ func backendWorkspace(ctx context.Context, project, backendURL, passphrase, regi
 		return nil, fmt.Errorf("open workspace: %w", err)
 	}
 	return ws, nil
-}
-
-// previewIdentityFromStack extracts a preview environment's identity from a
-// stack name of the form "<projectID>-preview-<identity>", or reports ok=false
-// for any stack that isn't a preview of projectID (including another project's
-// previews). It is pure.
-func previewIdentityFromStack(projectID, stackName string) (identity string, ok bool) {
-	prefix := projectID + previewStackInfix
-	if !strings.HasPrefix(stackName, prefix) {
-		return "", false
-	}
-	identity = strings.TrimPrefix(stackName, prefix)
-	if identity == "" {
-		return "", false
-	}
-	return identity, true
 }
