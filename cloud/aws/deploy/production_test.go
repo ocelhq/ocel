@@ -71,6 +71,71 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 	})
 }
 
+func TestPreviewBaseDomain(t *testing.T) {
+	cases := map[string]string{
+		"*.preview.acme.com": "preview.acme.com",
+		"*.acme.com":         "acme.com",
+		"acme.com":           "",
+		"":                   "",
+	}
+	for in, want := range cases {
+		if got := previewBaseDomain(in); got != want {
+			t.Errorf("previewBaseDomain(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestPreviewGenericName_DistinctFromProduction(t *testing.T) {
+	prod := workerScriptName("proj-production", "web")
+	preview := previewGenericName("proj", "web")
+	if prod == preview {
+		t.Fatalf("preview root worker name %q collides with production", preview)
+	}
+	if want := "ocel-proj-preview-web"; preview != want {
+		t.Errorf("previewGenericName = %q, want %q", preview, want)
+	}
+}
+
+func TestRootStackSpecs_PreviewCarriesPreviewVarsAndWildcardDomain(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+		Domains:   map[string]string{"preview": "*.preview.acme.com"},
+	}
+	cfg := Config{
+		Edge:  &recordingEdge{},
+		Slug:  "proj",
+		Class: deploymentsv1.Environment_CLASS_PREVIEW,
+	}
+
+	specs, err := rootStackSpecs(cfg, manifest, "v1")
+	if err != nil {
+		t.Fatalf("rootStackSpecs: %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("specs = %d, want 1", len(specs))
+	}
+	spec := specs[0]
+	if spec.GenericName != "ocel-proj-preview-web" {
+		t.Errorf("GenericName = %q, want ocel-proj-preview-web", spec.GenericName)
+	}
+	if spec.Domain != "*.preview.acme.com" {
+		t.Errorf("Domain = %q, want the preview wildcard", spec.Domain)
+	}
+	if spec.Generic.Vars[envPreview] != "1" {
+		t.Errorf("Vars[%s] = %q, want 1", envPreview, spec.Generic.Vars[envPreview])
+	}
+	if spec.Generic.Vars[envPreviewBaseDomain] != "preview.acme.com" {
+		t.Errorf("Vars[%s] = %q, want preview.acme.com", envPreviewBaseDomain, spec.Generic.Vars[envPreviewBaseDomain])
+	}
+	if spec.Generic.Vars["OCEL_APP"] != "web" {
+		t.Errorf("Vars[OCEL_APP] = %q, want web", spec.Generic.Vars["OCEL_APP"])
+	}
+}
+
 // The generic worker is AWS_IAM-gated behind its Lambdas, so it must be handed
 // the edge reader's key to sign forwards — the access key as a plain var, the
 // secret key as a secret binding (never plaintext).

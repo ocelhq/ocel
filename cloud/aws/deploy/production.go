@@ -288,10 +288,22 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		Values:          cfg.EdgeValues,
 	}
 
+	preview := cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW
+
+	genericName := func(app string) string {
+		if preview {
+			return previewGenericName(cfg.Slug, app)
+		}
+		return workerScriptName(cfg.StackName, app)
+	}
+
 	apps := workerApps(manifest)
 	if len(apps) == 0 {
 		spec := base
-		spec.GenericName = workerScriptName(cfg.StackName, "root")
+		spec.GenericName = genericName("root")
+		if preview {
+			spec.Generic = withPreviewVars(generic, "")
+		}
 		return []edge.RootStackSpec{spec}, nil
 	}
 
@@ -303,12 +315,58 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	for _, app := range apps {
 		name := app.GetName()
 		spec := base
-		spec.GenericName = workerScriptName(cfg.StackName, name)
+		spec.GenericName = genericName(name)
 		spec.Generic = withVar(generic, "OCEL_APP", name)
 		spec.Domain = domains[name]
+		// A preview's root worker is the project-scoped wildcard worker: it
+		// resolves the per-request pointer from the request subdomain, so it
+		// carries OCEL_PREVIEW plus the base domain to match against, not a
+		// fixed pointer. The PREVIEW store coordinates ride on cfg.Store* (the
+		// caller populates them from the preview SSM param).
+		if preview {
+			spec.Generic = withPreviewVars(spec.Generic, previewBaseDomain(domains[name]))
+		}
 		specs = append(specs, spec)
 	}
 	return specs, nil
+}
+
+// Env var names the frozen preview worker reads to enter preview mode
+// (workers/nextjs/src/index.ts): OCEL_PREVIEW="1" turns it on and
+// OCEL_PREVIEW_BASE_DOMAIN is the wildcard's base the worker extracts the
+// per-request pointer subdomain from.
+const (
+	envPreview           = "OCEL_PREVIEW"
+	envPreviewBaseDomain = "OCEL_PREVIEW_BASE_DOMAIN"
+)
+
+// withPreviewVars turns a generic worker bundle into a preview root worker by
+// setting OCEL_PREVIEW and, when known, the base domain it resolves pointers
+// against. Pure.
+func withPreviewVars(worker edge.Worker, baseDomain string) edge.Worker {
+	worker = withVar(worker, envPreview, "1")
+	if baseDomain != "" {
+		worker = withVar(worker, envPreviewBaseDomain, baseDomain)
+	}
+	return worker
+}
+
+// previewGenericName is the project-scoped preview root worker's deterministic
+// name, shaped "ocel-<project>-preview-<app>" so it can never collide with the
+// production root worker ("ocel-<project>-<app>") in the same account. Pure.
+func previewGenericName(slug, app string) string {
+	return workerScriptName(slug+"-preview", app)
+}
+
+// previewBaseDomain strips the leading "*." from a preview wildcard domain to
+// get the base the frozen worker matches request subdomains against —
+// "*.preview.app.com" becomes "preview.app.com". Returns "" for a
+// non-wildcard. Pure.
+func previewBaseDomain(wildcard string) string {
+	if !strings.HasPrefix(wildcard, "*.") {
+		return ""
+	}
+	return wildcard[len("*."):]
 }
 
 // withVar returns worker with one additional plain-text var, leaving the
