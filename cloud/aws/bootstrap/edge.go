@@ -300,18 +300,6 @@ func adoptDeploymentsStore(ctx context.Context, ssmClient SSMAPI, class string, 
 	return nil
 }
 
-// ReadDeploymentsStore returns the production substrate's adopted
-// deployments-store worker coordinates, decrypted.
-func ReadDeploymentsStore(ctx context.Context, ssmClient SSMAPI) (DeploymentsStore, error) {
-	return ReadDeploymentsStoreFor(ctx, ssmClient, ClassProduction)
-}
-
-// ReadDeploymentsStorePreview returns the preview substrate's adopted
-// deployments-store worker coordinates, decrypted.
-func ReadDeploymentsStorePreview(ctx context.Context, ssmClient SSMAPI) (DeploymentsStore, error) {
-	return ReadDeploymentsStoreFor(ctx, ssmClient, ClassPreview)
-}
-
 // ReadDeploymentsStoreFor returns a substrate class's adopted deployments-store
 // worker coordinates, decrypted. An account whose edge offered none (a bootstrap
 // predating the store) reads as the zero value rather than as a failure, so the
