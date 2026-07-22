@@ -66,7 +66,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		return edge.PruneResult{}, err
 	}
 
-	return deploy.Prune(ctx, stack, state, cfg, req.GetProjectId(), int(req.GetKeepN()), progress, logf)
+	return deploy.Prune(ctx, stack, state, cfg, req.GetProjectId(), int(req.GetKeepN()), "", progress, logf)
 }
 
 // pruneSummaryLines renders the kept-vs-reclaimed outcome as the human-readable

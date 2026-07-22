@@ -62,7 +62,7 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 		return nil, err
 	}
 
-	history, err := stack.History(ctx, state)
+	history, err := stack.History(ctx, state, "")
 	if err != nil {
 		return nil, err
 	}

@@ -26,20 +26,25 @@ type RootStack interface {
 	// Promote does.
 	PutStaged(ctx context.Context, state RootStackState, record DeploymentRecord) error
 
-	// Promote atomically flips the project's active-deployment pointer to
-	// promotion, making every app's just-staged Deployment live together.
-	Promote(ctx context.Context, state RootStackState, promotion Promotion) error
+	// Promote atomically flips a named pointer to promotion, making every app's
+	// just-staged Deployment live together under that pointer. An empty pointer
+	// moves the reserved production default (the primary domain resolves it); a
+	// preview passes its own pointer (the subdomain slug or persistent name), so
+	// production and every preview retain independent active deployments in the
+	// same store instance.
+	Promote(ctx context.Context, state RootStackState, promotion Promotion, pointer string) error
 
-	// History returns the project's promotion history, newest first, each
-	// entry marked with whether it is the currently active one.
-	History(ctx context.Context, state RootStackState) ([]HistoryEntry, error)
+	// History returns a pointer's promotion history, newest first, each entry
+	// marked with whether it is the currently active one for that pointer. An
+	// empty pointer scopes to the production default.
+	History(ctx context.Context, state RootStackState, pointer string) ([]HistoryEntry, error)
 
-	// DeletePromotionArtifacts deletes the Deployment records of every
-	// promotion outside a keepN-deep window, always pinning the active
-	// promotion so pruning can never take the live site down. It reports what
-	// it removed so the caller can reclaim the app-deploy stacks and R2
-	// assets those records named.
-	DeletePromotionArtifacts(ctx context.Context, state RootStackState, keepN int) (PruneResult, error)
+	// DeletePromotionArtifacts deletes the Deployment records of every promotion
+	// outside a keepN-deep window for one pointer, always pinning that pointer's
+	// active promotion so pruning can never take a live deployment down. An empty
+	// pointer scopes to the production default. It reports what it removed so the
+	// caller can reclaim the app-deploy stacks and R2 assets those records named.
+	DeletePromotionArtifacts(ctx context.Context, state RootStackState, keepN int, pointer string) (PruneResult, error)
 
 	// DestroyRootStack deletes every worker named in workers — the project's
 	// generic worker(s) — detaching each one's custom-domain binding first

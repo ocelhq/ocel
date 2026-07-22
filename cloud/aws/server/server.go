@@ -28,7 +28,6 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
-	"github.com/ocelhq/ocel/cloud/edge"
 	"github.com/ocelhq/ocel/cloud/edge/cloudflare"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -210,23 +209,19 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return nil, nil, err
 	}
 
-	// The root stack is production-only (ADR 0001); a preview keeps no
-	// root-stack state and reconciles nothing of the sort.
-	var priorRootStackState edge.RootStackState
-	var deploymentsStore bootstrap.DeploymentsStore
-	if !preview {
-		priorRootStackState, err = bootstrap.ReadRootStackState(ctx, ssmClient, manifest.GetProjectId())
-		if err != nil {
-			return nil, nil, err
-		}
-		// The shared deployments-store worker's coordinates, provisioned once at
-		// bootstrap. A bootstrap predating it reads the zero value, and a
-		// production deploy then fails fast asking for a re-bootstrap
-		// (runProduction, deploy/production.go).
-		deploymentsStore, err = bootstrap.ReadDeploymentsStore(ctx, ssmClient)
-		if err != nil {
-			return nil, nil, err
-		}
+	// Both classes realize the stacked model (ADR 0001): read this substrate's
+	// prior root-stack state and its own deployments-store worker coordinates.
+	// The two substrates keep separate state (their own store instance, secret
+	// and owner token), keyed by class. A bootstrap predating the store reads the
+	// zero value, and the deploy then fails fast asking for a re-bootstrap
+	// (realize, deploy/production.go).
+	priorRootStackState, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetProjectId())
+	if err != nil {
+		return nil, nil, err
+	}
+	deploymentsStore, err := bootstrap.ReadDeploymentsStoreFor(ctx, ssmClient, edgeClass)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	outputs, urls, rootStackState, err := deploy.Run(ctx, deploy.Config{
@@ -259,24 +254,24 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		StoreEndpoint:      deploymentsStore.Endpoint,
 		StoreBootstrapCred: deploymentsStore.BootstrapCred,
 
-		Uploader: s3.NewFromConfig(awscfg),
-		Edge:             cloudflare.New(),
-		Class:            env.GetClass(),
-		Lifecycle:        env.GetLifecycle(),
-		Identity:         env.GetIdentity(),
-		ExpiresAt:        previewExpiry(env.GetLifecycle(), time.Now()),
-		RootStackState:   priorRootStackState,
-		Tag:              req.GetTag(),
+		Uploader:       s3.NewFromConfig(awscfg),
+		Edge:           cloudflare.New(),
+		Class:          env.GetClass(),
+		Lifecycle:      env.GetLifecycle(),
+		Identity:       env.GetIdentity(),
+		ExpiresAt:      previewExpiry(env.GetLifecycle(), time.Now()),
+		RootStackState: priorRootStackState,
+		Tag:            req.GetTag(),
 	}, manifest, progress, logf)
 
 	// Persist whatever root-stack state was reconciled — even when a later
 	// step of this same deploy failed — so the next deploy (and
 	// rollback/deployments-ls) reconciles against it instead of starting
-	// fresh and orphaning the root stack this run just reconciled. Nil for a
-	// preview, which carries no root stack, and nil when reconcile itself
-	// never ran (an error before it).
+	// fresh and orphaning the root stack this run just reconciled. Written to
+	// this deploy's own substrate (production or preview), and nil when
+	// reconcile itself never ran (an error before it).
 	if rootStackState != nil {
-		if writeErr := bootstrap.WriteRootStackState(ctx, ssmClient, manifest.GetProjectId(), rootStackState); writeErr != nil {
+		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetProjectId(), rootStackState); writeErr != nil {
 			if err != nil {
 				return outputs, urls, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
 			}

@@ -28,7 +28,10 @@ type recordingRootStack struct {
 
 	staged            []edge.DeploymentRecord
 	promotions        []edge.Promotion
+	promotePointers   []string
 	pruned            []int
+	prunePointers     []string
+	historyPointers   []string
 	destroyed         int
 	destroyedWorkers  []string
 	destroyedInstance int
@@ -73,26 +76,29 @@ func (f *recordingRootStack) PutStaged(_ context.Context, state edge.RootStackSt
 	return nil
 }
 
-func (f *recordingRootStack) Promote(_ context.Context, state edge.RootStackState, promotion edge.Promotion) error {
+func (f *recordingRootStack) Promote(_ context.Context, state edge.RootStackState, promotion edge.Promotion, pointer string) error {
 	if err := f.checkAuth(state); err != nil {
 		return err
 	}
 	f.promotions = append(f.promotions, promotion)
+	f.promotePointers = append(f.promotePointers, pointer)
 	return nil
 }
 
-func (f *recordingRootStack) History(_ context.Context, state edge.RootStackState) ([]edge.HistoryEntry, error) {
+func (f *recordingRootStack) History(_ context.Context, state edge.RootStackState, pointer string) ([]edge.HistoryEntry, error) {
 	if err := f.checkAuth(state); err != nil {
 		return nil, err
 	}
+	f.historyPointers = append(f.historyPointers, pointer)
 	return f.history, nil
 }
 
-func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state edge.RootStackState, keepN int) (edge.PruneResult, error) {
+func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state edge.RootStackState, keepN int, pointer string) (edge.PruneResult, error) {
 	if err := f.checkAuth(state); err != nil {
 		return edge.PruneResult{}, err
 	}
 	f.pruned = append(f.pruned, keepN)
+	f.prunePointers = append(f.prunePointers, pointer)
 	return f.pruneResult, nil
 }
 
@@ -184,14 +190,14 @@ func TestRecordingRootStack_StoreOpsRecordCallsAfterReconcile(t *testing.T) {
 		t.Fatalf("PutStaged: %v", err)
 	}
 	promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1, Builds: map[string]string{"web": "b1"}}
-	if err := f.Promote(ctx, state, promotion); err != nil {
+	if err := f.Promote(ctx, state, promotion, ""); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	history, err := f.History(ctx, state)
+	history, err := f.History(ctx, state, "")
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}
-	result, err := f.DeletePromotionArtifacts(ctx, state, 3)
+	result, err := f.DeletePromotionArtifacts(ctx, state, 3, "")
 	if err != nil {
 		t.Fatalf("DeletePromotionArtifacts: %v", err)
 	}

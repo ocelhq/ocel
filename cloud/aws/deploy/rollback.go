@@ -65,7 +65,7 @@ func RollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion
 // edge.RootStack is called, and it is exercised directly against the
 // edge.RootStack fake in tests.
 func Rollback(ctx context.Context, stack edge.RootStack, state edge.RootStackState, to, tag string, now int64) (edge.Promotion, error) {
-	history, err := stack.History(ctx, state)
+	history, err := stack.History(ctx, state, "")
 	if err != nil {
 		return edge.Promotion{}, fmt.Errorf("read promotion history: %w", err)
 	}
@@ -75,7 +75,7 @@ func Rollback(ctx context.Context, stack edge.RootStack, state edge.RootStackSta
 	}
 
 	promoted := edge.Promotion{PromotionID: target.PromotionID, Ts: now, Builds: target.Builds, Tag: target.Tag}
-	if err := stack.Promote(ctx, state, promoted); err != nil {
+	if err := stack.Promote(ctx, state, promoted, ""); err != nil {
 		return edge.Promotion{}, fmt.Errorf("promote %s: %w", promoted.PromotionID, err)
 	}
 	return promoted, nil

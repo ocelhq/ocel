@@ -248,10 +248,10 @@ func TestPromoteThenHistory_ReportsActivePromotion(t *testing.T) {
 	state := testState(srv.URL, "s3cr3t")
 	promotion := edge.Promotion{PromotionID: "promo-1", Ts: 1000, Builds: map[string]string{"web": "b1"}}
 
-	if err := p.Promote(context.Background(), state, promotion); err != nil {
+	if err := p.Promote(context.Background(), state, promotion, ""); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	history, err := p.History(context.Background(), state)
+	history, err := p.History(context.Background(), state, "")
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}
@@ -270,18 +270,91 @@ func TestDeletePromotionArtifacts_KeepsWindowAndPinsActive(t *testing.T) {
 	ctx := context.Background()
 
 	for _, id := range []string{"p1", "p2", "p3"} {
-		if err := p.Promote(ctx, state, edge.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}); err != nil {
+		if err := p.Promote(ctx, state, edge.Promotion{PromotionID: id, Ts: 1, Builds: map[string]string{"web": id}}, ""); err != nil {
 			t.Fatalf("Promote(%s): %v", id, err)
 		}
 	}
 
-	result, err := p.DeletePromotionArtifacts(ctx, state, 1)
+	result, err := p.DeletePromotionArtifacts(ctx, state, 1, "")
 	if err != nil {
 		t.Fatalf("DeletePromotionArtifacts: %v", err)
 	}
 	want := []string{"p2", "p1"}
 	if len(result.RemovedPromotionIDs) != len(want) || result.RemovedPromotionIDs[0] != want[0] || result.RemovedPromotionIDs[1] != want[1] {
 		t.Errorf("RemovedPromotionIDs = %v, want %v", result.RemovedPromotionIDs, want)
+	}
+}
+
+// TestStoreOps_TransmitPointer proves the Go host sends the pointer the store
+// scopes promote/history/prune by: as a sibling field of the /promote body, a
+// ?pointer= query on /history, and a field of the /prune body. An empty pointer
+// is omitted so the store applies its reserved production default.
+func TestStoreOps_TransmitPointer(t *testing.T) {
+	var (
+		promoteBodies []map[string]any
+		historyQuery  []string
+		pruneBodies   []map[string]any
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /{slug}/promote", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		promoteBodies = append(promoteBodies, b)
+		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /{slug}/history", func(w http.ResponseWriter, r *http.Request) {
+		historyQuery = append(historyQuery, r.URL.Query().Get("pointer"))
+		json.NewEncoder(w).Encode([]edge.HistoryEntry{})
+	})
+	mux.HandleFunc("POST /{slug}/prune", func(w http.ResponseWriter, r *http.Request) {
+		var b map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&b)
+		pruneBodies = append(pruneBodies, b)
+		json.NewEncoder(w).Encode(edge.PruneResult{})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	p := &provider{}
+	state := testState(srv.URL, "s3cr3t")
+	ctx := context.Background()
+
+	// Preview pointer: transmitted on all three.
+	if err := p.Promote(ctx, state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, "pr-42"); err != nil {
+		t.Fatalf("Promote(preview): %v", err)
+	}
+	if _, err := p.History(ctx, state, "pr-42"); err != nil {
+		t.Fatalf("History(preview): %v", err)
+	}
+	if _, err := p.DeletePromotionArtifacts(ctx, state, 3, "pr-42"); err != nil {
+		t.Fatalf("Prune(preview): %v", err)
+	}
+	// Production default: pointer omitted from the promote/prune bodies and the
+	// history query.
+	if err := p.Promote(ctx, state, edge.Promotion{PromotionID: "p2", Ts: 2, Builds: map[string]string{"web": "b2"}}, ""); err != nil {
+		t.Fatalf("Promote(prod): %v", err)
+	}
+	if _, err := p.History(ctx, state, ""); err != nil {
+		t.Fatalf("History(prod): %v", err)
+	}
+	if _, err := p.DeletePromotionArtifacts(ctx, state, 3, ""); err != nil {
+		t.Fatalf("Prune(prod): %v", err)
+	}
+
+	if promoteBodies[0]["pointer"] != "pr-42" || promoteBodies[0]["promotionId"] != "p1" {
+		t.Errorf("preview promote body = %v, want pointer pr-42 alongside the promotion", promoteBodies[0])
+	}
+	if _, ok := promoteBodies[1]["pointer"]; ok {
+		t.Errorf("production promote body carried a pointer field: %v", promoteBodies[1])
+	}
+	if historyQuery[0] != "pr-42" || historyQuery[1] != "" {
+		t.Errorf("history pointer queries = %v, want [pr-42 <empty>]", historyQuery)
+	}
+	if pruneBodies[0]["pointer"] != "pr-42" {
+		t.Errorf("preview prune body = %v, want pointer pr-42", pruneBodies[0])
+	}
+	if _, ok := pruneBodies[1]["pointer"]; ok {
+		t.Errorf("production prune body carried a pointer field: %v", pruneBodies[1])
 	}
 }
 
@@ -351,13 +424,13 @@ func TestDestroyInstance_WipesTheInstance(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
 	state := testState(srv.URL, "s3cr3t")
-	if err := p.Promote(context.Background(), state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}); err != nil {
+	if err := p.Promote(context.Background(), state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
 	if err := p.DestroyInstance(context.Background(), state); err != nil {
 		t.Fatalf("DestroyInstance: %v", err)
 	}
-	history, err := p.History(context.Background(), state)
+	history, err := p.History(context.Background(), state, "")
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}

@@ -51,18 +51,24 @@ type appDeployResult struct {
 	Err     error
 }
 
-// runProduction realizes one production deploy under the stacked model: root
-// reconcile, the infra stack, N app-deploy stacks in parallel, staged
-// records, and a single atomic promote. It is Run's production branch and,
+// realize runs one deploy under the stacked model, for both production and
+// preview: root reconcile, the infra stack (skipped for an ephemeral preview,
+// which has none), N app-deploy stacks in parallel, staged records, and a
+// single atomic promote of this deploy's pointer. It is Run's whole body and,
 // like Run, is exercised only by opt-in e2e — the sequencing and atomicity it
-// drives are unit-tested directly against finalizeProductionDeploy below.
-func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootStackState, error) {
+// drives are unit-tested directly against finalizeDeploy below. Production and
+// preview differ only in data threaded here: the store coordinates and
+// root-stack state come from the preview substrate for a preview (Config, set
+// by the server), the plan is class-aware (BuildPlan/rootStackSpecs), and the
+// promote pointer is empty for production, the environment identity for a
+// preview.
+func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootStackState, error) {
 	stack, ok := cfg.Edge.(edge.RootStack)
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("production deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind())
+		return nil, nil, nil, fmt.Errorf("deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind())
 	}
 	if cfg.StoreEndpoint == "" {
-		return nil, nil, nil, fmt.Errorf("no shared deployments-store worker found for this account; re-run `ocel bootstrap` to provision it before a production deploy")
+		return nil, nil, nil, fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg))
 	}
 
 	// Validate then check availability up front, before any artifact upload or
@@ -113,10 +119,16 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 		return nil, nil, nil, err
 	}
 
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
-	infraOutputs, err := runInfraStack(ctx, cfg, manifest, plan, log)
-	if err != nil {
-		return nil, nil, state, err
+	// An ephemeral preview has no infra stack (BuildPlan leaves it empty): its
+	// functions get no resource-connection env — an acknowledged gap, not a
+	// logical slice. Every other class realizes its per-project infra stack.
+	var infraOutputs []*deploymentsv1.ResourceOutput
+	if plan.InfraStack != "" {
+		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
+		infraOutputs, err = runInfraStack(ctx, cfg, manifest, plan, log)
+		if err != nil {
+			return nil, nil, state, err
+		}
 	}
 	resourceEnv := resourceEnvValues(manifest, infraOutputs)
 
@@ -143,7 +155,7 @@ func runProduction(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 	wg.Wait()
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
-	if err := stageAndPromote(ctx, stack, state, promotionID, cfg.Tag, time.Now().Unix(), results); err != nil {
+	if err := stageAndPromote(ctx, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
 		return nil, nil, state, err
 	}
 
@@ -186,7 +198,7 @@ func checkTagAvailable(ctx context.Context, stack edge.RootStack, state edge.Roo
 	if tag == "" || state[edge.RootStackKeyEndpoint] == "" {
 		return nil
 	}
-	history, err := stack.History(ctx, state)
+	history, err := stack.History(ctx, state, "")
 	if err != nil {
 		return fmt.Errorf("check tag availability: %w", err)
 	}
@@ -222,7 +234,7 @@ func reconcileRootStack(ctx context.Context, stack edge.RootStack, specs []edge.
 // the active pointer never moves and the previous Deployment keeps serving.
 // Pure of Pulumi/AWS/Cloudflare: the caller has already reconciled the root
 // stack and run every app-deploy stack.
-func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootStackState, promotionID, tag string, now int64, results []appDeployResult) error {
+func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) error {
 	var failed []string
 	builds := make(map[string]string, len(results))
 	for _, r := range results {
@@ -239,24 +251,43 @@ func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootS
 		return fmt.Errorf("app-deploy failed for %s; promote aborted, the previous Deployment keeps serving", strings.Join(failed, "; "))
 	}
 
-	if err := stack.Promote(ctx, state, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds, Tag: tag}); err != nil {
+	if err := stack.Promote(ctx, state, edge.Promotion{PromotionID: promotionID, Ts: now, Builds: builds, Tag: tag}, pointer); err != nil {
 		return fmt.Errorf("promote %s: %w", promotionID, err)
 	}
 	return nil
 }
 
-// finalizeProductionDeploy composes reconcileRootStack and stageAndPromote —
-// the same order runProduction drives them in, just without any AWS
-// provisioning between the two. Pure of Pulumi/AWS/Cloudflare, so this is
-// what unit tests exercise directly against the edge.RootStack fake to assert
-// the reconcile -> stage -> promote sequence and the abort-on-failure
-// behavior.
-func finalizeProductionDeploy(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID, tag string, now int64, results []appDeployResult) (edge.RootStackState, error) {
+// promotePointer is the store pointer this deploy's promote moves: empty for
+// production (the store's reserved default pointer), the environment identity
+// (the DNS-safe preview slug/name) for a preview.
+func promotePointer(cfg Config) string {
+	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
+		return cfg.Identity
+	}
+	return ""
+}
+
+// bootstrapCommand is the bootstrap invocation a class's deploy tells the user
+// to re-run when the account is missing something a deploy needs.
+func bootstrapCommand(cfg Config) string {
+	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
+		return "ocel bootstrap --preview"
+	}
+	return "ocel bootstrap"
+}
+
+// finalizeDeploy composes reconcileRootStack and stageAndPromote — the same
+// order realize drives them in, just without any AWS provisioning between the
+// two, promoting the given pointer (empty for production, the preview identity
+// for a preview). Pure of Pulumi/AWS/Cloudflare, so this is what unit tests
+// exercise directly against the edge.RootStack fake to assert the reconcile ->
+// stage -> promote sequence and the abort-on-failure behavior.
+func finalizeDeploy(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) (edge.RootStackState, error) {
 	state, err := reconcileRootStack(ctx, stack, specs, prior)
 	if err != nil {
 		return prior, err
 	}
-	if err := stageAndPromote(ctx, stack, state, promotionID, tag, now, results); err != nil {
+	if err := stageAndPromote(ctx, stack, state, promotionID, tag, pointer, now, results); err != nil {
 		return state, err
 	}
 	return state, nil
@@ -654,6 +685,13 @@ func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.R
 	)
 	if err != nil {
 		return auto.UpResult{}, fmt.Errorf("prepare stack %s: %w", stackName, err)
+	}
+
+	// An ephemeral preview's stacks carry its expiry so `ocel preview ls` can
+	// surface age/expiry and a future reaper can find orphans. A no-op (zero
+	// ExpiresAt) for production and persistent previews.
+	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
+		return auto.UpResult{}, err
 	}
 
 	logWriter := lineWriter(log)

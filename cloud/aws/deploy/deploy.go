@@ -12,16 +12,12 @@ import (
 	"encoding/json"
 	"fmt"
 
-	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
-	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
-	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
 	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 // SecretsReader is the subset of the AWS Secrets Manager client the deploy
@@ -183,151 +179,20 @@ func (p Progress) report(phase deploymentsv1.Phase, message string, current, tot
 }
 
 // Run provisions every resource in manifest against AWS and returns the
-// whole-stack connection outputs, the user-facing app URLs, and — for a
-// production deploy only — the root-stack state the caller must persist so the
-// next deploy (and rollback) reconciles against it instead of starting fresh;
-// nil for a preview. progress reports phase-tagged steps and log forwards
-// Pulumi engine output; both may be nil. Run performs the real Pulumi up and
-// is not exercised by unit tests.
+// whole-stack connection outputs, the user-facing app URLs, and the root-stack
+// state the caller must persist so the next deploy (and rollback) reconciles
+// against it instead of starting fresh — scoped to this deploy's substrate
+// (production or preview). progress reports phase-tagged steps and log forwards
+// Pulumi engine output; both may be nil. Run performs the real Pulumi up and is
+// not exercised by unit tests.
+//
+// Both production and preview realize the same stacked model (ADR 0001): root
+// reconcile, then a stable infra stack (skipped for an ephemeral preview), then
+// one parallel app-deploy stack per app, staged and promoted atomically under
+// this deploy's pointer. The two differ only in the data the server threads in
+// via Config — see realize.
 func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootStackState, error) {
-	// Production deploys realize the stacked model (ADR 0001): root reconcile,
-	// then a stable infra stack, then one parallel app-deploy stack per app,
-	// staged and promoted atomically. Preview keeps the single in-place stack
-	// below unchanged.
-	if cfg.Class == deploymentsv1.Environment_CLASS_PRODUCTION {
-		return runProduction(ctx, cfg, manifest, progress, log)
-	}
-
-	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// A Next app's prerender configs + fallbacks ride to the asset bucket
-	// alongside the function artifacts, keyed by build id. No-op otherwise.
-	if err := uploadPrerenderAssets(ctx, cfg, manifest); err != nil {
-		return nil, nil, nil, err
-	}
-
-	program := func(pctx *pulumi.Context) error {
-		vpc, err := ec2.LookupVpc(pctx, &ec2.LookupVpcArgs{Default: pulumi.BoolRef(true)})
-		if err != nil {
-			return fmt.Errorf("look up default VPC: %w", err)
-		}
-		subnets, err := ec2.GetSubnets(pctx, &ec2.GetSubnetsArgs{
-			Filters: []ec2.GetSubnetsFilter{{Name: "vpc-id", Values: []string{vpc.Id}}},
-		})
-		if err != nil {
-			return fmt.Errorf("look up default VPC subnets: %w", err)
-		}
-		// Every function is injected with every resource's connection payload
-		// (OCEL_RESOURCE_<TYPE>_<id>), mirroring how `ocel dev` injects all
-		// resources. Resources are realized first so their outputs are available
-		// to wire onto each function's env.
-		env := pulumi.StringMap{}
-		for _, r := range manifest.GetResources() {
-			var (
-				value pulumi.StringOutput
-				err   error
-			)
-			switch {
-			case r.GetPostgres() != nil:
-				if realizationFor(resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, cfg.Lifecycle) == RealizationLogicalSlice {
-					value, err = registerPostgresLogicalSlice(pctx, r.GetLogicalName(), postgresSliceArgs{
-						DatabaseName:    sliceDatabaseName(cfg.Identity, r.GetLogicalName()),
-						ClusterEndpoint: cfg.SharedClusterEndpoint,
-						AdminSecretARN:  cfg.SharedClusterSecretARN,
-					})
-					break
-				}
-				value, err = registerPostgres(pctx, r.GetLogicalName(), translatePostgres(r.GetPostgres()), vpc.Id, vpc.CidrBlock, subnets.Ids)
-			case r.GetBucket() != nil:
-				value, err = registerBucket(pctx, r.GetLogicalName(), translateBucket(r.GetBucket()), cfg.StateTable, cfg.StateTableARN, cfg.ListenerCodePath)
-			default:
-				continue
-			}
-			if err != nil {
-				return fmt.Errorf("declare %s: %w", r.GetLogicalName(), err)
-			}
-			env[functionEnvKey(r.GetResource().GetType(), r.GetResource().GetName())] = value
-		}
-
-		// Each app's functions read and write only that app's slice of the
-		// account-global asset bucket and state table, so the execution role
-		// follows the app: one role per app, granting logs plus its own cache.
-		caches, err := appCaches(cfg, manifest)
-		if err != nil {
-			return err
-		}
-		roleArns := map[string]pulumi.StringInput{}
-		for _, r := range executionRoles(caches, manifest.GetFunctions()) {
-			role, err := newFunctionRole(pctx, r)
-			if err != nil {
-				return err
-			}
-			roleArns[r.App] = role.Arn
-		}
-
-		for _, fn := range manifest.GetFunctions() {
-			app := fn.GetApp()
-			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(app, cfg.Env, manifest.GetProjectId()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[app], roleArns[app]); err != nil {
-				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
-			}
-		}
-		return nil
-	}
-
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Preparing deployment stack", 0, 0)
-	stack, err := auto.UpsertStackInlineSource(ctx, cfg.StackName, cfg.ProjectName, program,
-		auto.Pulumi(cfg.Pulumi),
-		auto.SecretsProvider("passphrase"),
-		auto.EnvVars(map[string]string{
-			"PULUMI_BACKEND_URL":       cfg.BackendURL,
-			"PULUMI_CONFIG_PASSPHRASE": cfg.Passphrase,
-			"AWS_REGION":               cfg.Region,
-			// TODO: revisit ?
-			"PULUMI_SKIP_CHECKPOINTS":  "true",
-			"PULUMI_SKIP_UPDATE_CHECK": "true",
-		}),
-	)
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("prepare stack %s: %w", cfg.StackName, err)
-	}
-
-	if err := stampExpiry(ctx, stack, cfg.ExpiresAt); err != nil {
-		return nil, nil, nil, err
-	}
-
-	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning resources (this can take several minutes)", 0, 0)
-	logWriter := lineWriter(log)
-	upOpts := []optup.Option{}
-	if logWriter != nil {
-		upOpts = append(upOpts, optup.ProgressStreams(logWriter))
-	}
-
-	res, err := stack.Up(ctx, upOpts...)
-	logWriter.Flush() // emit any final, un-newline-terminated engine line
-	if err != nil {
-		return nil, nil, nil, fmt.Errorf("provision stack %s: %w", cfg.StackName, err)
-	}
-
-	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Collecting outputs", 0, 0)
-	outputs, err := collectOutputs(ctx, cfg.Secrets, manifest, res.Outputs)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
-	// The edge worker fronts the just-provisioned Lambdas, so it deploys last —
-	// it needs their Function URLs. A failure here fails the deploy; the AWS
-	// resources persist and a redeploy is idempotent.
-	workerOutputs, err := deployEdgeWorker(ctx, cfg, manifest, outputs, func(msg string) {
-		progress.report(deploymentsv1.Phase_PHASE_FINALIZING, msg, 0, 0)
-	})
-	if err != nil {
-		return nil, nil, nil, err
-	}
-	outputs = append(outputs, workerOutputs...)
-	return outputs, appURLs(manifest, outputs), nil, nil
+	return realize(ctx, cfg, manifest, progress, log)
 }
 
 // appURLs returns the user-facing URLs to feature on the success screen: for
