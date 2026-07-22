@@ -99,7 +99,8 @@ export function ensureSchema(store: SqlStore): void {
        ts INTEGER NOT NULL,
        builds TEXT NOT NULL,
        seq INTEGER NOT NULL,
-       tag TEXT
+       tag TEXT,
+       pointer TEXT NOT NULL DEFAULT '${DEFAULT_POINTER}'
      );
      CREATE TABLE IF NOT EXISTS pointers (
        name TEXT PRIMARY KEY,
@@ -125,6 +126,20 @@ export function ensureSchema(store: SqlStore): void {
     `CREATE UNIQUE INDEX IF NOT EXISTS promotions_tag_unique
        ON promotions(tag) WHERE tag IS NOT NULL`,
   );
+
+  // Migrate a promotions table created before pointer-scoped retention: add
+  // the column, backfilling every existing row to the reserved default pointer
+  // so production history()/prune() (which pass @production) keep seeing exactly
+  // the rows they saw before this column existed.
+  const hasPointer = store.sql
+    .exec<{ name: string }>(`PRAGMA table_info(promotions)`)
+    .toArray()
+    .some((c) => c.name === "pointer");
+  if (!hasPointer) {
+    store.sql.exec(
+      `ALTER TABLE promotions ADD COLUMN pointer TEXT NOT NULL DEFAULT '${DEFAULT_POINTER}'`,
+    );
+  }
 }
 
 function getMeta(store: SqlStore, key: string): string | undefined {
@@ -225,14 +240,15 @@ export function promote(
       .exec<{ n: number }>(`SELECT COALESCE(MAX(seq), 0) + 1 AS n FROM promotions`)
       .one().n;
     store.sql.exec(
-      `INSERT INTO promotions (promotion_id, ts, builds, seq, tag) VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO promotions (promotion_id, ts, builds, seq, tag, pointer) VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(promotion_id) DO UPDATE SET
-         ts = excluded.ts, builds = excluded.builds, seq = excluded.seq, tag = excluded.tag`,
+         ts = excluded.ts, builds = excluded.builds, seq = excluded.seq, tag = excluded.tag, pointer = excluded.pointer`,
       promotion.promotionId,
       promotion.ts,
       JSON.stringify(promotion.builds),
       nextSeq,
       promotion.tag ?? null,
+      pointer,
     );
     setPointer(store, pointer, promotion.promotionId);
   });
@@ -287,13 +303,19 @@ export function pointerRecord(
   return { kind: "record", buildId, record: rec };
 }
 
-export function history(store: SqlStore): HistoryEntry[] {
-  const activeId = getPointer(store, DEFAULT_POINTER);
+export function history(
+  store: SqlStore,
+  pointer: string = DEFAULT_POINTER,
+): HistoryEntry[] {
+  const activeId = getPointer(store, pointer);
   // Ordered newest-first by seq (promote assigns an increasing seq) per the
-  // acceptance criteria, with the active promotion marked.
+  // acceptance criteria, with the active promotion marked. Scoped to one
+  // pointer: production passes @production and sees exactly its own history,
+  // each preview pointer sees only its own.
   return store.sql
     .exec<{ promotion_id: string; ts: number; builds: string; tag: string | null }>(
-      `SELECT promotion_id, ts, builds, tag FROM promotions ORDER BY seq DESC`,
+      `SELECT promotion_id, ts, builds, tag FROM promotions WHERE pointer = ? ORDER BY seq DESC`,
+      pointer,
     )
     .toArray()
     .map((r) => {
@@ -308,18 +330,24 @@ export function history(store: SqlStore): HistoryEntry[] {
     });
 }
 
-export function prune(store: SqlStore, keepN: number): PruneResult {
+export function prune(
+  store: SqlStore,
+  keepN: number,
+  pointer: string = DEFAULT_POINTER,
+): PruneResult {
   return store.transactionSync(() => {
-    const activeId = getPointer(store, DEFAULT_POINTER);
+    const activeId = getPointer(store, pointer);
     const rows = store.sql
       .exec<{ promotion_id: string; builds: string }>(
-        `SELECT promotion_id, builds FROM promotions ORDER BY seq DESC`,
+        `SELECT promotion_id, builds FROM promotions WHERE pointer = ? ORDER BY seq DESC`,
+        pointer,
       )
       .toArray();
 
-    // The keep window is the N most recent promotions; the active one is
-    // pinned even if it falls outside that window, so pruning can never take
-    // the live site down.
+    // The keep window is the N most recent promotions for this pointer; the
+    // active one is pinned even if it falls outside that window, so pruning can
+    // never take the live site (or a live preview) down. Scoping by pointer
+    // means a preview prune never reclaims production's builds and vice versa.
     const kept: string[] = [];
     const removed: { promotionId: string; builds: Record<string, string> }[] =
       [];

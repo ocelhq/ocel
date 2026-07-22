@@ -96,12 +96,12 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.pointerRecord(this.ctx.storage, app, pointer, knownBuildId);
   }
 
-  async history(): Promise<HistoryEntry[]> {
-    return store.history(this.ctx.storage);
+  async history(pointer?: string): Promise<HistoryEntry[]> {
+    return store.history(this.ctx.storage, pointer);
   }
 
-  async prune(keepN: number): Promise<PruneResult> {
-    return store.prune(this.ctx.storage, keepN);
+  async prune(keepN: number, pointer?: string): Promise<PruneResult> {
+    return store.prune(this.ctx.storage, keepN, pointer);
   }
 
   async versionStamp(): Promise<string | undefined> {
