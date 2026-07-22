@@ -561,3 +561,77 @@ export default {
 		t.Fatalf("Domains[production] = %q, want %q", got, "acme.com")
 	}
 }
+
+func TestResolve_ParsesPreviewWildcardDomain(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  projectId: "proj_123",
+  domains: { production: "acme.com", preview: "*.Preview.Acme.com" },
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := cfg.Domains["preview"]; got != "*.preview.acme.com" {
+		t.Fatalf("Domains[preview] = %q, want %q (lowercased)", got, "*.preview.acme.com")
+	}
+}
+
+func TestResolve_RejectsInvalidPreviewDomain(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  projectId: "proj_123",
+  domains: { preview: "preview.acme.com" },
+};
+`)
+
+	if _, err := Resolve(root); err == nil {
+		t.Fatal("Resolve accepted a non-wildcard preview domain, want error")
+	}
+}
+
+func TestValidatePreviewDomain(t *testing.T) {
+	valid := []string{
+		"*.preview.acme.com",
+		"*.acme.com",
+	}
+	for _, d := range valid {
+		if err := validatePreviewDomain(d); err != nil {
+			t.Errorf("validatePreviewDomain(%q) = %v, want nil", d, err)
+		}
+	}
+
+	invalid := []string{
+		"preview.acme.com",   // no wildcard
+		"acme.com",           // apex, no wildcard
+		"*.*.acme.com",       // multiple wildcards
+		"foo*.preview.com",   // wildcard not a whole label
+		"preview.*.acme.com", // wildcard not leftmost
+		"*",                  // no base domain
+	}
+	for _, d := range invalid {
+		if err := validatePreviewDomain(d); err == nil {
+			t.Errorf("validatePreviewDomain(%q) = nil, want error", d)
+		}
+	}
+}
+
+func TestPreviewBaseDomain(t *testing.T) {
+	cases := map[string]string{
+		"*.preview.acme.com": "preview.acme.com",
+		"*.acme.com":         "acme.com",
+		"acme.com":           "", // not a wildcard
+		"":                   "",
+	}
+	for in, want := range cases {
+		if got := PreviewBaseDomain(in); got != want {
+			t.Errorf("PreviewBaseDomain(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
