@@ -359,6 +359,57 @@ describe("prune", () => {
     expect(result.removedPromotionIds).toEqual([]);
     expect(result.keptPromotionIds).toEqual(["promo-2", "promo-1"]);
   });
+
+  it("is scoped to a pointer: pruning one pointer leaves another untouched", async () => {
+    const store = storeStub();
+    // Two independent pointer histories interleaved.
+    for (let i = 1; i <= 3; i++) {
+      await store.putStaged(makeRecord({ buildId: `prod-${i}` }));
+      await store.promote(
+        makePromotion({ promotionId: `prod-${i}`, ts: i * 1_000, builds: { web: `prod-${i}` } }),
+      );
+      await store.putStaged(makeRecord({ buildId: `prev-${i}` }));
+      await store.promote(
+        makePromotion({ promotionId: `prev-${i}`, ts: i * 1_000 + 500, builds: { web: `prev-${i}` } }),
+        "staging",
+      );
+    }
+
+    const result = await store.prune(1, "staging");
+
+    // Only the staging pointer's superseded promotions are collected; the
+    // active staging one (prev-3) is kept and production is entirely untouched.
+    expect(result.removedPromotionIds).toEqual(["prev-2", "prev-1"]);
+    expect((await store.history("staging")).map((h) => h.promotionId)).toEqual(["prev-3"]);
+    expect((await store.history()).map((h) => h.promotionId)).toEqual([
+      "prod-3",
+      "prod-2",
+      "prod-1",
+    ]);
+    // Production's records survive a staging prune.
+    expect(await store.record("web", "prod-1")).toBeDefined();
+    expect(await store.record("web", "prev-1")).toBeUndefined();
+  });
+});
+
+describe("pointer-scoped history", () => {
+  it("returns only the given pointer's promotions, active marked per pointer", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "prod-1" }));
+    await store.promote(makePromotion({ promotionId: "prod-1", builds: { web: "prod-1" } }));
+    await store.putStaged(makeRecord({ buildId: "prev-1" }));
+    await store.promote(
+      makePromotion({ promotionId: "prev-1", ts: 2_000, builds: { web: "prev-1" } }),
+      "staging",
+    );
+
+    expect(await store.history()).toEqual([
+      { promotionId: "prod-1", ts: 1_000, builds: { web: "prod-1" }, active: true },
+    ]);
+    expect(await store.history("staging")).toEqual([
+      { promotionId: "prev-1", ts: 2_000, builds: { web: "prev-1" }, active: true },
+    ]);
+  });
 });
 
 describe("version stamp", () => {

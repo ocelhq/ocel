@@ -96,15 +96,20 @@ export default class extends WorkerEntrypoint<Env> {
     }
 
     if (request.method === "GET" && sub === "/history") {
-      return Response.json(await store.history());
+      // The pointer to scope history to is an optional query param; absent means
+      // the reserved default (production).
+      const pointer = url.searchParams.get("pointer") ?? undefined;
+      return Response.json(await store.history(pointer));
     }
 
     if (request.method === "POST" && sub === "/prune") {
-      const body = await readJson<{ keepN: number }>(request);
+      const body = await readJson<{ keepN: number; pointer?: string }>(request);
       if (typeof body?.keepN !== "number") {
         return new Response("Bad Request", { status: 400 });
       }
-      return Response.json(await store.prune(body.keepN));
+      // The pointer to scope the prune to is optional; absent means the reserved
+      // default (production).
+      return Response.json(await store.prune(body.keepN, body.pointer));
     }
 
     if (request.method === "GET" && sub === "/version-stamp") {
