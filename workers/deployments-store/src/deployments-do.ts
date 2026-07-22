@@ -104,6 +104,10 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.prune(this.ctx.storage, keepN, pointer);
   }
 
+  async removePointer(pointer?: string): Promise<PruneResult> {
+    return store.removePointer(this.ctx.storage, pointer);
+  }
+
   async versionStamp(): Promise<string | undefined> {
     return store.versionStamp(this.ctx.storage);
   }

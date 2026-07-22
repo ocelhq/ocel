@@ -974,7 +974,14 @@ type DestroyProjectRequest struct {
 	// project_id scopes the teardown to one project. The Pulumi state backend is
 	// account-global, so the provider addresses this project's per-project stacks
 	// (root state, infra stack, and every app-deploy stack) with it.
-	ProjectId     string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	ProjectId string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// environment selects the substrate to tear down. Absent (or production class)
+	// destroys the whole production project. A preview environment destroys the
+	// whole preview footprint — every pointer, every app-deploy and per-name infra
+	// stack, the preview store instance, the preview root worker(s), the R2 assets
+	// and the preview root-stack state — leaving the account-level preview
+	// bootstrap intact. `ocel destroy --preview` sends this.
+	Environment   *Environment `protobuf:"bytes,4,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1028,6 +1035,13 @@ func (x *DestroyProjectRequest) GetProjectId() string {
 		return x.ProjectId
 	}
 	return ""
+}
+
+func (x *DestroyProjectRequest) GetEnvironment() *Environment {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
 }
 
 // PlanDestroyProjectRequest is the request for
@@ -2068,7 +2082,13 @@ type PruneRequest struct {
 	ProjectId       string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	// keep_n is how many of the newest Promotions to keep, always additionally
 	// pinning the currently active one even if it falls outside this window.
-	KeepN         int32 `protobuf:"varint,4,opt,name=keep_n,json=keepN,proto3" json:"keep_n,omitempty"`
+	KeepN int32 `protobuf:"varint,4,opt,name=keep_n,json=keepN,proto3" json:"keep_n,omitempty"`
+	// environment scopes the prune to a substrate. Absent (or production class)
+	// prunes production's history. A preview environment (persistent only) prunes
+	// that named preview pointer's history in the preview store, reclaiming its
+	// superseded builds' pointer-scoped stacks and R2 assets. `ocel preview prune
+	// --name` sends this.
+	Environment   *Environment `protobuf:"bytes,5,opt,name=environment,proto3" json:"environment,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2129,6 +2149,13 @@ func (x *PruneRequest) GetKeepN() int32 {
 		return x.KeepN
 	}
 	return 0
+}
+
+func (x *PruneRequest) GetEnvironment() *Environment {
+	if x != nil {
+		return x.Environment
+	}
+	return nil
 }
 
 // DeployEvent is a single item on the Deploy response stream: either
@@ -2796,12 +2823,13 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x04 \x01(\tR\tprojectId\"{\n" +
+	"project_id\x18\x04 \x01(\tR\tprojectId\"\xba\x01\n" +
 	"\x15DestroyProjectRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\"\x7f\n" +
+	"project_id\x18\x03 \x01(\tR\tprojectId\x12=\n" +
+	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"\x7f\n" +
 	"\x19PlanDestroyProjectRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
@@ -2880,13 +2908,14 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x02to\x18\x04 \x01(\tR\x02to\x12\x10\n" +
 	"\x03tag\x18\x05 \x01(\tR\x03tag\"I\n" +
 	"\x10RollbackResponse\x125\n" +
-	"\bpromoted\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\bpromoted\"\x89\x01\n" +
+	"\bpromoted\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\bpromoted\"\xc8\x01\n" +
 	"\fPruneRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x15\n" +
-	"\x06keep_n\x18\x04 \x01(\x05R\x05keepN\"\xb8\x01\n" +
+	"\x06keep_n\x18\x04 \x01(\x05R\x05keepN\x12=\n" +
+	"\venvironment\x18\x05 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"\xb8\x01\n" +
 	"\vDeployEvent\x12;\n" +
 	"\bprogress\x18\x01 \x01(\v2\x1d.deployments.v1.ProgressEventH\x00R\bprogress\x12,\n" +
 	"\x03log\x18\x02 \x01(\v2\x18.deployments.v1.LogEventH\x00R\x03log\x125\n" +
@@ -3017,49 +3046,51 @@ var file_deployments_v1_deployments_proto_depIdxs = []int32{
 	4,  // 12: deployments.v1.DeployRequest.environment:type_name -> deployments.v1.Environment
 	1,  // 13: deployments.v1.BootstrapRequest.class:type_name -> deployments.v1.Environment.Class
 	4,  // 14: deployments.v1.DestroyPreviewRequest.environment:type_name -> deployments.v1.Environment
-	17, // 15: deployments.v1.ListEnvironmentsResponse.environments:type_name -> deployments.v1.PreviewEnvironment
-	2,  // 16: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
-	1,  // 17: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
-	1,  // 18: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
-	20, // 19: deployments.v1.PreflightResponse.identity:type_name -> deployments.v1.Identity
-	21, // 20: deployments.v1.PreflightResponse.credential_problems:type_name -> deployments.v1.CredentialProblem
-	39, // 21: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
-	22, // 22: deployments.v1.PromotionHistoryEntry.promotion:type_name -> deployments.v1.Promotion
-	23, // 23: deployments.v1.ListPromotionsResponse.promotions:type_name -> deployments.v1.PromotionHistoryEntry
-	22, // 24: deployments.v1.RollbackResponse.promoted:type_name -> deployments.v1.Promotion
-	30, // 25: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
-	31, // 26: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
-	32, // 27: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
-	0,  // 28: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
-	33, // 29: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
-	34, // 30: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
-	35, // 31: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
-	36, // 32: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
-	9,  // 33: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
-	10, // 34: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
-	11, // 35: deployments.v1.DeploymentService.DestroyPreview:input_type -> deployments.v1.DestroyPreviewRequest
-	12, // 36: deployments.v1.DeploymentService.DestroyProject:input_type -> deployments.v1.DestroyProjectRequest
-	13, // 37: deployments.v1.DeploymentService.PlanDestroyProject:input_type -> deployments.v1.PlanDestroyProjectRequest
-	15, // 38: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
-	18, // 39: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
-	24, // 40: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
-	26, // 41: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
-	28, // 42: deployments.v1.DeploymentService.Prune:input_type -> deployments.v1.PruneRequest
-	29, // 43: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
-	29, // 44: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
-	29, // 45: deployments.v1.DeploymentService.DestroyPreview:output_type -> deployments.v1.DeployEvent
-	29, // 46: deployments.v1.DeploymentService.DestroyProject:output_type -> deployments.v1.DeployEvent
-	14, // 47: deployments.v1.DeploymentService.PlanDestroyProject:output_type -> deployments.v1.PlanDestroyProjectResponse
-	16, // 48: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
-	19, // 49: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
-	25, // 50: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
-	27, // 51: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
-	29, // 52: deployments.v1.DeploymentService.Prune:output_type -> deployments.v1.DeployEvent
-	43, // [43:53] is the sub-list for method output_type
-	33, // [33:43] is the sub-list for method input_type
-	33, // [33:33] is the sub-list for extension type_name
-	33, // [33:33] is the sub-list for extension extendee
-	0,  // [0:33] is the sub-list for field type_name
+	4,  // 15: deployments.v1.DestroyProjectRequest.environment:type_name -> deployments.v1.Environment
+	17, // 16: deployments.v1.ListEnvironmentsResponse.environments:type_name -> deployments.v1.PreviewEnvironment
+	2,  // 17: deployments.v1.PreviewEnvironment.lifecycle:type_name -> deployments.v1.Environment.Lifecycle
+	1,  // 18: deployments.v1.PreflightRequest.required_class:type_name -> deployments.v1.Environment.Class
+	1,  // 19: deployments.v1.PreflightResponse.infra_class:type_name -> deployments.v1.Environment.Class
+	20, // 20: deployments.v1.PreflightResponse.identity:type_name -> deployments.v1.Identity
+	21, // 21: deployments.v1.PreflightResponse.credential_problems:type_name -> deployments.v1.CredentialProblem
+	39, // 22: deployments.v1.Promotion.builds:type_name -> deployments.v1.Promotion.BuildsEntry
+	22, // 23: deployments.v1.PromotionHistoryEntry.promotion:type_name -> deployments.v1.Promotion
+	23, // 24: deployments.v1.ListPromotionsResponse.promotions:type_name -> deployments.v1.PromotionHistoryEntry
+	22, // 25: deployments.v1.RollbackResponse.promoted:type_name -> deployments.v1.Promotion
+	4,  // 26: deployments.v1.PruneRequest.environment:type_name -> deployments.v1.Environment
+	30, // 27: deployments.v1.DeployEvent.progress:type_name -> deployments.v1.ProgressEvent
+	31, // 28: deployments.v1.DeployEvent.log:type_name -> deployments.v1.LogEvent
+	32, // 29: deployments.v1.DeployEvent.result:type_name -> deployments.v1.ResultEvent
+	0,  // 30: deployments.v1.ProgressEvent.phase:type_name -> deployments.v1.Phase
+	33, // 31: deployments.v1.ResultEvent.outputs:type_name -> deployments.v1.ResourceOutput
+	34, // 32: deployments.v1.ResourceOutput.postgres:type_name -> deployments.v1.PostgresOutput
+	35, // 33: deployments.v1.ResourceOutput.bucket:type_name -> deployments.v1.BucketOutput
+	36, // 34: deployments.v1.ResourceOutput.function:type_name -> deployments.v1.FunctionOutput
+	9,  // 35: deployments.v1.DeploymentService.Deploy:input_type -> deployments.v1.DeployRequest
+	10, // 36: deployments.v1.DeploymentService.Bootstrap:input_type -> deployments.v1.BootstrapRequest
+	11, // 37: deployments.v1.DeploymentService.DestroyPreview:input_type -> deployments.v1.DestroyPreviewRequest
+	12, // 38: deployments.v1.DeploymentService.DestroyProject:input_type -> deployments.v1.DestroyProjectRequest
+	13, // 39: deployments.v1.DeploymentService.PlanDestroyProject:input_type -> deployments.v1.PlanDestroyProjectRequest
+	15, // 40: deployments.v1.DeploymentService.ListEnvironments:input_type -> deployments.v1.ListEnvironmentsRequest
+	18, // 41: deployments.v1.DeploymentService.Preflight:input_type -> deployments.v1.PreflightRequest
+	24, // 42: deployments.v1.DeploymentService.ListPromotions:input_type -> deployments.v1.ListPromotionsRequest
+	26, // 43: deployments.v1.DeploymentService.Rollback:input_type -> deployments.v1.RollbackRequest
+	28, // 44: deployments.v1.DeploymentService.Prune:input_type -> deployments.v1.PruneRequest
+	29, // 45: deployments.v1.DeploymentService.Deploy:output_type -> deployments.v1.DeployEvent
+	29, // 46: deployments.v1.DeploymentService.Bootstrap:output_type -> deployments.v1.DeployEvent
+	29, // 47: deployments.v1.DeploymentService.DestroyPreview:output_type -> deployments.v1.DeployEvent
+	29, // 48: deployments.v1.DeploymentService.DestroyProject:output_type -> deployments.v1.DeployEvent
+	14, // 49: deployments.v1.DeploymentService.PlanDestroyProject:output_type -> deployments.v1.PlanDestroyProjectResponse
+	16, // 50: deployments.v1.DeploymentService.ListEnvironments:output_type -> deployments.v1.ListEnvironmentsResponse
+	19, // 51: deployments.v1.DeploymentService.Preflight:output_type -> deployments.v1.PreflightResponse
+	25, // 52: deployments.v1.DeploymentService.ListPromotions:output_type -> deployments.v1.ListPromotionsResponse
+	27, // 53: deployments.v1.DeploymentService.Rollback:output_type -> deployments.v1.RollbackResponse
+	29, // 54: deployments.v1.DeploymentService.Prune:output_type -> deployments.v1.DeployEvent
+	45, // [45:55] is the sub-list for method output_type
+	35, // [35:45] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_deployments_v1_deployments_proto_init() }

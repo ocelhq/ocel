@@ -81,6 +81,12 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 		return connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
+	// A preview environment destroys the whole preview footprint on the preview
+	// substrate; anything else destroys the production project.
+	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
+		return s.runDestroyPreviewProject(ctx, opts, req.GetProjectId(), env, progress, logf)
+	}
+
 	// A project may have no root stack (a first deploy that aborted before
 	// reconcile) yet still own orphaned infra/app stacks; that is not an error,
 	// it just leaves nothing edge-side to remove.
@@ -115,4 +121,32 @@ func (s *Server) deleteRootStackState(ctx context.Context, opts options, project
 		return err
 	}
 	return bootstrap.DeleteRootStackState(ctx, ssm.NewFromConfig(awscfg), projectID)
+}
+
+// runDestroyPreviewProject tears down a whole project's preview footprint on the
+// preview substrate: every preview pointer's app-deploy and per-name infra
+// stacks, the preview store instance, the preview root worker(s), the R2 assets,
+// and — once the store instance and workers are gone — the persisted preview
+// root-stack state. The account-level preview bootstrap is left intact.
+func (s *Server) runDestroyPreviewProject(ctx context.Context, opts options, projectID string, env *deploymentsv1.Environment, progress, logf func(string)) error {
+	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, projectID, env)
+	if err != nil {
+		return err
+	}
+
+	derr := deploy.DestroyPreviewProject(ctx, stack, state, cfg, projectID, progress, logf)
+
+	// Forget the persisted preview root-stack state only once the store instance
+	// and workers are gone, so a re-run of a partial teardown still holds the
+	// identities it needs. A teardown that failed leaves the state in place.
+	if derr == nil && len(state) > 0 {
+		awscfg, awsErr := loadAWS(ctx, opts.Region)
+		if awsErr != nil {
+			return awsErr
+		}
+		if err := bootstrap.DeleteRootStackStateFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, projectID); err != nil {
+			derr = errors.Join(derr, err)
+		}
+	}
+	return derr
 }

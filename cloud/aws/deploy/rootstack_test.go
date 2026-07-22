@@ -31,6 +31,7 @@ type recordingRootStack struct {
 	promotePointers   []string
 	pruned            []int
 	prunePointers     []string
+	removedPointers   []string
 	historyPointers   []string
 	destroyed         int
 	destroyedWorkers  []string
@@ -99,6 +100,14 @@ func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state e
 	}
 	f.pruned = append(f.pruned, keepN)
 	f.prunePointers = append(f.prunePointers, pointer)
+	return f.pruneResult, nil
+}
+
+func (f *recordingRootStack) RemovePointer(_ context.Context, state edge.RootStackState, pointer string) (edge.PruneResult, error) {
+	if err := f.checkAuth(state); err != nil {
+		return edge.PruneResult{}, err
+	}
+	f.removedPointers = append(f.removedPointers, pointer)
 	return f.pruneResult, nil
 }
 

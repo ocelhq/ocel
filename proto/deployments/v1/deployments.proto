@@ -339,6 +339,14 @@ message DestroyProjectRequest {
   // account-global, so the provider addresses this project's per-project stacks
   // (root state, infra stack, and every app-deploy stack) with it.
   string project_id = 3;
+
+  // environment selects the substrate to tear down. Absent (or production class)
+  // destroys the whole production project. A preview environment destroys the
+  // whole preview footprint — every pointer, every app-deploy and per-name infra
+  // stack, the preview store instance, the preview root worker(s), the R2 assets
+  // and the preview root-stack state — leaving the account-level preview
+  // bootstrap intact. `ocel destroy --preview` sends this.
+  Environment environment = 4;
 }
 
 // PlanDestroyProjectRequest is the request for
@@ -585,6 +593,13 @@ message PruneRequest {
   // keep_n is how many of the newest Promotions to keep, always additionally
   // pinning the currently active one even if it falls outside this window.
   int32 keep_n = 4;
+
+  // environment scopes the prune to a substrate. Absent (or production class)
+  // prunes production's history. A preview environment (persistent only) prunes
+  // that named preview pointer's history in the preview store, reclaiming its
+  // superseded builds' pointer-scoped stacks and R2 assets. `ocel preview prune
+  // --name` sends this.
+  Environment environment = 5;
 }
 
 // DeployEvent is a single item on the Deploy response stream: either
