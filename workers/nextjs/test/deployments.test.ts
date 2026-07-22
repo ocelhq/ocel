@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   resolveDeployment,
+  type ActiveRecordResult,
   type DeploymentRecord,
   type DeploymentsBinding,
   type DeploymentsDeps,
@@ -20,30 +21,46 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   };
 }
 
-// A binding stub whose activeBuildId/record calls are counted and can be
-// switched between answering and throwing (simulating a store outage), with
-// each per-app/build answer configurable independently.
+// A binding stub whose activeRecord calls are counted and can be switched to
+// throwing (simulating a store outage). It resolves each app's active build id
+// and records from injected maps, and honours knownBuildId the same way the
+// real store does — omitting the record when the caller's build is still live.
 function countingBinding(opts: {
   activeBuildId: Record<string, string | undefined>;
   records: Record<string, DeploymentRecord>;
 }): DeploymentsBinding & {
-  activeBuildIdCalls: number;
-  recordCalls: number;
+  activeRecordCalls: number;
+  // Whether the last answered call carried a record (vs. an "unchanged" echo).
+  lastCarriedRecord: boolean;
   down: boolean;
 } {
   return {
-    activeBuildIdCalls: 0,
-    recordCalls: 0,
+    activeRecordCalls: 0,
+    lastCarriedRecord: false,
     down: false,
-    async activeBuildId(_slug: string, app: string) {
-      this.activeBuildIdCalls++;
+    async activeRecord(
+      _slug: string,
+      app: string,
+      knownBuildId?: string,
+    ): Promise<ActiveRecordResult> {
+      this.activeRecordCalls++;
       if (this.down) throw new Error("store unreachable");
-      return opts.activeBuildId[app];
-    },
-    async record(_slug: string, app: string, buildId: string) {
-      this.recordCalls++;
-      if (this.down) throw new Error("store unreachable");
-      return opts.records[`${app}/${buildId}`];
+      const buildId = opts.activeBuildId[app];
+      if (!buildId) {
+        this.lastCarriedRecord = false;
+        return { kind: "no-pointer" };
+      }
+      if (buildId === knownBuildId) {
+        this.lastCarriedRecord = false;
+        return { kind: "unchanged", buildId };
+      }
+      const record = opts.records[`${app}/${buildId}`];
+      if (!record) {
+        this.lastCarriedRecord = false;
+        return { kind: "dangling", buildId };
+      }
+      this.lastCarriedRecord = true;
+      return { kind: "record", buildId, record };
     },
   };
 }
@@ -76,10 +93,9 @@ describe("resolveDeployment", () => {
     const resolution = await resolveDeployment(deps(binding, clock));
 
     expect(resolution).toEqual({ kind: "not-found" });
-    expect(binding.recordCalls).toBe(0);
   });
 
-  it("reuses the cached record across requests without re-reading it", async () => {
+  it("serves the cached record within the TTL without calling the store", async () => {
     const binding = countingBinding({
       activeBuildId: { web: "build-1" },
       records: { "web/build-1": makeRecord() },
@@ -90,13 +106,11 @@ describe("resolveDeployment", () => {
     await resolveDeployment(d);
     await resolveDeployment(d);
 
-    // The pointer is still within its TTL on the second call, so neither RPC
-    // fires again.
-    expect(binding.activeBuildIdCalls).toBe(1);
-    expect(binding.recordCalls).toBe(1);
+    // The record is still within its TTL on the second call, so no RPC fires.
+    expect(binding.activeRecordCalls).toBe(1);
   });
 
-  it("re-reads the pointer only after its TTL elapses", async () => {
+  it("revalidates after the TTL without re-transferring an unchanged record", async () => {
     const binding = countingBinding({
       activeBuildId: { web: "build-1" },
       records: { "web/build-1": makeRecord() },
@@ -107,17 +121,18 @@ describe("resolveDeployment", () => {
     await resolveDeployment(d);
     clock.ms = 4_000; // still within the 5s TTL
     await resolveDeployment(d);
-    expect(binding.activeBuildIdCalls).toBe(1);
+    expect(binding.activeRecordCalls).toBe(1);
 
     clock.ms = 5_001; // TTL elapsed
     const resolution = await resolveDeployment(d);
-    expect(binding.activeBuildIdCalls).toBe(2);
-    // The record itself is unchanged (same build id), so it's still cached.
-    expect(binding.recordCalls).toBe(1);
+    expect(binding.activeRecordCalls).toBe(2);
+    // The build is unchanged, so the store echoed it back without the record;
+    // the cached record still stands.
+    expect(binding.lastCarriedRecord).toBe(false);
     expect(resolution).toEqual({ kind: "found", record: makeRecord() });
   });
 
-  it("re-reads the record when the pointer moves to a new build (promotion/rollback)", async () => {
+  it("re-reads the record when the build moves (promotion/rollback)", async () => {
     const activeBuildId: Record<string, string> = { web: "build-1" };
     const binding = countingBinding({
       activeBuildId,
@@ -132,8 +147,8 @@ describe("resolveDeployment", () => {
     const first = await resolveDeployment(d);
     expect(first).toEqual({ kind: "found", record: makeRecord() });
 
-    // A rollback/promotion re-points the app at build-2; the pointer TTL has
-    // to elapse before this worker notices.
+    // A rollback/promotion re-points the app at build-2; the TTL has to elapse
+    // before this worker notices.
     activeBuildId.web = "build-2";
     clock.ms = 5_001;
     const second = await resolveDeployment(d);
@@ -142,7 +157,7 @@ describe("resolveDeployment", () => {
       kind: "found",
       record: makeRecord({ buildId: "build-2" }),
     });
-    expect(binding.recordCalls).toBe(2);
+    expect(binding.lastCarriedRecord).toBe(true);
   });
 
   it("serves the cached record during a transient store outage", async () => {
@@ -153,9 +168,9 @@ describe("resolveDeployment", () => {
     const clock = { ms: 0 };
     const d = deps(binding, clock);
 
-    await resolveDeployment(d); // warms the pointer + record caches
+    await resolveDeployment(d); // warms the record cache
 
-    clock.ms = 5_001; // TTL elapsed, so the next call re-reads the pointer
+    clock.ms = 5_001; // TTL elapsed, so the next call revalidates
     binding.down = true;
     const resolution = await resolveDeployment(d);
 
@@ -172,7 +187,7 @@ describe("resolveDeployment", () => {
     expect(resolution).toEqual({ kind: "unavailable" });
   });
 
-  it("returns unavailable when the record read fails even though the pointer resolved", async () => {
+  it("returns unavailable when the pointer names a build with no record", async () => {
     const binding = countingBinding({
       activeBuildId: { web: "build-1" },
       records: {},
@@ -202,44 +217,5 @@ describe("resolveDeployment", () => {
       kind: "found",
       record: makeRecord({ app: "admin", buildId: "build-9" }),
     });
-  });
-
-  it("evicts the oldest record once the bounded LRU is exceeded", async () => {
-    const records: Record<string, DeploymentRecord> = {};
-    const activeBuildId: Record<string, string> = {};
-    for (let i = 0; i < 20; i++) {
-      const buildId = `build-${i}`;
-      records[`web/${buildId}`] = makeRecord({ buildId });
-    }
-    const binding = countingBinding({ activeBuildId, records });
-    const clock = { ms: 0 };
-
-    // Walk through 20 distinct build ids for the same app, each one a fresh
-    // pointer read (TTL bumped past every time) so every record is fetched
-    // and memoized in turn.
-    for (let i = 0; i < 20; i++) {
-      activeBuildId.web = `build-${i}`;
-      clock.ms = (i + 1) * 6_000;
-      const resolution = await resolveDeployment(deps(binding, clock));
-      expect(resolution).toEqual({
-        kind: "found",
-        record: makeRecord({ buildId: `build-${i}` }),
-      });
-    }
-
-    // The oldest build (build-0) fell out of the 16-entry bound: resolving it
-    // again costs a fresh record RPC rather than serving from memory.
-    const callsBefore = binding.recordCalls;
-    activeBuildId.web = "build-0";
-    clock.ms = 21 * 6_000;
-    await resolveDeployment(deps(binding, clock));
-    expect(binding.recordCalls).toBe(callsBefore + 1);
-
-    // The most recently used build (build-19) is still warm.
-    const callsBefore2 = binding.recordCalls;
-    activeBuildId.web = "build-19";
-    clock.ms = 22 * 6_000;
-    await resolveDeployment(deps(binding, clock));
-    expect(binding.recordCalls).toBe(callsBefore2);
   });
 });

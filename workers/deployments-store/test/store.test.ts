@@ -99,6 +99,62 @@ describe("activeBuildId / record", () => {
   });
 });
 
+describe("activeRecord", () => {
+  it("returns no-pointer when the app has no active promotion", async () => {
+    const store = storeStub();
+    expect(await store.activeRecord("web")).toEqual({ kind: "no-pointer" });
+  });
+
+  it("returns the active build id and record when no build is known", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord());
+    await store.promote(makePromotion());
+
+    expect(await store.activeRecord("web")).toEqual({
+      kind: "record",
+      buildId: "build-1",
+      record: makeRecord(),
+    });
+  });
+
+  it("omits the record when the known build is still active", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord());
+    await store.promote(makePromotion());
+
+    expect(await store.activeRecord("web", "build-1")).toEqual({
+      kind: "unchanged",
+      buildId: "build-1",
+    });
+  });
+
+  it("returns the new record when the known build is stale", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "build-1" }));
+    await store.putStaged(makeRecord({ buildId: "build-2" }));
+    await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "build-1" } }));
+    await store.promote(makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "build-2" } }));
+
+    expect(await store.activeRecord("web", "build-1")).toEqual({
+      kind: "record",
+      buildId: "build-2",
+      record: makeRecord({ buildId: "build-2" }),
+    });
+  });
+
+  it("returns dangling when the active pointer names a build with no record", async () => {
+    const store = storeStub();
+    // Promote a build that was never staged, so the pointer resolves but the
+    // record read misses.
+    await store.promote(makePromotion({ builds: { web: "ghost-build" } }));
+
+    expect(await store.activeRecord("web")).toEqual({
+      kind: "dangling",
+      buildId: "ghost-build",
+    });
+  });
+});
+
 describe("history", () => {
   it("returns promotions newest-first with the active one marked", async () => {
     const store = storeStub();

@@ -27,21 +27,17 @@ function bindingReturning(
   record: DeploymentRecord | undefined,
 ): DeploymentsBinding {
   return {
-    async activeBuildId() {
-      return buildId;
-    },
-    async record() {
-      return record;
+    async activeRecord() {
+      if (!buildId) return { kind: "no-pointer" };
+      if (!record) return { kind: "dangling", buildId };
+      return { kind: "record", buildId, record };
     },
   };
 }
 
 function failingBinding(): DeploymentsBinding {
   return {
-    async activeBuildId() {
-      throw new Error("store unreachable");
-    },
-    async record() {
+    async activeRecord() {
       throw new Error("store unreachable");
     },
   };
