@@ -140,7 +140,7 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.RootStackState, projectID, env string) ([]string, error) {
 	prodStack := projectID + "-" + env
 
-	history, err := stack.History(ctx, state)
+	history, err := stack.History(ctx, state, "")
 	if err != nil {
 		return nil, err
 	}

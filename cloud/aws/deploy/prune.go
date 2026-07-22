@@ -162,8 +162,8 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, l
 // Reclaim sweeps up what those records named — the app-deploy stacks and
 // R2/S3 objects. It backs `ocel deployments prune` and is never run inline on
 // a deploy.
-func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, keepN int, progress, log func(string)) (edge.PruneResult, error) {
-	result, err := stack.DeletePromotionArtifacts(ctx, state, keepN)
+func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, keepN int, pointer string, progress, log func(string)) (edge.PruneResult, error) {
+	result, err := stack.DeletePromotionArtifacts(ctx, state, keepN, pointer)
 	if err != nil {
 		return edge.PruneResult{}, fmt.Errorf("delete promotion artifacts: %w", err)
 	}

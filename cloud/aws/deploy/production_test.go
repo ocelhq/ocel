@@ -191,9 +191,9 @@ func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testin
 		{App: "api", BuildID: "b2", Record: edge.DeploymentRecord{App: "api", BuildID: "b2"}},
 	}
 
-	state, err := finalizeProductionDeploy(ctx, fake, specs, nil, "promo1", "", 100, results)
+	state, err := finalizeDeploy(ctx, fake, specs, nil, "promo1", "", "", 100, results)
 	if err != nil {
-		t.Fatalf("finalizeProductionDeploy: %v", err)
+		t.Fatalf("finalizeDeploy: %v", err)
 	}
 
 	if len(fake.reconciles) != 1 {
@@ -229,12 +229,53 @@ func TestFinalizeProductionDeploy_StampsTheTagOntoThePromotion(t *testing.T) {
 		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
 	}
 
-	if _, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", 100, results); err != nil {
-		t.Fatalf("finalizeProductionDeploy: %v", err)
+	if _, err := finalizeDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", "", 100, results); err != nil {
+		t.Fatalf("finalizeDeploy: %v", err)
 	}
 
 	if len(fake.promotions) != 1 || fake.promotions[0].Tag != "v1.2.3" {
 		t.Errorf("promotions = %v, want the promote to carry tag %q", fake.promotions, "v1.2.3")
+	}
+}
+
+func TestFinalizeDeploy_PromotesTheGivenPointer(t *testing.T) {
+	ctx := context.Background()
+	results := []appDeployResult{
+		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
+	}
+
+	prod := &recordingRootStack{}
+	if _, err := finalizeDeploy(ctx, prod, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		t.Fatalf("finalizeDeploy(production): %v", err)
+	}
+	if len(prod.promotePointers) != 1 || prod.promotePointers[0] != "" {
+		t.Errorf("production promote pointer = %v, want the reserved default (empty)", prod.promotePointers)
+	}
+
+	preview := &recordingRootStack{}
+	if _, err := finalizeDeploy(ctx, preview, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "pr-42", 100, results); err != nil {
+		t.Fatalf("finalizeDeploy(preview): %v", err)
+	}
+	if len(preview.promotePointers) != 1 || preview.promotePointers[0] != "pr-42" {
+		t.Errorf("preview promote pointer = %v, want [pr-42]", preview.promotePointers)
+	}
+}
+
+func TestPromotePointer_EmptyForProductionIdentityForPreview(t *testing.T) {
+	if got := promotePointer(Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION, Identity: "ignored"}); got != "" {
+		t.Errorf("promotePointer(production) = %q, want empty", got)
+	}
+	if got := promotePointer(Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}); got != "pr-42" {
+		t.Errorf("promotePointer(preview) = %q, want pr-42", got)
+	}
+}
+
+func TestBootstrapCommand_ByClass(t *testing.T) {
+	if got := bootstrapCommand(Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION}); got != "ocel bootstrap" {
+		t.Errorf("bootstrapCommand(production) = %q", got)
+	}
+	if got := bootstrapCommand(Config{Class: deploymentsv1.Environment_CLASS_PREVIEW}); got != "ocel bootstrap --preview" {
+		t.Errorf("bootstrapCommand(preview) = %q", got)
 	}
 }
 
@@ -311,8 +352,8 @@ func TestFinalizeProductionDeploy_StagesBeforeAnyPromote(t *testing.T) {
 		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
 	}
 
-	if _, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", 100, results); err != nil {
-		t.Fatalf("finalizeProductionDeploy: %v", err)
+	if _, err := finalizeDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		t.Fatalf("finalizeDeploy: %v", err)
 	}
 
 	want := []string{"reconcile", "stage", "promote"}
@@ -334,7 +375,7 @@ func TestFinalizeProductionDeploy_AppFailureAbortsPromote(t *testing.T) {
 		{App: "api", Err: errors.New("app-deploy stack failed")},
 	}
 
-	_, err := finalizeProductionDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", 100, results)
+	_, err := finalizeDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results)
 	if err == nil {
 		t.Fatal("expected an error when one app's deploy failed")
 	}
@@ -353,14 +394,14 @@ func TestFinalizeProductionDeploy_SecondDeployProducesNewPromotionRetainingPrior
 	specs := []edge.RootStackSpec{{Version: "v1"}}
 	results := []appDeployResult{{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}}}
 
-	state, err := finalizeProductionDeploy(ctx, fake, specs, nil, "promo1", "", 100, results)
+	state, err := finalizeDeploy(ctx, fake, specs, nil, "promo1", "", "", 100, results)
 	if err != nil {
-		t.Fatalf("first finalizeProductionDeploy: %v", err)
+		t.Fatalf("first finalizeDeploy: %v", err)
 	}
 
 	results2 := []appDeployResult{{App: "web", BuildID: "b2", Record: edge.DeploymentRecord{App: "web", BuildID: "b2"}}}
-	if _, err := finalizeProductionDeploy(ctx, fake, specs, state, "promo2", "", 200, results2); err != nil {
-		t.Fatalf("second finalizeProductionDeploy: %v", err)
+	if _, err := finalizeDeploy(ctx, fake, specs, state, "promo2", "", "", 200, results2); err != nil {
+		t.Fatalf("second finalizeDeploy: %v", err)
 	}
 
 	if len(fake.promotions) != 2 {
@@ -389,9 +430,9 @@ func (f *orderTrackingRootStack) PutStaged(ctx context.Context, state edge.RootS
 	return f.recordingRootStack.PutStaged(ctx, state, record)
 }
 
-func (f *orderTrackingRootStack) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion) error {
+func (f *orderTrackingRootStack) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion, pointer string) error {
 	f.calls = append(f.calls, "promote")
-	return f.recordingRootStack.Promote(ctx, state, promotion)
+	return f.recordingRootStack.Promote(ctx, state, promotion, pointer)
 }
 
 func TestReconcileRootStack_ThreadsStateAcrossMultipleSpecs(t *testing.T) {

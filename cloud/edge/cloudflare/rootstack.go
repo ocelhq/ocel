@@ -18,6 +18,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -298,22 +299,39 @@ func (p *provider) PutStaged(ctx context.Context, state edge.RootStackState, rec
 	return err
 }
 
-func (p *provider) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion) error {
-	_, err := p.storeRequest(ctx, state, http.MethodPost, "/promote", promotion, nil)
+// promoteBody carries a Promotion plus the optional pointer to move, matching
+// the store's `Promotion & { pointer?: string }` /promote body: the store
+// destructures pointer out and stores the rest as the promotion. An empty
+// pointer is omitted so the store applies its reserved production default.
+type promoteBody struct {
+	edge.Promotion
+	Pointer string `json:"pointer,omitempty"`
+}
+
+func (p *provider) Promote(ctx context.Context, state edge.RootStackState, promotion edge.Promotion, pointer string) error {
+	_, err := p.storeRequest(ctx, state, http.MethodPost, "/promote", promoteBody{Promotion: promotion, Pointer: pointer}, nil)
 	return err
 }
 
-func (p *provider) History(ctx context.Context, state edge.RootStackState) ([]edge.HistoryEntry, error) {
+func (p *provider) History(ctx context.Context, state edge.RootStackState, pointer string) ([]edge.HistoryEntry, error) {
+	subpath := "/history"
+	if pointer != "" {
+		subpath += "?pointer=" + url.QueryEscape(pointer)
+	}
 	var history []edge.HistoryEntry
-	if _, err := p.storeRequest(ctx, state, http.MethodGet, "/history", nil, &history); err != nil {
+	if _, err := p.storeRequest(ctx, state, http.MethodGet, subpath, nil, &history); err != nil {
 		return nil, err
 	}
 	return history, nil
 }
 
-func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.RootStackState, keepN int) (edge.PruneResult, error) {
+func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.RootStackState, keepN int, pointer string) (edge.PruneResult, error) {
+	body := map[string]any{"keepN": keepN}
+	if pointer != "" {
+		body["pointer"] = pointer
+	}
 	var result edge.PruneResult
-	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/prune", map[string]int{"keepN": keepN}, &result); err != nil {
+	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/prune", body, &result); err != nil {
 		return edge.PruneResult{}, err
 	}
 	return result, nil
