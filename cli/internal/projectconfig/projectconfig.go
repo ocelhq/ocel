@@ -118,19 +118,58 @@ type rawConfig struct {
 }
 
 // rawDomains is the class-keyed domain block, shared by the project and each
-// app. Only "production" is settable today.
+// app. "production" is a plain hostname; "preview" is a wildcard the ephemeral
+// and persistent previews are served under, one subdomain label per pointer.
 type rawDomains struct {
 	Production string `json:"production"`
+	Preview    string `json:"preview"`
 }
 
 // normalizeDomains lowers a raw domain block into the class-keyed map the
-// manifest carries, dropping empty entries.
-func normalizeDomains(raw rawDomains) map[string]string {
+// manifest carries, dropping empty entries and validating the preview wildcard.
+func normalizeDomains(raw rawDomains) (map[string]string, error) {
 	domains := map[string]string{}
 	if raw.Production != "" {
 		domains["production"] = strings.ToLower(raw.Production)
 	}
-	return domains
+	if raw.Preview != "" {
+		preview := strings.ToLower(raw.Preview)
+		if err := validatePreviewDomain(preview); err != nil {
+			return nil, err
+		}
+		domains["preview"] = preview
+	}
+	return domains, nil
+}
+
+// validatePreviewDomain enforces that a preview domain is a single-wildcard
+// pattern whose sole wildcard is the leftmost label — e.g. "*.preview.app.com".
+// The subdomain label the wildcard stands in for is the store pointer; a
+// pattern with no wildcard, a wildcard that isn't a whole leftmost label, or
+// more than one wildcard cannot host per-pointer subdomains and is rejected.
+func validatePreviewDomain(domain string) error {
+	labels := strings.Split(domain, ".")
+	if len(labels) < 2 {
+		return fmt.Errorf("preview domain %q must be a wildcard hostname like \"*.preview.example.com\"", domain)
+	}
+	if strings.Count(domain, "*") != 1 {
+		return fmt.Errorf("preview domain %q must contain exactly one wildcard, in its leftmost label (e.g. \"*.preview.example.com\")", domain)
+	}
+	if labels[0] != "*" {
+		return fmt.Errorf("preview domain %q must have its wildcard as the whole leftmost label (e.g. \"*.preview.example.com\")", domain)
+	}
+	return nil
+}
+
+// PreviewBaseDomain derives the base domain the preview wildcard is anchored on
+// by stripping the leading "*." — "*.preview.app.com" becomes "preview.app.com".
+// It is the OCEL_PREVIEW_BASE_DOMAIN the frozen preview worker matches request
+// subdomains against. Returns "" for a non-wildcard or empty input.
+func PreviewBaseDomain(previewDomain string) string {
+	if !strings.HasPrefix(previewDomain, "*.") {
+		return ""
+	}
+	return previewDomain[len("*."):]
 }
 
 // defaultCompute is the Ocel-internal compute target applied to every app
@@ -190,7 +229,10 @@ func Resolve(startDir string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", configPath, err)
 	}
 
-	domains := normalizeDomains(raw.Domains)
+	domains, err := normalizeDomains(raw.Domains)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", configPath, err)
+	}
 
 	return &Config{
 		Slug:      raw.Slug,
@@ -256,12 +298,16 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			return nil, fmt.Errorf("app %q is missing required \"path\"", a.Name)
 		}
 
+		domains, err := normalizeDomains(a.Domains)
+		if err != nil {
+			return nil, fmt.Errorf("app %q: %w", a.Name, err)
+		}
 		apps = append(apps, App{
 			Name:       a.Name,
 			Path:       a.Path,
 			Framework:  a.Framework,
 			Entrypoint: a.Entrypoint,
-			Domains:    normalizeDomains(a.Domains),
+			Domains:    domains,
 			Compute:    defaultCompute,
 		})
 	}
