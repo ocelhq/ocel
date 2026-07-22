@@ -299,10 +299,9 @@ func (p *provider) PutStaged(ctx context.Context, state edge.RootStackState, rec
 	return err
 }
 
-// promoteBody carries a Promotion plus the optional pointer to move, matching
-// the store's `Promotion & { pointer?: string }` /promote body: the store
-// destructures pointer out and stores the rest as the promotion. An empty
-// pointer is omitted so the store applies its reserved production default.
+// promoteBody matches the store's `Promotion & { pointer?: string }` /promote
+// body. An empty pointer is omitted so the store applies its reserved
+// production default.
 type promoteBody struct {
 	edge.Promotion
 	Pointer string `json:"pointer,omitempty"`

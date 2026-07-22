@@ -391,10 +391,8 @@ export function prune(
 // Removes a pointer outright: every promotion scoped to it, the records those
 // promotions name, and the pointer row itself. Unlike prune(), it pins nothing
 // — a `preview rm` tears the whole preview down, so its active promotion goes
-// with the rest. It returns the removed promotion ids and record keys so the
-// host reclaims the app-deploy stacks and R2/S3 objects those records named,
-// exactly like prune(). Scoped by pointer, so it never touches production or
-// another preview. Removing an unknown pointer is a clean no-op.
+// too. Returns the removed record keys so the host reclaims the stacks and
+// R2/S3 objects they named. Removing an unknown pointer is a clean no-op.
 export function removePointer(
   store: SqlStore,
   pointer: string = DEFAULT_POINTER,
