@@ -36,10 +36,29 @@ const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
 // credential, a project secret, or an owner token), hex-encoded on the wire.
 const secretBytes = 32
 
-// sharedStoreScriptName is the shared deployments-store worker's script name,
-// provisioned once at bootstrap and service-bound by every project's generic
-// worker. One per account (production class only).
-const sharedStoreScriptName = "ocel-deployments-store"
+// sharedStoreScriptName / previewStoreScriptName are the deployments-store
+// worker script names, one per substrate class: production provisions
+// sharedStoreScriptName, preview provisions previewStoreScriptName. They are
+// distinct scripts so their Durable Object namespaces (which are script-scoped)
+// never collide, letting the two substrates coexist in one account. Each is
+// provisioned once at bootstrap and service-bound by that substrate's projects.
+const (
+	sharedStoreScriptName  = "ocel-deployments-store"
+	previewStoreScriptName = "ocel-deployments-store-preview"
+)
+
+// storeScriptNameFor returns the deployments-store worker script name for a
+// substrate class.
+func storeScriptNameFor(class edge.Class) (string, error) {
+	switch class {
+	case edge.ClassProduction:
+		return sharedStoreScriptName, nil
+	case edge.ClassPreview:
+		return previewStoreScriptName, nil
+	default:
+		return "", fmt.Errorf("deployments store: unknown substrate class %q", class)
+	}
+}
 
 // The shared deployments-store worker's own Durable Object binding (mirroring
 // its wrangler.jsonc: workers/deployments-store/wrangler.jsonc), which

@@ -85,16 +85,19 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 	if err != nil {
 		return out, err
 	}
-	// The shared deployments-store worker is a production-class concept: the
-	// promotion history/rollback machinery only runs on the production deploy
-	// path. Preview keeps its request-time resolution and provisions no store.
-	if class == edge.ClassProduction {
-		storeOffer, err := p.bootstrapStore(ctx, accountID)
-		if err != nil {
-			return out, fmt.Errorf("bootstrap deployments-store worker: %w", err)
-		}
-		out.Offers = append(out.Offers, storeOffer)
+	// Each substrate provisions its own deployments-store worker so preview and
+	// production never share promotion history or Durable Object state. The two
+	// workers are distinct scripts (production vs preview script names), which is
+	// what keeps their DO namespaces separate — the namespace is script-scoped.
+	scriptName, err := storeScriptNameFor(class)
+	if err != nil {
+		return out, err
 	}
+	storeOffer, err := p.bootstrapStore(ctx, accountID, scriptName)
+	if err != nil {
+		return out, fmt.Errorf("bootstrap deployments-store worker: %w", err)
+	}
+	out.Offers = append(out.Offers, storeOffer)
 	return out, nil
 }
 
@@ -106,7 +109,7 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 // /<slug>/initialize and is read fresh from the adopted param at deploy time,
 // never held long-term. The DO migration is declared only on the first
 // bootstrap (when no script exists yet); redeclaring it later is rejected.
-func (p *provider) bootstrapStore(ctx context.Context, accountID string) (edge.Offer, error) {
+func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName string) (edge.Offer, error) {
 	bundles, err := edge.LoadStoreBundleManifest()
 	if err != nil {
 		return edge.Offer{}, err
@@ -120,7 +123,7 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID string) (edge.O
 		return edge.Offer{}, err
 	}
 
-	exists, err := p.FindApp(ctx, sharedStoreScriptName)
+	exists, err := p.FindApp(ctx, scriptName)
 	if err != nil {
 		return edge.Offer{}, fmt.Errorf("check deployments-store worker: %w", err)
 	}
@@ -129,7 +132,7 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID string) (edge.O
 		return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
 	}
 
-	up := upload{accountID: accountID, scriptName: sharedStoreScriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
+	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
 	if err := p.putStoreScript(ctx, up, !exists); err != nil {
 		return edge.Offer{}, fmt.Errorf("put deployments-store worker: %w", err)
 	}
@@ -142,7 +145,7 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID string) (edge.O
 		Kind: edge.OfferDeploymentsStore,
 		Values: map[string]string{
 			edge.OfferKeyStoreEndpoint:      endpoint,
-			edge.OfferKeyStoreScriptName:    sharedStoreScriptName,
+			edge.OfferKeyStoreScriptName:    scriptName,
 			edge.OfferKeyStoreBootstrapCred: cred,
 		},
 	}, nil
