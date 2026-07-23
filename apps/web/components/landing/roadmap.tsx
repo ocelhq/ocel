@@ -57,15 +57,15 @@ export function Roadmap() {
       <span className="absolute right-10 top-11 font-mono text-[15px] text-faint">
         +
       </span>
-      <span className="pointer-events-none absolute -right-6 top-1/2 origin-center rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim">
+      <span className="pointer-events-none absolute -right-6 top-1/2 hidden origin-center rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim md:block">
         FIG. 03 — ROADMAP
       </span>
-      <div className="mx-auto max-w-[1180px] px-10 pb-[116px] pt-[84px]">
+      <div className="mx-auto max-w-[1180px] px-5 pb-24 pt-16 md:px-10 md:pb-[116px] md:pt-[84px]">
         <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">
           ROADMAP — IN THE OPEN
         </div>
-        <h2 className="max-w-[20ch] text-[34px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
-          Built in public. The same board we work from.
+        <h2 className="max-w-[24ch] text-[34px] font-semibold leading-[1.15] tracking-[-0.02em] text-foreground">
+          We ship fast — and in public.
         </h2>
         <p className="mt-4 max-w-[54ch] text-[15px] leading-[1.65] text-muted-foreground">
           Open source means you don't take the roadmap on faith. Here's what's

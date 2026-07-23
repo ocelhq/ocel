@@ -101,7 +101,7 @@ export function StatusQuo() {
       <span className="absolute bottom-12 left-10 font-mono text-[15px] text-primary">
         +
       </span>
-      <div className="mx-auto max-w-[1180px] px-10 py-[84px]">
+      <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
         <div className="mb-3.5 font-mono text-xs tracking-[0.08em] text-primary">
           THE STATUS QUO
         </div>
