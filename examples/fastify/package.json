@@ -1,6 +1,6 @@
 {
   "name": "fastify",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "",
   "main": "index.js",
   "scripts": {
@@ -13,6 +13,6 @@
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
     "@ocel/sdk": "workspace:^",
-    "fastify": "^5.10.0"
+    "fastify": "^1.0.1"
   }
 }
