@@ -38,6 +38,7 @@ export default function Home() {
       <Interop />
       <Pricing />
       <Faq />
+      <OneMoreThingBreak />
       <OneMoreThing />
       <Roadmap />
       <CtaBand />
@@ -66,7 +67,9 @@ function SectionHeading({ children }: { children: ReactNode }) {
 
 function Container({ children }: { children: ReactNode }) {
   return (
-    <div className="mx-auto max-w-[1180px] px-10 py-[84px]">{children}</div>
+    <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
+      {children}
+    </div>
   );
 }
 
@@ -82,14 +85,14 @@ function DarkCodePane({
   return (
     <div
       className={cn(
-        "self-start border-[1.5px] border-foreground bg-[#0a0a0a] shadow-[6px_6px_0_0_var(--hard-shadow)]",
+        "min-w-0 max-w-full self-start border-[1.5px] border-foreground bg-[#0a0a0a] shadow-[6px_6px_0_0_var(--hard-shadow)]",
         className,
       )}
     >
       <div className="border-b border-[#2e2e2e] px-4 py-2.5 font-mono text-[11px] text-[#8a8a8a]">
         {file}
       </div>
-      <div className="px-5.5 py-5 font-mono text-[13.5px] leading-[1.95] text-[#e8e9eb]">
+      <div className="overflow-x-auto px-5.5 py-5 font-mono text-[13.5px] leading-[1.95] text-[#e8e9eb]">
         {children}
       </div>
     </div>
@@ -326,7 +329,7 @@ async function Sdk() {
             <span className="size-0 border-y-[6px] border-l-[8px] border-y-transparent border-l-primary" />
           </div>
 
-          <div className="border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]">
+          <div className="min-w-0 border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]">
             <div className="flex items-center gap-2.5 border-b-[1.5px] border-foreground px-4 py-3">
               <FaAws className="size-6 shrink-0 text-foreground" />
               <span className="text-[13px] font-semibold text-foreground">
@@ -459,7 +462,7 @@ function DevMode() {
       <span className="absolute left-[44%] top-10 font-mono text-[15px] text-primary">
         +
       </span>
-      <div className="mx-auto max-w-[1180px] px-10 py-[84px]">
+      <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
         <div className="grid grid-cols-1 gap-12 md:grid-cols-2">
           <div>
             <Eyebrow>03 — DEV MODE</Eyebrow>
@@ -536,10 +539,10 @@ function DevMode() {
 function Console() {
   return (
     <section className="relative overflow-hidden border-t border-border bg-secondary">
-      <span className="absolute left-3.5 top-[54%] origin-top-left rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim">
+      <span className="absolute left-3.5 top-[54%] hidden origin-top-left rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim md:block">
         FIG. 02 — CONSOLE
       </span>
-      <div className="mx-auto max-w-[1180px] px-10 py-[84px]">
+      <div className="mx-auto max-w-[1180px] px-5 py-16 md:px-10 md:py-[84px]">
         <div className="mx-auto max-w-[620px] text-center">
           <Eyebrow>04 — CONSOLE</Eyebrow>
           <SectionHeading>A dashboard for infra you still own.</SectionHeading>
@@ -572,7 +575,7 @@ function Interop() {
       <span className="absolute bottom-9 right-12 font-mono text-[15px] text-faint">
         +
       </span>
-      <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-12 px-10 py-[84px] md:grid-cols-2">
+      <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-12 px-5 py-16 md:grid-cols-2 md:px-10 md:py-[84px]">
         <div>
           <Eyebrow>05 — INTEROP</Eyebrow>
           <SectionHeading>Bring your own IaC.</SectionHeading>
@@ -607,7 +610,7 @@ function Interop() {
 function Pricing() {
   return (
     <section className="border-t border-border bg-secondary">
-      <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-12 px-10 py-[84px] md:grid-cols-2">
+      <div className="mx-auto grid max-w-[1180px] grid-cols-1 items-center gap-12 px-5 py-16 md:grid-cols-2 md:px-10 md:py-[84px]">
         <div>
           <Eyebrow>06 — THE MATH</Eyebrow>
           <SectionHeading>Read the bill, not the brochure.</SectionHeading>
@@ -617,8 +620,8 @@ function Pricing() {
             bill is the one you already have.
           </p>
         </div>
-        <div className="border-[1.5px] border-foreground bg-card font-mono text-sm text-foreground shadow-[6px_6px_0_0_var(--hard-shadow)]">
-          <div className="flex justify-between border-b border-border px-5 py-4">
+        <div className="min-w-0 border-[1.5px] border-foreground bg-card font-mono text-sm text-foreground shadow-[6px_6px_0_0_var(--hard-shadow)]">
+          <div className="flex justify-between gap-4 border-b border-border px-5 py-4">
             <span className="text-dim">20 seats × $20/mo, elsewhere</span>
             <span>$400/mo</span>
           </div>
@@ -693,17 +696,17 @@ function Faq() {
 
 function CtaBand() {
   return (
-    <section className="relative overflow-hidden bg-foreground px-10 py-20 text-center">
+    <section className="relative overflow-hidden bg-foreground px-5 py-16 text-center md:px-10 md:py-20">
       <span className="absolute left-[60px] top-10 font-mono text-[15px] text-dim">
         +
       </span>
       <span className="absolute bottom-11 right-20 font-mono text-[15px] text-primary">
         +
       </span>
-      <h2 className="text-[40px] font-semibold leading-[1.1] tracking-[-0.03em] text-background">
+      <h2 className="text-pretty text-[32px] font-semibold leading-[1.1] tracking-[-0.03em] text-background md:text-[40px]">
         Deploy to your own cloud in minutes.
       </h2>
-      <div className="mt-6 flex justify-center gap-3">
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
         <Button className="h-auto rounded-none px-6 py-[13px] text-[15px] font-semibold normal-case tracking-normal">
           Get started
         </Button>
@@ -724,10 +727,20 @@ const footerCols = [
   },
 ];
 
+function OneMoreThingBreak() {
+  return (
+    <div className="pb-6 pt-18 text-center md:pb-8 md:pt-24">
+      <span className="font-mono text-xs tracking-[0.14em] text-dim">
+        — ONE MORE THING —
+      </span>
+    </div>
+  );
+}
+
 function OneMoreThing() {
   return (
     <section
-      className="relative overflow-hidden px-10 pb-[92px] pt-20 text-center"
+      className="relative overflow-hidden px-5 pb-20 pt-4 text-center md:px-10 md:pb-18 md:pt-10"
       style={{
         backgroundImage:
           "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)",
@@ -742,10 +755,7 @@ function OneMoreThing() {
         }}
       />
       <div className="relative">
-        <div className="mb-[22px] font-mono text-xs tracking-[0.14em] text-dim">
-          — ONE MORE THING —
-        </div>
-        <h2 className="text-[54px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground">
+        <h2 className="text-pretty text-[38px] font-semibold leading-[1.08] tracking-[-0.03em] text-foreground md:text-[54px]">
           Oh — and it's <span className="text-primary">open source.</span>
         </h2>
         <p className="mx-auto mt-[18px] max-w-[52ch] text-[15px] leading-[1.65] text-muted-foreground">
@@ -768,7 +778,7 @@ function OneMoreThing() {
 
 function Footer() {
   return (
-    <section className="border-t border-border px-10 pb-[26px] pt-[54px] text-center">
+    <section className="border-t border-border px-5 pb-[26px] pt-[54px] text-center md:px-10">
       <div className="mx-auto grid max-w-[1180px] grid-cols-1 gap-8 text-left md:grid-cols-[1.4fr_1fr_1fr_1fr]">
         <div>
           <Wordmark markSize={18} textSize={15} />
@@ -790,7 +800,7 @@ function Footer() {
           </div>
         ))}
       </div>
-      <div className="mx-auto mt-[34px] flex max-w-[1180px] justify-between border-t border-border pt-4 font-mono text-[11.5px] text-dim">
+      <div className="mx-auto mt-[34px] flex max-w-[1180px] flex-col gap-1.5 border-t border-border pt-4 font-mono text-[11.5px] text-dim sm:flex-row sm:justify-between">
         <span>© 2026 ocel</span>
         <span>FIG. 04 — YOUR CLOUD. YOUR CODE. YOUR CALL.</span>
       </div>

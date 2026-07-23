@@ -44,18 +44,22 @@ export function Terminal({
     <div
       {...interactive}
       className={cn(
-        "border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]",
+        "min-w-0 max-w-full border-[1.5px] border-foreground bg-card shadow-[6px_6px_0_0_var(--hard-shadow)]",
         onClick && "cursor-pointer",
         className,
       )}
     >
       <div className="flex items-center gap-1.5 border-b-[1.5px] border-foreground px-3.5 py-2.5">
-        <span className="size-[9px] rounded-full border-[1.5px] border-foreground" />
-        <span className="size-[9px] rounded-full border-[1.5px] border-foreground" />
-        <span className="size-[9px] rounded-full bg-primary" />
-        <span className="ml-2 font-mono text-[11px] text-dim">{title}</span>
+        <span className="size-[9px] shrink-0 rounded-full border-[1.5px] border-foreground" />
+        <span className="size-[9px] shrink-0 rounded-full border-[1.5px] border-foreground" />
+        <span className="size-[9px] shrink-0 rounded-full bg-primary" />
+        <span className="ml-2 truncate font-mono text-[11px] text-dim">
+          {title}
+        </span>
       </div>
-      <div className={cn("px-5.5 py-4.5 font-mono", bodyClassName)}>
+      <div
+        className={cn("overflow-x-auto px-5.5 py-4.5 font-mono", bodyClassName)}
+      >
         {children}
       </div>
     </div>

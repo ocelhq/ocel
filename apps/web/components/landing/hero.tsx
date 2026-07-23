@@ -43,11 +43,11 @@ export function Hero() {
       <span className="absolute bottom-[52px] right-[36%] font-mono text-[15px] text-primary">
         +
       </span>
-      <span className="absolute right-[-34px] top-1/2 origin-center rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim">
+      <span className="absolute right-[-34px] top-1/2 hidden origin-center rotate-90 font-mono text-[10.5px] tracking-[0.14em] text-dim md:block">
         FIG. 01 — YOUR ACCOUNT
       </span>
 
-      <div className="relative mx-auto grid max-w-[1180px] grid-cols-1 gap-11 px-10 pb-[58px] pt-16 md:grid-cols-[1fr_1.06fr]">
+      <div className="relative mx-auto grid max-w-[1180px] grid-cols-1 gap-11 px-5 pb-[58px] pt-16 md:grid-cols-[1fr_1.06fr] md:px-10">
         <div>
           <div className="mb-[18px] font-mono text-xs tracking-[0.08em] text-primary">
             $ npm i -g ocel
