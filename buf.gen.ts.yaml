@@ -1,4 +1,11 @@
 version: v2
+# The TypeScript SDK is kept lightweight: dev- and deployment-only services
+# are CLI/control-plane concerns and are excluded from client codegen.
+inputs:
+  - directory: proto
+    exclude_paths:
+      - proto/dev
+      - proto/deployments
 plugins:
   - local: protoc-gen-es
     out: packages/sdk/src/gen/proto
