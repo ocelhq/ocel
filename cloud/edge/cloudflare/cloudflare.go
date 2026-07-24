@@ -231,15 +231,15 @@ func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.
 		return edge.AppResult{}, fmt.Errorf("put worker script: %w", err)
 	}
 
-	if err := p.reconcileWorkerHostname(ctx, up, app.Domain); err != nil {
+	if err := p.reconcileWorkerRoutes(ctx, up, app.Domains, app.Warn); err != nil {
 		return edge.AppResult{}, err
 	}
-	url, err := p.setSubdomain(ctx, up, app.Domain == "")
+	url, err := p.setSubdomain(ctx, up, len(app.Domains) == 0)
 	if err != nil {
 		return edge.AppResult{}, fmt.Errorf("set workers.dev subdomain: %w", err)
 	}
-	if app.Domain != "" {
-		url = "https://" + app.Domain
+	if len(app.Domains) > 0 {
+		url = canonicalDomainURL(app.Domains)
 	}
 	return edge.AppResult{URL: url}, nil
 }
@@ -523,33 +523,132 @@ func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (s
 	return fmt.Sprintf("https://%s.%s.workers.dev", up.scriptName, account.Subdomain), nil
 }
 
-// reconcileWorkerHostname attaches the worker to desired by whichever Cloudflare
-// mechanism its shape calls for: a wildcard (e.g. "*.preview.app.com", which
-// cannot be a custom domain) becomes a worker route "<wildcard>/*", and a plain
-// hostname becomes a custom domain. Empty attaches neither. Production passes a
-// plain hostname; a preview passes its base-domain wildcard, whose per-request
-// subdomains the frozen preview worker routes internally.
-func (p *provider) reconcileWorkerHostname(ctx context.Context, up upload, desired string) error {
-	if strings.HasPrefix(desired, "*.") {
-		return p.reconcileWorkerRoute(ctx, up, desired)
+// reconcileWorkerRoutes makes the worker's attached hostnames exactly desired,
+// each as a Cloudflare worker route "<hostname>/*", or none when desired is
+// empty. Every hostname — a plain production apex, a "www" host, or a "*."
+// wildcard (multitenant production or a preview base) — routes the same way, so
+// production and preview can share a base domain and Cloudflare's most-specific
+// route wins per request. It is the single hostname path for both classes,
+// replacing the earlier custom-domain-for-production split.
+//
+// It converges idempotently: it ensures a route and its proxied placeholder
+// record for each desired hostname, deletes any route for this script whose
+// hostname is no longer desired (removing only Ocel's own placeholder record),
+// and detaches any custom domain still bound to this script from before the
+// switch to routes — a custom domain would otherwise reject an overlapping
+// route. warn, when non-nil, receives non-fatal advisories (a hostname the
+// zone's Universal SSL does not cover, a user-managed record blocking a route).
+func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, desired []string, warn func(string)) error {
+	warn = nilSafeWarn(warn)
+
+	if err := p.detachCustomDomains(ctx, up.accountID, up.scriptName); err != nil {
+		return err
 	}
-	return p.reconcileCustomDomains(ctx, up, desired)
+
+	wanted := make(map[string]bool, len(desired))
+	for _, host := range desired {
+		zoneID, zoneName, err := p.resolveZone(ctx, up.accountID, routeBaseDomain(host))
+		if err != nil {
+			return err
+		}
+		wanted[host] = true
+		if !coveredByUniversalSSL(host, zoneName) {
+			warn(fmt.Sprintf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover — TLS will fail there until you add a Cloudflare Advanced Certificate for it", host, zoneName))
+		}
+		if err := p.ensureRoute(ctx, zoneID, host+"/*", up.scriptName); err != nil {
+			return err
+		}
+		if err := p.ensureProxiedRecord(ctx, zoneID, host, warn); err != nil {
+			return err
+		}
+	}
+
+	return p.pruneStaleRoutes(ctx, up, wanted)
 }
 
-// reconcileWorkerRoute attaches the worker to a wildcard hostname, idempotently:
-// it routes "<wildcard>/*" to the script and plants the proxied placeholder DNS
-// record that makes the hostname resolve — a route without that record never
-// fires. The pattern's zone is resolved from the account's zones by the
-// wildcard's base domain. Its counterpart on teardown is detachRouteRecords.
-func (p *provider) reconcileWorkerRoute(ctx context.Context, up upload, wildcard string) error {
-	zoneID, err := p.resolveZoneID(ctx, up.accountID, strings.TrimPrefix(wildcard, "*."))
-	if err != nil {
-		return err
+// pruneStaleRoutes deletes every route pointing at this script whose hostname is
+// not in wanted, across all of the account's zones — so dropping a hostname from
+// the config (even the last one in a whole zone) tears its route and Ocel's
+// placeholder record down. A record the user manages is left untouched.
+func (p *provider) pruneStaleRoutes(ctx context.Context, up upload, wanted map[string]bool) error {
+	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
+		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(up.accountID)}),
+	})
+	var errs []error
+	for owned.Next() {
+		zoneID := owned.Current().ID
+		routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
+		for routes.Next() {
+			route := routes.Current()
+			if route.Script != up.scriptName {
+				continue
+			}
+			host := strings.TrimSuffix(route.Pattern, "/*")
+			if wanted[host] {
+				continue
+			}
+			if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+				errs = append(errs, fmt.Errorf("delete stale worker route %q: %w", route.Pattern, err))
+				continue
+			}
+			if err := p.deleteProxiedRecord(ctx, zoneID, host); err != nil {
+				errs = append(errs, err)
+			}
+		}
+		if err := routes.Err(); err != nil {
+			errs = append(errs, fmt.Errorf("list worker routes in zone %s: %w", zoneID, err))
+		}
 	}
-	if err := p.ensureRoute(ctx, zoneID, wildcard+"/*", up.scriptName); err != nil {
-		return err
+	if err := owned.Err(); err != nil {
+		errs = append(errs, fmt.Errorf("list zones: %w", err))
 	}
-	return p.ensureProxiedRecord(ctx, zoneID, wildcard)
+	return errors.Join(errs...)
+}
+
+// routeBaseDomain is the zone-owning suffix of a route hostname: a "*." wildcard
+// strips its wildcard label, and any other host is resolved by itself. The
+// result is what resolveZone matches an account zone against.
+func routeBaseDomain(host string) string {
+	return strings.TrimPrefix(host, "*.")
+}
+
+// coveredByUniversalSSL reports whether host falls under the zone's Universal
+// SSL certificate, which covers only the apex and hostnames exactly one label
+// below it — including the first-level wildcard "*.<zone>". A name two or more
+// labels deep ("*.preview.<zone>", "a.b.<zone>") needs an Advanced Certificate.
+func coveredByUniversalSSL(host, zone string) bool {
+	if host == zone {
+		return true
+	}
+	sub := strings.TrimSuffix(host, "."+zone)
+	if sub == host {
+		return false
+	}
+	return !strings.Contains(sub, ".")
+}
+
+// canonicalDomainURL is the single URL a multi-hostname deploy is reported
+// under: the first non-wildcard hostname in declared order, or — when every
+// hostname is a wildcard (a pure multitenant deploy) — the first declared,
+// verbatim. Empty for no hostnames. Mirrors workerAppURL's production branch in
+// cloud/aws deploy (a separate Go module): keep the two in step.
+func canonicalDomainURL(domains []string) string {
+	if len(domains) == 0 {
+		return ""
+	}
+	for _, host := range domains {
+		if !strings.HasPrefix(host, "*.") {
+			return "https://" + host
+		}
+	}
+	return "https://" + domains[0]
+}
+
+func nilSafeWarn(warn func(string)) func(string) {
+	if warn == nil {
+		return func(string) {}
+	}
+	return warn
 }
 
 // ensureRoute makes the zone route pattern to scriptName: it reuses an existing
@@ -588,21 +687,39 @@ func (p *provider) ensureRoute(ctx context.Context, zoneID, pattern, scriptName 
 	return nil
 }
 
-// ensureProxiedRecord plants the proxied placeholder record for hostname so the
-// wildcard resolves to Cloudflare's edge, where the route fires. It is
-// conservative: if any record already exists at that name — Ocel's own
-// placeholder on a redeploy, or one the user manages — it leaves it untouched
-// rather than add a duplicate or a conflicting record.
-func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname string) error {
+// ensureProxiedRecord plants the proxied placeholder record for hostname so it
+// resolves to Cloudflare's edge, where the route fires — a route without a
+// proxied address record at its hostname never fires. Only address records (A,
+// AAAA, CNAME) govern whether the hostname reaches the edge; TXT/MX and the like
+// share the name but are inherently unproxiable, so they are ignored here. It
+// never overwrites an address record the user (or a prior deploy) already put
+// there: if a proxied one exists the route already resolves and it is left
+// alone; if address records exist but none is proxied the route cannot fire, so
+// it warns rather than silently serve nothing — but still leaves them untouched.
+func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname string, warn func(string)) error {
 	existing := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
 		ZoneID: cf.F(zoneID),
 		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(hostname)}),
 	})
-	if existing.Next() {
-		return nil
+	var haveAddress, haveProxied bool
+	for existing.Next() {
+		rec := existing.Current()
+		if !isAddressRecord(rec.Type) {
+			continue
+		}
+		haveAddress = true
+		if rec.Proxied {
+			haveProxied = true
+		}
 	}
 	if err := existing.Err(); err != nil {
 		return fmt.Errorf("list DNS records for %q: %w", hostname, err)
+	}
+	if haveAddress {
+		if !haveProxied {
+			warn(fmt.Sprintf("%s already has a DNS record that is not proxied through Cloudflare, so the worker route will not serve it — set that record to proxied (orange cloud) for %s to go live", hostname, hostname))
+		}
+		return nil
 	}
 
 	if _, err := p.client.DNS.Records.New(ctx, dns.RecordNewParams{
@@ -621,72 +738,39 @@ func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname str
 	return nil
 }
 
-// reconcileCustomDomains makes the worker's attached custom domains exactly
-// {desired}, or none when desired is empty: it detaches every attached hostname
-// that isn't desired, then attaches desired if it isn't already. The desired
-// hostname's zone is resolved from the account's zones.
-func (p *provider) reconcileCustomDomains(ctx context.Context, up upload, desired string) error {
-	attached := p.client.Workers.Domains.ListAutoPaging(ctx, workers.DomainListParams{
-		AccountID: cf.F(up.accountID),
-		Service:   cf.F(up.scriptName),
-	})
-	desiredAttached := false
-	for attached.Next() {
-		dom := attached.Current()
-		if dom.Hostname == desired {
-			desiredAttached = true
-			continue
-		}
-		if err := p.client.Workers.Domains.Delete(ctx, dom.ID, workers.DomainDeleteParams{
-			AccountID: cf.F(up.accountID),
-		}); err != nil {
-			return fmt.Errorf("detach custom domain %q: %w", dom.Hostname, err)
-		}
+// isAddressRecord reports whether a DNS record type is one that resolves a
+// hostname to an address Cloudflare can proxy — A, AAAA, or CNAME. Only these
+// determine whether a worker route's hostname reaches the edge.
+func isAddressRecord(t dns.RecordResponseType) bool {
+	switch t {
+	case dns.RecordResponseTypeA, dns.RecordResponseTypeAAAA, dns.RecordResponseTypeCNAME:
+		return true
+	default:
+		return false
 	}
-	if err := attached.Err(); err != nil {
-		return fmt.Errorf("list custom domains: %w", err)
-	}
-	if desired == "" || desiredAttached {
-		return nil
-	}
-
-	zoneID, err := p.resolveZoneID(ctx, up.accountID, desired)
-	if err != nil {
-		return err
-	}
-	if _, err := p.client.Workers.Domains.Update(ctx, workers.DomainUpdateParams{
-		AccountID:   cf.F(up.accountID),
-		Environment: cf.F("production"),
-		Hostname:    cf.F(desired),
-		Service:     cf.F(up.scriptName),
-		ZoneID:      cf.F(zoneID),
-	}); err != nil {
-		return fmt.Errorf("attach custom domain %q: %w", desired, err)
-	}
-	return nil
 }
 
-// resolveZoneID finds the account zone whose name is the longest suffix of
-// hostname (e.g. "acme.com" for "app.acme.com"). A hostname with no owning zone
-// in the account is a hard error: the deploy cannot serve it.
-func (p *provider) resolveZoneID(ctx context.Context, accountID, hostname string) (string, error) {
+// resolveZone finds the account zone whose name is the longest suffix of
+// hostname (e.g. "acme.com" for "app.acme.com"), returning its id and name. A
+// hostname with no owning zone in the account is a hard error: the deploy
+// cannot serve it.
+func (p *provider) resolveZone(ctx context.Context, accountID, hostname string) (id, name string, err error) {
 	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(accountID)}),
 	})
-	bestID, bestName := "", ""
 	for owned.Next() {
 		z := owned.Current()
-		if zoneOwns(hostname, z.Name) && len(z.Name) > len(bestName) {
-			bestID, bestName = z.ID, z.Name
+		if zoneOwns(hostname, z.Name) && len(z.Name) > len(name) {
+			id, name = z.ID, z.Name
 		}
 	}
 	if err := owned.Err(); err != nil {
-		return "", fmt.Errorf("list zones: %w", err)
+		return "", "", fmt.Errorf("list zones: %w", err)
 	}
-	if bestID == "" {
-		return "", fmt.Errorf("no Cloudflare zone in this account owns %q — add its zone to the account whose CLOUDFLARE_API_TOKEN you provided", hostname)
+	if id == "" {
+		return "", "", fmt.Errorf("no Cloudflare zone in this account owns %q — add its zone to the account whose CLOUDFLARE_API_TOKEN you provided", hostname)
 	}
-	return bestID, nil
+	return id, name, nil
 }
 
 func zoneOwns(hostname, zone string) bool {

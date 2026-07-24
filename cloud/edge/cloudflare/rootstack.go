@@ -137,10 +137,10 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	if err := p.putScript(ctx, genericUp, assetsJWT); err != nil {
 		return nil, fmt.Errorf("put generic worker: %w", err)
 	}
-	if err := p.reconcileWorkerHostname(ctx, genericUp, spec.Domain); err != nil {
+	if err := p.reconcileWorkerRoutes(ctx, genericUp, spec.Domains, spec.Warn); err != nil {
 		return nil, err
 	}
-	if _, err := p.setSubdomain(ctx, genericUp, spec.Domain == ""); err != nil {
+	if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains) == 0); err != nil {
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
 

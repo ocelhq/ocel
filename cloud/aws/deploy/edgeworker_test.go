@@ -307,17 +307,17 @@ func TestDeployEdgeWorker_UnsupportedPairingNamesBoth(t *testing.T) {
 	}
 }
 
-func TestDeployEdgeWorker_CustomDomainOnlyForProduction(t *testing.T) {
+func TestDeployEdgeWorker_DomainsOnlyForProduction(t *testing.T) {
 	cases := []struct {
 		name    string
 		class   deploymentsv1.Environment_Class
-		domains map[string]string
-		want    string
+		domains map[string]*deploymentsv1.DomainList
+		want    []string
 	}{
-		{"production with domain", deploymentsv1.Environment_CLASS_PRODUCTION, map[string]string{"production": "app.acme.com"}, "app.acme.com"},
-		{"production without domain", deploymentsv1.Environment_CLASS_PRODUCTION, nil, ""},
-		{"preview ignores domain", deploymentsv1.Environment_CLASS_PREVIEW, map[string]string{"production": "app.acme.com"}, ""},
-		{"unspecified ignores domain", deploymentsv1.Environment_CLASS_UNSPECIFIED, map[string]string{"production": "app.acme.com"}, ""},
+		{"production with domains", deploymentsv1.Environment_CLASS_PRODUCTION, classDomains("production", "app.acme.com", "www.acme.com"), []string{"app.acme.com", "www.acme.com"}},
+		{"production without domain", deploymentsv1.Environment_CLASS_PRODUCTION, nil, nil},
+		{"preview ignores domain", deploymentsv1.Environment_CLASS_PREVIEW, classDomains("production", "app.acme.com"), nil},
+		{"unspecified ignores domain", deploymentsv1.Environment_CLASS_UNSPECIFIED, classDomains("production", "app.acme.com"), nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -333,8 +333,8 @@ func TestDeployEdgeWorker_CustomDomainOnlyForProduction(t *testing.T) {
 			if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 				t.Fatalf("deployEdgeWorker: %v", err)
 			}
-			if got := fake.only(t).Domain; got != tc.want {
-				t.Errorf("Domain = %q, want %q", got, tc.want)
+			if got := fake.only(t).Domains; !slicesEqual(got, tc.want) {
+				t.Errorf("Domains = %v, want %v", got, tc.want)
 			}
 		})
 	}
@@ -377,9 +377,18 @@ func writeMinimalWorkerArtifacts(t *testing.T) string {
 	return artifactRoot
 }
 
+// classDomains builds a manifest domains map attaching hostnames to one class.
+// nil hostnames yields a nil map (no domains).
+func classDomains(class string, hostnames ...string) map[string]*deploymentsv1.DomainList {
+	if len(hostnames) == 0 {
+		return nil
+	}
+	return map[string]*deploymentsv1.DomainList{class: {Hostnames: hostnames}}
+}
+
 // nextApp is a Next app plus its single index function, the shape most
 // multi-app assertions below only vary the names of.
-func nextApp(name string, domains map[string]string) (*deploymentsv1.ManifestApp, *deploymentsv1.ManifestFunction) {
+func nextApp(name string, domains map[string]*deploymentsv1.DomainList) (*deploymentsv1.ManifestApp, *deploymentsv1.ManifestFunction) {
 	return &deploymentsv1.ManifestApp{Name: name, Framework: "next", Domains: domains},
 		&deploymentsv1.ManifestFunction{LogicalName: name + "_index", Framework: "next", App: name, RouteId: "/"}
 }
@@ -459,9 +468,9 @@ func TestWorkerScriptName_AppSegmentSurvivesTruncation(t *testing.T) {
 
 func TestDeployEdgeWorker_AppDomainWins(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
-	manifest.Domains = map[string]string{"production": "project.acme.com"}
-	manifest.GetApps()[0].Domains = map[string]string{"production": "web.acme.com"}
-	manifest.GetApps()[1].Domains = map[string]string{"production": "docs.acme.com"}
+	manifest.Domains = classDomains("production", "project.acme.com")
+	manifest.GetApps()[0].Domains = classDomains("production", "web.acme.com")
+	manifest.GetApps()[1].Domains = classDomains("production", "docs.acme.com")
 
 	fake := &recordingEdge{}
 	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
@@ -469,10 +478,10 @@ func TestDeployEdgeWorker_AppDomainWins(t *testing.T) {
 		t.Fatalf("deployEdgeWorker: %v", err)
 	}
 
-	want := map[string]string{"ocel-proj-prod-web": "web.acme.com", "ocel-proj-prod-docs": "docs.acme.com"}
+	want := map[string][]string{"ocel-proj-prod-web": {"web.acme.com"}, "ocel-proj-prod-docs": {"docs.acme.com"}}
 	for _, d := range fake.deployed {
-		if d.Domain != want[d.Name] {
-			t.Errorf("%s Domain = %q, want %q", d.Name, d.Domain, want[d.Name])
+		if !slicesEqual(d.Domains, want[d.Name]) {
+			t.Errorf("%s Domains = %v, want %v", d.Name, d.Domains, want[d.Name])
 		}
 	}
 }
@@ -485,7 +494,7 @@ func TestDeployEdgeWorker_ProjectDomainNeedsExactlyOneWorkerApp(t *testing.T) {
 	webApp, webFn := nextApp("web", nil)
 	manifest := &deploymentsv1.Manifest{
 		ProjectId: "proj",
-		Domains:   map[string]string{"production": "project.acme.com"},
+		Domains:   classDomains("production", "project.acme.com"),
 		Apps: []*deploymentsv1.ManifestApp{
 			webApp,
 			{Name: "api", Framework: "express"},
@@ -506,8 +515,8 @@ func TestDeployEdgeWorker_ProjectDomainNeedsExactlyOneWorkerApp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("deployEdgeWorker: %v", err)
 	}
-	if got := fake.only(t).Domain; got != "project.acme.com" {
-		t.Errorf("Domain = %q, want the project-level domain", got)
+	if got := fake.only(t).Domains; !slicesEqual(got, []string{"project.acme.com"}) {
+		t.Errorf("Domains = %v, want the project-level domain", got)
 	}
 	// The Express app has no registry entry, so it is served from its own
 	// Function URL.
@@ -521,7 +530,7 @@ func TestDeployEdgeWorker_ProjectDomainNeedsExactlyOneWorkerApp(t *testing.T) {
 
 func TestDeployEdgeWorker_ProjectDomainWithTwoWorkerAppsIsAmbiguous(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
-	manifest.Domains = map[string]string{"production": "project.acme.com"}
+	manifest.Domains = classDomains("production", "project.acme.com")
 
 	fake := &recordingEdge{}
 	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
@@ -544,8 +553,8 @@ func TestDeployEdgeWorker_ProjectDomainWithTwoWorkerAppsIsAmbiguous(t *testing.T
 // worker — the same path production takes.
 func TestDeployEdgeWorker_PreviewDeploysEveryWorkerWithoutDomains(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
-	manifest.Domains = map[string]string{"production": "project.acme.com"}
-	manifest.GetApps()[0].Domains = map[string]string{"production": "web.acme.com"}
+	manifest.Domains = classDomains("production", "project.acme.com")
+	manifest.GetApps()[0].Domains = classDomains("production", "web.acme.com")
 
 	fake := &recordingEdge{}
 	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-preview-pr-7", Class: deploymentsv1.Environment_CLASS_PREVIEW}
@@ -558,8 +567,8 @@ func TestDeployEdgeWorker_PreviewDeploysEveryWorkerWithoutDomains(t *testing.T) 
 		t.Fatalf("deployed script names = %v, want %v", got, want)
 	}
 	for _, d := range fake.deployed {
-		if d.Domain != "" {
-			t.Errorf("%s Domain = %q, want none outside production", d.Name, d.Domain)
+		if len(d.Domains) != 0 {
+			t.Errorf("%s Domains = %v, want none outside production", d.Name, d.Domains)
 		}
 	}
 }

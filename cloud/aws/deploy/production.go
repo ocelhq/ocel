@@ -110,7 +110,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	// aborts the deploy up front rather than after paying for infra and every
 	// app-deploy stack.
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, 0)
-	specs, err := rootStackSpecs(cfg, manifest, rootStackVersion)
+	specs, err := rootStackSpecs(cfg, manifest, rootStackVersion, log)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -310,8 +310,9 @@ func finalizeDeploy(ctx context.Context, stack edge.RootStack, specs []edge.Root
 // project's store instance still has to be seeded for every app's Deployment
 // record to be staged into it, even one served straight off its own Function
 // URL. Every spec shares the version, slug and shared-store coordinates; only
-// GenericName/Domain vary per app.
-func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string) ([]edge.RootStackSpec, error) {
+// GenericName/Domains vary per app. warn, when non-nil, receives the edge's
+// non-fatal hostname advisories (an uncovered TLS name, a blocking DNS record).
+func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.RootStackSpec, error) {
 	generic, err := genericWorkerBundle(cfg)
 	if err != nil {
 		return nil, err
@@ -329,6 +330,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		StoreEndpoint:   cfg.StoreEndpoint,
 		BootstrapCred:   cfg.StoreBootstrapCred,
 		Values:          cfg.EdgeValues,
+		Warn:            warn,
 	}
 
 	preview := cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW
@@ -360,12 +362,12 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		spec := base
 		spec.GenericName = genericName(name)
 		spec.Generic = withVar(generic, "OCEL_APP", name)
-		spec.Domain = domains[name]
+		spec.Domains = domains[name]
 		// A preview's root worker resolves the per-request pointer from the
 		// request subdomain, so it carries the base domain to match against
-		// rather than a fixed pointer.
+		// rather than a fixed pointer. A preview carries exactly one wildcard.
 		if preview {
-			spec.Generic = withPreviewVars(spec.Generic, previewBaseDomain(domains[name]))
+			spec.Generic = withPreviewVars(spec.Generic, previewBaseDomain(firstDomain(domains[name])))
 		}
 		specs = append(specs, spec)
 	}
@@ -410,6 +412,16 @@ func previewGenericName(slug, app string) string {
 // slugs are unique per org and that shape is pathological. Pure.
 func previewWorkerPrefix(slug string) string {
 	return sanitizeWorkerName("ocel-" + slug + "-preview")
+}
+
+// firstDomain is the first hostname in an app's resolved domain list, or "" for
+// none. A preview's list holds exactly one wildcard, so this is that wildcard;
+// production picks the leading hostname where a single one is wanted.
+func firstDomain(domains []string) string {
+	if len(domains) == 0 {
+		return ""
+	}
+	return domains[0]
 }
 
 // previewBaseDomain strips the leading "*." from a preview wildcard domain —
@@ -608,21 +620,29 @@ func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymen
 	return outs
 }
 
-// workerAppURL turns an app's resolved domain into the URL to feature. For a
-// preview it substitutes the deploy's pointer (cfg.Identity) for the wildcard's
-// "*" label — the actual subdomain this ref is served on — so the success screen
-// shows a URL that resolves, not the wildcard pattern. Production returns the
-// domain verbatim. Empty domain (vendor-subdomain app) yields no URL.
-func workerAppURL(cfg Config, domain string) string {
-	if domain == "" {
+// workerAppURL turns an app's resolved domains into the URL to feature. For a
+// preview it substitutes the deploy's pointer (cfg.Identity) for the single
+// wildcard's "*" label — the actual subdomain this ref is served on — so the
+// success screen shows a URL that resolves, not the wildcard pattern. Production
+// features the first non-wildcard hostname, or the first declared when every
+// hostname is a wildcard (a pure multitenant deploy). No domains (a
+// vendor-subdomain app) yields no URL. Its production branch mirrors
+// cloudflare.canonicalDomainURL (a separate Go module): keep the two in step.
+func workerAppURL(cfg Config, domains []string) string {
+	if len(domains) == 0 {
 		return ""
 	}
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
-		if base := previewBaseDomain(domain); base != "" {
+		if base := previewBaseDomain(firstDomain(domains)); base != "" {
 			return "https://" + cfg.Identity + "." + base
 		}
 	}
-	return "https://" + domain
+	for _, host := range domains {
+		if !strings.HasPrefix(host, "*.") {
+			return "https://" + host
+		}
+	}
+	return "https://" + domains[0]
 }
 
 // runInfraStack provisions the project's SDK-declared resources (postgres,

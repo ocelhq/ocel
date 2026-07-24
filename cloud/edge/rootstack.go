@@ -10,7 +10,8 @@ type RootStack interface {
 	// ReconcileRootStack brings the frozen root stack up to spec.Version: it
 	// deploys spec.Generic (service-bound to the shared deployments-store
 	// worker named spec.StoreScriptName and carrying spec.Slug) and attaches
-	// spec.Domain. On a fresh project it also mints an owner token and the
+	// each hostname in spec.Domains as its own worker route. On a fresh project
+	// it also mints an owner token and the
 	// per-project secret and seeds them into the project's store instance via
 	// spec's endpoint/bootstrap credential; a later call re-puts the generic
 	// worker only when the version already deployed is behind spec.Version — an
@@ -89,7 +90,7 @@ type RootStack interface {
 
 // RootStackSpec is what the host asks a RootStack to reconcile: the two worker
 // bundles the frozen root stack carries, the deterministic names to deploy
-// them under (mirroring AppDeployment.Name), the custom domain the generic
+// them under (mirroring AppDeployment.Name), the custom hostnames the generic
 // worker serves on, and the ocel root-stack revision this deploy expects.
 type RootStackSpec struct {
 	// Version is the ocel root-stack revision this deploy expects. Reconcile
@@ -115,14 +116,19 @@ type RootStackSpec struct {
 	// authenticates the one-time /<slug>/initialize call with. It authorizes
 	// nothing else.
 	BootstrapCred string
-	// Domain is the custom hostname Generic is attached to. Empty serves it
-	// on the edge's own vendor subdomain instead.
-	Domain string
+	// Domains are the custom hostnames Generic is attached to, each as a worker
+	// route. Empty serves it on the edge's own vendor subdomain instead.
+	// Production may carry several; a preview carries its single base wildcard.
+	Domains []string
 	// Values are what this edge reported at bootstrap, persisted verbatim by
 	// the host and handed back unread — the same contract AppDeployment.Values
 	// carries, so Generic's object-store binding can be sourced from it exactly
 	// like a regular app worker's.
 	Values map[string]string
+	// Warn, when set, receives non-fatal deploy-time warnings surfaced while
+	// attaching Domains (an uncovered TLS hostname, a blocking DNS record).
+	// Nil is a no-op. Mirrors AppDeployment.Warn.
+	Warn func(string)
 }
 
 // RootStackState is what ReconcileRootStack reports back: opaque to the caller,

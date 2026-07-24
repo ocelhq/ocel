@@ -84,10 +84,11 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 			progress(fmt.Sprintf("Deploying %s to the edge", name))
 		}
 		result, err := cfg.Edge.DeployApp(ctx, edge.AppDeployment{
-			Name:   workerScriptName(cfg.StackName, name),
-			Domain: domains[name],
-			Worker: worker,
-			Values: cfg.EdgeValues,
+			Name:    workerScriptName(cfg.StackName, name),
+			Domains: domains[name],
+			Worker:  worker,
+			Values:  cfg.EdgeValues,
+			Warn:    progress,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("deploy edge worker for %s: %w", name, err)
@@ -239,39 +240,40 @@ func domainClassKeyFor(class deploymentsv1.Environment_Class) string {
 	return "production"
 }
 
-// workerDomains resolves the custom hostname each worker-backed app is served
+// workerDomains resolves the custom hostnames each worker-backed app is served
 // on, keyed by app name and absent where the app takes the edge's vendor
-// subdomain. An app's own domain wins; the project-level domain applies only
-// when the project has exactly one worker-backed app, because a single hostname
-// (a production apex or a preview wildcard) cannot be split between two apps and
-// Ocel does not guess which owns it. For preview the resolved value is the
-// wildcard pattern; the frozen preview worker routes per-subdomain within it.
-func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (map[string]string, error) {
+// subdomain. An app's own domains win; the project-level domains apply only when
+// the project has exactly one worker-backed app, because a hostname set (a
+// production apex plus its aliases, or a preview wildcard) cannot be split
+// between two apps and Ocel does not guess which owns it. Production may carry
+// several hostnames; for preview the value is the single wildcard pattern, whose
+// per-subdomain requests the frozen preview worker routes internally.
+func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (map[string][]string, error) {
 	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION &&
 		cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return nil, nil
 	}
 	domainClassKey := domainClassKeyFor(cfg.Class)
 
-	domains := map[string]string{}
+	domains := map[string][]string{}
 	var undeclared []string
 	for _, app := range apps {
-		if d := app.GetDomains()[domainClassKey]; d != "" {
+		if d := app.GetDomains()[domainClassKey].GetHostnames(); len(d) > 0 {
 			domains[app.GetName()] = d
 			continue
 		}
 		undeclared = append(undeclared, app.GetName())
 	}
 
-	project := manifest.GetDomains()[domainClassKey]
+	project := manifest.GetDomains()[domainClassKey].GetHostnames()
 	switch {
-	case project == "" || len(undeclared) == 0:
+	case len(project) == 0 || len(undeclared) == 0:
 		return domains, nil
 	case len(apps) == 1:
 		domains[undeclared[0]] = project
 		return domains, nil
 	case len(undeclared) == len(apps):
-		return nil, fmt.Errorf("the project-level domain %q is ambiguous: apps %s each run their own edge worker and none declares a domain of its own — give each app its own domain instead", project, quotedList(undeclared))
+		return nil, fmt.Errorf("the project-level domains %s are ambiguous: apps %s each run their own edge worker and none declares a domain of its own — give each app its own domain instead", quotedList(project), quotedList(undeclared))
 	default:
 		return domains, nil
 	}

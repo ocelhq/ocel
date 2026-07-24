@@ -186,15 +186,25 @@ message Manifest {
   string slug = 7;
 
   // domains maps a lowercased environment class ("production") to the custom
-  // hostname the web-facing worker is served on for that class. A provider
-  // reads only the entry matching DeployRequest.environment; absent entries
-  // mean the default vendor subdomain. Only "production" is populated today.
-  map<string, string> domains = 5;
+  // hostnames the web-facing worker is served on for that class, each attached
+  // as a Cloudflare worker route. A provider reads only the entry matching
+  // DeployRequest.environment; absent entries mean the default vendor
+  // subdomain. Production may carry several hostnames; preview carries a single
+  // wildcard (validated one-entry at config time).
+  map<string, DomainList> domains = 5;
 
   // apps are the project's applications. Every ManifestFunction belongs to
   // exactly one of them. A project that configures no apps still yields one,
   // the app the builder detected at the project root.
   repeated ManifestApp apps = 6;
+}
+
+// DomainList is the set of custom hostnames a web-facing worker is served on
+// for one environment class. Production may name several; preview names exactly
+// one (a wildcard). Modelling both as a list keeps a single internal shape —
+// the single-vs-many distinction is a config-authoring rule, not a wire one.
+message DomainList {
+  repeated string hostnames = 1;
 }
 
 // ManifestApp is one application in the project: a unit the CLI builds and a
@@ -208,10 +218,10 @@ message ManifestApp {
   // the framework of the app's functions.
   string framework = 2;
   // domains maps a lowercased environment class ("production") to the custom
-  // hostname this app is served on for that class, mirroring Manifest.domains
+  // hostnames this app is served on for that class, mirroring Manifest.domains
   // so a persistent preview can gain a domain without a schema change. Absent
   // entries mean the default vendor subdomain.
-  map<string, string> domains = 3;
+  map<string, DomainList> domains = 3;
 }
 
 // ManifestFunction is a deployable function unit. Being listed in

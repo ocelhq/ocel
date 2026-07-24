@@ -84,8 +84,8 @@ export default {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if got := cfg.Domains["production"]; got != "app.acme.com" {
-		t.Fatalf("Domains[production] = %q, want %q (lowercased)", got, "app.acme.com")
+	if got := cfg.Domains["production"]; len(got) != 1 || got[0] != "app.acme.com" {
+		t.Fatalf("Domains[production] = %v, want [%q] (lowercased)", got, "app.acme.com")
 	}
 }
 
@@ -550,15 +550,15 @@ export default {
 	if len(cfg.Apps) != 2 {
 		t.Fatalf("got %d apps, want 2", len(cfg.Apps))
 	}
-	if got := cfg.Apps[0].Domains["production"]; got != "app.acme.com" {
-		t.Fatalf("Apps[0].Domains[production] = %q, want %q (lowercased)", got, "app.acme.com")
+	if got := cfg.Apps[0].Domains["production"]; len(got) != 1 || got[0] != "app.acme.com" {
+		t.Fatalf("Apps[0].Domains[production] = %v, want [%q] (lowercased)", got, "app.acme.com")
 	}
 	if len(cfg.Apps[1].Domains) != 0 {
 		t.Fatalf("Apps[1].Domains = %v, want empty", cfg.Apps[1].Domains)
 	}
 	// The project-level domain is independent of any app's.
-	if got := cfg.Domains["production"]; got != "acme.com" {
-		t.Fatalf("Domains[production] = %q, want %q", got, "acme.com")
+	if got := cfg.Domains["production"]; len(got) != 1 || got[0] != "acme.com" {
+		t.Fatalf("Domains[production] = %v, want [%q]", got, "acme.com")
 	}
 }
 
@@ -576,8 +576,8 @@ export default {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if got := cfg.Domains["preview"]; got != "*.preview.acme.com" {
-		t.Fatalf("Domains[preview] = %q, want %q (lowercased)", got, "*.preview.acme.com")
+	if got := cfg.Domains["preview"]; len(got) != 1 || got[0] != "*.preview.acme.com" {
+		t.Fatalf("Domains[preview] = %v, want [%q] (lowercased)", got, "*.preview.acme.com")
 	}
 }
 
@@ -633,5 +633,54 @@ func TestPreviewBaseDomain(t *testing.T) {
 		if got := PreviewBaseDomain(in); got != want {
 			t.Errorf("PreviewBaseDomain(%q) = %q, want %q", in, got, want)
 		}
+	}
+}
+
+func TestResolve_ProductionAcceptsListOfDomains(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  projectId: "proj_123",
+  domains: { production: ["Acme.com", "www.acme.com", "acme.com"] },
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	// Lowercased, and the duplicate "acme.com" deduped in declared order.
+	if got := cfg.Domains["production"]; len(got) != 2 || got[0] != "acme.com" || got[1] != "www.acme.com" {
+		t.Fatalf("Domains[production] = %v, want [acme.com www.acme.com]", got)
+	}
+}
+
+func TestResolve_RejectsProductionDomainEqualToPreview(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  projectId: "proj_123",
+  domains: { production: ["*.acme.com"], preview: "*.acme.com" },
+};
+`)
+
+	if _, err := Resolve(root); err == nil {
+		t.Fatal("Resolve accepted a production domain identical to the preview wildcard, want error")
+	}
+}
+
+func TestNormalizeProductionDomains_DedupesAndRejectsPreviewCollision(t *testing.T) {
+	got, err := normalizeProductionDomains(stringOrList{"App.com", "app.com", " www.app.com "}, "")
+	if err != nil {
+		t.Fatalf("normalizeProductionDomains: %v", err)
+	}
+	if len(got) != 2 || got[0] != "app.com" || got[1] != "www.app.com" {
+		t.Fatalf("normalized = %v, want [app.com www.app.com]", got)
+	}
+
+	if _, err := normalizeProductionDomains(stringOrList{"*.app.com"}, "*.app.com"); err == nil {
+		t.Fatal("want error when a production hostname equals the preview wildcard")
 	}
 }

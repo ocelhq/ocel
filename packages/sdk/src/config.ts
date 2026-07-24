@@ -7,11 +7,14 @@ export interface ProviderDescriptor {
   options: unknown;
 }
 
-// DomainConfig maps an environment class to the custom hostname served for it.
-// It is the same shape at the project level and per app; an app's entry wins
-// for that app.
+// DomainConfig maps an environment class to the custom hostname(s) served for
+// it. It is the same shape at the project level and per app; an app's entry
+// wins for that app. Production may name several hostnames (an apex plus its
+// aliases, or a "*." wildcard for a multitenant app), each attached as a
+// Cloudflare worker route; preview names a single wildcard the per-pointer
+// preview subdomains live under.
 export interface DomainConfig {
-  production?: string;
+  production?: string | string[];
   preview?: string;
 }
 
