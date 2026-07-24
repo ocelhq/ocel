@@ -3,6 +3,7 @@
 package projectconfig
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -56,9 +57,9 @@ type App struct {
 	// Entrypoint is an optional override relative to Path.
 	Entrypoint string
 	// Domains maps a lowercased environment class ("production") to the custom
-	// hostname this app is served on, mirroring Config.Domains. Empty entries
+	// hostnames this app is served on, mirroring Config.Domains. Empty entries
 	// are dropped.
-	Domains map[string]string
+	Domains map[string][]string
 	// Compute is Ocel-internal: it defaults to "serverless" during
 	// normalization, is never user-settable, and is never serialized onto
 	// the manifest wire.
@@ -78,8 +79,8 @@ type Config struct {
 	// Apps holds the normalized applications declared in the config.
 	Apps []App
 	// Domains maps a lowercased environment class ("production") to the custom
-	// hostname the web-facing worker is served on. Empty entries are dropped.
-	Domains map[string]string
+	// hostnames the web-facing worker is served on. Empty entries are dropped.
+	Domains map[string][]string
 	// Dir is the directory containing the resolved ocel.config.ts.
 	// discovery.paths are relative to it.
 	Dir string
@@ -118,28 +119,95 @@ type rawConfig struct {
 }
 
 // rawDomains is the class-keyed domain block, shared by the project and each
-// app. "production" is a plain hostname; "preview" is a wildcard the ephemeral
-// and persistent previews are served under, one subdomain label per pointer.
+// app. "production" is one or more plain hostnames (or "*." wildcards for a
+// multitenant app), each attached as a worker route; "preview" is a single
+// wildcard the ephemeral and persistent previews are served under, one
+// subdomain label per pointer.
 type rawDomains struct {
-	Production string `json:"production"`
-	Preview    string `json:"preview"`
+	Production stringOrList `json:"production"`
+	Preview    string       `json:"preview"`
 }
 
-// normalizeDomains lowers a raw domain block into the class-keyed map the
-// manifest carries, dropping empty entries and validating the preview wildcard.
-func normalizeDomains(raw rawDomains) (map[string]string, error) {
-	domains := map[string]string{}
-	if raw.Production != "" {
-		domains["production"] = strings.ToLower(raw.Production)
+// stringOrList unmarshals a JSON value that may be a single string or an array
+// of strings into a slice — the authoring ergonomics for production domains,
+// where `production: "app.com"` and `production: ["app.com", "www.app.com"]`
+// are both valid. A missing/null/empty value is the empty slice.
+type stringOrList []string
+
+func (s *stringOrList) UnmarshalJSON(b []byte) error {
+	trimmed := bytes.TrimSpace(b)
+	if len(trimmed) == 0 || string(trimmed) == "null" {
+		*s = nil
+		return nil
 	}
+	if trimmed[0] == '[' {
+		var list []string
+		if err := json.Unmarshal(b, &list); err != nil {
+			return err
+		}
+		*s = list
+		return nil
+	}
+	var one string
+	if err := json.Unmarshal(b, &one); err != nil {
+		return err
+	}
+	if one == "" {
+		*s = nil
+		return nil
+	}
+	*s = []string{one}
+	return nil
+}
+
+// normalizeDomains lowers a raw domain block into the class-keyed lists the
+// manifest carries: dropping empty entries, validating the preview wildcard,
+// deduping the production hostnames, and rejecting a production hostname that
+// exactly equals the preview wildcard (production and preview cannot attach the
+// same worker-route pattern).
+func normalizeDomains(raw rawDomains) (map[string][]string, error) {
+	domains := map[string][]string{}
+
+	var preview string
 	if raw.Preview != "" {
-		preview := strings.ToLower(raw.Preview)
+		preview = strings.ToLower(raw.Preview)
 		if err := validatePreviewDomain(preview); err != nil {
 			return nil, err
 		}
-		domains["preview"] = preview
+		domains["preview"] = []string{preview}
 	}
+
+	production, err := normalizeProductionDomains(raw.Production, preview)
+	if err != nil {
+		return nil, err
+	}
+	if len(production) > 0 {
+		domains["production"] = production
+	}
+
 	return domains, nil
+}
+
+// normalizeProductionDomains lowercases, trims and dedupes the production
+// hostnames in declared order, and rejects any that equals the preview wildcard.
+func normalizeProductionDomains(raw stringOrList, preview string) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	for _, d := range raw {
+		host := strings.ToLower(strings.TrimSpace(d))
+		if host == "" {
+			continue
+		}
+		if preview != "" && host == preview {
+			return nil, fmt.Errorf("production domain %q is identical to the preview wildcard %q; production and preview cannot attach the same worker-route pattern — give them different hostnames", host, preview)
+		}
+		if seen[host] {
+			continue
+		}
+		seen[host] = true
+		out = append(out, host)
+	}
+	return out, nil
 }
 
 // validatePreviewDomain enforces that a preview domain is a single-wildcard

@@ -41,7 +41,7 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 
 	t.Run("no worker-fronted apps", func(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{ProjectId: "proj"}
-		specs, err := rootStackSpecs(cfg, manifest, "v1")
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
 			t.Fatalf("rootStackSpecs: %v", err)
 		}
@@ -59,7 +59,7 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		}
-		specs, err := rootStackSpecs(cfg, manifest, "v1")
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
 			t.Fatalf("rootStackSpecs: %v", err)
 		}
@@ -91,21 +91,23 @@ func TestWorkerAppURL(t *testing.T) {
 	preview := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42-a1b2c3d4"}
 
 	cases := []struct {
-		name   string
-		cfg    Config
-		domain string
-		want   string
+		name    string
+		cfg     Config
+		domains []string
+		want    string
 	}{
-		{"production custom domain", prod, "app.acme.com", "https://app.acme.com"},
-		{"production no domain", prod, "", ""},
-		{"preview resolves wildcard to the ref subdomain", preview, "*.preview.acme.com", "https://pr-42-a1b2c3d4.preview.acme.com"},
-		{"preview no domain", preview, "", ""},
-		{"preview non-wildcard domain falls back verbatim", preview, "app.acme.com", "https://app.acme.com"},
+		{"production custom domain", prod, []string{"app.acme.com"}, "https://app.acme.com"},
+		{"production features first non-wildcard", prod, []string{"*.acme.com", "app.acme.com"}, "https://app.acme.com"},
+		{"production all-wildcard falls back to first", prod, []string{"*.acme.com"}, "https://*.acme.com"},
+		{"production no domain", prod, nil, ""},
+		{"preview resolves wildcard to the ref subdomain", preview, []string{"*.preview.acme.com"}, "https://pr-42-a1b2c3d4.preview.acme.com"},
+		{"preview no domain", preview, nil, ""},
+		{"preview non-wildcard domain falls back verbatim", preview, []string{"app.acme.com"}, "https://app.acme.com"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := workerAppURL(tc.cfg, tc.domain); got != tc.want {
-				t.Errorf("workerAppURL(%q) = %q, want %q", tc.domain, got, tc.want)
+			if got := workerAppURL(tc.cfg, tc.domains); got != tc.want {
+				t.Errorf("workerAppURL(%v) = %q, want %q", tc.domains, got, tc.want)
 			}
 		})
 	}
@@ -150,7 +152,7 @@ func TestRootStackSpecs_PreviewCarriesPreviewVarsAndWildcardDomain(t *testing.T)
 		ProjectId: "proj",
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
-		Domains:   map[string]string{"preview": "*.preview.acme.com"},
+		Domains:   map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 	}
 	cfg := Config{
 		Edge:  &recordingEdge{},
@@ -158,7 +160,7 @@ func TestRootStackSpecs_PreviewCarriesPreviewVarsAndWildcardDomain(t *testing.T)
 		Class: deploymentsv1.Environment_CLASS_PREVIEW,
 	}
 
-	specs, err := rootStackSpecs(cfg, manifest, "v1")
+	specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
 	if err != nil {
 		t.Fatalf("rootStackSpecs: %v", err)
 	}
@@ -169,8 +171,8 @@ func TestRootStackSpecs_PreviewCarriesPreviewVarsAndWildcardDomain(t *testing.T)
 	if spec.GenericName != "ocel-proj-preview-web" {
 		t.Errorf("GenericName = %q, want ocel-proj-preview-web", spec.GenericName)
 	}
-	if spec.Domain != "*.preview.acme.com" {
-		t.Errorf("Domain = %q, want the preview wildcard", spec.Domain)
+	if len(spec.Domains) != 1 || spec.Domains[0] != "*.preview.acme.com" {
+		t.Errorf("Domains = %v, want the preview wildcard", spec.Domains)
 	}
 	if spec.Generic.Vars[envPreview] != "1" {
 		t.Errorf("Vars[%s] = %q, want 1", envPreview, spec.Generic.Vars[envPreview])
@@ -197,7 +199,7 @@ func TestRootStackSpecs_BindsEdgeSigningCredentials(t *testing.T) {
 
 	t.Run("bound when the substrate has edge credentials", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}, EdgeAccessKeyID: "AKIAEDGE", EdgeSecretKey: "secret-edge"}
-		specs, err := rootStackSpecs(cfg, manifest, "v1")
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
 			t.Fatalf("rootStackSpecs: %v", err)
 		}
@@ -215,7 +217,7 @@ func TestRootStackSpecs_BindsEdgeSigningCredentials(t *testing.T) {
 
 	t.Run("absent on a substrate predating edge credentials", func(t *testing.T) {
 		cfg := Config{Edge: &recordingEdge{}}
-		specs, err := rootStackSpecs(cfg, manifest, "v1")
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
 			t.Fatalf("rootStackSpecs: %v", err)
 		}

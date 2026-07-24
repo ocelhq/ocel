@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strings"
 
 	"connectrpc.com/connect"
 
@@ -259,7 +260,7 @@ func describeFunction(f *deploymentsv1.ManifestFunction) string {
 // describeApp renders a ManifestApp into a stable, assertable one-line string.
 func describeApp(a *deploymentsv1.ManifestApp) string {
 	return fmt.Sprintf("name=%s framework=%s production_domain=%s",
-		a.GetName(), a.GetFramework(), a.GetDomains()["production"])
+		a.GetName(), a.GetFramework(), strings.Join(a.GetDomains()["production"].GetHostnames(), ","))
 }
 
 // parseInfraClass maps the fakeInfraClassEnvVar value to an Environment_Class.

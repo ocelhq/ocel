@@ -343,6 +343,52 @@ func TestBuildAssetBatch_EncodesFilePartsPerHash(t *testing.T) {
 	}
 }
 
+func TestCoveredByUniversalSSL(t *testing.T) {
+	cases := []struct {
+		host, zone string
+		want       bool
+	}{
+		{"acme.com", "acme.com", true},          // apex
+		{"www.acme.com", "acme.com", true},       // one label deep
+		{"*.acme.com", "acme.com", true},         // first-level wildcard
+		{"*.preview.acme.com", "acme.com", false}, // two labels deep
+		{"a.b.acme.com", "acme.com", false},       // two labels deep
+		{"other.com", "acme.com", false},          // not in zone
+	}
+	for _, tc := range cases {
+		if got := coveredByUniversalSSL(tc.host, tc.zone); got != tc.want {
+			t.Errorf("coveredByUniversalSSL(%q, %q) = %v, want %v", tc.host, tc.zone, got, tc.want)
+		}
+	}
+}
+
+func TestCanonicalDomainURL(t *testing.T) {
+	cases := []struct {
+		name    string
+		domains []string
+		want    string
+	}{
+		{"none", nil, ""},
+		{"single plain", []string{"app.com"}, "https://app.com"},
+		{"first non-wildcard wins", []string{"*.app.com", "app.com"}, "https://app.com"},
+		{"all wildcard falls back to first", []string{"*.app.com"}, "https://*.app.com"},
+	}
+	for _, tc := range cases {
+		if got := canonicalDomainURL(tc.domains); got != tc.want {
+			t.Errorf("%s: canonicalDomainURL(%v) = %q, want %q", tc.name, tc.domains, got, tc.want)
+		}
+	}
+}
+
+func TestRouteBaseDomain(t *testing.T) {
+	if got := routeBaseDomain("*.preview.acme.com"); got != "preview.acme.com" {
+		t.Errorf("routeBaseDomain wildcard = %q, want preview.acme.com", got)
+	}
+	if got := routeBaseDomain("www.acme.com"); got != "www.acme.com" {
+		t.Errorf("routeBaseDomain plain = %q, want www.acme.com", got)
+	}
+}
+
 func TestZoneOwns(t *testing.T) {
 	cases := []struct {
 		hostname string

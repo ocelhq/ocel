@@ -67,13 +67,18 @@ type AppDeployment struct {
 	Name string
 	// Worker is the assembled bundle and bindings to upload under Name.
 	Worker Worker
-	// Domain is the custom hostname the app is served on. Empty serves it on the
-	// edge's own vendor subdomain instead.
-	Domain string
+	// Domains are the custom hostnames the app is served on, each attached as a
+	// worker route. Empty serves it on the edge's own vendor subdomain instead.
+	// Production may carry several; a preview carries its single base wildcard.
+	Domains []string
 	// Values are what this edge reported at bootstrap, persisted verbatim by the
 	// provider and handed back unread, so the edge can see what it provisioned
 	// without re-querying its own API.
 	Values map[string]string
+	// Warn, when set, receives non-fatal deploy-time warnings the edge surfaces
+	// while attaching hostnames (a TLS hostname the zone's Universal SSL does
+	// not cover, a user-managed DNS record blocking a route). Nil is a no-op.
+	Warn func(string)
 }
 
 // Worker is a framework's edge bundle: the entrypoint, the modules shipping

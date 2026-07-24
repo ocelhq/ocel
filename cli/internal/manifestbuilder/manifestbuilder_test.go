@@ -335,13 +335,13 @@ func TestBuild_FunctionsReorderInvariance(t *testing.T) {
 }
 
 func TestBuild_CarriesDomains(t *testing.T) {
-	domains := map[string]string{"production": "app.acme.com"}
+	domains := map[string][]string{"production": {"app.acme.com", "www.acme.com"}}
 	manifest, err := Build("proj_1", "proj-1", domains, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if got := manifest.GetDomains()["production"]; got != "app.acme.com" {
-		t.Fatalf("Domains[production] = %q, want %q", got, "app.acme.com")
+	if got := manifest.GetDomains()["production"].GetHostnames(); len(got) != 2 || got[0] != "app.acme.com" || got[1] != "www.acme.com" {
+		t.Fatalf("Domains[production] = %v, want [app.acme.com www.acme.com]", got)
 	}
 }
 
@@ -378,7 +378,7 @@ func TestBuild_FunctionRouteIDCarriedDistinctFromLogicalName(t *testing.T) {
 
 func TestBuild_CarriesAppsSortedByName(t *testing.T) {
 	apps := []App{
-		{Name: "web", Framework: "next", Domains: map[string]string{"production": "example.com"}},
+		{Name: "web", Framework: "next", Domains: map[string][]string{"production": {"example.com"}}},
 		{Name: "admin", Framework: "express"},
 	}
 	manifest, err := Build("proj_1", "proj-1", nil, apps, nil, []Function{
@@ -399,8 +399,8 @@ func TestBuild_CarriesAppsSortedByName(t *testing.T) {
 	if got[1].GetFramework() != "next" {
 		t.Fatalf("web framework = %q, want %q", got[1].GetFramework(), "next")
 	}
-	if got[1].GetDomains()["production"] != "example.com" {
-		t.Fatalf("web production domain = %q, want %q", got[1].GetDomains()["production"], "example.com")
+	if got := got[1].GetDomains()["production"].GetHostnames(); len(got) != 1 || got[0] != "example.com" {
+		t.Fatalf("web production domain = %v, want [example.com]", got)
 	}
 	if len(got[0].GetDomains()) != 0 {
 		t.Fatalf("admin domains = %v, want empty", got[0].GetDomains())

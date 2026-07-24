@@ -37,8 +37,9 @@ type App struct {
 	Name      string
 	Framework string
 	// Domains maps a lowercased environment class ("production") to the custom
-	// hostname this app is served on, mirroring the project-level shape.
-	Domains map[string]string
+	// hostnames this app is served on, mirroring the project-level shape.
+	// Production may carry several; preview carries one wildcard.
+	Domains map[string][]string
 }
 
 // Function is a single collected function unit: the pure input to Build for
@@ -127,7 +128,7 @@ func normalizeLogicalName(s string) string {
 // one never changes an existing entry's logical name. Two declarations sharing
 // the same (type, id) are a hard error naming both declarations and their
 // source locations.
-func Build(projectID, slug string, domains map[string]string, apps []App, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
+func Build(projectID, slug string, domains map[string][]string, apps []App, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
 	type identity struct {
 		typ resourcesv1.ResourceType
 		id  string
@@ -198,9 +199,29 @@ func Build(projectID, slug string, domains map[string]string, apps []App, declar
 		Slug:          slug,
 		Resources:     resources,
 		Functions:     manifestFunctions,
-		Domains:       domains,
+		Domains:       domainLists(domains),
 		Apps:          buildApps(apps, functions),
 	}, nil
+}
+
+// domainLists lowers the class-keyed hostname lists into the manifest's
+// class-keyed DomainList map, dropping classes with no hostnames. Returns nil
+// for an empty input so a domainless manifest carries no domains map at all.
+func domainLists(domains map[string][]string) map[string]*deploymentsv1.DomainList {
+	if len(domains) == 0 {
+		return nil
+	}
+	out := make(map[string]*deploymentsv1.DomainList, len(domains))
+	for class, hostnames := range domains {
+		if len(hostnames) == 0 {
+			continue
+		}
+		out[class] = &deploymentsv1.DomainList{Hostnames: hostnames}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // buildApps lowers the configured apps into manifest apps, sorted by name. An
@@ -229,7 +250,7 @@ func buildApps(apps []App, functions []Function) []*deploymentsv1.ManifestApp {
 		manifestApps = append(manifestApps, &deploymentsv1.ManifestApp{
 			Name:      a.Name,
 			Framework: framework,
-			Domains:   a.Domains,
+			Domains:   domainLists(a.Domains),
 		})
 	}
 
