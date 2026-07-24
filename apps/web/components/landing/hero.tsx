@@ -53,9 +53,8 @@ export function Hero() {
             $ npm i -g ocel
           </div>
           <h1 className="text-[54px] font-semibold leading-[1.04] tracking-[-0.03em] text-foreground text-pretty">
-            Vercel DX.
-            <br />
-            <span className="text-primary">Your cloud.</span>
+            Deploy apps to
+            <span className="text-primary"> your own cloud.</span>
           </h1>
           <p className="mt-5 max-w-[44ch] text-[16.5px] leading-[1.62] text-muted-foreground">
             The deploy experience you love, running in the account you already

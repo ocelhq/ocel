@@ -38,7 +38,6 @@ export default function Home() {
       <Interop />
       <Pricing />
       <Faq />
-      <OneMoreThingBreak />
       <OneMoreThing />
       <Roadmap />
       <CtaBand />
@@ -740,7 +739,7 @@ function OneMoreThingBreak() {
 function OneMoreThing() {
   return (
     <section
-      className="relative overflow-hidden px-5 pb-20 pt-4 text-center md:px-10 md:pb-18 md:pt-10"
+      className="relative overflow-hidden px-5 pb-20 pt-4 text-center md:px-10 md:py-20"
       style={{
         backgroundImage:
           "linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px)",
@@ -751,7 +750,7 @@ function OneMoreThing() {
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(to bottom,var(--background) 0%,transparent 20%),radial-gradient(ellipse 70% 85% at 50% 45%,transparent 22%,var(--background) 78%)",
+            "radial-gradient(ellipse 70% 85% at 50% 45%,transparent 22%,var(--background) 78%)",
         }}
       />
       <div className="relative">
