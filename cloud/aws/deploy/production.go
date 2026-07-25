@@ -62,13 +62,13 @@ type appDeployResult struct {
 // by the server), the plan is class-aware (BuildPlan/rootStackSpecs), and the
 // promote pointer is empty for production, the environment identity for a
 // preview.
-func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootStackState, error) {
+func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
 	stack, ok := cfg.Edge.(edge.RootStack)
 	if !ok {
-		return nil, nil, nil, fmt.Errorf("deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind())
+		return Result{}, fmt.Errorf("deploys require an edge that supports the root stack (instant rollback); %s does not", cfg.Edge.Kind())
 	}
 	if cfg.StoreEndpoint == "" {
-		return nil, nil, nil, fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg))
+		return Result{}, fmt.Errorf("no deployments-store worker found for this account; re-run `%s` to provision it before deploying", bootstrapCommand(cfg))
 	}
 
 	// Validate then check availability up front, before any artifact upload or
@@ -76,34 +76,34 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	// store's promote re-applies the uniqueness check atomically (the
 	// concurrent-deploy backstop); these exist to fail fast with a clear message.
 	if err := validateTag(cfg.Tag); err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
 	if err := checkTagAvailable(ctx, stack, cfg.RootStackState, cfg.Tag); err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
 
 	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
 	if err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
 	if err := uploadPrerenderAssets(ctx, cfg, manifest); err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
 	if err := uploadStaticAssets(ctx, cfg, manifest); err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
 
 	builds, err := assignBuildIDs(cfg, manifest)
 	if err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
-	promotionID := cfg.DeploymentID
-	if promotionID == "" {
-		return nil, nil, nil, fmt.Errorf("deploy config carries no DeploymentID; the caller must mint one with NewDeploymentID")
+	promotionID, err := newRandomID()
+	if err != nil {
+		return Result{}, err
 	}
 	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, builds)
 	if err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
 
 	// Root reconcile runs before any AWS provisioning: a broken root stack
@@ -112,11 +112,11 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Reconciling the root stack", 0, 0)
 	specs, err := rootStackSpecs(cfg, manifest, rootStackVersion, log)
 	if err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
 	state, err := reconcileRootStack(ctx, stack, specs, cfg.RootStackState)
 	if err != nil {
-		return nil, nil, nil, err
+		return Result{}, err
 	}
 
 	// An ephemeral preview has no infra stack (BuildPlan leaves it empty): its
@@ -127,7 +127,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		progress.report(deploymentsv1.Phase_PHASE_PROVISIONING, "Provisioning infra stack", 0, 0)
 		infraOutputs, err = runInfraStack(ctx, cfg, manifest, plan, log)
 		if err != nil {
-			return nil, nil, state, err
+			return Result{RootStackState: state}, err
 		}
 	}
 	resourceEnv := resourceEnvValues(manifest, infraOutputs)
@@ -156,7 +156,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
 	if err := stageAndPromote(ctx, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
-		return nil, nil, state, err
+		return Result{RootStackState: state}, err
 	}
 
 	outputs := append([]*deploymentsv1.ResourceOutput{}, infraOutputs...)
@@ -164,7 +164,12 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		outputs = append(outputs, outs...)
 	}
 	outputs = append(outputs, workerURLOutputs(cfg, manifest)...)
-	return outputs, appURLs(manifest, outputs), state, nil
+	return Result{
+		Outputs:        outputs,
+		AppURLs:        appURLs(manifest, outputs),
+		PromotionID:    promotionID,
+		RootStackState: state,
+	}, nil
 }
 
 // maxTagLen bounds a deployment tag, mirroring the CLI's own limit.
@@ -497,13 +502,6 @@ func loadWorkerBundle(path string) (edge.Worker, error) {
 		ContentType: "application/javascript+module",
 		Content:     main,
 	}}, nil
-}
-
-// NewDeploymentID mints the identity a deploy's Promotion is created under
-// (Config.DeploymentID). The caller mints it so it can report the id on the
-// RPC's terminal result whatever the deploy goes on to do.
-func NewDeploymentID() (string, error) {
-	return newRandomID()
 }
 
 // newRandomID mints a fresh random identity: a production deploy's Promotion

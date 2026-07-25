@@ -95,28 +95,21 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	}
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
-	// Minted here, before the deploy, so the terminal result can always name the
-	// deployment this run created (the CLI records it in .ocel/deploy-result.json).
-	deploymentID, err := deploy.NewDeploymentID()
+	res, err := s.runDeploy(ctx, req, manifest, progress, logf)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
+		return stream.Send(failureResult(err))
 	}
-
-	outputs, appURLs, err := s.runDeploy(ctx, req, manifest, deploymentID, progress, logf)
-	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
-	}
-	return stream.Send(resultEvent(true, "", outputs, appURLs, deploymentID))
+	return stream.Send(deployedResult(res))
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, deploymentID string, progress deploy.Progress, logf func(string)) ([]*deploymentsv1.ResourceOutput, []string, error) {
+func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string)) (deploy.Result, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
@@ -134,27 +127,27 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	progress(deploymentsv1.Phase_PHASE_UPLOADING, "Checking account bootstrap", 0, 0)
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 	if err := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion).Explain(); err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 	if deployed.StateBucket == "" {
-		return nil, nil, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its state bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 	if deployed.ArtifactBucket == "" {
-		return nil, nil, fmt.Errorf("account bootstrap is present but its artifact bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its artifact bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 	if deployed.AssetBucket == "" {
-		return nil, nil, fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its asset bucket is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 	if deployed.StateTable == "" {
-		return nil, nil, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 
 	// The edge reader credentials are injected into the Next.js worker so it can
@@ -180,7 +173,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
 	})
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 
 	for _, r := range manifest.GetResources() {
@@ -194,7 +187,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// Resource into its policy and fails the deploy at Pulumi.
 	account, err := accountID(ctx, sts.NewFromConfig(awscfg))
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
@@ -203,7 +196,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// in the function's read grant anyway.
 	cacheStoreParam, err := bootstrap.CacheStoreParamFor(edgeClass)
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 	cacheStoreParamARN := fmt.Sprintf("arn:aws:ssm:%s:%s:parameter%s", awscfg.Region, account, cacheStoreParam)
 
@@ -213,7 +206,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// costs no error, only every prerendered route silently rendering cold.
 	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, edgeClass)
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 
 	// Both classes realize the stacked model (ADR 0001): read this substrate's
@@ -224,14 +217,14 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// (realize, deploy/production.go).
 	priorRootStackState, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetProjectId())
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 	deploymentsStore, err := bootstrap.ReadDeploymentsStoreFor(ctx, ssmClient, edgeClass)
 	if err != nil {
-		return nil, nil, err
+		return deploy.Result{}, err
 	}
 
-	outputs, urls, rootStackState, err := deploy.Run(ctx, deploy.Config{
+	res, err := deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
 		BackendURL:    "s3://" + deployed.StateBucket,
 		Passphrase:    passphrase,
@@ -269,7 +262,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ExpiresAt:      previewExpiry(env.GetLifecycle(), time.Now()),
 		RootStackState: priorRootStackState,
 		Tag:            req.GetTag(),
-		DeploymentID:   deploymentID,
 	}, manifest, progress, logf)
 
 	// Persist whatever root-stack state was reconciled — even when a later
@@ -278,15 +270,15 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// fresh and orphaning the root stack this run just reconciled. Written to
 	// this deploy's own substrate (production or preview), and nil when
 	// reconcile itself never ran (an error before it).
-	if rootStackState != nil {
-		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetProjectId(), rootStackState); writeErr != nil {
+	if res.RootStackState != nil {
+		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetProjectId(), res.RootStackState); writeErr != nil {
 			if err != nil {
-				return outputs, urls, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
+				return res, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
 			}
-			return outputs, urls, writeErr
+			return res, writeErr
 		}
 	}
-	return outputs, urls, err
+	return res, err
 }
 
 // previewTTL is how long an ephemeral preview lives before it is considered
@@ -349,11 +341,11 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
+		return stream.Send(failureResult(err))
 	}
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
+		return stream.Send(failureResult(err))
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
@@ -368,10 +360,10 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	// Each substrate has its own stack, so the gate reads the one being acted on.
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
+		return stream.Send(failureResult(err))
 	}
 	if bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion) == bootstrap.NeedsCLIUpgrade {
-		return stream.Send(resultEvent(false, bootstrap.NeedsCLIUpgrade.Explain().Error(), nil, nil, ""))
+		return stream.Send(failureResult(bootstrap.NeedsCLIUpgrade.Explain()))
 	}
 
 	run := bootstrap.Run
@@ -379,9 +371,9 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		run = bootstrap.RunPreview
 	}
 	if err := run(ctx, cfn, ssmClient, iamClient, cloudflare.New(), progress, logf); err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
+		return stream.Send(failureResult(err))
 	}
-	return stream.Send(resultEvent(true, "", nil, nil, ""))
+	return stream.Send(okResult())
 }
 
 // checkBootstrap reads the deployed state of the substrate a command acts on:
@@ -485,14 +477,30 @@ func logEvent(message string) *deploymentsv1.DeployEvent {
 	}
 }
 
-func resultEvent(success bool, errMsg string, outputs []*deploymentsv1.ResourceOutput, appURLs []string, deploymentID string) *deploymentsv1.DeployEvent {
+func failureResult(err error) *deploymentsv1.DeployEvent {
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
-			Success:      success,
-			Error:        errMsg,
-			Outputs:      outputs,
-			AppUrls:      appURLs,
-			DeploymentId: deploymentID,
+			Success: false,
+			Error:   err.Error(),
+		}},
+	}
+}
+
+// okResult is the terminal result of an RPC that succeeded with nothing to
+// report — bootstrap, destroy, prune.
+func okResult() *deploymentsv1.DeployEvent {
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
+	}
+}
+
+func deployedResult(res deploy.Result) *deploymentsv1.DeployEvent {
+	return &deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
+			Success:     true,
+			Outputs:     res.Outputs,
+			AppUrls:     res.AppURLs,
+			PromotionId: res.PromotionID,
 		}},
 	}
 }

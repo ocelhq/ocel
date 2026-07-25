@@ -2442,12 +2442,12 @@ type ResultEvent struct {
 	// in priority order (e.g. a Next.js worker URL, else the function URLs). The
 	// provider declares them so the CLI never has to match magic logical names.
 	AppUrls []string `protobuf:"bytes,4,rep,name=app_urls,json=appUrls,proto3" json:"app_urls,omitempty"`
-	// deployment_id is the provider's identity for the deploy this stream
-	// produced - the Promotion it created. The CLI records it in
+	// promotion_id identifies the promotion this deploy produced: the
+	// project-wide unit grouping every app's build id. The CLI records it in
 	// .ocel/deploy-result.json so a later process can address this exact deploy
 	// (roll back to it, correlate its logs) without scraping CLI output. Empty
-	// on failure, and for RPCs that create no deployment (Bootstrap).
-	DeploymentId  string `protobuf:"bytes,5,opt,name=deployment_id,json=deploymentId,proto3" json:"deployment_id,omitempty"`
+	// on failure, and for RPCs that promote nothing (Bootstrap).
+	PromotionId   string `protobuf:"bytes,5,opt,name=promotion_id,json=promotionId,proto3" json:"promotion_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2510,9 +2510,9 @@ func (x *ResultEvent) GetAppUrls() []string {
 	return nil
 }
 
-func (x *ResultEvent) GetDeploymentId() string {
+func (x *ResultEvent) GetPromotionId() string {
 	if x != nil {
-		return x.DeploymentId
+		return x.PromotionId
 	}
 	return ""
 }
@@ -2996,13 +2996,13 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\b_currentB\b\n" +
 	"\x06_total\"$\n" +
 	"\bLogEvent\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\"\xb7\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\"\xb5\x01\n" +
 	"\vResultEvent\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x14\n" +
 	"\x05error\x18\x02 \x01(\tR\x05error\x128\n" +
 	"\aoutputs\x18\x03 \x03(\v2\x1e.deployments.v1.ResourceOutputR\aoutputs\x12\x19\n" +
-	"\bapp_urls\x18\x04 \x03(\tR\aappUrls\x12#\n" +
-	"\rdeployment_id\x18\x05 \x01(\tR\fdeploymentId\"\xf1\x01\n" +
+	"\bapp_urls\x18\x04 \x03(\tR\aappUrls\x12!\n" +
+	"\fpromotion_id\x18\x05 \x01(\tR\vpromotionId\"\xf1\x01\n" +
 	"\x0eResourceOutput\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12<\n" +
 	"\bpostgres\x18\x02 \x01(\v2\x1e.deployments.v1.PostgresOutputH\x00R\bpostgres\x126\n" +

@@ -674,12 +674,12 @@ message ResultEvent {
   // provider declares them so the CLI never has to match magic logical names.
   repeated string app_urls = 4;
 
-  // deployment_id is the provider's identity for the deploy this stream
-  // produced - the Promotion it created. The CLI records it in
+  // promotion_id identifies the promotion this deploy produced: the
+  // project-wide unit grouping every app's build id. The CLI records it in
   // .ocel/deploy-result.json so a later process can address this exact deploy
   // (roll back to it, correlate its logs) without scraping CLI output. Empty
-  // on failure, and for RPCs that create no deployment (Bootstrap).
-  string deployment_id = 5;
+  // on failure, and for RPCs that promote nothing (Bootstrap).
+  string promotion_id = 5;
 }
 
 // ResourceOutput pairs a resource's logical name with its typed connection

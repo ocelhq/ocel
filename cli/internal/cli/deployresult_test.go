@@ -14,7 +14,7 @@ import (
 )
 
 // TestRunDeploy_Success_WritesDeployResult proves a successful `ocel deploy`
-// leaves the machine-readable result on disk: the featured URL and deployment
+// leaves the machine-readable result on disk: the featured URL and promotion
 // id the provider reported, the tag it was stamped with, and each deployed
 // app's build id read back from the build output.
 func TestRunDeploy_Success_WritesDeployResult(t *testing.T) {
@@ -41,8 +41,8 @@ func TestRunDeploy_Success_WritesDeployResult(t *testing.T) {
 	if got.Environment.Class != "production" {
 		t.Errorf("environment.class = %q, want %q", got.Environment.Class, "production")
 	}
-	if got.DeploymentID != fakeDeploymentID {
-		t.Errorf("deploymentId = %q, want the provider's %q", got.DeploymentID, fakeDeploymentID)
+	if got.PromotionID != fakePromotionID {
+		t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, fakePromotionID)
 	}
 	if got.Tag != "v9" {
 		t.Errorf("tag = %q, want %q", got.Tag, "v9")
@@ -63,7 +63,7 @@ func TestRunDeploy_Success_WritesDeployResult(t *testing.T) {
 // a consumer would otherwise read as this run's outcome.
 func TestRunDeploy_Failure_LeavesNoStaleDeployResult(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
-	if err := deployresult.Write(root, deployresult.Result{DeploymentID: "dep_previous_run"}); err != nil {
+	if err := deployresult.Write(root, deployresult.Result{PromotionID: "prm_previous_run"}); err != nil {
 		t.Fatalf("seed stale result: %v", err)
 	}
 	t.Setenv(deployFakeProviderModeEnvVar, "fail")
@@ -95,8 +95,8 @@ func TestRunPreviewUp_Success_WritesDeployResult(t *testing.T) {
 	if got.Environment.Class != "preview" || got.Environment.Identity != "e2e-42" {
 		t.Errorf("environment = %+v, want the named preview", got.Environment)
 	}
-	if got.DeploymentID != fakeDeploymentID {
-		t.Errorf("deploymentId = %q, want the provider's %q", got.DeploymentID, fakeDeploymentID)
+	if got.PromotionID != fakePromotionID {
+		t.Errorf("promotionId = %q, want the provider's %q", got.PromotionID, fakePromotionID)
 	}
 	if len(got.AppURLs) != 1 || got.AppURLs[0] != fakeAppURL {
 		t.Errorf("appUrls = %v, want [%s]", got.AppURLs, fakeAppURL)
