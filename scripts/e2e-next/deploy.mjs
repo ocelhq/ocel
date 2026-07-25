@@ -25,8 +25,8 @@ import {
 
 // How long building and deploying one app may take, in total, before it is
 // killed. A hung deploy must fail its own suite rather than burn the job's whole
-// timeout, so the budget is shared across the CLI runs rather than granted to
-// each: two runs must not cost twice the wall clock one used to.
+// timeout, so the budget is shared across every command this script runs rather
+// than granted to each: two runs must not cost twice the wall clock one used to.
 const DEFAULT_TIMEOUT_MS = 25 * 60 * 1000;
 
 const deadline = Date.now() + (Number(process.env.OCEL_E2E_DEPLOY_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
@@ -64,6 +64,7 @@ function deploy() {
     join(appDir, "ocel.config.ts"),
     renderOcelConfig({ slug: slugForProject, projectId, previewDomain, appName: slug }),
   );
+  ensureDeps();
   linkSidecar(sidecarDir);
   ensureBuildScript();
 
@@ -78,6 +79,18 @@ function deploy() {
     throw new Error(`${resultPath} was not written; the deploy reported success but produced no result`);
   }
   return deployURL(JSON.parse(readFileSync(resultPath, "utf8")));
+}
+
+// ensureDeps installs the temp app's dependencies when the harness left it
+// without them: without a resolvable `next`, the build fails before Ocel does
+// anything. It runs before linkSidecar because an install can rewrite
+// node_modules, which would drop the @ocel symlink.
+function ensureDeps() {
+  if (existsSync(join(appDir, "node_modules", ".bin", "next"))) {
+    return;
+  }
+  console.error("[ocel-e2e] no node_modules/.bin/next; installing dependencies");
+  run("pnpm install", "pnpm", ["install", "--prefer-offline"]);
 }
 
 // linkSidecar points the temp app at the prebuilt @ocel packages. Only the
@@ -126,14 +139,19 @@ function ensureBuildScript() {
 // the harness reads this process's stdout as the deployment URL and nothing
 // else, and logs.mjs replays the whole log afterward.
 function runOcel(adapterDir, args) {
-  const label = `ocel ${args[0]}`;
+  run(`ocel ${args[0]}`, process.execPath, [join(adapterDir, "packages", "ocel", "bin", "run.js"), ...args]);
+}
+
+// run spends what is left of the shared budget on one command, appending its
+// output to the build log.
+function run(label, command, args) {
   const remaining = deadline - Date.now();
   if (remaining <= 0) {
     throw new Error(`the shared build+deploy budget was exhausted before ${label} started`);
   }
   const log = openSync(join(appDir, BUILD_LOG_FILE), "a");
   try {
-    const res = spawnSync(process.execPath, [join(adapterDir, "packages", "ocel", "bin", "run.js"), ...args], {
+    const res = spawnSync(command, args, {
       cwd: appDir,
       stdio: ["ignore", log, log],
       timeout: remaining,
