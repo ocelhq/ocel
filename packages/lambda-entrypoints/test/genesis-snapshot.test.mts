@@ -4,13 +4,13 @@ import { fileURLToPath } from "node:url";
 import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
-import { mergeSnapshot, snapshotValidityMs } from "../src/next/tag-snapshot.mjs";
+import { mergeSnapshot } from "../src/next/tag-snapshot.mjs";
 
 // The genesis snapshot is written by the Go deploy and rewritten thereafter by
 // this publisher, so no type is shared across the boundary and nothing but this
 // fixture stops the two from drifting apart in silence. The deploy's own test
 // asserts it marshals exactly these bytes; the assertions here are what that
-// pins it to. Changing the shape or the validity window must break both sides.
+// pins it to. Changing the document's shape must break both sides.
 const fixture: TagSnapshot = JSON.parse(
   readFileSync(
     fileURLToPath(
@@ -26,15 +26,15 @@ describe("the deploy's genesis snapshot", () => {
       "deployedAt",
       "generatedAt",
       "records",
-      "validUntil",
       "version",
     ]);
     expect(fixture.version).toBe(1);
     expect(fixture.records).toEqual({});
   });
 
-  it("declares the trust window this publisher republishes on", () => {
-    expect(fixture.validUntil).toBe(fixture.generatedAt + snapshotValidityMs);
+  it("carries no expiry for a reader to second-guess the publisher with", () => {
+    expect(fixture).not.toHaveProperty("validUntil");
+    expect(mergeSnapshot(fixture, new Map(), 1)).not.toHaveProperty("validUntil");
   });
 
   it("anchors pruning, and the publisher carries that anchor forward", () => {

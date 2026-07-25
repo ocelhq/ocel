@@ -1,6 +1,6 @@
 import type { TagRecord } from "@ocel/next-cache";
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
-import { mergeRecord, publishTagSnapshot, snapshotRefreshMs } from "./tag-snapshot.mjs";
+import { mergeRecord, publishTagSnapshot } from "./tag-snapshot.mjs";
 import { now } from "./use-cache-entry.mjs";
 
 // Invalidations are recorded in the state table and synced back into a local
@@ -33,7 +33,6 @@ interface ClockState {
   // changed.
   revision: number;
   publishedRevision: number;
-  publishedAt: number;
 }
 
 // Throttled on the *attempt* rather than the success, so a persistently failing
@@ -61,7 +60,6 @@ function initialState(fingerprint: string): ClockState {
     inflight: null,
     revision: 0,
     publishedRevision: 0,
-    publishedAt: -Infinity,
   };
 }
 
@@ -186,19 +184,21 @@ function drain(): Promise<void> {
 // every invalidation this instance has merged from the index.
 async function publish(backend: UseCacheStore): Promise<void> {
   const revision = state.revision;
-  const stale = now() - state.publishedAt >= snapshotRefreshMs;
-  if (revision === state.publishedRevision && !stale) return;
+  // Nothing observed since the last publish is nothing to say: the replica the
+  // edge already holds is this instance's answer. There is no expiry to renew,
+  // so a periodic rewrite of an unchanged map would buy the reader nothing.
+  if (revision === state.publishedRevision) return;
 
   try {
-    // Only a confirmed write advances the marks, so a failed publish is retried
+    // Only a confirmed write advances the mark, so a failed publish is retried
     // by the next sync rather than mistaken for a live replica.
     if (!(await publishTagSnapshot(backend, state.records))) return;
     state.publishedRevision = revision;
-    state.publishedAt = now();
   } catch {
     // The replica is an optimization; DynamoDB remains the authoritative clock
-    // and the origin is still correct. A publish that cannot land costs the edge
-    // its trust window, which falls open and wakes a publisher.
+    // and the origin is still correct. A publish that cannot land leaves the
+    // edge answering from the last one until this instance observes something
+    // new, or another instance publishes what it already has.
   }
 }
 

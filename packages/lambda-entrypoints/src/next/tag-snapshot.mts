@@ -3,22 +3,6 @@ import { type TagRecord, type TagSnapshot } from "@ocel/next-cache";
 import { now } from "./use-cache-entry.mjs";
 import type { UseCacheStore } from "./use-cache-store.mjs";
 
-// How long a published snapshot may be trusted by the edge. The window is the
-// only bound on how long a failed publish can leave the replica stale, because
-// every other repair path needs a Lambda and a fully intercepted workload wakes
-// none. Past it the edge falls open, which wakes a Lambda, which republishes —
-// so the window also sets how often a completely idle build pays one origin
-// render.
-//
-// Five minutes buys both cheaply: a worst-case staleness a user can be told
-// about plainly, at a cost of roughly twelve origin renders an hour per build,
-// far below what ISR revalidation already spends.
-export const snapshotValidityMs = 5 * 60_000;
-
-// Republished at half the window so the trust window is renewed well before it
-// lapses, rather than after the edge has already started falling open.
-export const snapshotRefreshMs = snapshotValidityMs / 2;
-
 // A publish loses only to another publisher landing first, and each retry starts
 // from that publisher's snapshot. Convergence does not depend on winning: an
 // exhausted publisher's records are carried by the next publish from any
@@ -69,13 +53,7 @@ export function mergeSnapshot(
     if (!isInert(record, deployedAt)) merged[tag] = record;
   }
 
-  return {
-    version: 1,
-    deployedAt,
-    generatedAt: at,
-    validUntil: at + snapshotValidityMs,
-    records: merged,
-  };
+  return { version: 1, deployedAt, generatedAt: at, records: merged };
 }
 
 // Publishes the clock's merged map as this build's replica.

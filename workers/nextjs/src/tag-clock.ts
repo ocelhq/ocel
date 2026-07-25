@@ -45,21 +45,23 @@ export interface TagClock {
 // by two layers: the PoP-shared Cache API, and a per-isolate memo covering the
 // burst one isolate serves inside a second.
 //
-// The TTL is the entire delay this design adds to an invalidation, because the
-// publisher republishes on every revalidateTag — so an invalidation raised at
-// the origin reaches a PoP within one TTL of being raised. Ten seconds buys a
-// PoP's whole burst for one store read while staying far inside the publisher's
-// five-minute trust window, so the window, not the cache, remains what bounds
-// worst-case staleness.
+// These TTLs are the entire delay this design adds to an invalidation, because
+// the publisher republishes on every revalidateTag — so an invalidation raised
+// at the origin reaches a PoP within one TTL of being raised.
 const snapshotTtlSeconds = 10;
 const snapshotMemoMs = 1_000;
 
 // Keyed by the binding itself, which is one stable object for the life of an
 // isolate. Keying on the binding rather than on module state is also what keeps
 // the memo from leaking between tests.
+//
+// A null snapshot is memoized like any other: an unreadable replica is the case
+// that costs the most — every tagged route on the isolate falls open to the
+// origin — so it is exactly the one that must not also pay a store read per
+// call. The memo window bounds how long the isolate waits to notice a repair.
 const snapshotMemo = new WeakMap<
   ObjectStoreReader,
-  { at: number; snapshot: TagSnapshot }
+  { at: number; snapshot: TagSnapshot | null }
 >();
 
 // createTagClock reads the build's tag-clock replica, fronted by the per-isolate
@@ -104,34 +106,34 @@ async function snapshotRecords(
   return snapshot && new Map(Object.entries(snapshot.records));
 }
 
-// readSnapshot returns the build's tag-clock replica, or null whenever it cannot
-// be trusted — missing, torn, stale, or written in a format this worker predates.
-// Every one of those falls open to the origin, which wakes a Lambda, which
-// republishes: the liveness loop repairs itself by being used.
+// readSnapshot returns the build's tag-clock replica, or null when there is no
+// replica this reader can read at all — missing, torn, or written in a format
+// this worker predates. Those fall open to the origin, which is always correct.
+//
+// How current the replica is, is the publisher's business and not checked here.
+// A reader that second-guessed it would have to decide what "too old" means
+// without knowing whether anything had happened to publish, and the only honest
+// answer to that is the one the writer already gave by leaving the object as it
+// is: nothing has changed since.
 async function readSnapshot(
   cfg: { isrPrefix: string },
   deps: TagClockDeps,
   now: number,
 ): Promise<TagSnapshot | null> {
   const memoized = snapshotMemo.get(deps.store);
-  if (memoized && now - memoized.at < snapshotMemoMs) {
-    return usableSnapshot(memoized.snapshot, now);
-  }
+  if (memoized && now - memoized.at < snapshotMemoMs) return memoized.snapshot;
 
   const key = tagSnapshotKey(cfg.isrPrefix);
   const cacheRequest = new Request(snapshotCacheUrl(key));
   const cached = await matchSnapshot(deps.snapshotCache, cacheRequest);
 
   const body = cached ?? (await storeText(deps.store, key));
-  if (body === null) return null;
+  const snapshot = body === null ? null : readableSnapshot(parseJson<TagSnapshot>(body));
 
-  const snapshot = usableSnapshot(parseJson<TagSnapshot>(body), now);
-  if (!snapshot) return null;
-
-  if (cached === null && deps.snapshotCache) {
+  if (snapshot && cached === null && deps.snapshotCache) {
     await deps.snapshotCache.put(
       cacheRequest,
-      new Response(body, {
+      new Response(body!, {
         headers: { "cache-control": `max-age=${snapshotTtlSeconds}` },
       }),
     );
@@ -154,18 +156,13 @@ async function matchSnapshot(
   }
 }
 
-// A replica is trusted only inside the window its publisher declared, and only
-// at a version this worker was written against. An unknown version is a format
-// this reader cannot claim to understand, so it declines to guess — which is
-// what lets the format change without a worker fleet misreading it.
-function usableSnapshot(
-  snapshot: TagSnapshot | null,
-  now: number,
-): TagSnapshot | null {
+// A replica is read only at a version this worker was written against. An
+// unknown version is a format this reader cannot claim to understand, so it
+// declines to guess — which is what lets the format change without a worker
+// fleet misreading it. This is the whole of what a reader may judge: everything
+// else about the document is the publisher's to assert.
+function readableSnapshot(snapshot: TagSnapshot | null): TagSnapshot | null {
   if (snapshot?.version !== 1) return null;
-  if (typeof snapshot.validUntil !== "number" || now >= snapshot.validUntil) {
-    return null;
-  }
   return snapshot.records && typeof snapshot.records === "object"
     ? snapshot
     : null;

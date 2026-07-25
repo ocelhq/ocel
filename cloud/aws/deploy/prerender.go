@@ -178,13 +178,12 @@ func (t uploadTarget) validate() error {
 
 // tagSnapshot mirrors the TypeScript TagSnapshot in @ocel/next-cache. The deploy
 // writes this document once and the Lambda publisher rewrites it thereafter, so
-// the two agree on the field names, the version and the validity window by way
-// of the shared fixture both sides' tests read — never by way of a shared type.
+// the two agree on the field names and the version by way of the shared fixture
+// both sides' tests read — never by way of a shared type.
 type tagSnapshot struct {
 	Version     int                  `json:"version"`
 	DeployedAt  int64                `json:"deployedAt"`
 	GeneratedAt int64                `json:"generatedAt"`
-	ValidUntil  int64                `json:"validUntil"`
 	Records     map[string]tagRecord `json:"records"`
 }
 
@@ -197,10 +196,6 @@ type tagRecord struct {
 
 const (
 	tagSnapshotVersion = 1
-	// The publisher's snapshotValidityMs. Duplicated across the language
-	// boundary and held equal by the fixture, whose TypeScript test asserts the
-	// window against the constant itself.
-	snapshotValidityMs = 5 * 60 * 1000
 	// What tagSnapshotKey() in @ocel/next-cache appends to the same prefix. The
 	// deploy writes the object and the edge reads it without either calling the
 	// other's code, so the edge contract fixture is what holds the two spellings
@@ -218,7 +213,6 @@ func genesisSnapshot(at time.Time) tagSnapshot {
 		Version:     tagSnapshotVersion,
 		DeployedAt:  ms,
 		GeneratedAt: ms,
-		ValidUntil:  ms + snapshotValidityMs,
 		Records:     map[string]tagRecord{},
 	}
 }

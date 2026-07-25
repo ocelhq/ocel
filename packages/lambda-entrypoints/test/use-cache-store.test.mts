@@ -337,7 +337,6 @@ const snapshot = {
   version: 1 as const,
   deployedAt: 1_000,
   generatedAt: 2_000,
-  validUntil: 3_000,
   records: { products: { expired: 1_500 } },
 };
 
