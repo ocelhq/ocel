@@ -309,6 +309,80 @@ describe("dispatchResult", () => {
     expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
   });
 
+  // A prerender route whose allowHeader is the one Next actually emits — which
+  // omits `cookie`, so anything that must reach the origin with its cookies has
+  // to leave through the bypass path rather than the filtered one.
+  function draftDeps(capture: (req: Request) => void): RouteDeps {
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/ssg-draft-mode/test-1": {
+            kind: "prerender",
+            id: "/ssg-draft-mode/[[...route]]",
+            config: {
+              allowHeader: ["host", "x-matched-path", "x-prerender-revalidate"],
+              bypassFor: [{ type: "header", key: "next-action" }],
+            },
+          },
+        },
+      },
+      functionUrls: { "/ssg-draft-mode/[[...route]]": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        capture(req);
+        return new Response("rendered", { status: 200 });
+      }) as unknown as typeof fetch,
+      cache: missingCache(),
+    });
+  }
+
+  function draftRequest(init: RequestInit = {}) {
+    return new Request("https://app.example/ssg-draft-mode/test-1", {
+      headers: { cookie: "__prerender_bypass=abc123" },
+      ...init,
+    });
+  }
+
+  async function dispatchDraft(deps: RouteDeps, request: Request) {
+    return dispatchResult(
+      {
+        resolvedPathname: "/ssg-draft-mode/test-1",
+        invocationTarget: { pathname: "/ssg-draft-mode/test-1" },
+      },
+      request,
+      deps,
+    );
+  }
+
+  it("forwards the draft cookie to a prerender origin, which allowHeader omits", async () => {
+    let captured: Request | undefined;
+    const res = await dispatchDraft(
+      draftDeps((req) => (captured = req)),
+      draftRequest(),
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
+    expect(captured?.headers.get("cookie")).toBe("__prerender_bypass=abc123");
+  });
+
+  it("forwards a non-GET to a prerender origin with its own headers", async () => {
+    let captured: Request | undefined;
+    const res = await dispatchDraft(
+      draftDeps((req) => (captured = req)),
+      new Request("https://app.example/ssg-draft-mode/test-1", {
+        method: "POST",
+        headers: { cookie: "session=xyz" },
+        body: "{}",
+      }),
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
+    expect(captured?.headers.get("cookie")).toBe("session=xyz");
+  });
+
   it("forwards the RSC-family headers to a prerender origin past allowHeader", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({
