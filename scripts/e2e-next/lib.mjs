@@ -1,13 +1,10 @@
 // Pure helpers shared by the Next.js adapter-harness lifecycle scripts
-// (deploy.mjs, logs.mjs, cleanup.mjs, merge-baseline.mjs).
-//
-// The harness runs deploy and logs as separate processes, so everything they
-// share travels through files in the temp app directory rather than memory.
-// Keeping the derivations here — slug, config, package.json patch, result
-// reading, marker formatting, baseline merging — makes the parts that can be
-// wrong on a real cloud run testable without one.
+// (deploy.mjs, logs.mjs, cleanup.mjs, merge-baseline.mjs). The harness runs
+// them as separate processes, so everything they share travels through files in
+// the temp app directory rather than memory.
 
 import { createHash } from "node:crypto";
+import { join } from "node:path";
 
 /** A valid single DNS label, per RFC 1035 (mirrors cli/internal/previewid). */
 export const DNS_LABEL = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -17,6 +14,9 @@ export const STATE_FILE = ".ocel-e2e.json";
 
 /** The file every byte of the deploy's output is redirected to. */
 export const BUILD_LOG_FILE = ".adapter-build.log";
+
+/** The CLI's machine-readable deploy result, relative to the app directory. */
+export const DEPLOY_RESULT_FILE = join(".ocel", "deploy-result.json");
 
 /** How many hex characters of the temp dir's hash disambiguate one app. */
 const HASH_LEN = 8;
@@ -42,6 +42,16 @@ export function previewSlug({ runId, dir }) {
 }
 
 /**
+ * previewSlugForApp is how deploy.mjs and cleanup.mjs derive the slug. Both
+ * must derive the same one from the same environment — a drift between them
+ * means cleanup tears down the wrong preview, or nothing — so the environment
+ * read lives here, in one place, rather than at each call site.
+ */
+export function previewSlugForApp(appDir) {
+  return previewSlug({ runId: process.env.GITHUB_RUN_ID, dir: process.env.NEXT_TEST_DIR || appDir });
+}
+
+/**
  * projectSlug lowers an arbitrary project identifier into the DNS-label shape
  * ocel.config.ts requires of `slug` (projectId is not constrained to it: a
  * "proj_ab12" id is a valid project id and an invalid slug).
@@ -54,7 +64,6 @@ export function projectSlug(value) {
   return token;
 }
 
-/** sanitizeToken lowers a value to the DNS-label alphabet, collapsing runs of separators. */
 function sanitizeToken(value) {
   return value
     .toLowerCase()
@@ -105,8 +114,8 @@ export function withBuildScript(pkg) {
 
 /**
  * deployURL is the URL the harness reads from the deploy script's stdout, taken
- * from the CLI's .ocel/deploy-result.json. A successful deploy that featured no
- * app URL is a failure for our purposes: the harness has nothing to test.
+ * from the CLI's deploy result. A successful deploy that featured no app URL is
+ * a failure for our purposes: the harness has nothing to test.
  */
 export function deployURL(result) {
   const url = result?.appUrls?.[0];
@@ -121,13 +130,15 @@ export function deployURL(result) {
  * script's output. A missing value is reported as the literal "undefined",
  * which is what the contract asks for — never a blank value.
  *
- * IMMUTABLE_ASSET_TOKEN is always undefined: the Ocel adapter never sets
+ * `DEPLOYMENT_ID` is the harness's own marker name, not ours: it is an external
+ * contract, so it keeps that spelling while carrying Ocel's promotion id.
+ * IMMUTABLE_ASSET_TOKEN is always undefined — the Ocel adapter never sets
  * `config.deploymentId`, so its assets carry no `?dpl=` token.
  */
-export function markerLines({ buildId, deploymentId }) {
+export function markerLines({ buildId, promotionId }) {
   return [
     `BUILD_ID: ${buildId || "undefined"}`,
-    `DEPLOYMENT_ID: ${deploymentId || "undefined"}`,
+    `DEPLOYMENT_ID: ${promotionId || "undefined"}`,
     `IMMUTABLE_ASSET_TOKEN: undefined`,
   ];
 }
@@ -145,7 +156,6 @@ export function lambdaLogGroups(response) {
     .map((match) => `/aws/lambda/${match[1]}`);
 }
 
-/** tail keeps the last maxLines lines of text. */
 export function tail(text, maxLines) {
   const lines = text.split("\n");
   return lines.slice(Math.max(0, lines.length - maxLines)).join("\n");

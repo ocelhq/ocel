@@ -14,7 +14,7 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { STATE_FILE, previewSlug } from "./lib.mjs";
+import { STATE_FILE, previewSlugForApp } from "./lib.mjs";
 
 const TEARDOWN_TIMEOUT_MS = 20 * 60 * 1000;
 
@@ -60,5 +60,5 @@ function resolveSlug() {
   } catch {
     console.error(`[ocel-e2e] no readable ${STATE_FILE}; re-deriving the slug`);
   }
-  return previewSlug({ runId: process.env.GITHUB_RUN_ID, dir: process.env.NEXT_TEST_DIR || appDir });
+  return previewSlugForApp(appDir);
 }

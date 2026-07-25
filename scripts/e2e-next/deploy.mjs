@@ -13,9 +13,10 @@ import { join } from "node:path";
 
 import {
   BUILD_LOG_FILE,
+  DEPLOY_RESULT_FILE,
   STATE_FILE,
   deployURL,
-  previewSlug,
+  previewSlugForApp,
   projectSlug,
   renderOcelConfig,
   tail,
@@ -46,7 +47,7 @@ function deploy() {
   const previewDomain = process.env.OCEL_E2E_PREVIEW_DOMAIN || "";
   const sidecarDir = required("OCEL_E2E_SIDECAR_DIR");
 
-  const slug = previewSlug({ runId: process.env.GITHUB_RUN_ID, dir: process.env.NEXT_TEST_DIR || appDir });
+  const slug = previewSlugForApp(appDir);
   // Persisted first, before anything is provisioned: cleanup has to be able to
   // tear down a deploy that failed halfway through.
   writeFileSync(
@@ -64,7 +65,7 @@ function deploy() {
 
   runPreviewUp(adapterDir, slug);
 
-  const resultPath = join(appDir, ".ocel", "deploy-result.json");
+  const resultPath = join(appDir, DEPLOY_RESULT_FILE);
   if (!existsSync(resultPath)) {
     throw new Error(`${resultPath} was not written; the deploy reported success but produced no result`);
   }
@@ -100,9 +101,8 @@ function isSymlink(path) {
   }
 }
 
-// ensureBuildScript guarantees the `build` script buildNext requires (it throws
-// without one). The harness writes one itself in deploy mode; this is the
-// backstop for a fixture whose package.json it leaves alone.
+// ensureBuildScript is the backstop for a fixture whose package.json the
+// harness leaves without the `build` script buildNext requires.
 function ensureBuildScript() {
   const path = join(appDir, "package.json");
   const pkg = JSON.parse(readFileSync(path, "utf8"));

@@ -16,7 +16,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { BUILD_LOG_FILE, STATE_FILE, lambdaLogGroups, markerLines } from "./lib.mjs";
+import { BUILD_LOG_FILE, DEPLOY_RESULT_FILE, STATE_FILE, lambdaLogGroups, markerLines } from "./lib.mjs";
 
 // How far back CloudWatch is queried when the state file carries no start time.
 const DEFAULT_LOG_WINDOW_MS = 60 * 60 * 1000;
@@ -28,9 +28,9 @@ const AWS_TIMEOUT_MS = 60_000;
 
 const appDir = process.cwd();
 const state = readJSON(join(appDir, STATE_FILE)) ?? {};
-const result = readJSON(join(appDir, ".ocel", "deploy-result.json")) ?? {};
+const result = readJSON(join(appDir, DEPLOY_RESULT_FILE)) ?? {};
 
-for (const line of markerLines({ buildId: readBuildID(), deploymentId: result.deploymentId })) {
+for (const line of markerLines({ buildId: readBuildID(), promotionId: result.promotionId })) {
   console.log(line);
 }
 
