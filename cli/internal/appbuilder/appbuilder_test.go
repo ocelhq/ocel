@@ -65,9 +65,13 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 		return nil
 	})
 
-	fns, err := Build(context.Background(), cfg, io.Discard)
-	if err != nil {
+	if err := Build(context.Background(), cfg, io.Discard); err != nil {
 		t.Fatalf("Build: %v", err)
+	}
+
+	fns, err := CollectFunctions(root)
+	if err != nil {
+		t.Fatalf("CollectFunctions: %v", err)
 	}
 
 	want := []manifestbuilder.Function{
@@ -75,7 +79,7 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 		{Name: "worker/index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/worker/functions/index.func", Framework: "express", App: "worker"},
 	}
 	if len(fns) != len(want) {
-		t.Fatalf("Build returned %d functions, want %d: %+v", len(fns), len(want), fns)
+		t.Fatalf("CollectFunctions returned %d functions, want %d: %+v", len(fns), len(want), fns)
 	}
 	for i, w := range want {
 		if fns[i] != w {
@@ -118,7 +122,7 @@ func TestBuild_MissingBuilderPath(t *testing.T) {
 		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
 	}
 
-	_, err := Build(context.Background(), cfg, io.Discard)
+	err := Build(context.Background(), cfg, io.Discard)
 	if err == nil {
 		t.Fatal("Build succeeded with OCEL_BUILDER_PATH unset, want error")
 	}
@@ -140,12 +144,16 @@ func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 		return json.Unmarshal(request, &gotReq)
 	})
 
-	fns, err := Build(context.Background(), &projectconfig.Config{Dir: root}, io.Discard)
-	if err != nil {
+	if err := Build(context.Background(), &projectconfig.Config{Dir: root}, io.Discard); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
+
+	fns, err := CollectFunctions(root)
+	if err != nil {
+		t.Fatalf("CollectFunctions: %v", err)
+	}
 	if fns != nil {
-		t.Errorf("Build returned %+v, want nil", fns)
+		t.Errorf("CollectFunctions returned %+v, want nil", fns)
 	}
 	if len(gotReq.Apps) != 0 {
 		t.Errorf("request apps = %+v, want empty", gotReq.Apps)
@@ -169,12 +177,69 @@ func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
 		return errors.New("node-builder failed: no entrypoint resolved for app \"api\"")
 	})
 
-	_, err := Build(context.Background(), cfg, io.Discard)
+	err := Build(context.Background(), cfg, io.Discard)
 	if err == nil {
 		t.Fatal("Build succeeded, want error")
 	}
 	if !strings.Contains(err.Error(), "no entrypoint resolved") {
 		t.Errorf("error = %q, want it to surface the node-builder failure", err)
+	}
+}
+
+func TestCollect_NoOutputTree_Errors(t *testing.T) {
+	_, err := CollectFunctions(t.TempDir())
+	if err == nil {
+		t.Fatal("CollectFunctions succeeded with no build output, want error")
+	}
+	if !strings.Contains(err.Error(), filepath.Join(scratchDirName, outputDirName)) {
+		t.Errorf("error = %q, want it to name the missing output directory", err)
+	}
+	if !strings.Contains(err.Error(), "ocel build") {
+		t.Errorf("error = %q, want it to point at `ocel build`", err)
+	}
+}
+
+// A built tree that produced no functions — a fully static export, say — is a
+// fact about the project, not a failure.
+func TestCollect_EmptyOutputTree_NoError(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, scratchDirName, outputDirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	fns, err := CollectFunctions(root)
+	if err != nil {
+		t.Fatalf("CollectFunctions: %v", err)
+	}
+	if fns != nil {
+		t.Errorf("CollectFunctions = %+v, want nil", fns)
+	}
+}
+
+func TestCollect_ReadsPrebuiltTree(t *testing.T) {
+	root := t.TempDir()
+	outDir := filepath.Join(root, scratchDirName, outputDirName)
+	writeFuncConfig(t, outDir, "web", "index.func",
+		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
+	writeFuncConfig(t, outDir, "web", filepath.Join("api", "todos", "[id].func"),
+		functionConfig{Runtime: "nodejs24.x", Handler: "index.handler", Framework: "next", App: "web"})
+
+	fns, err := CollectFunctions(root)
+	if err != nil {
+		t.Fatalf("CollectFunctions: %v", err)
+	}
+
+	want := []manifestbuilder.Function{
+		{Name: "web/api/todos/[id]", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/api/todos/[id].func", Framework: "next", App: "web"},
+		{Name: "web/index", Runtime: "nodejs24.x", Handler: "index.handler", ArtifactPath: "apps/web/functions/index.func", Framework: "next", App: "web"},
+	}
+	if len(fns) != len(want) {
+		t.Fatalf("CollectFunctions returned %d functions, want %d: %+v", len(fns), len(want), fns)
+	}
+	for i, w := range want {
+		if fns[i] != w {
+			t.Errorf("function[%d] = %+v, want %+v", i, fns[i], w)
+		}
 	}
 }
 
@@ -344,13 +409,16 @@ func TestBuild_Integration(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
 
 	var stderr bytes.Buffer
-	fns, err := Build(context.Background(), cfg, &stderr)
-	if err != nil {
+	if err := Build(context.Background(), cfg, &stderr); err != nil {
 		t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 	}
 
+	fns, err := CollectFunctions(fixtureRoot)
+	if err != nil {
+		t.Fatalf("CollectFunctions: %v", err)
+	}
 	if len(fns) != 1 {
-		t.Fatalf("Build returned %d functions, want 1: %+v", len(fns), fns)
+		t.Fatalf("CollectFunctions returned %d functions, want 1: %+v", len(fns), fns)
 	}
 	want := manifestbuilder.Function{
 		Name:         "api/index",
@@ -386,13 +454,16 @@ func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
 
 	var stderr bytes.Buffer
-	fns, err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, &stderr)
-	if err != nil {
+	if err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, &stderr); err != nil {
 		t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 	}
 
+	fns, err := CollectFunctions(fixtureRoot)
+	if err != nil {
+		t.Fatalf("CollectFunctions: %v", err)
+	}
 	if len(fns) != 1 {
-		t.Fatalf("Build returned %d functions, want 1: %+v", len(fns), fns)
+		t.Fatalf("CollectFunctions returned %d functions, want 1: %+v", len(fns), fns)
 	}
 	if fns[0].Name != "express-app/index" || fns[0].Framework != "express" {
 		t.Errorf("detected function = %+v, want name express-app/index framework express", fns[0])

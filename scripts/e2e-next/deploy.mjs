@@ -23,9 +23,13 @@ import {
   withBuildScript,
 } from "./lib.mjs";
 
-// How long a single deploy may take before it is killed. A hung deploy must fail
-// its own suite rather than burn the job's whole timeout.
+// How long building and deploying one app may take, in total, before it is
+// killed. A hung deploy must fail its own suite rather than burn the job's whole
+// timeout, so the budget is shared across the CLI runs rather than granted to
+// each: two runs must not cost twice the wall clock one used to.
 const DEFAULT_TIMEOUT_MS = 25 * 60 * 1000;
+
+const deadline = Date.now() + (Number(process.env.OCEL_E2E_DEPLOY_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS);
 
 // Lines of the deploy log echoed to stderr when the deploy fails.
 const FAILURE_LOG_LINES = 200;
@@ -63,7 +67,11 @@ function deploy() {
   linkSidecar(sidecarDir);
   ensureBuildScript();
 
-  runPreviewUp(adapterDir, slug);
+  // Build and deploy are separate CLI runs so a build failure is reported as
+  // one, rather than as a failed deploy. `preview up --prebuilt` then ships the
+  // .ocel/output this produced instead of building the app a second time.
+  runOcel(adapterDir, ["build"]);
+  runOcel(adapterDir, ["preview", "up", "--name", slug, "--prebuilt"]);
 
   const resultPath = join(appDir, DEPLOY_RESULT_FILE);
   if (!existsSync(resultPath)) {
@@ -113,30 +121,32 @@ function ensureBuildScript() {
   }
 }
 
-// runPreviewUp drives the npm launcher (which exports the adapter/builder/worker
-// paths the Go CLI reads) with every byte of output redirected to the build log:
-// the harness reads this process's stdout as the deployment URL and nothing else.
-function runPreviewUp(adapterDir, slug) {
+// runOcel drives the npm launcher (which exports the adapter/builder/worker
+// paths the Go CLI reads) with every byte of output appended to the build log:
+// the harness reads this process's stdout as the deployment URL and nothing
+// else, and logs.mjs replays the whole log afterward.
+function runOcel(adapterDir, args) {
+  const label = `ocel ${args[0]}`;
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error(`the shared build+deploy budget was exhausted before ${label} started`);
+  }
   const log = openSync(join(appDir, BUILD_LOG_FILE), "a");
   try {
-    const res = spawnSync(
-      process.execPath,
-      [join(adapterDir, "packages", "ocel", "bin", "run.js"), "preview", "up", "--name", slug],
-      {
-        cwd: appDir,
-        stdio: ["ignore", log, log],
-        timeout: Number(process.env.OCEL_E2E_DEPLOY_TIMEOUT_MS) || DEFAULT_TIMEOUT_MS,
-        killSignal: "SIGTERM",
-      },
-    );
+    const res = spawnSync(process.execPath, [join(adapterDir, "packages", "ocel", "bin", "run.js"), ...args], {
+      cwd: appDir,
+      stdio: ["ignore", log, log],
+      timeout: remaining,
+      killSignal: "SIGTERM",
+    });
     if (res.error) {
-      throw new Error(`ocel preview up: ${res.error.message}`);
+      throw new Error(`${label}: ${res.error.message}`);
     }
     if (res.signal) {
-      throw new Error(`ocel preview up timed out and was killed with ${res.signal}`);
+      throw new Error(`${label} timed out and was killed with ${res.signal}`);
     }
     if (res.status !== 0) {
-      throw new Error(`ocel preview up exited with ${res.status}`);
+      throw new Error(`${label} exited with ${res.status}`);
     }
   } finally {
     closeSync(log);
