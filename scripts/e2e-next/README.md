@@ -12,13 +12,34 @@ isolated app per test suite and calls three scripts per app; these are ours:
 
 `lib.mjs` holds the shared pure logic (unit tested: `pnpm --filter
 @ocel-scripts/e2e-next test`). `merge-baseline.mjs` records the known-failure
-baseline. `guard-accounts.sh` refuses to deploy anywhere but the disposable
-account. The workflow that drives all of it is
-`.github/workflows/test-e2e-deploy.yml` — **manual dispatch only**.
+baseline. `stage-smoke-app.mjs` stages the smoke job's app. `guard-accounts.sh`
+refuses to deploy anywhere but the disposable account. The workflow that drives
+all of it is `.github/workflows/test-e2e-deploy.yml` — **manual dispatch only**.
+
+`logs.mjs`'s `DEPLOYMENT_ID:` marker carries Ocel's **promotion id** (see
+`CONTEXT.md`: an Ocel Deployment is per-app, a Promotion is what one deploy
+produces). The marker keeps Next's spelling because the harness parses that
+literal; the value comes from `promotionId` in `.ocel/deploy-result.json`.
 
 Each temp app gets its own preview environment *and* its own declared app name
 (`e2e-<run id>-<hash of the temp dir>`), so concurrent suites get their own
 Cloudflare worker script and S3 asset prefix instead of racing a shared one.
+
+## Jobs, and what the smoke job does not cover
+
+`build` → `smoke` → `test` (16 groups) → `baseline` (recording runs only).
+
+The `smoke` job drives `deploy.mjs`, `logs.mjs` and `cleanup.mjs` **directly**
+against one trivial app, because what it asserts — a 200 from the URL plus all
+three marker lines — is not observable through `run-tests.js`. Its app is
+installed off the `nextjs` checkout by the harness's own
+`test/lib/create-next-install`, so it builds against the same Next the matrix
+tests; only `react`/`react-dom` come from `smoke-app/package.json`.
+
+The tradeoff: the smoke job does **not** exercise `run-tests.js`,
+`NEXT_TEST_MODE=deploy`, or the `NEXT_TEST_*_SCRIPT_PATH` indirection. That
+wiring is first exercised by the matrix itself, so a break in it costs one
+matrix start rather than being caught by the gate.
 
 ## One-time setup (out of band, by a human)
 
@@ -73,14 +94,22 @@ adapter cannot pass everything (edge-runtime suites, for one — the adapter emi
 nodejs functions only and skips edge routes), so a baseline is what makes the
 matrix a regression signal instead of a wall of red.
 
+The manifest lives in two places, deliberately:
+
+- **`scripts/e2e-next/baseline-manifest.json`** — the committed source of truth
+  in this repo, next to the scripts that produce it.
+- **`nextjs/test/ocel-deploy-tests-manifest.json`** — where each `test` job
+  copies it inside the Next.js checkout. `NEXT_EXTERNAL_TESTS_FILTERS` is
+  resolved against the harness's own cwd, so it can only be read from there.
+
+Nothing but the copy step knows about the second path; edit and commit the first.
+
 1. Dispatch the workflow with **`recordBaseline: true`**. The matrix then runs
    unfiltered, emits a results file per suite, and the `baseline` job merges
    every group's fragment.
 2. Download the `baseline-manifest` artifact and commit it over
    `scripts/e2e-next/baseline-manifest.json`.
-3. Dispatch normally from then on. The manifest is copied into the Next.js
-   checkout as `test/ocel-deploy-tests-manifest.json`, which is where
-   `NEXT_EXTERNAL_TESTS_FILTERS` resolves it.
+3. Dispatch normally from then on.
 
 A recording run is expensive and may hit AWS Lambda code-storage or Cloudflare
 worker-script limits mid-flight; re-dispatch and merge again if it does.

@@ -40,6 +40,12 @@ jobs:
     name: Build Next.js + adapter
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.E2E_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -64,20 +70,12 @@ jobs:
         with:
           go-version-file: adapter/cli/go.mod
 
-      - name: Configure AWS credentials
-        run: |
-          echo "AWS_ACCESS_KEY_ID=${{ secrets.E2E_AWS_ACCESS_KEY_ID }}" >> "$GITHUB_ENV"
-          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}" >> "$GITHUB_ENV"
-          echo "AWS_REGION=${{ vars.E2E_AWS_REGION }}" >> "$GITHUB_ENV"
-
       # Runs before anything is built, let alone deployed: a misconfigured secret
       # must never reach a real account.
       - name: Guard the target accounts
         env:
           EXPECTED_AWS_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
         run: adapter/scripts/e2e-next/guard-accounts.sh
 
       - name: Install & build Next.js
@@ -155,7 +153,6 @@ jobs:
       AWS_REGION: ${{ vars.E2E_AWS_REGION }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
-      SMOKE_APP: ${{ github.workspace }}/smoke-app
     steps:
       - uses: actions/cache/restore@v4
         with:
@@ -171,18 +168,25 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
       - name: Guard the target accounts
         env:
           EXPECTED_AWS_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
         run: adapter/scripts/e2e-next/guard-accounts.sh
 
+      # Installed off the `nextjs` checkout by the harness's own
+      # create-next-install, so the smoke app builds against the same Next the
+      # matrix tests whatever nextjsRef was dispatched.
       - name: Stage the smoke app
         run: |
           set -euo pipefail
-          cp -R adapter/scripts/e2e-next/smoke-app "$SMOKE_APP"
-          cd "$SMOKE_APP"
-          npm install --no-audit --no-fund
+          app=$(node adapter/scripts/e2e-next/stage-smoke-app.mjs nextjs adapter/scripts/e2e-next/smoke-app)
+          echo "SMOKE_APP=$app" >> "$GITHUB_ENV"
+          echo "staged in $app"
 
       # Exercises exactly what the harness will: deploy prints only a URL, the
       # URL serves the app, logs carries all three markers, cleanup tears it
@@ -190,6 +194,8 @@ jobs:
       # once one round trip is known to work.
       - name: Deploy the smoke app
         working-directory: ${{ env.SMOKE_APP }}
+        env:
+          NEXT_TEST_DIR: ${{ env.SMOKE_APP }}
         run: |
           set -euo pipefail
           url=$(node "$ADAPTER_DIR/scripts/e2e-next/deploy.mjs")
@@ -218,22 +224,22 @@ jobs:
         run: |
           set -euo pipefail
           node "$ADAPTER_DIR/scripts/e2e-next/logs.mjs" > logs.txt
+          # `|| true` keeps a missing marker from aborting the step under
+          # `set -e` before its diagnostic can print. Only the first match
+          # counts: the replayed build log carries the fixture's own markers.
           for marker in BUILD_ID DEPLOYMENT_ID IMMUTABLE_ASSET_TOKEN; do
-            value=$(grep -m1 "^$marker: " logs.txt | sed "s/^$marker: //")
-            if [ -z "$value" ]; then
+            line=$(grep -m1 "^$marker: " logs.txt || true)
+            if [ -z "$line" ]; then
               echo "::error::logs script emitted no $marker marker"
               exit 1
             fi
-            echo "$marker=$value"
+            echo "$line"
+            # IMMUTABLE_ASSET_TOKEN is legitimately undefined for this adapter.
+            if [ "$marker" != IMMUTABLE_ASSET_TOKEN ] && [ "$line" = "$marker: undefined" ]; then
+              echo "::error::$marker resolved to undefined"
+              exit 1
+            fi
           done
-          if [ "$(grep -m1 '^BUILD_ID: ' logs.txt)" = "BUILD_ID: undefined" ]; then
-            echo "::error::BUILD_ID resolved to undefined"
-            exit 1
-          fi
-          if [ "$(grep -m1 '^DEPLOYMENT_ID: ' logs.txt)" = "DEPLOYMENT_ID: undefined" ]; then
-            echo "::error::DEPLOYMENT_ID resolved to undefined"
-            exit 1
-          fi
 
       - name: Tear the smoke app down
         if: always()
@@ -258,6 +264,12 @@ jobs:
     needs: smoke
     runs-on: ubuntu-latest
     timeout-minutes: 360
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.E2E_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
     strategy:
       fail-fast: false
       matrix:
@@ -307,11 +319,6 @@ jobs:
         env:
           EXPECTED_AWS_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
           EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.E2E_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ vars.E2E_AWS_REGION }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
         run: adapter/scripts/e2e-next/guard-accounts.sh
 
       - name: Copy the baseline manifest into the Next.js checkout
@@ -344,11 +351,6 @@ jobs:
           OCEL_E2E_PROJECT_SLUG: ${{ vars.E2E_OCEL_PROJECT_SLUG }}
           OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
           OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
-          AWS_ACCESS_KEY_ID: ${{ secrets.E2E_AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}
-          AWS_REGION: ${{ vars.E2E_AWS_REGION }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
         run: node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e
 
       - name: Collect this group's results into a baseline fragment
