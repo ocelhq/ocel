@@ -34,12 +34,10 @@ const SchemaVersion = 1
 // shared with projectconfig/appbuilder/deployui.
 const scratchDirName = ".ocel"
 
-// fileName is the result document's name inside scratchDirName.
 const fileName = "deploy-result.json"
 
-// Result is the deploy-result document. Every field is populated from what the
-// CLI already knows once the provider's Deploy RPC reaches a successful
-// terminal result.
+// Result is the deploy-result document, populated from what the CLI knows once
+// the provider's Deploy RPC reaches a successful terminal result.
 type Result struct {
 	SchemaVersion int         `json:"schemaVersion"`
 	ProjectID     string      `json:"projectId"`

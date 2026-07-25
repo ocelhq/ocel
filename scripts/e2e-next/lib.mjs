@@ -161,11 +161,7 @@ export function tail(text, maxLines) {
   return lines.slice(Math.max(0, lines.length - maxLines)).join("\n");
 }
 
-/**
- * suiteFromResultsPath recovers the harness's test-file key from the path of
- * the per-suite Jest results file run-tests.js writes next to it
- * (`${test.file}.results.json`).
- */
+/** Recovers the harness's test-file key from `${test.file}.results.json`. */
 export function suiteFromResultsPath(resultsPath) {
   return resultsPath
     .replace(/\\/g, "/")
