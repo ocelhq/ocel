@@ -328,7 +328,7 @@ jobs:
           NEXT_TELEMETRY_DISABLED: 1
           # Empty on a recording run: the manifest excludes known-failing cases,
           # and a recording run has to observe them.
-          NEXT_EXTERNAL_TESTS_FILTERS: ${{ inputs.recordBaseline && '' || env.BASELINE_MANIFEST }}
+          NEXT_EXTERNAL_TESTS_FILTERS: ${{ !inputs.recordBaseline && env.BASELINE_MANIFEST || '' }}
           # Emits a results file for every suite, not just failing ones, so a
           # recording run can build the baseline from them.
           NEXT_TEST_EMIT_ALL_OUTPUT: ${{ inputs.recordBaseline && '1' || '' }}
