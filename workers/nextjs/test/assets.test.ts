@@ -114,13 +114,30 @@ describe("serveStaticAsset", () => {
     expect(res.headers.get("content-type")).toBe("text/css; charset=utf-8");
   });
 
-  it("returns a plain 404 when the object is not in the store", async () => {
-    const url = new URL("https://serve-2.example/missing.txt");
+  it("serves the app's own 404 page when the object is not in the store", async () => {
+    const url = new URL("https://serve-2.example/blog/timm");
+    const deps = countingDeps(
+      bucketServing({
+        "assets/p/app/b1/404.html": { body: "<h1>This page could not be found</h1>" },
+      }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toContain("page could not be found");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("returns a plain 404 when the build emitted no 404 page", async () => {
+    const url = new URL("https://serve-2b.example/missing.txt");
     const deps = countingDeps(bucketServing({}), "assets/p/app/b1");
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
     expect(res.status).toBe(404);
+    expect(await res.text()).toBe("Not Found");
   });
 
   it("returns 404 when no store is bound", async () => {

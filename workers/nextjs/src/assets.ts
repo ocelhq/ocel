@@ -74,8 +74,18 @@ export function contentTypeFor(pathname: string): string {
   return CONTENT_TYPES[pathname.slice(dot).toLowerCase()] ?? "application/octet-stream";
 }
 
-function notFound(): Response {
-  return new Response("Not Found", { status: 404 });
+// A request that matches nothing — no route, no asset — is answered with the
+// app's own rendered 404 page, which the build emits as static/404.html (App
+// Router not-found.js and Pages Router 404.js alike) and the deploy uploads
+// beside every other asset. Only a build that emitted none falls back to a
+// bare body.
+async function notFound(deps: AssetStoreDeps): Promise<Response> {
+  const page = await deps.store?.get(`${deps.assetPrefix}/404.html`);
+  if (!page?.body) return new Response("Not Found", { status: 404 });
+  return new Response(page.body, {
+    status: 404,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  });
 }
 
 // serveStaticAsset answers a static-asset request from the R2 cache store,
@@ -84,20 +94,20 @@ function notFound(): Response {
 // build-id-scoped path — nothing at that key is ever overwritten — so a colo
 // hit never needs revalidation: the response is cached with immutable
 // headers. Always returns a Response (never throws): a miss, or no store
-// bound at all, is a plain 404.
+// bound at all, is the app's 404 page.
 export async function serveStaticAsset(
   request: Request,
   url: URL,
   deps: AssetStoreDeps,
 ): Promise<Response> {
-  if (!deps.store) return notFound();
+  if (!deps.store) return notFound(deps);
 
   const cached = await deps.cache.match(request);
   if (cached) return cached;
 
   const key = `${deps.assetPrefix}${url.pathname}`;
   const object = await deps.store.get(key);
-  if (!object?.body) return notFound();
+  if (!object?.body) return notFound(deps);
 
   const headers = new Headers({
     "content-type": object.httpMetadata?.contentType || contentTypeFor(url.pathname),
