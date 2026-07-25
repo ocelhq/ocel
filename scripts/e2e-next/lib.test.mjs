@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   DNS_LABEL,
@@ -8,6 +8,7 @@ import {
   markerLines,
   mergeBaselineManifest,
   previewSlug,
+  previewSlugForApp,
   projectSlug,
   renderOcelConfig,
   suiteFromResultsPath,
@@ -43,6 +44,20 @@ describe("previewSlug", () => {
     const slug = previewSlug({ runId: "9".repeat(200), dir: "/tmp/x" });
     expect(slug).toMatch(DNS_LABEL);
     expect(slug.length).toBeLessThanOrEqual(63);
+  });
+});
+
+describe("previewSlugForApp", () => {
+  it("prefers NEXT_TEST_DIR over the app directory, so deploy and cleanup agree", () => {
+    vi.stubEnv("GITHUB_RUN_ID", "42");
+    vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
+    expect(previewSlugForApp("/somewhere/else")).toBe(previewSlug({ runId: "42", dir: "/tmp/harness-app" }));
+  });
+
+  it("falls back to the app directory when the harness sets no NEXT_TEST_DIR", () => {
+    vi.stubEnv("GITHUB_RUN_ID", "42");
+    vi.stubEnv("NEXT_TEST_DIR", "");
+    expect(previewSlugForApp("/tmp/app")).toBe(previewSlug({ runId: "42", dir: "/tmp/app" }));
   });
 });
 
@@ -111,9 +126,9 @@ describe("deployURL", () => {
 
 describe("markerLines", () => {
   it("emits the three harness markers in order", () => {
-    expect(markerLines({ buildId: "bld", deploymentId: "dep" })).toEqual([
+    expect(markerLines({ buildId: "bld", promotionId: "prm" })).toEqual([
       "BUILD_ID: bld",
-      "DEPLOYMENT_ID: dep",
+      "DEPLOYMENT_ID: prm",
       "IMMUTABLE_ASSET_TOKEN: undefined",
     ]);
   });
