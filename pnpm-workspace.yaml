@@ -3,6 +3,7 @@ packages:
   - packages/*
   - packages/native-lib/*
   - tools/*
+  - scripts/*
   - examples/*
   - tests/*
   - workers/*
