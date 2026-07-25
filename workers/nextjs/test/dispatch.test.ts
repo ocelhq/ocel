@@ -378,6 +378,7 @@ describe("dispatchResult", () => {
   function interceptDeps(
     lambdaBody: string,
     storeEntry: unknown | null,
+    lambdaHeaders: Record<string, string> = {},
   ): { deps: RouteDeps; lambdaCalls: () => number } {
     let lambda = 0;
     const deps = baseDeps({
@@ -400,7 +401,7 @@ describe("dispatchResult", () => {
         lambda++;
         return new Response(lambdaBody, {
           status: 200,
-          headers: { "cache-control": "s-maxage=60" },
+          headers: { "cache-control": "s-maxage=60", ...lambdaHeaders },
         });
       }) as unknown as typeof fetch,
       cache: missingCache(),
@@ -430,6 +431,8 @@ describe("dispatchResult", () => {
 
     // Colo memo miss, served from the R2 store one tier down.
     expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    // A fresh entry, so the freshness Next's own server would have reported.
+    expect(res.headers.get("x-nextjs-cache")).toBe("HIT");
     expect(await res.text()).toBe("<html>edge</html>");
     expect(lambdaCalls()).toBe(0);
   });
@@ -442,6 +445,18 @@ describe("dispatchResult", () => {
     expect(res.headers.get("x-ocel-cache")).toBe("MISS");
     expect(await res.text()).toBe("from-lambda");
     expect(lambdaCalls()).toBe(1);
+  });
+
+  it("leaves the Lambda's own x-nextjs-cache alone on a store miss", async () => {
+    // REVALIDATED is a value only Next's server can know to report, so a serve
+    // it authored has to reach the client with that value intact.
+    const { deps } = interceptDeps("from-lambda", null, {
+      "x-nextjs-cache": "REVALIDATED",
+    });
+
+    const res = await dispatchBlog(deps);
+
+    expect(res.headers.get("x-nextjs-cache")).toBe("REVALIDATED");
   });
 
   it("serves a stale complete entry from the store and refreshes via the Lambda behind the request", async () => {
@@ -496,6 +511,7 @@ describe("dispatchResult", () => {
 
     // Served stale from the store, never blocked on the Lambda.
     expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(res.headers.get("x-nextjs-cache")).toBe("STALE");
     expect(await res.text()).toBe("<html>edge</html>");
 
     await Promise.all(pending);
