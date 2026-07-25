@@ -389,7 +389,9 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 // changes when the code changes, so Pulumi redeploys exactly the changed
 // functions. isr is the app's cache, nil when it keeps none; it injects the
 // cache handler's env, and the grant backing it lives on that same app's role.
-// The Function URL is exported under logicalName for collectFunctionOutput.
+// The Function URL is exported under logicalName for collectFunctionOutput,
+// which is the identity everything downstream uses; the Pulumi resource name is
+// the clamped lambdaResourceName, so a long route still fits AWS's name limit.
 func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, env pulumi.StringMap, isr *isrConfig, roleArn pulumi.StringInput) error {
 	// env is shared across every function in the deploy, so per-function
 	// additions are made on a copy.
@@ -407,7 +409,9 @@ func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.Strin
 		}
 	}
 
-	fn, err := lambda.NewFunction(ctx, logicalName, &lambda.FunctionArgs{
+	resourceName := lambdaResourceName(logicalName)
+
+	fn, err := lambda.NewFunction(ctx, resourceName, &lambda.FunctionArgs{
 		Runtime:    pulumi.String(args.Runtime),
 		Handler:    pulumi.String(lambdaConfigHandler),
 		Role:       roleArn,
@@ -435,7 +439,7 @@ func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.Strin
 	// credentials IAM authorizes, so it needs no resource-based grant at all —
 	// the edge reader's identity-based grant (conditioned on the ocel:app tag) is
 	// the whole authorization. The public NONE grants are gone with it.
-	url, err := lambda.NewFunctionUrl(ctx, logicalName+"-url", &lambda.FunctionUrlArgs{
+	url, err := lambda.NewFunctionUrl(ctx, resourceName+"-url", &lambda.FunctionUrlArgs{
 		FunctionName:      fn.Name,
 		AuthorizationType: pulumi.String(functionURLAuthIAM),
 		InvokeMode:        pulumi.String(functionURLInvokeModeStream),

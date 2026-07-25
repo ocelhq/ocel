@@ -87,3 +87,24 @@ func TestSafeName_CappedAndNoInvalidChars(t *testing.T) {
 		}
 	}
 }
+
+func TestLambdaResourceName(t *testing.T) {
+	short := "e2e_local_9385dcd9_api_revalidate"
+	if got := lambdaResourceName(short); got != short {
+		t.Errorf("lambdaResourceName(%q) = %q, want it unchanged", short, got)
+	}
+
+	long := "e2e_local_9385dcd9_variable_revalidate_authorization_route_cookies"
+	got := lambdaResourceName(long)
+	if len(got)+lambdaAutonameSuffixLen > maxLambdaNameLen {
+		t.Errorf("lambdaResourceName(%q) = %q (%d chars); autonaming would exceed %d", long, got, len(got), maxLambdaNameLen)
+	}
+	if got != lambdaResourceName(long) {
+		t.Error("lambdaResourceName is not deterministic")
+	}
+
+	sibling := long + "_more"
+	if other := lambdaResourceName(sibling); other == got {
+		t.Errorf("two logical names sharing a prefix collided on %q", got)
+	}
+}
