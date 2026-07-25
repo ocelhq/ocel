@@ -184,6 +184,10 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 		return err
 	}
 
+	if err := clearDeployResult(cfg); err != nil {
+		return err
+	}
+
 	ui := deployui.New(stdout, cfg.Dir, "ocel preview up", verboseEnabled())
 	defer ui.Close()
 
@@ -213,17 +217,22 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 
 		var stackOutputs []*deploymentsv1.ResourceOutput
 		var appURLs []string
+		var deploymentID string
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
 				stackOutputs = res.GetOutputs()
 				appURLs = res.GetAppUrls()
+				deploymentID = res.GetDeploymentId()
 			}
 		}
 		if err := runner.Deploy(ctx, req, onEvent); err != nil {
 			return err
 		}
 
+		if err := recordDeployResult(cfg, manifest, env, "", deploymentID, appURLs); err != nil {
+			return err
+		}
 		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), appURLs, stackOutputs)
 		return nil
 	})

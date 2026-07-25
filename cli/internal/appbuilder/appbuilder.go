@@ -138,6 +138,25 @@ func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) ([]
 	return collectFunctions(outputDir)
 }
 
+// BuildID reads the build id an app's build stamped into its routing manifest
+// at <projectDir>/.ocel/output/apps/<app>/routing-manifest.json. It returns ""
+// for an app whose framework writes no routing manifest, or whose manifest
+// carries no build id: those apps have no build identity the CLI can know (the
+// provider mints one deploy-side), which is a fact about the app, not an error.
+func BuildID(projectDir, app string) string {
+	raw, err := os.ReadFile(filepath.Join(projectDir, scratchDirName, outputDirName, appsDirName, app, "routing-manifest.json"))
+	if err != nil {
+		return ""
+	}
+	var manifest struct {
+		BuildID string `json:"buildId"`
+	}
+	if err := json.Unmarshal(raw, &manifest); err != nil {
+		return ""
+	}
+	return manifest.BuildID
+}
+
 // collectFunctions walks each app's <outputDir>/apps/<app>/functions subtree
 // and returns one function per `*.func` directory, reading its config.json.
 // Nested functions (e.g. functions/api/todos/[id].func) are supported. A

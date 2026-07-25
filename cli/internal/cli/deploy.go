@@ -103,6 +103,10 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		return err
 	}
 
+	if err := clearDeployResult(cfg); err != nil {
+		return err
+	}
+
 	ui := deployui.New(stdout, cfg.Dir, "ocel deploy", verboseEnabled())
 	defer ui.Close()
 
@@ -134,30 +138,36 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		}
 		ui.BuildOK()
 
+		env := &deploymentsv1.Environment{
+			Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
+			Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
+		}
 		req := &deploymentsv1.DeployRequest{
 			Manifest:        manifest,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			Environment: &deploymentsv1.Environment{
-				Class:     deploymentsv1.Environment_CLASS_PRODUCTION,
-				Lifecycle: deploymentsv1.Environment_LIFECYCLE_UNSPECIFIED,
-			},
-			Tag: opts.tag,
+			Environment:     env,
+			Tag:             opts.tag,
 		}
 
 		var stackOutputs []*deploymentsv1.ResourceOutput
 		var appURLs []string
+		var deploymentID string
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
 				stackOutputs = res.GetOutputs()
 				appURLs = res.GetAppUrls()
+				deploymentID = res.GetDeploymentId()
 			}
 		}
 		if err := runner.Deploy(ctx, req, onEvent); err != nil {
 			return err
 		}
 
+		if err := recordDeployResult(cfg, manifest, env, opts.tag, deploymentID, appURLs); err != nil {
+			return err
+		}
 		ui.Deployed("Deployed", appURLs, stackOutputs)
 		return nil
 	})

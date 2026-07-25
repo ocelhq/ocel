@@ -95,14 +95,21 @@ func (s *Server) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, s
 	}
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
-	outputs, appURLs, err := s.runDeploy(ctx, req, manifest, progress, logf)
+	// Minted here, before the deploy, so the terminal result can always name the
+	// deployment this run created (the CLI records it in .ocel/deploy-result.json).
+	deploymentID, err := deploy.NewDeploymentID()
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
 	}
-	return stream.Send(resultEvent(true, "", outputs, appURLs))
+
+	outputs, appURLs, err := s.runDeploy(ctx, req, manifest, deploymentID, progress, logf)
+	if err != nil {
+		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
+	}
+	return stream.Send(resultEvent(true, "", outputs, appURLs, deploymentID))
 }
 
-func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, progress deploy.Progress, logf func(string)) ([]*deploymentsv1.ResourceOutput, []string, error) {
+func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest, manifest *deploymentsv1.Manifest, deploymentID string, progress deploy.Progress, logf func(string)) ([]*deploymentsv1.ResourceOutput, []string, error) {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
 		return nil, nil, err
@@ -262,6 +269,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ExpiresAt:      previewExpiry(env.GetLifecycle(), time.Now()),
 		RootStackState: priorRootStackState,
 		Tag:            req.GetTag(),
+		DeploymentID:   deploymentID,
 	}, manifest, progress, logf)
 
 	// Persist whatever root-stack state was reconciled — even when a later
@@ -341,11 +349,11 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
 	}
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
 	}
 	cfn := cloudformation.NewFromConfig(awscfg)
 	ssmClient := ssm.NewFromConfig(awscfg)
@@ -360,10 +368,10 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	// Each substrate has its own stack, so the gate reads the one being acted on.
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
 	}
 	if bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion) == bootstrap.NeedsCLIUpgrade {
-		return stream.Send(resultEvent(false, bootstrap.NeedsCLIUpgrade.Explain().Error(), nil, nil))
+		return stream.Send(resultEvent(false, bootstrap.NeedsCLIUpgrade.Explain().Error(), nil, nil, ""))
 	}
 
 	run := bootstrap.Run
@@ -371,9 +379,9 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		run = bootstrap.RunPreview
 	}
 	if err := run(ctx, cfn, ssmClient, iamClient, cloudflare.New(), progress, logf); err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
 	}
-	return stream.Send(resultEvent(true, "", nil, nil))
+	return stream.Send(resultEvent(true, "", nil, nil, ""))
 }
 
 // checkBootstrap reads the deployed state of the substrate a command acts on:
@@ -477,13 +485,14 @@ func logEvent(message string) *deploymentsv1.DeployEvent {
 	}
 }
 
-func resultEvent(success bool, errMsg string, outputs []*deploymentsv1.ResourceOutput, appURLs []string) *deploymentsv1.DeployEvent {
+func resultEvent(success bool, errMsg string, outputs []*deploymentsv1.ResourceOutput, appURLs []string, deploymentID string) *deploymentsv1.DeployEvent {
 	return &deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
-			Success: success,
-			Error:   errMsg,
-			Outputs: outputs,
-			AppUrls: appURLs,
+			Success:      success,
+			Error:        errMsg,
+			Outputs:      outputs,
+			AppUrls:      appURLs,
+			DeploymentId: deploymentID,
 		}},
 	}
 }

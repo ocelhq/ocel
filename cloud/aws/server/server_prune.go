@@ -34,14 +34,14 @@ func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, str
 
 	result, err := s.runPrune(ctx, req, progress, logf)
 	if err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
 	}
 	for _, line := range pruneSummaryLines(result) {
 		if err := stream.Send(progressEvent(line)); err != nil {
 			return err
 		}
 	}
-	return stream.Send(resultEvent(true, "", nil, nil))
+	return stream.Send(resultEvent(true, "", nil, nil, ""))
 }
 
 // runPrune resolves state and drives deploy.Prune, returning what it reclaimed.
