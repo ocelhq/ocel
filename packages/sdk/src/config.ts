@@ -24,7 +24,7 @@ export interface DomainConfig {
 export interface AppConfig {
   name: string;
   path: string;
-  framework: "express" | "fastify";
+  framework: "next" | "express" | "fastify";
   entrypoint?: string;
   domains?: DomainConfig;
 }
