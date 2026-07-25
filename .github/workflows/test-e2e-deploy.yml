@@ -1,0 +1,402 @@
+name: test-e2e-deploy
+
+# Next.js's deployment-adapter compatibility harness, run against the Ocel Next
+# adapter with NEXT_TEST_MODE=deploy: every suite builds and deploys a real
+# isolated app into a disposable AWS + Cloudflare account through
+# `ocel preview up`, tests it over the network, and tears it down.
+#
+# Manual dispatch only, deliberately. A run deploys hundreds of apps, costs real
+# money, and its only footprint control is the synchronous teardown in
+# scripts/e2e-next/cleanup.mjs — it is not something to trigger from a push.
+#
+# See scripts/e2e-next/README.md for the one-time account setup, the secrets and
+# variables this needs, and how to record or promote the known-failure baseline.
+
+on:
+  workflow_dispatch:
+    inputs:
+      nextjsRef:
+        description: "Next.js repo ref (branch/tag/SHA). Match the `next` version packages/next-runtime pins."
+        default: "v16.2.10"
+        type: string
+      recordBaseline:
+        description: "Record a new known-failure baseline instead of filtering against the committed one"
+        default: false
+        type: boolean
+
+env:
+  # Where the baseline has to sit inside the Next.js checkout for
+  # NEXT_EXTERNAL_TESTS_FILTERS to resolve it (the harness resolves the path
+  # against its own cwd). Applied on a normal run so only regressions fail the
+  # job; skipped on a recording run, which must see every suite's real outcome.
+  BASELINE_MANIFEST: test/ocel-deploy-tests-manifest.json
+  # Where this repo keeps it, alongside the scripts that produce it.
+  ADAPTER_BASELINE: scripts/e2e-next/baseline-manifest.json
+  NODE_VERSION: "22"
+  PNPM_VERSION: "11.10.0"
+
+jobs:
+  build:
+    name: Build Next.js + adapter
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: adapter
+
+      - uses: actions/checkout@v4
+        with:
+          repository: vercel/next.js
+          ref: ${{ inputs.nextjsRef }}
+          path: nextjs
+          fetch-depth: 25
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: adapter/cli/go.mod
+
+      - name: Configure AWS credentials
+        run: |
+          echo "AWS_ACCESS_KEY_ID=${{ secrets.E2E_AWS_ACCESS_KEY_ID }}" >> "$GITHUB_ENV"
+          echo "AWS_SECRET_ACCESS_KEY=${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}" >> "$GITHUB_ENV"
+          echo "AWS_REGION=${{ vars.E2E_AWS_REGION }}" >> "$GITHUB_ENV"
+
+      # Runs before anything is built, let alone deployed: a misconfigured secret
+      # must never reach a real account.
+      - name: Guard the target accounts
+        env:
+          EXPECTED_AWS_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+        run: adapter/scripts/e2e-next/guard-accounts.sh
+
+      - name: Install & build Next.js
+        working-directory: nextjs
+        run: pnpm install && pnpm build && pnpm install
+
+      - name: Install Playwright
+        working-directory: nextjs
+        run: pnpm playwright install --with-deps chromium
+
+      # Every package the npm launcher require.resolve's has to exist as built
+      # output before the CLI can run: the node builder (ocel), the Next adapter,
+      # and both edge worker bundles.
+      - name: Install & build the adapter workspace
+        working-directory: adapter
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm --filter @ocel/sdk build
+          pnpm --filter ocel build
+          pnpm --filter @ocel/next-runtime build
+          pnpm --filter @ocel/worker-nextjs build
+          pnpm --filter @ocel/worker-deployments-store build
+
+      # The npm launcher resolves the platform CLI and provider binaries out of
+      # packages/native-lib, so HEAD's Go code has to land there before anything
+      # is packed for the sidecar.
+      - name: Build the Go binaries for this host
+        working-directory: adapter
+        run: |
+          node scripts/build-native.mjs --host --target cli
+          node scripts/build-native.mjs --host --target provider
+
+      # The sidecar is the only thing the harness's temp apps see of Ocel:
+      # ocel.config.ts is bundled and executed from the app dir (so @ocel/sdk and
+      # @ocel/provider-aws must resolve from there), and providerlocator
+      # require.resolve's @ocel/provider-aws-linux-x64 from the app dir too.
+      # deploy.mjs symlinks <temp-app>/node_modules/@ocel at this directory.
+      - name: Build the @ocel sidecar
+        working-directory: adapter
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/sidecar" "$GITHUB_WORKSPACE/tarballs"
+          for pkg in @ocel/sdk @ocel/provider-aws @ocel/provider-aws-linux-x64; do
+            pnpm --filter "$pkg" exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
+          done
+          cd "$GITHUB_WORKSPACE/sidecar"
+          npm init -y >/dev/null
+          npm install --no-audit --no-fund "$GITHUB_WORKSPACE"/tarballs/*.tgz
+          test -x node_modules/@ocel/provider-aws-linux-x64/bin/deploy
+
+      - uses: actions/cache/save@v4
+        with:
+          path: |
+            nextjs
+            adapter
+            sidecar
+            ~/.cache/ms-playwright
+          key: build-${{ github.sha }}-${{ github.run_id }}
+
+  smoke:
+    name: Smoke (one app through deploy/logs/cleanup)
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      ADAPTER_DIR: ${{ github.workspace }}/adapter
+      OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
+      OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+      OCEL_E2E_PROJECT_ID: ${{ vars.E2E_OCEL_PROJECT_ID }}
+      OCEL_E2E_PROJECT_SLUG: ${{ vars.E2E_OCEL_PROJECT_SLUG }}
+      OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
+      OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
+      AWS_ACCESS_KEY_ID: ${{ secrets.E2E_AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+      SMOKE_APP: ${{ github.workspace }}/smoke-app
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            nextjs
+            adapter
+            sidecar
+            ~/.cache/ms-playwright
+          key: build-${{ github.sha }}-${{ github.run_id }}
+          fail-on-cache-miss: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Guard the target accounts
+        env:
+          EXPECTED_AWS_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+        run: adapter/scripts/e2e-next/guard-accounts.sh
+
+      - name: Stage the smoke app
+        run: |
+          set -euo pipefail
+          cp -R adapter/scripts/e2e-next/smoke-app "$SMOKE_APP"
+          cd "$SMOKE_APP"
+          npm install --no-audit --no-fund
+
+      # Exercises exactly what the harness will: deploy prints only a URL, the
+      # URL serves the app, logs carries all three markers, cleanup tears it
+      # down. The matrix costs hours and hundreds of deploys, so it only starts
+      # once one round trip is known to work.
+      - name: Deploy the smoke app
+        working-directory: ${{ env.SMOKE_APP }}
+        run: |
+          set -euo pipefail
+          url=$(node "$ADAPTER_DIR/scripts/e2e-next/deploy.mjs")
+          echo "SMOKE_URL=$url" >> "$GITHUB_ENV"
+          echo "deployed to $url"
+
+      - name: Assert the deployment serves a 200
+        run: |
+          set -euo pipefail
+          for attempt in $(seq 1 10); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "$SMOKE_URL" || true)
+            echo "attempt $attempt: $code"
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            sleep 15
+          done
+          echo "::error::$SMOKE_URL never returned 200"
+          exit 1
+
+      - name: Assert the logs script emits all three markers
+        working-directory: ${{ env.SMOKE_APP }}
+        env:
+          NEXT_TEST_DIR: ${{ env.SMOKE_APP }}
+          NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
+        run: |
+          set -euo pipefail
+          node "$ADAPTER_DIR/scripts/e2e-next/logs.mjs" > logs.txt
+          for marker in BUILD_ID DEPLOYMENT_ID IMMUTABLE_ASSET_TOKEN; do
+            value=$(grep -m1 "^$marker: " logs.txt | sed "s/^$marker: //")
+            if [ -z "$value" ]; then
+              echo "::error::logs script emitted no $marker marker"
+              exit 1
+            fi
+            echo "$marker=$value"
+          done
+          if [ "$(grep -m1 '^BUILD_ID: ' logs.txt)" = "BUILD_ID: undefined" ]; then
+            echo "::error::BUILD_ID resolved to undefined"
+            exit 1
+          fi
+          if [ "$(grep -m1 '^DEPLOYMENT_ID: ' logs.txt)" = "DEPLOYMENT_ID: undefined" ]; then
+            echo "::error::DEPLOYMENT_ID resolved to undefined"
+            exit 1
+          fi
+
+      - name: Tear the smoke app down
+        if: always()
+        working-directory: ${{ env.SMOKE_APP }}
+        env:
+          NEXT_TEST_DIR: ${{ env.SMOKE_APP }}
+        run: node "$ADAPTER_DIR/scripts/e2e-next/cleanup.mjs"
+
+      - name: Upload the smoke logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-logs
+          path: |
+            ${{ env.SMOKE_APP }}/.adapter-build.log
+            ${{ env.SMOKE_APP }}/.ocel/logs/ocel.log
+            ${{ env.SMOKE_APP }}/logs.txt
+          if-no-files-found: ignore
+
+  test:
+    name: Tests (${{ matrix.group }})
+    needs: smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+    strategy:
+      fail-fast: false
+      matrix:
+        group:
+          [
+            1/16,
+            2/16,
+            3/16,
+            4/16,
+            5/16,
+            6/16,
+            7/16,
+            8/16,
+            9/16,
+            10/16,
+            11/16,
+            12/16,
+            13/16,
+            14/16,
+            15/16,
+            16/16,
+          ]
+    steps:
+      - uses: actions/cache/restore@v4
+        with:
+          path: |
+            nextjs
+            adapter
+            sidecar
+            ~/.cache/ms-playwright
+          key: build-${{ github.sha }}-${{ github.run_id }}
+          fail-on-cache-miss: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Ensure Playwright browser
+        working-directory: nextjs
+        run: pnpm playwright install chromium
+
+      - name: Guard the target accounts
+        env:
+          EXPECTED_AWS_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_AWS_ACCOUNT_ID }}
+          EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.E2E_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+        run: adapter/scripts/e2e-next/guard-accounts.sh
+
+      - name: Copy the baseline manifest into the Next.js checkout
+        if: ${{ !inputs.recordBaseline }}
+        run: cp "adapter/$ADAPTER_BASELINE" "nextjs/$BASELINE_MANIFEST"
+
+      - name: Run deploy tests
+        working-directory: nextjs
+        env:
+          NEXT_TEST_MODE: deploy
+          NEXT_E2E_TEST_TIMEOUT: 240000
+          IS_TURBOPACK_TEST: 1
+          NEXT_TEST_JOB: 1
+          NEXT_TELEMETRY_DISABLED: 1
+          # Empty on a recording run: the manifest excludes known-failing cases,
+          # and a recording run has to observe them.
+          NEXT_EXTERNAL_TESTS_FILTERS: ${{ inputs.recordBaseline && '' || env.BASELINE_MANIFEST }}
+          # Emits a results file for every suite, not just failing ones, so a
+          # recording run can build the baseline from them.
+          NEXT_TEST_EMIT_ALL_OUTPUT: ${{ inputs.recordBaseline && '1' || '' }}
+
+          ADAPTER_DIR: ${{ github.workspace }}/adapter
+          NEXT_TEST_DEPLOY_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/deploy.mjs
+          NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/logs.mjs
+          NEXT_TEST_CLEANUP_SCRIPT_PATH: ${{ github.workspace }}/adapter/scripts/e2e-next/cleanup.mjs
+
+          OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
+          OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
+          OCEL_E2E_PROJECT_ID: ${{ vars.E2E_OCEL_PROJECT_ID }}
+          OCEL_E2E_PROJECT_SLUG: ${{ vars.E2E_OCEL_PROJECT_SLUG }}
+          OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
+          OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
+          AWS_ACCESS_KEY_ID: ${{ secrets.E2E_AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.E2E_AWS_SECRET_ACCESS_KEY }}
+          AWS_REGION: ${{ vars.E2E_AWS_REGION }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.E2E_CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.E2E_CLOUDFLARE_API_TOKEN }}
+        run: node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e
+
+      - name: Collect this group's results into a baseline fragment
+        if: ${{ always() && inputs.recordBaseline }}
+        run: |
+          set -euo pipefail
+          group="$(echo '${{ matrix.group }}' | tr '/' '-')"
+          node adapter/scripts/e2e-next/merge-baseline.mjs collect nextjs "baseline-$group.json"
+          echo "BASELINE_FRAGMENT=baseline-$group.json" >> "$GITHUB_ENV"
+
+      - name: Upload this group's baseline fragment
+        if: ${{ always() && inputs.recordBaseline }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-${{ strategy.job-index }}
+          path: ${{ env.BASELINE_FRAGMENT }}
+          if-no-files-found: warn
+
+  baseline:
+    name: Merge the recorded baseline
+    needs: test
+    if: ${{ always() && inputs.recordBaseline }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: adapter
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: baseline-*
+          path: fragments
+          merge-multiple: true
+
+      - name: Merge every group's fragment
+        run: |
+          set -euo pipefail
+          node adapter/scripts/e2e-next/merge-baseline.mjs merge baseline-manifest.json fragments/*.json
+
+      # Uploaded rather than committed: the baseline is a claim about what this
+      # adapter cannot do yet, and a human decides when to adopt it.
+      - name: Upload the merged baseline for review
+        uses: actions/upload-artifact@v4
+        with:
+          name: baseline-manifest
+          path: baseline-manifest.json
