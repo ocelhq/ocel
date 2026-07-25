@@ -10,9 +10,19 @@ const STATIC_WINDOW = 31536000;
 // serve is a HIT whether the entry was fresh or served stale-while-revalidate;
 // staleness drives the background refresh, not the header.
 export const CACHE_STATUS = "x-ocel-cache";
+// Next's own header, reporting the freshness of the entry answering the
+// request. Next stamps it inside the server, so a Lambda response arrives
+// carrying it, and only for the routes Next stamps at all — a dynamic render
+// never gets one. A cache tier answering without the Lambda has to restate it,
+// because it, not the Lambda, knows the freshness of what it is about to serve.
+const NEXT_CACHE_STATUS = "x-nextjs-cache";
 const DRAFT_COOKIE = "__prerender_bypass";
 
 export type CacheStatus = "HIT" | "PRERENDER" | "MISS" | "BYPASS";
+type NextCacheStatus = "HIT" | "STALE";
+
+const nextCacheStatus = (stale: boolean): NextCacheStatus =>
+  stale ? "STALE" : "HIT";
 
 export interface CacheDeps {
   cache: Cache;
@@ -147,6 +157,16 @@ export function hasDraftCookie(request: Request): boolean {
   );
 }
 
+// servedFromStore stamps both status headers on an entry the R2 ISR store
+// answered without the Lambda: the Ocel tier that served it, and — since that
+// entry never reached Next's server — the freshness Next itself would have
+// reported for it.
+export function servedFromStore(response: Response, stale: boolean): Response {
+  const served = withStatus(response, "PRERENDER");
+  served.headers.set(NEXT_CACHE_STATUS, nextCacheStatus(stale));
+  return served;
+}
+
 export function withStatus(response: Response, status: CacheStatus): Response {
   const headers = new Headers(response.headers);
   headers.set(CACHE_STATUS, status);
@@ -178,7 +198,11 @@ function forStorage(
   });
 }
 
-function fromStorage(response: Response, status: CacheStatus): Response {
+function fromStorage(
+  response: Response,
+  status: CacheStatus,
+  stale: boolean,
+): Response {
   const headers = new Headers(response.headers);
 
   // this is what is forwarded to browser
@@ -186,6 +210,11 @@ function fromStorage(response: Response, status: CacheStatus): Response {
   headers.delete(ENTRY_MODIFIED);
   headers.delete("cache-tag");
   headers.set(CACHE_STATUS, status);
+  // The stored value dates from the write, not this serve; restate it — but
+  // only where there is one, so a dynamic response stays unstamped.
+  if (headers.has(NEXT_CACHE_STATUS)) {
+    headers.set(NEXT_CACHE_STATUS, nextCacheStatus(stale));
+  }
 
   return new Response(response.body, {
     status: response.status,
@@ -283,7 +312,7 @@ export async function serveCached(
         now(),
         tagStale,
       );
-      if (state === "fresh") return fromStorage(cached, "HIT");
+      if (state === "fresh") return fromStorage(cached, "HIT", false);
       if (state === "stale") {
         // A colo serve is a HIT even when stale; serving stale is what triggers
         // the background refresh, which forces a blocking origin render so the
@@ -293,7 +322,7 @@ export async function serveCached(
             store(keyRequest, target, deps, response),
           ),
         );
-        return fromStorage(cached, "HIT");
+        return fromStorage(cached, "HIT", true);
       }
       // "expired": fall through — R2 may already hold a fresher entry.
     }

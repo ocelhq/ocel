@@ -7,6 +7,7 @@ import {
   hasDraftCookie,
   refreshOnce,
   serveCached,
+  servedFromStore,
   storeInColo,
   withStatus,
 } from "./cache";
@@ -443,7 +444,7 @@ async function dispatchPrerender(
           ),
         );
       }
-      return withStatus(hit.response, "PRERENDER");
+      return servedFromStore(hit.response, hit.stale);
     };
   }
 

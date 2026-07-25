@@ -429,6 +429,48 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
+  it("restates x-nextjs-cache by the freshness of the colo entry it serves", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    // The value stored with the entry: whatever the tier below reported when it
+    // was written. A colo serve must not replay it — Next reports the freshness
+    // of the entry it is answering with, so a stale replay of a HIT is a STALE.
+    const origin = countingOrigin("s-maxage=1");
+    const stamped = (async () => {
+      const response = await origin();
+      response.headers.set("x-nextjs-cache", "HIT");
+      return response;
+    }) as CountingOrigin;
+    const t = target("nextjs-status", { revalidate: 1, expiration: 100 });
+
+    await serveCached(req(), t, deps, stamped, stamped);
+    await deps.flush();
+
+    const fresh = await serveCached(req(), t, deps, stamped, stamped);
+    expect(fresh.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(fresh.headers.get("x-nextjs-cache")).toBe("HIT");
+
+    clock.ms = 5_000; // past revalidate=1, inside expiration=100
+    const stale = await serveCached(req(), t, deps, stamped, stamped);
+    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(stale.headers.get("x-nextjs-cache")).toBe("STALE");
+    await deps.flush();
+  });
+
+  it("leaves a dynamic response unstamped: Next never sets x-nextjs-cache on one", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=60");
+    const t = target("unstamped");
+
+    await serveCached(req(), t, deps, origin, origin);
+    await deps.flush();
+
+    const hit = await serveCached(req(), t, deps, origin, origin);
+    expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(hit.headers.get("x-nextjs-cache")).toBeNull();
+  });
+
   it("falls through to origin (re-consults R2) once past expiration", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
