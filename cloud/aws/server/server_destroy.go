@@ -70,9 +70,9 @@ func (s *Server) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyP
 	logf := func(m string) { _ = stream.Send(logEvent(m)) }
 
 	if err := s.runDestroyProject(ctx, req, progress, logf); err != nil {
-		return stream.Send(resultEvent(false, err.Error(), nil, nil))
+		return stream.Send(resultEvent(false, err.Error(), nil, nil, ""))
 	}
-	return stream.Send(resultEvent(true, "", nil, nil))
+	return stream.Send(resultEvent(true, "", nil, nil, ""))
 }
 
 func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, progress, logf func(string)) error {

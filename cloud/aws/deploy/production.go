@@ -97,9 +97,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	promotionID, err := newRandomID()
-	if err != nil {
-		return nil, nil, nil, err
+	promotionID := cfg.DeploymentID
+	if promotionID == "" {
+		return nil, nil, nil, fmt.Errorf("deploy config carries no DeploymentID; the caller must mint one with NewDeploymentID")
 	}
 	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, builds)
 	if err != nil {
@@ -497,6 +497,13 @@ func loadWorkerBundle(path string) (edge.Worker, error) {
 		ContentType: "application/javascript+module",
 		Content:     main,
 	}}, nil
+}
+
+// NewDeploymentID mints the identity a deploy's Promotion is created under
+// (Config.DeploymentID). The caller mints it so it can report the id on the
+// RPC's terminal result whatever the deploy goes on to do.
+func NewDeploymentID() (string, error) {
+	return newRandomID()
 }
 
 // newRandomID mints a fresh random identity: a production deploy's Promotion

@@ -156,6 +156,12 @@ type Config struct {
 	// deploy before any infrastructure is created.
 	Tag string
 
+	// DeploymentID is the identity this deploy's Promotion is created under.
+	// The caller mints it (NewDeploymentID) rather than the deploy, so the
+	// caller can report it on the RPC's terminal result without the deploy
+	// having to hand it back out of band.
+	DeploymentID string
+
 	// RootStackState is the project's prior root-stack reconcile state (ADR
 	// 0001), persisted by the caller across deploys exactly like EdgeValues —
 	// opaque, handed back unread. Nil on a project's first production deploy,
