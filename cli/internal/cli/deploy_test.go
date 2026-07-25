@@ -257,11 +257,11 @@ func TestRunDeploy_NoApps_WarnsAndDeploysResourcesOnly(t *testing.T) {
 func TestRunDeploy_AppBuildFailure_AbortsBeforeSpawn(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
-	prev := buildAppFunctions
-	buildAppFunctions = func(context.Context, *projectconfig.Config, io.Writer) ([]manifestbuilder.Function, error) {
-		return nil, errors.New("boom: app build failed")
+	prev := buildApp
+	buildApp = func(context.Context, *projectconfig.Config, io.Writer) error {
+		return errors.New("boom: app build failed")
 	}
-	t.Cleanup(func() { buildAppFunctions = prev })
+	t.Cleanup(func() { buildApp = prev })
 
 	var stdout, stderr bytes.Buffer
 	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
@@ -503,16 +503,18 @@ export default {
 `)
 }
 
-// stubAppFunctions points the app-build seam at fixed functions for the
-// duration of a test, so the CLI path is exercised without spawning the
-// node builder. It mirrors locateProviderBinary/deployReadyTimeout.
+// stubAppFunctions turns the app build into a no-op and points discovery at
+// fixed functions for the duration of a test, so the CLI path is exercised
+// without spawning the node builder. It mirrors
+// locateProviderBinary/deployReadyTimeout.
 func stubAppFunctions(t *testing.T, functions []manifestbuilder.Function) {
 	t.Helper()
-	prev := buildAppFunctions
-	buildAppFunctions = func(context.Context, *projectconfig.Config, io.Writer) ([]manifestbuilder.Function, error) {
+	prevBuild, prevCollect := buildApp, collectAppFunctions
+	buildApp = func(context.Context, *projectconfig.Config, io.Writer) error { return nil }
+	collectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
 		return functions, nil
 	}
-	t.Cleanup(func() { buildAppFunctions = prev })
+	t.Cleanup(func() { buildApp, collectAppFunctions = prevBuild, prevCollect })
 }
 
 // nodePlatformSuffix mirrors resolve-provider.cjs's platform/arch naming

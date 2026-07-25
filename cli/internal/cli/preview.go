@@ -46,7 +46,8 @@ var discoverPRNumber = func() string {
 
 // previewUpOptions holds the flags accepted by `ocel preview` / `ocel preview up`.
 type previewUpOptions struct {
-	name string
+	name     string
+	prebuilt bool
 }
 
 // previewRmOptions holds the flags accepted by `ocel preview rm`.
@@ -146,6 +147,8 @@ var previewPruneCmd = &cobra.Command{
 func init() {
 	previewUpCmd.Flags().StringVar(&previewUpOpts.name, "name", "", "Name a persistent (staging-like) preview instead of the branch's ephemeral one")
 	previewCmd.Flags().StringVar(&previewUpOpts.name, "name", "", "Name a persistent (staging-like) preview instead of the branch's ephemeral one")
+	previewUpCmd.Flags().BoolVar(&previewUpOpts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
+	previewCmd.Flags().BoolVar(&previewUpOpts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 
 	previewRmCmd.Flags().StringVar(&previewRmOpts.ref, "ref", "", "Tear down the ephemeral preview for an explicit git ref")
 	previewRmCmd.Flags().StringVar(&previewRmOpts.name, "name", "", "Tear down the named persistent preview")
@@ -193,7 +196,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 	defer ui.Close()
 
 	ui.Building()
-	manifest, err := collectAndBuildManifest(ctx, cfg, ui.BuildWriter())
+	manifest, err := collectAndBuildManifest(ctx, cfg, opts.prebuilt, ui.BuildWriter())
 	if err != nil {
 		return failSession(ctx, ui, err)
 	}

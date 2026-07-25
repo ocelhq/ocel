@@ -35,15 +35,20 @@ var deployReadyTimeout time.Duration
 // point `ocel deploy` at a fake provider binary without a real npm install.
 var locateProviderBinary = providerlocator.Locate
 
-// buildAppFunctions is a seam over appbuilder.Build so tests can inject canned
-// functions without spawning the embedded node-builder, mirroring
+// buildApp and collectAppFunctions are seams over appbuilder so tests can drive
+// the build and its output separately — asserting that `--prebuilt` skips the
+// former — without spawning the embedded node-builder, mirroring
 // locateProviderBinary.
-var buildAppFunctions = appbuilder.Build
+var (
+	buildApp            = appbuilder.Build
+	collectAppFunctions = appbuilder.CollectFunctions
+)
 
 // deployOptions holds the flags accepted by `ocel deploy`.
 type deployOptions struct {
-	yes bool
-	tag string
+	yes      bool
+	tag      string
+	prebuilt bool
 }
 
 var deployOpts deployOptions
@@ -69,7 +74,13 @@ var deployCmd = &cobra.Command{
 func init() {
 	deployCmd.Flags().BoolVarP(&deployOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
 	deployCmd.Flags().StringVar(&deployOpts.tag, "tag", "", "Stamp this deploy with an immutable label to roll back to later (`ocel rollback --tag <tag>`)")
+	deployCmd.Flags().BoolVar(&deployOpts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 }
+
+// prebuiltFlagUsage documents --prebuilt everywhere it is registered. The flag
+// is an assertion by the caller that `ocel build` has already run against this
+// checkout; nothing verifies the output is current.
+const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building the apps first (produce it with ocel build)"
 
 // runDeploy resolves the project config, verifies auth, requires a
 // configured provider, spawns the provider binary, and preflights it —
@@ -129,7 +140,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		}
 
 		ui.Building()
-		manifest, err := collectAndBuildManifest(ctx, cfg, ui.BuildWriter())
+		manifest, err := collectAndBuildManifest(ctx, cfg, opts.prebuilt, ui.BuildWriter())
 		if err != nil {
 			return err
 		}
@@ -185,13 +196,22 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 // and proceeds infrastructure-only; when there is nothing at all — no functions
 // and no resources — it returns a nil manifest so the caller can exit cleanly.
 // Any app-build failure aborts here, before any provider is spawned.
-func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
+//
+// prebuilt skips the framework build and deploys whatever is already in
+// .ocel/output; the infrastructure discovery pass runs either way.
+func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
 	resources, err := deploycollector.Collect(ctx, cfg, buildOut, buildOut)
 	if err != nil {
 		return nil, err
 	}
 
-	functions, err := buildAppFunctions(ctx, cfg, buildOut)
+	if prebuilt {
+		fmt.Fprintln(buildOut, "using prebuilt output in .ocel/output")
+	} else if err := buildApp(ctx, cfg, buildOut); err != nil {
+		return nil, err
+	}
+
+	functions, err := collectAppFunctions(cfg.Dir)
 	if err != nil {
 		return nil, err
 	}

@@ -92,29 +92,28 @@ type functionConfig struct {
 // into the output) without spawning node.
 var builderExec = runNode
 
-// Build resets the project's build output, runs the node builder, and returns
-// the functions discovered by walking .ocel/output. The builder always runs:
-// with no configured apps it attempts to auto-detect a single app at the
-// project root, so whether there is anything to deploy is decided by walking
-// the output afterward, not up front. Builder progress and failure output are
-// forwarded to stderr; a non-zero exit is surfaced as an error so callers can
-// abort before spawning a provider.
-func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) ([]manifestbuilder.Function, error) {
+// Build resets the project's build output and runs the node builder over it.
+// The builder always runs: with no configured apps it attempts to auto-detect a
+// single app at the project root, so whether there is anything to deploy is
+// decided by CollectFunctions walking the output afterward, not up front. Builder
+// progress and failure output are forwarded to stderr; a non-zero exit is
+// surfaced as an error so callers can abort before spawning a provider.
+func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) error {
 	outputDir := filepath.Join(cfg.Dir, scratchDirName, outputDirName)
 	relOutput := filepath.Join(scratchDirName, outputDirName)
 
 	// Clear the output so discovery is deterministic: a stale `.func` from a
 	// previous build must not survive to be deployed.
 	if err := os.RemoveAll(outputDir); err != nil {
-		return nil, fmt.Errorf("reset %s: %w", relOutput, err)
+		return fmt.Errorf("reset %s: %w", relOutput, err)
 	}
 	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create %s: %w", relOutput, err)
+		return fmt.Errorf("create %s: %w", relOutput, err)
 	}
 
 	builderPath := os.Getenv("OCEL_BUILDER_PATH")
 	if builderPath == "" {
-		return nil, fmt.Errorf("OCEL_BUILDER_PATH is not set; the ocel CLI must be run through its npm launcher")
+		return fmt.Errorf("OCEL_BUILDER_PATH is not set; the ocel CLI must be run through its npm launcher")
 	}
 
 	req := builderRequest{OutDir: outputDir, ProjectRoot: cfg.Dir, Apps: make([]appInput, 0, len(cfg.Apps))}
@@ -129,12 +128,23 @@ func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) ([]
 
 	payload, err := json.Marshal(req)
 	if err != nil {
-		return nil, fmt.Errorf("marshal build request: %w", err)
+		return fmt.Errorf("marshal build request: %w", err)
 	}
-	if err := builderExec(ctx, builderPath, payload, stderr); err != nil {
+	return builderExec(ctx, builderPath, payload, stderr)
+}
+
+// CollectFunctions returns the functions in a project's build output,
+// discovered by walking .ocel/output. A missing output directory is an error; an
+// output directory holding no functions is not — a fully static export
+// legitimately builds none.
+func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
+	outputDir := filepath.Join(projectDir, scratchDirName, outputDirName)
+	if _, err := os.Stat(outputDir); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("no build output at %s; run `ocel build` first", filepath.Join(scratchDirName, outputDirName))
+		}
 		return nil, err
 	}
-
 	return collectFunctions(outputDir)
 }
 
