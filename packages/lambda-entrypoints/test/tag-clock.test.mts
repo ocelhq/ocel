@@ -493,7 +493,7 @@ function snapshotOf(
   deployedAt: number,
   records: Record<string, { stale?: number; expired?: number }>,
 ): TagSnapshot {
-  return { version: 1, deployedAt, generatedAt: deployedAt, validUntil: deployedAt, records };
+  return { version: 1, deployedAt, generatedAt: deployedAt, records };
 }
 
 test("publishes the merged clock as a snapshot the edge can read", async () => {
@@ -508,9 +508,6 @@ test("publishes the merged clock as a snapshot the edge can read", async () => {
   expect(snapshot.version).toBe(1);
   expect(snapshot.records.products!.expired).toBe(at);
   expect(snapshot.generatedAt).toBeGreaterThan(0);
-  // The window is what the edge trusts the replica within, so it has to be
-  // declared ahead of the generation time rather than at it.
-  expect(snapshot.validUntil).toBeGreaterThan(snapshot.generatedAt);
 });
 
 // The whole reason the write is safe under concurrency: the merge only moves
@@ -661,8 +658,8 @@ test("replaces a snapshot the store named no version for", async () => {
 });
 
 // The publisher runs on every sync, but the snapshot only has to be rewritten
-// when something moved or when its trust window needs renewing — otherwise a
-// busy instance would pay a round trip every sync interval to learn nothing.
+// when something moved — otherwise a busy instance would pay a round trip every
+// sync interval to learn nothing.
 test("does not rewrite the snapshot when no record has moved", async () => {
   const store = fakeStore();
   const { handler } = await load(store);
@@ -677,19 +674,21 @@ test("does not rewrite the snapshot when no record has moved", async () => {
   expect(store.snapshots!.writes).toBe(1);
 });
 
-// A fully intercepted workload wakes no Lambda, so the window has to be renewed
-// while the instance is still warm rather than after the edge falls open.
-test("republishes to renew the trust window once it is half spent", async () => {
+// The replica carries no expiry, so an unchanged map has nothing to say however
+// long the instance stays warm. Rewriting it on a timer would be a round trip
+// per interval, per instance, to leave the edge reading what it already had.
+test("never rewrites an unchanged snapshot, however long the instance runs", async () => {
   const store = fakeStore();
   const { handler } = await load(store);
-  const { snapshotRefreshMs } = await import("../src/next/tag-snapshot.mjs");
+  const at = Date.now();
+  store.seed("products", { expired: at, writtenAt: at });
 
   await handler.refreshTags();
   expect(store.snapshots!.writes).toBe(1);
 
-  advance(snapshotRefreshMs);
+  advance(60 * 60_000);
   await handler.refreshTags();
-  expect(store.snapshots!.writes).toBe(2);
+  expect(store.snapshots!.writes).toBe(1);
 });
 
 // An unadopted substrate has no edge replica to keep, so the clock has to behave

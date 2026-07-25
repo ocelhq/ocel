@@ -34,15 +34,15 @@ export interface TagRecord {
 // anchored — created by a publisher rather than seeded by the deploy — and
 // nothing may be pruned from it.
 //
-// `validUntil` is the publisher's declaration of how long the replica may be
-// trusted. A reader past it must fall open to the origin rather than answer from
-// this map, which is what keeps the trust window tunable without redeploying
-// readers.
+// The document carries no expiry. A replica is current until a publisher says
+// otherwise, and a publisher republishes on every invalidation it observes — so
+// an unchanged object means nothing has changed, not that nobody has looked
+// lately. `generatedAt` records when it was last written, for operators reading
+// the object; no reader branches on it.
 export interface TagSnapshot {
   version: 1;
   deployedAt: number;
   generatedAt: number;
-  validUntil: number;
   records: Record<string, TagRecord>;
 }
 

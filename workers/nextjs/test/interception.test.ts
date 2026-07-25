@@ -69,7 +69,6 @@ const snapshot = (over: Partial<TagSnapshot> = {}): TagSnapshot => ({
   version: 1,
   deployedAt: 500,
   generatedAt: 900,
-  validUntil: 300_900,
   records: {},
   ...over,
 });
@@ -262,12 +261,13 @@ describe("intercept, tag state from the snapshot", () => {
     expect(res).not.toBeNull();
   });
 
-  // Every unusable snapshot is a fall-open rather than a serve: waking the
-  // Lambda is what republishes it, so the liveness loop repairs itself.
+  // A replica this reader cannot read is a fall-open rather than a serve. How
+  // old it is never appears here: age is the publisher's to judge, and a reader
+  // that guessed would fall open on every route of a build nobody has
+  // invalidated anything in.
   const unusable: Record<string, string> = {
     missing: "",
     unparseable: "{not json",
-    "past validUntil": JSON.stringify(snapshot({ validUntil: 1_999 })),
     "a version this worker does not know": JSON.stringify({
       ...snapshot({ records: { products: { expired: 500 } } }),
       version: 2,
@@ -342,10 +342,12 @@ describe("intercept, tag state from the snapshot", () => {
     expect(store.gets.filter((k) => k === snapshotKey).length).toBe(2);
   });
 
-  it("falls open rather than trusting a snapshot the PoP cache held past validUntil", async () => {
+  // The PoP entry's own max-age is what bounds how long a colo answers from a
+  // superseded replica; the document it holds carries no second expiry.
+  it("keeps serving from a snapshot the PoP cache still holds", async () => {
     const store = stored({
       [entryKey("/blog")]: appPage({ tags: "products", lastModified: 1_000 }),
-      [snapshotKey]: snapshot({ validUntil: 10_000 }),
+      [snapshotKey]: snapshot(),
     });
     const snapshotCache = fakeCache();
 
@@ -354,7 +356,7 @@ describe("intercept, tag state from the snapshot", () => {
     ).not.toBeNull();
     expect(
       await served(req(), target(), cfg, storeDeps(store, { snapshotCache, now: () => 11_000 })),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 });
 
@@ -431,12 +433,7 @@ describe("intercept, PPR entries", () => {
   it("falls open when tags were invalidated past the expiration window", async () => {
     const store = stored({
       [entryKey("/blog")]: pprEntry({ tags: "posts", lastModified: 1_000 }),
-      // validUntil kept ahead of `now` so the null comes from expiration, not an
-      // untrusted snapshot.
-      [snapshotKey]: snapshot({
-        validUntil: 10_000_000,
-        records: { posts: { expired: 1_500 } },
-      }),
+      [snapshotKey]: snapshot({ records: { posts: { expired: 1_500 } } }),
     });
     expect(
       await intercept(
@@ -812,7 +809,11 @@ describe("the published snapshot format", () => {
     expect(res).not.toBeNull();
   });
 
-  it("stops being trusted at the validity window the publisher declared", async () => {
+  // Every app-router prerender carries Next's implicit _N_T_ tags, so a genesis
+  // snapshot that stopped being trusted would take every static route in the
+  // build to the Lambda, for the life of a deploy nobody invalidates anything
+  // in. It is trusted until a publisher replaces it, however long that is.
+  it("stays trusted however long the build goes without an invalidation", async () => {
     const store = fakeStore({
       [entryKey("/blog")]: JSON.stringify(
         appPage({ tags: "products", lastModified: genesis.deployedAt }),
@@ -821,9 +822,9 @@ describe("the published snapshot format", () => {
     });
     const res = await served(req(), target({ revalidate: false }), cfg, {
       ...storeDeps(store),
-      now: () => genesis.validUntil,
+      now: () => genesis.deployedAt + 30 * 86_400_000,
     });
-    expect(res).toBeNull();
+    expect(res).not.toBeNull();
   });
 
   it("is addressed at the key the publisher writes it to", () => {

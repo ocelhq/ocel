@@ -282,9 +282,6 @@ func TestUploadPrerenderAssets_SeedsTheGenesisTagSnapshot(t *testing.T) {
 		if snap.GeneratedAt != snap.DeployedAt {
 			t.Errorf("%s generatedAt = %d, want the deploy time %d", key, snap.GeneratedAt, snap.DeployedAt)
 		}
-		if want := snap.GeneratedAt + snapshotValidityMs; snap.ValidUntil != want {
-			t.Errorf("%s validUntil = %d, want %d", key, snap.ValidUntil, want)
-		}
 		if len(snap.Records) != 0 {
 			t.Errorf("%s records = %v, want none: no invalidation predates the build", key, snap.Records)
 		}
