@@ -53,12 +53,9 @@ const (
 	fakeCredProblemEnvVar  = "OCEL_TEST_FAKE_CRED_PROBLEM"
 )
 
-// fakeAppURL and fakeDeploymentID are what the fake provider reports on a
-// successful terminal result, so tests can assert what the CLI does with the
-// featured URLs and the deployment identity (see .ocel/deploy-result.json).
 const (
-	fakeAppURL       = "https://fake-app.example.com"
-	fakeDeploymentID = "dep_fake_1234"
+	fakeAppURL      = "https://fake-app.example.com"
+	fakePromotionID = "prm_fake_1234"
 )
 
 // runDeployFakeProvider binds a Unix socket, prints the readiness sentinel,
@@ -160,9 +157,9 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 	}
 	return stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{
-			Success:      true,
-			AppUrls:      []string{fakeAppURL},
-			DeploymentId: fakeDeploymentID,
+			Success:     true,
+			AppUrls:     []string{fakeAppURL},
+			PromotionId: fakePromotionID,
 		}},
 	})
 }

@@ -12,13 +12,13 @@ func TestWrite_WritesTheDocumentedShape(t *testing.T) {
 	dir := t.TempDir()
 
 	err := Write(dir, Result{
-		ProjectID:    "proj_123",
-		Environment:  Environment{Class: "preview", Identity: "e2e-42"},
-		DeploymentID: "dep_abc",
-		Tag:          "v1",
-		AppURLs:      []string{"https://app.example.com"},
-		Apps:         []App{{Name: "web", BuildID: "bld_1"}},
-		DeployedAt:   time.Date(2026, 7, 25, 10, 30, 0, 0, time.UTC),
+		ProjectID:   "proj_123",
+		Environment: Environment{Class: "preview", Identity: "e2e-42"},
+		PromotionID: "dep_abc",
+		Tag:         "v1",
+		AppURLs:     []string{"https://app.example.com"},
+		Apps:        []App{{Name: "web", BuildID: "bld_1"}},
+		DeployedAt:  time.Date(2026, 7, 25, 10, 30, 0, 0, time.UTC),
 	})
 	if err != nil {
 		t.Fatalf("Write() error = %v", err)
@@ -37,7 +37,7 @@ func TestWrite_WritesTheDocumentedShape(t *testing.T) {
 		"schemaVersion": float64(SchemaVersion),
 		"projectId":     "proj_123",
 		"environment":   map[string]any{"class": "preview", "identity": "e2e-42"},
-		"deploymentId":  "dep_abc",
+		"promotionId":   "dep_abc",
 		"tag":           "v1",
 		"appUrls":       []any{"https://app.example.com"},
 		"apps":          []any{map[string]any{"name": "web", "buildId": "bld_1"}},
@@ -79,17 +79,17 @@ func TestWrite_OmitsAnUnsetTagAndStampsTheTime(t *testing.T) {
 func TestWrite_OverwritesAnEarlierRunsResult(t *testing.T) {
 	dir := t.TempDir()
 
-	if err := Write(dir, Result{DeploymentID: "first", Tag: "old"}); err != nil {
+	if err := Write(dir, Result{PromotionID: "first", Tag: "old"}); err != nil {
 		t.Fatalf("first Write() error = %v", err)
 	}
-	if err := Write(dir, Result{DeploymentID: "second"}); err != nil {
+	if err := Write(dir, Result{PromotionID: "second"}); err != nil {
 		t.Fatalf("second Write() error = %v", err)
 	}
 
 	var got Result
 	readInto(t, Path(dir), &got)
-	if got.DeploymentID != "second" {
-		t.Errorf("deploymentId = %q, want the latest run's", got.DeploymentID)
+	if got.PromotionID != "second" {
+		t.Errorf("promotionId = %q, want the latest run's", got.PromotionID)
 	}
 	if got.Tag != "" {
 		t.Errorf("tag = %q, want the earlier run's value gone", got.Tag)
@@ -102,7 +102,7 @@ func TestClear_RemovesAStaleResultAndToleratesAbsence(t *testing.T) {
 	if err := Clear(dir); err != nil {
 		t.Fatalf("Clear() on a project with no result error = %v", err)
 	}
-	if err := Write(dir, Result{DeploymentID: "stale"}); err != nil {
+	if err := Write(dir, Result{PromotionID: "stale"}); err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
 	if err := Clear(dir); err != nil {

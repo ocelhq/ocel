@@ -156,12 +156,6 @@ type Config struct {
 	// deploy before any infrastructure is created.
 	Tag string
 
-	// DeploymentID is the identity this deploy's Promotion is created under.
-	// The caller mints it (NewDeploymentID) rather than the deploy, so the
-	// caller can report it on the RPC's terminal result without the deploy
-	// having to hand it back out of band.
-	DeploymentID string
-
 	// RootStackState is the project's prior root-stack reconcile state (ADR
 	// 0001), persisted by the caller across deploys exactly like EdgeValues —
 	// opaque, handed back unread. Nil on a project's first production deploy,
@@ -184,20 +178,32 @@ func (p Progress) report(phase deploymentsv1.Phase, message string, current, tot
 	}
 }
 
+// Result is what one deploy produced. RootStackState is set even when the
+// deploy fails partway: the caller must persist whatever was reconciled.
+type Result struct {
+	Outputs []*deploymentsv1.ResourceOutput
+	AppURLs []string
+	// PromotionID identifies the promotion this deploy created (CONTEXT.md):
+	// the project-wide unit grouping every app's build id. Empty when the
+	// deploy failed before promoting.
+	PromotionID    string
+	RootStackState edge.RootStackState
+}
+
 // Run provisions every resource in manifest against AWS and returns the
-// whole-stack connection outputs, the user-facing app URLs, and the root-stack
-// state the caller must persist so the next deploy (and rollback) reconciles
-// against it instead of starting fresh — scoped to this deploy's substrate
-// (production or preview). progress reports phase-tagged steps and log forwards
-// Pulumi engine output; both may be nil. Run performs the real Pulumi up and is
-// not exercised by unit tests.
+// whole-stack connection outputs, the user-facing app URLs, the promotion it
+// created, and the root-stack state the caller must persist so the next deploy
+// (and rollback) reconciles against it instead of starting fresh — scoped to
+// this deploy's substrate (production or preview). progress reports phase-tagged
+// steps and log forwards Pulumi engine output; both may be nil. Run performs the
+// real Pulumi up and is not exercised by unit tests.
 //
 // Both production and preview realize the same stacked model (ADR 0001): root
 // reconcile, then a stable infra stack (skipped for an ephemeral preview), then
 // one parallel app-deploy stack per app, staged and promoted atomically under
 // this deploy's pointer. The two differ only in the data the server threads in
 // via Config — see realize.
-func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) ([]*deploymentsv1.ResourceOutput, []string, edge.RootStackState, error) {
+func Run(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress, log func(string)) (Result, error) {
 	return realize(ctx, cfg, manifest, progress, log)
 }
 

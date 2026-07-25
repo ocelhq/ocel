@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
@@ -184,7 +185,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 		return err
 	}
 
-	if err := clearDeployResult(cfg); err != nil {
+	if err := deployresult.Clear(cfg.Dir); err != nil {
 		return err
 	}
 
@@ -217,20 +218,20 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 
 		var stackOutputs []*deploymentsv1.ResourceOutput
 		var appURLs []string
-		var deploymentID string
+		var promotionID string
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
 				stackOutputs = res.GetOutputs()
 				appURLs = res.GetAppUrls()
-				deploymentID = res.GetDeploymentId()
+				promotionID = res.GetPromotionId()
 			}
 		}
 		if err := runner.Deploy(ctx, req, onEvent); err != nil {
 			return err
 		}
 
-		if err := recordDeployResult(cfg, manifest, env, "", deploymentID, appURLs); err != nil {
+		if err := recordDeployResult(cfg, manifest, env, "", promotionID, appURLs); err != nil {
 			return err
 		}
 		ui.Deployed(fmt.Sprintf("Preview %s is up", env.GetIdentity()), appURLs, stackOutputs)

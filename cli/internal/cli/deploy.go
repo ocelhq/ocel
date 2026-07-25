@@ -16,6 +16,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -103,7 +104,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		return err
 	}
 
-	if err := clearDeployResult(cfg); err != nil {
+	if err := deployresult.Clear(cfg.Dir); err != nil {
 		return err
 	}
 
@@ -152,20 +153,20 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 
 		var stackOutputs []*deploymentsv1.ResourceOutput
 		var appURLs []string
-		var deploymentID string
+		var promotionID string
 		onEvent := func(ev *deploymentsv1.DeployEvent) {
 			ui.Event(ev)
 			if res := ev.GetResult(); res != nil {
 				stackOutputs = res.GetOutputs()
 				appURLs = res.GetAppUrls()
-				deploymentID = res.GetDeploymentId()
+				promotionID = res.GetPromotionId()
 			}
 		}
 		if err := runner.Deploy(ctx, req, onEvent); err != nil {
 			return err
 		}
 
-		if err := recordDeployResult(cfg, manifest, env, opts.tag, deploymentID, appURLs); err != nil {
+		if err := recordDeployResult(cfg, manifest, env, opts.tag, promotionID, appURLs); err != nil {
 			return err
 		}
 		ui.Deployed("Deployed", appURLs, stackOutputs)

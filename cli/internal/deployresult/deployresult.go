@@ -4,7 +4,7 @@
 // It exists because a deploy's outcome has to outlive the CLI process that
 // produced it: anything scripting Ocel — a CI job that deploys in one step and
 // asserts against the URL in the next, a lifecycle script the Next.js adapter
-// test harness runs as a separate process — needs the URL, the deployment id
+// test harness runs as a separate process — needs the URL, the promotion id
 // and the build ids after `ocel deploy` has exited. The alternative is scraping
 // the human-facing success screen, and that output is deliberately not a
 // contract: it is free to change with the UI.
@@ -44,9 +44,9 @@ type Result struct {
 	SchemaVersion int         `json:"schemaVersion"`
 	ProjectID     string      `json:"projectId"`
 	Environment   Environment `json:"environment"`
-	// DeploymentID is the provider's identity for this deploy — the promotion
-	// it created — as reported on the terminal result.
-	DeploymentID string `json:"deploymentId"`
+	// PromotionID identifies the promotion this deploy created, as reported on
+	// the provider's terminal result.
+	PromotionID string `json:"promotionId"`
 	// Tag is the immutable label this deploy was stamped with, absent when it
 	// was untagged.
 	Tag string `json:"tag,omitempty"`
