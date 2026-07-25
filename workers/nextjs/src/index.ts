@@ -319,7 +319,17 @@ async function dispatchPrerender(
   }
   const cache = deps.cache;
 
-  if (shouldBypass(request, url, target.config)) {
+  // A request that cannot be answered from any cache tier is forwarded as a
+  // plain invocation, under its own headers. That is the only path that carries
+  // cookies: allowHeader — Next's own filter for a *cached* prerender — omits
+  // them, so a draft-mode request routed through the cache tiers would reach
+  // the origin stripped of the very cookie that makes it draft mode, and render
+  // as an ordinary visitor.
+  if (
+    shouldBypass(request, url, target.config) ||
+    request.method !== "GET" ||
+    hasDraftCookie(request)
+  ) {
     const response = await doFetch(forward(forwardUrl, request, request.headers));
     return withStatus(response, "BYPASS");
   }
