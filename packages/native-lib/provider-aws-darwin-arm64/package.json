@@ -8,6 +8,10 @@
   "cpu": [
     "arm64"
   ],
+  "bin": {
+    "ocel-provider-aws-deploy": "bin/deploy",
+    "ocel-provider-aws-runtime": "bin/runtime"
+  },
   "files": [
     "bin"
   ],
