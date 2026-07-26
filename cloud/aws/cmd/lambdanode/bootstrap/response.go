@@ -22,11 +22,12 @@ const (
 	// (error trailer).
 	errTypeUpstream = "Ocel.UpstreamError"
 
-	// emptyBodyHeader marks a response whose app body was empty, and
-	// emptyBodySentinel is the one byte sent in its place — the workaround for a
-	// Function URL that never terminates a bodyless streamed response (see
-	// forward). The edge honours the header by dropping the byte and the header;
-	// nothing else reaches these Function URLs, which are IAM-gated to it.
+	// emptyBodyHeader marks a response the app left empty on a status the
+	// Function URL chunk-encodes, and emptyBodySentinel is the one byte sent in
+	// its place — the workaround for a Function URL that never terminates such a
+	// response (see forward). The edge honours the header by dropping the byte
+	// and the header; nothing else reaches these Function URLs, which are
+	// IAM-gated to it.
 	emptyBodyHeader   = "X-Ocel-Empty-Body"
 	emptyBodySentinel = "\n"
 )
