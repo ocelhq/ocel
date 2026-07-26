@@ -5,7 +5,7 @@
   "type": "module",
   "main": "./dist/next-adapter.mjs",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-edge-handler.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

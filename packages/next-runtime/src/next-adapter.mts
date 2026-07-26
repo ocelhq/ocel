@@ -24,12 +24,15 @@ function resolveOutputRoot(): string {
   return process.env.OCEL_OUTPUT_DIR || join(process.cwd(), ".ocel/output");
 }
 
-// Where the membrane layer mounts the bundled cache handlers. Deliberately not
-// set through modifyConfig: `next build` would hand these to its own static
-// generation workers, which would then try to reach S3 with no credentials, and
-// it rewrites any handler path it is given to one relative to the *build*
-// machine's distDir — which does not survive the move to /var/task. Patched
-// into the built manifest instead (see patchCacheHandlers).
+// Where the membrane layer mounts the bundled cache handlers — the ones the
+// Lambda tier loads at runtime. These reach S3 with the function's own
+// credentials, which `next build`'s static generation workers do not have, and
+// `next build` rewrites any handler path it is given to one relative to the
+// *build* machine's distDir, which does not survive the move to /var/task. So
+// they are patched into the built manifest rather than named in the config (see
+// patchCacheHandlers). modifyConfig names a handler too, but a different file
+// for a different tier — the one Next compiles into the edge chunks — and
+// setting it does not remove the need for this patch.
 //
 // The singular `cacheHandler` is the incremental cache (ISR, prerenders, Pages
 // Router); the plural `cacheHandlers` map, keyed by cache kind, is what backs
@@ -40,6 +43,24 @@ const useCacheHandlerPaths = {
   remote: "/opt/ocel/next/use-cache-remote.cjs",
 };
 
+// installCacheHandler puts the edge/build cache handler inside the app's own
+// tree and returns the path to name it by. It has to live there: Turbopack
+// rewrites config.cacheHandler to a project-relative path, and both it and
+// `next build`'s page-data workers resolve the handler's bare
+// `require('next/…')` from where the file physically sits — so a copy inside
+// this package would bind the app's build to this package's Next rather than the
+// app's. modifyConfig runs inside loadConfig, well before the config is
+// serialized for the build, so writing the file here is early enough.
+//
+// `next build` runs with the app directory as its cwd, which is what makes the
+// project root reachable from a hook that is handed only the config.
+async function installCacheHandler(): Promise<string> {
+  const dest = join(process.cwd(), ".ocel", "cache-handler.cjs");
+  await mkdir(dirname(dest), { recursive: true });
+  await copyFile(new URL("edge-cache-handler.cjs", import.meta.url), dest);
+  return dest;
+}
+
 const adapter = {
   name: "ocel-adapter",
 
@@ -48,6 +69,10 @@ const adapter = {
       return {
         ...config,
         cacheMaxMemorySize: 0,
+        // Singular only. The plural map is compiled into every edge chunk as
+        // well, and the `use cache` handlers reach the AWS SDK transitively —
+        // naming them here would put it in every edge bundle.
+        cacheHandler: await installCacheHandler(),
       };
     }
     return config;
