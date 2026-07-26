@@ -1,8 +1,13 @@
 import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
-import { env } from "cloudflare:test";
+import { createExecutionContext, env } from "cloudflare:test";
 import { beforeEach, expect, it } from "vitest";
 
-import { createEdgeCache, type SnapshotStore } from "../src/cache-entrypoint";
+import {
+  CacheEntrypoint,
+  createEdgeCache,
+  type SnapshotStore,
+} from "../src/cache-entrypoint";
+import type { Env } from "../src/index";
 import type { AwsService } from "../src/signing";
 
 declare module "cloudflare:test" {
@@ -338,4 +343,17 @@ it("sees its own invalidation on the very next read", async () => {
 
   await cache.revalidateTags(scope, ["posts"]);
   expect(await cache.fetchGet(scope, "abc123", ["posts"])).toBeNull();
+});
+
+// The worker script is frozen and outlives its deployments (ADR 0002), so it can
+// find itself on a substrate whose bootstrap predates the stores its cache reads:
+// the region, table and bucket vars are then simply unbound. Every call must
+// answer like an empty cache, because a throw would take down the edge render
+// that made it rather than leaving that render uncached.
+it("answers like an empty cache on a substrate that binds no coordinates", async () => {
+  const entrypoint = new CacheEntrypoint(createExecutionContext(), {} as Env);
+
+  expect(await entrypoint.fetchGet(scope, "abc123", ["posts"])).toBeNull();
+  await entrypoint.fetchSet(scope, "abc123", entry(), ["posts"]);
+  await entrypoint.revalidateTags(scope, ["posts"]);
 });
