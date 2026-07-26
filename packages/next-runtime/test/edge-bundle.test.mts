@@ -252,6 +252,30 @@ test("dedupes chunks by content and assigns ids in sorted-key order", async () =
   ]);
 });
 
+test("carries an entry's chunks in the order Next listed them", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+
+  // Next lists a page's files in the order Turbopack must evaluate them, and a
+  // chunk requiring a module from one that has not run yet dies on evaluation.
+  // Ordered against the alphabet so re-sorting cannot pass by coincidence.
+  const page = args.outputs.appPages[0]!;
+  page.assets = {
+    "chunks/shared.js": page.assets["chunks/shared.js"]!,
+    "chunks/page.js": page.assets["chunks/page.js"]!,
+    "chunks/dup-a.js": page.assets["chunks/dup-a.js"]!,
+  };
+  args.outputs.appPages[1]!.assets = page.assets;
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  expect(bundle.entries["middleware_app/edge-page/page"].chunks).toEqual([
+    "c/4.js",
+    "c/2.js",
+    "c/0.js",
+  ]);
+});
+
 test("leaves source maps out of the bundle", async () => {
   const { projectDir, args } = await synthEdgeProject();
 

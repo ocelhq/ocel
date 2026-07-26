@@ -62,7 +62,11 @@ export function createEdgeInvoker(
     const modules: Record<string, WorkerLoaderModule> = {
       [bundle.mainModule]: { js: bundle.shim },
     };
-    for (const [id, js] of Object.entries(bundle.chunks)) modules[id] = { js };
+    // Chunks are CommonJS, not ESM: Turbopack reaches a Node builtin through a
+    // bare synchronous `require`, which exists only in a CJS module. Declaring
+    // them `js` leaves every chunk that touches Buffer or AsyncLocalStorage
+    // throwing "require is not defined" the moment it evaluates.
+    for (const [id, cjs] of Object.entries(bundle.chunks)) modules[id] = { cjs };
     for (const [id, base64] of Object.entries(bundle.wasm ?? {})) {
       modules[id] = { wasm: wasmBytes(base64) };
     }

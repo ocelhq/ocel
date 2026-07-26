@@ -351,11 +351,19 @@ function stableStringify(value: unknown): string {
 // shim declares every chunk as a module and imports only the hit entry's,
 // leaving the rest for workerd to never compile. process.env must be populated
 // before the first import: the chunks read it at module scope.
+//
+// AsyncLocalStorage is a global to Next's edge runtime, never an import — a
+// chunk that reaches for it and finds nothing throws the "accessed in runtime
+// where it is not available" invariant on evaluation. renderLauncher hands the
+// Lambda the same global for the same reason.
 function renderEdgeShim(entries: Record<string, EdgeEntry>): string {
-  return `const ENTRIES = ${stableStringify(entries)}
+  return `import { AsyncLocalStorage } from "node:async_hooks"
+
+const ENTRIES = ${stableStringify(entries)}
 
 export default {
   async fetch(request, env, ctx) {
+    globalThis.AsyncLocalStorage ??= AsyncLocalStorage
     globalThis.process ??= { env: {} }
     Object.assign(globalThis.process.env, env)
     const k = ctx.props.entryKey
@@ -462,10 +470,16 @@ async function emitEdgeBundle(
     (bytes) => bytes.toString("base64"),
   );
 
+  // Chunk order is load order, never sorted: a Turbopack chunk evaluates its
+  // modules as it registers, so one that runs before the chunk defining a module
+  // it requires fails with that module's factory unavailable. Next lists a
+  // page's files in the order they must be evaluated and `assets` preserves it,
+  // so the entry carries them in the order they arrived. Determinism comes from
+  // that order being the build's own, not from re-sorting it.
   const entries: Record<string, EdgeEntry> = {};
   for (const [entryKey, keys] of entryAssets) {
     entries[entryKey] = {
-      chunks: [...new Set([...keys].sort().map((k) => chunkIdByKey.get(k)!))],
+      chunks: [...new Set([...keys].map((k) => chunkIdByKey.get(k)!))],
       handlerExport: handlerExports.get(entryKey)!,
     };
   }
