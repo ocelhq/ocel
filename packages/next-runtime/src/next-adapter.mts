@@ -26,13 +26,14 @@ function resolveOutputRoot(): string {
 
 // Where the membrane layer mounts the bundled cache handlers — the ones the
 // Lambda tier loads at runtime. These reach S3 with the function's own
-// credentials, which `next build`'s static generation workers do not have, and
-// `next build` rewrites any handler path it is given to one relative to the
-// *build* machine's distDir, which does not survive the move to /var/task. So
-// they are patched into the built manifest rather than named in the config (see
-// patchCacheHandlers). modifyConfig names a handler too, but a different file
-// for a different tier — the one Next compiles into the edge chunks — and
-// setting it does not remove the need for this patch.
+// credentials, which `next build`'s static generation workers do not have.
+//
+// The two tiers are named different handlers through different mechanisms.
+// modifyConfig names the edge tier's, the file Turbopack compiles into the edge
+// chunks. The node tier's are these paths, patched into the built manifest
+// afterwards (see patchCacheHandlers), because Next records a configured handler
+// relative to the *build* machine's distDir — a value that does not survive the
+// move to /var/task.
 //
 // The singular `cacheHandler` is the incremental cache (ISR, prerenders, Pages
 // Router); the plural `cacheHandlers` map, keyed by cache kind, is what backs
