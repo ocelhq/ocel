@@ -466,6 +466,61 @@ test("emits a shim that is a loadable module exporting a fetch handler", async (
   expect(typeof mod.default.fetch).toBe("function");
 });
 
+// The bundled cache handler cannot read its binding from process.env: on the
+// edge those are build-time string literals, and a binding is not a string.
+test("hands the cache binding to the chunks on a global, before they evaluate", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const { shim } = await readBundle(projectDir);
+  expect(shim).toContain(
+    "globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }",
+  );
+  expect(shim.indexOf("__OCEL_EDGE_CACHE")).toBeLessThan(
+    shim.indexOf("await import"),
+  );
+});
+
+// The dynamic worker's isolate is cached and long-lived, so a binding taken from
+// a request's ctx is captured by whichever request cold-started it and disposed
+// when that request ends — leaving requests 2..N holding a dead stub. Taking it
+// from the load-time env, which carries the main worker's ctx.exports loopback,
+// is what keeps a warm isolate working.
+test("rebinds every request from the load-time env, never from a request's ctx", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  await adapter.onBuildComplete!(args as never);
+  const { shim } = await readBundle(projectDir);
+  const mod = await import(`data:text/javascript,${encodeURIComponent(shim)}`);
+
+  const rpc = { fetchGet: () => null };
+  const env = { OCEL_CACHE_RPC: rpc, OCEL_CACHE_SCOPE: "prod/app/build" };
+  const seen: unknown[] = [];
+  try {
+    // An unknown entry key returns before any chunk is imported, which is what
+    // makes the prelude drivable without a real Turbopack chunk on disk.
+    for (let i = 0; i < 2; i++) {
+      const ctx = {
+        props: { entryKey: "unknown" },
+        waitUntil: () => {},
+        exports: { perRequest: i },
+      };
+      await mod.default.fetch(new Request("https://x/"), env, ctx);
+      seen.push((globalThis as Record<string, any>).__OCEL_EDGE_CACHE);
+    }
+  } finally {
+    delete (globalThis as Record<string, unknown>).__OCEL_EDGE_CACHE;
+    delete process.env.OCEL_CACHE_RPC;
+    delete process.env.OCEL_CACHE_SCOPE;
+    for (const key of Object.keys(buildEnv)) delete process.env[key];
+    delete process.env.MIDDLEWARE_ONLY;
+  }
+
+  for (const bound of seen) {
+    expect(bound).toEqual({ rpc, scope: "prod/app/build" });
+  }
+});
+
 test("warns that revalidate is inert for a prerender parented by an edge route", async () => {
   const { args } = await synthEdgeProject();
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

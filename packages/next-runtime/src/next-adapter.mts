@@ -381,6 +381,13 @@ function stableStringify(value: unknown): string {
 // chunk that reaches for it and finds nothing throws the "accessed in runtime
 // where it is not available" invariant on evaluation. renderLauncher hands the
 // Lambda the same global for the same reason.
+//
+// The cache binding travels the same way rather than through process.env, whose
+// edge reads are build-time string literals a binding could not survive. It is
+// read from the load-time env — the main worker's own ctx.exports loopback,
+// which outlives every request — and never from the request's ctx: the isolate
+// is cached, so a stub captured from whichever request cold-started it is
+// disposed at that request's end and leaves requests 2..N holding a dead one.
 function renderEdgeShim(entries: Record<string, EdgeEntry>): string {
   return `import { AsyncLocalStorage } from "node:async_hooks"
 
@@ -391,6 +398,7 @@ export default {
     globalThis.AsyncLocalStorage ??= AsyncLocalStorage
     globalThis.process ??= { env: {} }
     Object.assign(globalThis.process.env, env)
+    globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }
     const k = ctx.props.entryKey
     const e = ENTRIES[k]
     if (!e) return new Response(\`unknown edge entry \${k}\`, { status: 500 })
