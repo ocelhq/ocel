@@ -31,21 +31,28 @@ const (
 	// Compatible means the deployed bootstrap matches what the provider
 	// requires; work may proceed.
 	Compatible Compatibility = iota
-	// NeedsBootstrap means the account has no bootstrap, or an older one than
-	// the provider requires: the user must (re-)run `ocel bootstrap`.
-	NeedsBootstrap
+	// NeedsBootstrapInit means the account has no bootstrap stack at all: the
+	// user must run `ocel bootstrap` to create one.
+	NeedsBootstrapInit
+	// NeedsBootstrapUpgrade means the account has a bootstrap, but an older one
+	// than the provider requires: the user must re-run `ocel bootstrap` to
+	// upgrade it. It is kept distinct from NeedsBootstrapInit because the two
+	// share only a remedy — telling someone with a working account that they
+	// never bootstrapped sends them hunting the wrong problem.
+	NeedsBootstrapUpgrade
 	// NeedsCLIUpgrade means the deployed bootstrap is newer than the provider
-	// understands: the user must upgrade the Ocel CLI/provider.
+	// understands: the user must upgrade the Ocel CLI.
 	NeedsCLIUpgrade
 )
 
 // CheckCompat compares a deployed bootstrap version against required. present
-// is false when the account has no bootstrap stack at all, which is always
-// NeedsBootstrap regardless of deployed.
+// is false when the account has no bootstrap stack at all.
 func CheckCompat(deployed int, present bool, required int) Compatibility {
 	switch {
-	case !present || deployed < required:
-		return NeedsBootstrap
+	case !present:
+		return NeedsBootstrapInit
+	case deployed < required:
+		return NeedsBootstrapUpgrade
 	case deployed > required:
 		return NeedsCLIUpgrade
 	default:
@@ -54,13 +61,24 @@ func CheckCompat(deployed int, present bool, required int) Compatibility {
 }
 
 // Explain renders the actionable, direction-aware error for a non-compatible
-// outcome, or nil when compatible.
-func (c Compatibility) Explain() error {
+// outcome, or nil when compatible. deployed and required are the versions that
+// produced the outcome; cmd is the bootstrap command for the substrate being
+// acted on — `ocel bootstrap --preview` for a preview one. Each message is two
+// lines, diagnosis then remedy, so the remedy survives a narrow terminal: the
+// CLI indents whole lines, not wrapped continuations.
+func (c Compatibility) Explain(deployed, required int, cmd string) error {
 	switch c {
-	case NeedsBootstrap:
-		return fmt.Errorf("this AWS account is not bootstrapped for the current Ocel provider. Run `ocel bootstrap` and try again")
+	case NeedsBootstrapInit:
+		return fmt.Errorf("this AWS account has no Ocel bootstrap.\nRun `%s` to create it, then try again", cmd)
+	case NeedsBootstrapUpgrade:
+		// A stack raised before the BootstrapVersion output existed reads as
+		// zero, which is not a version anybody deployed.
+		if deployed == 0 {
+			return fmt.Errorf("this AWS account's Ocel bootstrap predates version tracking; this provider requires version %d.\nRun `%s` to upgrade it, then try again", required, cmd)
+		}
+		return fmt.Errorf("this AWS account's Ocel bootstrap is out of date: the account is at version %d, this provider requires version %d.\nRun `%s` to upgrade it, then try again", deployed, required, cmd)
 	case NeedsCLIUpgrade:
-		return fmt.Errorf("this AWS account was bootstrapped by a newer Ocel provider than this one. Upgrade the Ocel CLI and try again")
+		return fmt.Errorf("this AWS account's Ocel bootstrap is newer than this provider understands: the account is at version %d, this provider supports up to version %d.\nUpgrade the Ocel CLI and try again", deployed, required)
 	default:
 		return nil
 	}

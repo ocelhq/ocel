@@ -97,13 +97,18 @@ func (e *ReadyTimeoutError) Error() string {
 }
 
 // DeployFailedError reports that the provider's Deploy stream ended in a
-// terminal ResultEvent with Success == false.
+// terminal ResultEvent with Success == false. Its message is the provider's own
+// words, unprefixed: the CLI already heads it with the failed step, and a
+// second announcement in plumbing language only buries the provider's.
 type DeployFailedError struct {
 	Message string
 }
 
 func (e *DeployFailedError) Error() string {
-	return "provider deploy failed: " + e.Message
+	if strings.TrimSpace(e.Message) == "" {
+		return "the provider reported a failure without a reason"
+	}
+	return e.Message
 }
 
 // Runner owns a single spawned provider process for its entire lifetime:

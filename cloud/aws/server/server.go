@@ -116,20 +116,22 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 	env := req.GetEnvironment()
 	preview := env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW
-	bootstrapCmd := "ocel bootstrap"
-	if preview {
-		bootstrapCmd = "ocel bootstrap --preview"
-	}
+	bootstrapCmd := bootstrapCommand(preview)
 
 	// A preview deploy must read (and write) the preview substrate's Pulumi
 	// backend, not production's — otherwise `ocel preview rm`/`ls`, which
 	// resolve the preview backend, never see what up just created.
-	progress(deploymentsv1.Phase_PHASE_UPLOADING, "Checking account bootstrap", 0, 0)
+	//
+	// The gate is unclassified so it becomes its own step titled by this
+	// message: it runs before anything is uploaded, and heading its failure
+	// "Uploading failed" names a phase that never started.
+	progress(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Checking account bootstrap", 0, 0)
 	deployed, err := checkBootstrap(ctx, cfn, preview)
 	if err != nil {
 		return deploy.Result{}, err
 	}
-	if err := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion).Explain(); err != nil {
+	compat := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion)
+	if err := compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCmd); err != nil {
 		return deploy.Result{}, err
 	}
 	if deployed.StateBucket == "" {
@@ -362,8 +364,8 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	if err != nil {
 		return stream.Send(failureResult(err))
 	}
-	if bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion) == bootstrap.NeedsCLIUpgrade {
-		return stream.Send(failureResult(bootstrap.NeedsCLIUpgrade.Explain()))
+	if compat := bootstrap.CheckCompat(deployed.Version, deployed.Present, bootstrap.RequiredBootstrapVersion); compat == bootstrap.NeedsCLIUpgrade {
+		return stream.Send(failureResult(compat.Explain(deployed.Version, bootstrap.RequiredBootstrapVersion, bootstrapCommand(preview))))
 	}
 
 	run := bootstrap.Run
@@ -374,6 +376,17 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())
+}
+
+// bootstrapCommand is the command that raises or upgrades the substrate a
+// command acts on. Every error that tells a user to bootstrap routes through
+// here: a preview deploy pointed at the bare production command sends them to
+// fix the wrong account.
+func bootstrapCommand(preview bool) string {
+	if preview {
+		return "ocel bootstrap --preview"
+	}
+	return "ocel bootstrap"
 }
 
 // checkBootstrap reads the deployed state of the substrate a command acts on:

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -191,6 +192,19 @@ func TestDeploy_TerminalFailure(t *testing.T) {
 	}
 	if deployErr.Message != "simulated deploy failure" {
 		t.Errorf("DeployFailedError.Message = %q, want %q", deployErr.Message, "simulated deploy failure")
+	}
+	if err.Error() != "simulated deploy failure" {
+		t.Errorf("DeployFailedError.Error() = %q, want the provider's message verbatim", err.Error())
+	}
+}
+
+// TestDeployFailedError_EmptyMessage covers a provider that reports failure
+// without saying why: the error still has to read as something, since the CLI
+// prints it verbatim under the failed step.
+func TestDeployFailedError_EmptyMessage(t *testing.T) {
+	err := (&DeployFailedError{}).Error()
+	if strings.TrimSpace(err) == "" {
+		t.Fatalf("DeployFailedError{}.Error() = %q, want a non-empty fallback", err)
 	}
 }
 
