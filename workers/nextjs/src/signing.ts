@@ -1,7 +1,11 @@
-// SigV4-signing the worker's Function-URL forwards. The Lambdas behind an app
-// are provisioned with AWS_IAM auth, so every origin call the worker makes must
-// be signed with the edge reader's credentials (the same IAM user whose key
-// already backs the direct ISR reads). Nothing else the worker fetches — static
+// SigV4-signing the worker's AWS calls, under the edge reader's credentials
+// (the same IAM user whose key backs the direct ISR reads). There are two, and
+// they sign differently and deliberately so: the Function-URL forwards it
+// proxies (edgeOriginFetch), and the S3/DynamoDB calls the cache entrypoint
+// makes on the edge's behalf (awsServiceFetch).
+//
+// The Lambdas behind an app are provisioned with AWS_IAM auth, so every origin
+// call the worker makes must be signed. Nothing else the worker fetches — static
 // assets, external rewrites — is signed: those go to arbitrary hosts, and
 // attaching AWS credentials to them would be both wrong and a needless leak.
 import { AwsClient } from "aws4fetch";
@@ -85,4 +89,48 @@ export function edgeOriginFetch(
       }),
     );
   }) as typeof fetch;
+}
+
+// The AWS services the cache entrypoint addresses under the same edge
+// credentials. Named rather than inferred: aws4fetch's guesser only reads
+// `*.amazonaws.com` hosts, and a wrong guess is a 403 with nothing to point at.
+export type AwsService = "s3" | "dynamodb";
+
+// A signed call to one of those services.
+//
+// Signing here is the aws4fetch default — host plus every signable header the
+// request carries — and not the host-only signature edgeOriginFetch uses. That
+// narrowing exists because the forward path re-sends *someone else's* headers,
+// which the Workers runtime may rewrite after signing. Nothing on this path is
+// forwarded: the worker composes each request itself, so no header changes
+// between signing and sending, and both services need more than host anyway —
+// DynamoDB rejects a call whose `x-amz-target` is unsigned, and S3 a call with
+// no payload hash. Carrying the narrowing over would break both.
+export type AwsServiceFetch = (
+  service: AwsService,
+  url: string,
+  init?: RequestInit,
+) => Promise<Response>;
+
+// A cache read or write is optional work on a request's critical path: failing
+// one costs a miss or a re-render, so aws4fetch's default ladder of ten retries
+// — which backs off into the tens of seconds — costs far more than it buys. One
+// retry covers a single blip; anything worse is a miss.
+const serviceRetries = 1;
+
+// awsServiceFetch signs the entrypoint's storage calls with the edge reader's
+// credentials, or is undefined when the substrate binds no credentials or no
+// region — leaving the edge uncached rather than failing to boot.
+export function awsServiceFetch(
+  accessKeyId: string | undefined,
+  secretAccessKey: string | undefined,
+  region: string | undefined,
+): AwsServiceFetch | undefined {
+  if (!accessKeyId || !secretAccessKey || !region) return undefined;
+  const options = { accessKeyId, secretAccessKey, region, retries: serviceRetries };
+  const clients: Record<AwsService, AwsClient> = {
+    s3: new AwsClient({ ...options, service: "s3" }),
+    dynamodb: new AwsClient({ ...options, service: "dynamodb" }),
+  };
+  return (service, url, init) => clients[service].fetch(url, init);
 }
