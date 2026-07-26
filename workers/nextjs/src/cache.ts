@@ -2,6 +2,9 @@
 import type { TagClock, TagVerdict } from "./tag-clock";
 
 const ENTRY_MODIFIED = "x-ocel-entry-modified";
+// The freshness the tier below declared for this entry, kept verbatim beside it
+// because the entry's own cache-control is rewritten to its retention window.
+const ENTRY_WINDOW = "x-ocel-entry-window";
 const STATIC_WINDOW = 31536000;
 
 // The one status header every served route carries, reporting which tier
@@ -177,6 +180,26 @@ export function withStatus(response: Response, status: CacheStatus): Response {
   });
 }
 
+// The window an entry is judged by. What the tier below declared on the
+// response wins: it describes the render that actually happened, and for a path
+// generated on demand it is the only window there is — the build manifest names
+// only the paths it prerendered. A bare s-maxage (what the R2 tier synthesizes)
+// declares a revalidate window and nothing about expiry, so how long the entry
+// may still be served stale stays the manifest's to say.
+function entryWindow(
+  declared: string | null,
+  target: CacheTarget,
+): { revalidate?: number; expiration?: number } {
+  const policy = storagePolicy(declared);
+  if (!policy) {
+    return { revalidate: target.revalidate, expiration: target.expiration };
+  }
+  return {
+    revalidate: policy.sMaxAge,
+    expiration: policy.swr > 0 ? policy.sMaxAge + policy.swr : target.expiration,
+  };
+}
+
 function forStorage(
   response: Response,
   target: CacheTarget,
@@ -185,10 +208,13 @@ function forStorage(
   const headers = new Headers(response.headers);
   const modified = response.headers.get(ENTRY_MODIFIED) ?? String(storedAt);
   headers.set(ENTRY_MODIFIED, modified);
+  const declared = response.headers.get("cache-control");
+  if (declared) headers.set(ENTRY_WINDOW, declared);
   // Physical retention is decoupled from logical freshness: keep the object as
   // long as it could ever be served (through its expiration window, or a year
   // for a static entry), and let evaluate decide fresh/stale/expired per hit.
-  headers.set("cache-control", `s-maxage=${target.expiration ?? STATIC_WINDOW}`);
+  const { expiration } = entryWindow(declared, target);
+  headers.set("cache-control", `s-maxage=${expiration ?? STATIC_WINDOW}`);
   if (target.tags?.length) headers.set("cache-tag", target.tags.join(","));
 
   return new Response(response.body, {
@@ -208,6 +234,7 @@ function fromStorage(
   // this is what is forwarded to browser
   headers.set("cache-control", "public, max-age=0, must-revalidate");
   headers.delete(ENTRY_MODIFIED);
+  headers.delete(ENTRY_WINDOW);
   headers.delete("cache-tag");
   headers.set(CACHE_STATUS, status);
   // The stored value dates from the write, not this serve; restate it — but
@@ -308,7 +335,7 @@ export async function serveCached(
         tagStale = verdict !== false;
       }
       const state = evaluate(
-        { lastModified: modified, revalidate: target.revalidate, expiration: target.expiration },
+        { lastModified: modified, ...entryWindow(cached.headers.get(ENTRY_WINDOW), target) },
         now(),
         tagStale,
       );

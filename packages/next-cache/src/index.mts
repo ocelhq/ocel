@@ -33,6 +33,11 @@ export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
 export interface CacheEntryFile {
   lastModified: number;
   value: Record<string, any>;
+  // The freshness window of the render that wrote this entry, as Next declared
+  // it. Absent on entries the build seeded and on entries written before this
+  // was recorded, where the routing manifest's window stands in. `revalidate:
+  // false` is a static entry: no time-based staleness, only tag-based.
+  cacheControl?: { revalidate?: number | false; expire?: number };
 }
 
 // When a tag was last invalidated. Mirrors Next's own tagsManifest entries:
