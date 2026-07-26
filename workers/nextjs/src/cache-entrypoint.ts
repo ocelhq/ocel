@@ -31,37 +31,43 @@ import {
 } from "./tag-clock";
 import type { Env } from "./index";
 
-// The store the tag snapshot lives in: the same R2 binding the tag clock reads,
-// plus the conditional put its republish needs. Narrowed to those two calls
-// rather than typed as R2Bucket so nothing here depends on the rest of it.
+// The snapshot replica's store: the same R2 binding the tag clock reads, plus
+// the conditional put its republish needs. Narrowed to those two calls rather
+// than typed as R2Bucket so nothing here depends on the rest of it.
 export interface SnapshotStore extends ObjectStoreReader {
+  // The etag the write landed as, or null when the precondition lost — which is
+  // how R2 reports a conditional put that another publisher got to first.
   put(
     key: string,
     value: string,
     options?: { onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string } },
-  ): Promise<unknown>;
+  ): Promise<{ etag: string } | null>;
 }
 
 export interface EdgeCacheDeps {
-  // The account-global coordinates the deploy binds: one bucket and one table
-  // for every project and app, scoped to a deployment by the ISR prefix each
-  // call names.
+  // The account-global AWS coordinates the deploy binds: one bucket and one
+  // table for every project and app, scoped to a deployment by the ISR prefix
+  // each call names. fetchBucket holds the fetch entries; table holds the
+  // authoritative tag records.
   region: string;
-  bucket: string;
+  fetchBucket: string;
   table: string;
   aws: AwsServiceFetch;
-  store: SnapshotStore;
+  // The edge-local R2 binding the tag-snapshot replica lives in — a different
+  // store from fetchBucket, deliberately: a replica is edge-readable tag state,
+  // while a fetch entry holds an origin-private response body.
+  snapshots: SnapshotStore;
   waitUntil(promise: Promise<unknown>): void;
-  now?: () => number;
+  now(): number;
 }
 
 // Next's IncrementalCache caps a fetch entry at 2 MB, but skips that check
-// entirely when a custom handler is bound (incremental-cache/index.js:492-496).
-// So the cap is restored here rather than invented: it is the same bound the
-// node tier's writes are already held to, and an entry the node path would have
-// refused must not become a multi-megabyte RPC payload just by arriving from the
-// edge. Over it the entry is simply not cached, which is how a cache refuses;
-// raising would turn an oversized response into a broken render.
+// entirely when a custom handler is bound. So the cap is restored here rather
+// than invented: it is the same bound the node tier's writes are already held
+// to, and an entry the node path would have refused must not become a
+// multi-megabyte RPC payload just by arriving from the edge. Over it the entry is
+// simply not cached, which is how a cache refuses; raising would turn an
+// oversized response into a broken render.
 const maxEntryBytes = 2 * 1024 * 1024;
 
 // Losing the conditional write means another publisher landed first, and each
@@ -82,11 +88,11 @@ const fetchObjectKey = (scope: string, key: string) =>
 // An object key's separators are path structure and have to survive into the
 // URL, so each segment is encoded on its own rather than the key as a whole.
 const objectUrl = (deps: EdgeCacheDeps, key: string) =>
-  `https://${deps.bucket}.s3.${deps.region}.amazonaws.com/` +
+  `https://${deps.fetchBucket}.s3.${deps.region}.amazonaws.com/` +
   key.split("/").map(encodeURIComponent).join("/");
 
 export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
-  const now = () => deps.now?.() ?? Date.now();
+  const now = deps.now;
 
   return {
     // Nothing here throws: Next does not wrap a cache read in a try/catch, so a
@@ -106,7 +112,7 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
         // the same isolate that republishes the snapshot, and a PoP entry is not
         // something a writer can drop the way it drops its memo. The serving
         // tiers can afford the cache's TTL because they only read.
-        const clock = createTagClock({ isrPrefix: scope }, { store: deps.store });
+        const clock = createTagClock({ isrPrefix: scope }, { store: deps.snapshots });
         // Unknown never serves. The colo tier decides the other way, but it is
         // already holding the bytes and its own refresh is what repairs the
         // snapshot; here, returning the entry would be a positive choice to hand
@@ -121,14 +127,21 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
 
     // The write must not hold the response open. A fetch entry is written on the
     // way out of a render — including a background revalidation the caller is
-    // explicitly not waiting on — so awaiting a cross-internet PUT here would
-    // put S3's latency on the user's TTFB. Nothing reads an entry back inside
-    // the request that wrote it, and a write that never lands costs one cache
-    // entry: the next request renders again. The node tier defers its write for
-    // the same reason (cache-handler.mts).
+    // explicitly not waiting on — and a Server Action awaits the revalidation
+    // drain before responding, so awaiting a cross-internet PUT here would put
+    // S3's latency on the response. The node tier defers its write for the same
+    // reason (cache-handler.mts).
     //
-    // Nothing here throws either, and for the same reason a read does not: a
-    // cache that cannot store something declines to store it.
+    // Deferring it onto this entrypoint's own context rather than returning it is
+    // what keeps it off that path, and workerd does hold it: an RPC callee's
+    // waitUntil task runs to completion after the method returned and after the
+    // calling request responded (verified against workerd 2026-03-10). Returning
+    // the promise would put the PUT back in front of whichever caller awaits it.
+    //
+    // Nothing here throws once the entry is a fetch entry, and for the same
+    // reason a read does not: a cache that cannot store something declines to
+    // store it. A write that never lands costs one cache entry — the next
+    // request renders again.
     async fetchSet(scope, key, entry, tags) {
       // The one thing here that does throw, and the only door a page-level entry
       // could come through. Next's node entry templates are bundled into every
@@ -161,9 +174,7 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
             })
             .catch(() => undefined),
         );
-      } catch {
-        // Swallowed deliberately: see above.
-      }
+      } catch {}
     },
 
     // Two writes, and both are required, but only one may fail the caller. The
@@ -209,7 +220,7 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
         // This isolate has just replaced the document its memo holds, so the memo
         // is known-stale — and without the drop an edge route that invalidates
         // and immediately re-reads would be answered from before its own write.
-        dropSnapshotMemo(deps.store);
+        dropSnapshotMemo(deps.snapshots);
       }
     },
   };
@@ -276,7 +287,7 @@ async function publishSnapshot(
   const key = tagSnapshotKey(scope);
 
   for (let attempt = 0; attempt < publishAttempts; attempt++) {
-    const stored = await deps.store.get(key);
+    const stored = await deps.snapshots.get(key);
     const prior = stored === null ? null : readableSnapshot(parseJson<TagSnapshot>(await stored.text()));
     if (stored !== null && prior === null) {
       // Torn, or written in a format this worker predates. Merging into it would
@@ -290,7 +301,7 @@ async function publishSnapshot(
       : // "*" is R2's spelling of "only if the object does not exist", which is
         // what makes the first publish safe against a concurrent one.
         { etagDoesNotMatch: "*" };
-    if ((await deps.store.put(key, JSON.stringify(mergeSnapshot(prior, records, at)), { onlyIf })) !== null) {
+    if ((await deps.snapshots.put(key, JSON.stringify(mergeSnapshot(prior, records, at)), { onlyIf })) !== null) {
       return;
     }
   }
@@ -321,11 +332,12 @@ export class CacheEntrypoint extends WorkerEntrypoint<Env> implements EdgeCacheR
     }
     return createEdgeCache({
       region: OCEL_AWS_REGION,
-      bucket: OCEL_ISR_BUCKET,
+      fetchBucket: OCEL_ISR_BUCKET,
       table: OCEL_STATE_TABLE,
       aws,
-      store: OCEL_CACHE_STORE,
+      snapshots: OCEL_CACHE_STORE,
       waitUntil: (promise) => this.ctx.waitUntil(promise),
+      now: Date.now,
     });
   }
 

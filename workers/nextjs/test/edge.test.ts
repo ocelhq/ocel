@@ -5,6 +5,7 @@ import { dispatchResult, serve, type RouteDeps } from "../src/index";
 import {
   createEdgeInvoker,
   type EdgeCacheBinding,
+  type EdgeCacheStub,
   type EdgeInvoker,
 } from "../src/edge";
 import type { AssetBucket } from "../src/assets";
@@ -13,12 +14,15 @@ import type { ObjectStoreReader } from "../src/tag-clock";
 declare module "cloudflare:test" {
   interface ProvidedEnv {
     LOADER: WorkerLoader;
-    // Stands in for the ctx.exports loopback the worker hands the bundle: a real
-    // remote stub, which is the only kind that crosses into a loaded worker's
-    // env at all.
     DEPLOYMENTS: Fetcher;
   }
 }
+
+// These tests never call the cache through the stub — they assert that a live one
+// reaches the bundle and stays live — and a real remote stub is the only kind
+// that crosses into a loaded worker's env at all, so the 501 service binding
+// stands in for the worker's own CacheEntrypoint loopback.
+const remoteStub = () => env.DEPLOYMENTS as unknown as EdgeCacheStub;
 
 interface EdgeEntry {
   chunks: string[];
@@ -834,7 +838,7 @@ describe("the cache loopback", () => {
         }`,
       },
       chunkFor,
-      { rpc: env.DEPLOYMENTS, scope: "prod/proj/app/build" },
+      { rpc: remoteStub(), scope: "prod/proj/app/build" },
     );
 
     for (let i = 0; i < 3; i++) {
@@ -847,7 +851,7 @@ describe("the cache loopback", () => {
     const edge = invokerFor(
       { e: `async () => new Response(process.env.__NEXT_BUILD_ID)` },
       chunkFor,
-      { rpc: env.DEPLOYMENTS, scope: "prod/proj/app/build" },
+      { rpc: remoteStub(), scope: "prod/proj/app/build" },
     );
     expect(await (await edge("e", new Request("https://x/"))).text()).toBe("t");
   });
@@ -874,7 +878,7 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 `;
 
   const deployment = (id: string, scope: string) =>
-    invokerFor({ e: "" }, servedCount, { rpc: env.DEPLOYMENTS, scope }, id);
+    invokerFor({ e: "" }, servedCount, { rpc: remoteStub(), scope }, id);
 
   const serve = async (edge: EdgeInvoker) =>
     (await edge("e", new Request("https://x/"))).text();

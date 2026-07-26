@@ -4,6 +4,8 @@
 // keyed by the bundle's content hash. Nothing is uploaded at deploy time, which
 // is what keeps a rollback a pointer flip (ADR 0002).
 
+import type { EdgeCacheRpc } from "@ocel/next-cache";
+
 import type { ObjectStoreReader } from "./tag-clock";
 
 // The Deployment record's edge slot, written by the host at deploy time.
@@ -11,8 +13,7 @@ export interface EdgeWorkers {
   bundleKey: string;
   // Hashes the bundle bytes together with the compat settings below: the
   // loader's contract is "same id, same code", and compat is part of the code
-  // it compiles. Everything deploy time decides, which is not the whole loader
-  // key — createEdgeInvoker scopes that by its load-time additions too.
+  // it compiles. One input to the loader key, not the key — see createEdgeInvoker.
   id: string;
   compatDate: string;
   compatFlags?: string[];
@@ -43,11 +44,16 @@ export type EdgeInvoker = (
   request: Request,
 ) => Promise<Response>;
 
-// What the bundled cache handler is given to reach storage: the main worker's
-// own CacheEntrypoint as a loopback binding, and the deployment scope every call
-// names. The edge holds no credentials, so this stub is its entire cache.
+// A loopback stub for EdgeCacheRpc: the main worker's own CacheEntrypoint,
+// reached across a worker boundary, so what the bundle holds is the RPC view of
+// that interface rather than the object.
+export type EdgeCacheStub = Rpc.Provider<EdgeCacheRpc>;
+
+// What the bundled cache handler is given to reach storage: that stub, and the
+// deployment scope every call names. The edge holds no credentials, so this is
+// its entire cache.
 export interface EdgeCacheBinding {
-  rpc: unknown;
+  rpc: EdgeCacheStub;
   scope: string;
 }
 
