@@ -4,7 +4,7 @@ import {
   type MiddlewareResult,
 } from "@next/routing";
 import { serveStaticAsset, type AssetStoreDeps } from "./assets";
-import { createEdgeInvoker, type EdgeInvoker } from "./edge";
+import { createEdgeInvoker, type EdgeCacheStub, type EdgeInvoker } from "./edge";
 import {
   CacheDeps,
   CacheTarget,
@@ -230,7 +230,7 @@ export async function resolveRouteDeps(
     edgeRuntime?: {
       loader: WorkerLoader;
       store: ObjectStoreReader;
-      cacheRpc?: unknown;
+      cacheRpc?: EdgeCacheStub;
     };
   },
 ): Promise<RouteDeps | Response> {

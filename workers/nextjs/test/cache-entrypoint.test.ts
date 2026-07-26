@@ -104,10 +104,10 @@ function cacheWith(
 ) {
   return createEdgeCache({
     region,
-    bucket,
+    fetchBucket: bucket,
     table,
     aws: aws.send,
-    store: over.store ?? snapshotStore(),
+    snapshots: over.store ?? snapshotStore(),
     waitUntil: over.waitUntil ?? (() => {}),
     now: over.now ?? (() => 5_000),
   });
