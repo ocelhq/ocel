@@ -11,7 +11,7 @@ if (process.env.NEXT_RUNTIME === "edge") {
   // build-time string literals, and a service binding is not a string. The
   // dynamic worker's shim assigns this global from the worker's load-time env
   // before the first Next chunk evaluates.
-  const bound = () => {
+  const resolveCacheBinding = () => {
     const cache = globalThis.__OCEL_EDGE_CACHE;
     if (!cache || !cache.rpc) {
       throw new Error(
@@ -27,14 +27,10 @@ if (process.env.NEXT_RUNTIME === "edge") {
     // Next does not wrap get() in a try/catch: a throw surfaces as a render
     // error rather than a miss. Every failure is therefore swallowed into null,
     // which degrades a cache outage into a fresh fetch instead of a 500.
-    //
-    // A non-FETCH kind is a genuine miss rather than a swallowed failure —
-    // nothing else is ever written here — so it needs no noise of its own; the
-    // invariant is enforced on the write side, where being wrong costs data.
     async get(key, ctx) {
       if (ctx?.kind !== "FETCH") return null;
       try {
-        const { rpc, scope } = bound();
+        const { rpc, scope } = resolveCacheBinding();
         return await rpc.fetchGet(scope, key, tagsOf(ctx));
       } catch {
         return null;
@@ -57,7 +53,7 @@ if (process.env.NEXT_RUNTIME === "edge") {
           `ocel: the edge cache handler stores fetch entries only, got kind ${data.kind}`,
         );
       }
-      const { rpc, scope } = bound();
+      const { rpc, scope } = resolveCacheBinding();
       const tags = ctx?.tags ?? [];
       const entry = {
         lastModified: Date.now(),
@@ -76,7 +72,7 @@ if (process.env.NEXT_RUNTIME === "edge") {
     async revalidateTag(tags, durations) {
       const list = typeof tags === "string" ? [tags] : tags;
       if (list.length === 0) return;
-      const { rpc, scope } = bound();
+      const { rpc, scope } = resolveCacheBinding();
       return rpc.revalidateTags(scope, list, durations);
     }
 
