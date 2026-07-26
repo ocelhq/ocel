@@ -28,6 +28,9 @@ import {
   type DeploymentsBinding,
   type DeploymentsDeps,
 } from "./deployments";
+// Re-exported from the main module so ctx.exports carries a loopback binding for
+// it, which is the only way the edge's dynamic worker can reach storage.
+export { CacheEntrypoint } from "./cache-entrypoint";
 import { normalizeBaseDomain, previewPointer } from "./preview";
 import { edgeOriginFetch } from "./signing";
 import type { ObjectStoreReader } from "./tag-clock";
@@ -221,8 +224,14 @@ export async function resolveRouteDeps(
     interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
     assetStore: Omit<AssetStoreDeps, "assetPrefix">;
     // What the edge invoker is built from once the Deployment names a bundle:
-    // the loader binding and the store holding it.
-    edgeRuntime?: { loader: WorkerLoader; store: ObjectStoreReader };
+    // the loader binding, the store holding it, and the cache loopback its
+    // entries call back through. The loopback's scope is the Deployment's own
+    // ISR prefix, so it is filled in here rather than by the caller.
+    edgeRuntime?: {
+      loader: WorkerLoader;
+      store: ObjectStoreReader;
+      cacheRpc?: unknown;
+    };
   },
 ): Promise<RouteDeps | Response> {
   const resolution = await resolveDeployment(deployments);
@@ -237,7 +246,14 @@ export async function resolveRouteDeps(
     ...rest,
     edge:
       edgeRuntime && edgeWorkers
-        ? createEdgeInvoker(edgeRuntime.loader, edgeWorkers, edgeRuntime.store)
+        ? createEdgeInvoker(
+            edgeRuntime.loader,
+            edgeWorkers,
+            edgeRuntime.store,
+            edgeRuntime.cacheRpc
+              ? { rpc: edgeRuntime.cacheRpc, scope: record.isrPrefix }
+              : undefined,
+          )
         : undefined,
     manifest: record.routingManifest as Manifest,
     functionUrls: record.functionUrls,
@@ -925,7 +941,17 @@ export default {
         // The edge bundle lives in the same store as the ISR cache, under its
         // own prefix — never under assets/, whose keys a request pathname can
         // reach, because the bundle carries the app's edge secrets.
-        edgeRuntime: env.LOADER && store ? { loader: env.LOADER, store } : undefined,
+        edgeRuntime:
+          env.LOADER && store
+            ? {
+                loader: env.LOADER,
+                store,
+                // The loopback binding for this script's own CacheEntrypoint. It
+                // is a binding rather than a per-request stub, so the loaded
+                // isolate may hold it for as long as it lives.
+                cacheRpc: ctx.exports.CacheEntrypoint,
+              }
+            : undefined,
       },
     );
     if (deps instanceof Response) return deps;
