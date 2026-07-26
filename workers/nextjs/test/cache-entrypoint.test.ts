@@ -323,11 +323,33 @@ it("does not clobber a replica another publisher created first", async () => {
   expect(snapshot.records.authors?.expired).toBe(4_000);
 });
 
-it("leaves a replica it cannot read alone rather than replacing it", async () => {
+// Next calls revalidateTag with no try/catch of its own, and a Server Action
+// awaits the drain before responding — so a throw out of the replication half
+// fails the very route that raised the invalidation. The durable record is
+// already written by then; the replica is the edge's copy of it, and a copy that
+// cannot be replaced leaves the edge reading the last one.
+it("leaves a replica it cannot read alone, without failing the route", async () => {
   await env.TAG_SNAPSHOT_STORE.put(tagSnapshotKey(scope), "{{ not json");
   const aws = awsRecorder(() => new Response("{}"));
-  await expect(cacheWith(aws).revalidateTags(scope, ["posts"])).rejects.toThrow(/tag snapshot/);
+
+  await expect(cacheWith(aws).revalidateTags(scope, ["posts"])).resolves.toBeUndefined();
+
+  // The durable write still happened: the invalidation is recorded even though
+  // the replica could not be republished.
+  expect(aws.calls.filter((call) => call.service === "dynamodb")).toHaveLength(1);
   expect(await (await env.TAG_SNAPSHOT_STORE.get(tagSnapshotKey(scope)))!.text()).toBe("{{ not json");
+});
+
+it("does not fail the route when every conditional write is lost", async () => {
+  await seedSnapshot({}, 100);
+  const store = snapshotStore();
+  const aws = awsRecorder(() => new Response("{}"));
+
+  await expect(
+    cacheWith(aws, { store: { ...store, put: async () => null } }).revalidateTags(scope, ["posts"]),
+  ).resolves.toBeUndefined();
+
+  expect(aws.calls.filter((call) => call.service === "dynamodb")).toHaveLength(1);
 });
 
 it("sees its own invalidation on the very next read", async () => {
