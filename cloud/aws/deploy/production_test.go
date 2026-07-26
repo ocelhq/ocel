@@ -231,6 +231,52 @@ func TestRootStackSpecs_BindsEdgeSigningCredentials(t *testing.T) {
 	})
 }
 
+// The worker's cache entrypoint addresses S3 and DynamoDB itself, so it must be
+// handed their coordinates. They are account-global, so they ride as vars on the
+// frozen bundle rather than in each Deployment record — and the region is bound
+// rather than parsed off a Function URL host, which an all-edge app has none of.
+func TestRootStackSpecs_BindsCacheCoordinates(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	manifest := &deploymentsv1.Manifest{
+		ProjectId: "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+	}
+
+	t.Run("bound from the substrate's stores", func(t *testing.T) {
+		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", StateTable: "state-abc", AssetBucket: "assets-xyz"}
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		vars := specs[0].Generic.Vars
+		for name, want := range map[string]string{
+			edge.AWSRegionVar:   "eu-west-1",
+			edge.StateTableVar:  "state-abc",
+			edge.AssetBucketVar: "assets-xyz",
+		} {
+			if vars[name] != want {
+				t.Errorf("generic Vars[%s] = %q, want %q", name, vars[name], want)
+			}
+		}
+	})
+
+	t.Run("absent on a substrate predating a store", func(t *testing.T) {
+		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		vars := specs[0].Generic.Vars
+		for _, name := range []string{edge.StateTableVar, edge.AssetBucketVar} {
+			if _, ok := vars[name]; ok {
+				t.Errorf("Vars[%s] must be unset, not bound empty", name)
+			}
+		}
+	})
+}
+
 func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testing.T) {
 	fake := &recordingRootStack{}
 	ctx := context.Background()

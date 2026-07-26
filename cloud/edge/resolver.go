@@ -34,3 +34,23 @@ const (
 	EdgeAccessKeyIDVar = "OCEL_EDGE_ACCESS_KEY_ID"
 	EdgeSecretKeyVar   = "OCEL_EDGE_SECRET_KEY"
 )
+
+// Worker binding names for the account-global stores the worker's cache
+// entrypoint addresses under those credentials: the region they live in, the
+// state table holding ISR tag records, and the asset bucket holding fetch-cache
+// entries. The table and bucket names match what the Lambda tier reads them
+// under, so one vocabulary spans both tiers. The region is bound rather than
+// parsed back out of a Function URL host, which an all-edge app has none of.
+//
+// Nothing here is per-deployment — bootstrap provisions one table and one bucket
+// for every project, app and deployment in the account — so they ride as worker
+// vars beside the credentials rather than in each Deployment record, which would
+// copy a constant into every record and make a bootstrap-level change need a
+// redeploy of every app to propagate. What scopes them to one app is the ISR
+// prefix the record already carries; the tag namespace derives from that prefix,
+// so it needs no binding of its own.
+const (
+	AWSRegionVar   = "OCEL_AWS_REGION"
+	StateTableVar  = "OCEL_STATE_TABLE"
+	AssetBucketVar = "OCEL_ISR_BUCKET"
+)
