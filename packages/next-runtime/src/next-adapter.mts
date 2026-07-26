@@ -1,5 +1,6 @@
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import {
   copyFile,
@@ -71,13 +72,34 @@ const adapter = {
       ...outputs.appRoutes,
     ];
 
-    const routableOutputs = [...allRoutes, ...outputs.prerenders, ...outputs.staticFiles];
+    const routableOutputs = [
+      ...allRoutes,
+      ...outputs.prerenders,
+      ...outputs.staticFiles,
+    ];
+
+    const { middleware } = outputs;
+    if (middleware?.runtime === "nodejs") {
+      throw new Error(
+        `ocel: the nodejs middleware runtime is not supported — ${middleware.sourcePage || middleware.filePath} must export \`config = { runtime: 'edge' }\``,
+      );
+    }
 
     const functionRoutes = allRoutes.filter((r) => r.runtime === "nodejs");
-    const skipped = allRoutes.length - functionRoutes.length;
-    if (skipped > 0) {
+    const edgeRoutes = allRoutes.filter((r) => r.runtime === "edge");
+
+    // Which entry a prerender's parent renders through, for the prerenders
+    // parented by an edge route: they have no Lambda to regenerate from, so the
+    // worker invokes this entry instead of looking for a Function URL.
+    const edgeEntryByOutputId = new Map(
+      edgeRoutes.map((r) => [r.id, edgeEntryOf(r).entryKey]),
+    );
+    const inertPrerenders = outputs.prerenders
+      .filter((p) => edgeEntryByOutputId.has(p.parentOutputId))
+      .map((p) => p.pathname);
+    if (inertPrerenders.length > 0) {
       console.warn(
-        `ocel: skipping ${skipped} non-nodejs route(s) — only the nodejs runtime is supported`,
+        `ocel: revalidate is inert for edge-rendered route(s) ${inertPrerenders.join(", ")} — edge ISR is not supported yet (bd ocelhq-b7l)`,
       );
     }
 
@@ -209,19 +231,27 @@ const adapter = {
       ],
       routes: routing,
 
+      // An absent or empty matcher list is Next's "run on everything" — the
+      // shape a bare middleware.ts with no `config` export produces.
+      ...(middleware && {
+        middleware: {
+          entryKey: edgeEntryOf(middleware).entryKey,
+          matchers: middleware.config.matchers ?? [],
+        },
+      }),
+
       dispatch: Object.fromEntries([
-        ...functionRoutes
-          .filter((o) => o.runtime !== "edge")
-          .map((o) => [
-            o.pathname,
-            { kind: "lambda", id: parentIdByPathname.get(o.pathname) ?? o.id },
-          ]),
-        ...functionRoutes
-          .filter((o) => o.runtime === "edge")
-          .map((o) => [
-            o.pathname,
-            { kind: "edge", entryKey: o.edgeRuntime?.entryKey },
-          ]),
+        ...functionRoutes.map((o) => [
+          o.pathname,
+          { kind: "lambda", id: parentIdByPathname.get(o.pathname) ?? o.id },
+        ]),
+        // Edge variants (`.rsc`, `_next/data`) share one compiled entry, so
+        // several pathnames simply name the same entryKey — no grouping or
+        // symlinking as the nodejs path needs.
+        ...edgeRoutes.map((o) => [
+          o.pathname,
+          { kind: "edge", entryKey: edgeEntryOf(o).entryKey },
+        ]),
         ...outputs.staticFiles.map((o) => [o.pathname, { kind: "static" }]),
         ...publicFiles.map((p) => [p.pathname, { kind: "static" }]),
 
@@ -239,6 +269,7 @@ const adapter = {
         ...outputs.prerenders.map((p) => {
           const allowQuery = p.config?.allowQuery;
           const tags = cacheTags(p);
+          const entryKey = edgeEntryByOutputId.get(p.parentOutputId);
 
           return [
             p.pathname,
@@ -253,6 +284,10 @@ const adapter = {
               ...(p.pprChain && { pprChain: p.pprChain }),
               ...(tags.length > 0 && { tags }),
               ...(allowQuery && { allowQuery }),
+              // Set only when the parent renders on the edge: there is no
+              // Function URL to fall back to, so the worker regenerates this
+              // route through the bundle entry instead.
+              ...(entryKey && { entryKey }),
             },
           ];
         }),
@@ -264,8 +299,196 @@ const adapter = {
       join(outputRoot, "routing-manifest.json"),
       JSON.stringify(routingManifest),
     );
+
+    await emitEdgeBundle(outputRoot, [
+      ...edgeRoutes,
+      ...(middleware ? [middleware] : []),
+    ]);
   },
 } satisfies NextAdapter;
+
+// Every output that runs on the edge: the `runtime: 'edge'` routes and, when the
+// app has one, middleware.
+type EdgeOutput =
+  | AdapterOutput["PAGES"]
+  | AdapterOutput["PAGES_API"]
+  | AdapterOutput["APP_PAGE"]
+  | AdapterOutput["APP_ROUTE"]
+  | AdapterOutput["MIDDLEWARE"];
+
+interface EdgeEntry {
+  chunks: string[];
+  handlerExport: string;
+}
+
+function edgeEntryOf(output: EdgeOutput): {
+  entryKey: string;
+  handlerExport: string;
+} {
+  if (!output.edgeRuntime) {
+    throw new Error(
+      `ocel: edge output "${output.pathname}" carries no edgeRuntime entry — this build cannot be served`,
+    );
+  }
+  return output.edgeRuntime;
+}
+
+// stableStringify serializes with keys in sorted order at every level. The
+// bundle's bytes are content-hashed downstream into the dynamic worker's id, so
+// an unchanged build must produce an identical file.
+function stableStringify(value: unknown): string {
+  return JSON.stringify(value, (_key, val) =>
+    val && typeof val === "object" && !Array.isArray(val)
+      ? Object.fromEntries(
+          Object.entries(val).sort(([a], [b]) => (a < b ? -1 : 1)),
+        )
+      : val,
+  );
+}
+
+// The bundle's main module. Turbopack's edge chunks are classic scripts that
+// register themselves on globalThis, so nothing here imports by specifier — the
+// shim declares every chunk as a module and imports only the hit entry's,
+// leaving the rest for workerd to never compile. process.env must be populated
+// before the first import: the chunks read it at module scope.
+function renderEdgeShim(entries: Record<string, EdgeEntry>): string {
+  return `const ENTRIES = ${stableStringify(entries)}
+
+export default {
+  async fetch(request, env, ctx) {
+    globalThis.process ??= { env: {} }
+    Object.assign(globalThis.process.env, env)
+    const k = ctx.props.entryKey
+    const e = ENTRIES[k]
+    if (!e) return new Response(\`unknown edge entry \${k}\`, { status: 500 })
+    for (const id of e.chunks) await import("./" + id)
+    const entry = await globalThis._ENTRIES[k]
+    const handler = entry[e.handlerExport]
+    return handler(request, {
+      waitUntil: (p) => ctx.waitUntil(p),
+      signal: request.signal,
+      requestMeta: {},
+    })
+  },
+}
+`;
+}
+
+// moduleIds reads every source file and gives each distinct content one opaque
+// module id, so a chunk two entries share is carried once. Sources are visited
+// in sorted-key order and ids are numbered as they are minted, which is what
+// makes the bundle byte-stable across builds with unchanged input.
+async function moduleIds(
+  pathByKey: Map<string, string>,
+  idOf: (index: number) => string,
+  encode: (bytes: Buffer) => string,
+): Promise<{ idByKey: Map<string, string>; modules: Record<string, string> }> {
+  const idByKey = new Map<string, string>();
+  const idByHash = new Map<string, string>();
+  const modules: Record<string, string> = {};
+  for (const key of [...pathByKey.keys()].sort()) {
+    const bytes = await readFile(pathByKey.get(key)!);
+    const hash = createHash("sha256").update(bytes).digest("hex");
+    let id = idByHash.get(hash);
+    if (!id) {
+      id = idOf(idByHash.size);
+      idByHash.set(hash, id);
+      modules[id] = encode(bytes);
+    }
+    idByKey.set(key, id);
+  }
+  return { idByKey, modules };
+}
+
+// emitEdgeBundle writes the single JSON file the main worker turns into a
+// Cloudflare dynamic worker: every edge chunk under an opaque module id, the
+// wasm those chunks need, the env they read, and the table mapping each entry
+// key to what must be evaluated before its handler can be called. Ids are
+// content-deduped and assigned in sorted-key order so an unchanged build yields
+// an identical file — the deployment's worker id is a hash of these bytes.
+async function emitEdgeBundle(
+  outputRoot: string,
+  sources: readonly EdgeOutput[],
+): Promise<void> {
+  if (sources.length === 0) return;
+
+  // Source maps are dead weight in the bundle — one alone runs to 1.5 MB.
+  const isChunk = (key: string) => !key.endsWith(".map");
+
+  const chunkPathByKey = new Map<string, string>();
+  const wasmPathByName = new Map<string, string>();
+  const env: Record<string, string> = {};
+  const entryAssets = new Map<string, Set<string>>();
+  const handlerExports = new Map<string, string>();
+
+  for (const source of sources) {
+    const { entryKey, handlerExport } = edgeEntryOf(source);
+    handlerExports.set(entryKey, handlerExport);
+
+    const assets = entryAssets.get(entryKey) ?? new Set<string>();
+    entryAssets.set(entryKey, assets);
+    for (const [key, abs] of Object.entries(source.assets)) {
+      if (!isChunk(key)) continue;
+      chunkPathByKey.set(key, abs);
+      assets.add(key);
+    }
+
+    // Wasm modules are declared globally in the bundle, not per entry: workerd
+    // compiles a declared-but-unimported module lazily, so an entry that needs
+    // none pays nothing for the rest.
+    for (const [name, abs] of Object.entries(source.wasmAssets ?? {})) {
+      wasmPathByName.set(name, abs);
+    }
+
+    for (const [key, value] of Object.entries(source.config.env ?? {})) {
+      const seen = env[key];
+      if (seen !== undefined && seen !== value) {
+        throw new Error(
+          `ocel: edge outputs disagree on the value of env "${key}" — the bundle holds one env for every entry`,
+        );
+      }
+      env[key] = value;
+    }
+  }
+
+  const { idByKey: chunkIdByKey, modules: chunks } = await moduleIds(
+    chunkPathByKey,
+    (n) => `c/${n}.js`,
+    (bytes) => bytes.toString("utf8"),
+  );
+  const { modules: wasmModules } = await moduleIds(
+    wasmPathByName,
+    (n) => `w/${n}.wasm`,
+    (bytes) => bytes.toString("base64"),
+  );
+
+  const entries: Record<string, EdgeEntry> = {};
+  for (const [entryKey, keys] of entryAssets) {
+    entries[entryKey] = {
+      chunks: [...new Set([...keys].sort().map((k) => chunkIdByKey.get(k)!))],
+      handlerExport: handlerExports.get(entryKey)!,
+    };
+  }
+
+  const json = stableStringify({
+    version: 1,
+    mainModule: "main.js",
+    shim: renderEdgeShim(entries),
+    chunks,
+    wasm: wasmModules,
+    env,
+    entries,
+  });
+
+  const dest = join(outputRoot, "edge", "bundle.json");
+  await mkdir(dirname(dest), { recursive: true });
+  await writeFile(dest, json);
+
+  const mb = (Buffer.byteLength(json) / 1024 / 1024).toFixed(1);
+  console.log(
+    `ocel: edge bundle ${mb} MB, ${Object.keys(chunks).length} chunks, ${Object.keys(entries).length} entries`,
+  );
+}
 
 // Cloudflare's Cache-Tag ceilings: 16KB aggregate on the response header, 1000
 // tags in it, and 1024 chars per tag in a purge call. Cloudflare rejects an

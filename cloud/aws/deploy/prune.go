@@ -37,6 +37,10 @@ type PruneTarget struct {
 	// wrote this build's cache entries under, in whichever bucket(s) they
 	// landed in (entryTarget, at deploy time, may have been either).
 	CachePrefix string
+	// EdgePrefix is the R2 prefix uploadEdgeBundles wrote this build's edge
+	// bundle under (ADR 0002). Build-scoped like the rest, so reclaiming it
+	// can never take out a bundle another deployment still loads.
+	EdgePrefix string
 }
 
 // removedRecordKeyPrefix is the store's own record-key prefix (recordKey in
@@ -86,6 +90,7 @@ func reclaimTargets(projectID, env string, removedRecordKeys []string, stackFor 
 			Stack:       stackFor(app, buildID),
 			AssetPrefix: appAssetR2Prefix(projectID, app, buildID),
 			CachePrefix: appAssetPrefixFor(env, projectID, app, buildID),
+			EdgePrefix:  appEdgeR2Prefix(projectID, app, buildID),
 		})
 	}
 	return targets, nil
@@ -149,12 +154,13 @@ func asPrefixDeleter(up ArtifactUploader) PrefixDeleter {
 }
 
 // Reclaim destroys one Promotion's collected app-deploy stacks and deletes
-// the R2/S3 objects they published: the static-assets prefix from the
-// adopted cache store, and the ISR/prerender prefix from both the asset
-// bucket (fetch-cache entries always land there) and the adopted cache store
-// (route entries may have). Deleting a prefix nothing was ever written to is
-// a no-op, so trying both buckets unconditionally is safe. Performs the real
-// Pulumi destroy and S3/R2 calls; not exercised by unit tests, like Destroy.
+// the R2/S3 objects they published: the static-assets and edge-bundle prefixes
+// from the adopted cache store, and the ISR/prerender prefix from both the
+// asset bucket (fetch-cache entries always land there) and the adopted cache
+// store (route entries may have). Deleting a prefix nothing was ever written
+// to is a no-op, so trying both buckets unconditionally is safe. Performs the
+// real Pulumi destroy and S3/R2 calls; not exercised by unit tests, like
+// Destroy.
 func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, log func(string)) error {
 	for _, t := range targets {
 		if progress != nil {
@@ -168,6 +174,9 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, l
 			return err
 		}
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, t.CachePrefix); err != nil {
+			return err
+		}
+		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, t.EdgePrefix); err != nil {
 			return err
 		}
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, t.CachePrefix); err != nil {

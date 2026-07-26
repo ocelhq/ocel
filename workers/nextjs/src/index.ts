@@ -1,5 +1,10 @@
-import { resolveRoutes } from "@next/routing";
+import {
+  resolveRoutes,
+  responseToMiddlewareResult,
+  type MiddlewareResult,
+} from "@next/routing";
 import { serveStaticAsset, type AssetStoreDeps } from "./assets";
+import { createEdgeInvoker, type EdgeInvoker } from "./edge";
 import {
   CacheDeps,
   CacheTarget,
@@ -25,6 +30,7 @@ import {
 } from "./deployments";
 import { normalizeBaseDomain, previewPointer } from "./preview";
 import { edgeOriginFetch } from "./signing";
+import type { ObjectStoreReader } from "./tag-clock";
 
 // The request headers a Next App Router response varies on. The colo cache key
 // is derived from these directly (see variantPath), and Next's own allowHeader
@@ -64,6 +70,10 @@ interface Env {
   // provider's trust boundary — where the Function URLs are not IAM-gated.
   OCEL_EDGE_ACCESS_KEY_ID?: string;
   OCEL_EDGE_SECRET_KEY?: string;
+  // The dynamic-worker loader the Deployment's edge bundle is compiled through.
+  // Optional so a substrate without the binding degrades to a 500 on the edge
+  // routes alone rather than failing to boot.
+  LOADER?: WorkerLoader;
 }
 
 type RouteHas =
@@ -93,6 +103,10 @@ type DispatchTarget =
       // The headers the build declares for this route's resume request, read
       // from the manifest rather than assumed.
       pprChain?: { headers: Record<string, string> };
+      // Set when the route that regenerates this prerender runs on the edge:
+      // there is no Function URL to forward to, so every tier below the cache
+      // invokes this entry instead.
+      entryKey?: string;
       config: {
         allowQuery?: string[];
         allowHeader?: string[];
@@ -104,12 +118,29 @@ type DispatchTarget =
     }
   | { kind: "edge"; entryKey?: string };
 
+interface MiddlewareMatcher {
+  sourceRegex: string;
+  has?: RouteHas[];
+  missing?: RouteHas[];
+}
+
 interface Manifest {
   buildId: string;
   basePath: string;
   pathnames: string[];
   routes: unknown;
   dispatch: Record<string, DispatchTarget>;
+  // Absent when the app ships no middleware.
+  middleware?: { entryKey: string; matchers?: MiddlewareMatcher[] };
+}
+
+// What resolveRoutes never hands back: the middleware's own Response, the
+// redirect it asked for, and the request headers it rewrote. The invoker
+// captures all three (see invokeMiddleware in `serve`).
+export interface MiddlewareOutcome {
+  response: Response;
+  result: MiddlewareResult;
+  headers: Headers;
 }
 
 // The relevant subset of resolveRoutes' result; typed loosely so the dispatch
@@ -121,6 +152,9 @@ interface RouteResult {
   externalRewrite?: string | URL;
   resolvedPathname?: string | null;
   invocationTarget?: { pathname: string } | null;
+  // next.config `headers()` rules and the middleware's own response headers.
+  resolvedHeaders?: Headers;
+  middleware?: MiddlewareOutcome;
 }
 
 export interface RouteDeps {
@@ -130,6 +164,11 @@ export interface RouteDeps {
   assetStore: AssetStoreDeps;
   // Injectable so lambda/external forwarding can be observed in tests.
   fetch?: typeof fetch;
+
+  // Present when this Deployment carries an edge bundle and the loader binding
+  // exists. Absent leaves middleware and every edge route unservable — they
+  // fail closed with a 500 rather than routing on without them.
+  edge?: EdgeInvoker;
 
   // The SigV4-signing fetch used for Function-URL forwards only: the app's
   // Lambdas require AWS_IAM auth, so every origin call goes through this. Falls
@@ -168,9 +207,12 @@ export interface RouteDeps {
 // store is unreachable and no cached Deployment can stand in.
 export async function resolveRouteDeps(
   deployments: DeploymentsDeps,
-  base: Omit<RouteDeps, "manifest" | "functionUrls" | "interception" | "deployments" | "assetStore"> & {
+  base: Omit<RouteDeps, "manifest" | "functionUrls" | "interception" | "deployments" | "assetStore" | "edge"> & {
     interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
     assetStore: Omit<AssetStoreDeps, "assetPrefix">;
+    // What the edge invoker is built from once the Deployment names a bundle:
+    // the loader binding and the store holding it.
+    edgeRuntime?: { loader: WorkerLoader; store: ObjectStoreReader };
   },
 ): Promise<RouteDeps | Response> {
   const resolution = await resolveDeployment(deployments);
@@ -179,8 +221,14 @@ export async function resolveRouteDeps(
   if (resolution.kind === "unavailable") return unavailableResponse();
 
   const { record } = resolution;
+  const { edgeRuntime, ...rest } = base;
+  const { edgeWorkers } = record;
   return {
-    ...base,
+    ...rest,
+    edge:
+      edgeRuntime && edgeWorkers
+        ? createEdgeInvoker(edgeRuntime.loader, edgeWorkers, edgeRuntime.store)
+        : undefined,
     manifest: record.routingManifest as Manifest,
     functionUrls: record.functionUrls,
     interception: base.interception && {
@@ -214,18 +262,111 @@ function unavailableResponse(): Response {
   });
 }
 
+// serve is the whole request path: buffer, route, dispatch. The body is read
+// here rather than at dispatch because middleware may consume it — routing gets
+// a fresh stream over the buffer, and the forward that follows reuses the same
+// bytes instead of a stream someone else already drained.
+export async function serve(
+  request: Request,
+  deps: RouteDeps,
+): Promise<Response> {
+  const body = await bufferBody(request);
+  if (body) {
+    request = new Request(request.url, {
+      method: request.method,
+      headers: request.headers,
+      body,
+      redirect: "manual",
+    });
+  }
+
+  let outcome: MiddlewareOutcome | undefined;
+  let failure: unknown;
+
+  const result = (await resolveRoutes({
+    url: new URL(request.url),
+    buildId: deps.manifest.buildId,
+    basePath: deps.manifest.basePath,
+    i18n: undefined,
+    headers: request.headers,
+    requestBody: streamOf(body) as ReadableStream,
+    pathnames: deps.manifest.pathnames,
+    routes: deps.manifest.routes as Parameters<typeof resolveRoutes>[0]["routes"],
+
+    // resolveRoutes has no matcher field: whether middleware runs at all is
+    // entirely this callback's decision, and it returns neither the middleware's
+    // Response nor its redirect — so both are captured on the way through.
+    invokeMiddleware: async (ctx) => {
+      const middleware = deps.manifest.middleware;
+      if (!middleware) return {};
+      try {
+        if (!middlewareMatches(middleware.matchers, ctx.url, ctx.headers)) {
+          return {};
+        }
+        if (!deps.edge) {
+          throw new Error("no edge runtime is bound to this deployment");
+        }
+        const response = await deps.edge(
+          middleware.entryKey,
+          new Request(ctx.url, {
+            method: request.method,
+            headers: ctx.headers,
+            body,
+            redirect: "manual",
+          }),
+        );
+        // ctx.headers is resolveRoutes' own mutable clone, which
+        // responseToMiddlewareResult rewrites in place and never returns; hold
+        // the reference or every request-header override is lost.
+        const middlewareResult = responseToMiddlewareResult(
+          response,
+          ctx.headers,
+          ctx.url,
+        );
+        outcome = { response, result: middlewareResult, headers: ctx.headers };
+        return middlewareResult;
+      } catch (error) {
+        failure = error;
+        return {};
+      }
+    },
+  })) as RouteResult;
+
+  // Fail closed: middleware that could not run must not be routed past. An auth
+  // middleware failing open serves the pages it exists to protect.
+  if (failure) {
+    console.error("ocel: middleware invocation failed", failure);
+    return new Response("Middleware failed", { status: 500 });
+  }
+
+  return dispatchResult({ ...result, middleware: outcome }, request, deps);
+}
+
 export async function dispatchResult(
   result: RouteResult,
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
   const response = await dispatch(result, request, deps);
+  if (!result.resolvedHeaders && !result.resolvedPathname) return response;
+
+  const tagged = new Response(response.body, response);
+  // Applied here, after every cache tier: merging next.config `headers()` and
+  // the middleware's response headers before serveCached memoizes would bake
+  // one visitor's Set-Cookie into an entry every visitor is served.
+  result.resolvedHeaders?.forEach((value, name) => {
+    if (name.toLowerCase() !== "set-cookie") tagged.headers.set(name, value);
+  });
+  for (const cookie of result.resolvedHeaders?.getSetCookie() ?? []) {
+    tagged.headers.append("set-cookie", cookie);
+  }
+  stripMiddlewareHeaders(tagged.headers);
   // x-matched-path mirrors Next.js: the matched route template with dynamic
   // segments left un-substituted (e.g. /posts/[id]). Set only when routing
   // resolved to a route — unmatched assets, 404s, and redirects carry none.
-  if (!result.resolvedPathname) return response;
-  const tagged = new Response(response.body, response);
-  tagged.headers.set("x-matched-path", result.resolvedPathname);
+  if (result.resolvedPathname) {
+    tagged.headers.set("x-matched-path", result.resolvedPathname);
+  }
   return tagged;
 }
 
@@ -240,11 +381,21 @@ async function dispatch(
   // not (they reach arbitrary hosts, so must never carry AWS credentials).
   const doOrigin = deps.originFetch ?? doFetch;
   const url = new URL(request.url);
-
-  request = await bufferBody(request);
+  // Middleware may have rewritten the request's headers; everything downstream
+  // forwards those, not the ones the client sent.
+  const headers = result.middleware?.headers ?? request.headers;
 
   if (result.middlewareResponded) {
-    return new Response(null, { status: result.status ?? 200 });
+    return middlewareResponse(result.middleware, result.status);
+  }
+  const middlewareRedirect = result.middleware?.result.redirect;
+  if (middlewareRedirect) {
+    // resolveRoutes drops a middleware redirect — it returns resolvedHeaders and
+    // a status, and no resolvedPathname, so the request would otherwise fall
+    // through to a 404. Response.redirect cannot carry the Set-Cookie an auth
+    // middleware pairs with it, so the response is built explicitly; its
+    // location comes from resolvedHeaders like every other header.
+    return new Response(null, { status: middlewareRedirect.status });
   }
   if (result.redirect) {
     return Response.redirect(
@@ -275,21 +426,22 @@ async function dispatch(
     case "lambda": {
       const fnUrl = functionUrls[target.id];
       if (!fnUrl) return noFunctionUrl(target.id);
-      return doOrigin(
-        forward(originUrl(fnUrl, url, result), request, request.headers),
+      return doOrigin(forward(originUrl(fnUrl, url, result), request, headers));
+    }
+
+    case "prerender":
+      return dispatchPrerender(request, url, result, target, headers, deps);
+
+    case "edge": {
+      if (!target.entryKey) return noEdgeEntry(result.resolvedPathname);
+      // An edge route is invoked under the public origin: it renders the page a
+      // browser asked for, not a forward to some other host.
+      return edgeResponse(
+        deps,
+        target.entryKey,
+        forward(originUrl(url.origin, url, result), request, headers),
       );
     }
-
-    case "prerender": {
-      const fnUrl = functionUrls[target.id];
-      if (!fnUrl) return noFunctionUrl(target.id);
-      return dispatchPrerender(request, url, result, target, fnUrl, deps);
-    }
-
-    case "edge":
-      // TODO: edge functions run in-Worker; import the compiled edge entry by
-      // target.entryKey and invoke it.
-      return new Response("Edge runtime not wired yet", { status: 501 });
 
     default:
       return serveStaticAsset(request, url, deps.assetStore);
@@ -300,22 +452,31 @@ type PrerenderTarget = Extract<DispatchTarget, { kind: "prerender" }>;
 
 // dispatchPrerender serves a prerendered route: from the colo cache when it can,
 // from the ISR cache the worker reads itself when edge coordinates are present,
-// and from the Lambda whenever neither can answer.
+// and from the route's own renderer whenever neither can answer. That renderer
+// is the parent Lambda, or — for a route that renders on the edge — the entry in
+// the Deployment's edge bundle.
 async function dispatchPrerender(
   request: Request,
   url: URL,
   result: RouteResult,
   target: PrerenderTarget,
-  fnUrl: string,
+  headers: Headers,
   deps: RouteDeps,
 ): Promise<Response> {
-  // Every call this function makes is a forward to the app's own Function URL,
-  // so all of them are signed when edge credentials are bound.
+  const fnUrl = deps.functionUrls[target.id];
+  const entryKey = target.entryKey;
+  if (!fnUrl && !entryKey) return noFunctionUrl(target.id);
+
+  // Every Function-URL call this function makes is signed when edge credentials
+  // are bound; an edge-rendered route has no Function URL at all and reaches its
+  // renderer through the loader instead.
   const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
-  const forwardUrl = originUrl(fnUrl, url, result);
+  const forwardUrl = originUrl(fnUrl ?? url.origin, url, result);
+  const render = (rendered: Request) =>
+    entryKey ? edgeResponse(deps, entryKey, rendered) : doFetch(rendered);
 
   if (!deps.cache) {
-    return doFetch(forward(forwardUrl, request, request.headers));
+    return render(forward(forwardUrl, request, headers));
   }
   const cache = deps.cache;
 
@@ -324,31 +485,45 @@ async function dispatchPrerender(
   // cookies: allowHeader — Next's own filter for a *cached* prerender — omits
   // them, so a draft-mode request routed through the cache tiers would reach
   // the origin stripped of the very cookie that makes it draft mode, and render
-  // as an ordinary visitor.
+  // as an ordinary visitor. A middleware that set a cookie is the same case:
+  // the renderer must see it, and its response is per-visitor.
   if (
     shouldBypass(request, url, target.config) ||
     request.method !== "GET" ||
-    hasDraftCookie(request)
+    hasDraftCookie(request) ||
+    headers.has("x-middleware-set-cookie")
   ) {
-    const response = await doFetch(forward(forwardUrl, request, request.headers));
+    const response = await render(forward(forwardUrl, request, headers));
     return withStatus(response, "BYPASS");
   }
 
   const safeHeaders = new Headers();
   const allowedHeaders = target.config.allowHeader?.map((h) => h.toLowerCase());
-  for (const [name, value] of request.headers) {
+  // Whatever middleware rewrote onto the request is part of what the route
+  // renders from, so it survives allowHeader's filter.
+  const overridden = middlewareOverrides(result.middleware);
+  for (const [name, value] of headers) {
     const lower = name.toLowerCase();
-    if (allowedHeaders?.includes(lower) || RSC_FORWARD_HEADERS.has(lower)) {
+    if (
+      allowedHeaders?.includes(lower) ||
+      RSC_FORWARD_HEADERS.has(lower) ||
+      overridden.has(lower)
+    ) {
       safeHeaders.set(name, value);
     }
   }
 
-  const origin = () => doFetch(forward(forwardUrl, request, safeHeaders));
+  const origin = () => render(forward(forwardUrl, request, safeHeaders));
 
   const blockingHeaders = new Headers(safeHeaders);
   blockingHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
   const originBlocking = () =>
-    doFetch(forward(forwardUrl, request, blockingHeaders));
+    render(forward(forwardUrl, request, blockingHeaders));
+
+  // Edge chunks compile with no incremental cache handler, so an edge render can
+  // never rewrite the ISR entry it was asked to refresh — scheduling one would
+  // only burn an invocation. Edge ISR is bd ocelhq-b7l.
+  const revalidates = !entryKey;
 
   // A pages-router data request (/_next/data/<build>/route.json) resolves to
   // the same prerender target as its html route, but must be answered with
@@ -418,14 +593,14 @@ async function dispatchPrerender(
     if (mayPostpone) {
       const hit = await read();
       if (hit?.kind === "ppr") {
-        if (hit.stale) {
+        if (hit.stale && revalidates) {
           refreshOnce(deps.cache, refreshKey, async () =>
             (await originBlocking()).body?.cancel(),
           );
         }
         return composePpr(
           hit,
-          doFetch(
+          render(
             resumeRequest(
               forwardUrl,
               request,
@@ -447,7 +622,7 @@ async function dispatchPrerender(
       // A stale entry serves immediately; the Lambda regenerates it behind the
       // request, and this write mirrors that fresh response straight into colo
       // so the next request is a colo HIT instead of another R2 round-trip.
-      if (hit.stale) {
+      if (hit.stale && revalidates) {
         refreshOnce(cache, refreshKey, () =>
           originBlocking().then((response) =>
             storeInColo(cacheTarget, cache, response),
@@ -493,17 +668,17 @@ function originUrl(fnUrl: string, url: URL, result: RouteResult): URL {
 // runs — which flaps, because whether Cloudflare buffers a small body or streams
 // it is nondeterministic. Buffering here is what the PPR resume already does for
 // its own POST; doing it for the served request makes forwarded actions reliable.
-async function bufferBody(request: Request): Promise<Request> {
+// It is also what lets middleware read the body without starving the origin: the
+// bytes outlive the one stream a Request carries.
+async function bufferBody(request: Request): Promise<ArrayBuffer | null> {
   if (!request.body || request.method === "GET" || request.method === "HEAD") {
-    return request;
+    return null;
   }
-  const body = await request.arrayBuffer();
-  return new Request(request.url, {
-    method: request.method,
-    headers: request.headers,
-    body,
-    redirect: "manual",
-  });
+  return request.arrayBuffer();
+}
+
+function streamOf(body: ArrayBuffer | null): ReadableStream | null {
+  return body === null ? null : new Blob([body]).stream();
 }
 
 // forward rebuilds a request against an origin URL under a chosen header set,
@@ -536,6 +711,88 @@ function noFunctionUrl(id: string): Response {
   return new Response(`No function URL for ${id}`, { status: 502 });
 }
 
+function noEdgeEntry(pathname: string | null | undefined): Response {
+  return new Response(`No edge entry for ${pathname}`, { status: 502 });
+}
+
+// edgeResponse runs one entry of the Deployment's edge bundle, fail-closed:
+// a missing bundle, a loader failure or a throwing entry is a 500, never a
+// silent fall-through to something else.
+async function edgeResponse(
+  deps: RouteDeps,
+  entryKey: string,
+  request: Request,
+): Promise<Response> {
+  const edge = deps.edge;
+  try {
+    if (!edge) throw new Error("no edge runtime is bound to this deployment");
+    return await edge(entryKey, request);
+  } catch (error) {
+    console.error(`ocel: edge entry ${entryKey} failed`, error);
+    return new Response("Edge invocation failed", { status: 500 });
+  }
+}
+
+// A response with one of these statuses carries no body at all, and constructing
+// one over a body — even the empty body Next's own middleware returns — throws.
+const NULL_BODY_STATUSES = new Set([204, 205, 304]);
+
+// The middleware answered the request itself. resolveRoutes reports only that it
+// did — not the status, not the headers, not the body — so what goes back is the
+// Response the invoker captured, minus the control headers Next reads off it.
+function middlewareResponse(
+  outcome: MiddlewareOutcome | undefined,
+  status?: number,
+): Response {
+  if (!outcome) return new Response(null, { status: status ?? 200 });
+  const body = NULL_BODY_STATUSES.has(outcome.response.status)
+    ? null
+    : outcome.response.body;
+  const response = new Response(body, outcome.response);
+  stripMiddlewareHeaders(response.headers);
+  return response;
+}
+
+// Next's middleware protocol travels on response headers — the rewrite
+// destination, the request-header overrides, the set-cookie relay. They are read
+// by this worker and by resolveRoutes, and must never reach the client: a
+// rewrite header alone would publish the internal path every rewritten route
+// resolves to.
+function stripMiddlewareHeaders(headers: Headers): void {
+  for (const name of [...headers.keys()]) {
+    if (name.startsWith("x-middleware-")) headers.delete(name);
+  }
+}
+
+// An absent or empty matcher list is Next's "run on everything" — what a bare
+// middleware.ts with no `config` export produces. It never means "never run".
+function middlewareMatches(
+  matchers: MiddlewareMatcher[] | undefined,
+  url: URL,
+  headers: Headers,
+): boolean {
+  if (!matchers || matchers.length === 0) return true;
+  return matchers.some(
+    (matcher) =>
+      new RegExp(matcher.sourceRegex).test(url.pathname) &&
+      (matcher.has ?? []).every((has) => matchesHas(has, headers, url)) &&
+      !(matcher.missing ?? []).some((has) => matchesHas(has, headers, url)),
+  );
+}
+
+// The request headers middleware replaced, named by the response header Next's
+// own server reads them from. The captured Response still carries it —
+// responseToMiddlewareResult consumes it off a copy.
+function middlewareOverrides(outcome: MiddlewareOutcome | undefined): Set<string> {
+  const named = outcome?.response.headers.get("x-middleware-override-headers");
+  return new Set(
+    named
+      ?.split(",")
+      .map((name) => name.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
 // shouldBypass decides whether a prerender request must skip the cache and go
 // straight to the origin: the route's own revalidate token, or any one of its
 // bypassFor conditions. Next builds bypassFor as independent bypass *reasons*
@@ -552,14 +809,16 @@ export function shouldBypass(
   ) {
     return true;
   }
-  return (config.bypassFor ?? []).some((has) => matchesHas(has, request, url));
+  return (config.bypassFor ?? []).some((has) =>
+    matchesHas(has, request.headers, url),
+  );
 }
 
 // matchesHas mirrors Next's own hasMatch: a bare condition matches on presence
 // of a truthy value, and a condition with a value matches it as an ANCHORED
 // regex — not a string equality. A repeated key is matched on its last value.
-function matchesHas(has: RouteHas, request: Request, url: URL): boolean {
-  const value = hasValue(has, request, url);
+function matchesHas(has: RouteHas, headers: Headers, url: URL): boolean {
+  const value = hasValue(has, headers, url);
   if (!value) return false;
   if (!has.value) return true;
 
@@ -573,14 +832,14 @@ function matchesHas(has: RouteHas, request: Request, url: URL): boolean {
 
 function hasValue(
   has: RouteHas,
-  request: Request,
+  headers: Headers,
   url: URL,
 ): string | string[] | undefined {
   switch (has.type) {
     case "header":
-      return request.headers.get(has.key) ?? undefined;
+      return headers.get(has.key) ?? undefined;
     case "cookie":
-      return cookieValue(request.headers.get("cookie"), has.key);
+      return cookieValue(headers.get("cookie"), has.key);
     case "query": {
       const values = url.searchParams.getAll(has.key);
       if (values.length === 0) return undefined;
@@ -653,26 +912,14 @@ export default {
               waitUntil: (promise) => ctx.waitUntil(promise),
             }
           : undefined,
+        // The edge bundle lives in the same store as the ISR cache, under its
+        // own prefix — never under assets/, whose keys a request pathname can
+        // reach, because the bundle carries the app's edge secrets.
+        edgeRuntime: env.LOADER && store ? { loader: env.LOADER, store } : undefined,
       },
     );
     if (deps instanceof Response) return deps;
 
-    const result = (await resolveRoutes({
-      url: new URL(request.url),
-      buildId: deps.manifest.buildId,
-      basePath: deps.manifest.basePath,
-      i18n: undefined,
-      headers: request.headers,
-      requestBody: request.body as ReadableStream,
-      pathnames: deps.manifest.pathnames,
-      routes: deps.manifest.routes as Parameters<typeof resolveRoutes>[0]["routes"],
-
-      // TODO: invoke user-defined middleware
-      invokeMiddleware: async () => {
-        return {};
-      },
-    })) as RouteResult;
-
-    return dispatchResult(result, request, deps);
+    return serve(request, deps);
   },
 } satisfies ExportedHandler<Env>;

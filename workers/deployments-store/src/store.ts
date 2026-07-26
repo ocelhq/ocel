@@ -15,9 +15,8 @@ export interface SqlStore {
 
 // A Deployment record: everything the frozen generic worker needs to serve
 // one app's build that used to be baked into its per-deploy worker script.
-// edgeWorkers is a reserved, unused slot for future deployment-owned edge
-// workers (Next edge routes / middleware) — carried so adding that later
-// needs no record migration.
+// The store holds records opaquely — it never reads a field but app/buildId —
+// so this shape is here to describe what it carries, not to validate it.
 export interface DeploymentRecord {
   app: string;
   buildId: string;
@@ -26,7 +25,19 @@ export interface DeploymentRecord {
   assetPrefix: string;
   isrPrefix: string;
   createdAt: number;
-  edgeWorkers?: unknown;
+  // The build's own edge code (Next edge routes / middleware): where its bundle
+  // lives and what runtime the serving worker's loader evaluates it under.
+  // Absent when the build produced no edge output at all.
+  edgeWorkers?: EdgeWorkers;
+}
+
+// Mirrors EdgeWorkers in cloud/edge/rootstack.go (the host writes it) and in
+// workers/nextjs/src/edge.ts (the serving worker reads it).
+export interface EdgeWorkers {
+  bundleKey: string;
+  id: string;
+  compatDate: string;
+  compatFlags?: string[];
 }
 
 // One project-wide Promotion: a promotion id grouping the per-app build ids

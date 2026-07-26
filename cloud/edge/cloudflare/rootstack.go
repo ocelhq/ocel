@@ -125,10 +125,10 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		}
 	}
 
-	generic := bindObjectStore(
+	generic := bindCodeLoader(bindObjectStore(
 		withVar(withService(spec.Generic, genericStoreBinding, spec.StoreScriptName), genericSlugBinding, slug),
 		spec.Values,
-	)
+	))
 	genericUp := upload{accountID: accountID, scriptName: spec.GenericName, worker: generic}
 	assetsJWT, err := p.uploadAssets(ctx, genericUp)
 	if err != nil {

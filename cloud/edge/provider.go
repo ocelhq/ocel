@@ -51,6 +51,18 @@ type CredentialVerifier interface {
 	VerifyCredentials(ctx context.Context) (CredentialIdentity, error)
 }
 
+// CodeLoader is an optional Provider capability: evaluating a Deployment's own
+// worker code at request time, so a framework's edge routes and middleware ship
+// as bytes a Deployment record points at rather than as a script upload — which
+// is what keeps rollback a pointer flip (ADR 0002). It reports the runtime that
+// loaded code is evaluated under, which the host stamps into the record beside
+// the bundle: a loader keys code by id, so the id has to cover the runtime too.
+// An edge with no loader simply does not implement it, and its records carry no
+// edge workers at all.
+type CodeLoader interface {
+	CodeRuntime() (compatDate string, compatFlags []string)
+}
+
 // CredentialIdentity is what an edge's credentials resolve to, surfaced by
 // VerifyCredentials for the CLI's preflight banner.
 type CredentialIdentity struct {
@@ -98,6 +110,10 @@ type Worker struct {
 	// AssetBinding is the env name the worker reads its static-asset fetcher
 	// from. Empty when the worker serves no static assets.
 	AssetBinding string
+	// LoaderBinding is the env name the worker reads its code loader from — the
+	// binding it evaluates a Deployment's own edge routes and middleware
+	// through. Empty when the edge has no loader to bind.
+	LoaderBinding string
 	// Assets are the truly-static files served alongside the worker.
 	Assets []StaticAsset
 	// ObjectStore is the store the worker reads through an edge-native binding

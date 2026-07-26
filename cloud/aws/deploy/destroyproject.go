@@ -194,10 +194,11 @@ func PlanProjectTeardown(ctx context.Context, cfg Config, projectID string) (Pro
 }
 
 // purgeProjectAssets deletes a project's whole R2/S3 footprint: its static
-// assets (in the adopted cache store) and its ISR/prerender entries (which land
-// in both the asset bucket and the cache store), rooted at the project prefix
-// so every app and build under it goes at once. Deleting a prefix nothing was
-// written to is a no-op, mirroring Reclaim's per-build sweep at project scope.
+// assets and edge bundles (in the adopted cache store) and its ISR/prerender
+// entries (which land in both the asset bucket and the cache store), rooted at
+// the project prefix so every app and build under it goes at once. Deleting a
+// prefix nothing was written to is a no-op, mirroring Reclaim's per-build sweep
+// at project scope.
 func purgeProjectAssets(ctx context.Context, cfg Config, projectID string) error {
 	assets := projectAssetR2Prefix(projectID)
 	isr := projectISRPrefix(cfg.Env, projectID)
@@ -208,6 +209,7 @@ func purgeProjectAssets(ctx context.Context, cfg Config, projectID string) error
 		prefix  string
 	}{
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, assets},
+		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, projectEdgeR2Prefix(projectID)},
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, isr},
 		{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, isr},
 	} {
@@ -224,6 +226,13 @@ func purgeProjectAssets(ctx context.Context, cfg Config, projectID string) error
 // this one as a prefix.
 func projectAssetR2Prefix(projectID string) string {
 	return path.Join("assets", projectID) + "/"
+}
+
+// projectEdgeR2Prefix is the edge-bundle prefix root under which every app and
+// build of a project lives (appEdgeR2Prefix without the app/build tail),
+// trailing-slashed for the same reason projectAssetR2Prefix is.
+func projectEdgeR2Prefix(projectID string) string {
+	return path.Join("edge", projectID) + "/"
 }
 
 // projectISRPrefix is the ISR/prerender prefix root for a project in one
