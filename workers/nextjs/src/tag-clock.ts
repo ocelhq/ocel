@@ -169,7 +169,7 @@ async function matchSnapshot(
 // declines to guess — which is what lets the format change without a worker
 // fleet misreading it. This is the whole of what a reader may judge: everything
 // else about the document is the publisher's to assert.
-function readableSnapshot(snapshot: TagSnapshot | null): TagSnapshot | null {
+export function readableSnapshot(snapshot: TagSnapshot | null): TagSnapshot | null {
   if (snapshot?.version !== 1) return null;
   return snapshot.records && typeof snapshot.records === "object"
     ? snapshot
