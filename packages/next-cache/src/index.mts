@@ -16,7 +16,14 @@ export {
   type TagRecordUpdate,
   type TagUpdateItem,
 } from "./tag-index.mjs";
-export { latest, mergeRecord, mergeSnapshot } from "./tag-snapshot.mjs";
+export {
+  latest,
+  mergeRecord,
+  mergeSnapshot,
+  publishTagSnapshot,
+  type StoredTagSnapshot,
+  type TagSnapshotStore,
+} from "./tag-snapshot.mjs";
 export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
 
 // A cache entry exactly as it sits in S3: one object per route holding the html,
@@ -66,6 +73,19 @@ export interface TagSnapshot {
 // spelling against.
 export function tagSnapshotKey(prefix: string): string {
   return `${prefix}/tag-clock.json`;
+}
+
+// The partition-key prefix an app's tag records live under in the state table,
+// derived from the same ISR prefix that scopes its objects so one identity
+// governs both stores — which is also what lets the deploy grant DynamoDB with a
+// single LeadingKeys wildcard.
+//
+// Held together with Go by the same fixture tagSnapshotKey is, and for a stronger
+// reason: the Lambda tier is handed the finished namespace in its env and never
+// derives it, so the deploy and this function are the only two spellings and
+// nothing at runtime would notice them drifting.
+export function tagNamespace(prefix: string): string {
+  return `TAG#${prefix.replaceAll("/", "#")}#`;
 }
 
 // The header Next stamps a route's cache tags onto. For page and route kinds the

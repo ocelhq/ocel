@@ -2,17 +2,18 @@ import { DynamoDBClient, QueryCommand, UpdateItemCommand } from "@aws-sdk/client
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 
-import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
-
-import { adoptedObjectStore } from "./object-store.mjs";
 import {
   isGuardRejection,
   tagRecordUpdate,
+  tagSnapshotKey,
   tagSortKey,
+  type StoredTagSnapshot,
   type TagRecordUpdate,
-} from "./tag-index.mjs";
+  type TagSnapshot,
+  type TagSnapshotStore,
+} from "@ocel/next-cache";
 
-export type { TagRecordUpdate } from "./tag-index.mjs";
+import { adoptedObjectStore } from "./object-store.mjs";
 
 // A `use cache` entry exactly as it sits in object storage: the metadata and the
 // body in one JSON document, so a read is a single GET and a write is atomic
@@ -36,32 +37,6 @@ export interface TagRecordRow extends TagRecordUpdate {
 export interface TagRecordPage {
   records: TagRecordRow[];
   cursor?: unknown;
-}
-
-// A snapshot as it was found, with the version the next write conditions on. A
-// null etag means the object exists but the store named no version for it, which
-// is a write that has to proceed unconditionally rather than one that can never
-// satisfy its precondition.
-export interface StoredTagSnapshot {
-  snapshot: TagSnapshot;
-  etag: string | null;
-}
-
-// TagSnapshotStore is the edge's replica of the tag clock, addressed as one
-// object under compare-and-swap. Only ever written by the publisher and only
-// ever read by it to merge — the authoritative clock is the state table.
-export interface TagSnapshotStore {
-  // Throws rather than reporting an unparseable snapshot as absent. Replacing
-  // one would publish a snapshot with no deploy anchor, and since the anchor is
-  // written only by the deploy's genesis seed, that disables pruning for the
-  // life of the build. Declining costs one build until its next deploy re-seeds
-  // — and the edge already falls open on a snapshot it cannot parse — where
-  // clobbering the anchor is unbounded.
-  read(): Promise<StoredTagSnapshot | null>;
-  // `prior` is what the write is conditioned on, or null to create the object
-  // where none existed. False means the precondition failed: another publisher
-  // got there first and the caller must re-read and merge onto their write.
-  write(snapshot: TagSnapshot, prior: StoredTagSnapshot | null): Promise<boolean>;
 }
 
 // UseCacheStore is the plural cache handlers' whole view of their backing

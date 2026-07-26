@@ -13,8 +13,7 @@ export interface FetchCacheEntry {
 //
 // `scope` is the deployment's ISR prefix (`prod/proj/app/build`). The worker
 // needs nothing else to address a deployment: the entries sit under that prefix,
-// and the DynamoDB tag namespace is derived from the same string — the deploy
-// spells it `TAG#` + the prefix with `/` replaced by `#` + `#`.
+// and the DynamoDB tag namespace is derived from the same string (tagNamespace).
 export interface EdgeCacheRpc {
   // null on a miss, and also when the entry's tags have been invalidated — the
   // worker owns tag evaluation because it owns the clock.

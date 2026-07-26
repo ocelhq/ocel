@@ -11,12 +11,16 @@ import {
   providerObjectStore,
   type ObjectStore,
 } from "./object-store.mjs";
-import { isGuardRejection, tagRecordUpdate } from "./tag-index.mjs";
 
 // The entry and tag-record shapes are the shared ISR contract — the same the
 // edge worker reads — so they live in @ocel/next-cache and are re-exported here
 // for the handler and its tests.
-import type { CacheEntryFile, TagRecord } from "@ocel/next-cache";
+import {
+  isGuardRejection,
+  tagRecordUpdate,
+  type CacheEntryFile,
+  type TagRecord,
+} from "@ocel/next-cache";
 
 export type { CacheEntryFile, TagRecord } from "@ocel/next-cache";
 

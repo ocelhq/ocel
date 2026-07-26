@@ -126,6 +126,11 @@ type isrConfig struct {
 // under in the shared state table. It mirrors the S3 prefix so one identity
 // governs both stores. Building it from the same Prefix is what lets isrPolicy
 // scope DynamoDB with a single LeadingKeys wildcard.
+//
+// The edge derives the same namespace from the same prefix in TypeScript
+// (tagNamespace in @ocel/next-cache) and reaches DynamoDB under this grant. The
+// two spellings are held together by the checked-in edge contract fixture, which
+// each side asserts its own against.
 func (c isrConfig) tagNamespace() string {
 	return "TAG#" + strings.ReplaceAll(c.Prefix, "/", "#") + "#"
 }

@@ -2,6 +2,8 @@ package deploy
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -303,6 +305,33 @@ func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
 	// the template alone controls.
 	if env["OCEL_STATE_TABLE_INDEX"] != bootstrap.StateTableIndexName {
 		t.Errorf("OCEL_STATE_TABLE_INDEX = %q, want %q", env["OCEL_STATE_TABLE_INDEX"], bootstrap.StateTableIndexName)
+	}
+}
+
+// TestTagNamespace_MatchesTheEdgeContract pins the namespace this deploy grants
+// to the one the edge derives for itself. The Lambda tier is handed the finished
+// string in its env, so the only other spelling is TypeScript's tagNamespace() —
+// and since neither side calls the other, the fixture is what fails when one of
+// them moves. The edge reader's own test asserts against the same file.
+func TestTagNamespace_MatchesTheEdgeContract(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "packages", "next-cache", "fixtures", "edge-contract.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var contract struct {
+		TagNamespace struct {
+			ISRPrefix          string `json:"isrPrefix"`
+			PartitionKeyPrefix string `json:"partitionKeyPrefix"`
+		} `json:"tagNamespace"`
+	}
+	if err := json.Unmarshal(body, &contract); err != nil {
+		t.Fatalf("parse fixture: %v", err)
+	}
+
+	cfg := isrConfig{Prefix: contract.TagNamespace.ISRPrefix}
+	if got := cfg.tagNamespace(); got != contract.TagNamespace.PartitionKeyPrefix {
+		t.Errorf("tagNamespace() = %q, want %q", got, contract.TagNamespace.PartitionKeyPrefix)
 	}
 }
 

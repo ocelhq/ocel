@@ -46,3 +46,64 @@ export function mergeSnapshot(
 
   return { version: 1, deployedAt, generatedAt: at, records: merged };
 }
+
+// A snapshot as it was found, with the version the next write conditions on. A
+// null etag means the object exists but the store named no version for it, which
+// is a write that has to proceed unconditionally rather than one that can never
+// satisfy its precondition.
+export interface StoredTagSnapshot {
+  snapshot: TagSnapshot;
+  etag: string | null;
+}
+
+// TagSnapshotStore is the edge's replica of the tag clock, addressed as one
+// object under compare-and-swap. Only ever written by a publisher and only ever
+// read by one to merge — the authoritative clock is the state table.
+//
+// This is the whole of what differs between the two publishers: the Lambda
+// reaches the replica over the S3-compatible API and spells the precondition
+// If-Match/If-None-Match, the worker over a native R2 binding and spells it
+// etagMatches/etagDoesNotMatch. The loop below is the same on both.
+export interface TagSnapshotStore {
+  // Throws rather than reporting an unparseable snapshot as absent. Replacing
+  // one would publish a snapshot with no deploy anchor, and since the anchor is
+  // written only by the deploy's genesis seed, that disables pruning for the
+  // life of the build. Declining costs one build until its next deploy re-seeds
+  // — and the edge already falls open on a snapshot it cannot parse — where
+  // clobbering the anchor is unbounded.
+  read(): Promise<StoredTagSnapshot | null>;
+  // `prior` is what the write is conditioned on, or null to create the object
+  // where none existed. False means the precondition failed: another publisher
+  // got there first and the caller must re-read and merge onto their write.
+  write(snapshot: TagSnapshot, prior: StoredTagSnapshot | null): Promise<boolean>;
+}
+
+// A publish loses only to another publisher landing first, and each retry starts
+// from that publisher's snapshot. Convergence does not depend on winning: an
+// exhausted publisher's records are carried by the next publish from any
+// instance that has observed them, so the bound is small on purpose.
+const publishAttempts = 3;
+
+// Publishes `records` as this build's replica: read, merge, conditional write,
+// retry on precondition failure. False when every attempt lost.
+//
+// Because the merge only moves watermarks upward, whichever writer wins a race
+// produces a snapshot that contains both writers' invalidations, so no
+// invalidation can be lost — and a publish that fails outright is repaired by
+// the next one from any instance that has observed the same events.
+//
+// Throws whatever the store throws, including on a stored snapshot that cannot
+// be parsed: the caller's failure path is to leave the replica alone, which is
+// the whole point of not replacing an unreadable one.
+export async function publishTagSnapshot(
+  store: TagSnapshotStore,
+  records: Map<string, TagRecord>,
+  at: number,
+): Promise<boolean> {
+  for (let attempt = 0; attempt < publishAttempts; attempt++) {
+    const stored = await store.read();
+    const merged = mergeSnapshot(stored?.snapshot ?? null, records, at);
+    if (await store.write(merged, stored)) return true;
+  }
+  return false;
+}

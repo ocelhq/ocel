@@ -1,5 +1,9 @@
 {
   "tagSnapshotSuffix": "/tag-clock.json",
+  "tagNamespace": {
+    "isrPrefix": "prod/proj/web/BID",
+    "partitionKeyPrefix": "TAG#prod#proj#web#BID#"
+  },
   "cacheStoreEnv": {
     "bucket": "OCEL_ISR_STORE_BUCKET",
     "endpoint": "OCEL_ISR_STORE_ENDPOINT",

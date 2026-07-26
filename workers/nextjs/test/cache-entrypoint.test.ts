@@ -5,7 +5,7 @@ import { beforeEach, expect, it } from "vitest";
 import {
   CacheEntrypoint,
   createEdgeCache,
-  type SnapshotStore,
+  type SnapshotBucket,
 } from "../src/cache-entrypoint";
 import type { Env } from "../src/index";
 import type { AwsService } from "../src/signing";
@@ -20,11 +20,11 @@ const region = "eu-west-2";
 const bucket = "ocel-assets";
 const table = "ocel-state";
 
-// One R2 bucket serves every test, but the snapshot memo is keyed on the store
+// One R2 bucket serves every test, but the snapshot memo is keyed on the binding
 // *object* — so each test wraps the binding in its own delegate and keeps its
 // own isolate-local memo. Real R2 underneath, because whether the republish
 // converges is entirely a property of its etag preconditions.
-function snapshotStore(hooks: { onGet?: () => Promise<void> } = {}): SnapshotStore {
+function snapshotBucket(hooks: { onGet?: () => Promise<void> } = {}): SnapshotBucket {
   return {
     async get(key) {
       const object = await env.TAG_SNAPSHOT_STORE.get(key);
@@ -100,14 +100,14 @@ async function storedSnapshot(): Promise<TagSnapshot> {
 
 function cacheWith(
   aws: ReturnType<typeof awsRecorder>,
-  over: { store?: SnapshotStore; waitUntil?: (p: Promise<unknown>) => void; now?: () => number } = {},
+  over: { store?: SnapshotBucket; waitUntil?: (p: Promise<unknown>) => void; now?: () => number } = {},
 ) {
   return createEdgeCache({
     region,
     fetchBucket: bucket,
     table,
     aws: aws.send,
-    snapshots: over.store ?? snapshotStore(),
+    snapshots: over.store ?? snapshotBucket(),
     waitUntil: over.waitUntil ?? (() => {}),
     now: over.now ?? (() => 5_000),
   });
@@ -289,7 +289,7 @@ it("merges the invalidation into the published snapshot", async () => {
 it("converges when another publisher lands between the read and the write", async () => {
   await seedSnapshot({}, 100);
   let raced = false;
-  const store = snapshotStore({
+  const store = snapshotBucket({
     onGet: async () => {
       if (raced) return;
       raced = true;
@@ -316,7 +316,7 @@ it("converges when another publisher lands between the read and the write", asyn
 
 it("does not clobber a replica another publisher created first", async () => {
   let raced = false;
-  const store = snapshotStore({
+  const store = snapshotBucket({
     onGet: async () => {
       if (raced) return;
       raced = true;
@@ -361,7 +361,7 @@ it("leaves a replica it cannot read alone, without failing the route", async () 
 
 it("does not fail the route when every conditional write is lost", async () => {
   await seedSnapshot({}, 100);
-  const store = snapshotStore();
+  const store = snapshotBucket();
   const aws = awsRecorder(() => new Response("{}"));
 
   await expect(
@@ -376,7 +376,7 @@ it("sees its own invalidation on the very next read", async () => {
   const aws = awsRecorder((call) =>
     call.service === "s3" ? new Response(JSON.stringify(stored)) : new Response("{}"),
   );
-  const cache = cacheWith(aws, { store: snapshotStore() });
+  const cache = cacheWith(aws, { store: snapshotBucket() });
 
   // Warms this isolate's memo with the pre-invalidation snapshot.
   await seedSnapshot({ posts: { expired: 500 } });

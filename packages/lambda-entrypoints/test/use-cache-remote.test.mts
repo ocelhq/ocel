@@ -1,10 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
+import type { TagRecordUpdate } from "@ocel/next-cache";
 import type {
   UseCacheEntry,
   UseCacheStore,
   TagRecordPage,
   TagRecordRow,
-  TagRecordUpdate,
 } from "../src/next/use-cache-store.mjs";
 
 // A stand-in for the whole backing pair: an object store keyed by cache key, and
