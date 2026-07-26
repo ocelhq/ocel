@@ -11,6 +11,11 @@ import {
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
+import {
+  PHASE_DEVELOPMENT_SERVER,
+  PHASE_PRODUCTION_BUILD,
+} from "next/constants.js";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 // Absent OCEL_OUTPUT_DIR, onBuildComplete writes everything under
@@ -612,6 +617,62 @@ async function readCacheEntry(projectDir: string, key: string) {
     ),
   );
 }
+
+// Turbopack rewrites config.cacheHandler to a project-relative path, and both it
+// and the page-data workers resolve the handler's own `require('next/…')` from
+// wherever the file physically sits — from inside a workspace package that is a
+// different copy of Next than the app builds with. Copying it into the app's own
+// tree is what makes the bare require resolve to the app's Next.
+test("copies the cache handler into the app tree and names it there", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!({} as never, {
+    phase: PHASE_PRODUCTION_BUILD,
+    nextVersion: "16.2.10",
+  });
+
+  const dest = join(projectDir, ".ocel/cache-handler.cjs");
+  expect(config.cacheHandler).toBe(dest);
+  expect(await readFile(dest, "utf8")).toBe(
+    await readFile(
+      fileURLToPath(new URL("../src/edge-cache-handler.cjs", import.meta.url)),
+      "utf8",
+    ),
+  );
+});
+
+// The plural map is bundled per entry into the edge chunks too, and our `use
+// cache` handlers reach the AWS SDK transitively — naming them here would drag
+// it into every edge bundle. They stay a post-build patch of the node manifest.
+test("names the singular handler only, never the 'use cache' map", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!({ cacheMaxMemorySize: 1 } as never, {
+    phase: PHASE_PRODUCTION_BUILD,
+    nextVersion: "16.2.10",
+  });
+
+  expect(config.cacheHandlers).toBeUndefined();
+  expect(config.cacheMaxMemorySize).toBe(0);
+});
+
+test("leaves a non-build phase untouched and writes nothing", async () => {
+  const projectDir = await mkdtemp(join(tmpdir(), "ocel-next-cfg-"));
+  const adapter = await loadAdapterIn(projectDir);
+
+  const config = await adapter.modifyConfig!({ cacheMaxMemorySize: 1 } as never, {
+    phase: PHASE_DEVELOPMENT_SERVER,
+    nextVersion: "16.2.10",
+  });
+
+  expect(config.cacheHandler).toBeUndefined();
+  expect(config.cacheMaxMemorySize).toBe(1);
+  await expect(
+    readFile(join(projectDir, ".ocel/cache-handler.cjs"), "utf8"),
+  ).rejects.toThrow();
+});
 
 // The runtime resolves nextConfig.cacheHandler through
 // formatDynamicImportPath(distDir, path), which only leaves the value alone
