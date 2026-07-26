@@ -44,7 +44,7 @@ const RSC_FORWARD_HEADERS = new Set([
   "next-url",
 ]);
 
-interface Env {
+export interface Env {
   // The service binding to the shared deployments-store worker (ADR 0002),
   // through which the active Deployment is resolved at request time.
   DEPLOYMENTS: DeploymentsBinding;
@@ -70,6 +70,16 @@ interface Env {
   // provider's trust boundary — where the Function URLs are not IAM-gated.
   OCEL_EDGE_ACCESS_KEY_ID?: string;
   OCEL_EDGE_SECRET_KEY?: string;
+  // The account-global stores the cache entrypoint addresses under those
+  // credentials, and the region they live in. Nothing here is per-deployment —
+  // bootstrap provisions one table and one bucket for the whole account — so
+  // they ride as worker vars rather than in each Deployment record; what scopes
+  // them to one app is the ISR prefix the record already carries. Optional like
+  // every other binding: a substrate that binds none of them leaves the edge
+  // uncached rather than failing to boot.
+  OCEL_AWS_REGION?: string;
+  OCEL_STATE_TABLE?: string;
+  OCEL_ISR_BUCKET?: string;
   // The dynamic-worker loader the Deployment's edge bundle is compiled through.
   // Optional so a substrate without the binding degrades to a 500 on the edge
   // routes alone rather than failing to boot.
