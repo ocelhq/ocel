@@ -2,13 +2,21 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, serve, type RouteDeps } from "../src/index";
-import { createEdgeInvoker, type EdgeInvoker } from "../src/edge";
+import {
+  createEdgeInvoker,
+  type EdgeCacheBinding,
+  type EdgeInvoker,
+} from "../src/edge";
 import type { AssetBucket } from "../src/assets";
 import type { ObjectStoreReader } from "../src/tag-clock";
 
 declare module "cloudflare:test" {
   interface ProvidedEnv {
     LOADER: WorkerLoader;
+    // Stands in for the ctx.exports loopback the worker hands the bundle: a real
+    // remote stub, which is the only kind that crosses into a loaded worker's
+    // env at all.
+    DEPLOYMENTS: Fetcher;
   }
 }
 
@@ -30,6 +38,7 @@ export default {
     globalThis.AsyncLocalStorage ??= AsyncLocalStorage
     globalThis.process ??= { env: {} }
     Object.assign(globalThis.process.env, env)
+    globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }
     const k = ctx.props.entryKey
     const e = ENTRIES[k]
     if (!e) return new Response(\`unknown edge entry \${k}\`, { status: 500 })
@@ -77,6 +86,7 @@ let bundles = 0;
 function invokerFor(
   handlers: Record<string, string>,
   chunkSource: (entryKey: string, handler: string) => string = chunkFor,
+  cache?: EdgeCacheBinding,
 ): EdgeInvoker {
   const chunks: Record<string, string> = {};
   const entries: Record<string, EdgeEntry> = {};
@@ -113,6 +123,7 @@ function invokerFor(
       compatFlags: ["nodejs_compat"],
     },
     store,
+    cache,
   );
 }
 
@@ -803,5 +814,47 @@ describe("edge-parented prerenders", () => {
     );
 
     expect(res.status).toBe(502);
+  });
+});
+
+describe("the cache loopback", () => {
+  // The cache binding reaches the bundle through the load-time env, which the
+  // loader evaluates once per isolate — so it has to keep working for every
+  // request that isolate goes on to serve, not just the one that compiled it.
+  it("stays live across every request a warm isolate serves", async () => {
+    const edge = invokerFor(
+      {
+        e: `async () => {
+          const cache = globalThis.__OCEL_EDGE_CACHE
+          const probe = await cache.rpc.fetch("https://loopback/")
+          return new Response(cache.scope + ":" + probe.status)
+        }`,
+      },
+      chunkFor,
+      { rpc: env.DEPLOYMENTS, scope: "prod/proj/app/build" },
+    );
+
+    for (let i = 0; i < 3; i++) {
+      const response = await edge("e", new Request("https://x/"));
+      expect(await response.text()).toBe("prod/proj/app/build:501");
+    }
+  });
+
+  it("leaves the bundle's own env intact", async () => {
+    const edge = invokerFor(
+      { e: `async () => new Response(process.env.__NEXT_BUILD_ID)` },
+      chunkFor,
+      { rpc: env.DEPLOYMENTS, scope: "prod/proj/app/build" },
+    );
+    expect(await (await edge("e", new Request("https://x/"))).text()).toBe("t");
+  });
+
+  // A deployment served by a substrate that binds no cache store gets no
+  // loopback, and must still run its edge routes.
+  it("is simply absent when nothing bound one", async () => {
+    const edge = invokerFor({
+      e: `async () => new Response(String(globalThis.__OCEL_EDGE_CACHE.rpc))`,
+    });
+    expect(await (await edge("e", new Request("https://x/"))).text()).toBe("undefined");
   });
 });

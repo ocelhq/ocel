@@ -42,10 +42,19 @@ export type EdgeInvoker = (
   request: Request,
 ) => Promise<Response>;
 
+// What the bundled cache handler is given to reach storage: the main worker's
+// own CacheEntrypoint as a loopback binding, and the deployment scope every call
+// names. The edge holds no credentials, so this stub is its entire cache.
+export interface EdgeCacheBinding {
+  rpc: unknown;
+  scope: string;
+}
+
 export function createEdgeInvoker(
   loader: WorkerLoader,
   workers: EdgeWorkers,
   store: ObjectStoreReader,
+  cache?: EdgeCacheBinding,
 ): EdgeInvoker {
   const load = async (): Promise<WorkerLoaderWorkerCode> => {
     const object = await store.get(workers.bundleKey);
@@ -76,10 +85,17 @@ export function createEdgeInvoker(
       compatibilityFlags: workers.compatFlags,
       mainModule: bundle.mainModule,
       modules,
-      // The bundle's own env and nothing else: the chunks read it off
-      // process.env at module scope, and no binding is reachable from an edge
-      // entry while edge ISR stays out of scope (bd ocelhq-b7l).
-      env: bundle.env ?? {},
+      // The bundle's own env, which the chunks read off process.env at module
+      // scope, plus the one binding an edge entry may reach: the cache loopback.
+      // It travels in the load-time env rather than per request because this
+      // env is evaluated once per isolate and outlives every request the isolate
+      // serves — a stub taken from a request's ctx would be disposed at the end
+      // of whichever request cold-started it, leaving requests 2..N holding a
+      // dead one.
+      env: {
+        ...(bundle.env ?? {}),
+        ...(cache && { OCEL_CACHE_RPC: cache.rpc, OCEL_CACHE_SCOPE: cache.scope }),
+      },
     };
   };
 
