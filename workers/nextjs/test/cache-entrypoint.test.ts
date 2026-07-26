@@ -201,6 +201,25 @@ it("skips an oversized entry rather than failing the render", async () => {
   expect(pending).toHaveLength(0);
 });
 
+// Next's node entry templates are bundled into every edge chunk as dead code, so
+// a future Next could route a page-kind write through here with no change on our
+// side. The bundled client refuses one too, but a build's bundle keeps running
+// against a worker deployed long after it — so the invariant has to be enforced
+// on the side that cannot be replaced by an old bundle.
+it.each(["APP_PAGE", "APP_ROUTE", "PAGES", undefined])(
+  "refuses to store a %s entry rather than corrupting the fetch cache",
+  async (kind) => {
+    const aws = awsRecorder();
+    const { pending, waitUntil } = waitUntilRecorder();
+
+    await expect(
+      cacheWith(aws, { waitUntil }).fetchSet(scope, "abc123", entry({ kind }), []),
+    ).rejects.toThrow(/fetch entries only/);
+    expect(aws.calls).toHaveLength(0);
+    expect(pending).toHaveLength(0);
+  },
+);
+
 it("does not surface a failed write to the caller", async () => {
   const aws = awsRecorder(() => {
     throw new Error("s3 down");
