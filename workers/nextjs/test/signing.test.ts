@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { edgeOriginFetch, lambdaRegion } from "../src/signing";
+import { awsServiceFetch, edgeOriginFetch, lambdaRegion } from "../src/signing";
 
 describe("lambdaRegion", () => {
   it("parses the region out of a Function URL host", () => {
@@ -96,5 +96,63 @@ describe("edgeOriginFetch", () => {
     await expect(
       origin(new Request("https://fn.example.com/x")),
     ).rejects.toThrow(/non-Function-URL host/);
+  });
+});
+
+describe("awsServiceFetch", () => {
+  // Captures the request aws4fetch actually put on the wire.
+  async function capture(
+    call: (send: ReturnType<typeof awsServiceFetch>) => Promise<unknown>,
+  ): Promise<Request> {
+    let sent: Request | undefined;
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      sent = new Request(input as RequestInfo, init);
+      return new Response("ok");
+    }) as typeof fetch;
+    try {
+      await call(awsServiceFetch("AKIAEXAMPLE", "secretkey", "eu-west-2"));
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+    return sent!;
+  }
+
+  it("is undefined when a credential or the region is missing", () => {
+    expect(awsServiceFetch(undefined, "s", "eu-west-2")).toBeUndefined();
+    expect(awsServiceFetch("k", undefined, "eu-west-2")).toBeUndefined();
+    expect(awsServiceFetch("k", "s", undefined)).toBeUndefined();
+    expect(awsServiceFetch("k", "s", "")).toBeUndefined();
+  });
+
+  it("signs an S3 read against the bound region and the s3 service", async () => {
+    const sent = await capture((send) =>
+      send!("s3", "https://bucket.s3.eu-west-2.amazonaws.com/prod/p/a/b/x.json"),
+    );
+    const auth = sent.headers.get("authorization") ?? "";
+    expect(auth).toContain("/eu-west-2/s3/aws4_request");
+    // S3 rejects a request whose payload hash is neither computed nor declared.
+    expect(sent.headers.get("x-amz-content-sha256")).toBeTruthy();
+  });
+
+  it("signs a DynamoDB call's x-amz-target, which the API requires", async () => {
+    const body = JSON.stringify({ TableName: "state" });
+    const sent = await capture((send) =>
+      send!("dynamodb", "https://dynamodb.eu-west-2.amazonaws.com/", {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-amz-json-1.0",
+          "x-amz-target": "DynamoDB_20120810.UpdateItem",
+        },
+        body,
+      }),
+    );
+    const auth = sent.headers.get("authorization") ?? "";
+    expect(auth).toContain("/eu-west-2/dynamodb/aws4_request");
+    const signedHeaders = /SignedHeaders=([^,]+)/.exec(auth)?.[1] ?? "";
+    expect(signedHeaders).toContain("host");
+    expect(signedHeaders).toContain("x-amz-target");
+    // The body reaches DynamoDB verbatim; the signature covers its hash.
+    expect(await sent.text()).toBe(body);
   });
 });
