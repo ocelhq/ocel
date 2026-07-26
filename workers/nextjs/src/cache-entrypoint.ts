@@ -9,10 +9,6 @@
 // they stay in the account's own S3 bucket and never reach an adopted edge
 // store; tag records stay authoritative in DynamoDB; the edge reads tag state
 // from the R2 replica the publisher republishes.
-//
-// Every method is fetch-scoped by name, which is what makes the "no page-level
-// entry ever reaches here" rule an invariant rather than an assumption: there is
-// no door a page kind could come through.
 import {
   isGuardRejection,
   mergeSnapshot,
@@ -134,6 +130,19 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
     // Nothing here throws either, and for the same reason a read does not: a
     // cache that cannot store something declines to store it.
     async fetchSet(scope, key, entry, tags) {
+      // The one thing here that does throw, and the only door a page-level entry
+      // could come through. Next's node entry templates are bundled into every
+      // edge chunk as dead code (bd ocelhq-b7l), so a Next bump that started
+      // routing a page write through the edge would arrive here with no change
+      // on our side and silently compete with the worker's own ISR write-back
+      // for the same key. The bundled client refuses one too, but a build's
+      // bundle keeps running against a worker deployed long after it — so the
+      // invariant lives on the side an old bundle cannot outlive.
+      if (entry.value?.kind !== "FETCH") {
+        throw new Error(
+          `ocel: the edge cache stores fetch entries only, got kind ${entry.value?.kind}`,
+        );
+      }
       try {
         // Tags are stamped onto the stored value, which is where both tiers'
         // readers look for them (tagsOf), so an entry either tier writes is
