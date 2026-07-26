@@ -105,6 +105,10 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
         const all = entryTags(entry, tags);
         if (all.length === 0) return entry;
 
+        // No PoP cache in front of this read, unlike the serving tiers': this is
+        // the same isolate that republishes the snapshot, and a PoP entry is not
+        // something a writer can drop the way it drops its memo. The serving
+        // tiers can afford the cache's TTL because they only read.
         const clock = createTagClock({ isrPrefix: scope }, { store: deps.store });
         // Unknown never serves. The colo tier decides the other way, but it is
         // already holding the bytes and its own refresh is what repairs the
