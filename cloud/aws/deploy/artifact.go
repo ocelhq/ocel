@@ -220,6 +220,13 @@ func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, conte
 	if err != nil {
 		return err
 	}
+	return putArtifact(ctx, up, bucket, key, contentType, data)
+}
+
+// putArtifact writes bucket/key unconditionally, replacing whatever is there.
+// It is what a key that is not content-addressed has to use: skip-if-exists is
+// only safe when the key changes whenever the bytes do.
+func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentType string, data []byte) error {
 	in := &s3.PutObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),

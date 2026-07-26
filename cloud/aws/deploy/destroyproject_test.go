@@ -151,4 +151,7 @@ func TestProjectPrefixes_TrailingSlashScopesToProject(t *testing.T) {
 	if p := projectISRPrefix("prod", "shop"); p != "prod/shop/" {
 		t.Errorf("projectISRPrefix = %q, want prod/shop/", p)
 	}
+	if p := projectEdgeR2Prefix("shop"); p != "edge/shop/" {
+		t.Errorf("projectEdgeR2Prefix = %q, want edge/shop/", p)
+	}
 }

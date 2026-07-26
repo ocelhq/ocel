@@ -27,6 +27,12 @@
   "services": [
     { "binding": "DEPLOYMENTS", "service": "deployments-store" },
   ],
+  // Next's edge outputs (middleware, `runtime: 'edge'` routes) are compiled from
+  // the Deployment's own bundle at request time, so no script is uploaded and a
+  // rollback stays a pointer flip (ADR 0002).
+  "worker_loaders": [
+    { "binding": "LOADER" },
+  ],
   /**
    * Smart Placement
    * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

@@ -178,10 +178,28 @@ type DeploymentRecord struct {
 	// the two lifecycles never collide.
 	IsrPrefix string `json:"isrPrefix"`
 	CreatedAt int64  `json:"createdAt"`
-	// EdgeWorkers is a reserved, unused slot for future deployment-owned edge
-	// workers (Next edge routes/middleware), carried so wiring that later
-	// needs no record migration.
-	EdgeWorkers any `json:"edgeWorkers,omitempty"`
+	// EdgeWorkers is this build's deployment-owned edge code (Next edge
+	// routes/middleware): where its bundle lives and what runtime to evaluate
+	// it under. Omitted when the build produced no edge output at all.
+	EdgeWorkers *Code `json:"edgeWorkers,omitempty"`
+}
+
+// Code is one build's dynamically-loaded edge code, as the frozen worker reads
+// it back off the Deployment record: it GETs BundleKey from the object store and
+// hands those bytes to its CodeLoader under ID. Mirrors EdgeWorkers in
+// workers/deployments-store/src/store.ts.
+type Code struct {
+	// BundleKey is the full R2 key this build's edge bundle was uploaded
+	// under. Build-scoped, never content-addressed: pruning a build reclaims
+	// its whole prefix, so two builds sharing one key would let an old
+	// deployment's prune delete the bundle a live one still loads.
+	BundleKey string `json:"bundleKey"`
+	// ID keys the loaded code in the edge's loader cache — same id, same code —
+	// so it hashes the runtime settings below alongside the bundle bytes: they
+	// are as much a part of what gets evaluated as the source is.
+	ID          string   `json:"id"`
+	CompatDate  string   `json:"compatDate"`
+	CompatFlags []string `json:"compatFlags"`
 }
 
 // Promotion is the project-wide unit one production deploy produces: a

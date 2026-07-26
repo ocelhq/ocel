@@ -92,6 +92,9 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err := uploadStaticAssets(ctx, cfg, manifest); err != nil {
 		return Result{}, err
 	}
+	if err := uploadEdgeBundles(ctx, cfg, manifest); err != nil {
+		return Result{}, err
+	}
 
 	builds, err := assignBuildIDs(cfg, manifest)
 	if err != nil {
@@ -597,6 +600,12 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	if isr := caches[name]; isr != nil {
 		record.IsrPrefix = isr.Prefix
 	}
+
+	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetProjectId(), name, buildID)
+	if err != nil {
+		return edge.DeploymentRecord{}, err
+	}
+	record.EdgeWorkers = edgeWorkers
 	return record, nil
 }
 

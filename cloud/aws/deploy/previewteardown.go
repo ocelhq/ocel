@@ -221,14 +221,16 @@ func planPreviewProjectTeardown(ctx context.Context, cfg Config, projectID strin
 }
 
 // purgePreviewAssets deletes a project's whole preview R2/S3 footprint: its
-// static assets (env-agnostic, one project-rooted prefix) and each pointer's
-// env-scoped ISR/prerender entries (in both the asset bucket and the cache
-// store). Deleting a prefix nothing was written to is a no-op.
+// static assets and edge bundles (env-agnostic, one project-rooted prefix
+// each) and each pointer's env-scoped ISR/prerender entries (in both the asset
+// bucket and the cache store). Deleting a prefix nothing was written to is a
+// no-op.
 func purgePreviewAssets(ctx context.Context, cfg Config, projectID string, pointers []string) error {
 	var errs []error
-	assets := projectAssetR2Prefix(projectID)
-	if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, assets); err != nil {
-		errs = append(errs, err)
+	for _, prefix := range []string{projectAssetR2Prefix(projectID), projectEdgeR2Prefix(projectID)} {
+		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, prefix); err != nil {
+			errs = append(errs, err)
+		}
 	}
 	for _, pointer := range pointers {
 		isr := projectISRPrefix("preview-"+pointer, projectID)

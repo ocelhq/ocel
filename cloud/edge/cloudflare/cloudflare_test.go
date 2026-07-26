@@ -462,3 +462,77 @@ func TestHashAsset_MatchesWranglerAlgorithm(t *testing.T) {
 		t.Errorf("hash must be 32 hex chars")
 	}
 }
+
+// The API's binding type is the singular "worker_loader" — the plural
+// "worker_loaders" is wrangler's config key, which this endpoint rejects.
+func TestScriptBindings_MapsTheCodeLoaderToAWorkerLoader(t *testing.T) {
+	worker := edge.Worker{
+		Main:          edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+		LoaderBinding: "LOADER",
+	}
+
+	loaders := bindingsByType(metadataFromMultipart(t, worker, ""), "worker_loader")
+	if len(loaders) != 1 {
+		t.Fatalf("got %d worker_loader bindings, want 1", len(loaders))
+	}
+	if loaders[0]["name"] != "LOADER" {
+		t.Errorf("worker_loader binding name = %v, want LOADER", loaders[0]["name"])
+	}
+}
+
+// A worker that loads no code of its own — the deployments-store worker, say —
+// uploads exactly as it did before there was a loader.
+func TestScriptBindings_NoCodeLoaderEmitsNoLoaderBinding(t *testing.T) {
+	worker := edge.Worker{
+		Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+		Vars: map[string]string{"FUNCTION_URLS": "{}"},
+	}
+
+	meta := metadataFromMultipart(t, worker, "")
+	if got := bindingsByType(meta, "worker_loader"); len(got) != 0 {
+		t.Errorf("worker_loader bindings = %v, want none", got)
+	}
+	if got := len(bindingsByType(meta, "plain_text")); got != 1 {
+		t.Errorf("plain_text bindings = %d, want the worker's vars unchanged", got)
+	}
+}
+
+// The frozen generic worker arrives from its compiled bundle declaring no
+// bindings at all (production.go's loadWorkerBundle), so — exactly as with the
+// R2 store — bindCodeLoader has to supply the name, or the deployed worker has
+// no LOADER and every edge route fails closed.
+func TestBindCodeLoader_FrozenBundleStillGetsTheBinding(t *testing.T) {
+	frozen := edge.Worker{
+		Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+	}
+
+	composed := bindCodeLoader(bindObjectStore(frozen, map[string]string{valueKeyCacheBucket: "ocel-edge-cache"}))
+	meta := metadataFromMultipart(t, composed, "")
+
+	loaders := bindingsByType(meta, "worker_loader")
+	if len(loaders) != 1 {
+		t.Fatalf("got %d worker_loader bindings, want 1", len(loaders))
+	}
+	if loaders[0]["name"] != codeLoaderBinding {
+		t.Errorf("worker_loader binding name = %v, want %q", loaders[0]["name"], codeLoaderBinding)
+	}
+	if got := len(bindingsByType(meta, "r2_bucket")); got != 1 {
+		t.Errorf("r2_bucket bindings = %d, want the object store's binding to survive", got)
+	}
+}
+
+// The record's compat settings are the ones the loading worker itself was
+// uploaded with, so loaded code never runs on a runtime its parent does not.
+func TestCodeRuntime_ReportsTheUploadedScriptsCompatSettings(t *testing.T) {
+	loader, ok := New().(edge.CodeLoader)
+	if !ok {
+		t.Fatalf("cloudflare provider does not implement edge.CodeLoader")
+	}
+	date, flags := loader.CodeRuntime()
+	if date != compatDate {
+		t.Errorf("CodeRuntime date = %q, want %q", date, compatDate)
+	}
+	if len(flags) != len(compatFlags) || (len(flags) > 0 && flags[0] != compatFlags[0]) {
+		t.Errorf("CodeRuntime flags = %v, want %v", flags, compatFlags)
+	}
+}

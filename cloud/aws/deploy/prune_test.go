@@ -24,6 +24,7 @@ func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
 			Stack:       AppDeployStackName("proj1", "web", "build-1"),
 			AssetPrefix: appAssetR2Prefix("proj1", "web", "build-1"),
 			CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "build-1"),
+			EdgePrefix:  appEdgeR2Prefix("proj1", "web", "build-1"),
 		},
 		{
 			App:         "api",
@@ -31,10 +32,32 @@ func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
 			Stack:       AppDeployStackName("proj1", "api", "build-2"),
 			AssetPrefix: appAssetR2Prefix("proj1", "api", "build-2"),
 			CachePrefix: appAssetPrefixFor("prod", "proj1", "api", "build-2"),
+			EdgePrefix:  appEdgeR2Prefix("proj1", "api", "build-2"),
 		},
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+	}
+}
+
+// A reclaimed build must give its edge bundle up too, under the same
+// build-scoped prefix uploadEdgeBundles published it at — nothing else sweeps
+// it, and the prefix belongs to exactly one build, so no live deployment can
+// lose the bundle it loads from.
+func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
+	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"})
+	if err != nil {
+		t.Fatalf("ReclaimTargets: %v", err)
+	}
+	if want := "edge/proj1/web/build-1"; got[0].EdgePrefix != want {
+		t.Errorf("EdgePrefix = %q, want %q", got[0].EdgePrefix, want)
+	}
+	other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"})
+	if err != nil {
+		t.Fatalf("ReclaimTargets: %v", err)
+	}
+	if other[0].EdgePrefix == got[0].EdgePrefix {
+		t.Error("two builds of one app resolved the same edge prefix; pruning one would take the other's bundle")
 	}
 }
 

@@ -18,6 +18,10 @@ export default defineWorkersConfig({
 					serviceBindings: {
 						DEPLOYMENTS: () => new Response(null, { status: 501 }),
 					},
+					// The loader is local-only in miniflare, so the edge tests drive
+					// the real binding — a mock would prove nothing about whether a
+					// bundle actually compiles and runs.
+					workerLoaders: { LOADER: {} },
 				},
 			},
 		},

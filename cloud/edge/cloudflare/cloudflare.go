@@ -85,6 +85,12 @@ func New() edge.Provider {
 
 func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }
 
+// CodeRuntime reports the runtime a dynamically loaded worker is evaluated
+// under: the same settings every uploaded script is built against, so a
+// deployment's edge code never runs on a runtime the worker loading it does
+// not. It implements edge.CodeLoader.
+func (p *provider) CodeRuntime() (string, []string) { return compatDate, compatFlags }
+
 // Bootstrap provisions the substrate class's R2 cache store and reports
 // Cloudflare's trust posture. Cloudflare runs in its own account, outside any
 // cloud provider's trust boundary, so the provider must mint static credentials
@@ -220,7 +226,7 @@ func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.
 	if accountID == "" {
 		return edge.AppResult{}, fmt.Errorf("%s is not set; it is required to deploy to the Cloudflare edge", envAccountID)
 	}
-	up := upload{accountID: accountID, scriptName: app.Name, worker: bindObjectStore(app.Worker, app.Values)}
+	up := upload{accountID: accountID, scriptName: app.Name, worker: bindCodeLoader(bindObjectStore(app.Worker, app.Values))}
 
 	assetsJWT, err := p.uploadAssets(ctx, up)
 	if err != nil {
@@ -438,10 +444,25 @@ func bindObjectStore(worker edge.Worker, values map[string]string) edge.Worker {
 	return worker
 }
 
+// codeLoaderBinding is the name the Next.js worker reads its Worker Loader
+// under, the binding it evaluates a Deployment's own edge routes and middleware
+// through.
+const codeLoaderBinding = "LOADER"
+
+// bindCodeLoader gives an app worker Cloudflare's Worker Loader under the name
+// its code reads it from. Like the object store it is bound here rather than
+// declared by the worker: the frozen generic worker arrives from its compiled
+// bundle declaring nothing, and only an app worker loads deployment-owned code
+// — the deployments-store worker never does.
+func bindCodeLoader(worker edge.Worker) edge.Worker {
+	worker.LoaderBinding = codeLoaderBinding
+	return worker
+}
+
 // scriptBindings is the worker's binding set: the Assets Fetcher (only when
-// assets were uploaded), the object store as an R2 bucket, one service
-// binding per entry in Services, one plain-text binding per var, and one
-// secret_text binding per secret — values that must never surface in
+// assets were uploaded), the object store as an R2 bucket, the code loader, one
+// service binding per entry in Services, one plain-text binding per var, and
+// one secret_text binding per secret — values that must never surface in
 // plaintext metadata.
 func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 	bindings := []map[string]any{}
@@ -456,6 +477,14 @@ func scriptBindings(worker edge.Worker, includeAssets bool) []map[string]any {
 			"type":        "r2_bucket",
 			"name":        store.Binding,
 			"bucket_name": store.Bucket,
+		})
+	}
+	if worker.LoaderBinding != "" {
+		// The API's binding type is the singular "worker_loader"; the plural
+		// "worker_loaders" is wrangler's config key and is rejected here.
+		bindings = append(bindings, map[string]any{
+			"type": "worker_loader",
+			"name": worker.LoaderBinding,
 		})
 	}
 	for name, service := range worker.Services {
