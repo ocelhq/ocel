@@ -14,8 +14,12 @@ import "fmt"
 // account-global asset S3 bucket for prerender configs + fallbacks. Version 5
 // replaced the single-purpose sessions table with a generic pk/sk state table
 // shared by every Ocel state entity — a key-schema change, so CloudFormation
-// replaces the table and in-flight upload sessions are dropped.
-const RequiredBootstrapVersion = 5
+// replaces the table and in-flight upload sessions are dropped. Version 6 added
+// the state table's tag-sync index and widened the edge user's inline policy to
+// write the fetch cache and tag records; both are in-place updates, but neither
+// reaches an account that is never told to re-run bootstrap, and an edge running
+// under the narrower policy 403s every cache write.
+const RequiredBootstrapVersion = 6
 
 // Compatibility is the outcome of comparing the deployed bootstrap version
 // against the version a provider requires.
