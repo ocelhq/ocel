@@ -7,6 +7,17 @@
 // S3/DynamoDB calls) stays per-reader, since one speaks the AWS SDK and the
 // other signs raw HTTP.
 
+export {
+  isGuardRejection,
+  tagRecordUpdate,
+  tagSortKey,
+  type TagAttribute,
+  type TagRecordUpdate,
+  type TagUpdateItem,
+} from "./tag-index.mjs";
+export { latest, mergeRecord, mergeSnapshot } from "./tag-snapshot.mjs";
+export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
+
 // A cache entry exactly as it sits in S3: one object per route holding the html,
 // the RSC payload and any PPR segments together, so a read is a single GET and a
 // write is atomic. Binary bodies are base64 so the whole entry stays one JSON
