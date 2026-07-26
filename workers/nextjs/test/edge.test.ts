@@ -21,10 +21,13 @@ interface EdgeEntry {
 // process.env populated before the first chunk import, entry key read off
 // ctx.props.
 function shimFor(entries: Record<string, EdgeEntry>): string {
-  return `const ENTRIES = ${JSON.stringify(entries)}
+  return `import { AsyncLocalStorage } from "node:async_hooks"
+
+const ENTRIES = ${JSON.stringify(entries)}
 
 export default {
   async fetch(request, env, ctx) {
+    globalThis.AsyncLocalStorage ??= AsyncLocalStorage
     globalThis.process ??= { env: {} }
     Object.assign(globalThis.process.env, env)
     const k = ctx.props.entryKey
@@ -51,6 +54,19 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = { handler: ${handler} }
 `;
 }
 
+// A chunk that reaches a Node builtin the way Turbopack's edge chunks do:
+// `require` at module scope, synchronously, through its externalRequire helper.
+// Next compiles every edge entry that touches AsyncLocalStorage or Buffer this
+// way, so this is the shape a real bundle carries, not an exotic one.
+function nodeRequireChunkFor(entryKey: string): string {
+  return `const { Buffer } = require("node:buffer")
+globalThis._ENTRIES ??= {}
+globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
+  handler: async () => new Response(Buffer.from("required").toString()),
+}
+`;
+}
+
 // The loader keys its compiled worker on the record id, so every bundle gets a
 // fresh one — otherwise the second test to use the same id would run the first
 // test's code.
@@ -58,13 +74,16 @@ let bundles = 0;
 
 // invokerFor builds a real dynamic-worker invoker over a synthetic bundle: one
 // chunk per entry, served out of an in-memory store shaped like the R2 binding.
-function invokerFor(handlers: Record<string, string>): EdgeInvoker {
+function invokerFor(
+  handlers: Record<string, string>,
+  chunkSource: (entryKey: string, handler: string) => string = chunkFor,
+): EdgeInvoker {
   const chunks: Record<string, string> = {};
   const entries: Record<string, EdgeEntry> = {};
   let next = 0;
   for (const [entryKey, handler] of Object.entries(handlers)) {
     const id = `c/${next++}.js`;
-    chunks[id] = chunkFor(entryKey, handler);
+    chunks[id] = chunkSource(entryKey, handler);
     entries[entryKey] = { chunks: [id], handlerExport: "handler" };
   }
 
@@ -539,6 +558,68 @@ describe("edge dispatch", () => {
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("from-edge:/edge:t");
+  });
+
+  it("invokes an entry whose chunk requires a Node builtin", async () => {
+    const edge = invokerFor(
+      { "middleware_app/edge": "" },
+      (entryKey) => nodeRequireChunkFor(entryKey),
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
+      new Request("https://app.example/edge"),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/edge"],
+          routes: emptyRoutes,
+          dispatch: {
+            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+          },
+        },
+        edge,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("required");
+  });
+
+  it("invokes an entry whose chunk reads the AsyncLocalStorage global", async () => {
+    const edge = invokerFor(
+      { "middleware_app/edge": "" },
+      (entryKey) => `if (typeof AsyncLocalStorage !== "function") {
+  throw new Error("Invariant: AsyncLocalStorage accessed in runtime where it is not available")
+}
+const store = new AsyncLocalStorage()
+globalThis._ENTRIES ??= {}
+globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
+  handler: async () => store.run("scoped", () => new Response(store.getStore())),
+}
+`,
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
+      new Request("https://app.example/edge"),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/edge"],
+          routes: emptyRoutes,
+          dispatch: {
+            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+          },
+        },
+        edge,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("scoped");
   });
 
   it("returns 500 when the bundle cannot be read", async () => {
