@@ -87,7 +87,7 @@ func TestHandleInvocation_StreamsPreludeAndBody(t *testing.T) {
 	defer node.Close()
 
 	rt, cap := fakeRuntime(t, []byte(getEvent))
-	m := &Membrane{nodePort: portOf(t, node), client: &http.Client{}}
+	m := &Membrane{nodePort: portOf(t, node), client: newLoopbackClient()}
 
 	if err := handleInvocation(t.Context(), rt, m); err != nil {
 		t.Fatalf("handleInvocation: %v", err)
@@ -114,6 +114,117 @@ func TestHandleInvocation_StreamsPreludeAndBody(t *testing.T) {
 	}
 }
 
+// Every status Go's http.Client would otherwise follow on its own. The app owns
+// its redirects — NextResponse.redirect (307), permanentRedirect (308), a
+// next.config redirect (301/308), an auth guard (302/303) — so each must arrive
+// at the Runtime API as the app wrote it.
+func TestHandleInvocation_AppRedirectIsNotFollowed(t *testing.T) {
+	for _, status := range []int{
+		http.StatusMovedPermanently,
+		http.StatusFound,
+		http.StatusSeeOther,
+		http.StatusTemporaryRedirect,
+		http.StatusPermanentRedirect,
+	} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			var targetHits int
+			target := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				targetHits++
+				io.WriteString(w, "the redirect target's own body")
+			}))
+			defer target.Close()
+
+			node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				http.Redirect(w, r, target.URL, status)
+			}))
+			defer node.Close()
+
+			rt, cap := fakeRuntime(t, []byte(getEvent))
+			m := &Membrane{nodePort: portOf(t, node), client: newLoopbackClient()}
+
+			if err := handleInvocation(t.Context(), rt, m); err != nil {
+				t.Fatalf("handleInvocation: %v", err)
+			}
+
+			p, body := splitPrelude(t, cap.body)
+			if p.StatusCode != status {
+				t.Errorf("statusCode = %d, want %d", p.StatusCode, status)
+			}
+			if p.Headers["Location"] != target.URL {
+				t.Errorf("Location header = %q, want %q", p.Headers["Location"], target.URL)
+			}
+			if targetHits != 0 {
+				t.Errorf("bootstrap fetched the redirect target %d times; it must forward the 3xx untouched", targetHits)
+			}
+			if strings.Contains(string(body), "the redirect target's own body") {
+				t.Errorf("body = %q, want the app's redirect body, not the target's", body)
+			}
+		})
+	}
+}
+
+// A Function URL withholds the terminating chunk of a streamed response that
+// carries no body byte, hanging the client, so an empty body must leave as one
+// sentinel byte under the header that tells the edge to drop it again.
+func TestHandleInvocation_EmptyBodyTravelsAsSentinelByte(t *testing.T) {
+	for _, status := range []int{
+		http.StatusOK,
+		http.StatusTemporaryRedirect,
+		http.StatusNotFound,
+		http.StatusMethodNotAllowed,
+		http.StatusInternalServerError,
+	} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer node.Close()
+
+			rt, cap := fakeRuntime(t, []byte(getEvent))
+			m := &Membrane{nodePort: portOf(t, node), client: newLoopbackClient()}
+
+			if err := handleInvocation(t.Context(), rt, m); err != nil {
+				t.Fatalf("handleInvocation: %v", err)
+			}
+
+			p, body := splitPrelude(t, cap.body)
+			if p.StatusCode != status {
+				t.Errorf("statusCode = %d, want %d", p.StatusCode, status)
+			}
+			if p.Headers[emptyBodyHeader] != "1" {
+				t.Errorf("%s header = %q, want 1", emptyBodyHeader, p.Headers[emptyBodyHeader])
+			}
+			if string(body) != emptyBodySentinel {
+				t.Errorf("body = %q, want the sentinel byte %q", body, emptyBodySentinel)
+			}
+		})
+	}
+}
+
+// The sentinel is only for a body that has no bytes at all: a response with a
+// body must arrive byte-for-byte, unmarked, however small it is.
+func TestHandleInvocation_BodiedResponseIsUnmarkedAndIntact(t *testing.T) {
+	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		io.WriteString(w, "x")
+	}))
+	defer node.Close()
+
+	rt, cap := fakeRuntime(t, []byte(getEvent))
+	m := &Membrane{nodePort: portOf(t, node), client: newLoopbackClient()}
+
+	if err := handleInvocation(t.Context(), rt, m); err != nil {
+		t.Fatalf("handleInvocation: %v", err)
+	}
+
+	p, body := splitPrelude(t, cap.body)
+	if _, marked := p.Headers[emptyBodyHeader]; marked {
+		t.Errorf("bodied response carries %s; the edge would drop its body", emptyBodyHeader)
+	}
+	if string(body) != "x" {
+		t.Errorf("body = %q, want x", body)
+	}
+}
+
 func TestHandleInvocation_PreFirstByteFailureIs502(t *testing.T) {
 	// Reserve then release a port so nothing is listening → connection refused.
 	l, err := net.Listen("tcp", "127.0.0.1:0")
@@ -124,7 +235,7 @@ func TestHandleInvocation_PreFirstByteFailureIs502(t *testing.T) {
 	l.Close()
 
 	rt, cap := fakeRuntime(t, []byte(getEvent))
-	m := &Membrane{nodePort: deadPort, client: &http.Client{}}
+	m := &Membrane{nodePort: deadPort, client: newLoopbackClient()}
 
 	if err := handleInvocation(t.Context(), rt, m); err != nil {
 		t.Fatalf("handleInvocation: %v", err)
@@ -155,7 +266,7 @@ func TestHandleInvocation_MidStreamFailureSetsErrorTrailer(t *testing.T) {
 	defer node.Close()
 
 	rt, cap := fakeRuntime(t, []byte(getEvent))
-	m := &Membrane{nodePort: portOf(t, node), client: &http.Client{}}
+	m := &Membrane{nodePort: portOf(t, node), client: newLoopbackClient()}
 
 	if err := handleInvocation(t.Context(), rt, m); err != nil {
 		t.Fatalf("handleInvocation: %v", err)

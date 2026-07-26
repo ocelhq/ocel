@@ -431,7 +431,7 @@ async function dispatch(
   const doFetch = deps.fetch ?? fetch;
   // Function-URL forwards are signed; external rewrites and static assets are
   // not (they reach arbitrary hosts, so must never carry AWS credentials).
-  const doOrigin = deps.originFetch ?? doFetch;
+  const doOrigin = originFetch(deps);
   const url = new URL(request.url);
   // Middleware may have rewritten the request's headers; everything downstream
   // forwards those, not the ones the client sent.
@@ -522,7 +522,7 @@ async function dispatchPrerender(
   // Every Function-URL call this function makes is signed when edge credentials
   // are bound; an edge-rendered route has no Function URL at all and reaches its
   // renderer through the loader instead.
-  const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
+  const doFetch = originFetch(deps);
   const forwardUrl = originUrl(fnUrl ?? url.origin, url, result);
   const render = (rendered: Request) =>
     entryKey ? edgeResponse(deps, entryKey, rendered) : doFetch(rendered);
@@ -731,6 +731,30 @@ async function bufferBody(request: Request): Promise<ArrayBuffer | null> {
 
 function streamOf(body: ArrayBuffer | null): ReadableStream | null {
   return body === null ? null : new Blob([body]).stream();
+}
+
+// The membrane cannot answer a Function URL with a bodyless streamed response —
+// AWS would never terminate it, hanging this worker's own client — so an empty
+// body arrives as one sentinel byte under this header (see the membrane's
+// forward). Restoring the empty body is this hop's job, and it belongs to every
+// origin call rather than to one dispatch path: a prerender, a PPR resume and a
+// background revalidation all forward to the same Function URLs, and a sentinel
+// byte cached as page content would outlive the request that fetched it.
+const EMPTY_BODY_HEADER = "x-ocel-empty-body";
+
+// originFetch is how every Function-URL forward is made: signed when edge
+// credentials are bound, and always stripped of the sentinel body.
+function originFetch(deps: RouteDeps): typeof fetch {
+  const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
+  return (async (input, init) => {
+    const response = await doFetch(input as RequestInfo, init);
+    if (!response.headers.has(EMPTY_BODY_HEADER)) return response;
+
+    await response.body?.cancel();
+    const empty = new Response(null, response);
+    empty.headers.delete(EMPTY_BODY_HEADER);
+    return empty;
+  }) as typeof fetch;
 }
 
 // forward rebuilds a request against an origin URL under a chosen header set,

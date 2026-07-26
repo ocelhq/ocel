@@ -85,11 +85,40 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 	}
 	defer resp.Body.Close()
 
+	// A Function URL never terminates a streamed response that carries no body
+	// byte: it sends the headers and then holds the connection open forever,
+	// withholding the terminating chunk, so every empty-bodied response — a 404
+	// from notFound(), a 405, a redirect, an empty 200 — hangs its client. One
+	// body byte is enough to make it terminate, so an empty body travels as a
+	// single sentinel byte that the edge drops again (see emptyBodyHeader).
+	//
+	// The header announcing that rides in the prelude, so which case this is has
+	// to be known before the prelude is encoded: read the first byte first.
+	var first [1]byte
+	n, err := io.ReadFull(resp.Body, first[:])
+	if err != nil && err != io.EOF {
+		return true, m.fail(rw, fmt.Sprintf("read upstream body: %v", err))
+	}
+	empty := n == 0
+	if empty {
+		resp.Header.Set(emptyBodyHeader, "1")
+	}
+
 	prelude, err := encodePrelude(resp.StatusCode, resp.Header)
 	if err != nil {
 		return true, m.fail(rw, fmt.Sprintf("encode prelude: %v", err))
 	}
 	if _, err := rw.Write(prelude); err != nil {
+		return true, err
+	}
+
+	if empty {
+		if _, err := rw.Write([]byte(emptyBodySentinel)); err != nil {
+			return true, err
+		}
+		return true, rw.Close()
+	}
+	if _, err := rw.Write(first[:n]); err != nil {
 		return true, err
 	}
 
