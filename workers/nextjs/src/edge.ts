@@ -11,7 +11,8 @@ export interface EdgeWorkers {
   bundleKey: string;
   // Hashes the bundle bytes together with the compat settings below: the
   // loader's contract is "same id, same code", and compat is part of the code
-  // it compiles.
+  // it compiles. Everything deploy time decides, which is not the whole loader
+  // key — createEdgeInvoker scopes that by its load-time additions too.
   id: string;
   compatDate: string;
   compatFlags?: string[];
@@ -99,11 +100,23 @@ export function createEdgeInvoker(
     };
   };
 
+  // The loader compiles `load`'s result on a cold isolate and serves every later
+  // request for the same id out of that one, so the id must name every input to
+  // the code: the bundle bytes and compat settings workers.id hashes, plus
+  // whatever is added here at load time. Two deployments can share a bundle — a
+  // rollback, or preview and production of one build — and differ only in cache
+  // scope; keyed on workers.id alone they collapse onto one isolate and the
+  // second silently reads the first's cache. The loopback needs no place in the
+  // key beyond its presence: it is this script's own entrypoint, the same one for
+  // every deployment the script serves. JSON-encoded so no pair of values can
+  // spell another pair's id.
+  const id = `edge:${JSON.stringify([workers.id, cache?.scope ?? null])}`;
+
   // The entry key travels as ctx.props, never a header: the request reaches the
   // entry byte-exact, and no client can name an entry its URL never routed to.
   return (entryKey, request) =>
     loader
-      .get(`edge:${workers.id}`, load)
+      .get(id, load)
       .getEntrypoint<undefined>(undefined, { props: { entryKey } })
       .fetch(request);
 }
