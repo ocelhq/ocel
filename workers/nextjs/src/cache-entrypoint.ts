@@ -157,11 +157,23 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
       }
     },
 
-    // Two writes, and both are required. The DynamoDB record is authoritative
-    // and durable; the R2 snapshot is what the edge actually reads. A record
-    // written only to DynamoDB is invisible until some Lambda drains the tag
-    // index and republishes — and serving from the stale snapshot is exactly
-    // what stops any Lambda from running, so it would stay invisible for good.
+    // Two writes, and both are required, but only one may fail the caller. The
+    // DynamoDB record is authoritative and durable, so it is awaited and a real
+    // failure surfaces: an invalidation that did not record did not happen. The
+    // R2 snapshot is replication — what the edge reads, never what decides — so
+    // it can never surface. Next calls revalidateTag with no try/catch of its
+    // own and a Server Action awaits the drain before responding, so a throw out
+    // of the replication half would fail the very route raising the
+    // invalidation; a replica that cannot be replaced just leaves the edge
+    // reading the last one, exactly as the Lambda publisher's does
+    // (tag-clock.mts publish()).
+    //
+    // A record written only to DynamoDB is invisible until some Lambda drains
+    // the tag index and republishes — and serving from the stale snapshot is
+    // exactly what stops any Lambda from running — so the publish is awaited
+    // rather than deferred. It is the only thing that makes the invalidation
+    // visible at all, and it is what gives the isolate that raised it
+    // read-your-own-writes.
     async revalidateTags(scope, tags, durations) {
       if (tags.length === 0) return;
 
@@ -182,6 +194,8 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
       // behind it does not have.
       try {
         await publishSnapshot(deps, scope, new Map(tags.map((tag) => [tag, record])), at);
+      } catch (error) {
+        console.error("ocel: could not republish the tag snapshot", error);
       } finally {
         // This isolate has just replaced the document its memo holds, so the memo
         // is known-stale — and without the drop an edge route that invalidates
