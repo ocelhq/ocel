@@ -87,6 +87,9 @@ function invokerFor(
   handlers: Record<string, string>,
   chunkSource: (entryKey: string, handler: string) => string = chunkFor,
   cache?: EdgeCacheBinding,
+  // The bundle's loader id. Defaulted per bundle; named explicitly by the tests
+  // that need two deployments over one bundle, which share it.
+  id?: string,
 ): EdgeInvoker {
   const chunks: Record<string, string> = {};
   const entries: Record<string, EdgeEntry> = {};
@@ -118,7 +121,7 @@ function invokerFor(
     env.LOADER,
     {
       bundleKey,
-      id: `edge-${seq}`,
+      id: id ?? `edge-${seq}`,
       compatDate: "2026-03-10",
       compatFlags: ["nodejs_compat"],
     },
@@ -856,5 +859,46 @@ describe("the cache loopback", () => {
       e: `async () => new Response(String(globalThis.__OCEL_EDGE_CACHE.rpc))`,
     });
     expect(await (await edge("e", new Request("https://x/"))).text()).toBe("undefined");
+  });
+});
+
+describe("the loaded isolate's identity", () => {
+  // Counts the requests its own isolate has served, so isolate reuse is observed
+  // rather than inferred.
+  const servedCount = (entryKey: string) => `let served = 0
+globalThis._ENTRIES ??= {}
+globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
+  handler: async () =>
+    new Response(++served + ":" + globalThis.__OCEL_EDGE_CACHE.scope),
+}
+`;
+
+  const deployment = (id: string, scope: string) =>
+    invokerFor({ e: "" }, servedCount, { rpc: env.DEPLOYMENTS, scope }, id);
+
+  const serve = async (edge: EdgeInvoker) =>
+    (await edge("e", new Request("https://x/"))).text();
+
+  it("reuses one isolate across the requests of one deployment", async () => {
+    // The loader's contract is same id, same code, and it compiles only on a
+    // cold isolate: a key that varied per invoker or per request would recompile
+    // the bundle for every request it serves.
+    const prod = deployment("shared-bundle-a", "prod/p/app/b1");
+    const same = deployment("shared-bundle-a", "prod/p/app/b1");
+
+    expect(await serve(prod)).toBe("1:prod/p/app/b1");
+    expect(await serve(same)).toBe("2:prod/p/app/b1");
+  });
+
+  it("separates two deployments that share a bundle but not a scope", async () => {
+    // A rollback, or preview and production of one build: the same bundle bytes,
+    // hence the same workers.id, while the scope reaches the isolate only at
+    // load time. Keyed on the id alone the two collapse onto one isolate, and
+    // the second deployment silently reads the first's cache.
+    const prod = deployment("shared-bundle-b", "prod/p/app/b1");
+    const preview = deployment("shared-bundle-b", "preview/p/app/b1");
+
+    expect(await serve(prod)).toBe("1:prod/p/app/b1");
+    expect(await serve(preview)).toBe("1:preview/p/app/b1");
   });
 });

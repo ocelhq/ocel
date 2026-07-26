@@ -117,11 +117,17 @@ func appEdgeWorkers(cfg Config, projectID, app, buildID string) (*edge.Code, err
 	}, nil
 }
 
-// loaderID keys a bundle's code in the edge's loader cache, whose contract is
-// same id, same code. It folds the runtime settings in alongside the bytes
+// loaderID identifies a bundle's code in the edge's loader cache, whose contract
+// is same id, same code. It folds the runtime settings in alongside the bytes
 // because the loader evaluates the code under them: reusing an id across a
 // compat bump would leave warm isolates on the old runtime and cold ones on the
 // new, serving the same deployment two different ways.
+//
+// It covers what deploy time decides, which is not the whole loader key: the
+// worker adds values of its own when it loads the bundle, and scopes the key by
+// them there (see createEdgeInvoker). This id is deliberately blind to those —
+// the same bundle serves deployments that differ in them, and a host predating a
+// load-time value could not hash it anyway.
 func loaderID(bundle []byte, compatDate string, compatFlags []string) string {
 	h := sha256.New()
 	h.Write(bundle)
