@@ -25,6 +25,21 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
+// uploadConcurrency bounds every artifact and asset upload fan-out.
+//
+// This work is latency-bound rather than bandwidth- or memory-bound, which is
+// what sets the number. A round trip to the bucket costs ~250ms, so the
+// wall time of a fan-out tracks how many requests are in flight almost
+// linearly: 103 HeadObjects (the shape a re-deploy of unchanged functions
+// takes) run in 3.3s eight at a time and 0.9s sixty-four at a time, flattening
+// out beyond that. Payload size does not constrain the choice — a function's
+// zip tops out under a megabyte, so even this many in flight peaks well under
+// 100MB. PutObject is the exception: it saturates the uplink long before this
+// limit and does not respond to concurrency at all, so raising this speeds up
+// the presence checks and the many-small-files paths, not a cold upload of
+// changed function code.
+const uploadConcurrency = 64
+
 // ArtifactUploader is the subset of the S3 client the artifact upload path
 // needs: a presence check and a put. The aws-sdk-go-v2 S3 client satisfies it;
 // tests substitute a fake.
@@ -280,7 +295,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 	progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", 0, total)
 
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(8) // tune: bounded S3 conns + bounded peak memory
+	g.SetLimit(uploadConcurrency)
 
 	var mu sync.Mutex
 	for _, fn := range functions {

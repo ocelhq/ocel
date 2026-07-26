@@ -70,7 +70,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(8) // bounded R2/S3 conns, same budget uploadPrerenderAssets uses
+	g.SetLimit(uploadConcurrency)
 	for _, u := range uploads {
 		g.Go(func() error {
 			// An extension mime can't resolve stays "" so the worker's own
