@@ -554,40 +554,8 @@ test("re-reads and retries when another publisher wins the write", async () => {
   expect(records.ours!.expired).toBe(700);
 });
 
-// Every entry under a build's prefix was written at or after the build deployed,
-// so a record whose watermarks both sit at or before that instant can no longer
-// expire anything in it. Dropping those is what keeps the blob bounded on a
-// substrate that has been invalidating tags for months.
-test("prunes records that cannot apply to any entry in this build", async () => {
-  const store = fakeStore();
-  const publish = await publisher();
-  store.snapshots!.put(
-    snapshotOf(5_000, {
-      before: { expired: 4_000 },
-      atDeploy: { expired: 5_000 },
-      after: { expired: 6_000 },
-      staleOnly: { stale: 6_000 },
-    }),
-  );
-
-  await publish(store, new Map());
-
-  const records = store.snapshots!.current!.records;
-  expect(Object.keys(records).sort()).toEqual(["after", "staleOnly"]);
-});
-
-// Without the deploy's own timestamp there is no proof a record is inert, and
-// over-pruning would silently resurrect stale content at the edge.
-test("prunes nothing from a snapshot that was never anchored to a deploy", async () => {
-  const store = fakeStore();
-  const publish = await publisher();
-  store.snapshots!.put(snapshotOf(0, { ancient: { expired: 1 } }));
-
-  await publish(store, new Map());
-
-  expect(store.snapshots!.current!.records.ancient!.expired).toBe(1);
-});
-
+// Pruning itself is @ocel/next-cache's rule and is asserted there; what the
+// publisher owes it is the anchor, read back off the snapshot it is replacing.
 test("carries the build's deploy anchor forward across publishes", async () => {
   const store = fakeStore();
   const publish = await publisher();
