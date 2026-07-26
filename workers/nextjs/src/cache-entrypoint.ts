@@ -64,7 +64,8 @@ export interface EdgeCacheDeps {
 // So the cap is restored here rather than invented: it is the same bound the
 // node tier's writes are already held to, and an entry the node path would have
 // refused must not become a multi-megabyte RPC payload just by arriving from the
-// edge.
+// edge. Over it the entry is simply not cached, which is how a cache refuses;
+// raising would turn an oversized response into a broken render.
 const maxEntryBytes = 2 * 1024 * 1024;
 
 // Losing the conditional write means another publisher landed first, and each
@@ -129,26 +130,31 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
     // the request that wrote it, and a write that never lands costs one cache
     // entry: the next request renders again. The node tier defers its write for
     // the same reason (cache-handler.mts).
+    //
+    // Nothing here throws either, and for the same reason a read does not: a
+    // cache that cannot store something declines to store it.
     async fetchSet(scope, key, entry, tags) {
-      // Tags are stamped onto the stored value, which is where both tiers' readers
-      // look for them (tagsOf), so an entry either tier writes is legible to the
-      // other.
-      const body = new TextEncoder().encode(
-        JSON.stringify({ lastModified: entry.lastModified, value: { ...entry.value, tags } }),
-      );
-      // Refused the way a cache refuses: the entry simply is not cached. Raising
-      // here would turn an oversized response into a broken render.
-      if (body.byteLength > maxEntryBytes) return;
+      try {
+        // Tags are stamped onto the stored value, which is where both tiers'
+        // readers look for them (tagsOf), so an entry either tier writes is
+        // legible to the other.
+        const body = new TextEncoder().encode(
+          JSON.stringify({ lastModified: entry.lastModified, value: { ...entry.value, tags } }),
+        );
+        if (body.byteLength > maxEntryBytes) return;
 
-      deps.waitUntil(
-        deps
-          .aws("s3", objectUrl(deps, fetchObjectKey(scope, key)), {
-            method: "PUT",
-            headers: { "content-type": "application/json" },
-            body,
-          })
-          .catch(() => undefined),
-      );
+        deps.waitUntil(
+          deps
+            .aws("s3", objectUrl(deps, fetchObjectKey(scope, key)), {
+              method: "PUT",
+              headers: { "content-type": "application/json" },
+              body,
+            })
+            .catch(() => undefined),
+        );
+      } catch {
+        // Swallowed deliberately: see above.
+      }
     },
 
     // Two writes, and both are required. The DynamoDB record is authoritative

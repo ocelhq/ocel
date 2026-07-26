@@ -290,6 +290,34 @@ it("converges when another publisher lands between the read and the write", asyn
   expect(snapshot.records.authors?.expired).toBe(4_000);
 });
 
+it("does not clobber a replica another publisher created first", async () => {
+  let raced = false;
+  const store = snapshotStore({
+    onGet: async () => {
+      if (raced) return;
+      raced = true;
+      await env.TAG_SNAPSHOT_STORE.put(
+        tagSnapshotKey(scope),
+        JSON.stringify({
+          version: 1,
+          deployedAt: 100,
+          generatedAt: 4_000,
+          records: { authors: { expired: 4_000 } },
+        }),
+      );
+    },
+  });
+  const aws = awsRecorder(() => new Response("{}"));
+  await cacheWith(aws, { store }).revalidateTags(scope, ["posts"]);
+
+  // The genesis write is conditional on the object not existing, so it loses to
+  // the publisher that got there first and retries from that document.
+  const snapshot = await storedSnapshot();
+  expect(snapshot.deployedAt).toBe(100);
+  expect(snapshot.records.posts?.expired).toBe(5_000);
+  expect(snapshot.records.authors?.expired).toBe(4_000);
+});
+
 it("leaves a replica it cannot read alone rather than replacing it", async () => {
   await env.TAG_SNAPSHOT_STORE.put(tagSnapshotKey(scope), "{{ not json");
   const aws = awsRecorder(() => new Response("{}"));
