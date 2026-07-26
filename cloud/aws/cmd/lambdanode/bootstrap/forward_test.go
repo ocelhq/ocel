@@ -201,6 +201,38 @@ func TestHandleInvocation_EmptyBodyTravelsAsSentinelByte(t *testing.T) {
 	}
 }
 
+// A Function URL frames 204 and 304 with Content-Length: 0 rather than chunked
+// encoding, so they terminate with no body byte and need no sentinel — and both
+// forbid content, so sending one would violate the status.
+func TestHandleInvocation_SelfTerminatingStatusesCarryNoSentinel(t *testing.T) {
+	for _, status := range []int{http.StatusNoContent, http.StatusNotModified} {
+		t.Run(strconv.Itoa(status), func(t *testing.T) {
+			node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(status)
+			}))
+			defer node.Close()
+
+			rt, cap := fakeRuntime(t, []byte(getEvent))
+			m := &Membrane{nodePort: portOf(t, node), client: newLoopbackClient()}
+
+			if err := handleInvocation(t.Context(), rt, m); err != nil {
+				t.Fatalf("handleInvocation: %v", err)
+			}
+
+			p, body := splitPrelude(t, cap.body)
+			if p.StatusCode != status {
+				t.Errorf("statusCode = %d, want %d", p.StatusCode, status)
+			}
+			if _, marked := p.Headers[emptyBodyHeader]; marked {
+				t.Errorf("%s set on a status that terminates on its own", emptyBodyHeader)
+			}
+			if len(body) != 0 {
+				t.Errorf("body = %q, want no bytes at all on a %d", body, status)
+			}
+		})
+	}
+}
+
 // The sentinel is only for a body that has no bytes at all: a response with a
 // body must arrive byte-for-byte, unmarked, however small it is.
 func TestHandleInvocation_BodiedResponseIsUnmarkedAndIntact(t *testing.T) {

@@ -85,12 +85,13 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 	}
 	defer resp.Body.Close()
 
-	// A Function URL never terminates a streamed response that carries no body
-	// byte: it sends the headers and then holds the connection open forever,
-	// withholding the terminating chunk, so every empty-bodied response — a 404
-	// from notFound(), a 405, a redirect, an empty 200 — hangs its client. One
-	// body byte is enough to make it terminate, so an empty body travels as a
-	// single sentinel byte that the edge drops again (see emptyBodyHeader).
+	// A Function URL chunk-encodes a streamed response and then never terminates
+	// it when no body byte arrives: it sends the headers and holds the connection
+	// open forever, withholding the terminating chunk, so an empty-bodied 404,
+	// 405, redirect or 200 hangs its client. One body byte is enough to make it
+	// terminate, so such a body travels as a single sentinel byte that the edge
+	// drops again (see emptyBodyHeader). Statuses AWS frames with Content-Length
+	// instead are exempt — they terminate on their own (see selfTerminating).
 	//
 	// The header announcing that rides in the prelude, so which case this is has
 	// to be known before the prelude is encoded: read the first byte first.
@@ -100,7 +101,8 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 		return true, m.fail(rw, fmt.Sprintf("read upstream body: %v", err))
 	}
 	empty := n == 0
-	if empty {
+	sentinel := empty && !selfTerminating(resp.StatusCode)
+	if sentinel {
 		resp.Header.Set(emptyBodyHeader, "1")
 	}
 
@@ -113,8 +115,10 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 	}
 
 	if empty {
-		if _, err := rw.Write([]byte(emptyBodySentinel)); err != nil {
-			return true, err
+		if sentinel {
+			if _, err := rw.Write([]byte(emptyBodySentinel)); err != nil {
+				return true, err
+			}
 		}
 		return true, rw.Close()
 	}
@@ -128,6 +132,17 @@ func (m *Membrane) forward(ctx context.Context, inv *invocation, rw *responseWri
 		return true, rw.closeWithError(errTypeUpstream, err.Error())
 	}
 	return true, rw.Close()
+}
+
+// selfTerminating reports whether a Function URL answers this status with
+// Content-Length: 0 framing rather than chunked encoding, which ends the
+// response on its own with no body byte. AWS chooses framing by status alone: a
+// Content-Length: 0 the app declares on any other status is relocated to
+// x-amzn-Remapped-content-length and the response is chunked regardless. So
+// this is exactly the set the sentinel must skip — and the set where a body
+// byte would violate the status besides.
+func selfTerminating(status int) bool {
+	return status == http.StatusNoContent || status == http.StatusNotModified
 }
 
 // fail reports an upstream failure that occurred before any body byte was
