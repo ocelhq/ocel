@@ -21,6 +21,14 @@ const (
 	// fails a request — before the response starts (502 prelude) or mid-stream
 	// (error trailer).
 	errTypeUpstream = "Ocel.UpstreamError"
+
+	// emptyBodyHeader marks a response whose app body was empty, and
+	// emptyBodySentinel is the one byte sent in its place — the workaround for a
+	// Function URL that never terminates a bodyless streamed response (see
+	// forward). The edge honours the header by dropping the byte and the header;
+	// nothing else reaches these Function URLs, which are IAM-gated to it.
+	emptyBodyHeader   = "X-Ocel-Empty-Body"
+	emptyBodySentinel = "\n"
 )
 
 // prelude is the JSON header block of an http-integration-response.

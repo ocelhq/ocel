@@ -69,6 +69,63 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("<svg/>");
   });
 
+  // The membrane sends an empty body as one sentinel byte because a Function URL
+  // never terminates a bodyless streamed response; leaving the byte in place
+  // would serve it as the response's content.
+  it.each([200, 307, 404, 405, 500])(
+    "restores the empty body a %i sentinel response stands for",
+    async (status) => {
+      const deps = baseDeps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: { "/status": { kind: "lambda", id: "/status" } },
+        },
+        functionUrls: { "/status": "https://fn.example.com" },
+        fetch: (async () =>
+          new Response("\n", {
+            status,
+            headers: { "x-ocel-empty-body": "1", "x-custom": "kept" },
+          })) as unknown as typeof fetch,
+      });
+
+      const res = await dispatchResult(
+        { resolvedPathname: "/status", invocationTarget: { pathname: "/status" } },
+        new Request("https://app.example/status"),
+        deps,
+      );
+
+      expect(res.status).toBe(status);
+      expect(await res.text()).toBe("");
+      expect(res.headers.get("x-ocel-empty-body")).toBeNull();
+      expect(res.headers.get("x-custom")).toBe("kept");
+    },
+  );
+
+  it("leaves a body that is genuinely one byte alone", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/tiny": { kind: "lambda", id: "/tiny" } },
+      },
+      functionUrls: { "/tiny": "https://fn.example.com" },
+      fetch: (async () => new Response("\n", { status: 200 })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/tiny", invocationTarget: { pathname: "/tiny" } },
+      new Request("https://app.example/tiny"),
+      deps,
+    );
+
+    expect(await res.text()).toBe("\n");
+  });
+
   it("forwards a lambda route to its Function URL, preserving path and query", async () => {
     let captured: Request | undefined;
     const deps = baseDeps({

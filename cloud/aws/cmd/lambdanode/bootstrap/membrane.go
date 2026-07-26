@@ -281,22 +281,33 @@ func startNode(extraEnv []string, budget time.Duration) (*Membrane, error) {
 		control:  ready.control,
 		nodePort: ready.httpPort,
 		pending:  map[string]chan struct{}{},
-
-		// Data-plane client: plain loopback TCP. Tune the transport for the
-		// single-client, keep-alive-to-one-host case.
-		client: &http.Client{
-			Transport: &http.Transport{
-				MaxIdleConns:        16,
-				MaxIdleConnsPerHost: 16,
-				IdleConnTimeout:     90 * time.Second,
-			},
-		},
+		client:   newLoopbackClient(),
 	}
 
 	// Keep draining control messages (logs, metrics, completion) in the background.
 	go m.drainControl(ready.reader)
 	go superviseNode(exited)
 	return m, nil
+}
+
+// newLoopbackClient builds the data-plane client every forward runs through:
+// plain loopback TCP, with the transport tuned for the single-client,
+// keep-alive-to-one-host case.
+func newLoopbackClient() *http.Client {
+	return &http.Client{
+		// A 3xx from the app is the response, not an instruction to this proxy.
+		// Following it would swallow the redirect and answer with the target's
+		// body under a 200 — and a relative Location would re-enter the app at
+		// another path, serving that route's content under the requested URL.
+		CheckRedirect: func(*http.Request, []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+		Transport: &http.Transport{
+			MaxIdleConns:        16,
+			MaxIdleConnsPerHost: 16,
+			IdleConnTimeout:     90 * time.Second,
+		},
+	}
 }
 
 // superviseNode ends the process once node dies after a successful start. A
