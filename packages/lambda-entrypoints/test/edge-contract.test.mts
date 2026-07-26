@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { tagSnapshotKey } from "@ocel/next-cache";
+import { tagNamespace, tagSnapshotKey } from "@ocel/next-cache";
 import { afterEach, expect, test } from "vitest";
 
 // The names and keys that cross the Go/TS boundary. Each side declares its own
@@ -11,6 +11,7 @@ import { afterEach, expect, test } from "vitest";
 // fixture is what turns that into a failing test on both sides.
 const contract: {
   tagSnapshotSuffix: string;
+  tagNamespace: { isrPrefix: string; partitionKeyPrefix: string };
   cacheStoreEnv: Record<
     "bucket" | "endpoint" | "region" | "accessKeyId" | "secretAccessKey",
     string
@@ -31,6 +32,15 @@ afterEach(() => {
 test("the snapshot is keyed at the suffix the deploy seeds it under", () => {
   expect(tagSnapshotKey("prod/proj/web/BID")).toBe(
     "prod/proj/web/BID" + contract.tagSnapshotSuffix,
+  );
+});
+
+// The one contract item with no reader on this tier: the Lambda is handed the
+// finished namespace in its env, so only the deploy and the edge derive it, and
+// this is the whole of what stops those two spellings from parting company.
+test("tag records are namespaced exactly as the deploy grants them", () => {
+  expect(tagNamespace(contract.tagNamespace.isrPrefix)).toBe(
+    contract.tagNamespace.partitionKeyPrefix,
   );
 });
 

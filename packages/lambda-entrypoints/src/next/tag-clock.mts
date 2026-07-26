@@ -1,6 +1,6 @@
-import type { TagRecord } from "@ocel/next-cache";
+import { mergeRecord, publishTagSnapshot, type TagRecord } from "@ocel/next-cache";
+
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
-import { mergeRecord, publishTagSnapshot } from "./tag-snapshot.mjs";
 import { now } from "./use-cache-entry.mjs";
 
 // Invalidations are recorded in the state table and synced back into a local
@@ -183,6 +183,9 @@ function drain(): Promise<void> {
 // replica whole: updateTags knows only its own event, while the drain holds
 // every invalidation this instance has merged from the index.
 async function publish(backend: UseCacheStore): Promise<void> {
+  const snapshots = backend.snapshots;
+  if (!snapshots) return;
+
   const revision = state.revision;
   // Nothing observed since the last publish is nothing to say: the replica the
   // edge already holds is this instance's answer. There is no expiry to renew,
@@ -192,7 +195,7 @@ async function publish(backend: UseCacheStore): Promise<void> {
   try {
     // Only a confirmed write advances the mark, so a failed publish is retried
     // by the next sync rather than mistaken for a live replica.
-    if (!(await publishTagSnapshot(backend, state.records))) return;
+    if (!(await publishTagSnapshot(snapshots, state.records, now()))) return;
     state.publishedRevision = revision;
   } catch {
     // The replica is an optimization; DynamoDB remains the authoritative clock

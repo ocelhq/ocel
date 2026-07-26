@@ -11,13 +11,16 @@
 // from the R2 replica the publisher republishes.
 import {
   isGuardRejection,
-  mergeSnapshot,
+  publishTagSnapshot,
+  tagNamespace,
   tagRecordUpdate,
   tagSnapshotKey,
   type EdgeCacheRpc,
   type FetchCacheEntry,
+  type StoredTagSnapshot,
   type TagRecord,
   type TagSnapshot,
+  type TagSnapshotStore,
 } from "@ocel/next-cache";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
@@ -31,10 +34,10 @@ import {
 } from "./tag-clock";
 import type { Env } from "./index";
 
-// The snapshot replica's store: the same R2 binding the tag clock reads, plus
+// The snapshot replica's bucket: the same R2 binding the tag clock reads, plus
 // the conditional put its republish needs. Narrowed to those two calls rather
 // than typed as R2Bucket so nothing here depends on the rest of it.
-export interface SnapshotStore extends ObjectStoreReader {
+export interface SnapshotBucket extends ObjectStoreReader {
   // The etag the write landed as, or null when the precondition lost — which is
   // how R2 reports a conditional put that another publisher got to first.
   put(
@@ -56,7 +59,7 @@ export interface EdgeCacheDeps {
   // The edge-local R2 binding the tag-snapshot replica lives in — a different
   // store from fetchBucket, deliberately: a replica is edge-readable tag state,
   // while a fetch entry holds an origin-private response body.
-  snapshots: SnapshotStore;
+  snapshots: SnapshotBucket;
   waitUntil(promise: Promise<unknown>): void;
   now(): number;
 }
@@ -69,18 +72,6 @@ export interface EdgeCacheDeps {
 // simply not cached, which is how a cache refuses; raising would turn an
 // oversized response into a broken render.
 const maxEntryBytes = 2 * 1024 * 1024;
-
-// Losing the conditional write means another publisher landed first, and each
-// retry re-reads and re-merges from that publisher's document — so convergence
-// does not depend on winning, and the bound is small on purpose. Mirrors the
-// Lambda publisher (tag-snapshot.mts).
-const publishAttempts = 3;
-
-// The partition-key prefix an app's tag records live under, derived from the
-// same ISR prefix that scopes its objects. Mirrors isrConfig.tagNamespace in
-// cloud/aws/deploy/function.go — one identity governs both stores, so the two
-// spellings have to agree.
-const tagNamespace = (scope: string) => `TAG#${scope.replaceAll("/", "#")}#`;
 
 const fetchObjectKey = (scope: string, key: string) =>
   `${scope}/fetch-cache/${key}.cache.json`;
@@ -213,7 +204,14 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
       // Authority first: a replica must never claim an invalidation the record
       // behind it does not have.
       try {
-        await publishSnapshot(deps, scope, new Map(tags.map((tag) => [tag, record])), at);
+        const published = await publishTagSnapshot(
+          r2SnapshotStore(deps.snapshots, tagSnapshotKey(scope)),
+          new Map(tags.map((tag) => [tag, record])),
+          at,
+        );
+        if (!published) {
+          console.error("ocel: gave up republishing the tag snapshot; every write lost its race");
+        }
       } catch (error) {
         console.error("ocel: could not republish the tag snapshot", error);
       } finally {
@@ -274,39 +272,40 @@ async function dynamoError(response: Response): Promise<Error> {
   return error;
 }
 
-// Read, merge, conditional write, retry on precondition failure. Because the
-// merge only ever moves watermarks upward, whichever writer wins a race produces
-// a document containing both writers' invalidations — so a lost race costs a
-// retry and never an invalidation.
-async function publishSnapshot(
-  deps: EdgeCacheDeps,
-  scope: string,
-  records: Map<string, TagRecord>,
-  at: number,
-): Promise<void> {
-  const key = tagSnapshotKey(scope);
+// The publish loop is @ocel/next-cache's, shared with the Lambda publisher so
+// the two can never merge or condition their writes differently. All this side
+// owns is the transport: R2's native conditional put, where the Lambda has the
+// S3-compatible API's If-Match.
+function r2SnapshotStore(bucket: SnapshotBucket, key: string): TagSnapshotStore {
+  return {
+    async read() {
+      const stored = await bucket.get(key);
+      if (stored === null) return null;
+      const snapshot = readableSnapshot(parseJson<TagSnapshot>(await stored.text()));
+      if (snapshot === null) {
+        // Torn, or written in a format this worker predates. Merging into it
+        // would drop whatever that format carries — the deploy's own anchor
+        // included — so the replica is left exactly as its publisher left it.
+        throw new Error(`ocel: tag snapshot at ${key} is not a document this worker can read`);
+      }
+      return { snapshot, etag: stored.etag ?? null };
+    },
 
-  for (let attempt = 0; attempt < publishAttempts; attempt++) {
-    const stored = await deps.snapshots.get(key);
-    const prior = stored === null ? null : readableSnapshot(parseJson<TagSnapshot>(await stored.text()));
-    if (stored !== null && prior === null) {
-      // Torn, or written in a format this worker predates. Merging into it would
-      // drop whatever that format carries — the deploy's own anchor included — so
-      // the replica is left exactly as its publisher left it.
-      throw new Error(`ocel: tag snapshot at ${key} is not a document this worker can read`);
-    }
+    async write(snapshot, prior) {
+      const put = await bucket.put(key, JSON.stringify(snapshot), precondition(prior));
+      return put !== null;
+    },
+  };
+}
 
-    const onlyIf = stored?.etag
-      ? { etagMatches: stored.etag }
-      : // "*" is R2's spelling of "only if the object does not exist", which is
-        // what makes the first publish safe against a concurrent one.
-        { etagDoesNotMatch: "*" };
-    if ((await deps.snapshots.put(key, JSON.stringify(mergeSnapshot(prior, records, at)), { onlyIf })) !== null) {
-      return;
-    }
-  }
-
-  throw new Error(`ocel: tag snapshot at ${key} lost ${publishAttempts} conditional writes`);
+function precondition(prior: StoredTagSnapshot | null) {
+  // "*" is R2's spelling of "only if the object does not exist", which is what
+  // makes the first publish safe against a concurrent one.
+  if (prior === null) return { onlyIf: { etagDoesNotMatch: "*" } };
+  // R2 has no precondition meaning "write unconditionally", so an object the
+  // store named no version for carries none at all — conditioning on a version
+  // that does not exist would fail every write for the life of the build.
+  return prior.etag === null ? {} : { onlyIf: { etagMatches: prior.etag } };
 }
 
 // CacheEntrypoint is how the dynamic worker reaches all of the above: it is

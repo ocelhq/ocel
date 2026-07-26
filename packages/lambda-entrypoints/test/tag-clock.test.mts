@@ -1,12 +1,16 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { TagSnapshot } from "@ocel/next-cache";
+import {
+  publishTagSnapshot,
+  type StoredTagSnapshot,
+  type TagRecord,
+  type TagSnapshot,
+  type TagSnapshotStore,
+} from "@ocel/next-cache";
 import type { CacheStore } from "../src/next/cache-store.mjs";
 import type {
-  StoredTagSnapshot,
   TagRecordPage,
   TagRecordRow,
   TagRecordUpdate,
-  TagSnapshotStore,
   UseCacheStore,
 } from "../src/next/use-cache-store.mjs";
 
@@ -485,9 +489,10 @@ test("refuses to adopt a shared clock built from different configuration", async
 // from the sync drain rather than from updateTags, because only the drain holds
 // every invalidation this instance has merged rather than just its own event.
 
-async function publisher() {
-  return (await import("../src/next/tag-snapshot.mjs")).publishTagSnapshot;
-}
+// The publish loop itself is @ocel/next-cache's and is driven straight here;
+// what this tier contributes is the store behind it.
+const publish = (store: UseCacheStore, records: Map<string, TagRecord>) =>
+  publishTagSnapshot(store.snapshots!, records, Date.now());
 
 function snapshotOf(
   deployedAt: number,
@@ -515,7 +520,6 @@ test("publishes the merged clock as a snapshot the edge can read", async () => {
 // carrying both publishers' invalidations.
 test("concurrent publishers converge with no invalidation lost", async () => {
   const store = fakeStore();
-  const publish = await publisher();
 
   await Promise.all([
     publish(store, new Map([["a", { expired: 100 }]])),
@@ -529,7 +533,6 @@ test("concurrent publishers converge with no invalidation lost", async () => {
 
 test("a publisher carrying an older watermark never walks back a newer one", async () => {
   const store = fakeStore();
-  const publish = await publisher();
 
   await publish(store, new Map([["products", { expired: 900, stale: 900 }]]));
   await publish(store, new Map([["products", { expired: 100, stale: 100 }]]));
@@ -542,7 +545,6 @@ test("a publisher carrying an older watermark never walks back a newer one", asy
 
 test("re-reads and retries when another publisher wins the write", async () => {
   const store = fakeStore();
-  const publish = await publisher();
   store.snapshots!.interposeOnce(snapshotOf(0, { theirs: { expired: 500 } }));
 
   await expect(publish(store, new Map([["ours", { expired: 700 }]]))).resolves.toBe(
@@ -558,7 +560,6 @@ test("re-reads and retries when another publisher wins the write", async () => {
 // publisher owes it is the anchor, read back off the snapshot it is replacing.
 test("carries the build's deploy anchor forward across publishes", async () => {
   const store = fakeStore();
-  const publish = await publisher();
   store.snapshots!.put(snapshotOf(5_000, {}));
 
   await publish(store, new Map([["products", { expired: 9_000 }]]));
@@ -590,7 +591,6 @@ test("a failed publish is repaired by the next one", async () => {
 // it cannot parse — where clobbering the anchor is unbounded.
 test("refuses to replace a torn snapshot with an unanchored one", async () => {
   const store = fakeStore();
-  const publish = await publisher();
   store.snapshots!.putRaw("{not json");
 
   await expect(publish(store, new Map([["products", { expired: 700 }]]))).rejects.toThrow();
@@ -612,7 +612,6 @@ test("a torn snapshot cannot fail the request that found it", async () => {
 // lose one race.
 test("replaces a snapshot the store named no version for", async () => {
   const store = fakeStore();
-  const publish = await publisher();
   store.snapshots!.putUnversioned(snapshotOf(5_000, { theirs: { expired: 6_000 } }));
 
   await expect(publish(store, new Map([["ours", { expired: 7_000 }]]))).resolves.toBe(
