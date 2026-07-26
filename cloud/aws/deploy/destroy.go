@@ -80,7 +80,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	// Refresh first so the destroy reconciles against real provider state — this
 	// clears the pending operations an interrupted earlier deploy can leave on a
 	// stack, which would otherwise make the destroy refuse.
-	destroyOpts := []optdestroy.Option{optdestroy.Refresh(), optdestroy.Parallel()}
+	destroyOpts := []optdestroy.Option{optdestroy.Refresh()}
 	if logWriter != nil {
 		destroyOpts = append(destroyOpts, optdestroy.ProgressStreams(logWriter))
 	}

@@ -149,7 +149,7 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 	}
 
 	g, ctx := errgroup.WithContext(ctx)
-	g.SetLimit(8) // bounded S3 conns
+	g.SetLimit(uploadConcurrency)
 	for _, u := range uploads {
 		g.Go(func() error {
 			return uploadArtifact(ctx, u.to.up, u.to.bucket, u.key, "", func() ([]byte, error) {
