@@ -64,6 +64,16 @@ function serialize(data: any): Record<string, any> {
   return value;
 }
 
+// cacheControlOf reads the window Next declared for this render, narrowed to the
+// two fields the edge ages an entry by. An unrecognised shape records nothing,
+// leaving the routing manifest's window to stand in as it did before.
+function cacheControlOf(ctx: any): CacheEntryFile["cacheControl"] | undefined {
+  const revalidate = ctx?.cacheControl?.revalidate;
+  const expire = ctx?.cacheControl?.expire;
+  if (typeof revalidate !== "number" && revalidate !== false) return undefined;
+  return { revalidate, ...(typeof expire === "number" && { expire }) };
+}
+
 // carryForwardVariantHeaders preserves the build-seeded per-variant headers
 // across a revalidation rewrite. They exist only in the prerender output, so a
 // fresh serialize() never has them; without this a revalidated APP_PAGE loses
@@ -162,8 +172,18 @@ export default class OcelCacheHandler {
       const store = this.store;
       const value = serialize(data);
       if (data.kind === "FETCH") value.tags = ctx?.tags ?? [];
-      const entry = { lastModified: Date.now(), value };
       const isFetch = ctx?.fetchCache || data.kind === "FETCH";
+      // The route's freshness window, recorded on the entry. For a path
+      // generated on demand this is the only place it is ever known: the build
+      // manifest names only the paths the build prerendered, so without it the
+      // edge has nothing to age the entry by. A fetch entry carries its own
+      // revalidate inside the value and is never given one.
+      const cacheControl = !isFetch && cacheControlOf(ctx);
+      const entry = {
+        lastModified: Date.now(),
+        value,
+        ...(cacheControl && { cacheControl }),
+      };
       background(async () => {
         if (isFetch) return store.writeFetch(key, entry);
         // The per-variant rscHeaders/segmentHeaders live only in the build's

@@ -187,6 +187,53 @@ describe("intercept, complete entries", () => {
     expect(outcome).toMatchObject({ kind: "complete", stale: true });
   });
 
+  // A path generated on demand is named by no manifest entry, so the only
+  // window it has is the one the render recorded on the entry itself. Without
+  // it the entry would sit fresh forever and the route would never revalidate.
+  it("takes its window from the entry when the manifest declares none", async () => {
+    const store = stored({
+      [entryKey("/blog")]: {
+        ...appPage({ lastModified: 1_000 }),
+        cacheControl: { revalidate: 1, expire: 31536000 },
+      },
+    });
+    const outcome = await intercept(req(), target({ revalidate: undefined }), cfg, {
+      ...storeDeps(store),
+      now: () => 1_000 + 5_000,
+    });
+    expect(outcome).toMatchObject({ kind: "complete", stale: true });
+  });
+
+  // The entry describes the render that produced it; the manifest describes
+  // what the build projected. When they disagree, the entry is the fact.
+  it("prefers the entry's own window over the manifest's", async () => {
+    const store = stored({
+      [entryKey("/blog")]: {
+        ...appPage({ lastModified: 1_000 }),
+        cacheControl: { revalidate: 1, expire: 31536000 },
+      },
+    });
+    const outcome = await intercept(req(), target({ revalidate: 3600 }), cfg, {
+      ...storeDeps(store),
+      now: () => 1_000 + 5_000,
+    });
+    expect(outcome).toMatchObject({ kind: "complete", stale: true });
+  });
+
+  it("treats an entry recorded as revalidate false as static", async () => {
+    const store = stored({
+      [entryKey("/blog")]: {
+        ...appPage({ lastModified: 1_000 }),
+        cacheControl: { revalidate: false, expire: undefined },
+      },
+    });
+    const outcome = await intercept(req(), target({ revalidate: 60 }), cfg, {
+      ...storeDeps(store),
+      now: () => 1_000 + 10 * 365 * 86400_000,
+    });
+    expect(outcome).toMatchObject({ kind: "complete", stale: false });
+  });
+
   it("fails open past the expiration window (hard cutoff)", async () => {
     const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
     const res = await served(req(), target({ revalidate: 60, expiration: 3600 }), cfg, {

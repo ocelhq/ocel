@@ -223,6 +223,51 @@ test("round-trips a page written by set through get", async () => {
   expect(entry?.value.segmentData.get("/_tree").toString()).toBe("TREE");
 });
 
+// The build manifest names only the paths the build prerendered, so for a path
+// generated on demand this write is the one place the route's freshness window
+// is ever known. Dropping it leaves the edge with nothing to age the entry by.
+test("records the render's cache control on the entry", async () => {
+  const store = fakeStore();
+  const handler = new OcelCacheHandler();
+
+  const deferred = await invocation(() =>
+    handler.set(
+      "/blog",
+      {
+        kind: "APP_ROUTE",
+        body: Buffer.from('{"ok":true}'),
+        status: 200,
+        headers: {},
+      },
+      { cacheControl: { revalidate: 1, expire: 31536000 } },
+    ),
+  );
+  await Promise.all(deferred);
+
+  expect(store.entries.get("blog")?.cacheControl).toEqual({
+    revalidate: 1,
+    expire: 31536000,
+  });
+});
+
+// A fetch entry carries its own revalidate inside the value; the route-level
+// window means nothing to it, and Next never sends one.
+test("leaves a fetch entry's window unrecorded", async () => {
+  const store = fakeStore();
+  const handler = new OcelCacheHandler();
+
+  const deferred = await invocation(() =>
+    handler.set(
+      "hash",
+      { kind: "FETCH", data: { body: "x" }, revalidate: 60 },
+      { fetchCache: true, tags: ["posts"] },
+    ),
+  );
+  await Promise.all(deferred);
+
+  expect(store.fetches.get("hash")?.cacheControl).toBeUndefined();
+});
+
 // The per-variant rscHeaders/segmentHeaders exist only in the build's prerender
 // output; Next's runtime set() payload has just a single page-level headers map.
 // A revalidation rewrite must carry the build-seeded values forward, or the edge

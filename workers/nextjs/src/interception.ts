@@ -134,8 +134,7 @@ export async function intercept(
     if (!isServable(value)) return null;
 
     const ageSeconds = (now - entry.lastModified) / 1000;
-    const revalidate =
-      typeof target.revalidate === "number" ? target.revalidate : undefined;
+    const { revalidate, expiration } = entryWindow(entry, target);
     const window =
       revalidate !== undefined
         ? Math.max(1, revalidate - Math.floor(ageSeconds))
@@ -215,7 +214,7 @@ export async function intercept(
     // stale one still serves stale-while-revalidate; past expiration is too
     // old to serve even stale, so the request falls open to the Lambda.
     const verdict = evaluate(
-      { lastModified: entry.lastModified, revalidate, expiration: target.expiration },
+      { lastModified: entry.lastModified, revalidate, expiration },
       now,
       tagStale,
     );
@@ -241,6 +240,31 @@ export async function intercept(
   } catch {
     return null;
   }
+}
+
+// entryWindow decides the freshness window this entry is judged by. The window
+// the render recorded on the entry wins: it describes what actually happened,
+// and for a path generated on demand it is the only window there is — the
+// routing manifest names only the paths the build prerendered. Entries the
+// build seeded carry none and fall back to the manifest. `revalidate: false` is
+// a static entry: no time-based staleness, only tag-based.
+function entryWindow(
+  entry: CacheEntryFile,
+  target: InterceptTarget,
+): { revalidate?: number; expiration?: number } {
+  const declared = entry.cacheControl;
+  if (declared === undefined) {
+    return {
+      revalidate:
+        typeof target.revalidate === "number" ? target.revalidate : undefined,
+      expiration: target.expiration,
+    };
+  }
+  return {
+    revalidate:
+      typeof declared.revalidate === "number" ? declared.revalidate : undefined,
+    expiration: declared.expire ?? target.expiration,
+  };
 }
 
 // isServable gates interception to the entry kinds it can rebuild a response

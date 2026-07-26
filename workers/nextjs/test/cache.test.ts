@@ -429,6 +429,66 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
+  // An on-demand ISR path — one generateStaticParams never named — has no
+  // manifest window: Next emits initialRevalidate only for the paths it
+  // prerendered at build. The window it does carry is the one Next stamps on
+  // the response itself, so the entry must go stale on that rather than sit
+  // fresh for the whole retention window.
+  it("takes its window from the origin response when the manifest declares none", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=1, stale-while-revalidate=59");
+    const refresh = countingOrigin("s-maxage=1, stale-while-revalidate=59");
+    const t = target("origin-window");
+
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000; // 5s old: past the response's own 1s window.
+    const stale = await serveCached(req(), t, deps, origin, refresh);
+    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
+    await deps.flush();
+    expect(refresh.calls).toBe(1);
+  });
+
+  // The response describes what was actually rendered; the manifest only
+  // describes what the build projected. A route whose window changed since the
+  // build must not stay pinned to the build's number.
+  it("prefers the origin response's window over the manifest's", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=1, stale-while-revalidate=59");
+    const refresh = countingOrigin("s-maxage=1, stale-while-revalidate=59");
+    const t = target("window-precedence", { revalidate: 3600, expiration: 7200 });
+
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000;
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+    expect(refresh.calls).toBe(1);
+  });
+
+  // A bare s-maxage declares a revalidate window and nothing about expiry —
+  // it is what the R2 tier synthesizes for an entry it serves. How long that
+  // entry may still be served stale stays the manifest's to say.
+  it("keeps the manifest expiration when the response declares no swr", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const origin = countingOrigin("s-maxage=1");
+    const refresh = countingOrigin("s-maxage=1");
+    const t = target("bare-smaxage", { revalidate: 1, expiration: 100 });
+
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000; // past revalidate=1, still inside the manifest's 100s.
+    const stale = await serveCached(req(), t, deps, origin, refresh);
+    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(origin.calls).toBe(1);
+  });
+
   it("restates x-nextjs-cache by the freshness of the colo entry it serves", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
