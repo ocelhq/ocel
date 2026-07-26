@@ -1,0 +1,85 @@
+import { describe, expect, it } from "vitest";
+
+import { latest, mergeRecord, mergeSnapshot, type TagSnapshot } from "../src/index.mjs";
+
+function snapshotOf(
+  deployedAt: number,
+  records: Record<string, { stale?: number; expired?: number }>,
+): TagSnapshot {
+  return { version: 1, deployedAt, generatedAt: deployedAt, records };
+}
+
+// Whichever writer merges last must produce the same document, so the merge is
+// asserted here rather than through either publisher.
+
+describe("latest", () => {
+  it("only ever moves upward, whichever side carries the value", () => {
+    expect(latest(900, 100)).toBe(900);
+    expect(latest(100, 900)).toBe(900);
+    expect(latest(undefined, 100)).toBe(100);
+    expect(latest(100, undefined)).toBe(100);
+    expect(latest(undefined, undefined)).toBeUndefined();
+  });
+});
+
+describe("mergeRecord", () => {
+  it("never walks back a watermark the reader already knows about", () => {
+    expect(mergeRecord({ stale: 900, expired: 900 }, { stale: 100, expired: 100 })).toEqual({
+      stale: 900,
+      expired: 900,
+    });
+  });
+
+  it("adopts an incoming record the reader has never seen", () => {
+    expect(mergeRecord(undefined, { expired: 700 })).toEqual({
+      stale: undefined,
+      expired: 700,
+    });
+  });
+});
+
+describe("mergeSnapshot", () => {
+  it("carries both sides' invalidations, whichever order they arrive in", () => {
+    const merged = mergeSnapshot(
+      snapshotOf(0, { theirs: { expired: 500 } }),
+      new Map([["ours", { expired: 700 }]]),
+      1,
+    );
+    expect(merged.records.theirs!.expired).toBe(500);
+    expect(merged.records.ours!.expired).toBe(700);
+  });
+
+  // Every entry under a build's prefix was written at or after the build
+  // deployed, so a record whose watermarks both sit at or before that instant can
+  // no longer expire anything in it. Dropping those is what keeps the blob
+  // bounded on a substrate that has been invalidating tags for months.
+  it("prunes records that cannot apply to any entry in this build", () => {
+    const merged = mergeSnapshot(
+      snapshotOf(5_000, {
+        before: { expired: 4_000 },
+        atDeploy: { expired: 5_000 },
+        after: { expired: 6_000 },
+        staleOnly: { stale: 6_000 },
+      }),
+      new Map(),
+      1,
+    );
+    expect(Object.keys(merged.records).sort()).toEqual(["after", "staleOnly"]);
+  });
+
+  // Without the deploy's own timestamp there is no proof a record is inert, and
+  // over-pruning would silently resurrect stale content at the edge.
+  it("prunes nothing from a snapshot that was never anchored to a deploy", () => {
+    const merged = mergeSnapshot(snapshotOf(0, { ancient: { expired: 1 } }), new Map(), 1);
+    expect(merged.records.ancient!.expired).toBe(1);
+  });
+
+  it("starts unanchored when there is no prior snapshot to carry an anchor from", () => {
+    expect(mergeSnapshot(null, new Map([["products", { expired: 1 }]]), 7)).toEqual({
+      version: 1,
+      deployedAt: 0,
+      generatedAt: 7,
+      records: { products: { stale: undefined, expired: 1 } },
+    });
+  });
+});

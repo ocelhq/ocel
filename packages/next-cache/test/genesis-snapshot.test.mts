@@ -1,10 +1,9 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
-import { mergeSnapshot } from "../src/next/tag-snapshot.mjs";
+import { mergeSnapshot, tagSnapshotKey, type TagSnapshot } from "../src/index.mjs";
 
 // The genesis snapshot is written by the Go deploy and rewritten thereafter by
 // this publisher, so no type is shared across the boundary and nothing but this
@@ -13,9 +12,7 @@ import { mergeSnapshot } from "../src/next/tag-snapshot.mjs";
 // pins it to. Changing the document's shape must break both sides.
 const fixture: TagSnapshot = JSON.parse(
   readFileSync(
-    fileURLToPath(
-      new URL("../../next-cache/fixtures/genesis-tag-snapshot.json", import.meta.url),
-    ),
+    fileURLToPath(new URL("../fixtures/genesis-tag-snapshot.json", import.meta.url)),
     "utf8",
   ),
 );

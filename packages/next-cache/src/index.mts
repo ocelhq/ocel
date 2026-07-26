@@ -1,10 +1,11 @@
 // Portable ISR cache primitives shared by the Lambda cache handler (which backs
 // Next's server cache) and the Cloudflare worker (which reads the same
-// authoritative cache directly at the edge). Everything here is runtime-neutral:
-// no Node Buffer, no AWS SDK, no Workers globals beyond atob/btoa — so the key
-// normalization, tag-expiry, and payload-decoding rules are single-sourced and
-// the two readers can never disagree on them. The transport around these (the
-// S3/DynamoDB calls) stays per-reader, since one speaks the AWS SDK and the
+// authoritative cache directly at the edge, and writes tag records back into
+// it). Everything here is runtime-neutral: no Node Buffer, no AWS SDK, no
+// Workers globals beyond atob/btoa — so the key normalization, tag-expiry,
+// payload-decoding, tag-write and snapshot-merge rules are single-sourced and
+// the two sides can never disagree on them. The transport around these (the
+// S3/DynamoDB calls) stays per-side, since one speaks the AWS SDK and the
 // other signs raw HTTP.
 
 export {
