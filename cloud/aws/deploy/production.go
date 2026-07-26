@@ -756,13 +756,7 @@ func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.R
 	stack, err := auto.UpsertStackInlineSource(ctx, stackName, cfg.ProjectName, program,
 		auto.Pulumi(cfg.Pulumi),
 		auto.SecretsProvider("passphrase"),
-		auto.EnvVars(map[string]string{
-			"PULUMI_BACKEND_URL":       cfg.BackendURL,
-			"PULUMI_CONFIG_PASSPHRASE": cfg.Passphrase,
-			"AWS_REGION":               cfg.Region,
-			"PULUMI_SKIP_CHECKPOINTS":  "true",
-			"PULUMI_SKIP_UPDATE_CHECK": "true",
-		}),
+		auto.EnvVars(pulumiEnv(cfg.Region, cfg.BackendURL, cfg.Passphrase)),
 	)
 	if err != nil {
 		return auto.UpResult{}, fmt.Errorf("prepare stack %s: %w", stackName, err)

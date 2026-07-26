@@ -6,6 +6,7 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -39,6 +40,21 @@ func nilSafe(progress func(string)) func(string) {
 	}
 }
 
+// serialized wraps a progress or log callback so concurrent teardowns can share
+// it. Both callbacks ultimately write to the one response stream the host is
+// streaming events over, which admits a single sender at a time; nil passes
+// through so nilSafe still recognizes an absent callback.
+func serialized(mu *sync.Mutex, f func(string)) func(string) {
+	if f == nil {
+		return nil
+	}
+	return func(msg string) {
+		mu.Lock()
+		defer mu.Unlock()
+		f(msg)
+	}
+}
+
 // Destroy tears down one stack — a `pulumi destroy` followed by removing the
 // stack from the backend — and streams progress. progress and log may be nil.
 // Destroy performs the real teardown and is not exercised by unit tests.
@@ -53,11 +69,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	stack, err := auto.SelectStackInlineSource(ctx, cfg.StackName, cfg.ProjectName, nil,
 		auto.Pulumi(cfg.Pulumi),
 		auto.SecretsProvider("passphrase"),
-		auto.EnvVars(map[string]string{
-			"PULUMI_BACKEND_URL":       cfg.BackendURL,
-			"PULUMI_CONFIG_PASSPHRASE": cfg.Passphrase,
-			"AWS_REGION":               cfg.Region,
-		}),
+		auto.EnvVars(pulumiEnv(cfg.Region, cfg.BackendURL, cfg.Passphrase)),
 	)
 	if err != nil {
 		return fmt.Errorf("select stack %s: %w", cfg.StackName, err)
@@ -68,7 +80,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	// Refresh first so the destroy reconciles against real provider state — this
 	// clears the pending operations an interrupted earlier deploy can leave on a
 	// stack, which would otherwise make the destroy refuse.
-	destroyOpts := []optdestroy.Option{optdestroy.Refresh()}
+	destroyOpts := []optdestroy.Option{optdestroy.Refresh(), optdestroy.Parallel()}
 	if logWriter != nil {
 		destroyOpts = append(destroyOpts, optdestroy.ProgressStreams(logWriter))
 	}
@@ -170,11 +182,7 @@ func backendWorkspace(ctx context.Context, project, backendURL, passphrase, regi
 		}),
 		auto.Pulumi(pulumiCmd),
 		auto.SecretsProvider("passphrase"),
-		auto.EnvVars(map[string]string{
-			"PULUMI_BACKEND_URL":       backendURL,
-			"PULUMI_CONFIG_PASSPHRASE": passphrase,
-			"AWS_REGION":               region,
-		}),
+		auto.EnvVars(pulumiEnv(region, backendURL, passphrase)),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("open workspace: %w", err)

@@ -20,6 +20,31 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
+// pulumiEnv is the environment every Pulumi workspace this package opens runs
+// under, whether it updates a stack, tears one down, or only enumerates.
+//
+// PULUMI_SKIP_CHECKPOINTS is the load-bearing entry. Against a self-managed
+// backend Pulumi otherwise rewrites the entire state file — and a second copy of
+// it under the backup prefix — after every single resource step, serialized
+// behind one lock. That caps a stack at one resource per state write however
+// parallel the engine is: a 103-function app tore down at one delete every ~3s
+// (~10 minutes) while the same functions were created 48-wide in 22s, purely
+// because the update path set this and the teardown path did not.
+//
+// The cost is that an interrupted run leaves state naming resources that are
+// already gone. That is the recoverable direction — both up and destroy
+// reconcile against the provider on the next run, and a delete of an
+// already-absent resource succeeds — unlike the reverse, which would leak.
+func pulumiEnv(region, backendURL, passphrase string) map[string]string {
+	return map[string]string{
+		"PULUMI_BACKEND_URL":       backendURL,
+		"PULUMI_CONFIG_PASSPHRASE": passphrase,
+		"AWS_REGION":               region,
+		"PULUMI_SKIP_CHECKPOINTS":  "true",
+		"PULUMI_SKIP_UPDATE_CHECK": "true",
+	}
+}
+
 // SecretsReader is the subset of the AWS Secrets Manager client the deploy
 // path needs, to resolve an RDS-managed master-password secret to its
 // plaintext for the connection outputs. The aws-sdk-go-v2 client satisfies
