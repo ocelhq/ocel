@@ -1,7 +1,7 @@
 import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
-import { createTagClock } from "../src/tag-clock";
+import { createTagClock, dropSnapshotMemo } from "../src/tag-clock";
 
 const cfg = { isrPrefix: "prod/proj/app/build" };
 const snapshotKey = tagSnapshotKey(cfg.isrPrefix);
@@ -84,4 +84,24 @@ it("reads the snapshot object under the build prefix", async () => {
   const clock = createTagClock(cfg, { store });
   await clock.expired(["posts"], 1_000, 3_000);
   expect(store.gets).toContain(snapshotKey);
+});
+
+it("re-reads inside the memo window once the memo is dropped", async () => {
+  let body = JSON.stringify(snapshot());
+  const gets: string[] = [];
+  const store = {
+    async get(key: string) {
+      gets.push(key);
+      return { etag: `"${key}"`, text: async () => body };
+    },
+  };
+  const clock = createTagClock(cfg, { store });
+  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+
+  // A writer that republished the snapshot must see its own write, and the memo
+  // window would otherwise answer from before it.
+  body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
+  dropSnapshotMemo(store);
+  expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
+  expect(gets).toHaveLength(2);
 });
