@@ -94,35 +94,13 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 
 	slug := spec.Slug
 	endpoint := spec.StoreEndpoint
-	secret := prior[edge.RootStackKeySecret]
-	ownerToken := prior[edge.RootStackKeyOwnerToken]
-	// A project's first reconcile has no secret; a renamed project's prior
-	// names a different slug. Either way we mint fresh ownership and seed a new
-	// instance — the slug is the project's durable identity, so renaming it
-	// forks a new project (fresh history), leaving the old instance orphaned.
-	fresh := secret == "" || prior[edge.RootStackKeySlug] != slug
 
-	if fresh {
-		mintedSecret, err := mintSecret()
-		if err != nil {
-			return nil, fmt.Errorf("mint project store secret: %w", err)
-		}
-		mintedOwner, err := mintSecret()
-		if err != nil {
-			return nil, fmt.Errorf("mint project store owner token: %w", err)
-		}
-		secret, ownerToken = mintedSecret, mintedOwner
-		if err := p.initializeInstance(ctx, endpoint, slug, spec.BootstrapCred, ownerToken, secret); err != nil {
-			return nil, fmt.Errorf("initialize project store instance: %w", err)
-		}
-	} else {
-		current, err := p.getVersionStamp(ctx, endpoint, slug, secret)
-		if err != nil {
-			return nil, fmt.Errorf("read root-stack version stamp: %w", err)
-		}
-		if current == spec.Version {
-			return prior, nil
-		}
+	id, upToDate, err := p.ensureInstance(ctx, spec, prior)
+	if err != nil {
+		return nil, err
+	}
+	if upToDate {
+		return prior, nil
 	}
 
 	generic := bindCodeLoader(bindObjectStore(
@@ -144,16 +122,93 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
 
-	if err := p.putVersionStamp(ctx, endpoint, slug, secret, spec.Version); err != nil {
+	if err := p.putVersionStamp(ctx, endpoint, slug, id.secret, spec.Version); err != nil {
 		return nil, fmt.Errorf("set root-stack version stamp: %w", err)
 	}
 
 	return edge.RootStackState{
 		edge.RootStackKeySlug:       slug,
 		edge.RootStackKeyEndpoint:   endpoint,
-		edge.RootStackKeySecret:     secret,
-		edge.RootStackKeyOwnerToken: ownerToken,
+		edge.RootStackKeySecret:     id.secret,
+		edge.RootStackKeyOwnerToken: id.ownerToken,
 	}, nil
+}
+
+// storeIdentity is a project's credentials for its own deployments-store
+// instance: the owner token that proves the instance is this project's, and the
+// secret every op but /initialize authenticates with.
+type storeIdentity struct {
+	secret     string
+	ownerToken string
+}
+
+// ensureInstance brings the project's store instance to one this reconcile can
+// write to, and reports whether the root stack already carries spec.Version.
+//
+// A project's first reconcile has no secret; a renamed project's prior names a
+// different slug. Either way it mints fresh ownership and seeds a new instance —
+// the slug is the project's durable identity, so renaming it forks a new project
+// (fresh history), leaving the old instance orphaned.
+//
+// An instance that rejects the secret in state no longer holds it: a teardown
+// wiped its storage and then failed before the state naming it could be
+// forgotten. Re-seeding with the owner token in state is the recovery the store
+// is built for — it rotates the secret for a matching owner and refuses a
+// different one — so a wiped instance costs the project its promotion history,
+// not its ability to ever deploy or tear down again. A state old enough to carry
+// no owner token has nothing to prove the instance is this project's, so it can
+// only seed a new one and let the store refuse a slug someone else owns.
+func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (storeIdentity, bool, error) {
+	id := storeIdentity{
+		secret:     prior[edge.RootStackKeySecret],
+		ownerToken: prior[edge.RootStackKeyOwnerToken],
+	}
+	reseed := false
+
+	if id.secret != "" && prior[edge.RootStackKeySlug] == spec.Slug {
+		current, res, err := p.getVersionStamp(ctx, spec.StoreEndpoint, spec.Slug, id.secret)
+		switch {
+		case err == nil:
+			return id, current == spec.Version, nil
+		case !unauthorized(res):
+			return storeIdentity{}, false, fmt.Errorf("read root-stack version stamp: %w", err)
+		case id.ownerToken != "":
+			reseed = true
+		}
+	}
+
+	if !reseed {
+		minted, err := mintIdentity()
+		if err != nil {
+			return storeIdentity{}, false, err
+		}
+		id = minted
+	}
+	if err := p.initializeInstance(ctx, spec.StoreEndpoint, spec.Slug, spec.BootstrapCred, id.ownerToken, id.secret); err != nil {
+		return storeIdentity{}, false, fmt.Errorf("initialize project store instance: %w", err)
+	}
+	return id, false, nil
+}
+
+// mintIdentity mints a project a fresh identity for a store instance it is
+// about to seed.
+func mintIdentity() (storeIdentity, error) {
+	secret, err := mintSecret()
+	if err != nil {
+		return storeIdentity{}, fmt.Errorf("mint project store secret: %w", err)
+	}
+	ownerToken, err := mintSecret()
+	if err != nil {
+		return storeIdentity{}, fmt.Errorf("mint project store owner token: %w", err)
+	}
+	return storeIdentity{secret: secret, ownerToken: ownerToken}, nil
+}
+
+// unauthorized reports whether a deployments-store call was rejected for its
+// credential rather than failing outright — the instance holds no secret, or
+// not the one presented.
+func unauthorized(res *http.Response) bool {
+	return res != nil && res.StatusCode == http.StatusUnauthorized
 }
 
 // DestroyRootStack deletes every worker in names — a project's generic
@@ -276,11 +331,22 @@ func (p *provider) deleteProxiedRecord(ctx context.Context, zoneID, hostname str
 // A project that never deployed to production (no secret in state) is a no-op,
 // which also makes `ocel destroy` safe to re-run: the per-project state is
 // deleted after this succeeds, so a re-run reads empty state and skips.
+//
+// An instance that rejects the secret is reported destroyed. Wiping an instance
+// deletes the very secret this call authenticates with, so a rejected credential
+// cannot be told apart from an instance a previous run already wiped — and
+// either way there is nothing left here for this project to destroy. Treating it
+// as a failure is what would strand a teardown that failed after the wipe: the
+// state naming the instance is only forgotten once the teardown reports the
+// instance gone, so every re-run would fail on the same already-done step.
 func (p *provider) DestroyInstance(ctx context.Context, state edge.RootStackState) error {
 	if state[edge.RootStackKeySecret] == "" {
 		return nil
 	}
-	_, err := p.storeRequest(ctx, state, http.MethodPost, "/destroy", nil, nil)
+	res, err := p.storeRequest(ctx, state, http.MethodPost, "/destroy", nil, nil)
+	if unauthorized(res) {
+		return nil
+	}
 	return err
 }
 
@@ -445,17 +511,21 @@ func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, boots
 	return err
 }
 
-func (p *provider) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, error) {
+// getVersionStamp reads the version the instance's root stack last deployed. It
+// returns the response alongside the error so a caller can tell a rejected
+// credential (unauthorized) from a store it could not reach at all.
+func (p *provider) getVersionStamp(ctx context.Context, endpoint, slug, secret string) (string, *http.Response, error) {
 	var out struct {
 		Version *string `json:"version"`
 	}
-	if _, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodGet, "/version-stamp", nil, &out); err != nil {
-		return "", err
+	res, err := p.storeRequestTo(ctx, endpoint, slug, secret, http.MethodGet, "/version-stamp", nil, &out)
+	if err != nil {
+		return "", res, err
 	}
 	if out.Version == nil {
-		return "", nil
+		return "", res, nil
 	}
-	return *out.Version, nil
+	return *out.Version, res, nil
 }
 
 func (p *provider) putVersionStamp(ctx context.Context, endpoint, slug, secret, version string) error {

@@ -1,3 +1,4 @@
+import { tagSnapshotKey } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
@@ -1033,5 +1034,203 @@ describe("dispatchResult", () => {
     );
 
     expect(res.headers.has("x-matched-path")).toBe(false);
+  });
+});
+
+// A Server Action invalidates a tag at the origin, which republishes the edge's
+// tag-clock replica. The colo the action travelled through is fronting that
+// replica with a TTL'd Cache API copy, so without an explicit purge it keeps
+// answering "nothing was invalidated" for the whole TTL — and a fully static
+// route (initialRevalidate false) has no other way to go stale, so the visitor
+// who raised the invalidation is served their pre-invalidation page.
+describe("a Server Action's invalidation reaching the colo it travelled through", () => {
+  const cfg = { isrPrefix: "prod/p/app/build" };
+
+  function scenario() {
+    let now = 10_000;
+    let lambdaCalls = 0;
+    let actionRevalidates = true;
+    let replica = JSON.stringify({
+      version: 1,
+      deployedAt: 0,
+      generatedAt: 900,
+      records: {} as Record<string, { expired?: number }>,
+    });
+
+    const store = {
+      async get(key: string) {
+        if (key !== tagSnapshotKey(cfg.isrPrefix)) return null;
+        return { etag: '"v"', text: async () => replica };
+      },
+    };
+
+    // A PoP cache that really retains what it is handed — which is the whole of
+    // what makes a stale replica observable.
+    const pop = new Map<string, string>();
+    const snapshotCache = {
+      async match(request: Request) {
+        const body = pop.get(request.url);
+        return body === undefined ? undefined : new Response(body);
+      },
+      async put(request: Request, response: Response) {
+        pop.set(request.url, await response.text());
+      },
+      async delete(request: Request) {
+        return pop.delete(request.url);
+      },
+    };
+
+    const colo = new Map<string, Response>();
+    const pending: Promise<unknown>[] = [];
+    // The snapshot prime is deliberately fire-and-forget on the request path
+    // (interception.ts), so draining waitUntil alone does not mean the replica
+    // has been cached yet; yielding to the event loop is what covers it.
+    const settle = async () => {
+      while (pending.length) await pending.shift();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    const deps = baseDeps({
+      manifest: {
+        buildId: "test",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            tags: ["posts"],
+            config: { renderingMode: "STATIC" },
+            fallback: { initialRevalidate: false },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async (request: Request) => {
+        lambdaCalls++;
+        if (request.method === "POST") {
+          // What Next stamps on a Server Action response that invalidated
+          // something, by which point the origin has republished the replica.
+          return new Response("action", {
+            status: 200,
+            headers: actionRevalidates ? { "x-action-revalidated": "1" } : {},
+          });
+        }
+        return new Response("page", {
+          status: 200,
+          headers: {
+            "cache-control": "s-maxage=31536000",
+            "x-nextjs-cache": "HIT",
+          },
+        });
+      }) as unknown as typeof fetch,
+      cache: {
+        cache: {
+          match: async (request: Request) => colo.get(request.url)?.clone(),
+          put: async (request: Request, response: Response) => {
+            colo.set(request.url, response);
+          },
+        } as unknown as Cache,
+        waitUntil: (promise: Promise<unknown>) => {
+          pending.push(promise);
+        },
+        now: () => now,
+      },
+      interception: {
+        config: cfg,
+        store,
+        snapshotCache,
+        now: () => now,
+        waitUntil: (promise: Promise<unknown>) => {
+          pending.push(promise);
+        },
+      },
+    });
+
+    const get = () =>
+      dispatchResult(
+        { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+        new Request("https://app.example/blog"),
+        deps,
+      );
+
+    const runAction = () =>
+      dispatchResult(
+        { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
+        new Request("https://app.example/blog", {
+          method: "POST",
+          headers: { "next-action": "abc" },
+        }),
+        deps,
+      );
+
+    return {
+      get,
+      runAction,
+      settle,
+      lambdaCalls: () => lambdaCalls,
+      advanceTo: (at: number) => {
+        now = at;
+      },
+      actionRevalidatesNothing: () => {
+        actionRevalidates = false;
+      },
+      invalidate: (at: number) => {
+        replica = JSON.stringify({
+          version: 1,
+          deployedAt: 0,
+          generatedAt: at,
+          records: { posts: { expired: at } },
+        });
+      },
+    };
+  }
+
+  it("serves the invalidated entry as stale on the next request", async () => {
+    const s = scenario();
+
+    // Populates the colo entry (written at 10_000) and the PoP replica copy.
+    await s.get();
+    await s.settle();
+    expect(s.lambdaCalls()).toBe(1);
+
+    s.invalidate(20_000);
+    s.advanceTo(15_000);
+    const action = await s.runAction();
+    expect(action.headers.get("x-action-revalidated")).toBe("1");
+    await s.settle();
+    expect(s.lambdaCalls()).toBe(2);
+
+    // Past the isolate memo's window, so the PoP copy is the only thing that
+    // could still answer from before the invalidation.
+    s.advanceTo(30_000);
+    const after = await s.get();
+
+    expect(after.headers.get("x-nextjs-cache")).toBe("STALE");
+    await s.settle();
+    expect(s.lambdaCalls()).toBe(3);
+  });
+
+  // The control for the test above: with the purge withheld, the PoP copy is
+  // demonstrably what answers, so the staleness that test proves gone is this
+  // one and not the isolate memo lapsing on its own.
+  it("keeps answering from the cached replica when the action revalidated nothing", async () => {
+    const s = scenario();
+    s.actionRevalidatesNothing();
+
+    await s.get();
+    await s.settle();
+
+    s.invalidate(20_000);
+    s.advanceTo(15_000);
+    const action = await s.runAction();
+    expect(action.headers.has("x-action-revalidated")).toBe(false);
+    await s.settle();
+
+    s.advanceTo(30_000);
+    const after = await s.get();
+
+    expect(after.headers.get("x-nextjs-cache")).toBe("HIT");
   });
 });

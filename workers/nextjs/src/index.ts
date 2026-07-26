@@ -22,7 +22,7 @@ import {
   type InterceptDeps,
   type InterceptionConfig,
 } from "./interception";
-import { createTagClock, type TagClock } from "./tag-clock";
+import { createTagClock, invalidateSnapshot, type TagClock } from "./tag-clock";
 import {
   resolveDeployment,
   type DeploymentsBinding,
@@ -374,6 +374,7 @@ export async function dispatchResult(
   deps: RouteDeps,
 ): Promise<Response> {
   const response = await dispatch(result, request, deps);
+  await noteRevalidation(response, deps);
   if (!result.resolvedHeaders && !result.resolvedPathname) return response;
 
   const tagged = new Response(response.body, response);
@@ -394,6 +395,31 @@ export async function dispatchResult(
     tagged.headers.set("x-matched-path", result.resolvedPathname);
   }
   return tagged;
+}
+
+// Next stamps this on a Server Action response that invalidated a tag, a cookie
+// or a path. It names no tags, which is all this needs: the question it answers
+// is whether the replica this worker has cached is still the current one.
+const NEXT_ACTION_REVALIDATED = "x-action-revalidated";
+
+// A Server Action reaches its origin through this worker, and the origin has
+// published the new replica before it answers — so at this moment the colo's
+// cached view of the tag clock is the only thing left between the visitor and
+// their own write. Dropping it here is what makes an invalidation observable on
+// the visitor's next request instead of up to a snapshot TTL later.
+//
+// Awaited rather than deferred: the guarantee being bought is that the purge has
+// landed by the time the client holds the action's response, and the client's
+// next request races anything left on waitUntil.
+async function noteRevalidation(
+  response: Response,
+  deps: RouteDeps,
+): Promise<void> {
+  if (!deps.interception) return;
+  if (!response.headers.has(NEXT_ACTION_REVALIDATED)) return;
+
+  const { config, ...clockDeps } = deps.interception;
+  await invalidateSnapshot(config, clockDeps);
 }
 
 async function dispatch(
@@ -946,10 +972,11 @@ export default {
             ? {
                 loader: env.LOADER,
                 store,
-                // The loopback binding for this script's own CacheEntrypoint. It
-                // is a binding rather than a per-request stub, so the loaded
-                // isolate may hold it for as long as it lives.
-                cacheRpc: ctx.exports.CacheEntrypoint,
+                // A loopback stub for this script's own CacheEntrypoint.
+                // ctx.exports carries a stub *factory*, and only an invoked
+                // stub serializes into a loaded worker's env — the factory
+                // itself is refused with a DataCloneError.
+                cacheRpc: ctx.exports.CacheEntrypoint({}),
               }
             : undefined,
       },

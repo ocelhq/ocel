@@ -18,7 +18,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/ocelhq/ocel/cloud/edge"
 )
@@ -72,10 +71,6 @@ type DestroyProjectResult struct {
 // never reconciled a root stack, in which case there is nothing edge-side to
 // remove and RootTornDown is reported true. Best-effort throughout.
 func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, progress, log func(string)) (DestroyProjectResult, error) {
-	// The app stacks below come down concurrently, so every report from here on
-	// goes through one sender.
-	var mu sync.Mutex
-	progress, log = serialized(&mu, progress), serialized(&mu, log)
 	report := nilSafe(progress)
 
 	var errs []error
@@ -106,25 +101,12 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 		errs = append(errs, err)
 	}
 
-	// App stacks are mutually independent — they share only the infra stack that
-	// outlives them here — so they come down together, mirroring how deploy
-	// brings them up. Each keeps its own error slot rather than appending, so a
-	// failure in one neither races the others nor stops them.
-	appErrs := make([]error, len(plan.AppStacks))
-	var wg sync.WaitGroup
-	for i, name := range plan.AppStacks {
-		i, name := i, name
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			report("Destroying app stack " + name)
-			if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
-				appErrs[i] = fmt.Errorf("destroy app stack %s: %w", name, err)
-			}
-		}()
+	for _, name := range plan.AppStacks {
+		report("Destroying app stack " + name)
+		if err := Destroy(ctx, teardownConfig(cfg, name), progress, log); err != nil {
+			errs = append(errs, fmt.Errorf("destroy app stack %s: %w", name, err))
+		}
 	}
-	wg.Wait()
-	errs = append(errs, appErrs...)
 
 	if plan.InfraStack != "" {
 		report("Destroying infra stack " + plan.InfraStack + " (databases, buckets)")

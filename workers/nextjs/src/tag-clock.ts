@@ -17,10 +17,13 @@ export interface ObjectStoreReader {
   get(key: string): Promise<StoredObject | null>;
 }
 
-// The subset of the Cache API the snapshot read fronts itself with.
+// The subset of the Cache API the snapshot read fronts itself with. `delete` is
+// optional because a front that cannot purge is still a usable read-through
+// cache: it costs one TTL of staleness, never a wrong answer.
 export interface SnapshotCache {
   match(request: Request): Promise<Response | undefined>;
   put(request: Request, response: Response): Promise<void>;
+  delete?(request: Request): Promise<boolean>;
 }
 
 export interface TagClockDeps {
@@ -69,6 +72,30 @@ const snapshotMemo = new WeakMap<
 // snapshot it just replaced.
 export function dropSnapshotMemo(store: ObjectStoreReader): void {
   snapshotMemo.delete(store);
+}
+
+// An invalidation raised through this worker was already published by the origin
+// that answered it, so every layer fronting the replica is known-stale. The memo
+// alone is not enough: the PoP copy outlives the isolate and is what every other
+// isolate in the colo reads, so it is the layer that would otherwise answer the
+// raiser's own next request from before their write.
+//
+// Per-colo by construction — a worker cannot reach another PoP's cache — and
+// that is exactly the guarantee worth having, because the visitor who raised the
+// invalidation is served by the colo that just purged. Other colos converge on
+// their own TTL, as they did before.
+export async function invalidateSnapshot(
+  cfg: { isrPrefix: string },
+  deps: TagClockDeps,
+): Promise<void> {
+  dropSnapshotMemo(deps.store);
+  try {
+    const key = tagSnapshotKey(cfg.isrPrefix);
+    await deps.snapshotCache?.delete?.(new Request(snapshotCacheUrl(key)));
+  } catch {
+    // A purge that fails costs this colo one TTL of staleness, not a wrong
+    // answer: DynamoDB remains the authoritative clock either way.
+  }
 }
 
 // createTagClock reads the build's tag-clock replica, fronted by the per-isolate
