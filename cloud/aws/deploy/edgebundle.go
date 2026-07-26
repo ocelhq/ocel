@@ -123,11 +123,9 @@ func appEdgeWorkers(cfg Config, projectID, app, buildID string) (*edge.Code, err
 // compat bump would leave warm isolates on the old runtime and cold ones on the
 // new, serving the same deployment two different ways.
 //
-// It covers what deploy time decides, which is not the whole loader key: the
-// worker adds values of its own when it loads the bundle, and scopes the key by
-// them there (see createEdgeInvoker). This id is deliberately blind to those —
-// the same bundle serves deployments that differ in them, and a host predating a
-// load-time value could not hash it anyway.
+// It is one input to the loader key, not the key: the worker adds load-time
+// values of its own and scopes the key by them there (see createEdgeInvoker).
+// This id is deliberately blind to those.
 func loaderID(bundle []byte, compatDate string, compatFlags []string) string {
 	h := sha256.New()
 	h.Write(bundle)
