@@ -790,7 +790,7 @@ func upStack(ctx context.Context, cfg Config, stackName string, program pulumi.R
 	}
 
 	logWriter := lineWriter(log)
-	var upOpts []optup.Option
+	upOpts := []optup.Option{optup.Parallel(64)}
 	if logWriter != nil {
 		upOpts = append(upOpts, optup.ProgressStreams(logWriter))
 	}

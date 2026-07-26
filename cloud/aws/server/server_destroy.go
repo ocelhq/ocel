@@ -134,12 +134,14 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, opts options, pro
 		return err
 	}
 
-	derr := deploy.DestroyPreviewProject(ctx, stack, state, cfg, projectID, progress, logf)
+	result, derr := deploy.DestroyPreviewProject(ctx, stack, state, cfg, projectID, progress, logf)
 
 	// Forget the persisted preview root-stack state only once the store instance
 	// and workers are gone, so a re-run of a partial teardown still holds the
-	// identities it needs. A teardown that failed leaves the state in place.
-	if derr == nil && len(state) > 0 {
+	// identities it needs. A stack or asset failure does not hold it back: those
+	// need no identity to re-run, and keeping the state for them would leave the
+	// project pointing at an instance that no longer exists.
+	if result.RootTornDown && len(state) > 0 {
 		awscfg, awsErr := loadAWS(ctx, opts.Region)
 		if awsErr != nil {
 			return awsErr

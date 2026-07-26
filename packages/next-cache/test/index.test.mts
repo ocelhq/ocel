@@ -55,6 +55,18 @@ describe("tagsOf", () => {
       ),
     ).toEqual(["c", "s", "v"]);
   });
+
+  // The shape every stored fetch entry has: it records the tags it was written
+  // under, and its reader passes the same ones back in. BatchGetItem rejects a
+  // repeated key, so a bag here makes a tagged entry permanently unreadable.
+  it("names a tag once when the entry and the request agree on it", () => {
+    expect(
+      tagsOf(
+        { kind: "FETCH", tags: ["products"] },
+        { tags: ["products"], softTags: ["_N_T_/shop"] },
+      ),
+    ).toEqual(["products", "_N_T_/shop"]);
+  });
 });
 
 describe("areTagsExpired", () => {

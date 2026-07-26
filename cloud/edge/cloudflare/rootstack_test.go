@@ -110,10 +110,24 @@ func TestBuildStoreScriptMultipart_DeclaresMigrationOnlyWhenMigrateTrue(t *testi
 	}
 }
 
+// storeBootstrapCred / storeOwnerToken are the account-level credential
+// fakeStoreServer authorizes /initialize with (the worker's BOOTSTRAP_SECRET)
+// and the owner token its instance starts out seeded under.
+const (
+	storeBootstrapCred = "bootstrap-cred"
+	storeOwnerToken    = "owner-token"
+)
+
 // fakeStoreServer stands in for workers/deployments-store/src/index.ts's
 // fetch() surface, close enough to exercise the Go-side HTTP client without
-// any Cloudflare API: it checks the Bearer secret and serves /staged,
-// /promote, /history, /prune and /version-stamp.
+// any Cloudflare API: it checks the Bearer secret and serves /initialize,
+// /staged, /promote, /history, /prune, /version-stamp and /destroy.
+//
+// Ownership is modelled as the real store does it (store.ts initialize): the
+// instance starts seeded with secret under storeOwnerToken, /initialize rotates
+// the secret for a matching owner and 409s for a different one, and /destroy
+// clears the secret with the rest of the storage — so every later op on the
+// wiped instance is a 401, exactly as it is in production.
 func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	t.Helper()
 	var (
@@ -121,16 +135,43 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 		history []edge.HistoryEntry
 		version *string
 	)
+	// An empty secret is an instance nobody has seeded yet, so it has no owner
+	// either and the first /initialize claims it.
+	owner, live := storeOwnerToken, secret
+	if secret == "" {
+		owner = ""
+	}
 	mux := http.NewServeMux()
 	authed := func(h http.HandlerFunc) http.HandlerFunc {
 		return func(w http.ResponseWriter, r *http.Request) {
-			if r.Header.Get("Authorization") != "Bearer "+secret {
+			if live == "" || r.Header.Get("Authorization") != "Bearer "+live {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 			h(w, r)
 		}
 	}
+	mux.HandleFunc("POST /{slug}/initialize", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer "+storeBootstrapCred {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var body struct {
+			OwnerToken string `json:"ownerToken"`
+			Secret     string `json:"secret"`
+			Force      bool   `json:"force"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.OwnerToken == "" || body.Secret == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if owner != "" && owner != body.OwnerToken && !body.Force {
+			w.WriteHeader(http.StatusConflict)
+			return
+		}
+		owner, live = body.OwnerToken, body.Secret
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("PUT /{slug}/staged", authed(func(w http.ResponseWriter, r *http.Request) {
 		var rec edge.DeploymentRecord
 		if err := json.NewDecoder(r.Body).Decode(&rec); err != nil {
@@ -189,6 +230,7 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	}))
 	mux.HandleFunc("POST /{slug}/destroy", authed(func(w http.ResponseWriter, r *http.Request) {
 		staged, history, version = nil, nil, nil
+		owner, live = "", ""
 		w.WriteHeader(http.StatusNoContent)
 	}))
 	srv := httptest.NewServer(mux)
@@ -198,9 +240,21 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 
 func testState(endpoint, secret string) edge.RootStackState {
 	return edge.RootStackState{
-		edge.RootStackKeySlug:     "acme-web",
-		edge.RootStackKeyEndpoint: endpoint,
-		edge.RootStackKeySecret:   secret,
+		edge.RootStackKeySlug:       "acme-web",
+		edge.RootStackKeyEndpoint:   endpoint,
+		edge.RootStackKeySecret:     secret,
+		edge.RootStackKeyOwnerToken: storeOwnerToken,
+	}
+}
+
+// testSpec is the reconcile spec matching testState's project, addressing the
+// same instance with the account-level bootstrap credential.
+func testSpec(endpoint, version string) edge.RootStackSpec {
+	return edge.RootStackSpec{
+		Slug:          "acme-web",
+		StoreEndpoint: endpoint,
+		BootstrapCred: storeBootstrapCred,
+		Version:       version,
 	}
 }
 
@@ -387,7 +441,7 @@ func TestRemovePointer_SendsThePointerAndReturnsReclaimTargets(t *testing.T) {
 func TestGetVersionStamp_UnsetReadsEmpty(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
-	v, err := p.getVersionStamp(context.Background(), srv.URL, "acme-web", "s3cr3t")
+	v, _, err := p.getVersionStamp(context.Background(), srv.URL, "acme-web", "s3cr3t")
 	if err != nil {
 		t.Fatalf("getVersionStamp: %v", err)
 	}
@@ -403,7 +457,7 @@ func TestPutThenGetVersionStamp_RoundTrips(t *testing.T) {
 	if err := p.putVersionStamp(ctx, srv.URL, "acme-web", "s3cr3t", "v2"); err != nil {
 		t.Fatalf("putVersionStamp: %v", err)
 	}
-	v, err := p.getVersionStamp(ctx, srv.URL, "acme-web", "s3cr3t")
+	v, _, err := p.getVersionStamp(ctx, srv.URL, "acme-web", "s3cr3t")
 	if err != nil {
 		t.Fatalf("getVersionStamp: %v", err)
 	}
@@ -449,19 +503,134 @@ func TestDestroyInstance_NoSecretIsNoOp(t *testing.T) {
 func TestDestroyInstance_WipesTheInstance(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
+	ctx := context.Background()
 	state := testState(srv.URL, "s3cr3t")
-	if err := p.Promote(context.Background(), state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
+	if err := p.Promote(ctx, state, edge.Promotion{PromotionID: "p1", Ts: 1, Builds: map[string]string{"web": "b1"}}, ""); err != nil {
 		t.Fatalf("Promote: %v", err)
 	}
-	if err := p.DestroyInstance(context.Background(), state); err != nil {
+	if err := p.DestroyInstance(ctx, state); err != nil {
 		t.Fatalf("DestroyInstance: %v", err)
 	}
-	history, err := p.History(context.Background(), state, "")
-	if err != nil {
-		t.Fatalf("History: %v", err)
+	// The wipe takes the secret with it, so the instance no longer answers to
+	// the state that named it.
+	if _, err := p.History(ctx, state, ""); err == nil {
+		t.Error("history after destroy: err = nil, want the wiped instance to reject the secret")
 	}
-	if len(history) != 0 {
-		t.Errorf("history after destroy = %v, want empty", history)
+}
+
+func TestDestroyInstance_AlreadyWipedIsSuccess(t *testing.T) {
+	srv := fakeStoreServer(t, "s3cr3t")
+	p := &provider{}
+	ctx := context.Background()
+	state := testState(srv.URL, "s3cr3t")
+	if err := p.DestroyInstance(ctx, state); err != nil {
+		t.Fatalf("DestroyInstance: %v", err)
+	}
+	// Wiping deletes the secret /destroy authenticates with, so a re-run always
+	// meets a 401. Reporting that as a failure would strand a teardown that
+	// failed after the wipe: its state is only forgotten once this reports the
+	// instance gone.
+	if err := p.DestroyInstance(ctx, state); err != nil {
+		t.Fatalf("DestroyInstance on an already-wiped instance: err = %v, want nil", err)
+	}
+}
+
+func TestEnsureInstance_ReseedsAnInstanceWipedByAFailedTeardown(t *testing.T) {
+	srv := fakeStoreServer(t, "s3cr3t")
+	p := &provider{}
+	ctx := context.Background()
+	state := testState(srv.URL, "s3cr3t")
+
+	// A teardown wiped the instance and then failed, leaving the state naming it
+	// in place — the deploy that follows must recover, not fail forever.
+	if err := p.DestroyInstance(ctx, state); err != nil {
+		t.Fatalf("DestroyInstance: %v", err)
+	}
+
+	id, upToDate, err := p.ensureInstance(ctx, testSpec(srv.URL, "v2"), state)
+	if err != nil {
+		t.Fatalf("ensureInstance after a wipe: %v", err)
+	}
+	if upToDate {
+		t.Error("upToDate = true, want false: a wiped instance carries no version stamp")
+	}
+	if id.ownerToken != storeOwnerToken {
+		t.Errorf("ownerToken = %q, want the project's own %q", id.ownerToken, storeOwnerToken)
+	}
+	if err := p.putVersionStamp(ctx, srv.URL, "acme-web", id.secret, "v2"); err != nil {
+		t.Fatalf("the re-seeded instance still rejects the project: %v", err)
+	}
+}
+
+func TestEnsureInstance_RefusesAnInstanceOwnedByAnotherProject(t *testing.T) {
+	srv := fakeStoreServer(t, "s3cr3t")
+	p := &provider{}
+	state := testState(srv.URL, "stale-secret")
+	state[edge.RootStackKeyOwnerToken] = "another-projects-owner-token"
+
+	if _, _, err := p.ensureInstance(context.Background(), testSpec(srv.URL, "v2"), state); err == nil {
+		t.Fatal("ensureInstance err = nil, want a refusal: the slug belongs to another project")
+	}
+}
+
+func TestEnsureInstance_UpToDateVersionSkipsTheReconcile(t *testing.T) {
+	srv := fakeStoreServer(t, "s3cr3t")
+	p := &provider{}
+	ctx := context.Background()
+	if err := p.putVersionStamp(ctx, srv.URL, "acme-web", "s3cr3t", "v2"); err != nil {
+		t.Fatalf("putVersionStamp: %v", err)
+	}
+	id, upToDate, err := p.ensureInstance(ctx, testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t"))
+	if err != nil {
+		t.Fatalf("ensureInstance: %v", err)
+	}
+	if !upToDate {
+		t.Error("upToDate = false, want true for a root stack already at spec.Version")
+	}
+	if id.secret != "s3cr3t" {
+		t.Errorf("secret = %q, want the one already in state", id.secret)
+	}
+}
+
+func TestEnsureInstance_SeedsAFirstReconcile(t *testing.T) {
+	srv := fakeStoreServer(t, "")
+	p := &provider{}
+	ctx := context.Background()
+
+	id, upToDate, err := p.ensureInstance(ctx, testSpec(srv.URL, "v1"), nil)
+	if err != nil {
+		t.Fatalf("ensureInstance with no prior state: %v", err)
+	}
+	if upToDate {
+		t.Error("upToDate = true, want false for a project with no root stack yet")
+	}
+	if id.secret == "" || id.ownerToken == "" || id.secret == id.ownerToken {
+		t.Fatalf("minted identity = %+v, want two distinct non-empty credentials", id)
+	}
+	if err := p.putVersionStamp(ctx, srv.URL, "acme-web", id.secret, "v1"); err != nil {
+		t.Fatalf("the seeded instance rejects the minted secret: %v", err)
+	}
+}
+
+func TestEnsureInstance_DoesNotReseedOnAStoreFailure(t *testing.T) {
+	var initialized int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			initialized++
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	p := &provider{}
+
+	// Only a rejected credential means the instance lost our secret. Anything
+	// else is a store we could not read, and re-seeding on it would rotate the
+	// secret of a healthy instance.
+	if _, _, err := p.ensureInstance(context.Background(), testSpec(srv.URL, "v2"), testState(srv.URL, "s3cr3t")); err == nil {
+		t.Fatal("ensureInstance err = nil, want the store failure surfaced")
+	}
+	if initialized != 0 {
+		t.Errorf("initialize calls = %d, want 0: a 500 is not a lost secret", initialized)
 	}
 }
 

@@ -154,7 +154,13 @@ func classifyPreviewStacks(projectID string, stackNames []string) PreviewProject
 // prior `ocel preview rm` can leave it standing with no history left to name it.
 // stack/state may be zero when the project never reconciled a preview root
 // stack, in which case only stray stacks/assets are swept.
-func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, progress, log func(string)) error {
+//
+// RootTornDown reports that nothing edge-side is left, exactly as DestroyProject
+// does: it is the caller's signal that the persisted state may be forgotten. A
+// stack or asset failure below leaves it true — those hold no identity a re-run
+// needs, and gating the state on them would strand a project whose store
+// instance and workers are already gone.
+func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, progress, log func(string)) (DestroyProjectResult, error) {
 	report := nilSafe(progress)
 
 	plan, err := planPreviewProjectTeardown(ctx, cfg, projectID)
@@ -162,14 +168,17 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	if err != nil {
 		errs = append(errs, err)
 	}
+	result := DestroyProjectResult{RootTornDown: true}
 
 	if stack != nil && len(state) > 0 {
 		report("Destroying preview root worker(s)")
 		workers, wErr := stack.ListDeployedWorkers(ctx, previewWorkerPrefix(state[edge.RootStackKeySlug]))
 		if wErr != nil {
 			errs = append(errs, fmt.Errorf("resolve preview root workers: %w", wErr))
+			result.RootTornDown = false
 		} else if err := stack.DestroyRootStack(ctx, workers); err != nil {
 			errs = append(errs, fmt.Errorf("destroy preview root workers: %w", err))
+			result.RootTornDown = false
 		}
 		// One wipe clears every pointer's history and records at once — the store
 		// instance is per-project, not per-pointer. Done after the worker names
@@ -177,6 +186,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 		report("Wiping the project's preview deployments-store instance")
 		if err := stack.DestroyInstance(ctx, state); err != nil {
 			errs = append(errs, fmt.Errorf("destroy preview deployments-store instance: %w", err))
+			result.RootTornDown = false
 		}
 	}
 
@@ -198,7 +208,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 		errs = append(errs, err)
 	}
 
-	return errors.Join(errs...)
+	return result, errors.Join(errs...)
 }
 
 // planPreviewProjectTeardown lists the preview backend's stacks and classifies

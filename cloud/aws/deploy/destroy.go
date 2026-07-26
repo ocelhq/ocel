@@ -6,7 +6,6 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -37,21 +36,6 @@ func nilSafe(progress func(string)) func(string) {
 		if progress != nil {
 			progress(msg)
 		}
-	}
-}
-
-// serialized wraps a progress or log callback so concurrent teardowns can share
-// it. Both callbacks ultimately write to the one response stream the host is
-// streaming events over, which admits a single sender at a time; nil passes
-// through so nilSafe still recognizes an absent callback.
-func serialized(mu *sync.Mutex, f func(string)) func(string) {
-	if f == nil {
-		return nil
-	}
-	return func(msg string) {
-		mu.Lock()
-		defer mu.Unlock()
-		f(msg)
 	}
 }
 

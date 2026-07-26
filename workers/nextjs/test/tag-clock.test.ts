@@ -1,7 +1,11 @@
 import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
-import { createTagClock, dropSnapshotMemo } from "../src/tag-clock";
+import {
+  createTagClock,
+  dropSnapshotMemo,
+  invalidateSnapshot,
+} from "../src/tag-clock";
 
 const cfg = { isrPrefix: "prod/proj/app/build" };
 const snapshotKey = tagSnapshotKey(cfg.isrPrefix);
@@ -104,4 +108,99 @@ it("re-reads inside the memo window once the memo is dropped", async () => {
   dropSnapshotMemo(store);
   expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
   expect(gets).toHaveLength(2);
+});
+
+// The PoP copy is the layer an invalidation has to get past: it outlives the
+// isolate, is shared by every isolate in the colo, and carries the longer TTL.
+describe("the PoP copy fronting the replica", () => {
+  function popCache() {
+    const entries = new Map<string, string>();
+    return {
+      entries,
+      async match(request: Request) {
+        const body = entries.get(request.url);
+        return body === undefined ? undefined : new Response(body);
+      },
+      async put(request: Request, response: Response) {
+        entries.set(request.url, await response.text());
+      },
+      async delete(request: Request) {
+        return entries.delete(request.url);
+      },
+    };
+  }
+
+  it("answers a later read without going back to the store", async () => {
+    const store = storeWith(JSON.stringify(snapshot()));
+    const snapshotCache = popCache();
+    const clock = createTagClock(cfg, { store, snapshotCache });
+
+    await clock.expired(["posts"], 1_000, 3_000);
+    // Past the isolate memo's window, so only the PoP copy can answer.
+    await clock.expired(["posts"], 1_000, 9_000);
+
+    expect(store.gets).toHaveLength(1);
+  });
+
+  it("re-reads the replica once the copy is purged", async () => {
+    let body = JSON.stringify(snapshot());
+    const gets: string[] = [];
+    const store = {
+      async get(key: string) {
+        gets.push(key);
+        return { etag: `"${key}"`, text: async () => body };
+      },
+    };
+    const snapshotCache = popCache();
+    const clock = createTagClock(cfg, { store, snapshotCache });
+
+    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+
+    // What a Server Action's origin has already done by the time it answers.
+    body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
+    await invalidateSnapshot(cfg, { store, snapshotCache });
+
+    expect(await clock.expired(["posts"], 1_000, 9_000)).toBe(true);
+    expect(gets).toHaveLength(2);
+  });
+
+  it("purges the copy under the key the read path stored it at", async () => {
+    const store = storeWith(JSON.stringify(snapshot()));
+    const snapshotCache = popCache();
+    const clock = createTagClock(cfg, { store, snapshotCache });
+
+    await clock.expired(["posts"], 1_000, 3_000);
+    expect(snapshotCache.entries.size).toBe(1);
+
+    await invalidateSnapshot(cfg, { store, snapshotCache });
+    expect(snapshotCache.entries.size).toBe(0);
+  });
+
+  it("still drops the memo when the cache cannot purge", async () => {
+    let body = JSON.stringify(snapshot());
+    const gets: string[] = [];
+    const store = {
+      async get(key: string) {
+        gets.push(key);
+        return { etag: `"${key}"`, text: async () => body };
+      },
+    };
+    // A Cache API front with no delete, and one that throws, are the same case:
+    // the memo still goes, and the copy lapses on its own TTL.
+    const inert = {
+      async match() {
+        return undefined;
+      },
+      async put() {},
+    };
+    const clock = createTagClock(cfg, { store, snapshotCache: inert });
+
+    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(false);
+    body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
+    await invalidateSnapshot(cfg, { store, snapshotCache: inert });
+
+    // Same millisecond as the read above: only the memo drop can explain this.
+    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
+    expect(gets).toHaveLength(2);
+  });
 });

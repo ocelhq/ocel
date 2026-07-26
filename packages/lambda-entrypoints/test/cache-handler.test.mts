@@ -58,7 +58,13 @@ function fakeStore() {
       if (gate) await gate;
       fetches.set(hash, entry);
     },
+    // Rejects a repeated tag the way BatchGetItem does. A fake that quietly
+    // tolerates duplicates is more permissive than the service it stands for,
+    // and every caller's list would pass here while failing in production.
     async readTags(names) {
+      if (new Set(names).size !== names.length) {
+        throw new Error("Provided list of item keys contains duplicates");
+      }
       const found = new Map<string, TagRecord>();
       for (const n of names) {
         const rec = tags.get(n);
@@ -353,6 +359,36 @@ test("takes fetch tags from the request context", async () => {
   });
 
   expect(entry).toBeNull();
+});
+
+// A stored fetch entry records the tags it was written under, and its reader
+// passes the same ones back in — so the tag list this handler builds names them
+// twice unless it dedupes. BatchGetItem rejects a repeated key, and get()
+// swallows the throw into a miss, which makes a tagged entry unreadable for as
+// long as it carries the tag.
+test("reads back a fetch entry whose tags the request also names", async () => {
+  const store = fakeStore();
+  const handler = new OcelCacheHandler();
+
+  // Written through set() rather than seeded, because set() storing ctx.tags on
+  // the entry is what makes the reader's list repeat them.
+  const deferred = await invocation(() =>
+    handler.set(
+      "abc",
+      { kind: "FETCH", data: { body: "cached" }, revalidate: 900 },
+      { fetchCache: true, tags: ["products"] },
+    ),
+  );
+  await Promise.all(deferred);
+  expect(store.fetches.get("abc")!.value.tags).toEqual(["products"]);
+
+  const entry = await handler.get("abc", {
+    kind: "FETCH",
+    tags: ["products"],
+    softTags: ["_N_T_/shop"],
+  });
+
+  expect(entry?.value.data.body).toBe("cached");
 });
 
 // Fetch bodies are upstream response data and stay in the provider's own bucket,
