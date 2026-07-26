@@ -607,13 +607,23 @@ func assetBucketOutput() string {
 `, outputAssetBucket)
 }
 
-// edgeUserResource renders the per-substrate edge reader IAM user shared by both
+// edgeUserResource renders the per-substrate edge IAM user shared by both
 // substrate templates: the single principal the Cloudflare worker signs its
 // requests with. It carries an inline policy scoped to exactly the account-global
-// stores this stack provisions — s3:GetObject on the whole asset bucket and
-// dynamodb:BatchGetItem on the state table, the latter bounded to the TAG# tag
-// partitions so the edge key can never read the upload-session items (which carry
-// HMAC secrets) sharing the table.
+// stores this stack provisions, mirroring the Lambda tier's isrPolicy (cloud/aws
+// deploy, a separate Go module) narrowed to what the edge itself calls.
+//
+// Reads are bucket-wide (s3:GetObject) but writes are not: the edge's fetch-cache
+// writes are confined to the fetch-cache path segment of any prefix, because this
+// key is long-lived and lives in Cloudflare's environment, where a bucket-wide
+// write would let a compromise overwrite static assets, ISR entries and edge
+// bundles. The prefix itself varies per app and build (<env>/<project>/<app>/
+// <build>), so the wildcard admits any prefix and pins only the segment.
+//
+// The DynamoDB grants are bounded to the TAG# tag partitions so the edge key can
+// never read or write the upload-session items (which carry HMAC secrets) sharing
+// the table. Query is granted on the table's index separately: an index is not
+// covered by its table's ARN, so the tag drain would otherwise 403.
 //
 // The lambda:Invoke* grant is what authorizes the worker's signed Function-URL
 // forwards (the Lambdas are provisioned with AWS_IAM auth). It cannot be scoped
@@ -639,7 +649,7 @@ func edgeUserResource(userName string, trust edge.TrustBoundary) string {
     Properties:
       UserName: %s
       Policies:
-        - PolicyName: ocel-edge-isr-read
+        - PolicyName: ocel-edge-cache
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
@@ -647,8 +657,20 @@ func edgeUserResource(userName string, trust edge.TrustBoundary) string {
                 Action: s3:GetObject
                 Resource: !Sub '${AssetBucket.Arn}/*'
               - Effect: Allow
-                Action: dynamodb:BatchGetItem
+                Action: s3:PutObject
+                Resource: !Sub '${AssetBucket.Arn}/*/fetch-cache/*'
+              - Effect: Allow
+                Action:
+                  - dynamodb:BatchGetItem
+                  - dynamodb:UpdateItem
                 Resource: !GetAtt StateTable.Arn
+                Condition:
+                  ForAllValues:StringLike:
+                    dynamodb:LeadingKeys:
+                      - 'TAG#*'
+              - Effect: Allow
+                Action: dynamodb:Query
+                Resource: !Sub '${StateTable.Arn}/index/%s'
                 Condition:
                   ForAllValues:StringLike:
                     dynamodb:LeadingKeys:
@@ -661,7 +683,7 @@ func edgeUserResource(userName string, trust edge.TrustBoundary) string {
                 Condition:
                   'Null':
                     'aws:ResourceTag/ocel:app': 'false'
-`, userName)
+`, userName, StateTableIndexName)
 }
 
 // CloudFormation surfaces both "stack does not exist" and the no-op update as

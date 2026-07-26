@@ -347,7 +347,7 @@ func TestPreviewStackTemplate_StampsPreviewClass(t *testing.T) {
 }
 
 // edgeUserTemplate is the subset of a rendered template needed to assert the
-// edge reader IAM user and its inline ISR-read policy.
+// edge reader IAM user and its inline cache policy.
 type edgeUserTemplate struct {
 	Resources map[string]struct {
 		Type       string `yaml:"Type"`
@@ -369,11 +369,13 @@ type edgeUserTemplate struct {
 }
 
 // TestEdgeUser asserts both substrate templates provision the deterministic edge
-// reader IAM user with an inline policy scoped to this stack's own stores: read
-// on the asset bucket, BatchGetItem on the state table bounded to the TAG#
-// partitions (so the edge key can never reach the upload-session HMAC secrets
-// sharing the table), and the lambda:Invoke* grant scoped by the ocel:app tag
-// (functions are autonamed, so the grant is attribute-based, not name-based).
+// IAM user with an inline policy scoped to this stack's own stores: read on the
+// asset bucket, write confined to the fetch-cache prefix, BatchGetItem and
+// UpdateItem on the state table bounded to the TAG# partitions (so the edge key
+// can never reach the upload-session HMAC secrets sharing the table), Query on
+// the table's index under the same bound, and the lambda:Invoke* grant scoped by
+// the ocel:app tag (functions are autonamed, so the grant is attribute-based,
+// not name-based).
 func TestEdgeUser(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -402,38 +404,54 @@ func TestEdgeUser(t *testing.T) {
 				t.Fatalf("want exactly one inline policy, got %d", len(user.Properties.Policies))
 			}
 
+			if name := user.Properties.Policies[0].PolicyName; name != "ocel-edge-cache" {
+				t.Errorf("PolicyName = %q, want ocel-edge-cache", name)
+			}
+
 			stmts := user.Properties.Policies[0].PolicyDocument.Statement
-			var s3, ddb, invoke, invokeTagged bool
+			var s3Read, s3Write, ddbTable, ddbIndex, invoke, invokeTagged bool
 			for _, st := range stmts {
 				if st.Resource == "${AssetBucket.Arn}/*" {
-					s3 = st.Action == "s3:GetObject"
-				}
-				if cond, ok := st.Condition["ForAllValues:StringLike"].(map[string]any); ok {
-					if keys, ok := cond["dynamodb:LeadingKeys"].([]any); ok && len(keys) == 1 && keys[0] == "TAG#*" {
-						ddb = true
+					s3Read = hasAction(st.Action, "s3:GetObject")
+					// The key is long-lived and lives in Cloudflare's environment,
+					// so a bucket-wide write would let it overwrite static assets,
+					// ISR entries and edge bundles.
+					if hasAction(st.Action, "s3:PutObject") {
+						t.Error("s3:PutObject must not be granted bucket-wide")
 					}
 				}
-				if actions, ok := st.Action.([]any); ok {
-					for _, a := range actions {
-						if a == "lambda:InvokeFunctionUrl" {
-							invoke = true
-							// The grant is scoped by attribute, not name: any
-							// function carrying an ocel:app tag, gated by a Null
-							// presence check on that tag.
-							if null, ok := st.Condition["Null"].(map[string]any); ok {
-								if null["aws:ResourceTag/ocel:app"] == "false" {
-									invokeTagged = true
-								}
-							}
+				if st.Resource == "${AssetBucket.Arn}/*/fetch-cache/*" {
+					s3Write = hasAction(st.Action, "s3:PutObject")
+				}
+				if st.Resource == "StateTable.Arn" && boundToTagKeys(st.Condition) {
+					ddbTable = hasAction(st.Action, "dynamodb:BatchGetItem") && hasAction(st.Action, "dynamodb:UpdateItem")
+				}
+				if st.Resource == "${StateTable.Arn}/index/"+StateTableIndexName && boundToTagKeys(st.Condition) {
+					ddbIndex = hasAction(st.Action, "dynamodb:Query")
+				}
+				if hasAction(st.Action, "lambda:InvokeFunctionUrl") {
+					invoke = true
+					// The grant is scoped by attribute, not name: any function
+					// carrying an ocel:app tag, gated by a Null presence check on
+					// that tag.
+					if null, ok := st.Condition["Null"].(map[string]any); ok {
+						if null["aws:ResourceTag/ocel:app"] == "false" {
+							invokeTagged = true
 						}
 					}
 				}
 			}
-			if !s3 {
+			if !s3Read {
 				t.Error("missing s3:GetObject on the asset bucket")
 			}
-			if !ddb {
-				t.Error("missing dynamodb:BatchGetItem bounded to the TAG# LeadingKeys")
+			if !s3Write {
+				t.Error("missing s3:PutObject scoped to the fetch-cache prefix")
+			}
+			if !ddbTable {
+				t.Error("missing dynamodb:BatchGetItem + UpdateItem bounded to the TAG# LeadingKeys")
+			}
+			if !ddbIndex {
+				t.Error("missing dynamodb:Query on the table's index bounded to the TAG# LeadingKeys")
 			}
 			if !invoke {
 				t.Error("missing the lambda:Invoke* grant")
@@ -443,4 +461,32 @@ func TestEdgeUser(t *testing.T) {
 			}
 		})
 	}
+}
+
+// hasAction reports whether a statement grants action. YAML hands Action back as
+// a scalar string for a single action and a list for several.
+func hasAction(action any, want string) bool {
+	switch a := action.(type) {
+	case string:
+		return a == want
+	case []any:
+		for _, v := range a {
+			if v == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// boundToTagKeys reports whether a statement is bounded to the TAG# key
+// partitions, the condition that keeps the edge key away from the upload-session
+// items sharing the state table.
+func boundToTagKeys(condition map[string]any) bool {
+	cond, ok := condition["ForAllValues:StringLike"].(map[string]any)
+	if !ok {
+		return false
+	}
+	keys, ok := cond["dynamodb:LeadingKeys"].([]any)
+	return ok && len(keys) == 1 && keys[0] == "TAG#*"
 }
