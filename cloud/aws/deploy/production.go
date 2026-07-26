@@ -39,7 +39,7 @@ import (
 // ReconcileRootStack is a no-op once a project's root stack already carries it;
 // bump it only when the frozen generic/store worker bundles change shape in a
 // way that needs re-deploying.
-const rootStackVersion = "8"
+const rootStackVersion = "9"
 
 // appDeployResult is one app's app-deploy-stack outcome, fed into
 // finalizeProductionDeploy after Run has driven that stack (Pulumi) to
@@ -326,9 +326,10 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		return nil, err
 	}
 	// The generic worker signs its Function-URL forwards (the Lambdas are
-	// AWS_IAM-gated) with the edge reader's key. The bundle is the same bytes
-	// for every app, so the credentials are bound once here.
-	generic = withEdgeSigningCreds(generic, cfg)
+	// AWS_IAM-gated) with the edge reader's key, and addresses the ISR stores
+	// directly under the same key. The bundle is the same bytes for every app, so
+	// both are bound once here.
+	generic = withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg)
 
 	base := edge.RootStackSpec{
 		Version:         version,
@@ -471,6 +472,25 @@ func withEdgeSigningCreds(worker edge.Worker, cfg Config) edge.Worker {
 	}
 	secrets[edge.EdgeSecretKeyVar] = cfg.EdgeSecretKey
 	worker.Secrets = secrets
+	return worker
+}
+
+// withCacheCoordinates binds the account-global stores the worker's cache
+// entrypoint reads and writes the ISR cache in — see the var names in cloud/edge
+// for why they are worker vars rather than per-deployment record fields. A store
+// the substrate has not got (a bootstrap predating it) is left unbound rather
+// than bound empty, so the worker reads it as absent the way it already reads a
+// missing credential.
+func withCacheCoordinates(worker edge.Worker, cfg Config) edge.Worker {
+	for name, value := range map[string]string{
+		edge.AWSRegionVar:   cfg.Region,
+		edge.StateTableVar:  cfg.StateTable,
+		edge.AssetBucketVar: cfg.AssetBucket,
+	} {
+		if value != "" {
+			worker = withVar(worker, name, value)
+		}
+	}
 	return worker
 }
 
