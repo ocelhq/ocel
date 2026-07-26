@@ -64,6 +64,14 @@ const snapshotMemo = new WeakMap<
   { at: number; snapshot: TagSnapshot | null }
 >();
 
+// dropSnapshotMemo discards this isolate's memoized snapshot for a store, so the
+// next read goes back to it. Only a writer that has just republished the replica
+// needs this: the memo window is what would otherwise answer that writer's own
+// next read from the snapshot it just replaced.
+export function dropSnapshotMemo(store: ObjectStoreReader): void {
+  snapshotMemo.delete(store);
+}
+
 // createTagClock reads the build's tag-clock replica, fronted by the per-isolate
 // memo and the PoP Cache API exactly as the interception path did before the
 // split. The memo is keyed on the store binding, so two clocks over the same
