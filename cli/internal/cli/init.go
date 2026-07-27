@@ -103,7 +103,7 @@ func resolveSlug(projectDir, requested string) (string, error) {
 		return derived, nil
 	}
 
-	if !validSlug(requested) {
+	if !projectconfig.ValidSlug(requested) {
 		return "", fmt.Errorf("invalid slug %q — a slug must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen", requested)
 	}
 	return requested, nil
