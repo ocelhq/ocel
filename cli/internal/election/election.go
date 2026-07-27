@@ -1,5 +1,5 @@
 // Package election decides whether an `ocel dev` process becomes the leader
-// or a follower for a project, based on the lockfile recorded by
+// or a follower for a working tree, based on the lockfile recorded by
 // internal/lockfile.
 package election
 
@@ -42,19 +42,22 @@ type Result struct {
 // address is still reachable before concluding it's dead.
 var dialTimeout = 500 * time.Millisecond
 
-// Elect determines this process's role for projectID:
+// Elect determines this process's role for the project rooted at root:
 //   - no lockfile -> Leader.
 //   - lockfile with a reachable address -> Follower.
 //   - lockfile with an unreachable address (a prior leader crashed without
 //     cleaning up) -> the stale lockfile is removed and this process
 //     becomes Leader. Followers never self-promote; only Elect reclaims.
 //
+// The root is the unit of isolation, so election needs no cloud state and can
+// run before any is resolved.
+//
 // On becoming Leader, the caller is responsible for binding its own
 // listener and recording its address with lockfile.Create. That create is
 // exclusive: if it fails with os.ErrExist, a concurrent process won the
 // election first, and the caller should re-run Elect to join it.
-func Elect(projectID string) (Result, error) {
-	addr, err := lockfile.Read(projectID)
+func Elect(root string) (Result, error) {
+	addr, err := lockfile.Read(root)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return Result{Role: Leader}, nil
@@ -67,7 +70,7 @@ func Elect(projectID string) (Result, error) {
 		return Result{Role: Follower, LeaderAddr: addr}, nil
 	}
 
-	if err := lockfile.Remove(projectID); err != nil {
+	if err := lockfile.Remove(root); err != nil {
 		return Result{}, fmt.Errorf("reclaim stale leader lockfile: %w", err)
 	}
 	return Result{Role: Leader}, nil
