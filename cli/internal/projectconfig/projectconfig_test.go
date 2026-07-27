@@ -327,6 +327,34 @@ export default {
 	}
 }
 
+// ValidSlug is the single definition of the slug rule, shared with everything
+// that mints one, so its boundaries are pinned directly and not only through
+// Resolve.
+func TestValidSlug(t *testing.T) {
+	valid := []string{"a", "acme", "acme-web-1", "1", strings.Repeat("a", 63)}
+	for _, s := range valid {
+		if !ValidSlug(s) {
+			t.Errorf("ValidSlug(%q) = false, want true", s)
+		}
+	}
+
+	invalid := []string{
+		"",
+		"UPPER",
+		"Has_Underscore",
+		"-leading",
+		"trailing-",
+		"has space",
+		"has.dot",
+		strings.Repeat("a", 64),
+	}
+	for _, s := range invalid {
+		if ValidSlug(s) {
+			t.Errorf("ValidSlug(%q) = true, want false", s)
+		}
+	}
+}
+
 func TestResolve_InvalidSlugRejected(t *testing.T) {
 	for _, bad := range []string{"Has_Underscore", "UPPER", "-leading", "trailing-", "has space"} {
 		t.Run(bad, func(t *testing.T) {

@@ -300,7 +300,7 @@ func load(configPath string) (*Config, error) {
 	if raw.Slug == "" {
 		return nil, fmt.Errorf("%s is missing required \"slug\" — %s", configPath, initHint)
 	}
-	if !validSlug(raw.Slug) {
+	if !ValidSlug(raw.Slug) {
 		return nil, fmt.Errorf("%s has an invalid \"slug\" %q — it must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen", configPath, raw.Slug)
 	}
 
@@ -340,14 +340,20 @@ func load(configPath string) (*Config, error) {
 	}, nil
 }
 
-// slugPattern is the DNS-label shape a project slug must take: it keys the
-// project's own instance in the shared deployments-store worker (idFromName), a
-// URL path segment and an SSM parameter name, so it stays lowercase, digit and
-// hyphen only, 1–63 chars, not hyphen-bounded.
+// slugPattern is the DNS-label shape ValidSlug enforces.
 var slugPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
-// validSlug reports whether s is a usable project slug.
-func validSlug(s string) bool {
+// ValidSlug reports whether s is a usable project slug: a DNS label, meaning
+// lowercase letters, digits and hyphens only, 1–63 characters, not starting or
+// ending with a hyphen.
+//
+// The rule is a DNS label because the slug is spent as one in three places —
+// the shared deployments-store worker's instance name (idFromName), a URL path
+// segment, and an SSM parameter name. It is exported so everything that mints
+// or checks a slug — `ocel init` scaffolding a config, this resolver reading
+// one back — enforces the identical rule; slug is the sole project identity, so
+// two copies of this test drifting apart would orphan infrastructure.
+func ValidSlug(s string) bool {
 	return slugPattern.MatchString(s)
 }
 
