@@ -92,7 +92,7 @@ const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building 
 // configured, malformed or missing config — is returned before anything is
 // spawned.
 //
-// Deploy makes no call to the Ocel API: the project id comes from the resolved
+// Deploy makes no call to the Ocel API: the slug comes from the resolved
 // config, and the manifest is built entirely locally. It authenticates only to
 // the user's own cloud account, through the provider binary.
 func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
