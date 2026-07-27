@@ -104,7 +104,7 @@ func TestDeploy_RejectsWrongToken(t *testing.T) {
 func TestDeploy_MalformedManifestFailsBeforeStreaming(t *testing.T) {
 	client := newTestClient(t, testToken)
 
-	badManifest := &deploymentsv1.Manifest{SchemaVersion: "", ProjectId: "proj_123"}
+	badManifest := &deploymentsv1.Manifest{SchemaVersion: "", Slug: "proj-123"}
 	stream, err := client.Deploy(context.Background(), &deploymentsv1.DeployRequest{Manifest: badManifest})
 	if err != nil {
 		t.Fatalf("Deploy() error = %v, want nil (error surfaces on Receive)", err)

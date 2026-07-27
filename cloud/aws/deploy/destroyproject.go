@@ -33,13 +33,13 @@ type ProjectTeardownPlan struct {
 
 // classifyProjectStacks splits the account-global backend's stack names into
 // one project's teardown plan. A project owns every stack under the
-// "<safeName(projectID)>--" prefix; the exact "<safeName>--infra" name is its
+// "<safeName(slug)>--" prefix; the exact "<safeName>--infra" name is its
 // infra stack and the rest are app-deploy stacks. The "--" delimiter keeps a
 // project from matching a sibling whose id is a prefix of its own, and keeps
 // production's "--" names off single-dash preview stacks. Pure.
-func classifyProjectStacks(projectID string, stackNames []string) ProjectTeardownPlan {
-	prefix := safeName(projectID) + "--"
-	infra := InfraStackName(projectID)
+func classifyProjectStacks(slug string, stackNames []string) ProjectTeardownPlan {
+	prefix := safeName(slug) + "--"
+	infra := InfraStackName(slug)
 	var plan ProjectTeardownPlan
 	for _, name := range stackNames {
 		if !strings.HasPrefix(name, prefix) {
@@ -70,7 +70,7 @@ type DestroyProjectResult struct {
 // project's R2/S3 asset prefixes. stack/state may be zero when the project
 // never reconciled a root stack, in which case there is nothing edge-side to
 // remove and RootTornDown is reported true. Best-effort throughout.
-func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, progress, log func(string)) (DestroyProjectResult, error) {
+func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, progress, log func(string)) (DestroyProjectResult, error) {
 	report := nilSafe(progress)
 
 	var errs []error
@@ -78,7 +78,7 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 
 	if stack != nil && len(state) > 0 {
 		report("Destroying root stack (workers, custom domain)")
-		workers, err := rootStackWorkerNames(ctx, stack, state, projectID, cfg.Env)
+		workers, err := rootStackWorkerNames(ctx, stack, state, slug, cfg.Env)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("resolve root-stack workers: %w", err))
 			result.RootTornDown = false
@@ -96,7 +96,7 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 		}
 	}
 
-	plan, err := PlanProjectTeardown(ctx, cfg, projectID)
+	plan, err := PlanProjectTeardown(ctx, cfg, slug)
 	if err != nil {
 		errs = append(errs, err)
 	}
@@ -116,7 +116,7 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 	}
 
 	report("Purging project assets")
-	if err := purgeProjectAssets(ctx, cfg, projectID); err != nil {
+	if err := purgeProjectAssets(ctx, cfg, slug); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -133,8 +133,8 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 // history carries, keyed by app. The shared deployments-store worker is never
 // in this set — it outlives the project, and DestroyProject wipes only the
 // project's own instance of it (DestroyInstance).
-func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.RootStackState, projectID, env string) ([]string, error) {
-	prodStack := projectID + "-" + env
+func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.RootStackState, slug, env string) ([]string, error) {
+	prodStack := slug + "-" + env
 
 	history, err := stack.History(ctx, state, "")
 	if err != nil {
@@ -177,7 +177,7 @@ func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.
 // PlanProjectTeardown lists the account-global backend's stacks and classifies
 // the ones this project owns. It opens a bare Pulumi workspace over the same
 // self-managed backend Destroy selects against.
-func PlanProjectTeardown(ctx context.Context, cfg Config, projectID string) (ProjectTeardownPlan, error) {
+func PlanProjectTeardown(ctx context.Context, cfg Config, slug string) (ProjectTeardownPlan, error) {
 	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
 	if err != nil {
 		return ProjectTeardownPlan{}, err
@@ -190,7 +190,7 @@ func PlanProjectTeardown(ctx context.Context, cfg Config, projectID string) (Pro
 	for i, s := range summaries {
 		names[i] = s.Name
 	}
-	return classifyProjectStacks(projectID, names), nil
+	return classifyProjectStacks(slug, names), nil
 }
 
 // purgeProjectAssets deletes a project's whole R2/S3 footprint: its static
@@ -199,9 +199,9 @@ func PlanProjectTeardown(ctx context.Context, cfg Config, projectID string) (Pro
 // the project prefix so every app and build under it goes at once. Deleting a
 // prefix nothing was written to is a no-op, mirroring Reclaim's per-build sweep
 // at project scope.
-func purgeProjectAssets(ctx context.Context, cfg Config, projectID string) error {
-	assets := projectAssetR2Prefix(projectID)
-	isr := projectISRPrefix(cfg.Env, projectID)
+func purgeProjectAssets(ctx context.Context, cfg Config, slug string) error {
+	assets := projectAssetR2Prefix(slug)
+	isr := projectISRPrefix(cfg.Env, slug)
 	var errs []error
 	for _, t := range []struct {
 		deleter PrefixDeleter
@@ -209,7 +209,7 @@ func purgeProjectAssets(ctx context.Context, cfg Config, projectID string) error
 		prefix  string
 	}{
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, assets},
-		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, projectEdgeR2Prefix(projectID)},
+		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, projectEdgeR2Prefix(slug)},
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, isr},
 		{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, isr},
 	} {
@@ -224,21 +224,21 @@ func purgeProjectAssets(ctx context.Context, cfg Config, projectID string) error
 // and build of a project lives (appAssetR2Prefix without the app/build tail).
 // The trailing slash keeps it from matching a sibling project whose id shares
 // this one as a prefix.
-func projectAssetR2Prefix(projectID string) string {
-	return path.Join("assets", projectID) + "/"
+func projectAssetR2Prefix(slug string) string {
+	return path.Join("assets", slug) + "/"
 }
 
 // projectEdgeR2Prefix is the edge-bundle prefix root under which every app and
 // build of a project lives (appEdgeR2Prefix without the app/build tail),
 // trailing-slashed for the same reason projectAssetR2Prefix is.
-func projectEdgeR2Prefix(projectID string) string {
-	return path.Join("edge", projectID) + "/"
+func projectEdgeR2Prefix(slug string) string {
+	return path.Join("edge", slug) + "/"
 }
 
 // projectISRPrefix is the ISR/prerender prefix root for a project in one
 // environment (appAssetPrefixFor without the app/build tail).
-func projectISRPrefix(env, projectID string) string {
-	return path.Join(env, projectID) + "/"
+func projectISRPrefix(env, slug string) string {
+	return path.Join(env, slug) + "/"
 }
 
 // teardownConfig projects the account-global Config onto the single-stack

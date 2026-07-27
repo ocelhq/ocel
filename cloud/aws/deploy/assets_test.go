@@ -153,7 +153,7 @@ func TestBuildDeploymentRecord_AssetPrefixIsTheFullR2KeyRoot(t *testing.T) {
 		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
 	})
 	cfg := Config{ArtifactRoot: root}
-	manifest := &deploymentsv1.Manifest{ProjectId: "proj"}
+	manifest := &deploymentsv1.Manifest{Slug: "proj"}
 	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
 	record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
@@ -192,7 +192,7 @@ func TestBuildDeploymentRecord_IsrPrefixIsTheIsrKeyRoot(t *testing.T) {
 // a location nothing was ever uploaded to.
 func TestBuildDeploymentRecord_NonNextAppHasNoAssetPrefix(t *testing.T) {
 	cfg := Config{ArtifactRoot: t.TempDir()}
-	manifest := &deploymentsv1.Manifest{ProjectId: "proj"}
+	manifest := &deploymentsv1.Manifest{Slug: "proj"}
 	app := &deploymentsv1.ManifestApp{Name: "api", Framework: "express"}
 
 	record, err := buildDeploymentRecord(cfg, manifest, app, "API1", nil)

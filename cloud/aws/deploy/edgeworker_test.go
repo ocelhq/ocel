@@ -186,7 +186,7 @@ func TestDeployEdgeWorker_FullyConfiguredBindingSet(t *testing.T) {
 		EdgeSecretKey:   "secret-edge",
 	}
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug: "proj",
 		Functions: []*deploymentsv1.ManifestFunction{
 			{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"},
 		},
@@ -249,7 +249,7 @@ func TestDeployResolver_EdgeCredentialsNotConfigured(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
 	r := &deployResolver{
 		cfg:      Config{ArtifactRoot: artifactRoot},
-		manifest: &deploymentsv1.Manifest{ProjectId: "proj"},
+		manifest: &deploymentsv1.Manifest{Slug: "proj"},
 	}
 	if creds, ok := r.EdgeCredentials(); ok {
 		t.Errorf("expected not-configured, got %+v", creds)
@@ -405,7 +405,7 @@ func twoNextApps(t *testing.T) (string, *deploymentsv1.Manifest, []*deploymentsv
 	webApp, webFn := nextApp("web", nil)
 	docsApp, docsFn := nextApp("docs", nil)
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug:      "proj",
 		Apps:      []*deploymentsv1.ManifestApp{webApp, docsApp},
 		Functions: []*deploymentsv1.ManifestFunction{webFn, docsFn},
 	}
@@ -493,8 +493,8 @@ func TestDeployEdgeWorker_ProjectDomainNeedsExactlyOneWorkerApp(t *testing.T) {
 
 	webApp, webFn := nextApp("web", nil)
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
-		Domains:   classDomains("production", "project.acme.com"),
+		Slug:    "proj",
+		Domains: classDomains("production", "project.acme.com"),
 		Apps: []*deploymentsv1.ManifestApp{
 			webApp,
 			{Name: "api", Framework: "express"},
@@ -665,8 +665,8 @@ func TestDeployEdgeWorker_ConfiguredAppWithNoFunctionsDeploysNoWorker(t *testing
 	setWorkerBundle(t)
 	fake := &recordingEdge{}
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "marketing", Framework: "next"}},
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "marketing", Framework: "next"}},
 	}
 	cfg := Config{Edge: fake, ArtifactRoot: t.TempDir(), StackName: "proj-prod"}
 
@@ -690,7 +690,7 @@ func TestDeployEdgeWorker_ZeroFunctionAppDoesNotBlockOthers(t *testing.T) {
 
 	webApp, webFn := nextApp("web", nil)
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug:      "proj",
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "marketing", Framework: "next"}, webApp},
 		Functions: []*deploymentsv1.ManifestFunction{webFn},
 	}

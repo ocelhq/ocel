@@ -14,11 +14,11 @@ func TestRootStackState_WriteThenReadRoundTrips(t *testing.T) {
 		edge.RootStackKeySecret:   "s3cr3t",
 	}
 
-	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj_1", state); err != nil {
+	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj-1", state); err != nil {
 		t.Fatalf("WriteRootStackStateFor: %v", err)
 	}
 
-	got, err := ReadRootStackState(context.Background(), ssmc, "proj_1")
+	got, err := ReadRootStackState(context.Background(), ssmc, "proj-1")
 	if err != nil {
 		t.Fatalf("ReadRootStackState: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestRootStackState_WriteThenReadRoundTrips(t *testing.T) {
 func TestRootStackState_ReadAbsentReturnsNilNotError(t *testing.T) {
 	ssmc := newFakeSSM()
 
-	got, err := ReadRootStackState(context.Background(), ssmc, "proj_never_deployed")
+	got, err := ReadRootStackState(context.Background(), ssmc, "proj-never-deployed")
 	if err != nil {
 		t.Fatalf("ReadRootStackState on an absent parameter: %v", err)
 	}
@@ -44,15 +44,15 @@ func TestRootStackState_ReadAbsentReturnsNilNotError(t *testing.T) {
 
 func TestDeleteRootStackState_RemovesThenReadsAbsent(t *testing.T) {
 	ssmc := newFakeSSM()
-	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://store"}); err != nil {
+	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj-1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://store"}); err != nil {
 		t.Fatalf("WriteRootStackStateFor: %v", err)
 	}
 
-	if err := DeleteRootStackState(context.Background(), ssmc, "proj_1"); err != nil {
+	if err := DeleteRootStackState(context.Background(), ssmc, "proj-1"); err != nil {
 		t.Fatalf("DeleteRootStackState: %v", err)
 	}
 
-	got, err := ReadRootStackState(context.Background(), ssmc, "proj_1")
+	got, err := ReadRootStackState(context.Background(), ssmc, "proj-1")
 	if err != nil {
 		t.Fatalf("ReadRootStackState after delete: %v", err)
 	}
@@ -63,41 +63,41 @@ func TestDeleteRootStackState_RemovesThenReadsAbsent(t *testing.T) {
 
 func TestDeleteRootStackState_AbsentIsIdempotentSuccess(t *testing.T) {
 	ssmc := newFakeSSM()
-	if err := DeleteRootStackState(context.Background(), ssmc, "proj_never_deployed"); err != nil {
+	if err := DeleteRootStackState(context.Background(), ssmc, "proj-never-deployed"); err != nil {
 		t.Fatalf("DeleteRootStackState on an absent parameter: %v, want nil (idempotent)", err)
 	}
 }
 
 func TestRootStackState_ScopedPerProject(t *testing.T) {
 	ssmc := newFakeSSM()
-	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj_a", edge.RootStackState{edge.RootStackKeyEndpoint: "https://a"}); err != nil {
-		t.Fatalf("WriteRootStackStateFor(proj_a): %v", err)
+	if err := WriteRootStackStateFor(context.Background(), ssmc, ClassProduction, "proj-a", edge.RootStackState{edge.RootStackKeyEndpoint: "https://a"}); err != nil {
+		t.Fatalf("WriteRootStackStateFor(proj-a): %v", err)
 	}
 
-	got, err := ReadRootStackState(context.Background(), ssmc, "proj_b")
+	got, err := ReadRootStackState(context.Background(), ssmc, "proj-b")
 	if err != nil {
-		t.Fatalf("ReadRootStackState(proj_b): %v", err)
+		t.Fatalf("ReadRootStackState(proj-b): %v", err)
 	}
 	if len(got) != 0 {
-		t.Errorf("proj_b state = %v, want empty: state must not leak across projects", got)
+		t.Errorf("proj-b state = %v, want empty: state must not leak across projects", got)
 	}
 }
 
 func TestRootStackState_ProductionAndPreviewAreSeparate(t *testing.T) {
 	ssmc := newFakeSSM()
 	ctx := context.Background()
-	if err := WriteRootStackStateFor(ctx, ssmc, ClassProduction, "proj_1", edge.RootStackState{edge.RootStackKeySecret: "prod-secret"}); err != nil {
+	if err := WriteRootStackStateFor(ctx, ssmc, ClassProduction, "proj-1", edge.RootStackState{edge.RootStackKeySecret: "prod-secret"}); err != nil {
 		t.Fatalf("WriteRootStackStateFor(production): %v", err)
 	}
-	if err := WriteRootStackStateFor(ctx, ssmc, ClassPreview, "proj_1", edge.RootStackState{edge.RootStackKeySecret: "preview-secret"}); err != nil {
+	if err := WriteRootStackStateFor(ctx, ssmc, ClassPreview, "proj-1", edge.RootStackState{edge.RootStackKeySecret: "preview-secret"}); err != nil {
 		t.Fatalf("WriteRootStackStateFor(preview): %v", err)
 	}
 
-	prod, err := ReadRootStackStateFor(ctx, ssmc, ClassProduction, "proj_1")
+	prod, err := ReadRootStackStateFor(ctx, ssmc, ClassProduction, "proj-1")
 	if err != nil {
 		t.Fatalf("ReadRootStackStateFor(production): %v", err)
 	}
-	preview, err := ReadRootStackStateFor(ctx, ssmc, ClassPreview, "proj_1")
+	preview, err := ReadRootStackStateFor(ctx, ssmc, ClassPreview, "proj-1")
 	if err != nil {
 		t.Fatalf("ReadRootStackStateFor(preview): %v", err)
 	}
@@ -112,10 +112,10 @@ func TestRootStackState_ProductionAndPreviewAreSeparate(t *testing.T) {
 	}
 
 	// Deleting one substrate's state leaves the other intact.
-	if err := DeleteRootStackStateFor(ctx, ssmc, ClassPreview, "proj_1"); err != nil {
+	if err := DeleteRootStackStateFor(ctx, ssmc, ClassPreview, "proj-1"); err != nil {
 		t.Fatalf("DeleteRootStackStateFor(preview): %v", err)
 	}
-	stillProd, err := ReadRootStackStateFor(ctx, ssmc, ClassProduction, "proj_1")
+	stillProd, err := ReadRootStackStateFor(ctx, ssmc, ClassProduction, "proj-1")
 	if err != nil {
 		t.Fatalf("ReadRootStackStateFor(production) after preview delete: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestRootStackState_ProductionAndPreviewAreSeparate(t *testing.T) {
 }
 
 func TestRootStackStateFor_UnknownClassErrors(t *testing.T) {
-	if _, err := ReadRootStackStateFor(context.Background(), newFakeSSM(), "nonsense", "proj_1"); err == nil {
+	if _, err := ReadRootStackStateFor(context.Background(), newFakeSSM(), "nonsense", "proj-1"); err == nil {
 		t.Error("ReadRootStackStateFor(unknown class) = nil error, want an error")
 	}
 }
@@ -133,14 +133,14 @@ func TestRootStackStateFor_UnknownClassErrors(t *testing.T) {
 func TestRootStackState_OverwritesOnRewrite(t *testing.T) {
 	ssmc := newFakeSSM()
 	ctx := context.Background()
-	if err := WriteRootStackStateFor(ctx, ssmc, ClassProduction, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://old"}); err != nil {
+	if err := WriteRootStackStateFor(ctx, ssmc, ClassProduction, "proj-1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://old"}); err != nil {
 		t.Fatalf("first WriteRootStackStateFor: %v", err)
 	}
-	if err := WriteRootStackStateFor(ctx, ssmc, ClassProduction, "proj_1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://new"}); err != nil {
+	if err := WriteRootStackStateFor(ctx, ssmc, ClassProduction, "proj-1", edge.RootStackState{edge.RootStackKeyEndpoint: "https://new"}); err != nil {
 		t.Fatalf("second WriteRootStackStateFor: %v", err)
 	}
 
-	got, err := ReadRootStackState(ctx, ssmc, "proj_1")
+	got, err := ReadRootStackState(ctx, ssmc, "proj-1")
 	if err != nil {
 		t.Fatalf("ReadRootStackState: %v", err)
 	}

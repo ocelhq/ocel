@@ -23,8 +23,8 @@ const staticAssetsDir = "static"
 // different top segment) so the two lifecycles never collide. The frozen
 // worker reads this back verbatim as the Deployment record's AssetPrefix and
 // joins it with a request's pathname to form the object key.
-func appAssetR2Prefix(projectID, app, buildID string) string {
-	return path.Join("assets", projectID, sanitizeWorkerName(app), buildID)
+func appAssetR2Prefix(slug, app, buildID string) string {
+	return path.Join("assets", slug, sanitizeWorkerName(app), buildID)
 }
 
 // uploadStaticAssets uploads every Next.js app's static/ build output to the
@@ -57,7 +57,7 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 		if err != nil {
 			return err
 		}
-		prefix := appAssetR2Prefix(manifest.GetProjectId(), name, buildID)
+		prefix := appAssetR2Prefix(manifest.GetSlug(), name, buildID)
 		for _, rel := range rels {
 			uploads = append(uploads, upload{
 				key: path.Join(prefix, rel),

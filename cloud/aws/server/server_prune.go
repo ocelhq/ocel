@@ -56,17 +56,17 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 	// A preview environment prunes that named pointer's history in the preview
 	// store/substrate; anything else prunes production.
 	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
-		cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetProjectId(), env)
+		cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
 		if err != nil {
 			return edge.PruneResult{}, err
 		}
 		if len(state) == 0 {
 			return edge.PruneResult{}, nil
 		}
-		return deploy.Prune(ctx, stack, state, cfg, req.GetProjectId(), int(req.GetKeepN()), env.GetIdentity(), progress, logf)
+		return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), env.GetIdentity(), progress, logf)
 	}
 
-	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
+	stack, state, err := s.rootStack(ctx, opts, req.GetSlug())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return edge.PruneResult{}, nil
@@ -79,7 +79,7 @@ func (s *Server) runPrune(ctx context.Context, req *deploymentsv1.PruneRequest, 
 		return edge.PruneResult{}, err
 	}
 
-	return deploy.Prune(ctx, stack, state, cfg, req.GetProjectId(), int(req.GetKeepN()), "", progress, logf)
+	return deploy.Prune(ctx, stack, state, cfg, req.GetSlug(), int(req.GetKeepN()), "", progress, logf)
 }
 
 // pruneSummaryLines renders the kept-vs-reclaimed outcome as the human-readable

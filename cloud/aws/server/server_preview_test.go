@@ -35,26 +35,26 @@ func TestStackName(t *testing.T) {
 		env  *deploymentsv1.Environment
 		want string
 	}{
-		{"nil env keeps production", nil, "proj_123-prod"},
+		{"nil env keeps production", nil, "proj-123-prod"},
 		{
 			"production class keeps production",
 			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION},
-			"proj_123-prod",
+			"proj-123-prod",
 		},
 		{
 			"preview ephemeral isolates by identity",
 			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL, Identity: "feature_login_ab12"},
-			"proj_123-preview-feature_login_ab12",
+			"proj-123-preview-feature_login_ab12",
 		},
 		{
 			"preview persistent isolates by identity",
 			&deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "staging"},
-			"proj_123-preview-staging",
+			"proj-123-preview-staging",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := stackName("proj_123", tc.env); got != tc.want {
+			if got := stackName("proj-123", tc.env); got != tc.want {
 				t.Errorf("stackName() = %q, want %q", got, tc.want)
 			}
 		})

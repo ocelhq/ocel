@@ -52,9 +52,9 @@ const removedRecordKeyPrefix = "record:"
 // ReclaimTargets turns edge.PruneResult.RemovedRecordKeys (the store's own
 // "record:<app>/<buildId>" keys) into the concrete production stack name and
 // storage prefixes each one leaves to reclaim. Pure.
-func ReclaimTargets(projectID, env string, removedRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(projectID, env, removedRecordKeys, func(app, buildID string) string {
-		return AppDeployStackName(projectID, app, buildID)
+func ReclaimTargets(slug, env string, removedRecordKeys []string) ([]PruneTarget, error) {
+	return reclaimTargets(slug, env, removedRecordKeys, func(app, buildID string) string {
+		return AppDeployStackName(slug, app, buildID)
 	})
 }
 
@@ -63,9 +63,9 @@ func ReclaimTargets(projectID, env string, removedRecordKeys []string) ([]PruneT
 // the production one, so `preview rm`/`preview prune` reclaim exactly the
 // preview's stacks. The storage prefixes are keyed the same way (the asset
 // prefix carries no env; the cache prefix carries the preview env segment). Pure.
-func PreviewReclaimTargets(projectID, pointer, env string, removedRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(projectID, env, removedRecordKeys, func(app, buildID string) string {
-		return PreviewAppDeployStackName(projectID, pointer, app, buildID)
+func PreviewReclaimTargets(slug, pointer, env string, removedRecordKeys []string) ([]PruneTarget, error) {
+	return reclaimTargets(slug, env, removedRecordKeys, func(app, buildID string) string {
+		return PreviewAppDeployStackName(slug, pointer, app, buildID)
 	})
 }
 
@@ -73,7 +73,7 @@ func PreviewReclaimTargets(projectID, pointer, env string, removedRecordKeys []s
 // (app, build id) pair and the storage prefixes to delete, deferring only the
 // app-deploy stack name to stackFor so production and preview differ in exactly
 // that one axis. Pure.
-func reclaimTargets(projectID, env string, removedRecordKeys []string, stackFor func(app, buildID string) string) ([]PruneTarget, error) {
+func reclaimTargets(slug, env string, removedRecordKeys []string, stackFor func(app, buildID string) string) ([]PruneTarget, error) {
 	if len(removedRecordKeys) == 0 {
 		return nil, nil
 	}
@@ -88,9 +88,9 @@ func reclaimTargets(projectID, env string, removedRecordKeys []string, stackFor 
 			App:         app,
 			BuildID:     buildID,
 			Stack:       stackFor(app, buildID),
-			AssetPrefix: appAssetR2Prefix(projectID, app, buildID),
-			CachePrefix: appAssetPrefixFor(env, projectID, app, buildID),
-			EdgePrefix:  appEdgeR2Prefix(projectID, app, buildID),
+			AssetPrefix: appAssetR2Prefix(slug, app, buildID),
+			CachePrefix: appAssetPrefixFor(env, slug, app, buildID),
+			EdgePrefix:  appEdgeR2Prefix(slug, app, buildID),
 		})
 	}
 	return targets, nil
@@ -195,13 +195,13 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, l
 // never run inline on a deploy. The pointer selects the substrate's stack
 // naming: an empty pointer reclaims production stacks, a named one reclaims that
 // preview pointer's pointer-scoped stacks.
-func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, keepN int, pointer string, progress, log func(string)) (edge.PruneResult, error) {
+func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, keepN int, pointer string, progress, log func(string)) (edge.PruneResult, error) {
 	result, err := stack.DeletePromotionArtifacts(ctx, state, keepN, pointer)
 	if err != nil {
 		return edge.PruneResult{}, fmt.Errorf("delete promotion artifacts: %w", err)
 	}
 
-	targets, err := reclaimTargetsFor(projectID, pointer, cfg.Env, result.RemovedRecordKeys)
+	targets, err := reclaimTargetsFor(slug, pointer, cfg.Env, result.RemovedRecordKeys)
 	if err != nil {
 		return result, err
 	}
@@ -214,9 +214,9 @@ func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState,
 // reclaimTargetsFor picks the substrate-correct reclaim targets: production
 // stacks for the empty (reserved default) pointer, pointer-scoped preview stacks
 // for any named pointer. Pure.
-func reclaimTargetsFor(projectID, pointer, env string, removedRecordKeys []string) ([]PruneTarget, error) {
+func reclaimTargetsFor(slug, pointer, env string, removedRecordKeys []string) ([]PruneTarget, error) {
 	if pointer == "" {
-		return ReclaimTargets(projectID, env, removedRecordKeys)
+		return ReclaimTargets(slug, env, removedRecordKeys)
 	}
-	return PreviewReclaimTargets(projectID, pointer, env, removedRecordKeys)
+	return PreviewReclaimTargets(slug, pointer, env, removedRecordKeys)
 }

@@ -155,14 +155,14 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 		return err
 	}
 	env := req.GetEnvironment()
-	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetProjectId(), env)
+	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, req.GetSlug(), env)
 	if err != nil {
 		return err
 	}
 
 	pointer := env.GetIdentity()
 	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
-	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetProjectId(), pointer, persistent, progress, logf)
+	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, progress, logf)
 }
 
 // previewTeardownContext resolves everything a preview teardown (rm/prune/
@@ -172,7 +172,7 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 // missing preview substrate is refused up front. state is nil when the project
 // never deployed a preview — the caller treats that as "nothing store-side to
 // remove", not an error.
-func (s *Server) previewTeardownContext(ctx context.Context, opts options, projectID string, env *deploymentsv1.Environment) (deploy.Config, edge.RootStack, edge.RootStackState, error) {
+func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug string, env *deploymentsv1.Environment) (deploy.Config, edge.RootStack, edge.RootStackState, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return deploy.Config{}, nil, nil, err
@@ -204,7 +204,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, proje
 		cacheStore = bootstrap.CacheStore{}
 	}
 
-	state, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, projectID)
+	state, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
 	if err != nil {
 		return deploy.Config{}, nil, nil, err
 	}
@@ -266,7 +266,7 @@ func (s *Server) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEn
 		BackendURL:  "s3://" + deployed.StateBucket,
 		Passphrase:  passphrase,
 		ProjectName: pulumiProjectName,
-		ProjectID:   req.GetProjectId(),
+		Slug:        req.GetSlug(),
 		Pulumi:      pulumiCmd,
 	})
 	if err != nil {

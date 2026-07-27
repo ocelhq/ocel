@@ -601,7 +601,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	// Only a Next app ever has static output for uploadStaticAssets to have
 	// published; leaving AssetPrefix set for any other app would point at a
 	// prefix nothing was ever uploaded to.
-	record.AssetPrefix = appAssetR2Prefix(manifest.GetProjectId(), name, buildID)
+	record.AssetPrefix = appAssetR2Prefix(manifest.GetSlug(), name, buildID)
 
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, name), "routing-manifest.json"))
 	if err != nil {
@@ -621,7 +621,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		record.IsrPrefix = isr.Prefix
 	}
 
-	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetProjectId(), name, buildID)
+	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetSlug(), name, buildID)
 	if err != nil {
 		return edge.DeploymentRecord{}, err
 	}
@@ -743,7 +743,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 			return err
 		}
 		for _, fn := range functions {
-			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(name, cfg.Env, manifest.GetProjectId()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], role.Arn); err != nil {
+			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(name, cfg.Env, manifest.GetSlug()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], role.Arn); err != nil {
 				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}
