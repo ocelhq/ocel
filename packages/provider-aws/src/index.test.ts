@@ -19,7 +19,7 @@ describe("awsProvider", () => {
 
   it("type-checks as an ocel.config.ts `provider` field and serializes to { package, options }", () => {
     const config = defineConfig({
-      projectId: "proj_123",
+      slug: "test-app",
       provider: awsProvider({ region: "us-east-1" }),
     });
 

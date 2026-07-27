@@ -144,7 +144,6 @@ jobs:
       ADAPTER_DIR: ${{ github.workspace }}/adapter
       OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
       OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
-      OCEL_E2E_PROJECT_ID: ${{ vars.E2E_OCEL_PROJECT_ID }}
       OCEL_E2E_PROJECT_SLUG: ${{ vars.E2E_OCEL_PROJECT_SLUG }}
       OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
       OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
@@ -347,8 +346,7 @@ jobs:
 
           OCEL_ACCESS_TOKEN: ${{ secrets.E2E_OCEL_ACCESS_TOKEN }}
           OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
-          OCEL_E2E_PROJECT_ID: ${{ vars.E2E_OCEL_PROJECT_ID }}
-          OCEL_E2E_PROJECT_SLUG: ${{ vars.E2E_OCEL_PROJECT_SLUG }}
+              OCEL_E2E_PROJECT_SLUG: ${{ vars.E2E_OCEL_PROJECT_SLUG }}
           OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
           OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
         run: node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e
