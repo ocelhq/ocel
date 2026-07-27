@@ -3,6 +3,8 @@ package cli
 import (
 	"os"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/credentials"
 )
 
 // TestMain points os.UserConfigDir() (via XDG_CONFIG_HOME) at a scratch
@@ -26,4 +28,16 @@ func TestMain(m *testing.M) {
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
+}
+
+// setLoggedIn overrides the loadCredentials seam for the duration of t so the
+// commands that still require Ocel Cloud see a logged-in user, restoring the
+// previous value on cleanup.
+func setLoggedIn(t *testing.T) {
+	t.Helper()
+	prev := loadCredentials
+	loadCredentials = func() (credentials.Credentials, error) {
+		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+	}
+	t.Cleanup(func() { loadCredentials = prev })
 }

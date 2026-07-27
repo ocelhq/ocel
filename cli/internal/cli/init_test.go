@@ -3,294 +3,256 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
-	"net/http"
-	"net/http/httptest"
+	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
-
-	"github.com/ocelhq/ocel/cli/internal/credentials"
 )
 
-func TestSlugify(t *testing.T) {
-	cases := []struct {
-		name string
-		want string
-	}{
-		{"My Cool App", "my-cool-app"},
-		{"  leading/trailing -- spaces  ", "leading-trailing-spaces"},
-		{"Already-slugged-123", "already-slugged-123"},
-		{"!!!", ""},
-		{strings.Repeat("a", 100), strings.Repeat("a", 63)},
+// stubPackageManager replaces the package-manager seam for the duration of t
+// and returns a pointer to the argv of the last command init would have run,
+// nil if it ran none.
+func stubPackageManager(t *testing.T, result error) *[]string {
+	t.Helper()
+	var argv []string
+	prev := runPackageManager
+	runPackageManager = func(_ context.Context, _ string, cmd []string, _ io.Writer) error {
+		argv = cmd
+		return result
 	}
-	for _, tc := range cases {
-		if got := slugify(tc.name); got != tc.want {
-			t.Errorf("slugify(%q) = %q, want %q", tc.name, got, tc.want)
+	t.Cleanup(func() { runPackageManager = prev })
+	return &argv
+}
+
+// initTestDir makes a directory named name under a fresh temp dir, so tests can
+// control what init derives its default slug from.
+func initTestDir(t *testing.T, name string) string {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), name)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("create project dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "package.json"), []byte("{}\n"), 0o644); err != nil {
+		t.Fatalf("write package.json: %v", err)
+	}
+	return dir
+}
+
+func readConfig(t *testing.T, dir string) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(dir, "ocel.config.ts"))
+	if err != nil {
+		t.Fatalf("read ocel.config.ts: %v", err)
+	}
+	return string(data)
+}
+
+func TestRunInit_NoArgument_DefaultsSlugToDirectoryName(t *testing.T) {
+	stubPackageManager(t, nil)
+	dir := initTestDir(t, "My Cool App")
+
+	var stdout bytes.Buffer
+	if err := runInit(context.Background(), dir, "", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
+	}
+
+	content := readConfig(t, dir)
+	if !strings.Contains(content, `slug: "my-cool-app"`) {
+		t.Fatalf("config = %q, want slug derived from the directory name", content)
+	}
+}
+
+func TestRunInit_ExplicitSlug_WritesDeployableConfig(t *testing.T) {
+	stubPackageManager(t, nil)
+	dir := initTestDir(t, "ignored-dir-name")
+
+	var stdout bytes.Buffer
+	if err := runInit(context.Background(), dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
+	}
+
+	content := readConfig(t, dir)
+	for _, want := range []string{
+		`import { defineConfig } from "@ocel/sdk/config";`,
+		`import awsProvider from "@ocel/provider-aws";`,
+		`slug: "my-app"`,
+		`provider: awsProvider()`,
+	} {
+		if !strings.Contains(content, want) {
+			t.Errorf("config = %q, want it to contain %q", content, want)
 		}
 	}
-}
-
-func TestRunInit_NotLoggedIn_ReturnsExitErrorWithLoginInstruction(t *testing.T) {
-	prev := loadCredentials
-	loadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{}, credentials.ErrNotLoggedIn
-	}
-	defer func() { loadCredentials = prev }()
-
-	var stderr bytes.Buffer
-	err := runInit(context.Background(), t.TempDir(), "my-app", initOptions{yes: true}, &bytes.Buffer{}, &stderr, strings.NewReader(""))
-
-	var exitErr *ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("runInit err = %v (%T), want *ExitError", err, err)
-	}
-	if !strings.Contains(stderr.String(), "ocel login") {
-		t.Fatalf("stderr = %q, want it to mention `ocel login`", stderr.String())
+	if strings.Contains(content, "projectId") {
+		t.Errorf("config = %q, want no projectId", content)
 	}
 }
 
-func TestRunInit_ConfigAlreadyExists_ErrorsWithoutAnyAPICalls(t *testing.T) {
-	setLoggedIn(t)
+func TestRunInit_InvalidSlug_ErrorsWithoutWritingConfig(t *testing.T) {
+	for _, slug := range []string{"My App", "-leading", "trailing-", "under_score", strings.Repeat("a", 64)} {
+		t.Run(slug, func(t *testing.T) {
+			stubPackageManager(t, nil)
+			dir := initTestDir(t, "proj")
 
-	apiCalls := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiCalls++
-		http.NotFound(w, r)
-	}))
-	defer srv.Close()
+			err := runInit(context.Background(), dir, slug, initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+			if err == nil {
+				t.Fatal("runInit err = nil, want error")
+			}
+			if !strings.Contains(err.Error(), "invalid slug") {
+				t.Fatalf("err = %v, want it to name the slug as invalid", err)
+			}
+			if _, statErr := os.Stat(filepath.Join(dir, "ocel.config.ts")); !os.IsNotExist(statErr) {
+				t.Fatal("ocel.config.ts should not have been written")
+			}
+		})
+	}
+}
 
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "ocel.config.ts"), []byte("existing"), 0o644); err != nil {
+func TestRunInit_UnslugifiableDirectoryName_ErrorsAskingForASlug(t *testing.T) {
+	stubPackageManager(t, nil)
+	dir := initTestDir(t, "!!!")
+
+	err := runInit(context.Background(), dir, "", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
+	if err == nil {
+		t.Fatal("runInit err = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "ocel init my-app") {
+		t.Fatalf("err = %v, want it to show how to pass a slug", err)
+	}
+}
+
+func TestRunInit_ExistingConfig_RefusesToOverwrite(t *testing.T) {
+	argv := stubPackageManager(t, nil)
+	dir := initTestDir(t, "proj")
+	configPath := filepath.Join(dir, "ocel.config.ts")
+	if err := os.WriteFile(configPath, []byte("existing"), 0o644); err != nil {
 		t.Fatalf("write existing config: %v", err)
 	}
 
-	opts := initOptions{yes: true, apiURL: srv.URL}
-	err := runInit(context.Background(), root, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+	err := runInit(context.Background(), dir, "my-app", initOptions{}, &bytes.Buffer{}, &bytes.Buffer{})
 	if err == nil {
 		t.Fatal("runInit err = nil, want error")
 	}
 	if !strings.Contains(err.Error(), "ocel.config.ts") {
 		t.Fatalf("err = %v, want it to mention ocel.config.ts", err)
 	}
-	if apiCalls != 0 {
-		t.Fatalf("apiCalls = %d, want 0 (should fail before any network calls)", apiCalls)
+	if content := readConfig(t, dir); content != "existing" {
+		t.Fatalf("config = %q, want the existing file untouched", content)
+	}
+	if *argv != nil {
+		t.Fatalf("ran %v, want no package manager call", *argv)
 	}
 }
 
-func TestRunInit_DeclineConfirmation_ReturnsNilWithoutAPICallsOrConfigWrite(t *testing.T) {
-	setLoggedIn(t)
+func TestRunInit_ProviderFlag_OverridesTheDefaultPackage(t *testing.T) {
+	argv := stubPackageManager(t, nil)
+	dir := initTestDir(t, "proj")
 
-	apiCalls := 0
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		apiCalls++
-		http.NotFound(w, r)
-	}))
-	defer srv.Close()
+	opts := initOptions{provider: "@acme/provider-gcp"}
+	if err := runInit(context.Background(), dir, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit err = %v", err)
+	}
 
-	root := t.TempDir()
-	opts := initOptions{apiURL: srv.URL}
+	content := readConfig(t, dir)
+	if !strings.Contains(content, `import gcpProvider from "@acme/provider-gcp";`) || !strings.Contains(content, "provider: gcpProvider()") {
+		t.Fatalf("config = %q, want it to use the overridden provider", content)
+	}
+	if got := *argv; len(got) == 0 || got[len(got)-1] != "@acme/provider-gcp" {
+		t.Fatalf("ran %v, want the overridden package added", got)
+	}
+}
+
+func TestRunInit_AddsProviderWithThePackageManagerTheLockfileNames(t *testing.T) {
+	cases := []struct {
+		lockfile string
+		want     []string
+	}{
+		{"pnpm-lock.yaml", []string{"pnpm", "add", defaultProviderPackage}},
+		{"yarn.lock", []string{"yarn", "add", defaultProviderPackage}},
+		{"bun.lockb", []string{"bun", "add", defaultProviderPackage}},
+		{"package-lock.json", []string{"npm", "install", defaultProviderPackage}},
+		{"", []string{"npm", "install", defaultProviderPackage}},
+	}
+	for _, tc := range cases {
+		name := tc.lockfile
+		if name == "" {
+			name = "no-lockfile"
+		}
+		t.Run(name, func(t *testing.T) {
+			argv := stubPackageManager(t, nil)
+			dir := initTestDir(t, "proj")
+			if tc.lockfile != "" {
+				if err := os.WriteFile(filepath.Join(dir, tc.lockfile), nil, 0o644); err != nil {
+					t.Fatalf("write lockfile: %v", err)
+				}
+			}
+
+			var stdout bytes.Buffer
+			if err := runInit(context.Background(), dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+				t.Fatalf("runInit err = %v", err)
+			}
+			if got := *argv; !slices.Equal(got, tc.want) {
+				t.Fatalf("ran %v, want %v", got, tc.want)
+			}
+			if !strings.Contains(stdout.String(), "Added "+defaultProviderPackage) {
+				t.Fatalf("stdout = %q, want it to report the added package", stdout.String())
+			}
+		})
+	}
+}
+
+func TestRunInit_NoPackageJSON_SkipsTheInstallAndSaysSo(t *testing.T) {
+	argv := stubPackageManager(t, nil)
+	dir := initTestDir(t, "proj")
+	if err := os.Remove(filepath.Join(dir, "package.json")); err != nil {
+		t.Fatalf("remove package.json: %v", err)
+	}
+
 	var stdout bytes.Buffer
-	err := runInit(context.Background(), root, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader("n\n"))
-	if err != nil {
-		t.Fatalf("runInit err = %v, want nil", err)
+	if err := runInit(context.Background(), dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit err = %v", err)
 	}
-	if !strings.Contains(stdout.String(), "Aborted") {
-		t.Fatalf("stdout = %q, want it to mention Aborted", stdout.String())
+	if *argv != nil {
+		t.Fatalf("ran %v, want no package manager call", *argv)
 	}
-	if apiCalls != 0 {
-		t.Fatalf("apiCalls = %d, want 0", apiCalls)
-	}
-	if _, err := os.Stat(filepath.Join(root, "ocel.config.ts")); !os.IsNotExist(err) {
-		t.Fatalf("ocel.config.ts should not have been written")
+	if !strings.Contains(stdout.String(), "npm install "+defaultProviderPackage) {
+		t.Fatalf("stdout = %q, want the command to run later", stdout.String())
 	}
 }
 
-func TestRunInit_NonInteractiveWithoutYes_ErrorsAboutFlag(t *testing.T) {
-	setLoggedIn(t)
-
-	root := t.TempDir()
-	opts := initOptions{apiURL: "http://unused.invalid"}
-	err := runInit(context.Background(), root, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-	if err == nil {
-		t.Fatal("runInit err = nil, want error")
+func TestRunInit_PackageManagerFails_KeepsTheConfigAndPrintsTheCommand(t *testing.T) {
+	stubPackageManager(t, errors.New("exec: \"pnpm\": executable file not found in $PATH"))
+	dir := initTestDir(t, "proj")
+	if err := os.WriteFile(filepath.Join(dir, "pnpm-lock.yaml"), nil, 0o644); err != nil {
+		t.Fatalf("write lockfile: %v", err)
 	}
-	if !strings.Contains(err.Error(), "--yes") {
-		t.Fatalf("err = %v, want it to mention --yes", err)
-	}
-}
 
-func TestRunInit_HappyPath_SingleOrg_WritesConfig(t *testing.T) {
-	setLoggedIn(t)
-
-	var setActiveCalls int
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/api/auth/organization/list" && r.Method == http.MethodGet:
-			json.NewEncoder(w).Encode([]map[string]string{
-				{"id": "org_1", "name": "Acme Inc", "slug": "acme-inc"},
-			})
-		case r.URL.Path == "/api/auth/organization/set-active" && r.Method == http.MethodPost:
-			setActiveCalls++
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("{}"))
-		case r.URL.Path == "/api/projects" && r.Method == http.MethodPost:
-			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]any{
-				"id":             "proj_abc123",
-				"organizationId": "org_1",
-				"name":           "my-app",
-				"slug":           "my-app",
-				"description":    nil,
-			})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-
-	root := t.TempDir()
-	opts := initOptions{yes: true, apiURL: srv.URL}
 	var stdout bytes.Buffer
-	err := runInit(context.Background(), root, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader(""))
-	if err != nil {
-		t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
+	if err := runInit(context.Background(), dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit err = %v, want the failed install to be non-fatal", err)
 	}
-	if setActiveCalls != 1 {
-		t.Fatalf("setActiveCalls = %d, want 1", setActiveCalls)
+	if !strings.Contains(readConfig(t, dir), `slug: "my-app"`) {
+		t.Fatal("config should still have been written")
 	}
-
-	data, err := os.ReadFile(filepath.Join(root, "ocel.config.ts"))
-	if err != nil {
-		t.Fatalf("read ocel.config.ts: %v", err)
-	}
-	content := string(data)
-	if !strings.Contains(content, `import { defineConfig } from "@ocel/sdk/config";
-`) {
-		t.Fatalf("config content = %q, want defineConfig import", content)
-	}
-	if !strings.Contains(content, "proj_abc123") {
-		t.Fatalf("config content = %q, want it to contain project id", content)
+	if !strings.Contains(stdout.String(), "pnpm add "+defaultProviderPackage) {
+		t.Fatalf("stdout = %q, want the command the user should run", stdout.String())
 	}
 }
 
-func TestRunInit_MultiOrgWithOrgFlag_SelectsMatchingOrg(t *testing.T) {
-	setLoggedIn(t)
-
-	var setActiveBody map[string]string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/api/auth/organization/list" && r.Method == http.MethodGet:
-			json.NewEncoder(w).Encode([]map[string]string{
-				{"id": "org_1", "name": "Acme Inc", "slug": "acme-inc"},
-				{"id": "org_2", "name": "Beta LLC", "slug": "beta-llc"},
-			})
-		case r.URL.Path == "/api/auth/organization/set-active" && r.Method == http.MethodPost:
-			json.NewDecoder(r.Body).Decode(&setActiveBody)
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("{}"))
-		case r.URL.Path == "/api/projects" && r.Method == http.MethodPost:
-			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]any{
-				"id":             "proj_xyz",
-				"organizationId": "org_2",
-				"name":           "my-app",
-				"slug":           "my-app",
-			})
-		default:
-			http.NotFound(w, r)
+func TestProviderIdentifier(t *testing.T) {
+	cases := map[string]string{
+		"@ocel/provider-aws":        "awsProvider",
+		"@acme/provider-gcp":        "gcpProvider",
+		"provider-aws":              "awsProvider",
+		"@acme/provider-bare-metal": "bareMetalProvider",
+		"@acme/whatever":            "whateverProvider",
+		"@acme/provider-123":        "provider",
+	}
+	for pkg, want := range cases {
+		if got := providerIdentifier(pkg); got != want {
+			t.Errorf("providerIdentifier(%q) = %q, want %q", pkg, got, want)
 		}
-	}))
-	defer srv.Close()
-
-	root := t.TempDir()
-	opts := initOptions{yes: true, apiURL: srv.URL, org: "beta-llc"}
-	var stdout bytes.Buffer
-	err := runInit(context.Background(), root, "my-app", opts, &stdout, &bytes.Buffer{}, strings.NewReader(""))
-	if err != nil {
-		t.Fatalf("runInit err = %v; stdout=%s", err, stdout.String())
 	}
-	if setActiveBody["organizationId"] != "org_2" {
-		t.Fatalf("SetActiveOrganization called with organizationId = %q, want org_2", setActiveBody["organizationId"])
-	}
-	if !strings.Contains(stdout.String(), "Beta LLC") {
-		t.Fatalf("stdout = %q, want it to mention Beta LLC", stdout.String())
-	}
-}
-
-func TestRunInit_MultiOrgNoFlagNonInteractive_ErrorsAboutOrgFlag(t *testing.T) {
-	setLoggedIn(t)
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch r.URL.Path {
-		case "/api/auth/organization/list":
-			json.NewEncoder(w).Encode([]map[string]string{
-				{"id": "org_1", "name": "Acme Inc", "slug": "acme-inc"},
-				{"id": "org_2", "name": "Beta LLC", "slug": "beta-llc"},
-			})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-
-	root := t.TempDir()
-	opts := initOptions{yes: true, apiURL: srv.URL}
-	err := runInit(context.Background(), root, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-	if err == nil {
-		t.Fatal("runInit err = nil, want error")
-	}
-	if !strings.Contains(err.Error(), "--org") {
-		t.Fatalf("err = %v, want it to mention --org", err)
-	}
-}
-
-func TestRunInit_CreateProjectConflict_ErrorsAndDoesNotWriteConfig(t *testing.T) {
-	setLoggedIn(t)
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		switch {
-		case r.URL.Path == "/api/auth/organization/list":
-			json.NewEncoder(w).Encode([]map[string]string{
-				{"id": "org_1", "name": "Acme Inc", "slug": "acme-inc"},
-			})
-		case r.URL.Path == "/api/auth/organization/set-active":
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("{}"))
-		case r.URL.Path == "/api/projects":
-			w.WriteHeader(http.StatusConflict)
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "A project with this slug already exists in this organization",
-			})
-		default:
-			http.NotFound(w, r)
-		}
-	}))
-	defer srv.Close()
-
-	root := t.TempDir()
-	opts := initOptions{yes: true, apiURL: srv.URL}
-	err := runInit(context.Background(), root, "my-app", opts, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
-	if err == nil {
-		t.Fatal("runInit err = nil, want error")
-	}
-	if !strings.Contains(err.Error(), "Acme Inc") || !strings.Contains(err.Error(), "different name") {
-		t.Fatalf("err = %v, want it to name the org and suggest a different name", err)
-	}
-	if _, statErr := os.Stat(filepath.Join(root, "ocel.config.ts")); !os.IsNotExist(statErr) {
-		t.Fatalf("ocel.config.ts should not have been written")
-	}
-}
-
-// setLoggedIn overrides the loadCredentials seam for the duration of t so
-// runInit sees a logged-in user, restoring the previous value on cleanup.
-func setLoggedIn(t *testing.T) {
-	t.Helper()
-	prev := loadCredentials
-	loadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
-	}
-	t.Cleanup(func() { loadCredentials = prev })
 }
