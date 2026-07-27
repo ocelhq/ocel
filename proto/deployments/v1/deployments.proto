@@ -456,6 +456,16 @@ message PreflightRequest {
   // substrate is absent but the other exists, the provider reports the other
   // so the caller's class guard still fires an informative mismatch.
   Environment.Class required_class = 3;
+
+  // slug is the project the caller is about to deploy, set only when the
+  // caller wants the project-identity check that fills known_slugs. Slug is
+  // the sole thread back to a project's existing infrastructure, so a typo or
+  // a rename would silently fork a parallel one; the provider answers whether
+  // this slug is one it already holds stacks for. Empty from the commands
+  // that act on infrastructure already addressed by other means (rollback,
+  // destroy, deployments), and the provider then skips the enumeration
+  // rather than paying for it.
+  string slug = 4;
 }
 
 // PreflightResponse tells the CLI what the provider's ambient account/profile
@@ -483,6 +493,19 @@ message PreflightResponse {
   // provider may not have been able to read its own state) and the CLI aborts
   // before provisioning.
   repeated CredentialProblem credential_problems = 4;
+
+  // known_slugs names the *other* projects this backend already holds stacks
+  // for, and is populated only when request.slug is set and holds no stacks of
+  // its own — i.e. exactly when the deploy would fork a new project alongside
+  // existing ones, which is what a mistyped or renamed slug looks like. It is
+  // empty when the slug is already deployed, when the backend holds nothing at
+  // all (a genuine first deploy), and when request.slug was not sent, so a
+  // non-empty list is by itself the signal to warn. The provider decides
+  // membership rather than the CLI because only the provider knows how it
+  // derives a stack name from a slug. Best-effort: a backend the provider
+  // could not enumerate reports no known slugs rather than failing the
+  // preflight, since this guard is advisory.
+  repeated string known_slugs = 5;
 }
 
 // Identity is what a provider's ambient credentials resolve to, surfaced by
