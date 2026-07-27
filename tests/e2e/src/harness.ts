@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { readFile, rm, writeFile } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as delay } from "node:timers/promises";
@@ -138,7 +138,7 @@ function ocelEnv(token: string, port: number): NodeJS.ProcessEnv {
 
 type RunResult = { code: number | null; stdout: string; stderr: string };
 
-// Runs the CLI to completion (used for `init` and `run`), capturing output.
+// Runs the CLI to completion (used for `link` and `run`), capturing output.
 function runOcel(
   args: string[],
   spec: ExampleSpec,
@@ -162,35 +162,29 @@ function runOcel(
   });
 }
 
-// `ocel init` refuses to overwrite an existing config, so the run has to take
-// the checked-in one out of the way first and put it back verbatim afterwards.
-const stashedConfigs = new Map<string, string>();
-
-export async function stashConfig(spec: ExampleSpec) {
-  const configPath = path.join(spec.dir, "ocel.config.ts");
-  stashedConfigs.set(spec.framework, await readFile(configPath, "utf8"));
-  await rm(configPath, { force: true });
-}
-
-export async function restoreConfig(spec: ExampleSpec) {
-  const stashed = stashedConfigs.get(spec.framework);
-  if (stashed === undefined) return;
-  await writeFile(path.join(spec.dir, "ocel.config.ts"), stashed);
-}
-
-export async function runInit(
+// Creates a fresh Ocel Cloud project and records it as the example
+// directory's link, which `ocel run` and `ocel dev` both require. `--create`
+// takes the new project's name positionally and never prompts, so it works
+// without a terminal.
+export async function runLink(
   spec: ExampleSpec,
   token: string,
   runId: string,
 ): Promise<RunResult> {
   const name = `e2e-${spec.framework}-${runId}`;
-  const result = await runOcel(["init", name, "--yes"], spec, token);
+  const result = await runOcel(["link", "--create", name], spec, token);
   if (result.code !== 0) {
     throw new Error(
-      `ocel init failed (code ${result.code})\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
+      `ocel link failed (code ${result.code})\nstdout: ${result.stdout}\nstderr: ${result.stderr}`,
     );
   }
   return result;
+}
+
+// Drops the link the run created, so the example directory is left as it was
+// found rather than pointing a later `ocel dev` at a throwaway e2e project.
+export async function clearLink(spec: ExampleSpec) {
+  await rm(path.join(spec.dir, ".ocel", "link.json"), { force: true });
 }
 
 export async function runMigrate(

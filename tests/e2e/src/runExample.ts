@@ -3,14 +3,13 @@ import { createUploadClient } from "@ocel/sdk/blob/client";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import {
   base,
+  clearLink,
   type DevHandle,
   type ExampleSpec,
   minioReachable,
-  restoreConfig,
-  runInit,
+  runLink,
   runMigrate,
   startDev,
-  stashConfig,
   waitForHealth,
 } from "./harness";
 
@@ -32,22 +31,24 @@ async function poll<T>(
 }
 
 // Drives one example end to end through the real CLI:
-//   init (fresh project) -> run (migrate) -> dev (serve) -> CRUD over HTTP.
+//   link (fresh project) -> run (migrate) -> dev (serve) -> CRUD over HTTP.
 // Each example gets its own project, hence its own provisioned database, so
-// the three specs are safe to run in parallel.
+// the three specs are safe to run in parallel. The examples' ocel.config.ts is
+// checked in and left alone: `ocel link` only writes the untracked
+// .ocel/link.json.
 export function describeExample(spec: ExampleSpec) {
   describe(`${spec.framework} example (e2e)`, () => {
     const token = inject("accessToken");
-    // A per-run id keeps CreateProject's slug unique across reruns (409 on
-    // repeat otherwise), while staying stable within a single run.
+    // A per-run id keeps the created project's slug unique across reruns
+    // (`ocel link --create` 409s on a repeat), while staying stable within a
+    // single run.
     const runId = `${Date.now().toString(36)}-${Math.random()
       .toString(36)
       .slice(2, 7)}`;
     let dev: DevHandle | undefined;
 
     beforeAll(async () => {
-      await stashConfig(spec);
-      await runInit(spec, token, runId);
+      await runLink(spec, token, runId);
       await runMigrate(spec, token);
       dev = startDev(spec, token);
       await waitForHealth(spec, dev);
@@ -55,7 +56,7 @@ export function describeExample(spec: ExampleSpec) {
 
     afterAll(async () => {
       await dev?.stop();
-      await restoreConfig(spec);
+      await clearLink(spec);
     });
 
     it("creates, lists, gets, and deletes a todo", async () => {
