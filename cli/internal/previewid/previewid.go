@@ -21,14 +21,23 @@ const SourceGit = "git"
 // disambiguate refs that sanitize to the same base token.
 const hashLen = 8
 
-// maxLabelLen is the DNS label limit (RFC 1035). Key is used as a subdomain
-// label (the preview store pointer), so the sanitized base is capped to leave
-// room for the "-" separator and the hash.
+// maxLabelLen is the DNS label limit (RFC 1035).
 const maxLabelLen = 63
 
-// maxBaseLen caps the sanitized base so base + "-" + hash stays within a DNS
-// label.
-const maxBaseLen = maxLabelLen - 1 - hashLen
+// routeSuffixLen is the part of the label Key must leave free: the per-pointer
+// preview route suffix ("-" plus 10 hash chars) that cloud/aws/deploy appends
+// to Key to build the route hostname. It mirrors previewRouteSuffixLen there
+// (a separate Go module): keep the two in step.
+const routeSuffixLen = 11
+
+// maxKeyLen is the longest Key that still fits a DNS label once the route
+// suffix is appended. Key doubles as the preview subdomain label and the
+// preview store pointer, so every Key is held to it.
+const maxKeyLen = maxLabelLen - routeSuffixLen
+
+// maxBaseLen caps the sanitized base so base + "-" + hash stays within
+// maxKeyLen.
+const maxBaseLen = maxKeyLen - 1 - hashLen
 
 // Identity is a resolved preview environment key.
 type Identity struct {
@@ -39,7 +48,7 @@ type Identity struct {
 
 // Resolve derives a preview Identity from a git ref and an optional PR number.
 // Key is the sanitized ref plus a short deterministic hash of the full ref,
-// joined by a hyphen, always a valid DNS label (see ValidLabel) so it doubles
+// joined by a hyphen, always a valid label (see ValidateLabel) so it doubles
 // as the preview subdomain label and the store pointer. The same ref always
 // resolves to the same Key. Label is the PR number formatted for display (e.g.
 // "pr-482"), or empty when prNumber is empty.
@@ -52,8 +61,8 @@ func Resolve(ref string, prNumber string) (Identity, error) {
 
 	// A DNS label must start with a letter, so an empty or non-letter-leading
 	// base is given the "env" stem. The stem is applied before the length cap so
-	// the cap bounds the final base — a digit-led ref must not blow past 63 once
-	// "env-" is prepended.
+	// the cap bounds the final base — a digit-led ref must not blow past
+	// maxBaseLen once "env-" is prepended.
 	switch {
 	case base == "":
 		base = "env"
@@ -97,13 +106,21 @@ func sanitize(ref string) string {
 	return strings.Trim(b.String(), "-")
 }
 
-// dnsLabelPattern is a valid DNS label: lowercase letter start, then letters,
-// digits and hyphens, not ending in a hyphen, 1–63 chars.
-var dnsLabelPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
+// dnsLabelPattern is the shape of a DNS label: lowercase letter start, then
+// letters, digits and hyphens, not ending in a hyphen. Length is checked
+// separately so an over-long name gets its own message.
+var dnsLabelPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
 
-// ValidLabel reports whether s is usable as a preview subdomain label and store
-// pointer: the shape Resolve produces, and the shape a persistent preview's
-// --name must take. It is the single validator both paths share.
-func ValidLabel(s string) bool {
-	return dnsLabelPattern.MatchString(s)
+// ValidateLabel reports why s is unusable as a preview subdomain label and
+// store pointer, or nil when it is usable: the shape Resolve produces, and the
+// shape a persistent preview's --name must take. It is the single validator
+// both paths share, and its errors are written to be shown to the user.
+func ValidateLabel(s string) error {
+	if !dnsLabelPattern.MatchString(s) {
+		return fmt.Errorf("invalid preview name %q: use a DNS-label-safe name (lowercase letters, digits and hyphens)", s)
+	}
+	if len(s) > maxKeyLen {
+		return fmt.Errorf("preview name %q is too long: the limit is %d characters, because the preview route hostname reserves the rest of the DNS label", s, maxKeyLen)
+	}
+	return nil
 }
