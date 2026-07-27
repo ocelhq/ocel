@@ -1,10 +1,16 @@
-// Package lockfile records, per projectID, the TCP address of the `ocel dev`
-// leader process for that project, in a per-user temp directory. It holds no
-// opinion on liveness — callers decide whether a recorded address is still
-// reachable (see internal/election).
+// Package lockfile records, per project root, the TCP address of the `ocel
+// dev` leader process for that working tree, in a per-user temp directory. It
+// holds no opinion on liveness — callers decide whether a recorded address is
+// still reachable (see internal/election).
+//
+// The key is the project root rather than any project identity: one dev server
+// per working tree. Two clones of the same repo may sit at different commits
+// with different resource declarations, so they must never share a leader.
 package lockfile
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"os/user"
@@ -13,23 +19,27 @@ import (
 )
 
 // dirName is the per-user directory (under os.TempDir) holding one lockfile
-// per project.
+// per project root.
 const dirName = "ocel-dev-locks"
 
-// Path returns the lockfile path for projectID, creating its parent
-// directory (0700) if necessary.
-func Path(projectID string) (string, error) {
+// Path returns the lockfile path for the project rooted at root, creating its
+// parent directory (0700) if necessary.
+func Path(root string) (string, error) {
+	name, err := key(root)
+	if err != nil {
+		return "", err
+	}
 	dir, err := lockDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, sanitize(projectID)+".lock"), nil
+	return filepath.Join(dir, name+".lock"), nil
 }
 
-// Read returns the leader address recorded for projectID. It returns
+// Read returns the leader address recorded for root. It returns
 // os.ErrNotExist (check with os.IsNotExist) if no lockfile exists.
-func Read(projectID string) (string, error) {
-	path, err := Path(projectID)
+func Read(root string) (string, error) {
+	path, err := Path(root)
 	if err != nil {
 		return "", err
 	}
@@ -40,12 +50,12 @@ func Read(projectID string) (string, error) {
 	return strings.TrimSpace(string(data)), nil
 }
 
-// Create atomically records addr as the leader address for projectID. If a
+// Create atomically records addr as the leader address for root. If a
 // lockfile already exists — another process won the election concurrently —
 // it fails with an error satisfying errors.Is(err, os.ErrExist) and leaves
 // the existing file untouched.
-func Create(projectID, addr string) error {
-	path, err := Path(projectID)
+func Create(root, addr string) error {
+	path, err := Path(root)
 	if err != nil {
 		return err
 	}
@@ -63,9 +73,9 @@ func Create(projectID, addr string) error {
 	return nil
 }
 
-// Remove deletes projectID's lockfile. It does not error if none exists.
-func Remove(projectID string) error {
-	path, err := Path(projectID)
+// Remove deletes root's lockfile. It does not error if none exists.
+func Remove(root string) error {
+	path, err := Path(root)
 	if err != nil {
 		return err
 	}
@@ -92,7 +102,14 @@ func lockDir() (string, error) {
 	return dir, nil
 }
 
-// sanitize makes projectID safe to use as a filename.
-func sanitize(projectID string) string {
-	return strings.NewReplacer("/", "_", `\`, "_").Replace(projectID)
+// key is root's filename for the lock directory: the hash of its absolute
+// path. Absolute because two spellings of one root must agree; hashed because
+// a path is neither a legal filename nor bounded in length.
+func key(root string) (string, error) {
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve project root %q: %w", root, err)
+	}
+	sum := sha256.Sum256([]byte(abs))
+	return hex.EncodeToString(sum[:]), nil
 }
