@@ -71,7 +71,7 @@ containing `ocel.config.ts` **or** `.ocel/`, falling back to cwd — so a first 
 in a fresh clone anchors at cwd and creates `.ocel/` there, and later runs from
 subdirectories find the same root.
 
-**`ocel init` is fully offline** — no auth, no API call, no network. It writes
+**`ocel init` makes no Ocel Cloud call** — no auth, no API call. It writes
 `ocel.config.ts` with `slug` (defaulting to the slugified directory name) and
 `provider: awsProvider()`, and installs `@ocel/provider-aws` with the package
 manager detected from the lockfile. It is the prerequisite of deploy/preview.
