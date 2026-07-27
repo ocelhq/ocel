@@ -84,8 +84,6 @@ func TestPrintDestroyPlan_ListsEveryTarget(t *testing.T) {
 // and it must never be bypassable. It refuses before resolving config or
 // spawning the provider.
 func TestRunDestroy_RefusesWithoutTTY(t *testing.T) {
-	setLoggedIn(t)
-
 	var stdout, stderr bytes.Buffer
 	err := runDestroy(context.Background(), t.TempDir(), &stdout, &stderr, strings.NewReader(""))
 	if err == nil {

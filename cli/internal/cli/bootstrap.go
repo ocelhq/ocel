@@ -52,16 +52,11 @@ func init() {
 	bootstrapCmd.Flags().BoolVar(&bootstrapOpts.preview, "preview", false, "Stand up the preview infrastructure instead of the production infrastructure")
 }
 
-// runBootstrap resolves the project config, verifies auth, requires a
-// configured provider, confirms with the user, then spawns the provider and
-// drives its Bootstrap RPC to a terminal result. Bootstrap sends no manifest:
-// the provider decides what account-global resources to create.
+// runBootstrap resolves the project config, requires a configured provider,
+// confirms with the user, then spawns the provider and drives its Bootstrap RPC
+// to a terminal result. Bootstrap sends no manifest: the provider decides what
+// account-global resources to create.
 func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
