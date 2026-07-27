@@ -9,9 +9,7 @@ import (
 )
 
 func TestElect_NoLockfile_BecomesLeader(t *testing.T) {
-	projectID := uniqueProjectID(t)
-
-	result, err := Elect(projectID)
+	result, err := Elect(t.TempDir())
 	if err != nil {
 		t.Fatalf("Elect: %v", err)
 	}
@@ -21,21 +19,15 @@ func TestElect_NoLockfile_BecomesLeader(t *testing.T) {
 }
 
 func TestElect_LiveLock_BecomesFollower(t *testing.T) {
-	projectID := uniqueProjectID(t)
+	root := t.TempDir()
 
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("listen: %v", err)
-	}
-	defer ln.Close()
-
-	addr := ln.Addr().String()
-	if err := lockfile.Create(projectID, addr); err != nil {
+	addr := liveAddr(t)
+	if err := lockfile.Create(root, addr); err != nil {
 		t.Fatalf("lockfile.Create: %v", err)
 	}
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-	result, err := Elect(projectID)
+	result, err := Elect(root)
 	if err != nil {
 		t.Fatalf("Elect: %v", err)
 	}
@@ -47,13 +39,13 @@ func TestElect_LiveLock_BecomesFollower(t *testing.T) {
 	}
 
 	// The live lockfile must be left in place for other followers.
-	if _, err := lockfile.Read(projectID); err != nil {
+	if _, err := lockfile.Read(root); err != nil {
 		t.Fatalf("lockfile.Read after Elect: %v", err)
 	}
 }
 
 func TestElect_DeadLock_ReclaimsAndBecomesLeader(t *testing.T) {
-	projectID := uniqueProjectID(t)
+	root := t.TempDir()
 
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -62,12 +54,12 @@ func TestElect_DeadLock_ReclaimsAndBecomesLeader(t *testing.T) {
 	addr := ln.Addr().String()
 	ln.Close() // nothing is listening anymore: the lock is dead.
 
-	if err := lockfile.Create(projectID, addr); err != nil {
+	if err := lockfile.Create(root, addr); err != nil {
 		t.Fatalf("lockfile.Create: %v", err)
 	}
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
 
-	result, err := Elect(projectID)
+	result, err := Elect(root)
 	if err != nil {
 		t.Fatalf("Elect: %v", err)
 	}
@@ -75,12 +67,38 @@ func TestElect_DeadLock_ReclaimsAndBecomesLeader(t *testing.T) {
 		t.Fatalf("Role = %v, want Leader", result.Role)
 	}
 
-	if _, err := lockfile.Read(projectID); !os.IsNotExist(err) {
+	if _, err := lockfile.Read(root); !os.IsNotExist(err) {
 		t.Fatalf("lockfile.Read after reclaim err = %v, want os.ErrNotExist", err)
 	}
 }
 
-func uniqueProjectID(t *testing.T) string {
+// Two clones of one repo — same project, same everything but the path — are
+// two working trees, so a live leader in one must not make the other a
+// follower: they may sit at different commits with different resources.
+func TestElect_LiveLeaderInAnotherRoot_StillBecomesLeader(t *testing.T) {
+	elsewhere, here := t.TempDir(), t.TempDir()
+
+	if err := lockfile.Create(elsewhere, liveAddr(t)); err != nil {
+		t.Fatalf("lockfile.Create: %v", err)
+	}
+	t.Cleanup(func() { _ = lockfile.Remove(elsewhere) })
+
+	result, err := Elect(here)
+	if err != nil {
+		t.Fatalf("Elect: %v", err)
+	}
+	if result.Role != Leader {
+		t.Fatalf("Role = %v, want Leader (a leader in %q must not be inherited by %q)", result.Role, elsewhere, here)
+	}
+}
+
+// liveAddr returns an address that stays reachable for the test's duration.
+func liveAddr(t *testing.T) string {
 	t.Helper()
-	return "test-" + t.Name()
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	return ln.Addr().String()
 }

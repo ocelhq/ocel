@@ -133,11 +133,10 @@ func TestRunDev_HappyPath_NoConfigFile_DiscoversDeclaresSyncsAndSpawnsWithExitCo
 	}
 	defer func() { loadCredentials = prev }()
 
-	projectID := "proj_" + t.Name()
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
-
 	root := t.TempDir()
-	writeLink(t, root, resolveServer.URL, projectID)
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
@@ -185,7 +184,10 @@ export {};
 	}
 }
 
-func TestRunDev_SecondRunForSameProject_BecomesFollowerAndReceivesPushedEnv(t *testing.T) {
+// The working tree is the unit of election, and every run in it resolves the
+// same root — so a second run started deep inside the tree still joins the
+// leader rather than starting a rival one.
+func TestRunDev_SecondRunInSameRootFromSubdirectory_BecomesFollowerAndReceivesPushedEnv(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
 	}
@@ -199,14 +201,13 @@ func TestRunDev_SecondRunForSameProject_BecomesFollowerAndReceivesPushedEnv(t *t
 	}
 	defer func() { loadCredentials = prev }()
 
-	projectID := "proj_" + t.Name()
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
-
 	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-	writeLink(t, root, resolveServer.URL, projectID)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
@@ -237,13 +238,16 @@ export {};
 		leaderDone <- runDev(leaderCtx, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 	}()
 
-	waitForLockfile(t, projectID)
+	waitForLockfile(t, root)
 
 	envDumpPath := filepath.Join(root, "follower-env.out")
 	followerAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
+	subdir := filepath.Join(root, "apps", "web")
+	writeFile(t, filepath.Join(subdir, "index.ts"), "export {};\n")
+
 	var followerStdout, followerStderr bytes.Buffer
-	err := runDev(context.Background(), nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+	err := runDev(context.Background(), nil, subdir, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
 
 	var exitErr *ExitError
 	if !errors.As(err, &exitErr) {
@@ -275,6 +279,84 @@ export {};
 	}
 }
 
+// Two clones of one repo, linked to the same cloud project, are two working
+// trees: each elects its own leader and resolves its own declarations. Sharing
+// one would silently hand the second clone the first's environment even though
+// they may sit at different commits.
+func TestRunDev_SecondRootLinkedToSameProject_ElectsItsOwnLeader(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	prev := loadCredentials
+	loadCredentials = func() (credentials.Credentials, error) {
+		return credentials.Credentials{APIURL: resolveServer.URL, AccessToken: "tok"}, nil
+	}
+	defer func() { loadCredentials = prev }()
+
+	projectID := "proj_" + t.Name()
+
+	// The clones declare different resources, standing in for two checkouts at
+	// different commits: the environment each ends up with names its leader.
+	firstClone := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(firstClone) })
+	writeLink(t, firstClone, resolveServer.URL, projectID)
+	writeFile(t, filepath.Join(firstClone, "ocel", "main.ts"), declareResourceScript("first"))
+
+	secondClone := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(secondClone) })
+	writeLink(t, secondClone, resolveServer.URL, projectID)
+	writeFile(t, filepath.Join(secondClone, "ocel", "main.ts"), declareResourceScript("second"))
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	defer cancelLeader()
+
+	leaderDone := make(chan error, 1)
+	var leaderStdout, leaderStderr syncBuffer
+	go func() {
+		leaderDone <- runDev(leaderCtx, nil, firstClone, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+	}()
+
+	waitForLockfile(t, firstClone)
+
+	envDumpPath := filepath.Join(secondClone, "env.out")
+	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
+
+	var stdout, stderr bytes.Buffer
+	err := runDev(context.Background(), nil, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) {
+		t.Fatalf("second clone runDev err = %v, want *ExitError; stderr=%s", err, stderr.String())
+	}
+	if exitErr.Code != 9 {
+		t.Fatalf("second clone ExitError.Code = %d, want 9", exitErr.Code)
+	}
+
+	dumped, err := os.ReadFile(envDumpPath)
+	if err != nil {
+		t.Fatalf("read env dump: %v", err)
+	}
+	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+
+	if _, ok := env["OCEL_RESOURCE_POSTGRES_second"]; !ok {
+		t.Fatalf("second clone env missing its own OCEL_RESOURCE_POSTGRES_second, got: %s", dumped)
+	}
+	if _, ok := env["OCEL_RESOURCE_POSTGRES_first"]; ok {
+		t.Fatalf("second clone inherited the other clone's resolved env, got: %s", dumped)
+	}
+
+	cancelLeader()
+	select {
+	case <-leaderDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("leader runDev did not exit after cancellation")
+	}
+}
+
 func TestRunDev_Leader_FileChangeReResolvesAndPushesUpdatedEnvToFollower(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -293,14 +375,13 @@ func TestRunDev_Leader_FileChangeReResolvesAndPushesUpdatedEnvToFollower(t *test
 	}
 	defer func() { loadCredentials = prev }()
 
-	projectID := "proj_" + t.Name()
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
-
 	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-	writeLink(t, root, resolveServer.URL, projectID)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -316,7 +397,7 @@ export default { slug: "test-app" };
 		leaderDone <- runDev(leaderCtx, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 	}()
 
-	waitForLockfile(t, projectID)
+	waitForLockfile(t, root)
 
 	envDumpPath := filepath.Join(root, "follower-env.out")
 	// Loops so the test can observe the follower child's env both before
@@ -363,9 +444,10 @@ func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZer
 	}
 	defer func() { loadCredentials = prev }()
 
-	projectID := "proj_" + t.Name()
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
 
+	projectID := "proj_" + t.Name()
 	const apiURL = "https://api.example.com"
 	srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
 	srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"conn"}`})
@@ -377,11 +459,10 @@ func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZer
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 
-	if err := lockfile.Create(projectID, listener.Addr().String()); err != nil {
+	if err := lockfile.Create(root, listener.Addr().String()); err != nil {
 		t.Fatalf("lockfile.Create: %v", err)
 	}
 
-	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
@@ -455,17 +536,17 @@ func newFakeResolveServer(t *testing.T) *httptest.Server {
 	}))
 }
 
-// waitForLockfile polls until projectID's leader lockfile exists.
-func waitForLockfile(t *testing.T, projectID string) {
+// waitForLockfile polls until root's leader lockfile exists.
+func waitForLockfile(t *testing.T, root string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := lockfile.Read(projectID); err == nil {
+		if _, err := lockfile.Read(root); err == nil {
 			return
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatalf("lockfile for %q never appeared", projectID)
+	t.Fatalf("lockfile for %q never appeared", root)
 }
 
 // syncBuffer is a mutex-guarded bytes.Buffer, standing in for the
