@@ -8,13 +8,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
-	"github.com/briandowns/spinner"
-	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/authclient"
@@ -59,43 +55,6 @@ var initCmd = &cobra.Command{
 func init() {
 	initCmd.Flags().BoolVarP(&initOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
 	initCmd.Flags().StringVar(&initOpts.org, "org", "", "Select an organization by slug, bypassing the interactive picker")
-}
-
-// nonSlugChars matches runs of characters not allowed in a slug, per the
-// createProjectSchema slug validation in
-// packages/api/src/validation/project.ts (^[a-z0-9]+(-[a-z0-9]+)*$).
-var nonSlugChars = regexp.MustCompile(`[^a-z0-9]+`)
-
-// slugify derives a URL/API-safe slug from an arbitrary project name:
-// lowercase, runs of non [a-z0-9] characters collapsed to a single hyphen,
-// leading/trailing hyphens trimmed, truncated to 63 chars.
-func slugify(name string) string {
-	lower := strings.ToLower(name)
-	slug := nonSlugChars.ReplaceAllString(lower, "-")
-	slug = strings.Trim(slug, "-")
-	if len(slug) > 63 {
-		slug = strings.Trim(slug[:63], "-")
-	}
-	return slug
-}
-
-// isTTY reports whether w is a real terminal (as opposed to a pipe, file,
-// or in-memory buffer such as those used in tests).
-func isTTY(w io.Writer) bool {
-	f, ok := w.(*os.File)
-	if !ok {
-		return false
-	}
-	return isatty.IsTerminal(f.Fd())
-}
-
-// isReaderTTY reports whether r is a real terminal.
-func isReaderTTY(r io.Reader) bool {
-	f, ok := r.(*os.File)
-	if !ok {
-		return false
-	}
-	return isatty.IsTerminal(f.Fd())
 }
 
 // runInit resolves a project name, confirms with the user, resolves their
@@ -287,22 +246,4 @@ func joinSlugs(orgs []authclient.Organization) string {
 		slugs[i] = org.Slug
 	}
 	return strings.Join(slugs, ", ")
-}
-
-// withSpinner runs fn while displaying label with an animated spinner, but
-// only if stdout is a real terminal; otherwise it just prints label as a
-// plain line with no animation, so piped/logged output doesn't fill with
-// control characters.
-func withSpinner(stdout io.Writer, label string, fn func() error) error {
-	if !isTTY(stdout) {
-		fmt.Fprintln(stdout, label)
-		return fn()
-	}
-
-	s := spinner.New(spinner.CharSets[14], 100*time.Millisecond, spinner.WithWriter(stdout))
-	s.Suffix = " " + label
-	s.Start()
-	defer s.Stop()
-
-	return fn()
 }
