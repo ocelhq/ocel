@@ -1,14 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  APP_NAME,
   DNS_LABEL,
+  MAX_SLUG_LEN,
   buildBaselineManifest,
   deployURL,
   lambdaLogGroups,
   markerLines,
   mergeBaselineManifest,
-  previewSlug,
-  previewSlugForApp,
+  projectSlug,
+  projectSlugForApp,
   renderOcelConfig,
   suiteFromResultsPath,
   suiteResultFromJest,
@@ -16,69 +18,80 @@ import {
   withBuildScript,
 } from "./lib.mjs";
 
-describe("previewSlug", () => {
+describe("projectSlug", () => {
   it("is a valid single DNS label carrying the run id", () => {
-    const slug = previewSlug({ runId: "1234567890", dir: "/tmp/next-e2e-abc" });
+    const slug = projectSlug({ runId: "1234567890", dir: "/tmp/next-e2e-abc" });
     expect(slug).toMatch(DNS_LABEL);
     expect(slug).toContain("1234567890");
-    expect(slug.length).toBeLessThanOrEqual(63);
+    expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
   });
 
-  it("distinguishes two temp apps in the same run", () => {
-    const a = previewSlug({ runId: "7", dir: "/tmp/next-e2e-a" });
-    const b = previewSlug({ runId: "7", dir: "/tmp/next-e2e-b" });
+  it("gives two temp apps in the same run their own project", () => {
+    const a = projectSlug({ runId: "7", dir: "/tmp/next-e2e-a" });
+    const b = projectSlug({ runId: "7", dir: "/tmp/next-e2e-b" });
     expect(a).not.toBe(b);
   });
 
   it("is stable for the same run id and directory", () => {
-    expect(previewSlug({ runId: "7", dir: "/tmp/x" })).toBe(previewSlug({ runId: "7", dir: "/tmp/x" }));
+    expect(projectSlug({ runId: "7", dir: "/tmp/x" })).toBe(projectSlug({ runId: "7", dir: "/tmp/x" }));
   });
 
   it("stays a valid label with no run id and a hostile directory name", () => {
-    const slug = previewSlug({ runId: "", dir: "/tmp/Next E2E_App/../weird" });
+    const slug = projectSlug({ runId: "", dir: "/tmp/Next E2E_App/../weird" });
     expect(slug).toMatch(DNS_LABEL);
   });
 
-  it("stays within a DNS label for an absurdly long run id", () => {
-    const slug = previewSlug({ runId: "9".repeat(200), dir: "/tmp/x" });
+  it("stays within the slug budget for an absurdly long run id", () => {
+    const slug = projectSlug({ runId: "9".repeat(200), dir: "/tmp/x" });
     expect(slug).toMatch(DNS_LABEL);
-    expect(slug.length).toBeLessThanOrEqual(63);
+    expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
   });
 });
 
-describe("previewSlugForApp", () => {
+describe("projectSlugForApp", () => {
   it("prefers NEXT_TEST_DIR over the app directory, so deploy and cleanup agree", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
     vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
-    expect(previewSlugForApp("/somewhere/else")).toBe(previewSlug({ runId: "42", dir: "/tmp/harness-app" }));
+    expect(projectSlugForApp("/somewhere/else")).toBe(projectSlug({ runId: "42", dir: "/tmp/harness-app" }));
   });
 
   it("falls back to the app directory when the harness sets no NEXT_TEST_DIR", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
     vi.stubEnv("NEXT_TEST_DIR", "");
-    expect(previewSlugForApp("/tmp/app")).toBe(previewSlug({ runId: "42", dir: "/tmp/app" }));
+    expect(projectSlugForApp("/tmp/app")).toBe(projectSlug({ runId: "42", dir: "/tmp/app" }));
+  });
+
+  it("derives the same slug twice, so cleanup can recover it without the state file", () => {
+    vi.stubEnv("GITHUB_RUN_ID", "42");
+    vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
+    expect(projectSlugForApp("/tmp/harness-app")).toBe(projectSlugForApp("/tmp/harness-app"));
   });
 });
 
 describe("renderOcelConfig", () => {
-  const config = renderOcelConfig({
-    slug: "adapter-e2e",
-    previewDomain: "*.e2e.example.com",
-    appName: "e2e-7-abcd1234",
-  });
+  const config = renderOcelConfig({ slug: "e2e-42-abcd1234", previewDomain: "*.e2e.example.com" });
 
-  it("declares the app explicitly, keyed by the unique slug", () => {
-    expect(config).toContain(`{ name: "e2e-7-abcd1234", path: ".", framework: "next" }`);
-  });
-
-  it("carries the shared project identity, the provider and the preview wildcard", () => {
-    expect(config).toContain(`slug: "adapter-e2e"`);
+  it("carries this temp app's own project slug, the provider and the preview wildcard", () => {
+    expect(config).toContain(`slug: "e2e-42-abcd1234"`);
     expect(config).toContain("awsProvider()");
     expect(config).toContain(`preview: "*.e2e.example.com"`);
   });
 
+  it("declares one app explicitly, under the constant app name", () => {
+    expect(APP_NAME).toBe("app");
+    expect(config).toContain(`apps: [{ name: "app", path: ".", framework: "next" }]`);
+  });
+
+  it("is pure, so cleanup re-renders byte-for-byte what deploy wrote", () => {
+    vi.stubEnv("GITHUB_RUN_ID", "42");
+    vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
+    const args = { slug: projectSlugForApp("/tmp/harness-app"), previewDomain: "*.e2e.example.com" };
+    expect(renderOcelConfig(args)).toBe(renderOcelConfig(args));
+    expect(renderOcelConfig(args)).toContain(`slug: ${JSON.stringify(args.slug)}`);
+  });
+
   it("omits the domains block when no preview domain is configured", () => {
-    expect(renderOcelConfig({ slug: "s", appName: "a" })).not.toContain("domains");
+    expect(renderOcelConfig({ slug: "s" })).not.toContain("domains");
   });
 });
 

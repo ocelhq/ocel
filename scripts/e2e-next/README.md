@@ -21,9 +21,15 @@ all of it is `.github/workflows/test-e2e-deploy.yml` — **manual dispatch only*
 produces). The marker keeps Next's spelling because the harness parses that
 literal; the value comes from `promotionId` in `.ocel/deploy-result.json`.
 
-Each temp app gets its own preview environment *and* its own declared app name
-(`e2e-<run id>-<hash of the temp dir>`), so concurrent suites get their own
-Cloudflare worker script and S3 asset prefix instead of racing a shared one.
+Each temp app gets its own **Ocel project**, slugged `e2e-<run id>-<hash of the
+temp dir>` and deployed as a single persistent preview inside it. The project
+namespaces the Pulumi stacks, the deployments store, the asset prefixes and the
+Cloudflare worker scripts and routes, so the 32 deploys a run has in flight at
+once share no infrastructure and cannot steal each other's hostnames. The slug is
+minted locally — `ocel preview up` makes no control-plane call, so a project
+needs no `ocel init` or `ocel link` — and derived, so `cleanup.mjs` can re-derive
+it from `GITHUB_RUN_ID` and `NEXT_TEST_DIR` alone when a deploy left no state
+behind.
 
 ## Jobs, and what the smoke job does not cover
 
@@ -46,16 +52,22 @@ matrix start rather than being caught by the gate.
 This suite deploys real infrastructure hundreds of times per run. Do all of this
 in a **disposable AWS account and Cloudflare account** that hold nothing else.
 
-1. Create a project on the disposable account: run `ocel init` in a scratch
-   directory and note the `slug` it writes. Every temp app deploys into this one
-   project, as separate preview environments.
-2. Give the project a **wildcard preview domain** on a Cloudflare zone in that
-   account — `domains: { preview: "*.e2e.example.com" }`. Each preview's DNS
-   label lives under it, so without a wildcard the deploys have nowhere to land.
-3. Provision the preview substrate once: `ocel bootstrap --preview` (the suite's
-   deploys are `ocel preview up`, which refuses if it is missing).
-4. Mint an AWS access key and a Cloudflare API token scoped to those accounts,
-   and an Ocel access token for the project.
+No project is created by hand — each deployed test app mints its own — but the
+zone it lands on has to be prepared:
+
+1. Pick a **Cloudflare zone** in that account and create the **wildcard DNS
+   record** the previews resolve through: the `E2E_OCEL_PREVIEW_DOMAIN` value
+   itself, e.g. `*.ocel.site` (`*.e2e.example.com` for a subdomain zone). It must
+   be **proxied — orange cloud**: an unproxied hostname never reaches a worker.
+   Deploys only *verify* this record; they no longer create per-hostname DNS, so a
+   record that is missing or grey-clouded fails the deploy with an actionable
+   error rather than being fixed for you. Create it once, by hand.
+2. Provision the preview substrate once — it is account-global, not per-project:
+   from a scratch directory holding an `ocel.config.ts` that declares the AWS
+   provider, run `ocel bootstrap --preview` (the suite's deploys are
+   `ocel preview up`, which refuses if it is missing).
+3. Mint an AWS access key and a Cloudflare API token scoped to those accounts,
+   and an Ocel access token.
 
 ## Secrets and variables the workflow needs
 
@@ -76,8 +88,7 @@ Repository **variables**:
 | name                       | what                                                       |
 | -------------------------- | ---------------------------------------------------------- |
 | `E2E_OCEL_API_URL`         | Ocel API base URL                                           |
-| `E2E_OCEL_PROJECT_SLUG`    | the shared project's `slug` — its sole identity             |
-| `E2E_OCEL_PREVIEW_DOMAIN`  | the wildcard preview domain, e.g. `*.e2e.example.com`       |
+| `E2E_OCEL_PREVIEW_DOMAIN`  | the wildcard preview domain, e.g. `*.e2e.example.com` — the proxied record from step 1 |
 | `E2E_AWS_REGION`           | region to deploy into                                       |
 
 The expected account ids are deliberately duplicated: the guard compares the
@@ -132,10 +143,12 @@ silently adopt every *new* failure alongside it.
   only valid for that layer version.
 - The multi-GB build cache evicts `build.yml` / `e2e.yml` caches each run.
 - Edge-runtime suites cannot pass and land in the baseline wholesale.
-- A cancelled or timed-out runner strands that app's Lambdas, worker script and
-  DNS label: `cleanup.mjs` is the only footprint control, and it cannot run if
-  the runner is killed. Reclaim those with
-  `ocel preview rm --name <slug> --yes` (the slug is `e2e-<run id>-…`, printed by
-  the job) or `ocel preview ls`.
+- A cancelled or timed-out runner strands that app's whole project — Lambdas,
+  worker scripts, deployments store and DNS label: `cleanup.mjs` is the only
+  footprint control, and it cannot run if the runner is killed. Reclaim one by
+  running `ocel preview rm --name <slug> --yes` from a directory whose
+  `ocel.config.ts` declares that `slug` (it is `e2e-<run id>-…`, printed by the
+  job); `preview rm` addresses the project through the config in its working
+  directory, which is why `cleanup.mjs` re-renders the config if it is gone.
 
 [docs]: https://nextjs.org/docs/app/api-reference/adapters/testing-adapters
