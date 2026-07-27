@@ -40,7 +40,7 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 	cfg := Config{Edge: &recordingEdge{}, EdgeValues: map[string]string{"cacheBucket": "ocel-proj-cache"}}
 
 	t.Run("no worker-fronted apps", func(t *testing.T) {
-		manifest := &deploymentsv1.Manifest{ProjectId: "proj"}
+		manifest := &deploymentsv1.Manifest{Slug: "proj"}
 		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
 		if err != nil {
 			t.Fatalf("rootStackSpecs: %v", err)
@@ -55,7 +55,7 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 
 	t.Run("with a worker-fronted app", func(t *testing.T) {
 		manifest := &deploymentsv1.Manifest{
-			ProjectId: "proj",
+			Slug:      "proj",
 			Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 			Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		}
@@ -149,7 +149,7 @@ func TestRootStackSpecs_PreviewCarriesPreviewVarsAndWildcardDomain(t *testing.T)
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug:      "proj",
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		Domains:   map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
@@ -192,7 +192,7 @@ func TestRootStackSpecs_BindsEdgeSigningCredentials(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug:      "proj",
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 	}
@@ -239,7 +239,7 @@ func TestRootStackSpecs_BindsCacheCoordinates(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug:      "proj",
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 	}

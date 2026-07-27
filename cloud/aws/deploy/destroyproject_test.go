@@ -109,10 +109,10 @@ func TestClassifyProjectStacks_ExcludesOtherProjectsAndPreviews(t *testing.T) {
 	got := classifyProjectStacks("shop", []string{
 		"shop--infra",
 		"shop--web--b1",
-		"shopfoo--infra",     // sibling project whose id has ours as a prefix
-		"shopfoo--web--b1",   // ditto
-		"other--infra",       // unrelated project
-		"shop-preview-pr1",   // a preview stack (single-dash), not production
+		"shopfoo--infra",   // sibling project whose id has ours as a prefix
+		"shopfoo--web--b1", // ditto
+		"other--infra",     // unrelated project
+		"shop-preview-pr1", // a preview stack (single-dash), not production
 	})
 	want := ProjectTeardownPlan{
 		InfraStack: "shop--infra",

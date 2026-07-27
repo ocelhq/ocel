@@ -34,7 +34,7 @@ import (
 )
 
 // deployEnv is the environment segment of a production project's Pulumi stack
-// name (stacks are "<project_id>-prod").
+// name (stacks are "<slug>-prod").
 const deployEnv = "prod"
 
 // pulumiProjectName is the fixed Pulumi project all Ocel stacks live under.
@@ -47,11 +47,11 @@ type Server struct{}
 
 // stackName derives the Pulumi stack name for a deploy/destroy from the project
 // and the resolved environment. It is pure. A production, unspecified, or nil
-// environment keeps the historical "<projectID>-prod"; a preview environment is
-// isolated into its own "<projectID>-preview-<identity>" stack (identity is
+// environment keeps the historical "<slug>-prod"; a preview environment is
+// isolated into its own "<slug>-preview-<identity>" stack (identity is
 // already substrate-safe from the CLI).
-func stackName(projectID string, env *deploymentsv1.Environment) string {
-	return projectID + "-" + envSegment(env)
+func stackName(slug string, env *deploymentsv1.Environment) string {
+	return slug + "-" + envSegment(env)
 }
 
 // envSegment is the environment token shared by the Pulumi stack name and the
@@ -217,7 +217,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// and owner token), keyed by class. A bootstrap predating the store reads the
 	// zero value, and the deploy then fails fast asking for a re-bootstrap
 	// (realize, deploy/production.go).
-	priorRootStackState, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetProjectId())
+	priorRootStackState, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetSlug())
 	if err != nil {
 		return deploy.Result{}, err
 	}
@@ -231,7 +231,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		BackendURL:    "s3://" + deployed.StateBucket,
 		Passphrase:    passphrase,
 		ProjectName:   pulumiProjectName,
-		StackName:     stackName(manifest.GetProjectId(), env),
+		StackName:     stackName(manifest.GetSlug(), env),
 		Pulumi:        pulumiCmd,
 		Secrets:       secretsmanager.NewFromConfig(awscfg),
 		StateTable:    deployed.StateTable,
@@ -273,7 +273,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// this deploy's own substrate (production or preview), and nil when
 	// reconcile itself never ran (an error before it).
 	if res.RootStackState != nil {
-		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetProjectId(), res.RootStackState); writeErr != nil {
+		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetSlug(), res.RootStackState); writeErr != nil {
 			if err != nil {
 				return res, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
 			}
@@ -519,7 +519,7 @@ func deployedResult(res deploy.Result) *deploymentsv1.DeployEvent {
 }
 
 // validateManifest reports whether manifest is well-formed enough for the
-// provider to act on: a schema version and project id are set, and every
+// provider to act on: a schema version and slug are set, and every
 // resource entry carries a logical name, a typed resource identifier, and a
 // typed config.
 func validateManifest(m *deploymentsv1.Manifest) error {
@@ -529,8 +529,8 @@ func validateManifest(m *deploymentsv1.Manifest) error {
 	if m.GetSchemaVersion() == "" {
 		return fmt.Errorf("manifest.schema_version is required")
 	}
-	if m.GetProjectId() == "" {
-		return fmt.Errorf("manifest.project_id is required")
+	if m.GetSlug() == "" {
+		return fmt.Errorf("manifest.slug is required")
 	}
 	for i, r := range m.GetResources() {
 		if r.GetLogicalName() == "" {

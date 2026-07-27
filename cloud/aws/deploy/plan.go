@@ -36,8 +36,8 @@ type Plan struct {
 // infra stack: SDK-declared resources (postgres, bucket, …). It never varies
 // across a project's production deploys — a deploy realizes it in place —
 // so unlike an app-deploy stack it carries no build id. Pure.
-func InfraStackName(projectID string) string {
-	return safeName(projectID) + "--infra"
+func InfraStackName(slug string) string {
+	return safeName(slug) + "--infra"
 }
 
 // PreviewInfraStackName returns the per-name Pulumi stack name for a persistent
@@ -45,16 +45,16 @@ func InfraStackName(projectID string) string {
 // isolated db/bucket, so the name incorporates the preview pointer and stays
 // distinct from production's infra stack and from every other persistent
 // preview. Ephemeral previews have no infra stack. Pure.
-func PreviewInfraStackName(projectID, pointer string) string {
-	return safeName(projectID) + "--preview-" + safeName(pointer) + "--infra"
+func PreviewInfraStackName(slug, pointer string) string {
+	return safeName(slug) + "--preview-" + safeName(pointer) + "--infra"
 }
 
 // PreviewAppDeployStackName returns the per-deploy Pulumi stack name for one
 // app's app-deploy stack in a preview: unique per (project, pointer, app, build
 // id). The fixed "preview-<pointer>" segment keeps it distinct from any
 // production app-deploy stack even in a shared backend. Pure.
-func PreviewAppDeployStackName(projectID, pointer, app, buildID string) string {
-	return safeName(projectID) + "--preview-" + safeName(pointer) + "--" + safeName(app) + "--" + safeName(buildID)
+func PreviewAppDeployStackName(slug, pointer, app, buildID string) string {
+	return safeName(slug) + "--preview-" + safeName(pointer) + "--" + safeName(app) + "--" + safeName(buildID)
 }
 
 // AppDeployStackName returns the deterministic, per-deploy Pulumi stack name
@@ -65,8 +65,8 @@ func PreviewAppDeployStackName(projectID, pointer, app, buildID string) string {
 // segment can itself contain the "--" delimiter (safeName collapses runs of
 // "-" to one) — two different (project, app, build id) triples can never
 // join into the same name. Pure.
-func AppDeployStackName(projectID, app, buildID string) string {
-	return safeName(projectID) + "--" + safeName(app) + "--" + safeName(buildID)
+func AppDeployStackName(slug, app, buildID string) string {
+	return safeName(slug) + "--" + safeName(app) + "--" + safeName(buildID)
 }
 
 // BuildPlan turns a manifest, its environment, a promotion id, and the per-app
@@ -75,7 +75,7 @@ func AppDeployStackName(projectID, app, buildID string) string {
 // ephemeral preview gets no infra stack (InfraStack is ""). Every app the
 // manifest declares must have an entry in builds, else BuildPlan errors.
 func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, promotionID string, builds BuildIDs) (Plan, error) {
-	projectID := manifest.GetProjectId()
+	slug := manifest.GetSlug()
 	apps := manifest.GetApps()
 
 	var (
@@ -85,9 +85,9 @@ func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment,
 	)
 	switch env.GetClass() {
 	case deploymentsv1.Environment_CLASS_PRODUCTION:
-		infraStack = InfraStackName(projectID)
+		infraStack = InfraStackName(slug)
 		appStack = func(app, buildID string) string {
-			return AppDeployStackName(projectID, app, buildID)
+			return AppDeployStackName(slug, app, buildID)
 		}
 	case deploymentsv1.Environment_CLASS_PREVIEW:
 		pointer := env.GetIdentity()
@@ -97,10 +97,10 @@ func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment,
 		ephemeral = env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_EPHEMERAL
 		// Ephemeral previews get no infra stack; persistent ones get a per-name one.
 		if !ephemeral {
-			infraStack = PreviewInfraStackName(projectID, pointer)
+			infraStack = PreviewInfraStackName(slug, pointer)
 		}
 		appStack = func(app, buildID string) string {
-			return PreviewAppDeployStackName(projectID, pointer, app, buildID)
+			return PreviewAppDeployStackName(slug, pointer, app, buildID)
 		}
 	default:
 		return Plan{}, fmt.Errorf("deploy plan supports production and preview, got class %s", env.GetClass())

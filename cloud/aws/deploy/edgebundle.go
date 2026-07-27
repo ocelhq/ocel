@@ -28,14 +28,14 @@ const edgeBundleFile = "edge/bundle.json"
 // Its own top segment keeps it out of reach of the worker's static-asset serve,
 // which the bundle's inlined server env (Next's preview-mode and server-action
 // keys) must never be exposed through.
-func appEdgeR2Prefix(projectID, app, buildID string) string {
-	return path.Join("edge", projectID, sanitizeWorkerName(app), buildID)
+func appEdgeR2Prefix(slug, app, buildID string) string {
+	return path.Join("edge", slug, sanitizeWorkerName(app), buildID)
 }
 
 // appEdgeBundleR2Key is the object the frozen worker's loader callback GETs,
 // carried verbatim as the Deployment record's EdgeWorkers.BundleKey.
-func appEdgeBundleR2Key(projectID, app, buildID string) string {
-	return path.Join(appEdgeR2Prefix(projectID, app, buildID), "bundle.json")
+func appEdgeBundleR2Key(slug, app, buildID string) string {
+	return path.Join(appEdgeR2Prefix(slug, app, buildID), "bundle.json")
 }
 
 // readEdgeBundle reads one app's edge bundle, reporting ok=false when the build
@@ -80,7 +80,7 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 		if err != nil {
 			return err
 		}
-		key := appEdgeBundleR2Key(manifest.GetProjectId(), name, buildID)
+		key := appEdgeBundleR2Key(manifest.GetSlug(), name, buildID)
 		// Overwritten, never skipped-if-exists: the key is build-scoped while
 		// the loader id is content-addressed, so an app whose generateBuildId
 		// is constant would keep the old bytes under the key and have the
@@ -99,7 +99,7 @@ func uploadEdgeBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.
 // loaded under. It reports nil when the build produced no bundle, and equally
 // when the edge cannot load code at all — that edge would have nothing to do
 // with the slot.
-func appEdgeWorkers(cfg Config, projectID, app, buildID string) (*edge.Code, error) {
+func appEdgeWorkers(cfg Config, slug, app, buildID string) (*edge.Code, error) {
 	loader, ok := cfg.Edge.(edge.CodeLoader)
 	if !ok {
 		return nil, nil
@@ -110,7 +110,7 @@ func appEdgeWorkers(cfg Config, projectID, app, buildID string) (*edge.Code, err
 	}
 	compatDate, compatFlags := loader.CodeRuntime()
 	return &edge.Code{
-		BundleKey:   appEdgeBundleR2Key(projectID, app, buildID),
+		BundleKey:   appEdgeBundleR2Key(slug, app, buildID),
 		ID:          loaderID(bundle, compatDate, compatFlags),
 		CompatDate:  compatDate,
 		CompatFlags: compatFlags,

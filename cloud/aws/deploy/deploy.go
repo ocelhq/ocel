@@ -61,7 +61,7 @@ type Config struct {
 	BackendURL  string // Pulumi self-managed backend, e.g. "s3://<bucket>"
 	Passphrase  string // Pulumi passphrase secrets-provider value
 	ProjectName string // Pulumi project name, e.g. "ocel"
-	StackName   string // "<project_id>-<env>"
+	StackName   string // "<slug>-<env>"
 	Pulumi      auto.PulumiCommand
 	Secrets     SecretsReader
 

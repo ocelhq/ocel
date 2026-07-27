@@ -25,11 +25,11 @@ import (
 // PreviewInfraStackName, an ephemeral one gets no infra stack at all (its
 // functions carry no resource connections). Pure — the single seam the
 // ephemeral-vs-persistent teardown branch turns on.
-func PreviewInfraStackFor(projectID, pointer string, persistent bool) string {
+func PreviewInfraStackFor(slug, pointer string, persistent bool) string {
 	if !persistent {
 		return ""
 	}
-	return PreviewInfraStackName(projectID, pointer)
+	return PreviewInfraStackName(slug, pointer)
 }
 
 // RemovePreview tears one preview pointer down, traffic-first: the store pointer
@@ -43,7 +43,7 @@ func PreviewInfraStackFor(projectID, pointer string, persistent bool) string {
 // stack/state may be zero when the project never reconciled a preview root stack
 // (nothing was ever deployed under this pointer), in which case there is nothing
 // store-side to remove and only a stray infra/app stack, if any, is swept.
-func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID, pointer string, persistent bool, progress, log func(string)) error {
+func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, progress, log func(string)) error {
 	report := nilSafe(progress)
 
 	var errs []error
@@ -58,14 +58,14 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 		}
 	}
 
-	targets, err := PreviewReclaimTargets(projectID, pointer, cfg.Env, removedRecordKeys)
+	targets, err := PreviewReclaimTargets(slug, pointer, cfg.Env, removedRecordKeys)
 	if err != nil {
 		errs = append(errs, err)
 	} else if err := Reclaim(ctx, cfg, targets, progress, log); err != nil {
 		errs = append(errs, err)
 	}
 
-	if infra := PreviewInfraStackFor(projectID, pointer, persistent); infra != "" {
+	if infra := PreviewInfraStackFor(slug, pointer, persistent); infra != "" {
 		report("Destroying preview infra stack " + infra + " (database, bucket)")
 		if err := Destroy(ctx, teardownConfig(cfg, infra), progress, log); err != nil {
 			errs = append(errs, fmt.Errorf("destroy preview infra stack %s: %w", infra, err))
@@ -93,15 +93,15 @@ type PreviewProjectTeardownPlan struct {
 const previewStackNameInfix = "--preview-"
 
 // previewStackPointer recovers a preview stack's pointer from its name, or
-// reports ok=false for anything that isn't a preview of projectID (production
+// reports ok=false for anything that isn't a preview of slug (production
 // stacks, another project's previews, a sibling whose id merely prefixes ours,
 // the retired single-stack shape). A preview stack is named
-// "<safeName(projectID)>--preview-<pointer>--…"; the "…--infra" tail marks the
+// "<safeName(slug)>--preview-<pointer>--…"; the "…--infra" tail marks the
 // pointer's per-name infra stack. This is the single shared parse `ocel preview
 // ls` and preview teardown both build on, so their view of the naming can never
 // drift. Pure.
-func previewStackPointer(projectID, name string) (pointer string, infra, ok bool) {
-	prefix := safeName(projectID) + previewStackNameInfix
+func previewStackPointer(slug, name string) (pointer string, infra, ok bool) {
+	prefix := safeName(slug) + previewStackNameInfix
 	if !strings.HasPrefix(name, prefix) {
 		return "", false, false
 	}
@@ -116,11 +116,11 @@ func previewStackPointer(projectID, name string) (pointer string, infra, ok bool
 // project's whole-preview teardown plan: per-name infra stacks, app-deploy
 // stacks, and the distinct pointers they belong to (recovered so the caller can
 // purge each pointer's env-scoped ISR assets). Pure.
-func classifyPreviewStacks(projectID string, stackNames []string) PreviewProjectTeardownPlan {
+func classifyPreviewStacks(slug string, stackNames []string) PreviewProjectTeardownPlan {
 	var plan PreviewProjectTeardownPlan
 	seenPointer := map[string]struct{}{}
 	for _, name := range stackNames {
-		pointer, infra, ok := previewStackPointer(projectID, name)
+		pointer, infra, ok := previewStackPointer(slug, name)
 		if !ok {
 			continue
 		}
@@ -160,10 +160,10 @@ func classifyPreviewStacks(projectID string, stackNames []string) PreviewProject
 // stack or asset failure below leaves it true — those hold no identity a re-run
 // needs, and gating the state on them would strand a project whose store
 // instance and workers are already gone.
-func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, projectID string, progress, log func(string)) (DestroyProjectResult, error) {
+func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug string, progress, log func(string)) (DestroyProjectResult, error) {
 	report := nilSafe(progress)
 
-	plan, err := planPreviewProjectTeardown(ctx, cfg, projectID)
+	plan, err := planPreviewProjectTeardown(ctx, cfg, slug)
 	var errs []error
 	if err != nil {
 		errs = append(errs, err)
@@ -204,7 +204,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	}
 
 	report("Purging preview assets")
-	if err := purgePreviewAssets(ctx, cfg, projectID, plan.Pointers); err != nil {
+	if err := purgePreviewAssets(ctx, cfg, slug, plan.Pointers); err != nil {
 		errs = append(errs, err)
 	}
 
@@ -214,7 +214,7 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 // planPreviewProjectTeardown lists the preview backend's stacks and classifies
 // the ones this project owns. It opens a bare Pulumi workspace over the same
 // preview backend Destroy selects against.
-func planPreviewProjectTeardown(ctx context.Context, cfg Config, projectID string) (PreviewProjectTeardownPlan, error) {
+func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (PreviewProjectTeardownPlan, error) {
 	ws, err := backendWorkspace(ctx, cfg.ProjectName, cfg.BackendURL, cfg.Passphrase, cfg.Region, cfg.Pulumi)
 	if err != nil {
 		return PreviewProjectTeardownPlan{}, err
@@ -227,7 +227,7 @@ func planPreviewProjectTeardown(ctx context.Context, cfg Config, projectID strin
 	for i, s := range summaries {
 		names[i] = s.Name
 	}
-	return classifyPreviewStacks(projectID, names), nil
+	return classifyPreviewStacks(slug, names), nil
 }
 
 // purgePreviewAssets deletes a project's whole preview R2/S3 footprint: its
@@ -235,15 +235,15 @@ func planPreviewProjectTeardown(ctx context.Context, cfg Config, projectID strin
 // each) and each pointer's env-scoped ISR/prerender entries (in both the asset
 // bucket and the cache store). Deleting a prefix nothing was written to is a
 // no-op.
-func purgePreviewAssets(ctx context.Context, cfg Config, projectID string, pointers []string) error {
+func purgePreviewAssets(ctx context.Context, cfg Config, slug string, pointers []string) error {
 	var errs []error
-	for _, prefix := range []string{projectAssetR2Prefix(projectID), projectEdgeR2Prefix(projectID)} {
+	for _, prefix := range []string{projectAssetR2Prefix(slug), projectEdgeR2Prefix(slug)} {
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, prefix); err != nil {
 			errs = append(errs, err)
 		}
 	}
 	for _, pointer := range pointers {
-		isr := projectISRPrefix("preview-"+pointer, projectID)
+		isr := projectISRPrefix("preview-"+pointer, slug)
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, isr); err != nil {
 			errs = append(errs, err)
 		}

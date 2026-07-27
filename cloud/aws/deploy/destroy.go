@@ -18,14 +18,14 @@ import (
 // TeardownConfig carries what a Destroy needs to reach and remove one stack:
 // the Pulumi backend, its decryption passphrase, and the exact stack to act on.
 // The account-global backend holds every project's stacks, so StackName is the
-// project-scoped "<projectID>-preview-<identity>" the server derives (see the
+// project-scoped "<slug>-preview-<identity>" the server derives (see the
 // server's stackName), never an identity alone.
 type TeardownConfig struct {
 	Region      string
 	BackendURL  string
 	Passphrase  string
 	ProjectName string // Pulumi project, e.g. "ocel"
-	StackName   string // exact "<projectID>-preview-<identity>"
+	StackName   string // exact "<slug>-preview-<identity>"
 	Pulumi      auto.PulumiCommand
 }
 
@@ -93,19 +93,19 @@ type PreviewStack struct {
 
 // ListConfig carries what enumerating a project's preview stacks needs: the
 // Pulumi backend, the Pulumi project the workspace opens under, and the manifest
-// ProjectID the account-global backend's stacks are filtered by.
+// Slug the account-global backend's stacks are filtered by.
 type ListConfig struct {
 	Region      string
 	BackendURL  string
 	Passphrase  string
 	ProjectName string // Pulumi project, e.g. "ocel"
-	ProjectID   string // manifest project id, the stack-name scope prefix
+	Slug        string // manifest slug, the stack-name scope prefix
 	Pulumi      auto.PulumiCommand
 }
 
 // ListPreviewStacks enumerates one project's preview ENVIRONMENTS from the
 // preview Pulumi backend — one PreviewStack per distinct pointer, filtered to
-// cfg.ProjectID so it never lists another project's previews. It reads the real
+// cfg.Slug so it never lists another project's previews. It reads the real
 // Pulumi backend and is not exercised by unit tests; the pure pointer
 // enumeration and lifecycle inference it relies on is previewStacksFromNames.
 func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, error) {
@@ -123,7 +123,7 @@ func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, err
 	for i, s := range summaries {
 		names[i] = s.Name
 	}
-	return previewStacksFromNames(cfg.ProjectID, names), nil
+	return previewStacksFromNames(cfg.Slug, names), nil
 }
 
 // previewStacksFromNames collapses a project's preview stack names into one
@@ -135,11 +135,11 @@ func ListPreviewStacks(ctx context.Context, cfg ListConfig) ([]PreviewStack, err
 // Label, CreatedAt, and ExpiresAt are not recoverable from stack names — they
 // are stamped as stack tags at deploy time, whose reading is the opt-in-e2e
 // seam (bd ocelhq-d7u); until it lands, those fields stay zero. Pure.
-func previewStacksFromNames(projectID string, stackNames []string) []PreviewStack {
-	plan := classifyPreviewStacks(projectID, stackNames)
+func previewStacksFromNames(slug string, stackNames []string) []PreviewStack {
+	plan := classifyPreviewStacks(slug, stackNames)
 	persistent := map[string]struct{}{}
 	for _, infra := range plan.InfraStacks {
-		if pointer, _, ok := previewStackPointer(projectID, infra); ok {
+		if pointer, _, ok := previewStackPointer(slug, infra); ok {
 			persistent[pointer] = struct{}{}
 		}
 	}

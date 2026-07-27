@@ -25,14 +25,14 @@ var errNoProductionDeploy = errors.New("this project has no production deploys y
 // deploys have persisted, erroring clearly when none exists yet. Shared by
 // ListPromotions and Rollback, both of which only ever read/act on an
 // already-reconciled root stack — neither ever reconciles one itself.
-func (s *Server) rootStack(ctx context.Context, opts options, projectID string) (edge.RootStack, edge.RootStackState, error) {
+func (s *Server) rootStack(ctx context.Context, opts options, slug string) (edge.RootStack, edge.RootStackState, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return nil, nil, err
 	}
 	ssmClient := ssm.NewFromConfig(awscfg)
 
-	state, err := bootstrap.ReadRootStackState(ctx, ssmClient, projectID)
+	state, err := bootstrap.ReadRootStackState(ctx, ssmClient, slug)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -54,7 +54,7 @@ func (s *Server) ListPromotions(ctx context.Context, req *deploymentsv1.ListProm
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
+	stack, state, err := s.rootStack(ctx, opts, req.GetSlug())
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return &deploymentsv1.ListPromotionsResponse{}, nil
@@ -78,7 +78,7 @@ func (s *Server) Rollback(ctx context.Context, req *deploymentsv1.RollbackReques
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
+	stack, state, err := s.rootStack(ctx, opts, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}

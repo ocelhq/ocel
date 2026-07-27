@@ -1,6 +1,6 @@
 {
   "schema_version": "provider.v1",
-  "project_id": "proj_1",
+  "slug": "proj-1",
   "resources": [
     {
       "logical_name": "postgres_analytics",

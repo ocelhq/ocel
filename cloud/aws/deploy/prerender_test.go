@@ -17,7 +17,7 @@ import (
 // the prerender-upload path.
 func nextManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug: "proj",
 		Functions: []*deploymentsv1.ManifestFunction{
 			{LogicalName: "web_index", Framework: "next", App: "web"},
 		},
@@ -28,7 +28,7 @@ func nextManifest() *deploymentsv1.Manifest {
 // function.
 func twoAppManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug: "proj",
 		Functions: []*deploymentsv1.ManifestFunction{
 			{LogicalName: "web_index", Framework: "next", App: "web"},
 			{LogicalName: "admin_index", Framework: "next", App: "admin"},
@@ -79,7 +79,7 @@ func TestAppCaches_OmitsAnAppWithNoPrerenderedContent(t *testing.T) {
 	})
 	cfg := Config{ArtifactRoot: root, AssetBucket: "assets", StateTable: "state", Env: "prod"}
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug: "proj",
 		Functions: []*deploymentsv1.ManifestFunction{
 			{LogicalName: "web_index", Framework: "next", App: "web"},
 			{LogicalName: "api_index", Framework: "express", App: "api"},
@@ -376,7 +376,7 @@ func TestTagSnapshotSuffix_MatchesTheEdgeContract(t *testing.T) {
 func TestUploadPrerenderAssets_NoNextApp(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: t.TempDir(), AssetBucket: "assets", Env: "prod", Uploader: f}
-	manifest := &deploymentsv1.Manifest{ProjectId: "proj"}
+	manifest := &deploymentsv1.Manifest{Slug: "proj"}
 
 	if err := uploadPrerenderAssets(context.Background(), cfg, manifest); err != nil {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -464,8 +464,8 @@ func TestUploadPrerenderAssets_UploadsCacheEntries(t *testing.T) {
 func TestUploadPrerenderAssets_FetchEntriesStayOnTheAssetBucket(t *testing.T) {
 	hash := "a1b2c3"
 	root := writeTree(t, map[string]string{
-		"apps/web/routing-manifest.json":  `{"buildId":"WEB1"}`,
-		"apps/web/cache/index.cache.json": `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		"apps/web/routing-manifest.json":               `{"buildId":"WEB1"}`,
+		"apps/web/cache/index.cache.json":              `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
 		"apps/web/fetch-cache/" + hash + ".cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 	})
 

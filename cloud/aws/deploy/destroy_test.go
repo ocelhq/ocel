@@ -35,7 +35,7 @@ func TestPreviewStacksFromNames_OneEntryPerPointerWithInferredLifecycle(t *testi
 
 func TestPreviewStacksFromNames_RetiredShapeAndForeignProjectsExcluded(t *testing.T) {
 	got := previewStacksFromNames("shop", []string{
-		"shop-preview-feature_login_ab12", // retired "<projectID>-preview-<identity>"
+		"shop-preview-feature_login_ab12", // retired "<slug>-preview-<identity>"
 		"other--preview-x--web--b1",       // another project's preview
 		InfraStackName("shop"),            // production infra
 		AppDeployStackName("shop", "web", "b1"),

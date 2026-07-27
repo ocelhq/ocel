@@ -27,12 +27,12 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 	if err != nil {
 		return nil, err
 	}
-	plan, err := deploy.PlanProjectTeardown(ctx, cfg, req.GetProjectId())
+	plan, err := deploy.PlanProjectTeardown(ctx, cfg, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
 
-	rootStack, err := s.hasRootStack(ctx, opts, req.GetProjectId())
+	rootStack, err := s.hasRootStack(ctx, opts, req.GetSlug())
 	if err != nil {
 		return nil, err
 	}
@@ -46,8 +46,8 @@ func (s *Server) PlanDestroyProject(ctx context.Context, req *deploymentsv1.Plan
 
 // hasRootStack reports whether a project has a reconciled root stack, treating
 // "never deployed to production" as simply absent rather than an error.
-func (s *Server) hasRootStack(ctx context.Context, opts options, projectID string) (bool, error) {
-	_, state, err := s.rootStack(ctx, opts, projectID)
+func (s *Server) hasRootStack(ctx context.Context, opts options, slug string) (bool, error) {
+	_, state, err := s.rootStack(ctx, opts, slug)
 	if err != nil {
 		if errors.Is(err, errNoProductionDeploy) {
 			return false, nil
@@ -84,13 +84,13 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 	// A preview environment destroys the whole preview footprint on the preview
 	// substrate; anything else destroys the production project.
 	if env := req.GetEnvironment(); env.GetClass() == deploymentsv1.Environment_CLASS_PREVIEW {
-		return s.runDestroyPreviewProject(ctx, opts, req.GetProjectId(), env, progress, logf)
+		return s.runDestroyPreviewProject(ctx, opts, req.GetSlug(), env, progress, logf)
 	}
 
 	// A project may have no root stack (a first deploy that aborted before
 	// reconcile) yet still own orphaned infra/app stacks; that is not an error,
 	// it just leaves nothing edge-side to remove.
-	stack, state, err := s.rootStack(ctx, opts, req.GetProjectId())
+	stack, state, err := s.rootStack(ctx, opts, req.GetSlug())
 	if err != nil && !errors.Is(err, errNoProductionDeploy) {
 		return err
 	}
@@ -100,13 +100,13 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 		return err
 	}
 
-	result, derr := deploy.DestroyProject(ctx, stack, state, cfg, req.GetProjectId(), progress, logf)
+	result, derr := deploy.DestroyProject(ctx, stack, state, cfg, req.GetSlug(), progress, logf)
 
 	// Forget the persisted root-stack state only once the root stack is gone:
 	// deleting it while workers still stand would strip the identities a re-run
 	// needs to finish the teardown.
 	if result.RootTornDown && len(state) > 0 {
-		if err := s.deleteRootStackState(ctx, opts, req.GetProjectId()); err != nil {
+		if err := s.deleteRootStackState(ctx, opts, req.GetSlug()); err != nil {
 			derr = errors.Join(derr, err)
 		}
 	}
@@ -115,12 +115,12 @@ func (s *Server) runDestroyProject(ctx context.Context, req *deploymentsv1.Destr
 
 // deleteRootStackState removes a project's persisted root-stack state, the final
 // step of a successful root-stack teardown.
-func (s *Server) deleteRootStackState(ctx context.Context, opts options, projectID string) error {
+func (s *Server) deleteRootStackState(ctx context.Context, opts options, slug string) error {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
 		return err
 	}
-	return bootstrap.DeleteRootStackState(ctx, ssm.NewFromConfig(awscfg), projectID)
+	return bootstrap.DeleteRootStackState(ctx, ssm.NewFromConfig(awscfg), slug)
 }
 
 // runDestroyPreviewProject tears down a whole project's preview footprint on the
@@ -128,13 +128,13 @@ func (s *Server) deleteRootStackState(ctx context.Context, opts options, project
 // stacks, the preview store instance, the preview root worker(s), the R2 assets,
 // and — once the store instance and workers are gone — the persisted preview
 // root-stack state. The account-level preview bootstrap is left intact.
-func (s *Server) runDestroyPreviewProject(ctx context.Context, opts options, projectID string, env *deploymentsv1.Environment, progress, logf func(string)) error {
-	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, projectID, env)
+func (s *Server) runDestroyPreviewProject(ctx context.Context, opts options, slug string, env *deploymentsv1.Environment, progress, logf func(string)) error {
+	cfg, stack, state, err := s.previewTeardownContext(ctx, opts, slug, env)
 	if err != nil {
 		return err
 	}
 
-	result, derr := deploy.DestroyPreviewProject(ctx, stack, state, cfg, projectID, progress, logf)
+	result, derr := deploy.DestroyPreviewProject(ctx, stack, state, cfg, slug, progress, logf)
 
 	// Forget the persisted preview root-stack state only once the store instance
 	// and workers are gone, so a re-run of a partial teardown still holds the
@@ -146,7 +146,7 @@ func (s *Server) runDestroyPreviewProject(ctx context.Context, opts options, pro
 		if awsErr != nil {
 			return awsErr
 		}
-		if err := bootstrap.DeleteRootStackStateFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, projectID); err != nil {
+		if err := bootstrap.DeleteRootStackStateFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, slug); err != nil {
 			derr = errors.Join(derr, err)
 		}
 	}

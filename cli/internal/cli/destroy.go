@@ -93,7 +93,7 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 		plan, err := runner.PlanDestroyProject(ctx, &deploymentsv1.PlanDestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 		})
 		spinner.Stop()
 		if err != nil {
@@ -104,8 +104,8 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 			return nil
 		}
 
-		printDestroyPlan(stdout, cfg.ProjectID, plan)
-		confirmed, err := confirmDestroyProject(cfg.ProjectID, stdout, stdin)
+		printDestroyPlan(stdout, cfg.Slug, plan)
+		confirmed, err := confirmDestroyProject(cfg.Slug, stdout, stdin)
 		if err != nil {
 			return err
 		}
@@ -117,12 +117,12 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 		req := &deploymentsv1.DestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 		}
 		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
 			return err
 		}
-		ui.Finish(fmt.Sprintf("Destroyed project %s", cfg.ProjectID))
+		ui.Finish(fmt.Sprintf("Destroyed project %s", cfg.Slug))
 		return nil
 	})
 	if err != nil {
@@ -159,13 +159,13 @@ func runDestroyPreviewProject(ctx context.Context, cwd string, stdout, stderr io
 			return err
 		}
 
-		fmt.Fprintf(stdout, "This will permanently destroy the ENTIRE preview footprint of project %q:\n", cfg.ProjectID)
+		fmt.Fprintf(stdout, "This will permanently destroy the ENTIRE preview footprint of project %q:\n", cfg.Slug)
 		fmt.Fprintln(stdout, "  • every preview (persistent and ephemeral): app-deploy stacks, per-name infra stacks INCLUDING ALL DATA")
 		fmt.Fprintln(stdout, "  • the project's preview deployments-store instance and preview edge worker(s)")
 		fmt.Fprintln(stdout, "  • all stored preview assets belonging to this project")
 		fmt.Fprintln(stdout, "The account-level preview bootstrap is left intact. This cannot be undone.")
 
-		confirmed, err := confirmDestroyProject(cfg.ProjectID, stdout, stdin)
+		confirmed, err := confirmDestroyProject(cfg.Slug, stdout, stdin)
 		if err != nil {
 			return err
 		}
@@ -177,13 +177,13 @@ func runDestroyPreviewProject(ctx context.Context, cwd string, stdout, stderr io
 		req := &deploymentsv1.DestroyProjectRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 			Environment:     &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW},
 		}
 		if err := runner.DestroyProject(ctx, req, ui.Event); err != nil {
 			return err
 		}
-		ui.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.ProjectID))
+		ui.Finish(fmt.Sprintf("Destroyed preview footprint of project %s", cfg.Slug))
 		return nil
 	})
 	if err != nil {
@@ -201,8 +201,8 @@ func destroyPlanEmpty(plan *deploymentsv1.PlanDestroyProjectResponse) bool {
 
 // printDestroyPlan renders the blast radius the operator is about to confirm, so
 // they type the project name against a real inventory rather than blind.
-func printDestroyPlan(out io.Writer, projectID string, plan *deploymentsv1.PlanDestroyProjectResponse) {
-	fmt.Fprintf(out, "This will permanently destroy everything below in production project %q:\n", projectID)
+func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestroyProjectResponse) {
+	fmt.Fprintf(out, "This will permanently destroy everything below in production project %q:\n", slug)
 	if plan.GetRootStack() {
 		fmt.Fprintln(out, "  • root stack — edge workers, custom-domain binding, deployments store")
 	}
@@ -219,8 +219,8 @@ func printDestroyPlan(out io.Writer, projectID string, plan *deploymentsv1.PlanD
 // confirmDestroyProject requires the operator to type the exact project name.
 // The match is case-sensitive and exact so a keyboard slip — or a reflexive
 // "y" — never proceeds. An empty or closed stdin reads as "no".
-func confirmDestroyProject(projectID string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	fmt.Fprintf(stdout, "Type the project name (%s) to confirm: ", projectID)
+func confirmDestroyProject(slug string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	fmt.Fprintf(stdout, "Type the project name (%s) to confirm: ", slug)
 
 	scanner := bufio.NewScanner(stdin)
 	if !scanner.Scan() {
@@ -229,5 +229,5 @@ func confirmDestroyProject(projectID string, stdout io.Writer, stdin io.Reader) 
 		}
 		return false, nil
 	}
-	return strings.TrimSpace(scanner.Text()) == projectID, nil
+	return strings.TrimSpace(scanner.Text()) == slug, nil
 }

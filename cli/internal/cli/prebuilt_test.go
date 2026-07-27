@@ -134,10 +134,9 @@ func TestPrebuiltFlag_RegisteredOnDeployAndPreview(t *testing.T) {
 // test turns entirely on the build half.
 func prebuiltConfig(root string) *projectconfig.Config {
 	return &projectconfig.Config{
-		Dir:       root,
-		ProjectID: "proj_prebuilt",
-		Slug:      "prebuilt",
-		Apps:      []projectconfig.App{{Name: "api", Path: ".", Framework: "express", Compute: "serverless"}},
+		Dir:  root,
+		Slug: "prebuilt",
+		Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express", Compute: "serverless"}},
 	}
 }
 
