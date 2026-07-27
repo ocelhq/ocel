@@ -36,17 +36,84 @@ func TestConfirmDeploy(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			var stdout bytes.Buffer
-			got, err := confirmDeploy("proj_123", "@ocel/provider-aws", &stdout, strings.NewReader(tc.input))
+			got, err := confirmDeploy("my-app", "@ocel/provider-aws", nil, &stdout, strings.NewReader(tc.input))
 			if err != nil {
 				t.Fatalf("confirmDeploy() error = %v", err)
 			}
 			if got != tc.want {
 				t.Errorf("confirmDeploy(%q) = %v, want %v", tc.input, got, tc.want)
 			}
-			if !strings.Contains(stdout.String(), "Deploy proj_123 with @ocel/provider-aws? [y/N]") {
+			if !strings.Contains(stdout.String(), "Deploy my-app with @ocel/provider-aws? [y/N]") {
 				t.Errorf("stdout = %q, want it to contain the confirm prompt", stdout.String())
 			}
 		})
+	}
+}
+
+// TestConfirmDeploy_UnrecognizedSlugWarns covers the slug-drift guard's whole
+// point: when the provider reports other projects in its backend, the prompt
+// must be visibly different from a routine update — naming the slug being
+// deployed, saying a NEW project is about to be created, and listing what is
+// already there — so a typo or a rename can't sail past on muscle memory.
+func TestConfirmDeploy_UnrecognizedSlugWarns(t *testing.T) {
+	var stdout bytes.Buffer
+	got, err := confirmDeploy("my-app", "@ocel/provider-aws", []string{"my-application", "billing"}, &stdout, strings.NewReader("y\n"))
+	if err != nil {
+		t.Fatalf("confirmDeploy() error = %v", err)
+	}
+	if !got {
+		t.Error("confirmDeploy() = false, want the y answer to still proceed — the guard is a warning, not a refusal")
+	}
+
+	out := stdout.String()
+	for _, want := range []string{
+		`No existing deployment for slug "my-app".`,
+		"This will create a NEW project.",
+		"This backend already has: my-application, billing",
+		"Continue? [y/N]",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "Deploy my-app with") {
+		t.Errorf("stdout = %q, want the routine update prompt replaced, not appended to", out)
+	}
+}
+
+// TestConfirmDeploy_UnrecognizedSlugDefaultsToNo proves the drift prompt keeps
+// the y/N default: an empty or unrecognized answer aborts rather than forking
+// a project.
+func TestConfirmDeploy_UnrecognizedSlugDefaultsToNo(t *testing.T) {
+	for _, input := range []string{"\n", "", "sure\n"} {
+		var stdout bytes.Buffer
+		got, err := confirmDeploy("my-app", "@ocel/provider-aws", []string{"my-application"}, &stdout, strings.NewReader(input))
+		if err != nil {
+			t.Fatalf("confirmDeploy(%q) error = %v", input, err)
+		}
+		if got {
+			t.Errorf("confirmDeploy(%q) = true, want the drift prompt to default to No", input)
+		}
+	}
+}
+
+// TestConfirmDeploy_EmptyBackendIsNotNagged covers the case the guard must
+// stay quiet for: a genuinely-new project deploying into a backend that holds
+// nothing yet. The provider reports no known slugs, and the user sees the
+// routine prompt.
+func TestConfirmDeploy_EmptyBackendIsNotNagged(t *testing.T) {
+	for _, known := range [][]string{nil, {}} {
+		var stdout bytes.Buffer
+		if _, err := confirmDeploy("my-app", "@ocel/provider-aws", known, &stdout, strings.NewReader("y\n")); err != nil {
+			t.Fatalf("confirmDeploy() error = %v", err)
+		}
+		out := stdout.String()
+		if !strings.Contains(out, "Deploy my-app with @ocel/provider-aws? [y/N]") {
+			t.Errorf("stdout = %q, want the routine prompt", out)
+		}
+		if strings.Contains(out, "NEW project") {
+			t.Errorf("stdout = %q, want no drift warning when the backend reports nothing", out)
+		}
 	}
 }
 
@@ -311,6 +378,47 @@ func TestRunDeploy_ConfirmSkippedWhenStdinNotATTY_ProceedsWithoutPrompting(t *te
 	}
 	if !strings.Contains(stdout.String(), "Deployed") {
 		t.Errorf("stdout = %q, want deploy to still proceed to success", stdout.String())
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunDeploy_PreflightCarriesTheSlug proves the slug-drift guard's request
+// half over the wire: the preflight `ocel deploy` runs names the project it is
+// about to stand up, which is what lets the provider answer whether it already
+// holds stacks for it.
+func TestRunDeploy_PreflightCarriesTheSlug(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app") {
+		t.Errorf("stdout = %q, want the preflight to have carried the project's slug", stdout.String())
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunDeploy_YesBypassesTheSlugDriftGuard proves --yes keeps CI unaffected:
+// even with the provider reporting an unrecognized slug beside other projects,
+// no prompt is shown and the deploy proceeds.
+func TestRunDeploy_YesBypassesTheSlugDriftGuard(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	t.Setenv(fakeKnownSlugsEnvVar, "my-application,billing")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if strings.Contains(out, "NEW project") || strings.Contains(out, "[y/N]") {
+		t.Errorf("stdout = %q, want --yes to bypass the drift prompt", out)
+	}
+	if !strings.Contains(out, "Deployed") {
+		t.Errorf("stdout = %q, want the deploy to proceed", out)
 	}
 
 	waitForNoStaleSocket(t, sockPath)

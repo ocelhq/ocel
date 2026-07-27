@@ -459,6 +459,19 @@ func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provid
 	return preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PREVIEW, "ocel bootstrap --preview", out)
 }
 
+// preflightDeploy is preflightClass scoped to the project `ocel deploy` is
+// about to stand up: it additionally names the slug, and returns the other
+// projects the provider's backend already holds — non-empty only when this
+// slug holds nothing there, which is what a mistyped or renamed slug looks
+// like (see confirmDeploy).
+func preflightDeploy(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, slug string, out io.Writer) ([]string, error) {
+	resp, err := preflight(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, slug, "ocel bootstrap", out)
+	if err != nil {
+		return nil, err
+	}
+	return resp.GetKnownSlugs(), nil
+}
+
 // preflightClass asks the provider to authenticate the credentials it needs and
 // report what its ambient account points at, prints the "Running with:" banner
 // to out, and refuses locally — before anything is provisioned — when a
@@ -467,26 +480,39 @@ func preflightPreview(ctx context.Context, runner *providerrunner.Runner, provid
 // provider enforces credentials and class authoritatively; this is the fast
 // local refuse the deploy/preview/rollback/deployments commands share.
 func preflightClass(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, bootstrapHint string, out io.Writer) error {
+	_, err := preflight(ctx, runner, provider, required, "", bootstrapHint, out)
+	return err
+}
+
+// preflight drives the Preflight RPC and applies the shared refusals, handing
+// the response back for the caller-specific parts. slug is sent only by a
+// command that wants the project-identity answer; the rest send "" so the
+// provider skips enumerating its backend.
+func preflight(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, required deploymentsv1.Environment_Class, slug, bootstrapHint string, out io.Writer) (*deploymentsv1.PreflightResponse, error) {
 	spinner := deployui.StartSpinner(out, "Checking credentials")
 	resp, err := runner.Preflight(ctx, &deploymentsv1.PreflightRequest{
 		Options:         []byte(provider.Options),
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		RequiredClass:   required,
+		Slug:            slug,
 	})
 	spinner.Stop()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if banner := formatIdentityBanner(resp.GetIdentity()); banner != "" {
 		fmt.Fprint(out, banner)
 	}
 	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {
-		return err
+		return nil, err
 	}
 	if !resp.GetInfrastructurePresent() {
-		return fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
+		return nil, fmt.Errorf("no infrastructure is set up yet; run `%s` to create it", bootstrapHint)
 	}
-	return deploymentsv1.CheckClass(resp.GetInfraClass(), required)
+	if err := deploymentsv1.CheckClass(resp.GetInfraClass(), required); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 // formatIdentityBanner renders the "Running with:" block from the identity the
