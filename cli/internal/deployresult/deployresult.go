@@ -40,7 +40,7 @@ const fileName = "deploy-result.json"
 // the provider's Deploy RPC reaches a successful terminal result.
 type Result struct {
 	SchemaVersion int         `json:"schemaVersion"`
-	ProjectID     string      `json:"projectId"`
+	Slug          string      `json:"slug"`
 	Environment   Environment `json:"environment"`
 	// PromotionID identifies the promotion this deploy created, as reported on
 	// the provider's terminal result.

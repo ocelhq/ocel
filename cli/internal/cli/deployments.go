@@ -91,7 +91,7 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 		resp, err := runner.ListPromotions(ctx, &deploymentsv1.ListPromotionsRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 		})
 		if err != nil {
 			return err
@@ -128,7 +128,7 @@ func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, std
 		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 			KeepN:           int32(keepN),
 		}, ui.Event); err != nil {
 			return err

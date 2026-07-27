@@ -20,7 +20,7 @@ func recordDeployResult(cfg *projectconfig.Config, manifest *deploymentsv1.Manif
 	}
 
 	if err := deployresult.Write(cfg.Dir, deployresult.Result{
-		ProjectID: cfg.ProjectID,
+		Slug: cfg.Slug,
 		Environment: deployresult.Environment{
 			Class:    environmentClassKey(env.GetClass()),
 			Identity: env.GetIdentity(),

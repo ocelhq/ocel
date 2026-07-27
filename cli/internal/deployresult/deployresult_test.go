@@ -12,7 +12,7 @@ func TestWrite_WritesTheDocumentedShape(t *testing.T) {
 	dir := t.TempDir()
 
 	err := Write(dir, Result{
-		ProjectID:   "proj_123",
+		Slug:        "proj-123",
 		Environment: Environment{Class: "preview", Identity: "e2e-42"},
 		PromotionID: "dep_abc",
 		Tag:         "v1",
@@ -35,7 +35,7 @@ func TestWrite_WritesTheDocumentedShape(t *testing.T) {
 
 	want := map[string]any{
 		"schemaVersion": float64(SchemaVersion),
-		"projectId":     "proj_123",
+		"slug":          "proj-123",
 		"environment":   map[string]any{"class": "preview", "identity": "e2e-42"},
 		"promotionId":   "dep_abc",
 		"tag":           "v1",
@@ -59,7 +59,7 @@ func TestWrite_OmitsAnUnsetTagAndStampsTheTime(t *testing.T) {
 	dir := t.TempDir()
 
 	before := time.Now().Add(-time.Second)
-	if err := Write(dir, Result{ProjectID: "proj_123"}); err != nil {
+	if err := Write(dir, Result{Slug: "proj-123"}); err != nil {
 		t.Fatalf("Write() error = %v", err)
 	}
 

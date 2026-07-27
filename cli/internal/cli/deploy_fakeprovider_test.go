@@ -204,7 +204,7 @@ func (s *deployFakeProviderServer) DestroyPreview(ctx context.Context, req *depl
 		return err
 	}
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY project=" + req.GetProjectId() + " " + describeEnv(req.GetEnvironment())}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY project=" + req.GetSlug() + " " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
 		return err
 	}
@@ -213,7 +213,7 @@ func (s *deployFakeProviderServer) DestroyPreview(ctx context.Context, req *depl
 	})
 }
 
-// ListEnvironments echoes the project_id it was scoped to as a synthetic first
+// ListEnvironments echoes the slug it was scoped to as a synthetic first
 // entry (so tests can assert the CLI sent it), then returns a canned set of
 // preview environments for `ocel preview ls` to render.
 func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
@@ -223,7 +223,7 @@ func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *de
 	return &deploymentsv1.ListEnvironmentsResponse{
 		Environments: []*deploymentsv1.PreviewEnvironment{
 			{
-				Identity:  "project:" + req.GetProjectId(),
+				Identity:  "project:" + req.GetSlug(),
 				Lifecycle: deploymentsv1.Environment_LIFECYCLE_EPHEMERAL,
 			},
 			{

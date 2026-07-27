@@ -124,7 +124,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		}
 
 		if !opts.yes && isReaderTTY(stdin) {
-			proceed, err := confirmDeploy(cfg.ProjectID, provider.Package, stdout, stdin)
+			proceed, err := confirmDeploy(cfg.Slug, provider.Package, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -218,7 +218,7 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, pre
 		fmt.Fprintln(buildOut, "no functions to deploy; deploying infrastructure only")
 	}
 
-	return manifestbuilder.Build(cfg.ProjectID, cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions)
+	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions)
 }
 
 // toApps lowers the resolved config's apps into the manifest builder's input.
@@ -279,8 +279,8 @@ func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider
 
 // confirmDeploy prints the "Deploy <project> with <provider>? [y/N]" prompt
 // and returns the user's yes/no answer (see confirmYN).
-func confirmDeploy(projectID, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	return confirmYN(fmt.Sprintf("Deploy %s with %s?", projectID, providerPackage), stdout, stdin)
+func confirmDeploy(slug, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	return confirmYN(fmt.Sprintf("Deploy %s with %s?", slug, providerPackage), stdout, stdin)
 }
 
 // confirmYN prints "<prompt> [y/N] " and reads a single line from stdin,
