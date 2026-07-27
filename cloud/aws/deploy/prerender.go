@@ -34,7 +34,7 @@ type prerenderManifest struct {
 // is also what that app's IAM policy is scoped to and what its cache handler
 // joins its keys onto, so all three agree by construction — and no two apps ever
 // address the same slice.
-func appAssetPrefix(cfg Config, projectID, app string) (string, error) {
+func appAssetPrefix(cfg Config, slug, app string) (string, error) {
 	var pm prerenderManifest
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, app), "routing-manifest.json"))
 	if err != nil {
@@ -46,7 +46,7 @@ func appAssetPrefix(cfg Config, projectID, app string) (string, error) {
 	if pm.BuildID == "" {
 		return "", fmt.Errorf("routing manifest for %s is missing buildId; rebuild the app", app)
 	}
-	return appAssetPrefixFor(cfg.Env, projectID, app, pm.BuildID), nil
+	return appAssetPrefixFor(cfg.Env, slug, app, pm.BuildID), nil
 }
 
 // appAssetPrefixFor is appAssetPrefix's pure half, once the build id is
@@ -55,8 +55,8 @@ func appAssetPrefix(cfg Config, projectID, app string) (string, error) {
 // deploy running it. The app-id key segment reuses the worker-name sanitizer
 // so it agrees with how the app is otherwise addressed, and stays a safe,
 // stable path token.
-func appAssetPrefixFor(env, projectID, app, buildID string) string {
-	return path.Join(env, projectID, sanitizeWorkerName(app), buildID)
+func appAssetPrefixFor(env, slug, app, buildID string) string {
+	return path.Join(env, slug, sanitizeWorkerName(app), buildID)
 }
 
 // appCaches describes the ISR cache of every app in the manifest that keeps
@@ -69,7 +69,7 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 		if fn.GetFramework() != frameworkNext || caches[app] != nil {
 			continue
 		}
-		prefix, err := appAssetPrefix(cfg, manifest.GetProjectId(), app)
+		prefix, err := appAssetPrefix(cfg, manifest.GetSlug(), app)
 		if err != nil {
 			return nil, err
 		}

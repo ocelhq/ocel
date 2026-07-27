@@ -144,8 +144,8 @@ func writeLenPrefixed(h io.Writer, b []byte) {
 // structured by project then function for human-navigability, keyed by the
 // source hash so a code change lands at a new key (and Pulumi redeploys) while
 // identical code dedups onto the same object.
-func artifactKey(projectID, logicalName, hash string) string {
-	return fmt.Sprintf("%s/%s/%s.zip", projectID, logicalName, hash)
+func artifactKey(slug, logicalName, hash string) string {
+	return fmt.Sprintf("%s/%s/%s.zip", slug, logicalName, hash)
 }
 
 // zipDir archives a `.func` source tree into an in-memory Lambda deployment
@@ -305,7 +305,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 			if err != nil {
 				return err
 			}
-			key := artifactKey(manifest.GetProjectId(), fn.GetLogicalName(), hash)
+			key := artifactKey(manifest.GetSlug(), fn.GetLogicalName(), hash)
 			if err := uploadArtifact(ctx, cfg.Uploader, cfg.ArtifactBucket, key, "", func() ([]byte, error) {
 				return zipDir(dir)
 			}); err != nil {

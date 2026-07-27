@@ -18,7 +18,7 @@ import (
 func wellFormedManifest() *deploymentsv1.Manifest {
 	return &deploymentsv1.Manifest{
 		SchemaVersion: "provider.v1",
-		ProjectId:     "proj_123",
+		Slug:          "proj-123",
 		Resources: []*deploymentsv1.ManifestResource{
 			{
 				LogicalName: "postgres_main",
@@ -54,11 +54,11 @@ func TestValidateManifest_MissingSchemaVersion(t *testing.T) {
 	}
 }
 
-func TestValidateManifest_MissingProjectID(t *testing.T) {
+func TestValidateManifest_MissingSlug(t *testing.T) {
 	m := wellFormedManifest()
-	m.ProjectId = ""
+	m.Slug = ""
 	if err := validateManifest(m); err == nil {
-		t.Fatal("validateManifest() error = nil, want error for missing project_id")
+		t.Fatal("validateManifest() error = nil, want error for missing slug")
 	}
 }
 

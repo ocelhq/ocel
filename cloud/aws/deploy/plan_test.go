@@ -29,7 +29,7 @@ func TestAppDeployStackName_UniquePerApp(t *testing.T) {
 	}
 }
 
-// A naive "projectID-app-buildID" join would let a hyphen inside one segment
+// A naive "slug-app-buildID" join would let a hyphen inside one segment
 // shift where the next segment starts, colliding two distinct triples onto
 // the same name.
 func TestAppDeployStackName_NoCollisionAcrossHyphenatedSegments(t *testing.T) {
@@ -51,7 +51,7 @@ func TestInfraStackName_StableAcrossDeploys(t *testing.T) {
 
 func TestBuildPlan_HappyPath(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
+		Slug: "proj",
 		Apps: []*deploymentsv1.ManifestApp{
 			{Name: "web"},
 			{Name: "api"},
@@ -96,8 +96,8 @@ func TestBuildPlan_HappyPath(t *testing.T) {
 
 func TestBuildPlan_MissingBuildIDErrors(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}},
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}},
 	}
 	builds := BuildIDs{"web": "buildW"} // api missing
 
@@ -108,8 +108,8 @@ func TestBuildPlan_MissingBuildIDErrors(t *testing.T) {
 
 func TestBuildPlan_RejectsUnspecifiedClass(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}},
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
 	env := &deploymentsv1.Environment{} // CLASS_UNSPECIFIED
 
@@ -128,8 +128,8 @@ func previewEnv(lifecycle deploymentsv1.Environment_Lifecycle) *deploymentsv1.En
 
 func TestBuildPlan_PersistentPreviewHasPerNameInfraStack(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}},
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
 
 	plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "promo1", BuildIDs{"web": "b"})
@@ -151,8 +151,8 @@ func TestBuildPlan_PersistentPreviewHasPerNameInfraStack(t *testing.T) {
 
 func TestBuildPlan_EphemeralPreviewHasNoInfraStack(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}},
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
 
 	plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_EPHEMERAL), "promo1", BuildIDs{"web": "b"})
@@ -169,8 +169,8 @@ func TestBuildPlan_EphemeralPreviewHasNoInfraStack(t *testing.T) {
 
 func TestBuildPlan_PreviewRequiresIdentity(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
-		ProjectId: "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web"}},
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
 	env := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW} // no identity
 
@@ -180,7 +180,7 @@ func TestBuildPlan_PreviewRequiresIdentity(t *testing.T) {
 }
 
 func TestBuildPlan_TwoPersistentPreviewsDoNotCollide(t *testing.T) {
-	manifest := &deploymentsv1.Manifest{ProjectId: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
+	manifest := &deploymentsv1.Manifest{Slug: "proj", Apps: []*deploymentsv1.ManifestApp{{Name: "web"}}}
 	staging := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "staging"}
 	demo := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "demo"}
 
@@ -195,7 +195,7 @@ func TestBuildPlan_TwoPersistentPreviewsDoNotCollide(t *testing.T) {
 }
 
 func TestBuildPlan_NoAppsYieldsEmptyPlan(t *testing.T) {
-	manifest := &deploymentsv1.Manifest{ProjectId: "proj"}
+	manifest := &deploymentsv1.Manifest{Slug: "proj"}
 
 	plan, err := BuildPlan(manifest, prodEnv(), "promo1", BuildIDs{})
 	if err != nil {
