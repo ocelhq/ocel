@@ -59,11 +59,14 @@ function replay(label, path) {
 }
 
 // printLambdaLogs pulls this app's recent CloudWatch events. The functions are
-// Pulumi-autonamed, so they are found by the `ocel:app` tag every Ocel function
-// carries (cloud/aws/deploy/function.go), which is this app's unique slug.
+// Pulumi-autonamed, so they are found by the ocel tags every Ocel function
+// carries (cloud/aws/deploy/function.go). `ocel:project` is the one to filter
+// on: every temp app is declared under the constant APP_NAME and gets its own
+// project instead, so `ocel:app` would match every app deployed concurrently
+// into the account and mix their logs into this one's diagnostics.
 function printLambdaLogs() {
   console.log("=== lambda logs ===");
-  if (!state.appName) {
+  if (!state.slug) {
     console.log("(no deploy state; cannot resolve this app's functions)");
     return;
   }
@@ -76,7 +79,7 @@ function printLambdaLogs() {
           "resourcegroupstaggingapi",
           "get-resources",
           "--tag-filters",
-          `Key=ocel:app,Values=${state.appName}`,
+          `Key=ocel:project,Values=${state.slug}`,
           "--resource-type-filters",
           "lambda:function",
         ]),
@@ -88,7 +91,7 @@ function printLambdaLogs() {
   }
 
   if (groups.length === 0) {
-    console.log(`(no functions tagged ocel:app=${state.appName})`);
+    console.log(`(no functions tagged ocel:project=${state.slug})`);
     return;
   }
 

@@ -25,30 +25,51 @@ const HASH_LEN = 8;
 const LOCAL_RUN_ID = "local";
 
 /**
- * previewSlug derives this temp app's identity: the name of its preview
- * environment, its declared app name, and therefore its Cloudflare worker
- * script and S3 asset prefix. It must be a valid single DNS label (it becomes a
- * preview subdomain), unique per temp app (each suite gets its own app rather
- * than racing a shared one), and stable for a given run and directory so
- * logs/cleanup can re-derive it if the state file is ever lost.
+ * The name every temp app is declared under. Isolation lives in the project slug
+ * (projectSlug), so a per-app name would buy nothing and cost length: the
+ * Cloudflare worker script name derived from both ("ocel-<slug>-preview-<app>")
+ * has 63 characters to fit in.
  */
-export function previewSlug({ runId, dir }) {
+export const APP_NAME = "app";
+
+/**
+ * The longest slug a preview pointer named after it can still be served on: the
+ * route hostname's first label is the pointer plus an 11-character suffix
+ * (cloud/aws/deploy/previewhost.go) and a DNS label holds 63, which is the same
+ * cap `ocel preview up --name` enforces (cli/internal/previewid).
+ */
+export const MAX_SLUG_LEN = 52;
+
+/**
+ * projectSlug derives the identity that isolates one temp app: the `slug` of the
+ * Ocel project it deploys into, which is also the name of the persistent preview
+ * pointer inside that project. A project is the unit concurrent deploys must not
+ * share — it namespaces the Pulumi stacks, the deployments store, the asset
+ * prefixes and the Cloudflare worker scripts and routes — so every temp app gets
+ * its own.
+ *
+ * It must be a valid single DNS label within MAX_SLUG_LEN (it becomes the
+ * preview subdomain), unique per temp app, and stable for a given run and
+ * directory: cleanup re-derives it when the state file is lost, and a slug it
+ * cannot re-derive is infrastructure nothing will ever tear down.
+ */
+export function projectSlug({ runId, dir }) {
   const run = sanitizeToken(String(runId ?? "")) || LOCAL_RUN_ID;
   const hash = createHash("sha256").update(String(dir ?? "")).digest("hex").slice(0, HASH_LEN);
   // "e2e-" gives the label its required letter start; the run token is capped
-  // so run + hash can never push the label past the DNS limit.
-  const maxRun = 63 - "e2e-".length - 1 - HASH_LEN;
+  // so run + hash can never push the slug past MAX_SLUG_LEN.
+  const maxRun = MAX_SLUG_LEN - "e2e-".length - 1 - HASH_LEN;
   return `e2e-${run.slice(0, maxRun)}-${hash}`;
 }
 
 /**
- * previewSlugForApp is how deploy.mjs and cleanup.mjs derive the slug. Both
- * must derive the same one from the same environment — a drift between them
- * means cleanup tears down the wrong preview, or nothing — so the environment
- * read lives here, in one place, rather than at each call site.
+ * projectSlugForApp is how deploy.mjs and cleanup.mjs derive the slug. Both must
+ * derive the same one from the same environment — a drift between them means
+ * cleanup tears down the wrong project, or nothing — so the environment read
+ * lives here, in one place, rather than at each call site.
  */
-export function previewSlugForApp(appDir) {
-  return previewSlug({ runId: process.env.GITHUB_RUN_ID, dir: process.env.NEXT_TEST_DIR || appDir });
+export function projectSlugForApp(appDir) {
+  return projectSlug({ runId: process.env.GITHUB_RUN_ID, dir: process.env.NEXT_TEST_DIR || appDir });
 }
 
 function sanitizeToken(value) {
@@ -59,13 +80,15 @@ function sanitizeToken(value) {
 }
 
 /**
- * renderOcelConfig is the ocel.config.ts written into the temp app. The app is
- * declared explicitly rather than discovered, and its name is the unique slug:
- * that is what gives each test app its own worker script and asset prefix.
+ * renderOcelConfig is the ocel.config.ts written into the temp app. `slug` is
+ * this app's own project (projectSlug) — that is what gives it its own worker
+ * scripts and asset prefixes — and the app under it is declared explicitly
+ * rather than discovered, under APP_NAME. Pure: cleanup re-renders it from the
+ * same environment when a failed deploy left no config to tear down.
  * `@ocel/sdk` and `@ocel/provider-aws` must resolve from the app directory —
  * the config is bundled and executed from there.
  */
-export function renderOcelConfig({ slug, previewDomain, appName }) {
+export function renderOcelConfig({ slug, previewDomain }) {
   const lines = [
     `import { defineConfig } from "@ocel/sdk/config";`,
     `import awsProvider from "@ocel/provider-aws";`,
@@ -79,7 +102,7 @@ export function renderOcelConfig({ slug, previewDomain, appName }) {
     lines.push(`  domains: {`, `    preview: ${JSON.stringify(previewDomain)},`, `  },`);
   }
   lines.push(
-    `  apps: [{ name: ${JSON.stringify(appName)}, path: ".", framework: "next" }],`,
+    `  apps: [{ name: ${JSON.stringify(APP_NAME)}, path: ".", framework: "next" }],`,
     `});`,
     ``,
   );
@@ -132,8 +155,9 @@ export function markerLines({ buildId, promotionId }) {
 /**
  * lambdaLogGroups maps a resourcegroupstaggingapi get-resources response into
  * the CloudWatch log groups of the Lambdas it found. Function names are
- * Pulumi-autonamed, so the `ocel:app` tag (cloud/aws/deploy/function.go) is the
- * only way to find this app's functions.
+ * Pulumi-autonamed, so the ocel tags (cloud/aws/deploy/function.go) are the only
+ * way to find them; the caller filters on `ocel:project`, this app's own slug
+ * being what is unique per deploy.
  */
 export function lambdaLogGroups(response) {
   return (response?.ResourceTagMappingList ?? [])

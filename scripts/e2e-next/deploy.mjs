@@ -3,20 +3,22 @@
 // harness. Runs with cwd set to the harness's isolated temp app; prints only the
 // deployment URL to stdout, everything else to stderr or files in cwd.
 //
-// Each temp app gets its own preview environment AND its own declared app name
-// (previewSlug): that gives it its own Cloudflare worker script and S3 asset
-// prefix, so suites running concurrently cannot overwrite each other's assets.
+// Each temp app gets its own Ocel PROJECT (projectSlug), deployed as one
+// persistent preview inside it. The project namespaces the Pulumi stacks, the
+// deployments store, the asset prefixes and the Cloudflare worker scripts and
+// routes, so suites running concurrently contend over nothing at all.
 
 import { spawnSync } from "node:child_process";
 import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, closeSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
+  APP_NAME,
   BUILD_LOG_FILE,
   DEPLOY_RESULT_FILE,
   STATE_FILE,
   deployURL,
-  previewSlugForApp,
+  projectSlugForApp,
   renderOcelConfig,
   tail,
   withBuildScript,
@@ -45,23 +47,19 @@ try {
 
 function deploy() {
   const adapterDir = required("ADAPTER_DIR");
-  const slugForProject = required("OCEL_E2E_PROJECT_SLUG");
   const previewDomain = process.env.OCEL_E2E_PREVIEW_DOMAIN || "";
   const sidecarDir = required("OCEL_E2E_SIDECAR_DIR");
 
-  const slug = previewSlugForApp(appDir);
+  const slug = projectSlugForApp(appDir);
   // Persisted first, before anything is provisioned: cleanup has to be able to
   // tear down a deploy that failed halfway through.
   writeFileSync(
     join(appDir, STATE_FILE),
-    JSON.stringify({ slug, appName: slug, previewDomain, startedAt: Date.now() }, null, 2) + "\n",
+    JSON.stringify({ slug, appName: APP_NAME, previewDomain, startedAt: Date.now() }, null, 2) + "\n",
   );
-  console.error(`[ocel-e2e] preview ${slug} in ${appDir}`);
+  console.error(`[ocel-e2e] project ${slug} in ${appDir}`);
 
-  writeFileSync(
-    join(appDir, "ocel.config.ts"),
-    renderOcelConfig({ slug: slugForProject, previewDomain, appName: slug }),
-  );
+  writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug, previewDomain }));
   ensureDeps();
   linkSidecar(sidecarDir);
   ensureBuildScript();
@@ -69,6 +67,9 @@ function deploy() {
   // Build and deploy are separate CLI runs so a build failure is reported as
   // one, rather than as a failed deploy. `preview up --prebuilt` then ships the
   // .ocel/output this produced instead of building the app a second time.
+  //
+  // `--name` makes it a persistent preview: an ephemeral one resolves its
+  // identity from a git ref, and the harness's temp app directory is not a repo.
   runOcel(adapterDir, ["build"]);
   runOcel(adapterDir, ["preview", "up", "--name", slug, "--prebuilt"]);
 
