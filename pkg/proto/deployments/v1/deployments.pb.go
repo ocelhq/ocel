@@ -1443,6 +1443,15 @@ type PreflightRequest struct {
 	// substrate is absent but the other exists, the provider reports the other
 	// so the caller's class guard still fires an informative mismatch.
 	RequiredClass Environment_Class `protobuf:"varint,3,opt,name=required_class,json=requiredClass,proto3,enum=deployments.v1.Environment_Class" json:"required_class,omitempty"`
+	// slug is the project the caller is about to deploy, set only when the
+	// caller wants the project-identity check that fills known_slugs. Slug is
+	// the sole thread back to a project's existing infrastructure, so a typo or
+	// a rename would silently fork a parallel one; the provider answers whether
+	// this slug is one it already holds stacks for. Empty from the commands
+	// that act on infrastructure already addressed by other means (rollback,
+	// destroy, deployments), and the provider then skips the enumeration
+	// rather than paying for it.
+	Slug          string `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1498,6 +1507,13 @@ func (x *PreflightRequest) GetRequiredClass() Environment_Class {
 	return Environment_CLASS_UNSPECIFIED
 }
 
+func (x *PreflightRequest) GetSlug() string {
+	if x != nil {
+		return x.Slug
+	}
+	return ""
+}
+
 // PreflightResponse tells the CLI what the provider's ambient account/profile
 // points at, so the CLI can refuse before provisioning.
 type PreflightResponse struct {
@@ -1521,8 +1537,20 @@ type PreflightResponse struct {
 	// provider may not have been able to read its own state) and the CLI aborts
 	// before provisioning.
 	CredentialProblems []*CredentialProblem `protobuf:"bytes,4,rep,name=credential_problems,json=credentialProblems,proto3" json:"credential_problems,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// known_slugs names the *other* projects this backend already holds stacks
+	// for, and is populated only when request.slug is set and holds no stacks of
+	// its own — i.e. exactly when the deploy would fork a new project alongside
+	// existing ones, which is what a mistyped or renamed slug looks like. It is
+	// empty when the slug is already deployed, when the backend holds nothing at
+	// all (a genuine first deploy), and when request.slug was not sent, so a
+	// non-empty list is by itself the signal to warn. The provider decides
+	// membership rather than the CLI because only the provider knows how it
+	// derives a stack name from a slug. Best-effort: a backend the provider
+	// could not enumerate reports no known slugs rather than failing the
+	// preflight, since this guard is advisory.
+	KnownSlugs    []string `protobuf:"bytes,5,rep,name=known_slugs,json=knownSlugs,proto3" json:"known_slugs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreflightResponse) Reset() {
@@ -1579,6 +1607,13 @@ func (x *PreflightResponse) GetIdentity() *Identity {
 func (x *PreflightResponse) GetCredentialProblems() []*CredentialProblem {
 	if x != nil {
 		return x.CredentialProblems
+	}
+	return nil
+}
+
+func (x *PreflightResponse) GetKnownSlugs() []string {
+	if x != nil {
+		return x.KnownSlugs
 	}
 	return nil
 }
@@ -2909,17 +2944,20 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\x03R\tcreatedAt\x12\x1d\n" +
 	"\n" +
-	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\xa1\x01\n" +
+	"expires_at\x18\x05 \x01(\x03R\texpiresAt\"\xb5\x01\n" +
 	"\x10PreflightRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12H\n" +
-	"\x0erequired_class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\rrequiredClass\"\x98\x02\n" +
+	"\x0erequired_class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\rrequiredClass\x12\x12\n" +
+	"\x04slug\x18\x04 \x01(\tR\x04slug\"\xb9\x02\n" +
 	"\x11PreflightResponse\x12B\n" +
 	"\vinfra_class\x18\x01 \x01(\x0e2!.deployments.v1.Environment.ClassR\n" +
 	"infraClass\x125\n" +
 	"\x16infrastructure_present\x18\x02 \x01(\bR\x15infrastructurePresent\x124\n" +
 	"\bidentity\x18\x03 \x01(\v2\x18.deployments.v1.IdentityR\bidentity\x12R\n" +
-	"\x13credential_problems\x18\x04 \x03(\v2!.deployments.v1.CredentialProblemR\x12credentialProblems\"\xb3\x01\n" +
+	"\x13credential_problems\x18\x04 \x03(\v2!.deployments.v1.CredentialProblemR\x12credentialProblems\x12\x1f\n" +
+	"\vknown_slugs\x18\x05 \x03(\tR\n" +
+	"knownSlugs\"\xb3\x01\n" +
 	"\bIdentity\x12\x1f\n" +
 	"\vaws_account\x18\x01 \x01(\tR\n" +
 	"awsAccount\x12\x1f\n" +
