@@ -1,8 +1,11 @@
 package server
 
 import (
+	"context"
 	"testing"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
 
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
@@ -93,6 +96,31 @@ func TestPreflightResponse(t *testing.T) {
 			if got.GetInfraClass() != tc.wantClass || got.GetInfrastructurePresent() != tc.wantPresent {
 				t.Errorf("preflightResponse() = {class=%v present=%v}, want {class=%v present=%v}",
 					got.GetInfraClass(), got.GetInfrastructurePresent(), tc.wantClass, tc.wantPresent)
+			}
+		})
+	}
+}
+
+// knownSlugs must answer without opening a Pulumi backend whenever the drift
+// check can't or needn't run — a caller that sent no slug, or a substrate that
+// isn't bootstrapped. A zero aws.Config makes any AWS call the guard fails to
+// skip fail loudly rather than pass by luck.
+func TestKnownSlugs_SkipsTheBackendWhenTheCheckCannotRun(t *testing.T) {
+	present := bootstrap.Deployed{Present: true, StateBucket: "ocel-state"}
+
+	cases := []struct {
+		name      string
+		substrate bootstrap.Deployed
+		slug      string
+	}{
+		{"no slug sent", present, ""},
+		{"substrate not bootstrapped", bootstrap.Deployed{Present: false}, "my-app"},
+		{"substrate present but has no state bucket", bootstrap.Deployed{Present: true}, "my-app"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := knownSlugs(context.Background(), aws.Config{}, tc.substrate, tc.slug); got != nil {
+				t.Errorf("knownSlugs() = %v, want nil", got)
 			}
 		})
 	}

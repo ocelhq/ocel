@@ -119,12 +119,13 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		if err := preflightClass(ctx, runner, provider, deploymentsv1.Environment_CLASS_PRODUCTION, "ocel bootstrap", stdout); err != nil {
+		knownSlugs, err := preflightDeploy(ctx, runner, provider, cfg.Slug, stdout)
+		if err != nil {
 			return err
 		}
 
 		if !opts.yes && isReaderTTY(stdin) {
-			proceed, err := confirmDeploy(cfg.Slug, provider.Package, stdout, stdin)
+			proceed, err := confirmDeploy(cfg.Slug, provider.Package, knownSlugs, stdout, stdin)
 			if err != nil {
 				return err
 			}
@@ -279,8 +280,22 @@ func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider
 
 // confirmDeploy prints the "Deploy <project> with <provider>? [y/N]" prompt
 // and returns the user's yes/no answer (see confirmYN).
-func confirmDeploy(slug, providerPackage string, stdout io.Writer, stdin io.Reader) (bool, error) {
-	return confirmYN(fmt.Sprintf("Deploy %s with %s?", slug, providerPackage), stdout, stdin)
+//
+// knownSlugs is the slug-drift guard: the slug is a project's only thread back
+// to its infrastructure, so deploying a mistyped or renamed one orphans
+// production and stands a parallel copy of everything up beside it, and the
+// routine prompt looks identical either way. When the provider reports other
+// projects in its backend — which it does only when this slug has nothing there
+// — the prompt says so instead. An empty backend reports nothing, so a genuine
+// first deploy is never nagged. It stays a y/N, not a refusal: forking a new
+// project is legitimate, it just has to be deliberate.
+func confirmDeploy(slug, providerPackage string, knownSlugs []string, stdout io.Writer, stdin io.Reader) (bool, error) {
+	if len(knownSlugs) == 0 {
+		return confirmYN(fmt.Sprintf("Deploy %s with %s?", slug, providerPackage), stdout, stdin)
+	}
+	fmt.Fprintf(stdout, "No existing deployment for slug %q.\nThis will create a NEW project.\nThis backend already has: %s\n",
+		slug, strings.Join(knownSlugs, ", "))
+	return confirmYN("Continue?", stdout, stdin)
 }
 
 // confirmYN prints "<prompt> [y/N] " and reads a single line from stdin,
