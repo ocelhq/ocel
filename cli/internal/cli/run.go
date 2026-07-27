@@ -34,9 +34,10 @@ var runCmd = &cobra.Command{
 	},
 }
 
-// runRun resolves the project config, verifies auth, then either reuses a
-// running leader's resolved env as a one-shot follower, or performs a
-// standalone ephemeral resolution when no leader exists, before running
+// runRun resolves the project config, verifies auth, then either reuses the
+// resolved env of a leader running in the same project root as a one-shot
+// follower, or performs a standalone ephemeral resolution when there is no
+// such leader, before running
 // appArgs once and returning with its exit code. Unlike `ocel dev`, it never
 // watches for file changes and never writes a leader lockfile. cmd carries
 // the root --api-url flag so an explicit override wins over the persisted
@@ -54,18 +55,20 @@ func runRun(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []strin
 	}
 
 	apiURL := effectiveAPIURL(cmd, creds.APIURL)
-	link, err := ensureLinked(ctx, cfg.Dir, apiURL, stdout, stderr, stdin)
-	if err != nil {
-		return err
-	}
 
-	role, err := election.Elect(link.ProjectID)
+	// Keyed on the project root, election needs no cloud state: reusing a
+	// leader's environment requires no link of our own.
+	role, err := election.Elect(cfg.Dir)
 	if err != nil {
 		return fmt.Errorf("determine leader/follower role: %w", err)
 	}
-
 	if role.Role == election.Follower {
 		return runOnceAsFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
+	}
+
+	link, err := ensureLinked(ctx, cfg.Dir, apiURL, stdout, stderr, stdin)
+	if err != nil {
+		return err
 	}
 	return runStandalone(ctx, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin)
 }

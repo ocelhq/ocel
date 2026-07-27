@@ -54,14 +54,13 @@ func TestRunRun_NoLeader_StandaloneResolvesRunsAndTearsDownWithoutLockfile(t *te
 	}
 	defer func() { loadCredentials = prev }()
 
-	projectID := "proj_" + t.Name()
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
-
 	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-	writeLink(t, root, resolveServer.URL, projectID)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 	envDumpPath := filepath.Join(root, "env.out")
@@ -92,7 +91,7 @@ export default { slug: "test-app" };
 		t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain connectionString", raw)
 	}
 
-	if _, err := lockfile.Read(projectID); !os.IsNotExist(err) {
+	if _, err := lockfile.Read(root); !os.IsNotExist(err) {
 		t.Fatalf("lockfile.Read err = %v, want a not-exist error (ocel run must not advertise as leader)", err)
 	}
 }
@@ -111,14 +110,13 @@ func TestRunRun_WithRunningLeader_ReusesLeaderEnvAndRunsOnce(t *testing.T) {
 	}
 	defer func() { loadCredentials = prev }()
 
-	projectID := "proj_" + t.Name()
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
-
 	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
-	writeLink(t, root, resolveServer.URL, projectID)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -130,7 +128,7 @@ export default { slug: "test-app" };
 		leaderDone <- runDev(leaderCtx, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
 	}()
 
-	waitForLockfile(t, projectID)
+	waitForLockfile(t, root)
 
 	envDumpPath := filepath.Join(root, "run-env.out")
 	runAppArgs := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
@@ -184,9 +182,10 @@ func TestRunRun_WithRunningLeader_DoesNotWaitOnFollowerUpdatesOrDisconnect(t *te
 	}
 	defer func() { loadCredentials = prev }()
 
-	projectID := "proj_" + t.Name()
-	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
 
+	projectID := "proj_" + t.Name()
 	const apiURL = "https://api.example.com"
 	srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
 	srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"conn"}`})
@@ -199,11 +198,10 @@ func TestRunRun_WithRunningLeader_DoesNotWaitOnFollowerUpdatesOrDisconnect(t *te
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	if err := lockfile.Create(projectID, listener.Addr().String()); err != nil {
+	if err := lockfile.Create(root, listener.Addr().String()); err != nil {
 		t.Fatalf("lockfile.Write: %v", err)
 	}
 
-	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default { slug: "test-app" };
 `)
