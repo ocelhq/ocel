@@ -103,6 +103,8 @@ dist
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*
+.coverage/
+.coverage-archive/
 *.coverprofile
 profile.cov
 
@@ -196,3 +198,6 @@ packages/native-lib/*/bin/
 .beads/proxieddb/
 issues.jsonl
 interactions.jsonl
+
+examples/next-cache-lab/*
+!examples/next-cache-lab/package.json
