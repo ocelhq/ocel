@@ -46,7 +46,7 @@ export {};
 `)
 
 	cfg := &projectconfig.Config{
-		ProjectID: "proj_123",
+		Slug:      "test-app",
 		Dir:       root,
 		Discovery: projectconfig.Discovery{Paths: []string{"ocel"}},
 	}

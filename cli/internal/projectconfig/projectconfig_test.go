@@ -7,33 +7,71 @@ import (
 	"testing"
 )
 
-func TestFindConfigFile_WalksUpFromNestedSubdirectory(t *testing.T) {
-	root := t.TempDir()
-	configPath := filepath.Join(root, ConfigFileName)
-	if err := os.WriteFile(configPath, []byte("export default {};"), 0o644); err != nil {
-		t.Fatalf("write config: %v", err)
-	}
-
+func nestedDir(t *testing.T, root string) string {
+	t.Helper()
 	nested := filepath.Join(root, "a", "b", "c")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatalf("mkdir nested: %v", err)
 	}
+	return nested
+}
 
-	found, err := findConfigFile(nested)
+func TestFindProjectRoot_WalksUpToConfigFile(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, "export default { slug: \"test-app\" };")
+
+	found, err := findProjectRoot(nestedDir(t, root))
 	if err != nil {
-		t.Fatalf("findConfigFile: %v", err)
+		t.Fatalf("findProjectRoot: %v", err)
 	}
-	if found != configPath {
-		t.Fatalf("found = %q, want %q", found, configPath)
+	if found != root {
+		t.Fatalf("root = %q, want %q", found, root)
 	}
 }
 
-func TestFindConfigFile_NotFound(t *testing.T) {
+// The first run in a config-less clone anchors at the working directory and
+// creates .ocel/ there, so later runs from a subdirectory must find it.
+func TestFindProjectRoot_WalksUpToScratchDir(t *testing.T) {
 	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, scratchDirName), 0o755); err != nil {
+		t.Fatalf("mkdir scratch: %v", err)
+	}
 
-	_, err := findConfigFile(root)
-	if !os.IsNotExist(err) {
-		t.Fatalf("err = %v, want os.ErrNotExist", err)
+	found, err := findProjectRoot(nestedDir(t, root))
+	if err != nil {
+		t.Fatalf("findProjectRoot: %v", err)
+	}
+	if found != root {
+		t.Fatalf("root = %q, want %q", found, root)
+	}
+}
+
+func TestFindProjectRoot_FallsBackToStartDir(t *testing.T) {
+	start := nestedDir(t, t.TempDir())
+
+	found, err := findProjectRoot(start)
+	if err != nil {
+		t.Fatalf("findProjectRoot: %v", err)
+	}
+	if found != start {
+		t.Fatalf("root = %q, want the start directory %q", found, start)
+	}
+}
+
+// A .ocel/ that is a file, not a directory, is not an anchor.
+func TestFindProjectRoot_IgnoresScratchDirFile(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, scratchDirName), []byte("x"), 0o644); err != nil {
+		t.Fatalf("write scratch file: %v", err)
+	}
+	start := nestedDir(t, root)
+
+	found, err := findProjectRoot(start)
+	if err != nil {
+		t.Fatalf("findProjectRoot: %v", err)
+	}
+	if found != start {
+		t.Fatalf("root = %q, want the start directory %q", found, start)
 	}
 }
 
@@ -62,8 +100,8 @@ export default {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if cfg.ProjectID != "proj_123" {
-		t.Fatalf("ProjectID = %q, want %q", cfg.ProjectID, "proj_123")
+	if cfg.Slug != "test-app" {
+		t.Fatalf("Slug = %q, want %q", cfg.Slug, "test-app")
 	}
 	if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "resources" {
 		t.Fatalf("Discovery.Paths = %v, want [resources]", cfg.Discovery.Paths)
@@ -173,20 +211,105 @@ export default {
 	}
 }
 
-func TestResolve_MissingProjectID(t *testing.T) {
+// A .ocel/ anchors the project root, but it is not a config: the deploy path
+// still needs a real one.
+func TestResolve_ScratchDirIsNotAConfig(t *testing.T) {
 	root := t.TempDir()
-	writeConfig(t, root, `
-export default {
-  discovery: { paths: ["x"] },
-};
-`)
+	if err := os.MkdirAll(filepath.Join(root, scratchDirName), 0o755); err != nil {
+		t.Fatalf("mkdir scratch: %v", err)
+	}
 
-	_, err := Resolve(root)
+	_, err := Resolve(nestedDir(t, root))
 	if err == nil {
 		t.Fatal("Resolve: expected error, got nil")
 	}
 	if !strings.Contains(err.Error(), "ocel init") {
 		t.Fatalf("err = %q, want it to mention `ocel init`", err.Error())
+	}
+}
+
+// projectId is gone from the config; a leftover one is ignored silently.
+func TestResolve_IgnoresLeftoverProjectID(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  projectId: "proj_123",
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.Slug != "test-app" {
+		t.Fatalf("Slug = %q, want %q", cfg.Slug, "test-app")
+	}
+}
+
+func TestResolveOptional_NoConfigYieldsDefaultsRootedAtProjectRoot(t *testing.T) {
+	root := t.TempDir()
+
+	cfg, err := ResolveOptional(root)
+	if err != nil {
+		t.Fatalf("ResolveOptional: %v", err)
+	}
+	if cfg.Dir != root {
+		t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
+	}
+	if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "ocel" {
+		t.Fatalf("Discovery.Paths = %v, want [ocel]", cfg.Discovery.Paths)
+	}
+	if cfg.Slug != "" || cfg.Provider != nil || len(cfg.Apps) != 0 {
+		t.Fatalf("cfg = %+v, want the deploy-only fields empty", cfg)
+	}
+}
+
+// Dev in a config-less subdirectory of a linked clone must resolve to the same
+// root the link file lives at, not to the subdirectory.
+func TestResolveOptional_NoConfigAnchorsOnScratchDir(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, scratchDirName), 0o755); err != nil {
+		t.Fatalf("mkdir scratch: %v", err)
+	}
+
+	cfg, err := ResolveOptional(nestedDir(t, root))
+	if err != nil {
+		t.Fatalf("ResolveOptional: %v", err)
+	}
+	if cfg.Dir != root {
+		t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
+	}
+}
+
+func TestResolveOptional_ConfigStillWins(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  discovery: { paths: ["resources"] },
+};
+`)
+
+	cfg, err := ResolveOptional(nestedDir(t, root))
+	if err != nil {
+		t.Fatalf("ResolveOptional: %v", err)
+	}
+	if cfg.Dir != root {
+		t.Fatalf("Dir = %q, want %q", cfg.Dir, root)
+	}
+	if len(cfg.Discovery.Paths) != 1 || cfg.Discovery.Paths[0] != "resources" {
+		t.Fatalf("Discovery.Paths = %v, want [resources]", cfg.Discovery.Paths)
+	}
+}
+
+// An absent config is fine; a broken one is still an error.
+func TestResolveOptional_UnparseableConfigStillErrors(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `export default { this is not valid typescript +++`)
+
+	if _, err := ResolveOptional(root); err == nil {
+		t.Fatal("ResolveOptional: expected error, got nil")
 	}
 }
 
@@ -523,7 +646,7 @@ export default {
 		t.Fatalf("Resolve: %v", err)
 	}
 
-	artifact := filepath.Join(root, buildDirName, "config.mjs")
+	artifact := filepath.Join(root, scratchDirName, "config.mjs")
 	if _, err := os.Stat(artifact); err != nil {
 		t.Fatalf("expected build artifact at %s: %v", artifact, err)
 	}

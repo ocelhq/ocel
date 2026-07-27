@@ -18,9 +18,10 @@ import (
 // ConfigFileName is the name of the file Resolve looks for.
 const ConfigFileName = "ocel.config.ts"
 
-// buildDirName is the Ocel-internal build-artifact folder written next to
-// the resolved config. It must stay gitignored.
-const buildDirName = ".ocel"
+// scratchDirName is the Ocel-internal folder at the project root: it holds
+// build artifacts and the cloud link record, and it anchors the root walk
+// alongside the config. It must stay gitignored.
+const scratchDirName = ".ocel"
 
 // initHint is appended to every resolution failure so the user knows how to
 // fix it.
@@ -72,7 +73,6 @@ type Config struct {
 	// Slug is the project's stable, human-authored deployment identity: it keys
 	// the project's own instance in the shared deployments-store worker.
 	Slug      string
-	ProjectID string
 	Discovery Discovery
 	// Provider is nil when the config has no `provider` field configured.
 	Provider *ProviderDescriptor
@@ -81,8 +81,9 @@ type Config struct {
 	// Domains maps a lowercased environment class ("production") to the custom
 	// hostnames the web-facing worker is served on. Empty entries are dropped.
 	Domains map[string][]string
-	// Dir is the directory containing the resolved ocel.config.ts.
-	// discovery.paths are relative to it.
+	// Dir is the project root — the directory holding the resolved
+	// ocel.config.ts, or the root findProjectRoot settled on when there is no
+	// config. discovery.paths are relative to it.
 	Dir string
 }
 
@@ -100,7 +101,6 @@ func (c *Config) RequireProvider() (*ProviderDescriptor, error) {
 // ocel.config.ts.
 type rawConfig struct {
 	Slug      string `json:"slug"`
-	ProjectID string `json:"projectId"`
 	Discovery struct {
 		Paths []string `json:"paths"`
 	} `json:"discovery"`
@@ -244,19 +244,50 @@ func PreviewBaseDomain(previewDomain string) string {
 // during normalization. It is not user-settable.
 const defaultCompute = "serverless"
 
-// Resolve walks up from startDir to find the nearest ancestor
-// ocel.config.ts, bundles and executes it, and returns its parsed,
-// defaulted configuration.
+// Resolve finds the project root, bundles and executes the ocel.config.ts it
+// holds, and returns the parsed, defaulted configuration. It is the entry
+// point for every command that needs a real config — deploy, preview,
+// bootstrap and friends — and fails when there is none.
 //
-// If no config is found, it can't be bundled/executed, or it doesn't emit a
-// projectId, the returned error's message instructs the user to run
-// `ocel init`.
+// If no config is found, or it can't be bundled/executed, the returned error's
+// message instructs the user to run `ocel init`.
 func Resolve(startDir string) (*Config, error) {
-	configPath, err := findConfigFile(startDir)
+	root, err := findProjectRoot(startDir)
 	if err != nil {
-		return nil, fmt.Errorf("no %s found in %s or any parent directory — %s", ConfigFileName, startDir, initHint)
+		return nil, err
 	}
 
+	configPath := filepath.Join(root, ConfigFileName)
+	if !isFile(configPath) {
+		return nil, fmt.Errorf("no %s found in %s or any parent directory — %s", ConfigFileName, startDir, initHint)
+	}
+	return load(configPath)
+}
+
+// ResolveOptional is Resolve for commands that only need the project root and
+// discovery.paths — `ocel dev` and `ocel run`. Apps, domains, provider and slug
+// are all deploy-only, so an absent config is not an error here: it yields a
+// defaulted configuration rooted at the project root. A config that exists is
+// still parsed and validated in full, so a broken one is never silently
+// ignored.
+func ResolveOptional(startDir string) (*Config, error) {
+	root, err := findProjectRoot(startDir)
+	if err != nil {
+		return nil, err
+	}
+
+	configPath := filepath.Join(root, ConfigFileName)
+	if !isFile(configPath) {
+		return &Config{
+			Discovery: Discovery{Paths: defaultDiscoveryPaths},
+			Dir:       root,
+		}, nil
+	}
+	return load(configPath)
+}
+
+// load bundles, executes and normalizes the config at configPath.
+func load(configPath string) (*Config, error) {
 	output, err := buildAndRun(configPath)
 	if err != nil {
 		return nil, fmt.Errorf("could not read %s: %w — %s", configPath, err, initHint)
@@ -265,9 +296,6 @@ func Resolve(startDir string) (*Config, error) {
 	var raw rawConfig
 	if err := json.Unmarshal(output, &raw); err != nil {
 		return nil, fmt.Errorf("%s did not emit valid configuration: %w — %s", configPath, err, initHint)
-	}
-	if raw.ProjectID == "" {
-		return nil, fmt.Errorf("%s is missing required \"projectId\" — %s", configPath, initHint)
 	}
 	if raw.Slug == "" {
 		return nil, fmt.Errorf("%s is missing required \"slug\" — %s", configPath, initHint)
@@ -304,7 +332,6 @@ func Resolve(startDir string) (*Config, error) {
 
 	return &Config{
 		Slug:      raw.Slug,
-		ProjectID: raw.ProjectID,
 		Discovery: Discovery{Paths: paths},
 		Provider:  provider,
 		Apps:      apps,
@@ -389,9 +416,9 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 // what it wrote to stdout.
 func buildAndRun(configPath string) ([]byte, error) {
 	dir := filepath.Dir(configPath)
-	outDir := filepath.Join(dir, buildDirName)
+	outDir := filepath.Join(dir, scratchDirName)
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return nil, fmt.Errorf("create %s: %w", buildDirName, err)
+		return nil, fmt.Errorf("create %s: %w", scratchDirName, err)
 	}
 	outfile := filepath.Join(outDir, "config.mjs")
 
@@ -433,25 +460,39 @@ func buildAndRun(configPath string) ([]byte, error) {
 	return stdout, nil
 }
 
-// findConfigFile walks up from startDir (tsconfig-style) looking for the
-// nearest ancestor ConfigFileName. It returns os.ErrNotExist if none is
-// found by the time it reaches the filesystem root.
-func findConfigFile(startDir string) (string, error) {
-	dir, err := filepath.Abs(startDir)
+// findProjectRoot walks up from startDir (tsconfig-style) for the nearest
+// ancestor holding ocel.config.ts or the .ocel/ scratch dir, falling back to
+// startDir itself when it reaches the filesystem root without finding either.
+//
+// The scratch dir counts because it is what a config-less project leaves
+// behind: the first run in a fresh clone anchors at the working directory and
+// creates .ocel/ there, so every later run from a subdirectory finds the same
+// root.
+func findProjectRoot(startDir string) (string, error) {
+	start, err := filepath.Abs(startDir)
 	if err != nil {
 		return "", err
 	}
 
-	for {
-		candidate := filepath.Join(dir, ConfigFileName)
-		if info, err := os.Stat(candidate); err == nil && !info.IsDir() {
-			return candidate, nil
+	for dir := start; ; {
+		if isFile(filepath.Join(dir, ConfigFileName)) || isDir(filepath.Join(dir, scratchDirName)) {
+			return dir, nil
 		}
 
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return "", os.ErrNotExist
+			return start, nil
 		}
 		dir = parent
 	}
+}
+
+func isFile(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
+
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
 }
