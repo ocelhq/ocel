@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 
 	"connectrpc.com/connect"
 
@@ -52,6 +53,11 @@ const (
 	fakeIDCfAccountEnvVar  = "OCEL_TEST_FAKE_CF_ACCOUNT"
 	fakeCredProblemEnvVar  = "OCEL_TEST_FAKE_CRED_PROBLEM"
 )
+
+// fakeKnownSlugsEnvVar seeds the comma-separated known_slugs the fake
+// provider's Preflight reports, so tests can drive the CLI's slug-drift guard.
+// Like the real provider it answers them only when the request carries a slug.
+const fakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
 const (
 	fakeAppURL      = "https://fake-app.example.com"
@@ -103,6 +109,24 @@ type deployFakeProviderServer struct {
 	deploymentsv1connect.UnimplementedDeploymentServiceHandler
 	token string
 	mode  string
+
+	// preflightSlug records the slug the last Preflight carried, echoed back
+	// by Deploy so a test can assert which project the CLI identified itself
+	// as before it deployed.
+	mu            sync.Mutex
+	preflightSlug string
+}
+
+func (s *deployFakeProviderServer) recordPreflightSlug(slug string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.preflightSlug = slug
+}
+
+func (s *deployFakeProviderServer) lastPreflightSlug() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.preflightSlug
 }
 
 func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
@@ -114,6 +138,14 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		return stream.Send(&deploymentsv1.DeployEvent{
 			Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: false, Error: err.Error()}},
 		})
+	}
+
+	// Echo the slug the preceding Preflight carried, so tests can assert the
+	// CLI names the project it is about to deploy in its identity check.
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "PREFLIGHT slug=" + s.lastPreflightSlug()}},
+	}); err != nil {
+		return err
 	}
 
 	// Echo the received Environment so tests can assert what the CLI resolved
@@ -176,6 +208,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
+	s.recordPreflightSlug(req.GetSlug())
 	resp := &deploymentsv1.PreflightResponse{
 		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
@@ -185,6 +218,13 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 			AwsRegion:         os.Getenv(fakeIDAwsRegionEnvVar),
 			CloudflareAccount: os.Getenv(fakeIDCfAccountEnvVar),
 		},
+	}
+	if req.GetSlug() != "" {
+		for _, s := range strings.Split(os.Getenv(fakeKnownSlugsEnvVar), ",") {
+			if s = strings.TrimSpace(s); s != "" {
+				resp.KnownSlugs = append(resp.KnownSlugs, s)
+			}
+		}
 	}
 	if p := os.Getenv(fakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
