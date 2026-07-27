@@ -333,8 +333,9 @@ func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, 
 	if opts.name == "" {
 		return fmt.Errorf("`ocel preview prune` requires --name: only persistent previews are pruned")
 	}
-	if !previewid.ValidLabel(opts.name) {
-		return fmt.Errorf("invalid preview name %q: use a DNS-label-safe name (lowercase letters, digits and hyphens)", opts.name)
+	env, err := persistentPreviewEnvironment(opts.name)
+	if err != nil {
+		return err
 	}
 
 	cfg, err := projectconfig.Resolve(cwd)
@@ -344,13 +345,6 @@ func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, 
 	provider, err := cfg.RequireProvider()
 	if err != nil {
 		return err
-	}
-
-	env := &deploymentsv1.Environment{
-		Class:          deploymentsv1.Environment_CLASS_PREVIEW,
-		Lifecycle:      deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
-		Identity:       opts.name,
-		IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_DECLARED,
 	}
 
 	ui := deployui.New(stdout, cfg.Dir, "ocel preview prune", verboseEnabled())
@@ -379,17 +373,27 @@ func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, 
 	return nil
 }
 
+// persistentPreviewEnvironment addresses the persistent preview a --name names,
+// refusing a name that cannot serve as the preview's subdomain label and store
+// pointer.
+func persistentPreviewEnvironment(name string) (*deploymentsv1.Environment, error) {
+	if err := previewid.ValidateLabel(name); err != nil {
+		return nil, err
+	}
+	return &deploymentsv1.Environment{
+		Class:          deploymentsv1.Environment_CLASS_PREVIEW,
+		Lifecycle:      deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
+		Identity:       name,
+		IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_DECLARED,
+	}, nil
+}
+
 // resolveUpEnvironment builds the Environment `ocel preview up` provisions: a
 // named preview is persistent and declared; an unnamed one is ephemeral, keyed
 // off the current git branch with the PR number carried as a display label.
 func resolveUpEnvironment(cwd, name string) (*deploymentsv1.Environment, error) {
 	if name != "" {
-		return &deploymentsv1.Environment{
-			Class:          deploymentsv1.Environment_CLASS_PREVIEW,
-			Lifecycle:      deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
-			Identity:       name,
-			IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_DECLARED,
-		}, nil
+		return persistentPreviewEnvironment(name)
 	}
 
 	branch, err := currentGitBranch(cwd)
@@ -417,12 +421,7 @@ func resolveRmEnvironment(cwd string, opts previewRmOptions) (*deploymentsv1.Env
 		return nil, fmt.Errorf("--name and --ref are mutually exclusive; use one to address a persistent or ephemeral preview")
 	}
 	if opts.name != "" {
-		return &deploymentsv1.Environment{
-			Class:          deploymentsv1.Environment_CLASS_PREVIEW,
-			Lifecycle:      deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
-			Identity:       opts.name,
-			IdentitySource: deploymentsv1.Environment_IDENTITY_SOURCE_DECLARED,
-		}, nil
+		return persistentPreviewEnvironment(opts.name)
 	}
 
 	ref := opts.ref

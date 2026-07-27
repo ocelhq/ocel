@@ -199,6 +199,33 @@ func TestResolveRmEnvironment_NameAndRefAreMutuallyExclusive(t *testing.T) {
 	}
 }
 
+func TestPersistentPreviewNameIsCappedForTheRouteHostname(t *testing.T) {
+	atCap := "a" + strings.Repeat("b", 51)
+	overCap := atCap + "c"
+
+	cases := []struct {
+		name    string
+		resolve func(string) error
+	}{
+		{"up", func(n string) error { _, err := resolveUpEnvironment("", n); return err }},
+		{"rm", func(n string) error { _, err := resolveRmEnvironment("", previewRmOptions{name: n}); return err }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.resolve(atCap); err != nil {
+				t.Errorf("--name of %d chars rejected: %v", len(atCap), err)
+			}
+			err := tc.resolve(overCap)
+			if err == nil {
+				t.Fatalf("--name of %d chars accepted, want a rejection", len(overCap))
+			}
+			if !strings.Contains(err.Error(), "too long") {
+				t.Errorf("err = %v, want it to say the name is too long", err)
+			}
+		})
+	}
+}
+
 func TestRunPreviewRm_PersistentWithYes_DestroysWithoutPrompting(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	stubGit(t, "feature/login", "")

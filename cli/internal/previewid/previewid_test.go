@@ -2,14 +2,16 @@ package previewid
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 )
 
-// validKey matches a valid DNS label: leading lowercase letter, then letters,
-// digits and hyphens, not ending in a hyphen, 1–63 chars. Key is used as a
-// preview subdomain label and store pointer.
-var validKey = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$`)
+// validKey matches a valid DNS label short enough to leave the preview route
+// suffix room: leading lowercase letter, then letters, digits and hyphens, not
+// ending in a hyphen, 1–52 chars. Key is used as a preview subdomain label and
+// store pointer.
+var validKey = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,50}[a-z0-9])?$`)
 
 func TestResolve_KeyIsStable(t *testing.T) {
 	a, err := Resolve("feature/login", "")
@@ -140,22 +142,41 @@ func TestResolve_KeyHasNoUnderscore(t *testing.T) {
 	}
 }
 
-func TestValidLabel(t *testing.T) {
-	valid := []string{"staging", "feature-login", "web-1", "a"}
+func TestValidateLabel(t *testing.T) {
+	valid := []string{"staging", "feature-login", "web-1", "a", "a" + strings.Repeat("b", maxKeyLen-1)}
 	for _, s := range valid {
-		if !ValidLabel(s) {
-			t.Errorf("ValidLabel(%q) = false, want true", s)
+		if err := ValidateLabel(s); err != nil {
+			t.Errorf("ValidateLabel(%q) = %v, want nil", s, err)
 		}
 	}
 	invalid := []string{"", "Staging", "1web", "-x", "x-", "foo_bar", "a.b", "*"}
 	for _, s := range invalid {
-		if ValidLabel(s) {
-			t.Errorf("ValidLabel(%q) = true, want false", s)
+		if err := ValidateLabel(s); err == nil {
+			t.Errorf("ValidateLabel(%q) = nil, want an error", s)
 		}
 	}
 }
 
-func TestResolve_KeyStaysWithinDNSLabelLimit(t *testing.T) {
+func TestValidateLabel_TooLongNameIsRefusedActionably(t *testing.T) {
+	name := "a" + strings.Repeat("b", maxKeyLen)
+	err := ValidateLabel(name)
+	if err == nil {
+		t.Fatalf("ValidateLabel(%d-char name) = nil, want an error", len(name))
+	}
+	for _, want := range []string{"too long", strconv.Itoa(maxKeyLen)} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("ValidateLabel error = %q, want it to mention %q", err, want)
+		}
+	}
+}
+
+func TestRouteSuffixIsReservedInEveryKey(t *testing.T) {
+	if maxKeyLen+routeSuffixLen != maxLabelLen {
+		t.Errorf("maxKeyLen + routeSuffixLen = %d, want %d", maxKeyLen+routeSuffixLen, maxLabelLen)
+	}
+}
+
+func TestResolve_KeyLeavesRoomForRouteSuffix(t *testing.T) {
 	cases := []struct {
 		name string
 		ref  string
@@ -170,13 +191,23 @@ func TestResolve_KeyStaysWithinDNSLabelLimit(t *testing.T) {
 			if err != nil {
 				t.Fatalf("Resolve(%q) error = %v", tc.ref, err)
 			}
-			if len(id.Key) > maxLabelLen {
-				t.Errorf("len(Key) = %d (%q), want <= %d", len(id.Key), id.Key, maxLabelLen)
+			if len(id.Key) > maxKeyLen {
+				t.Errorf("len(Key) = %d (%q), want <= %d", len(id.Key), id.Key, maxKeyLen)
 			}
-			if !ValidLabel(id.Key) {
-				t.Errorf("ValidLabel(%q) = false, want true", id.Key)
+			if err := ValidateLabel(id.Key); err != nil {
+				t.Errorf("ValidateLabel(%q) = %v, want nil", id.Key, err)
 			}
 		})
+	}
+}
+
+func TestResolve_MaxLengthRefFillsTheKeyBudgetExactly(t *testing.T) {
+	id, err := Resolve("feature/"+strings.Repeat("x", 200), "")
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if len(id.Key) != maxKeyLen {
+		t.Errorf("len(Key) = %d (%q), want exactly %d", len(id.Key), id.Key, maxKeyLen)
 	}
 }
 
@@ -186,8 +217,8 @@ func TestResolve_KeyIsValidLabel(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Resolve(%q) error = %v", ref, err)
 		}
-		if !ValidLabel(id.Key) {
-			t.Errorf("Resolve(%q).Key = %q, ValidLabel = false", ref, id.Key)
+		if err := ValidateLabel(id.Key); err != nil {
+			t.Errorf("Resolve(%q).Key = %q, ValidateLabel = %v", ref, id.Key, err)
 		}
 	}
 }
