@@ -279,7 +279,6 @@ func TestRunPreviewUp_NoProviderConfigured_ErrorsBeforeAnySpawn(t *testing.T) {
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  projectId: "proj_no_provider",
 };
 `)
 
