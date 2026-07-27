@@ -9,7 +9,6 @@ import {
   mergeBaselineManifest,
   previewSlug,
   previewSlugForApp,
-  projectSlug,
   renderOcelConfig,
   suiteFromResultsPath,
   suiteResultFromJest,
@@ -61,21 +60,9 @@ describe("previewSlugForApp", () => {
   });
 });
 
-describe("projectSlug", () => {
-  it("lowers a project id into the DNS-label shape a slug must take", () => {
-    expect(projectSlug("proj_Ab12")).toBe("proj-ab12");
-    expect(projectSlug("adapter-e2e")).toBe("adapter-e2e");
-  });
-
-  it("refuses a value with nothing usable in it", () => {
-    expect(() => projectSlug("___")).toThrow(/cannot derive/);
-  });
-});
-
 describe("renderOcelConfig", () => {
   const config = renderOcelConfig({
     slug: "adapter-e2e",
-    projectId: "proj_123",
     previewDomain: "*.e2e.example.com",
     appName: "e2e-7-abcd1234",
   });
@@ -86,13 +73,12 @@ describe("renderOcelConfig", () => {
 
   it("carries the shared project identity, the provider and the preview wildcard", () => {
     expect(config).toContain(`slug: "adapter-e2e"`);
-    expect(config).toContain(`projectId: "proj_123"`);
     expect(config).toContain("awsProvider()");
     expect(config).toContain(`preview: "*.e2e.example.com"`);
   });
 
   it("omits the domains block when no preview domain is configured", () => {
-    expect(renderOcelConfig({ slug: "s", projectId: "p", appName: "a" })).not.toContain("domains");
+    expect(renderOcelConfig({ slug: "s", appName: "a" })).not.toContain("domains");
   });
 });
 

@@ -17,7 +17,6 @@ import {
   STATE_FILE,
   deployURL,
   previewSlugForApp,
-  projectSlug,
   renderOcelConfig,
   tail,
   withBuildScript,
@@ -46,8 +45,7 @@ try {
 
 function deploy() {
   const adapterDir = required("ADAPTER_DIR");
-  const projectId = required("OCEL_E2E_PROJECT_ID");
-  const slugForProject = process.env.OCEL_E2E_PROJECT_SLUG || projectSlug(projectId);
+  const slugForProject = required("OCEL_E2E_PROJECT_SLUG");
   const previewDomain = process.env.OCEL_E2E_PREVIEW_DOMAIN || "";
   const sidecarDir = required("OCEL_E2E_SIDECAR_DIR");
 
@@ -56,13 +54,13 @@ function deploy() {
   // tear down a deploy that failed halfway through.
   writeFileSync(
     join(appDir, STATE_FILE),
-    JSON.stringify({ slug, appName: slug, projectId, previewDomain, startedAt: Date.now() }, null, 2) + "\n",
+    JSON.stringify({ slug, appName: slug, previewDomain, startedAt: Date.now() }, null, 2) + "\n",
   );
   console.error(`[ocel-e2e] preview ${slug} in ${appDir}`);
 
   writeFileSync(
     join(appDir, "ocel.config.ts"),
-    renderOcelConfig({ slug: slugForProject, projectId, previewDomain, appName: slug }),
+    renderOcelConfig({ slug: slugForProject, previewDomain, appName: slug }),
   );
   ensureDeps();
   linkSidecar(sidecarDir);

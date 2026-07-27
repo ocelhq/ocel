@@ -18,17 +18,6 @@ export const ocelBin =
 
 export const apiUrl = process.env.OCEL_API_URL ?? "http://localhost:3000";
 
-// The committed placeholder each example's ocel.config.ts is reset to after a
-// run, matching what's checked in.
-const placeholderConfig = `import { defineConfig } from "@ocel/sdk/config";
-
-
-// Placeholder committed so the example type-checks and reads as complete.
-// \`ocel init\` overwrites this with the real projectId; the e2e harness deletes
-// it before running init and restores it afterwards.
-export default defineConfig({ projectId: "placeholder" });
-`;
-
 /** The blob upload scenario each example wires up, driven by the e2e. */
 export type BlobSpec = {
   /** Route the SDK upload client hits (?op=presign|callback|poll). */
@@ -173,12 +162,20 @@ function runOcel(
   });
 }
 
-export async function deletePlaceholderConfig(spec: ExampleSpec) {
-  await rm(path.join(spec.dir, "ocel.config.ts"), { force: true });
+// `ocel init` refuses to overwrite an existing config, so the run has to take
+// the checked-in one out of the way first and put it back verbatim afterwards.
+const stashedConfigs = new Map<string, string>();
+
+export async function stashConfig(spec: ExampleSpec) {
+  const configPath = path.join(spec.dir, "ocel.config.ts");
+  stashedConfigs.set(spec.framework, await readFile(configPath, "utf8"));
+  await rm(configPath, { force: true });
 }
 
-export async function resetPlaceholderConfig(spec: ExampleSpec) {
-  await writeFile(path.join(spec.dir, "ocel.config.ts"), placeholderConfig);
+export async function restoreConfig(spec: ExampleSpec) {
+  const stashed = stashedConfigs.get(spec.framework);
+  if (stashed === undefined) return;
+  await writeFile(path.join(spec.dir, "ocel.config.ts"), stashed);
 }
 
 export async function runInit(

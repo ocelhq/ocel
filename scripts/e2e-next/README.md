@@ -47,8 +47,8 @@ This suite deploys real infrastructure hundreds of times per run. Do all of this
 in a **disposable AWS account and Cloudflare account** that hold nothing else.
 
 1. Create a project on the disposable account: run `ocel init` in a scratch
-   directory and note the `projectId` and `slug` it writes. Every temp app
-   deploys into this one project, as separate preview environments.
+   directory and note the `slug` it writes. Every temp app deploys into this one
+   project, as separate preview environments.
 2. Give the project a **wildcard preview domain** on a Cloudflare zone in that
    account — `domains: { preview: "*.e2e.example.com" }`. Each preview's DNS
    label lives under it, so without a wildcard the deploys have nowhere to land.
@@ -76,8 +76,7 @@ Repository **variables**:
 | name                       | what                                                       |
 | -------------------------- | ---------------------------------------------------------- |
 | `E2E_OCEL_API_URL`         | Ocel API base URL                                           |
-| `E2E_OCEL_PROJECT_ID`      | the shared project's `projectId`                            |
-| `E2E_OCEL_PROJECT_SLUG`    | its `slug` (defaults to a sanitized project id if unset)    |
+| `E2E_OCEL_PROJECT_SLUG`    | the shared project's `slug` — its sole identity             |
 | `E2E_OCEL_PREVIEW_DOMAIN`  | the wildcard preview domain, e.g. `*.e2e.example.com`       |
 | `E2E_AWS_REGION`           | region to deploy into                                       |
 
