@@ -99,3 +99,42 @@ func TestCreateProject_GenericError(t *testing.T) {
 		t.Fatalf("err = %v, want neither conflict nor unauthorized", err)
 	}
 }
+
+func TestListProjects_Success(t *testing.T) {
+	var gotAuth, gotMethod, gotPath string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotAuth, gotMethod, gotPath = r.Header.Get("Authorization"), r.Method, r.URL.Path
+		json.NewEncoder(w).Encode([]map[string]string{
+			{"id": "p1", "organizationId": "org_1", "name": "My App", "slug": "my-app"},
+			{"id": "p2", "organizationId": "org_1", "name": "Other", "slug": "other"},
+		})
+	}))
+	defer srv.Close()
+
+	projects, err := New(srv.URL).ListProjects(context.Background(), "tok")
+	if err != nil {
+		t.Fatalf("ListProjects err = %v", err)
+	}
+	if gotMethod != http.MethodGet || gotPath != "/api/projects" {
+		t.Fatalf("request = %s %s, want GET /api/projects", gotMethod, gotPath)
+	}
+	if gotAuth != "Bearer tok" {
+		t.Fatalf("Authorization = %q, want %q", gotAuth, "Bearer tok")
+	}
+	if len(projects) != 2 || projects[0].Slug != "my-app" || projects[1].ID != "p2" {
+		t.Fatalf("projects = %+v, want the two encoded rows", projects)
+	}
+}
+
+func TestListProjects_Unauthorized(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		json.NewEncoder(w).Encode(map[string]string{"error": "Unauthorized"})
+	}))
+	defer srv.Close()
+
+	_, err := New(srv.URL).ListProjects(context.Background(), "tok")
+	if err == nil || !IsUnauthorized(err) {
+		t.Fatalf("ListProjects err = %v, want an unauthorized error", err)
+	}
+}
