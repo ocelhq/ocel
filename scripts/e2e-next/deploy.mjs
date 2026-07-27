@@ -37,6 +37,12 @@ const FAILURE_LOG_LINES = 200;
 
 const appDir = process.cwd();
 
+// The harness only injects test mode on its own Vercel and local paths, never on
+// the custom-script one. Without it `next build` skips the shim that sets
+// `__NEXT_TEST_MODE`, so `window.__NEXT_HYDRATED` never fires and every page load
+// in the suite waits out next-webdriver's 10-second fallback.
+const CHILD_ENV = { ...process.env, NEXT_PRIVATE_TEST_MODE: "e2e" };
+
 try {
   process.stdout.write(deploy() + "\n");
 } catch (err) {
@@ -152,6 +158,7 @@ function run(label, command, args) {
   try {
     const res = spawnSync(command, args, {
       cwd: appDir,
+      env: CHILD_ENV,
       stdio: ["ignore", log, log],
       timeout: remaining,
       killSignal: "SIGTERM",
