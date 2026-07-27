@@ -130,6 +130,30 @@ func (c *Client) do(req *http.Request, out any) error {
 	return nil
 }
 
+// getJSON GETs path with accessToken as a Bearer token and decodes a JSON
+// response into out.
+func (c *Client) getJSON(ctx context.Context, path, accessToken string, out any) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
+	if err != nil {
+		return fmt.Errorf("build request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+	req.Header.Set("User-Agent", "ocel-cli")
+
+	return c.do(req, out)
+}
+
+// ListProjects calls GET /api/projects, which returns the projects of the
+// session's active organization — set it with
+// authclient.SetActiveOrganization first.
+func (c *Client) ListProjects(ctx context.Context, accessToken string) ([]Project, error) {
+	var projects []Project
+	if err := c.getJSON(ctx, "/api/projects", accessToken, &projects); err != nil {
+		return nil, err
+	}
+	return projects, nil
+}
+
 // CreateProject calls POST /api/projects with {"name": name, "slug": slug}
 // and the given Bearer accessToken.
 func (c *Client) CreateProject(ctx context.Context, accessToken, name, slug string) (*Project, error) {
