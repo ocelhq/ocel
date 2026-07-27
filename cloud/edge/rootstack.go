@@ -14,8 +14,11 @@ type RootStack interface {
 	// it also mints an owner token and the
 	// per-project secret and seeds them into the project's store instance via
 	// spec's endpoint/bootstrap credential; a later call re-puts the generic
-	// worker only when the version already deployed is behind spec.Version — an
-	// up-to-date root stack is a no-op. The shared store worker itself is not
+	// worker only when the version already deployed is behind spec.Version. The
+	// version is per project while a route is per hostname, so an up-to-date
+	// root stack still attaches spec.Domains and returns prior unchanged —
+	// otherwise a second preview pointer deploying against a current root stack
+	// would never get a route. The shared store worker itself is not
 	// deployed here (it is provisioned once at bootstrap). prior is the
 	// RootStackState the last reconcile for this project returned, or nil the
 	// very first time; the caller persists whatever this returns, opaque, and
@@ -52,9 +55,22 @@ type RootStack interface {
 	// nothing, so its active promotion goes too. It backs `ocel preview rm`,
 	// which removes a whole preview. It reports the removed record keys so the
 	// caller can reclaim the app-deploy stacks and R2 assets those records named,
-	// exactly like DeletePromotionArtifacts. An empty pointer is refused by the
-	// store so production can never be torn down implicitly.
-	RemovePointer(ctx context.Context, state RootStackState, pointer string) (PruneResult, error)
+	// exactly like DeletePromotionArtifacts; alongside them, the worker routes the
+	// removed pointer owned, so the caller can delete exactly those without
+	// recomputing a hostname it has no config for, and how many pointers remain,
+	// so it can tell whether it just retired the project's last preview (whose
+	// generic worker every preview pointer shared). An empty pointer is refused by
+	// the store so production can never be torn down implicitly.
+	RemovePointer(ctx context.Context, state RootStackState, pointer string) (PointerRemoval, error)
+
+	// RemoveRoute deletes the worker route for hostname off the named worker
+	// script, leaving the script and every other route attached to it serving,
+	// and touching no DNS record. It backs per-pointer preview teardown: a
+	// project's preview pointers all share one generic worker and hold one exact
+	// route each (the hostnames RemovePointer reports), so retiring one pointer
+	// must drop only that pointer's route. A route that is already gone is not an
+	// error, so a re-run resumes, exactly as with DestroyRootStack.
+	RemoveRoute(ctx context.Context, worker, hostname string) error
 
 	// DestroyRootStack deletes every worker named in workers — the project's
 	// generic worker(s) — detaching each one's custom-domain binding first
@@ -92,9 +108,15 @@ type RootStack interface {
 // bundles the frozen root stack carries, the deterministic names to deploy
 // them under (mirroring AppDeployment.Name), the custom hostnames the generic
 // worker serves on, and the ocel root-stack revision this deploy expects.
+//
+// Its hostname fields (PruneRoutes, RequiredRecord) state what this reconcile
+// wants done, not the environment class it happens to follow from: an edge must
+// never encode Ocel's environment taxonomy, so a future class is a new
+// combination of these values and no provider change.
 type RootStackSpec struct {
-	// Version is the ocel root-stack revision this deploy expects. Reconcile
-	// is a no-op once the deployed root stack already carries it.
+	// Version is the ocel root-stack revision this deploy expects. A root stack
+	// already carrying it skips the worker upload, subdomain and version stamp;
+	// the hostname work below runs either way.
 	Version string
 	// GenericName is the deterministic deployment identity of the frozen
 	// generic app worker (ADR 0002): serves whichever Deployment the store's
@@ -118,8 +140,21 @@ type RootStackSpec struct {
 	BootstrapCred string
 	// Domains are the custom hostnames Generic is attached to, each as a worker
 	// route. Empty serves it on the edge's own vendor subdomain instead.
-	// Production may carry several; a preview carries its single base wildcard.
+	// Production may carry several; a preview carries its one pointer-exact
+	// hostname.
 	Domains []string
+	// PruneRoutes deletes any route on Generic whose hostname is not in Domains.
+	// A preview leaves it false: its shared generic worker carries one route per
+	// live pointer while a reconcile knows only the pointer it is deploying, so
+	// pruning would delete concurrently-deploying siblings' routes. Teardown
+	// (RemoveRoute) removes a preview's route instead.
+	PruneRoutes bool
+	// RequiredRecord is a DNS record Domains resolve through — a "*.<base>"
+	// wildcard over a preview base domain, say. Reconcile verifies it is present
+	// and proxied and fails otherwise; it never plants or reclaims it, because
+	// every project and pointer under that base shares it. Empty instead ensures
+	// Ocel's own proxied placeholder record per hostname in Domains.
+	RequiredRecord string
 	// Values are what this edge reported at bootstrap, persisted verbatim by
 	// the host and handed back unread — the same contract AppDeployment.Values
 	// carries, so Generic's object-store binding can be sourced from it exactly
@@ -182,6 +217,12 @@ type DeploymentRecord struct {
 	// routes/middleware): where its bundle lives and what runtime to evaluate
 	// it under. Omitted when the build produced no edge output at all.
 	EdgeWorkers *Code `json:"edgeWorkers,omitempty"`
+	// RouteHostnames are the worker-route hostnames the deploy that produced
+	// this record registered for it, so a teardown can delete exactly those
+	// without recomputing them from config it does not have. A preview carries
+	// its one pointer-exact hostname; production carries none — its routes are
+	// project-lifetime and reconciled declaratively.
+	RouteHostnames []string `json:"routeHostnames,omitempty"`
 }
 
 // Code is one build's dynamically-loaded edge code, as the frozen worker reads
@@ -234,4 +275,27 @@ type PruneResult struct {
 	// exactly which underlying artifacts (stacks, R2 assets, ISR entries) it
 	// still needs to reclaim.
 	RemovedRecordKeys []string `json:"removedRecordKeys"`
+}
+
+// RemovedRoute is one worker route a removed pointer owned: the app it fronted
+// and the hostname it was attached to. Mirrors RemovedRoute in
+// workers/deployments-store/src/store.ts — the two must agree on shape.
+type RemovedRoute struct {
+	App      string `json:"app"`
+	Hostname string `json:"hostname"`
+}
+
+// PointerRemoval reports what RemovePointer removed: a PruneResult plus the
+// routes the pointer owned and the pointers left behind. Distinct from
+// PruneResult, which DeletePromotionArtifacts returns, because a prune keeps
+// the pointer and its route alive. Mirrors PointerRemoval in
+// workers/deployments-store/src/store.ts — the two must agree on shape.
+type PointerRemoval struct {
+	PruneResult
+	// RemainingPointers are the preview pointers left in the project's store
+	// instance after the removal, excluding the reserved production default.
+	// Zero means the project just retired its last preview, so the generic
+	// worker every preview pointer shared can go too.
+	RemainingPointers int            `json:"remainingPointers"`
+	RemovedRoutes     []RemovedRoute `json:"removedRoutes"`
 }

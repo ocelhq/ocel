@@ -45,9 +45,17 @@ type PruneTarget struct {
 
 // removedRecordKeyPrefix is the store's own record-key prefix (recordKey in
 // workers/deployments-store/src/store.ts): "record:<app>/<buildId>".
-// edge.PruneResult.RemovedRecordKeys carries the store's keys verbatim, so
-// ReclaimTargets has to strip it before splitting out app/buildId.
+// edge.PruneResult.RemovedRecordKeys carries the store's keys verbatim, so a
+// reader has to strip it before splitting out app/buildId.
 const removedRecordKeyPrefix = "record:"
+
+// splitRemovedRecordKey splits one store record key into the (app, build id)
+// pair it names, reporting ok=false for anything not shaped like one. The single
+// place that knows the key's layout. Pure.
+func splitRemovedRecordKey(key string) (app, buildID string, ok bool) {
+	app, buildID, ok = strings.Cut(strings.TrimPrefix(key, removedRecordKeyPrefix), "/")
+	return app, buildID, ok && app != "" && buildID != ""
+}
 
 // ReclaimTargets turns edge.PruneResult.RemovedRecordKeys (the store's own
 // "record:<app>/<buildId>" keys) into the concrete production stack name and
@@ -79,9 +87,8 @@ func reclaimTargets(slug, env string, removedRecordKeys []string, stackFor func(
 	}
 	targets := make([]PruneTarget, 0, len(removedRecordKeys))
 	for _, key := range removedRecordKeys {
-		trimmed := strings.TrimPrefix(key, removedRecordKeyPrefix)
-		app, buildID, ok := strings.Cut(trimmed, "/")
-		if !ok || app == "" || buildID == "" {
+		app, buildID, ok := splitRemovedRecordKey(key)
+		if !ok {
 			return nil, fmt.Errorf("malformed removed record key %q, want %q", key, removedRecordKeyPrefix+"app/buildId")
 		}
 		targets = append(targets, PruneTarget{

@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -258,6 +259,133 @@ func testSpec(endpoint, version string) edge.RootStackSpec {
 	}
 }
 
+// previewSpec is testSpec shaped like a preview pointer's reconcile: one exact
+// pointer hostname resolved by the shared base wildcard, and no pruning.
+func previewSpec(endpoint, version, hostname string) edge.RootStackSpec {
+	spec := testSpec(endpoint, version)
+	spec.GenericName = "ocel-preview"
+	spec.Generic = testStoreWorker()
+	spec.Domains = []string{hostname}
+	spec.RequiredRecord = "*.preview.app.com"
+	return spec
+}
+
+func previewZoneMock() *cfMock {
+	return &cfMock{
+		zoneID:   "zone1",
+		zoneName: "app.com",
+		existingRecords: []map[string]any{
+			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+		},
+	}
+}
+
+// ocelhq-5w3: the version stamp is keyed on the project but a worker route is
+// per pointer, so a second pointer deploying against a root stack already at
+// spec.Version still gets its own route, while uploading nothing.
+func TestReconcileRootStack_UpToDateStillAttachesTheRoute(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	store := fakeStoreServer(t, "s3cr3t")
+	m := previewZoneMock()
+	p := m.provider(t)
+	ctx := context.Background()
+	if err := p.putVersionStamp(ctx, store.URL, "acme-web", "s3cr3t", "v2"); err != nil {
+		t.Fatalf("putVersionStamp: %v", err)
+	}
+
+	prior := testState(store.URL, "s3cr3t")
+	state, err := p.ReconcileRootStack(ctx, previewSpec(store.URL, "v2", "pr-2-abc1234567.preview.app.com"), prior)
+	if err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	if !reflect.DeepEqual(state, prior) {
+		t.Errorf("state = %v, want prior handed back unchanged (%v)", state, prior)
+	}
+	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "pr-2-abc1234567.preview.app.com/*" {
+		t.Errorf("created routes = %v, want this pointer's own route", m.createdRoutes)
+	}
+	if len(m.putScripts) != 0 {
+		t.Errorf("uploaded scripts = %v, want none: the root stack already carries spec.Version", m.putScripts)
+	}
+}
+
+// A root stack behind spec.Version still does the whole job: upload the script,
+// attach the route, and stamp the version it now carries.
+func TestReconcileRootStack_BehindVersionUploadsAndStamps(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	store := fakeStoreServer(t, "s3cr3t")
+	m := previewZoneMock()
+	p := m.provider(t)
+	ctx := context.Background()
+
+	state, err := p.ReconcileRootStack(ctx, previewSpec(store.URL, "v2", "pr-1-abc1234567.preview.app.com"), testState(store.URL, "s3cr3t"))
+	if err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	if len(m.putScripts) != 1 || m.putScripts[0] != "ocel-preview" {
+		t.Errorf("uploaded scripts = %v, want [ocel-preview]", m.putScripts)
+	}
+	if len(m.createdRoutes) != 1 {
+		t.Errorf("created routes = %v, want the pointer's route", m.createdRoutes)
+	}
+	version, _, err := p.getVersionStamp(ctx, store.URL, "acme-web", state[edge.RootStackKeySecret])
+	if err != nil {
+		t.Fatalf("getVersionStamp: %v", err)
+	}
+	if version != "v2" {
+		t.Errorf("version stamp = %q, want v2", version)
+	}
+}
+
+// Per-pointer teardown: the shared script, its sibling pointers' routes and the
+// base wildcard record all keep serving.
+func TestRemoveRoute_DeletesOnlyTheNamedRoute(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	m := previewZoneMock()
+	m.existingRoutes = []map[string]any{
+		{"id": "gone", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+		{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+		{"id": "other", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "someone-else"},
+	}
+	p := m.provider(t)
+
+	if err := p.RemoveRoute(context.Background(), "ocel-preview", "pr-1-abc1234567.preview.app.com"); err != nil {
+		t.Fatalf("RemoveRoute: %v", err)
+	}
+
+	if len(m.deletedRoutes) != 1 || m.deletedRoutes[0] != "gone" {
+		t.Errorf("deleted routes = %v, want [gone]", m.deletedRoutes)
+	}
+	if len(m.deletedRecords) != 0 {
+		t.Errorf("deleted records = %v, want none: the base wildcard is shared by every pointer", m.deletedRecords)
+	}
+}
+
+// A route that is already gone is not an error, so a teardown that failed
+// half-way resumes on a re-run.
+func TestRemoveRoute_AlreadyGoneIsSuccess(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	m := previewZoneMock()
+	p := m.provider(t)
+
+	if err := p.RemoveRoute(context.Background(), "ocel-preview", "pr-1-abc1234567.preview.app.com"); err != nil {
+		t.Fatalf("RemoveRoute on a missing route: err = %v, want nil", err)
+	}
+	if len(m.deletedRoutes) != 0 {
+		t.Errorf("deleted routes = %v, want none", m.deletedRoutes)
+	}
+}
+
+func TestRemoveRoute_RequiresAccountID(t *testing.T) {
+	t.Setenv(envAccountID, "")
+	p := &provider{}
+	if err := p.RemoveRoute(context.Background(), "ocel-preview", "pr-1.preview.app.com"); err == nil {
+		t.Fatal("RemoveRoute without an account id err = nil, want an error")
+	}
+}
+
 func TestDestroyRootStack_EmptyListIsNoOp(t *testing.T) {
 	t.Setenv(envAccountID, "acct-1")
 	p := &provider{}
@@ -417,9 +545,13 @@ func TestRemovePointer_SendsThePointerAndReturnsReclaimTargets(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /{slug}/remove-pointer", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		json.NewEncoder(w).Encode(edge.PruneResult{
-			RemovedPromotionIDs: []string{"promo-1"},
-			RemovedRecordKeys:   []string{"record:web/b1"},
+		json.NewEncoder(w).Encode(edge.PointerRemoval{
+			PruneResult: edge.PruneResult{
+				RemovedPromotionIDs: []string{"promo-1"},
+				RemovedRecordKeys:   []string{"record:web/b1"},
+			},
+			RemainingPointers: 2,
+			RemovedRoutes:     []edge.RemovedRoute{{App: "web", Hostname: "pr-42-abc1234567.preview.test"}},
 		})
 	})
 	srv := httptest.NewServer(mux)
@@ -435,6 +567,13 @@ func TestRemovePointer_SendsThePointerAndReturnsReclaimTargets(t *testing.T) {
 	}
 	if len(result.RemovedRecordKeys) != 1 || result.RemovedRecordKeys[0] != "record:web/b1" {
 		t.Errorf("result = %+v, want the removed record keys to reclaim", result)
+	}
+	if result.RemainingPointers != 2 {
+		t.Errorf("remaining pointers = %d, want 2", result.RemainingPointers)
+	}
+	want := edge.RemovedRoute{App: "web", Hostname: "pr-42-abc1234567.preview.test"}
+	if len(result.RemovedRoutes) != 1 || result.RemovedRoutes[0] != want {
+		t.Errorf("removed routes = %+v, want %+v", result.RemovedRoutes, want)
 	}
 }
 

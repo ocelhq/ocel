@@ -29,6 +29,12 @@ export interface DeploymentRecord {
   // lives and what runtime the serving worker's loader evaluates it under.
   // Absent when the build produced no edge output at all.
   edgeWorkers?: EdgeWorkers;
+  // The worker-route hostnames the deploy that produced this record registered
+  // for it, so a teardown can delete exactly those without recomputing them
+  // from config it does not have. A preview carries its one pointer-exact
+  // hostname; production carries none — its routes are project-lifetime and
+  // reconciled declaratively.
+  routeHostnames?: string[];
 }
 
 // Mirrors EdgeWorkers in cloud/edge/rootstack.go (the host writes it) and in
@@ -70,6 +76,26 @@ export interface PruneResult {
   // it still needs to reclaim. Kept in this prefixed form because the Go host
   // (cloud/aws/deploy/prune.go ReclaimTargets) parses it verbatim.
   removedRecordKeys: string[];
+}
+
+// One worker route a removed pointer owned: the app it fronted and the hostname
+// it was attached to.
+export interface RemovedRoute {
+  app: string;
+  hostname: string;
+}
+
+// What removePointer reports, over and above a prune's: the routes the pointer
+// owned and how many pointers the instance has left. Deliberately a type of its
+// own rather than fields on PruneResult, which prune() also returns — prune
+// keeps the pointer and its route alive, so a shared shape would let its result
+// read as "this pointer is gone, sweep its worker".
+export interface PointerRemoval extends PruneResult {
+  // Preview pointers left in this instance after the removal, excluding the
+  // reserved production default. Zero means the project just retired its last
+  // preview, so the generic worker every preview pointer shared can go too.
+  remainingPointers: number;
+  removedRoutes: RemovedRoute[];
 }
 
 // The reserved default pointer. The primary domain resolves it, and a promote
@@ -403,11 +429,14 @@ export function prune(
 // promotions name, and the pointer row itself. Unlike prune(), it pins nothing
 // — a `preview rm` tears the whole preview down, so its active promotion goes
 // too. Returns the removed record keys so the host reclaims the stacks and
-// R2/S3 objects they named. Removing an unknown pointer is a clean no-op.
+// R2/S3 objects they named, the worker routes those records carried so it can
+// detach exactly those, and the pointers left behind so it can tell whether it
+// just retired the project's last preview. Removing an unknown pointer is a
+// clean no-op.
 export function removePointer(
   store: SqlStore,
   pointer: string = DEFAULT_POINTER,
-): PruneResult {
+): PointerRemoval {
   return store.transactionSync(() => {
     const rows = store.sql
       .exec<{ promotion_id: string; builds: string }>(
@@ -423,6 +452,7 @@ export function removePointer(
     const removedRecordKeys = removed.flatMap((p) =>
       Object.entries(p.builds).map(([app, buildId]) => recordKey(app, buildId)),
     );
+    const removedRoutes = distinctRoutes(store, removed);
 
     for (const p of removed) {
       store.sql.exec(`DELETE FROM promotions WHERE promotion_id = ?`, p.promotionId);
@@ -440,8 +470,41 @@ export function removePointer(
       keptPromotionIds: [],
       removedPromotionIds: removed.map((p) => p.promotionId),
       removedRecordKeys,
+      remainingPointers: previewPointerCount(store),
+      removedRoutes,
     };
   });
+}
+
+// The (app, hostname) routes carried by the records these promotions name, each
+// pair once: several promotions of one pointer name records that all carry the
+// pointer's single hostname. Read before the records are deleted.
+function distinctRoutes(
+  store: SqlStore,
+  promotions: { builds: Record<string, string> }[],
+): RemovedRoute[] {
+  const routes: RemovedRoute[] = [];
+  const seen = new Set<string>();
+  for (const p of promotions) {
+    for (const [app, buildId] of Object.entries(p.builds)) {
+      for (const hostname of record(store, app, buildId)?.routeHostnames ?? []) {
+        const key = `${app} ${hostname}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        routes.push({ app, hostname });
+      }
+    }
+  }
+  return routes;
+}
+
+function previewPointerCount(store: SqlStore): number {
+  return store.sql
+    .exec<{ n: number }>(
+      `SELECT COUNT(*) AS n FROM pointers WHERE name != ?`,
+      DEFAULT_POINTER,
+    )
+    .one().n;
 }
 
 // Seeds (or rotates) this instance's ownership. The account-level bootstrap

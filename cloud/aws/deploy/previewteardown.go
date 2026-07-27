@@ -1,13 +1,10 @@
 // Preview teardown (ADR 0001): the per-pointer counterpart to DestroyProject.
-// `ocel preview rm` removes one preview pointer outright — every app-deploy
-// stack the pointer's builds live in, the pointer and its records in the
-// preview store, and the pointer's R2/S3 assets — and, for a persistent
-// preview, its per-name infra stack (db/bucket) too. Ephemeral previews have no
-// infra stack, so there is nothing stateful to remove.
-//
-// PreviewInfraStackFor is pure and unit-tested directly; RemovePreview drives
-// the real store/Pulumi/S3 calls and, like DestroyProject, is exercised only by
-// an opt-in run against a live account.
+// `ocel preview rm` retains nothing. An ephemeral preview has no infra stack, so
+// it has nothing stateful to remove; removing the project's last preview also
+// reclaims the generic worker(s) and store instance every pointer shared, which
+// nothing else ever would. RemovePreview drives the real store/Pulumi/S3 calls
+// and, like DestroyProject, is exercised end-to-end only by an opt-in run against
+// a live account; everything pure here is unit-tested directly.
 package deploy
 
 import (
@@ -33,12 +30,12 @@ func PreviewInfraStackFor(slug, pointer string, persistent bool) string {
 }
 
 // RemovePreview tears one preview pointer down, traffic-first: the store pointer
-// goes first (so it stops resolving and the removed record keys name exactly the
-// app-deploy stacks and R2 assets to reclaim), then every one of those
-// app-deploy stacks, then — for a persistent preview only — the per-name infra
-// stack (deleting its db/bucket outright), then the pointer's R2/S3 assets. It
-// retains nothing. Best-effort: a failed step never stops the rest, and every
-// failure is joined so the host can report what remains and a re-run can resume.
+// goes first both so it stops resolving and because the record keys its removal
+// reports name exactly the app-deploy stacks and R2 assets left to reclaim.
+// Best-effort: a failed step never stops the rest, and every failure is joined so
+// the host can report what remains and a re-run can resume — which is why the edge
+// sweep goes last, leaving the state and instance a re-run needs in place if an
+// earlier step failed.
 //
 // stack/state may be zero when the project never reconciled a preview root stack
 // (nothing was ever deployed under this pointer), in which case there is nothing
@@ -47,18 +44,19 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 	report := nilSafe(progress)
 
 	var errs []error
-	var removedRecordKeys []string
+	var removal edge.PointerRemoval
+	removed := false
 	if stack != nil && len(state) > 0 {
 		report(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
 		result, err := stack.RemovePointer(ctx, state, pointer)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("remove preview pointer %q: %w", pointer, err))
 		} else {
-			removedRecordKeys = result.RemovedRecordKeys
+			removal, removed = result, true
 		}
 	}
 
-	targets, err := PreviewReclaimTargets(slug, pointer, cfg.Env, removedRecordKeys)
+	targets, err := PreviewReclaimTargets(slug, pointer, cfg.Env, removal.RemovedRecordKeys)
 	if err != nil {
 		errs = append(errs, err)
 	} else if err := Reclaim(ctx, cfg, targets, progress, log); err != nil {
@@ -72,7 +70,85 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 		}
 	}
 
+	if removed {
+		errs = append(errs, reclaimPreviewEdge(ctx, stack, state, slug, removal, report))
+	}
+
 	return errors.Join(errs...)
+}
+
+// reclaimPreviewEdge frees the edge footprint a removed preview pointer leaves:
+// just this pointer's routes off the generic worker its live siblings share, or —
+// once it was the last pointer — those whole workers (each taking its routes with
+// it) and the project's store instance. Best-effort like its caller.
+func reclaimPreviewEdge(ctx context.Context, stack edge.RootStack, state edge.RootStackState, slug string, removal edge.PointerRemoval, report func(string)) error {
+	if removal.RemainingPointers > 0 {
+		var errs []error
+		for _, route := range removal.RemovedRoutes {
+			worker := previewGenericName(slug, route.App)
+			report("Removing preview route " + route.Hostname)
+			if err := stack.RemoveRoute(ctx, worker, route.Hostname); err != nil {
+				errs = append(errs, fmt.Errorf("remove preview route %s from %s: %w", route.Hostname, worker, err))
+			}
+		}
+		return errors.Join(errs...)
+	}
+
+	var errs []error
+	report("Destroying the project's preview worker(s) — no previews remain")
+	deployed, listErr := stack.ListDeployedWorkers(ctx, previewWorkerPrefix(slug))
+	if listErr != nil {
+		errs = append(errs, fmt.Errorf("resolve preview root workers: %w", listErr))
+	}
+	destroyErr := stack.DestroyRootStack(ctx, previewSweepWorkers(slug, removal, deployed))
+	if destroyErr != nil {
+		errs = append(errs, fmt.Errorf("destroy preview root workers: %w", destroyErr))
+	}
+
+	// The instance is the only thing a re-run can name these workers from: wiping
+	// it while any of them may still stand leaves them unreclaimable, because a
+	// second `preview rm` finds no pointer to remove and never reaches here.
+	if listErr == nil && destroyErr == nil {
+		report("Wiping the project's preview deployments-store instance")
+		if err := stack.DestroyInstance(ctx, state); err != nil {
+			errs = append(errs, fmt.Errorf("destroy preview deployments-store instance: %w", err))
+		}
+	}
+	return errors.Join(errs...)
+}
+
+// previewSweepWorkers is the set of preview generic workers a last-pointer
+// teardown destroys: every worker the edge reports under the project's preview
+// prefix, plus the deployed name of every app the removal names. Both sources are
+// needed — the prefix reaches workers whose app nothing remembers any more, while
+// the removal reaches names workerScriptName clamped out of that prefix to fit the
+// platform's name limit (a long slug). Destroying a name already gone is not an
+// error, so the union only ever risks a redundant call, where a missed name leaks
+// a billable worker. Pure.
+func previewSweepWorkers(slug string, removal edge.PointerRemoval, deployed []string) []string {
+	workers := make([]string, 0, len(deployed)+len(removal.RemovedRoutes))
+	seen := map[string]struct{}{}
+	add := func(name string) {
+		if _, dup := seen[name]; dup {
+			return
+		}
+		seen[name] = struct{}{}
+		workers = append(workers, name)
+	}
+	for _, name := range deployed {
+		add(name)
+	}
+	for _, route := range removal.RemovedRoutes {
+		if route.App != "" {
+			add(previewGenericName(slug, route.App))
+		}
+	}
+	for _, key := range removal.RemovedRecordKeys {
+		if app, _, ok := splitRemovedRecordKey(key); ok {
+			add(previewGenericName(slug, app))
+		}
+	}
+	return workers
 }
 
 // PreviewProjectTeardownPlan is what classifyPreviewStacks resolves from the

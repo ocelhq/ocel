@@ -72,6 +72,27 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 	})
 }
 
+// Production's worker routes are project-lifetime and reconciled declaratively,
+// so a hostname dropped from the config must lose its route. PruneRoutes is a
+// bool whose zero value is "prune nothing", so a spec that leaves it unset
+// silently stops pruning (ocelhq-5w3).
+func TestRootStackSpecs_ProductionPrunesStaleRoutes(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	cfg := Config{Edge: &recordingEdge{}, Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+
+	specs, err := rootStackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
+	if err != nil {
+		t.Fatalf("rootStackSpecs: %v", err)
+	}
+	if len(specs) != 1 {
+		t.Fatalf("specs = %d, want 1", len(specs))
+	}
+	if !specs[0].PruneRoutes {
+		t.Error("PruneRoutes = false, want true for production")
+	}
+}
+
 func TestPreviewBaseDomain(t *testing.T) {
 	cases := map[string]string{
 		"*.preview.acme.com": "preview.acme.com",
@@ -86,27 +107,133 @@ func TestPreviewBaseDomain(t *testing.T) {
 	}
 }
 
-func TestWorkerAppURL(t *testing.T) {
-	prod := Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION}
-	preview := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42-a1b2c3d4"}
+func TestPreviewWildcard(t *testing.T) {
+	cases := map[string]string{
+		"preview.acme.com": "*.preview.acme.com",
+		"":                 "",
+	}
+	for in, want := range cases {
+		if got := previewWildcard(in); got != want {
+			t.Errorf("previewWildcard(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
 
+// One route per pointer, so concurrent previews of one project stop overwriting a
+// shared wildcard route (ocelhq-5w3). The base domain is carried alongside because
+// the concrete hostname it resolves to has nothing to recover it from.
+func TestPreviewHostnames_ResolvesTheWildcardToThePointerHost(t *testing.T) {
+	declared := map[string][]string{"web": {"*.preview.acme.com"}}
+	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+
+	got, err := previewHostnames(cfg, declared)
+	if err != nil {
+		t.Fatalf("previewHostnames: %v", err)
+	}
+	want := previewRouteHost("proj", "web", "pr-42", "preview.acme.com")
+	if len(got.routes["web"]) != 1 || got.routes["web"][0] != want {
+		t.Fatalf("route hostnames = %v, want [%s]", got.routes["web"], want)
+	}
+	if strings.Contains(got.routes["web"][0], "*") {
+		t.Errorf("preview route hostname %q is still a wildcard", got.routes["web"][0])
+	}
+	if got.baseDomains["web"] != "preview.acme.com" {
+		t.Errorf("base domain = %q, want preview.acme.com", got.baseDomains["web"])
+	}
+}
+
+func TestResolveWorkerHostnames_ProductionServesItsDeclaredHostnames(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+		Domains:   map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}},
+	}
+	cfg := Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION, Slug: "proj"}
+
+	resolved, err := resolveWorkerHostnames(cfg, manifest, workerApps(manifest))
+	if err != nil {
+		t.Fatalf("resolveWorkerHostnames: %v", err)
+	}
+	if want := []string{"acme.com", "www.acme.com"}; !slicesEqual(resolved.routes["web"], want) {
+		t.Errorf("route hostnames = %v, want the declared hostnames %v", resolved.routes["web"], want)
+	}
+}
+
+// An app declaring no preview domain is served on the edge's own vendor
+// subdomain: no route, and no error — the legitimate no-route deploy.
+func TestResolveWorkerHostnames_PreviewWithNoDeclaredDomainGetsNoRoute(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+	}
+	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+
+	resolved, err := resolveWorkerHostnames(cfg, manifest, workerApps(manifest))
+	if err != nil {
+		t.Fatalf("resolveWorkerHostnames: %v", err)
+	}
+	if len(resolved.routes["web"]) != 0 {
+		t.Errorf("route hostnames = %v, want none", resolved.routes["web"])
+	}
+}
+
+// A preview declaration that is not a wildcard has no base to hang a pointer host
+// off, so the deploy would attach no route at all and every request 404 with
+// nothing having failed. It must fail instead, naming the app and the domain.
+func TestRootStackSpecs_PreviewWithoutAWildcardFailsTheDeploy(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	manifest := &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+		Domains:   map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"app.acme.com"}}},
+	}
+	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}
+
+	_, err := rootStackSpecs(cfg, manifest, "v1", nil)
+	if err == nil {
+		t.Fatal("expected a preview whose declared domain is not a wildcard to fail the deploy")
+	}
+	if !strings.Contains(err.Error(), "web") || !strings.Contains(err.Error(), "app.acme.com") {
+		t.Errorf("error must name the app and the offending domain, got %q", err)
+	}
+}
+
+// The pointer cap is mirrored in cli/internal/previewid and scripts/e2e-next
+// (separate modules, no shared constant), so drift is only ever caught here: an
+// over-long label yields a route the edge rejects or a hostname that never
+// resolves, with no deploy-time diagnostic.
+func TestPreviewHostnames_OverLongPointerFailsTheDeploy(t *testing.T) {
+	pointer := strings.Repeat("p", previewPointerMaxLen+1)
+	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: pointer}
+
+	_, err := previewHostnames(cfg, map[string][]string{"web": {"*.preview.acme.com"}})
+	if err == nil {
+		t.Fatalf("expected a pointer of %d characters to fail the deploy", len(pointer))
+	}
+	if !strings.Contains(err.Error(), pointer) || !strings.Contains(err.Error(), "64") {
+		t.Errorf("error must name the pointer and the label length, got %q", err)
+	}
+}
+
+func TestWorkerAppURL(t *testing.T) {
 	cases := []struct {
 		name    string
-		cfg     Config
 		domains []string
 		want    string
 	}{
-		{"production custom domain", prod, []string{"app.acme.com"}, "https://app.acme.com"},
-		{"production features first non-wildcard", prod, []string{"*.acme.com", "app.acme.com"}, "https://app.acme.com"},
-		{"production all-wildcard falls back to first", prod, []string{"*.acme.com"}, "https://*.acme.com"},
-		{"production no domain", prod, nil, ""},
-		{"preview resolves wildcard to the ref subdomain", preview, []string{"*.preview.acme.com"}, "https://pr-42-a1b2c3d4.preview.acme.com"},
-		{"preview no domain", preview, nil, ""},
-		{"preview non-wildcard domain falls back verbatim", preview, []string{"app.acme.com"}, "https://app.acme.com"},
+		{"custom domain", []string{"app.acme.com"}, "https://app.acme.com"},
+		{"features first non-wildcard", []string{"*.acme.com", "app.acme.com"}, "https://app.acme.com"},
+		{"all-wildcard falls back to first", []string{"*.acme.com"}, "https://*.acme.com"},
+		{"no domain", nil, ""},
+		{"a preview's resolved pointer host is reported as-is", []string{"pr-42-abc.preview.acme.com"}, "https://pr-42-abc.preview.acme.com"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := workerAppURL(tc.cfg, tc.domains); got != tc.want {
+			if got := workerAppURL(tc.domains); got != tc.want {
 				t.Errorf("workerAppURL(%v) = %q, want %q", tc.domains, got, tc.want)
 			}
 		})
@@ -145,7 +272,10 @@ func TestPreviewWorkerPrefix_PrefixesEveryPreviewWorkerAndNotProduction(t *testi
 	}
 }
 
-func TestRootStackSpecs_PreviewCarriesPreviewVarsAndWildcardDomain(t *testing.T) {
+// A preview reconciles one exact route per pointer, prunes nothing (its sibling
+// pointers' routes hang off the same shared script), and requires — never plants
+// — the wildcard record every pointer hostname resolves through (ocelhq-5w3).
+func TestRootStackSpecs_PreviewRoutesOnePointerExactHostname(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 	manifest := &deploymentsv1.Manifest{
@@ -155,9 +285,10 @@ func TestRootStackSpecs_PreviewCarriesPreviewVarsAndWildcardDomain(t *testing.T)
 		Domains:   map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 	}
 	cfg := Config{
-		Edge:  &recordingEdge{},
-		Slug:  "proj",
-		Class: deploymentsv1.Environment_CLASS_PREVIEW,
+		Edge:     &recordingEdge{},
+		Slug:     "proj",
+		Class:    deploymentsv1.Environment_CLASS_PREVIEW,
+		Identity: "pr-42",
 	}
 
 	specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
@@ -171,18 +302,117 @@ func TestRootStackSpecs_PreviewCarriesPreviewVarsAndWildcardDomain(t *testing.T)
 	if spec.GenericName != "ocel-proj-preview-web" {
 		t.Errorf("GenericName = %q, want ocel-proj-preview-web", spec.GenericName)
 	}
-	if len(spec.Domains) != 1 || spec.Domains[0] != "*.preview.acme.com" {
-		t.Errorf("Domains = %v, want the preview wildcard", spec.Domains)
+	wantHost := previewRouteHost("proj", "web", "pr-42", "preview.acme.com")
+	if len(spec.Domains) != 1 || spec.Domains[0] != wantHost {
+		t.Errorf("Domains = %v, want the pointer-exact host [%s]", spec.Domains, wantHost)
+	}
+	if spec.PruneRoutes {
+		t.Error("PruneRoutes = true: pruning would delete a sibling pointer's route off the shared script")
+	}
+	if spec.RequiredRecord != "*.preview.acme.com" {
+		t.Errorf("RequiredRecord = %q, want the declared wildcard *.preview.acme.com", spec.RequiredRecord)
 	}
 	if spec.Generic.Vars[envPreview] != "1" {
 		t.Errorf("Vars[%s] = %q, want 1", envPreview, spec.Generic.Vars[envPreview])
 	}
+	// Emitted empty, the worker leaves preview mode and every preview request
+	// 404s with nothing failing at deploy time — so it must survive the switch to
+	// a concrete Domains, which carries no wildcard to recover it from.
 	if spec.Generic.Vars[envPreviewBaseDomain] != "preview.acme.com" {
 		t.Errorf("Vars[%s] = %q, want preview.acme.com", envPreviewBaseDomain, spec.Generic.Vars[envPreviewBaseDomain])
+	}
+	// The worker recovers the pointer by stripping this exact suffix off the
+	// request's subdomain label; empty or wrong, it reads the whole label as the
+	// pointer and resolves nothing.
+	suffix := spec.Generic.Vars[envPreviewLabelSuffix]
+	if suffix != previewRouteSuffix("proj", "web") {
+		t.Errorf("Vars[%s] = %q, want %q", envPreviewLabelSuffix, suffix, previewRouteSuffix("proj", "web"))
+	}
+	label, _, _ := strings.Cut(spec.Domains[0], ".")
+	if got := strings.TrimSuffix(label, suffix); got != "pr-42" {
+		t.Errorf("stripping Vars[%s] off label %q gave %q, want the pointer pr-42", envPreviewLabelSuffix, label, got)
 	}
 	if spec.Generic.Vars["OCEL_APP"] != "web" {
 		t.Errorf("Vars[OCEL_APP] = %q, want web", spec.Generic.Vars["OCEL_APP"])
 	}
+}
+
+// Production's routes are project-lifetime and reconciled declaratively: it keeps
+// pruning, plants its own records, and serves its declared hostnames verbatim.
+func TestRootStackSpecs_ProductionKeepsDeclarativeHostnames(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	manifest := &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+		Domains:   map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}},
+	}
+	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+
+	specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+	if err != nil {
+		t.Fatalf("rootStackSpecs: %v", err)
+	}
+	spec := specs[0]
+	if !slicesEqual(spec.Domains, []string{"acme.com", "www.acme.com"}) {
+		t.Errorf("Domains = %v, want the declared hostnames", spec.Domains)
+	}
+	if !spec.PruneRoutes {
+		t.Error("PruneRoutes = false, want true for production")
+	}
+	if spec.RequiredRecord != "" {
+		t.Errorf("RequiredRecord = %q, want empty: production plants its own records", spec.RequiredRecord)
+	}
+}
+
+// A preview's teardown deletes exactly the routes its deploy registered, which it
+// reads back off the record — so the record has to carry them. Production carries
+// none: its routes outlive any one deploy.
+func TestBuildDeploymentRecord_RouteHostnamesByClass(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+		Domains: map[string]*deploymentsv1.DomainList{
+			"preview":    {Hostnames: []string{"*.preview.acme.com"}},
+			"production": {Hostnames: []string{"acme.com"}},
+		},
+	}
+	app := manifest.GetApps()[0]
+	root := writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`})
+
+	t.Run("preview records its pointer-exact host", func(t *testing.T) {
+		cfg := Config{
+			ArtifactRoot: root,
+			Slug:         "proj",
+			Class:        deploymentsv1.Environment_CLASS_PREVIEW,
+			Identity:     "pr-42",
+		}
+		record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
+		if err != nil {
+			t.Fatalf("buildDeploymentRecord: %v", err)
+		}
+		want := previewRouteHost("proj", "web", "pr-42", "preview.acme.com")
+		if !slicesEqual(record.RouteHostnames, []string{want}) {
+			t.Errorf("RouteHostnames = %v, want [%s]", record.RouteHostnames, want)
+		}
+	})
+
+	t.Run("production records none", func(t *testing.T) {
+		cfg := Config{
+			ArtifactRoot: root,
+			Slug:         "proj",
+			Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
+		}
+		record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
+		if err != nil {
+			t.Fatalf("buildDeploymentRecord: %v", err)
+		}
+		if len(record.RouteHostnames) != 0 {
+			t.Errorf("RouteHostnames = %v, want none: production routes are project-lifetime", record.RouteHostnames)
+		}
+	})
 }
 
 // The generic worker is AWS_IAM-gated behind its Lambdas, so it must be handed

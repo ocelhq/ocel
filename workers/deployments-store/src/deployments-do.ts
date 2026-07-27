@@ -5,6 +5,7 @@ import * as store from "./store";
 import type {
   DeploymentRecord,
   HistoryEntry,
+  PointerRemoval,
   Promotion,
   PruneResult,
 } from "./store";
@@ -104,7 +105,7 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.prune(this.ctx.storage, keepN, pointer);
   }
 
-  async removePointer(pointer?: string): Promise<PruneResult> {
+  async removePointer(pointer?: string): Promise<PointerRemoval> {
     return store.removePointer(this.ctx.storage, pointer);
   }
 

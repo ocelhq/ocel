@@ -390,6 +390,32 @@ describe("prune", () => {
     expect(await store.record("web", "prod-1")).toBeDefined();
     expect(await store.record("web", "prev-1")).toBeUndefined();
   });
+
+  it("reports neither removed routes nor a remaining-pointer count", async () => {
+    const store = storeStub();
+    await store.putStaged(
+      makeRecord({ buildId: "prev-1", routeHostnames: ["pr-42-abc1234567.preview.test"] }),
+    );
+    await store.promote(
+      makePromotion({ promotionId: "prev-1", builds: { web: "prev-1" } }),
+      "pr-42",
+    );
+    await store.putStaged(
+      makeRecord({ buildId: "prev-2", routeHostnames: ["pr-42-abc1234567.preview.test"] }),
+    );
+    await store.promote(
+      makePromotion({ promotionId: "prev-2", ts: 2_000, builds: { web: "prev-2" } }),
+      "pr-42",
+    );
+
+    // A prune keeps the pointer and the route it serves on alive, so its result
+    // must never carry the fields a teardown sweeps routes from.
+    const result = await store.prune(1, "pr-42");
+
+    expect(result.removedPromotionIds).toEqual(["prev-1"]);
+    expect(result).not.toHaveProperty("removedRoutes");
+    expect(result).not.toHaveProperty("remainingPointers");
+  });
 });
 
 describe("removePointer", () => {
@@ -430,6 +456,68 @@ describe("removePointer", () => {
     const result = await store.removePointer("never-existed");
     expect(result.removedPromotionIds).toEqual([]);
     expect(result.removedRecordKeys).toEqual([]);
+    expect(result.removedRoutes).toEqual([]);
+  });
+
+  it("reports the distinct routes the removed records carried", async () => {
+    const store = storeStub();
+    const webHost = "pr-42-abc1234567.preview.test";
+    const apiHost = "pr-42-def7654321.preview.test";
+    // Two promotions on the pointer, each app's record carrying the same
+    // hostname: the repeated app+hostname collapses to one entry.
+    for (let i = 1; i <= 2; i++) {
+      await store.putStaged(
+        makeRecord({ app: "web", buildId: `web-${i}`, routeHostnames: [webHost] }),
+      );
+      await store.putStaged(
+        makeRecord({ app: "api", buildId: `api-${i}`, routeHostnames: [apiHost] }),
+      );
+      await store.promote(
+        makePromotion({
+          promotionId: `prev-${i}`,
+          ts: i * 1_000,
+          builds: { web: `web-${i}`, api: `api-${i}` },
+        }),
+        "pr-42",
+      );
+    }
+
+    const result = await store.removePointer("pr-42");
+
+    expect([...result.removedRoutes].sort((a, b) => a.app.localeCompare(b.app))).toEqual([
+      { app: "api", hostname: apiHost },
+      { app: "web", hostname: webHost },
+    ]);
+  });
+
+  it("reports no routes for records that carry none", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "prev-1" }));
+    await store.promote(
+      makePromotion({ promotionId: "prev-1", builds: { web: "prev-1" } }),
+      "pr-42",
+    );
+
+    const result = await store.removePointer("pr-42");
+
+    expect(result.removedRecordKeys).toEqual(["record:web/prev-1"]);
+    expect(result.removedRoutes).toEqual([]);
+  });
+
+  it("counts the pointers left behind, never the production default", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "prod-1" }));
+    await store.promote(makePromotion({ promotionId: "prod-1", builds: { web: "prod-1" } }));
+    for (const p of ["pr-1", "pr-2", "pr-3"]) {
+      await store.putStaged(makeRecord({ buildId: p }));
+      await store.promote(makePromotion({ promotionId: p, builds: { web: p } }), p);
+    }
+
+    expect((await store.removePointer("pr-1")).remainingPointers).toBe(2);
+    expect((await store.removePointer("pr-2")).remainingPointers).toBe(1);
+    // Production is still promoted, so a zero here is what proves the reserved
+    // default pointer is excluded from the count.
+    expect((await store.removePointer("pr-3")).remainingPointers).toBe(0);
   });
 });
 
