@@ -337,12 +337,12 @@ type Manifest struct {
 	// schema_version lets a provider reject a manifest shape it doesn't
 	// understand, e.g. "provider.v1".
 	SchemaVersion string              `protobuf:"bytes,1,opt,name=schema_version,json=schemaVersion,proto3" json:"schema_version,omitempty"`
-	ProjectId     string              `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	Resources     []*ManifestResource `protobuf:"bytes,3,rep,name=resources,proto3" json:"resources,omitempty"`
 	Functions     []*ManifestFunction `protobuf:"bytes,4,rep,name=functions,proto3" json:"functions,omitempty"`
-	// slug is the project's stable, human-authored deployment identity (a
-	// DNS-label string). It keys the project's own instance in the shared
-	// deployments-store worker, distinct from project_id (the dev-cloud link).
+	// slug is the project's identity: a stable, human-authored DNS-label string.
+	// Everything project-scoped derives from it — Pulumi stack names, root-stack
+	// state keys, and the project's instance in the shared deployments-store
+	// worker.
 	Slug string `protobuf:"bytes,7,opt,name=slug,proto3" json:"slug,omitempty"`
 	// domains maps a lowercased environment class ("production") to the custom
 	// hostnames the web-facing worker is served on for that class, each attached
@@ -392,13 +392,6 @@ func (*Manifest) Descriptor() ([]byte, []int) {
 func (x *Manifest) GetSchemaVersion() string {
 	if x != nil {
 		return x.SchemaVersion
-	}
-	return ""
-}
-
-func (x *Manifest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
 	}
 	return ""
 }
@@ -858,7 +851,7 @@ func (x *DeployRequest) GetTag() string {
 }
 
 // BootstrapRequest is the request for DeploymentService.Bootstrap. Bootstrap
-// is account-global, so it carries no manifest and no project id: only the
+// is account-global, so it carries no manifest and no slug: only the
 // provider's opaque options and the pinned protocol version.
 type BootstrapRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
@@ -941,10 +934,10 @@ type DestroyPreviewRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,3,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// project_id scopes the teardown to one project. The Pulumi state backend is
+	// slug scopes the teardown to one project. The Pulumi state backend is
 	// account-global, so identity alone is ambiguous across projects; the
 	// provider addresses the exact per-project stack with it.
-	ProjectId     string `protobuf:"bytes,4,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Slug          string `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1000,9 +993,9 @@ func (x *DestroyPreviewRequest) GetProtocolVersion() string {
 	return ""
 }
 
-func (x *DestroyPreviewRequest) GetProjectId() string {
+func (x *DestroyPreviewRequest) GetSlug() string {
 	if x != nil {
-		return x.ProjectId
+		return x.Slug
 	}
 	return ""
 }
@@ -1011,7 +1004,7 @@ func (x *DestroyPreviewRequest) GetProjectId() string {
 // names no environment: a whole production project is the unit, so the provider
 // enumerates and tears down every stack the project owns. Like PruneRequest it
 // is project-scoped, carrying only the provider's opaque options, the pinned
-// protocol version, and the project id.
+// protocol version, and the slug.
 type DestroyProjectRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// options is always UTF-8 JSON bytes: `{}` when the provider was given no
@@ -1021,10 +1014,10 @@ type DestroyProjectRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// project_id scopes the teardown to one project. The Pulumi state backend is
+	// slug scopes the teardown to one project. The Pulumi state backend is
 	// account-global, so the provider addresses this project's per-project stacks
 	// (root state, infra stack, and every app-deploy stack) with it.
-	ProjectId string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Slug string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	// environment selects the substrate to tear down. Absent (or production class)
 	// destroys the whole production project. A preview environment destroys the
 	// whole preview footprint — every pointer, every app-deploy and per-name infra
@@ -1080,9 +1073,9 @@ func (x *DestroyProjectRequest) GetProtocolVersion() string {
 	return ""
 }
 
-func (x *DestroyProjectRequest) GetProjectId() string {
+func (x *DestroyProjectRequest) GetSlug() string {
 	if x != nil {
-		return x.ProjectId
+		return x.Slug
 	}
 	return ""
 }
@@ -1106,8 +1099,8 @@ type PlanDestroyProjectRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// project_id scopes the plan to one project.
-	ProjectId     string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// slug scopes the plan to one project.
+	Slug          string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1156,9 +1149,9 @@ func (x *PlanDestroyProjectRequest) GetProtocolVersion() string {
 	return ""
 }
 
-func (x *PlanDestroyProjectRequest) GetProjectId() string {
+func (x *PlanDestroyProjectRequest) GetSlug() string {
 	if x != nil {
-		return x.ProjectId
+		return x.Slug
 	}
 	return ""
 }
@@ -1245,10 +1238,10 @@ type ListEnvironmentsRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	// project_id scopes the listing to one project. The Pulumi state backend is
+	// slug scopes the listing to one project. The Pulumi state backend is
 	// account-global, so the provider filters to this project's preview stacks
 	// rather than every project's in the account.
-	ProjectId     string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Slug          string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1297,9 +1290,9 @@ func (x *ListEnvironmentsRequest) GetProtocolVersion() string {
 	return ""
 }
 
-func (x *ListEnvironmentsRequest) GetProjectId() string {
+func (x *ListEnvironmentsRequest) GetSlug() string {
 	if x != nil {
-		return x.ProjectId
+		return x.Slug
 	}
 	return ""
 }
@@ -1885,7 +1878,7 @@ type ListPromotionsRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	ProjectId       string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Slug            string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -1934,9 +1927,9 @@ func (x *ListPromotionsRequest) GetProtocolVersion() string {
 	return ""
 }
 
-func (x *ListPromotionsRequest) GetProjectId() string {
+func (x *ListPromotionsRequest) GetSlug() string {
 	if x != nil {
-		return x.ProjectId
+		return x.Slug
 	}
 	return ""
 }
@@ -1997,7 +1990,7 @@ type RollbackRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	ProjectId       string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Slug            string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	// to is the promotion id to roll back to. Empty means "the promotion
 	// immediately before the currently active one".
 	To string `protobuf:"bytes,4,opt,name=to,proto3" json:"to,omitempty"`
@@ -2052,9 +2045,9 @@ func (x *RollbackRequest) GetProtocolVersion() string {
 	return ""
 }
 
-func (x *RollbackRequest) GetProjectId() string {
+func (x *RollbackRequest) GetSlug() string {
 	if x != nil {
-		return x.ProjectId
+		return x.Slug
 	}
 	return ""
 }
@@ -2129,7 +2122,7 @@ type PruneRequest struct {
 	// protocol_version pins the wire contract so a provider can reject a
 	// request it can't speak.
 	ProtocolVersion string `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
-	ProjectId       string `protobuf:"bytes,3,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	Slug            string `protobuf:"bytes,3,opt,name=slug,proto3" json:"slug,omitempty"`
 	// keep_n is how many of the newest Promotions to keep, always additionally
 	// pinning the currently active one even if it falls outside this window.
 	KeepN int32 `protobuf:"varint,4,opt,name=keep_n,json=keepN,proto3" json:"keep_n,omitempty"`
@@ -2187,9 +2180,9 @@ func (x *PruneRequest) GetProtocolVersion() string {
 	return ""
 }
 
-func (x *PruneRequest) GetProjectId() string {
+func (x *PruneRequest) GetSlug() string {
 	if x != nil {
-		return x.ProjectId
+		return x.Slug
 	}
 	return ""
 }
@@ -2837,11 +2830,9 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x0eIdentitySource\x12\x1f\n" +
 	"\x1bIDENTITY_SOURCE_UNSPECIFIED\x10\x00\x12\x17\n" +
 	"\x13IDENTITY_SOURCE_GIT\x10\x01\x12\x1c\n" +
-	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\xae\x03\n" +
+	"\x18IDENTITY_SOURCE_DECLARED\x10\x02\"\x95\x03\n" +
 	"\bManifest\x12%\n" +
-	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x02 \x01(\tR\tprojectId\x12>\n" +
+	"\x0eschema_version\x18\x01 \x01(\tR\rschemaVersion\x12>\n" +
 	"\tresources\x18\x03 \x03(\v2 .deployments.v1.ManifestResourceR\tresources\x12>\n" +
 	"\tfunctions\x18\x04 \x03(\v2 .deployments.v1.ManifestFunctionR\tfunctions\x12\x12\n" +
 	"\x04slug\x18\a \x01(\tR\x04slug\x12?\n" +
@@ -2849,7 +2840,7 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x04apps\x18\x06 \x03(\v2\x1b.deployments.v1.ManifestAppR\x04apps\x1aV\n" +
 	"\fDomainsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.deployments.v1.DomainListR\x05value:\x028\x01\"*\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.deployments.v1.DomainListR\x05value:\x028\x01J\x04\b\x02\x10\x03\"*\n" +
 	"\n" +
 	"DomainList\x12\x1c\n" +
 	"\thostnames\x18\x01 \x03(\tR\thostnames\"\xdb\x01\n" +
@@ -2883,36 +2874,32 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x10BootstrapRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
-	"\x05class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\"\xba\x01\n" +
+	"\x05class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\"\xaf\x01\n" +
 	"\x15DestroyPreviewRequest\x12=\n" +
 	"\venvironment\x18\x01 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\x12\x18\n" +
 	"\aoptions\x18\x02 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x04 \x01(\tR\tprojectId\"\xba\x01\n" +
+	"\x10protocol_version\x18\x03 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
+	"\x04slug\x18\x04 \x01(\tR\x04slug\"\xaf\x01\n" +
 	"\x15DestroyProjectRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\x12=\n" +
-	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"\x7f\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12=\n" +
+	"\venvironment\x18\x04 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"t\n" +
 	"\x19PlanDestroyProjectRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\"{\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\"{\n" +
 	"\x1aPlanDestroyProjectResponse\x12\x1d\n" +
 	"\n" +
 	"app_stacks\x18\x01 \x03(\tR\tappStacks\x12\x1f\n" +
 	"\vinfra_stack\x18\x02 \x01(\tR\n" +
 	"infraStack\x12\x1d\n" +
 	"\n" +
-	"root_stack\x18\x03 \x01(\bR\trootStack\"}\n" +
+	"root_stack\x18\x03 \x01(\bR\trootStack\"r\n" +
 	"\x17ListEnvironmentsRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\"b\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\"b\n" +
 	"\x18ListEnvironmentsResponse\x12F\n" +
 	"\fenvironments\x18\x01 \x03(\v2\".deployments.v1.PreviewEnvironmentR\fenvironments\"\xc9\x01\n" +
 	"\x12PreviewEnvironment\x12\x1a\n" +
@@ -2956,30 +2943,27 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"h\n" +
 	"\x15PromotionHistoryEntry\x127\n" +
 	"\tpromotion\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\tpromotion\x12\x16\n" +
-	"\x06active\x18\x02 \x01(\bR\x06active\"{\n" +
+	"\x06active\x18\x02 \x01(\bR\x06active\"p\n" +
 	"\x15ListPromotionsRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\"_\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\"_\n" +
 	"\x16ListPromotionsResponse\x12E\n" +
 	"\n" +
 	"promotions\x18\x01 \x03(\v2%.deployments.v1.PromotionHistoryEntryR\n" +
-	"promotions\"\x97\x01\n" +
+	"promotions\"\x8c\x01\n" +
 	"\x0fRollbackRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x0e\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x0e\n" +
 	"\x02to\x18\x04 \x01(\tR\x02to\x12\x10\n" +
 	"\x03tag\x18\x05 \x01(\tR\x03tag\"I\n" +
 	"\x10RollbackResponse\x125\n" +
-	"\bpromoted\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\bpromoted\"\xc8\x01\n" +
+	"\bpromoted\x18\x01 \x01(\v2\x19.deployments.v1.PromotionR\bpromoted\"\xbd\x01\n" +
 	"\fPruneRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
-	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x03 \x01(\tR\tprojectId\x12\x15\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x12\x12\n" +
+	"\x04slug\x18\x03 \x01(\tR\x04slug\x12\x15\n" +
 	"\x06keep_n\x18\x04 \x01(\x05R\x05keepN\x12=\n" +
 	"\venvironment\x18\x05 \x01(\v2\x1b.deployments.v1.EnvironmentR\venvironment\"\xb8\x01\n" +
 	"\vDeployEvent\x12;\n" +
