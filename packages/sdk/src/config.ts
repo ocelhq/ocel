@@ -30,18 +30,13 @@ export interface AppConfig {
 }
 
 export interface OcelConfig {
-  // slug is the project's stable, human-authored deployment identity: a
-  // DNS-label string (^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$) that keys the
-  // project's own instance in the shared deployments-store worker. It is
-  // distinct from projectId (the ocel dev-cloud link, on its way out) and is
-  // treated as immutable — changing it forks a new project with fresh
-  // deployment history. ocel init pre-fills a sanitized directory-name default.
+  // slug is the project's identity: a DNS-label string
+  // (^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$) that everything project-scoped
+  // derives from — Pulumi stack names, SSM root-stack state keys, and the
+  // project's instance in the shared deployments-store worker. It is treated as
+  // immutable; changing it forks a new project with fresh infrastructure. ocel
+  // init pre-fills a sanitized directory-name default.
   slug: string;
-  // projectId links the project to the ocel dev cloud during dev mode, and
-  // still keys the AWS-side deploy state (SSM root-stack state, Pulumi stack
-  // names). It is slated to be phased out for account-less CLI use, but is
-  // required until that lands — the Go resolver still depends on it.
-  projectId: string;
   discovery?: {
     paths?: string[];
   };
