@@ -58,11 +58,17 @@ export interface Env {
   // up its Deployment in the project's deployments-store instance.
   OCEL_APP: string;
   // Preview mode: when OCEL_PREVIEW is "1" and a base domain is set, the worker
-  // is deployed behind a wildcard route and resolves the deployment pointer
-  // named by each request's subdomain instead of the default one. Both must be
-  // present and well-formed; a partial config degrades to normal mode.
+  // is deployed behind one exact route per preview deployment and resolves the
+  // deployment pointer named by each request's subdomain instead of the default
+  // one. Both must be present and well-formed; a partial config degrades to
+  // normal mode.
   OCEL_PREVIEW?: string;
   OCEL_PREVIEW_BASE_DOMAIN?: string;
+  // The trailing part of the preview subdomain label that is not the pointer —
+  // a per-project-and-app hash keeping preview hostnames unique across the
+  // zone. Stripped off the label to recover the pointer; absent means the whole
+  // label is the pointer.
+  OCEL_PREVIEW_LABEL_SUFFIX?: string;
   // Bound only where the edge provisioned a cache store; together with the
   // active Deployment's ISR prefix, its presence is what lets the worker
   // read the ISR cache directly.
@@ -960,7 +966,11 @@ export default {
         ? normalizeBaseDomain(env.OCEL_PREVIEW_BASE_DOMAIN)
         : "";
     if (baseDomain) {
-      const label = previewPointer(new URL(request.url).host, baseDomain);
+      const label = previewPointer(
+        new URL(request.url).host,
+        baseDomain,
+        env.OCEL_PREVIEW_LABEL_SUFFIX,
+      );
       if (label === null) return deploymentNotFoundResponse();
       pointer = label;
     }
