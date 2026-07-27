@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"net"
 	"net/http"
 	"os"
@@ -59,12 +58,10 @@ func TestRunRun_NoLeader_StandaloneResolvesRunsAndTearsDownWithoutLockfile(t *te
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
-export default {
-  slug: "test-app",
-  projectId: %q,
-};
-`, projectID))
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeLink(t, root, resolveServer.URL, projectID)
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 	envDumpPath := filepath.Join(root, "env.out")
@@ -118,12 +115,10 @@ func TestRunRun_WithRunningLeader_ReusesLeaderEnvAndRunsOnce(t *testing.T) {
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
-export default {
-  slug: "test-app",
-  projectId: %q,
-};
-`, projectID))
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeLink(t, root, resolveServer.URL, projectID)
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -192,7 +187,8 @@ func TestRunRun_WithRunningLeader_DoesNotWaitOnFollowerUpdatesOrDisconnect(t *te
 	projectID := "proj_" + t.Name()
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
-	srv := devserver.New("https://api.example.com", "tok", projectID, "http://127.0.0.1:0")
+	const apiURL = "https://api.example.com"
+	srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
 	srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"conn"}`})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -208,12 +204,10 @@ func TestRunRun_WithRunningLeader_DoesNotWaitOnFollowerUpdatesOrDisconnect(t *te
 	}
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
-export default {
-  slug: "test-app",
-  projectId: %q,
-};
-`, projectID))
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeLink(t, root, apiURL, projectID)
 
 	var stdout, stderr bytes.Buffer
 	done := make(chan error, 1)

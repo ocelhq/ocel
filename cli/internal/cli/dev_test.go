@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cli/internal/cloudlink"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
@@ -77,7 +78,48 @@ func TestRunDev_NotLoggedIn_ReturnsExitErrorWithLoginInstruction(t *testing.T) {
 	}
 }
 
-func TestRunDev_HappyPath_DiscoversDeclaresSyncsAndSpawnsWithExitCode(t *testing.T) {
+// Linking is interactive, so an unlinked directory with no terminal has no
+// flow to run — dev must say so and name the command that works non-interactively.
+func TestRunDev_Unlinked_NonTTY_ErrorsTowardOcelLink(t *testing.T) {
+	prev := loadCredentials
+	loadCredentials = func() (credentials.Credentials, error) {
+		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+	}
+	defer func() { loadCredentials = prev }()
+
+	var stdout, stderr bytes.Buffer
+	err := runDev(context.Background(), nil, t.TempDir(), []string{"true"}, &stdout, &stderr, strings.NewReader(""))
+
+	if err == nil {
+		t.Fatal("runDev: expected an error for an unlinked directory, got nil")
+	}
+	if !strings.Contains(err.Error(), "ocel link") {
+		t.Fatalf("err = %q, want it to point at `ocel link`", err.Error())
+	}
+}
+
+// A link written against another control plane doesn't apply here, so dev
+// treats the directory as unlinked rather than reusing the wrong project.
+func TestRunDev_LinkedToAnotherControlPlane_NonTTY_ErrorsTowardOcelLink(t *testing.T) {
+	prev := loadCredentials
+	loadCredentials = func() (credentials.Credentials, error) {
+		return credentials.Credentials{APIURL: "https://api.example.com", AccessToken: "tok"}, nil
+	}
+	defer func() { loadCredentials = prev }()
+
+	root := t.TempDir()
+	writeLink(t, root, "https://elsewhere.example.com", "proj_elsewhere")
+
+	err := runDev(context.Background(), nil, root, []string{"true"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
+
+	if err == nil || !strings.Contains(err.Error(), "ocel link") {
+		t.Fatalf("runDev err = %v, want it to point at `ocel link`", err)
+	}
+}
+
+// Dev needs only the project root and discovery.paths, so it runs in a
+// directory that has a link but no ocel.config.ts at all.
+func TestRunDev_HappyPath_NoConfigFile_DiscoversDeclaresSyncsAndSpawnsWithExitCode(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
 	}
@@ -91,13 +133,11 @@ func TestRunDev_HappyPath_DiscoversDeclaresSyncsAndSpawnsWithExitCode(t *testing
 	}
 	defer func() { loadCredentials = prev }()
 
+	projectID := "proj_" + t.Name()
+	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
+
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default {
-  slug: "test-app",
-  projectId: "proj_123",
-};
-`)
+	writeLink(t, root, resolveServer.URL, projectID)
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
@@ -163,12 +203,10 @@ func TestRunDev_SecondRunForSameProject_BecomesFollowerAndReceivesPushedEnv(t *t
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
-export default {
-  slug: "test-app",
-  projectId: %q,
-};
-`, projectID))
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeLink(t, root, resolveServer.URL, projectID)
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
 declare global {
   var __ocelRegister: Promise<unknown>[];
@@ -259,12 +297,10 @@ func TestRunDev_Leader_FileChangeReResolvesAndPushesUpdatedEnvToFollower(t *test
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
-export default {
-  slug: "test-app",
-  projectId: %q,
-};
-`, projectID))
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeLink(t, root, resolveServer.URL, projectID)
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareResourceScript("main"))
 
 	leaderCtx, cancelLeader := context.WithCancel(context.Background())
@@ -330,7 +366,8 @@ func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZer
 	projectID := "proj_" + t.Name()
 	t.Cleanup(func() { _ = lockfile.Remove(projectID) })
 
-	srv := devserver.New("https://api.example.com", "tok", projectID, "http://127.0.0.1:0")
+	const apiURL = "https://api.example.com"
+	srv := devserver.New(apiURL, "tok", projectID, "http://127.0.0.1:0")
 	srv.PushEnv(map[string]string{"OCEL_RESOURCE_POSTGRES_main": `{"connectionString":"conn"}`})
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -345,12 +382,10 @@ func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZer
 	}
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "ocel.config.ts"), fmt.Sprintf(`
-export default {
-  slug: "test-app",
-  projectId: %q,
-};
-`, projectID))
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeLink(t, root, apiURL, projectID)
 
 	startedPath := filepath.Join(root, "started")
 	appArgs := []string{"sh", "-c", "touch " + startedPath + "; sleep 10"}
@@ -503,6 +538,16 @@ func waitForFile(t *testing.T, path string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("%q never appeared", path)
+}
+
+// writeLink records dir as linked to projectID on the control plane at apiURL
+// — what `ocel link` writes, and what dev now takes its cloud identity from.
+func writeLink(t *testing.T, dir, apiURL, projectID string) {
+	t.Helper()
+	link := cloudlink.Link{APIURL: apiURL, OrganizationID: "org_1", ProjectID: projectID, ProjectName: "Test"}
+	if err := cloudlink.Write(dir, link); err != nil {
+		t.Fatalf("write link: %v", err)
+	}
 }
 
 func writeFile(t *testing.T, path, contents string) {
