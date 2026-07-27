@@ -3,14 +3,14 @@ import { createUploadClient } from "@ocel/sdk/blob/client";
 import { afterAll, beforeAll, describe, expect, inject, it } from "vitest";
 import {
   base,
-  deletePlaceholderConfig,
   type DevHandle,
   type ExampleSpec,
   minioReachable,
-  resetPlaceholderConfig,
+  restoreConfig,
   runInit,
   runMigrate,
   startDev,
+  stashConfig,
   waitForHealth,
 } from "./harness";
 
@@ -46,7 +46,7 @@ export function describeExample(spec: ExampleSpec) {
     let dev: DevHandle | undefined;
 
     beforeAll(async () => {
-      await deletePlaceholderConfig(spec);
+      await stashConfig(spec);
       await runInit(spec, token, runId);
       await runMigrate(spec, token);
       dev = startDev(spec, token);
@@ -55,7 +55,7 @@ export function describeExample(spec: ExampleSpec) {
 
     afterAll(async () => {
       await dev?.stop();
-      await resetPlaceholderConfig(spec);
+      await restoreConfig(spec);
     });
 
     it("creates, lists, gets, and deletes a todo", async () => {
