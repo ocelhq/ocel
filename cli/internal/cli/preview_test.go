@@ -3,12 +3,10 @@ package cli
 import (
 	"bytes"
 	"context"
-	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 )
@@ -276,28 +274,7 @@ func TestRunPreviewLs_RendersEnvironments(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
-func TestRunPreviewUp_NotLoggedIn_ReturnsExitErrorWithLoginInstruction(t *testing.T) {
-	prev := loadCredentials
-	loadCredentials = func() (credentials.Credentials, error) {
-		return credentials.Credentials{}, credentials.ErrNotLoggedIn
-	}
-	defer func() { loadCredentials = prev }()
-
-	var stderr bytes.Buffer
-	err := runPreviewUp(context.Background(), t.TempDir(), previewUpOptions{}, &bytes.Buffer{}, &stderr)
-
-	var exitErr *ExitError
-	if !errors.As(err, &exitErr) {
-		t.Fatalf("runPreviewUp err = %v (%T), want *ExitError", err, err)
-	}
-	if !strings.Contains(stderr.String(), "ocel login") {
-		t.Fatalf("stderr = %q, want it to mention `ocel login`", stderr.String())
-	}
-}
-
 func TestRunPreviewUp_NoProviderConfigured_ErrorsBeforeAnySpawn(t *testing.T) {
-	setLoggedIn(t)
-
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {

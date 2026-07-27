@@ -64,11 +64,6 @@ func init() {
 // radius, requires the operator to type the project name, then drives the
 // provider's DestroyProject RPC.
 func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
 	// A slip must never nuke production, so destroy has no --yes and no
 	// non-interactive path: without a terminal to type the project name into,
 	// refuse before touching anything.
@@ -142,10 +137,6 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 // state — leaving the account-level preview bootstrap intact. Like production
 // destroy it refuses without a terminal and requires typing the project name.
 func runDestroyPreviewProject(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
 	if !isReaderTTY(stdin) {
 		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; it cannot be run non-interactively")
 	}

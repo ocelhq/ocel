@@ -74,11 +74,6 @@ func init() {
 // and drives the provider's ListPromotions RPC, rendering each promotion
 // newest-first with its active marker.
 func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -112,11 +107,6 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 // active one. It never runs as part of `ocel deploy` — it is a standalone
 // command the user runs explicitly.
 func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, stderr io.Writer) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err

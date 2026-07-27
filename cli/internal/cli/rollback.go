@@ -61,11 +61,6 @@ func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, 
 		return err
 	}
 
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err

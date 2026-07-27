@@ -24,7 +24,7 @@ import (
 )
 
 // currentGitBranch resolves the current git branch of dir. A package var so
-// tests can stub it without a real repo, mirroring loadCredentials.
+// tests can stub it without a real repo.
 var currentGitBranch = func(dir string) (string, error) {
 	out, err := exec.Command("git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD").Output()
 	if err != nil {
@@ -169,11 +169,6 @@ func init() {
 // outputs on success. `ocel preview` and `ocel deploy` share the Deploy RPC and
 // diverge only by the Environment sent.
 func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout, stderr io.Writer) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -250,11 +245,6 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 // preview infrastructure, prompts before destroying a persistent preview, and
 // drives the provider's Destroy RPC.
 func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -311,11 +301,6 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 // runPreviewLs drives the provider's ListEnvironments RPC and renders each
 // preview environment.
 func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -345,10 +330,6 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 // preview class + persistent lifecycle + the name). Ephemeral previews have no
 // prune — they are torn down whole with `ocel preview rm`, never trimmed.
 func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, stdout, stderr io.Writer) error {
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
 	if opts.name == "" {
 		return fmt.Errorf("`ocel preview prune` requires --name: only persistent previews are pruned")
 	}
