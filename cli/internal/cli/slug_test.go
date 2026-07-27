@@ -3,6 +3,8 @@ package cli
 import (
 	"strings"
 	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
 func TestSlugify(t *testing.T) {
@@ -21,24 +23,8 @@ func TestSlugify(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("slugify(%q) = %q, want %q", tc.name, got, tc.want)
 		}
-		if got != "" && !validSlug(got) {
+		if got != "" && !projectconfig.ValidSlug(got) {
 			t.Errorf("slugify(%q) = %q, which is not a valid slug", tc.name, got)
-		}
-	}
-}
-
-func TestValidSlug(t *testing.T) {
-	valid := []string{"a", "my-app", "app123", "a" + strings.Repeat("b", 62)}
-	invalid := []string{"", "-app", "app-", "My-App", "my_app", "my.app", strings.Repeat("a", 64)}
-
-	for _, s := range valid {
-		if !validSlug(s) {
-			t.Errorf("validSlug(%q) = false, want true", s)
-		}
-	}
-	for _, s := range invalid {
-		if validSlug(s) {
-			t.Errorf("validSlug(%q) = true, want false", s)
 		}
 	}
 }
