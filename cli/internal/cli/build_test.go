@@ -17,7 +17,6 @@ func TestRunBuild_BuildsWithoutLoginOrProvider(t *testing.T) {
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  projectId: "proj_build",
   apps: [{ name: "api", path: ".", framework: "express" }],
 };
 `)
@@ -47,7 +46,7 @@ export default {
 func TestRunBuild_BuildFailure(t *testing.T) {
 	root := t.TempDir()
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app", projectId: "proj_build" };
+export default { slug: "test-app" };
 `)
 
 	prev := buildApp

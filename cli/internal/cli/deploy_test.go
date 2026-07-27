@@ -182,7 +182,6 @@ func TestRunDeploy_NoProviderConfigured_ErrorsBeforeAnySpawn(t *testing.T) {
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  projectId: "proj_no_provider",
 };
 `)
 
@@ -518,7 +517,6 @@ func setUpDeployFixture(t *testing.T) (root, sockPath string) {
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  projectId: "proj_deploy_happy",
   provider: { package: "@ocel/provider-aws", options: {} },
 };
 `)
@@ -578,7 +576,6 @@ func addAppToFixtureConfig(t *testing.T, root string) {
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  projectId: "proj_deploy_happy",
   provider: { package: "@ocel/provider-aws", options: {} },
   apps: [{ name: "api", path: "apps/api", framework: "express" }],
 };
@@ -644,7 +641,6 @@ func TestRunDeploy_SingleApp_ProducesExactlyOneAttributedApp(t *testing.T) {
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  projectId: "proj_deploy_happy",
   provider: { package: "@ocel/provider-aws", options: {} },
   apps: [{ name: "api", path: "apps/api", framework: "express", domains: { production: "Api.Acme.com" } }],
 };
@@ -680,7 +676,6 @@ func TestRunDeploy_TwoApps_AttributesFunctionsToTheirApps(t *testing.T) {
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
 export default {
   slug: "test-app",
-  projectId: "proj_deploy_happy",
   provider: { package: "@ocel/provider-aws", options: {} },
   apps: [
     { name: "web", path: "apps/web", framework: "express", domains: { production: "acme.com" } },

@@ -91,7 +91,6 @@ func TestResolve_ValidConfig(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   discovery: { paths: ["resources"] },
 };
 `)
@@ -113,7 +112,6 @@ func TestResolve_ParsesProductionDomain(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   domains: { production: "App.Acme.com" },
 };
 `)
@@ -132,7 +130,6 @@ func TestResolve_NoDomainsYieldsEmptyMap(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
 };
 `)
 
@@ -150,7 +147,6 @@ func TestResolve_ReturnsConfigDirectory(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
 };
 `)
 
@@ -168,7 +164,6 @@ func TestResolve_DefaultsDiscoveryPaths(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_456",
 };
 `)
 
@@ -198,7 +193,6 @@ func TestResolve_UnparseableConfig(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_789"
   this is not valid typescript +++
 `)
 
@@ -317,7 +311,6 @@ func TestResolve_MissingSlug(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `
 export default {
-  projectId: "proj_123",
 };
 `)
 
@@ -362,7 +355,6 @@ func TestResolve_InvalidSlugRejected(t *testing.T) {
 			writeConfig(t, root, `
 export default {
   slug: "`+bad+`",
-  projectId: "proj_123",
 };
 `)
 			_, err := Resolve(root)
@@ -378,7 +370,6 @@ func TestResolve_ValidSlugAccepted(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "acme-web-1",
-  projectId: "proj_123",
 };
 `)
 	cfg, err := Resolve(root)
@@ -395,7 +386,6 @@ func TestResolve_ParsesProviderDescriptor(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   provider: { package: "@ocel/provider-aws", options: { region: "us-east-1" } },
 };
 `)
@@ -420,7 +410,6 @@ func TestResolve_ProviderOptionsDefaultToEmptyObject(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   provider: { package: "@ocel/provider-aws" },
 };
 `)
@@ -439,7 +428,6 @@ func TestResolve_ProviderAbsentByDefault(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
 };
 `)
 
@@ -484,7 +472,6 @@ func TestResolve_ParsesApps(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   apps: [
     { name: "api", path: "services/api", framework: "express", entrypoint: "src/main.ts" },
     { name: "web", path: "services/web", framework: "express" },
@@ -516,7 +503,6 @@ func TestResolve_AppsAbsentByDefault(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
 };
 `)
 
@@ -534,7 +520,6 @@ func TestResolve_AppComputeDefaultsToServerless(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   apps: [{ name: "api", path: "services/api", framework: "express" }],
 };
 `)
@@ -553,7 +538,6 @@ func TestResolve_AppComputeNotSettableViaConfig(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   apps: [{ name: "api", path: "services/api", framework: "express", compute: "vm" }],
 };
 `)
@@ -572,7 +556,6 @@ func TestResolve_AppDuplicateNamesError(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   apps: [
     { name: "api", path: "services/api", framework: "express" },
     { name: "api", path: "services/other", framework: "express" },
@@ -601,7 +584,6 @@ func TestResolve_AppUnsafeNameErrors(t *testing.T) {
 			writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   apps: [{ name: "`+name+`", path: "services/api", framework: "express" }],
 };
 `)
@@ -626,7 +608,6 @@ func TestResolve_AppNameAllowsHarmlessPathSegments(t *testing.T) {
 			writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   apps: [{ name: "`+name+`", path: "services/api", framework: "express" }],
 };
 `)
@@ -647,7 +628,6 @@ func TestResolve_AppMissingPathErrors(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   apps: [{ name: "api", framework: "express" }],
 };
 `)
@@ -666,7 +646,6 @@ func TestResolve_WritesBuildArtifactsUnderOcelDir(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
 };
 `)
 
@@ -685,7 +664,6 @@ func TestResolve_ParsesPerAppDomain(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   domains: { production: "acme.com" },
   apps: [
     { name: "web", path: "apps/web", framework: "express", domains: { production: "App.Acme.com" } },
@@ -718,7 +696,6 @@ func TestResolve_ParsesPreviewWildcardDomain(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   domains: { production: "acme.com", preview: "*.Preview.Acme.com" },
 };
 `)
@@ -737,7 +714,6 @@ func TestResolve_RejectsInvalidPreviewDomain(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   domains: { preview: "preview.acme.com" },
 };
 `)
@@ -792,7 +768,6 @@ func TestResolve_ProductionAcceptsListOfDomains(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   domains: { production: ["Acme.com", "www.acme.com", "acme.com"] },
 };
 `)
@@ -812,7 +787,6 @@ func TestResolve_RejectsProductionDomainEqualToPreview(t *testing.T) {
 	writeConfig(t, root, `
 export default {
   slug: "test-app",
-  projectId: "proj_123",
   domains: { production: ["*.acme.com"], preview: "*.acme.com" },
 };
 `)
