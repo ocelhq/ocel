@@ -82,27 +82,22 @@ func init() {
 // checkout; nothing verifies the output is current.
 const prebuiltFlagUsage = "Deploy the existing .ocel/output instead of building the apps first (produce it with ocel build)"
 
-// runDeploy resolves the project config, verifies auth, requires a
-// configured provider, spawns the provider binary, and preflights it —
-// authenticating the credentials the deploy needs and printing the "Running
-// with:" banner — before the user confirms and before the app build runs, so a
-// missing or invalid credential aborts up front rather than after paying for a
-// build. It then builds the deploy manifest, drives the provider's Deploy RPC
-// to a terminal result, and tears the provider down. Every pre-spawn error —
-// not logged in, no provider configured, malformed or missing config — is
-// returned before anything is spawned.
+// runDeploy resolves the project config, requires a configured provider,
+// spawns the provider binary, and preflights it — authenticating the
+// credentials the deploy needs and printing the "Running with:" banner — before
+// the user confirms and before the app build runs, so a missing or invalid
+// credential aborts up front rather than after paying for a build. It then
+// builds the deploy manifest, drives the provider's Deploy RPC to a terminal
+// result, and tears the provider down. Every pre-spawn error — no provider
+// configured, malformed or missing config — is returned before anything is
+// spawned.
 //
-// Deploy makes no call to the Ocel API: the project id comes from the
-// resolved config, and the manifest is built entirely locally. Login is only
-// gated to confirm the user is authenticated.
+// Deploy makes no call to the Ocel API: the project id comes from the resolved
+// config, and the manifest is built entirely locally. It authenticates only to
+// the user's own cloud account, through the provider binary.
 func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	if err := validateTag(opts.tag); err != nil {
 		return err
-	}
-
-	if _, err := loadCredentials(); err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
 	}
 
 	cfg, err := projectconfig.Resolve(cwd)

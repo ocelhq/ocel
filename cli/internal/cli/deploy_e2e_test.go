@@ -202,8 +202,6 @@ func requireRealProviderEnv(t *testing.T) string {
 		t.Skipf("packages/ocel is not built (missing %s); run `pnpm --filter ocel build` first", ocelDist)
 	}
 
-	setLoggedIn(t)
-
 	prevTimeout := deployReadyTimeout
 	deployReadyTimeout = 10 * time.Second
 	t.Cleanup(func() { deployReadyTimeout = prevTimeout })
