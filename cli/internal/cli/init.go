@@ -1,249 +1,204 @@
 package cli
 
 import (
-	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/cobra"
 
-	"github.com/ocelhq/ocel/cli/internal/authclient"
-	"github.com/ocelhq/ocel/cli/internal/projectclient"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
+
+// defaultProviderPackage is the provider `ocel init` scaffolds with. It is the
+// only one, so init installs it without asking.
+const defaultProviderPackage = "@ocel/provider-aws"
 
 // initOptions holds the flags accepted by `ocel init`.
 type initOptions struct {
-	yes    bool
-	org    string
-	apiURL string
+	provider string
 }
 
 var initOpts initOptions
 
-// initCmd scaffolds a new Ocel project.
+// initCmd makes the current directory deployable.
 var initCmd = &cobra.Command{
-	Use:   "init [name]",
-	Short: "Create a new Ocel project",
-	Args:  cobra.MaximumNArgs(1),
+	Use:   "init [slug]",
+	Short: "Make this directory deployable",
+	Long: "Writes ocel.config.ts and adds the provider package to your dependencies.\n\n" +
+		"Runs entirely offline: it neither signs you in nor contacts Ocel Cloud.\n\n" +
+		"The slug is the project's deployment identity — every stack and resource\n" +
+		"ocel creates in your own cloud account is keyed on it, so changing it later\n" +
+		"forks a new project. It defaults to this directory's name.\n\n" +
+		"Run `ocel link` to associate this directory with an Ocel Cloud project.",
+	Args: cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		cwd, err := os.Getwd()
 		if err != nil {
 			return fmt.Errorf("determine working directory: %w", err)
 		}
 
-		name := ""
+		slug := ""
 		if len(args) > 0 {
-			name = args[0]
+			slug = args[0]
 		}
 
-		opts := initOpts
-		// An explicit --api-url wins; otherwise fall back to the persisted
-		// credentials' API URL, then the resolved default (effectiveAPIURL).
-		creds, _ := loadCredentials()
-		opts.apiURL = effectiveAPIURL(cmd, creds.APIURL)
-
-		return runInit(cmd.Context(), cwd, name, opts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+		return runInit(cmd.Context(), cwd, slug, initOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
 	},
 }
 
 func init() {
-	initCmd.Flags().BoolVarP(&initOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
-	initCmd.Flags().StringVar(&initOpts.org, "org", "", "Select an organization by slug, bypassing the interactive picker")
+	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderPackage, "Provider package to scaffold with")
 }
 
-// runInit resolves a project name, confirms with the user, resolves their
-// organization, creates the project via the control-plane API, and
-// scaffolds ocel.config.ts in cwd.
-func runInit(ctx context.Context, cwd string, name string, opts initOptions, stdout, stderr io.Writer, stdin io.Reader) error {
-	scanner := bufio.NewScanner(stdin)
-
-	name = strings.TrimSpace(name)
-	if name == "" {
-		if !isReaderTTY(stdin) {
-			return errors.New("project name required — pass it as an argument, e.g. `ocel init my-app`")
-		}
-		fmt.Fprint(stdout, "Project name: ")
-		if scanner.Scan() {
-			name = strings.TrimSpace(scanner.Text())
-		}
-		if name == "" {
-			return errors.New("project name required — pass it as an argument, e.g. `ocel init my-app`")
-		}
-	}
-
-	slug := slugify(name)
-	if slug == "" {
-		return fmt.Errorf("could not derive a valid slug from %q — try a name with at least one alphanumeric character", name)
-	}
-
-	configPath := filepath.Join(cwd, "ocel.config.ts")
-	if _, err := os.Stat(configPath); err == nil {
-		return errors.New("ocel.config.ts already exists in this directory.")
-	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("check for existing ocel.config.ts: %w", err)
-	}
-
-	creds, err := loadCredentials()
-	if err != nil {
-		fmt.Fprintln(stderr, "You're not logged in. Run `ocel login` first.")
-		return &ExitError{Code: 1}
-	}
-
-	fmt.Fprintf(stdout, "This will create project %q in the current directory.\n", name)
-	if !opts.yes {
-		fmt.Fprint(stdout, "Continue? (Y/n) ")
-		// No line available to read (e.g. a closed/empty pipe) means there's
-		// no one there to answer the prompt; a real TTY simply blocks here
-		// until the user responds, and a piped answer (like "n\n" in tests)
-		// is read and honored either way.
-
-		if !scanner.Scan() {
-			if err := scanner.Err(); err != nil {
-				return fmt.Errorf("failed to read input: %w", err)
-			}
-			return errors.New("confirmation required — pass --yes to run non-interactively.")
-		}
-
-		answer := strings.TrimSpace(scanner.Text())
-		if answer == "n" || strings.EqualFold(answer, "no") {
-			fmt.Fprintln(stdout, "Aborted.")
-			return nil
-		}
-	}
-
-	apiURL := strings.TrimRight(opts.apiURL, "/")
-	authClient := authclient.New(apiURL)
-	projectClient := projectclient.New(apiURL)
-
-	org, err := resolveOrganization(ctx, authClient, creds.AccessToken, opts, stdout, stdin, scanner)
+// runInit scaffolds ocel.config.ts in projectDir and adds the provider package
+// to its dependencies. slug is the requested project slug, empty to derive one
+// from the directory name.
+func runInit(ctx context.Context, projectDir, slug string, opts initOptions, stdout, stderr io.Writer) error {
+	slug, err := resolveSlug(projectDir, slug)
 	if err != nil {
 		return err
 	}
 
-	if err := authClient.SetActiveOrganization(ctx, creds.AccessToken, org.ID); err != nil {
-		return fmt.Errorf("failed to set active organization: %w", err)
+	providerPkg := strings.TrimSpace(opts.provider)
+	if providerPkg == "" {
+		providerPkg = defaultProviderPackage
 	}
-	fmt.Fprintf(stdout, "✓ Using organization %s\n", org.Name)
 
-	var project *projectclient.Project
-	err = withSpinner(stdout, fmt.Sprintf("Creating project %q...", name), func() error {
-		p, createErr := projectClient.CreateProject(ctx, creds.AccessToken, name, slug)
-		if createErr != nil {
-			return createErr
-		}
-		project = p
-		return nil
-	})
-	if err != nil {
-		if projectclient.IsConflict(err) {
-			return fmt.Errorf("a project named %q already exists in %s. Try `ocel init` with a different name.", name, org.Name)
-		}
-		return fmt.Errorf("failed to create project: %w", err)
+	configPath := filepath.Join(projectDir, projectconfig.ConfigFileName)
+	if _, err := os.Stat(configPath); err == nil {
+		return fmt.Errorf("%s already exists in this directory.", projectconfig.ConfigFileName)
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("check for existing %s: %w", projectconfig.ConfigFileName, err)
 	}
-	fmt.Fprintf(stdout, "✓ Created project (id: %s)\n", project.ID)
 
-	configSlug := project.Slug
-	if configSlug == "" {
-		configSlug = slug
+	if err := os.WriteFile(configPath, []byte(configTemplate(slug, providerPkg)), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", projectconfig.ConfigFileName, err)
 	}
-	configContent := fmt.Sprintf("import { defineConfig } from \"@ocel/sdk/config\";\n\nexport default defineConfig({\n  slug: %q,\n  projectId: %q,\n});\n", configSlug, project.ID)
-	if err := os.WriteFile(configPath, []byte(configContent), 0o644); err != nil {
-		return fmt.Errorf("created project (id: %s) but failed to write ocel.config.ts: %w", project.ID, err)
-	}
-	fmt.Fprintln(stdout, "✓ Wrote ocel.config.ts")
+	fmt.Fprintf(stdout, "✓ Wrote %s (slug: %s)\n", projectconfig.ConfigFileName, slug)
+
+	addProviderDependency(ctx, projectDir, providerPkg, stdout, stderr)
 
 	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "Run `ocel dev` to start local development.")
+	fmt.Fprintln(stdout, "Run `ocel deploy` to deploy to your own cloud, or `ocel dev` to develop against Ocel Cloud.")
 
 	return nil
 }
 
-// resolveOrganization determines which organization to use for the new
-// project: the sole organization the user belongs to, the one matching
-// opts.org, or an interactive pick among several. scanner reads from the
-// same stdin as the rest of runInit's prompts — it must be reused rather
-// than wrapped again, since a second bufio.Scanner over the same
-// underlying reader could silently drop bytes already buffered by the
-// first one.
-func resolveOrganization(ctx context.Context, client *authclient.Client, accessToken string, opts initOptions, stdout io.Writer, stdin io.Reader, scanner *bufio.Scanner) (*authclient.Organization, error) {
-	var orgs []authclient.Organization
-	err := withSpinner(stdout, "Resolving organization...", func() error {
-		list, listErr := client.ListOrganizations(ctx, accessToken)
-		if listErr != nil {
-			return listErr
+// resolveSlug settles the project's slug: the requested one, or the directory
+// name slugified. Both are checked against the rule the config resolver
+// enforces, so init never writes a config that later fails to load.
+func resolveSlug(projectDir, requested string) (string, error) {
+	requested = strings.TrimSpace(requested)
+	if requested == "" {
+		dir := filepath.Base(projectDir)
+		derived := slugify(dir)
+		if derived == "" {
+			return "", fmt.Errorf("could not derive a slug from directory %q — pass one, e.g. `ocel init my-app`", dir)
 		}
-		orgs = list
-		return nil
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve organization: %w", err)
+		return derived, nil
 	}
 
-	if len(orgs) == 0 {
-		return nil, errors.New("you don't belong to any organization yet — create one on the Ocel dashboard first.")
+	if !validSlug(requested) {
+		return "", fmt.Errorf("invalid slug %q — a slug must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen", requested)
 	}
-
-	if len(orgs) == 1 {
-		return &orgs[0], nil
-	}
-
-	if opts.org != "" {
-		for i := range orgs {
-			if orgs[i].Slug == opts.org {
-				return &orgs[i], nil
-			}
-		}
-		return nil, fmt.Errorf("no organization with slug %q found; available: %s", opts.org, joinSlugs(orgs))
-	}
-
-	nonInteractive := opts.yes || !isReaderTTY(stdin)
-	if nonInteractive {
-		return nil, fmt.Errorf("multiple organizations found; pass --org <slug>. available: %s", joinSlugs(orgs))
-	}
-
-	fmt.Fprintln(stdout, "Multiple organizations found:")
-	for i, org := range orgs {
-		fmt.Fprintf(stdout, "  %d) %s (%s)\n", i+1, org.Name, org.Slug)
-	}
-	fmt.Fprint(stdout, "Select an organization (number or slug): ")
-
-	selection := ""
-	if scanner.Scan() {
-		selection = strings.TrimSpace(scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, fmt.Errorf("failed to read input: %w", err)
-	}
-	if selection == "" {
-		return nil, errors.New("no organization selected; rerun `ocel init`.")
-	}
-
-	if idx, convErr := strconv.Atoi(selection); convErr == nil {
-		if idx < 1 || idx > len(orgs) {
-			return nil, fmt.Errorf("invalid selection %q; rerun `ocel init`.", selection)
-		}
-		return &orgs[idx-1], nil
-	}
-
-	for i := range orgs {
-		if orgs[i].Slug == selection {
-			return &orgs[i], nil
-		}
-	}
-	return nil, fmt.Errorf("invalid selection %q; rerun `ocel init`.", selection)
+	return requested, nil
 }
 
-// joinSlugs comma-joins the slugs of orgs, for use in error messages.
-func joinSlugs(orgs []authclient.Organization) string {
-	slugs := make([]string, len(orgs))
-	for i, org := range orgs {
-		slugs[i] = org.Slug
+// configTemplate renders the scaffolded ocel.config.ts.
+func configTemplate(slug, providerPkg string) string {
+	provider := providerIdentifier(providerPkg)
+	return fmt.Sprintf(`import { defineConfig } from "@ocel/sdk/config";
+import %s from %q;
+
+export default defineConfig({
+  slug: %q,
+  provider: %s(),
+});
+`, provider, providerPkg, slug, provider)
+}
+
+// providerIdentifier names a provider package's default export in the
+// scaffolded config: "@ocel/provider-aws" becomes "awsProvider".
+func providerIdentifier(pkg string) string {
+	base := pkg[strings.LastIndex(pkg, "/")+1:]
+	name := slugify(strings.TrimPrefix(strings.ToLower(base), "provider-"))
+	if name == "" || (name[0] >= '0' && name[0] <= '9') {
+		return "provider"
 	}
-	return strings.Join(slugs, ", ")
+
+	parts := strings.Split(name, "-")
+	ident := parts[0]
+	for _, part := range parts[1:] {
+		ident += strings.ToUpper(part[:1]) + part[1:]
+	}
+	return ident + "Provider"
+}
+
+// packageManager is a JS package manager, the lockfile that identifies it, and
+// the subcommand it adds a dependency with.
+type packageManager struct {
+	name       string
+	lockfile   string
+	addCommand string
+}
+
+var npmPackageManager = packageManager{name: "npm", lockfile: "package-lock.json", addCommand: "install"}
+
+// packageManagers is searched in order, so the first lockfile found wins when a
+// directory somehow carries more than one.
+var packageManagers = []packageManager{
+	{name: "pnpm", lockfile: "pnpm-lock.yaml", addCommand: "add"},
+	{name: "yarn", lockfile: "yarn.lock", addCommand: "add"},
+	{name: "bun", lockfile: "bun.lockb", addCommand: "add"},
+	npmPackageManager,
+}
+
+// detectPackageManager identifies dir's package manager by its lockfile,
+// defaulting to npm when there is none to go on.
+func detectPackageManager(dir string) packageManager {
+	for _, pm := range packageManagers {
+		if _, err := os.Stat(filepath.Join(dir, pm.lockfile)); err == nil {
+			return pm
+		}
+	}
+	return npmPackageManager
+}
+
+// runPackageManager executes argv in dir. A variable so tests can observe the
+// command without running an installer.
+var runPackageManager = func(ctx context.Context, dir string, argv []string, output io.Writer) error {
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	cmd.Dir = dir
+	cmd.Stdout = output
+	cmd.Stderr = output
+	return cmd.Run()
+}
+
+// addProviderDependency adds pkg to dir's dependencies with the package manager
+// its lockfile names. This is the one step that leaves the machine, so a
+// failure is reported rather than returned: the config is already written, and
+// a rerun of init would refuse to overwrite it.
+func addProviderDependency(ctx context.Context, dir, pkg string, stdout, stderr io.Writer) {
+	pm := detectPackageManager(dir)
+	argv := []string{pm.name, pm.addCommand, pkg}
+	command := strings.Join(argv, " ")
+
+	if _, err := os.Stat(filepath.Join(dir, "package.json")); err != nil {
+		fmt.Fprintf(stdout, "! No package.json here — run `%s` once you have one.\n", command)
+		return
+	}
+
+	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", pkg), func() error {
+		return runPackageManager(ctx, dir, argv, stderr)
+	})
+	if err != nil {
+		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", pkg, err, command)
+		return
+	}
+	fmt.Fprintf(stdout, "✓ Added %s\n", pkg)
 }
