@@ -92,9 +92,49 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 		pf := preflightResponse(req.GetRequiredClass(), preview, production)
 		resp.InfraClass = pf.GetInfraClass()
 		resp.InfrastructurePresent = pf.GetInfrastructurePresent()
+
+		wanted, _ := requiredSubstrate(req.GetRequiredClass(), preview, production)
+		resp.KnownSlugs = knownSlugs(ctx, awscfg, wanted, req.GetSlug())
 	}
 
 	return resp, nil
+}
+
+// knownSlugs names the other projects the required class's Pulumi backend
+// already holds stacks for, or nil when the deploying slug already owns stacks
+// there — the CLI's slug-drift signal. It answers nil without touching the
+// backend when the caller sent no slug (the commands that address existing
+// infrastructure by other means don't need the check and shouldn't pay for the
+// enumeration) or when the substrate isn't bootstrapped yet, in which case the
+// preflight is about to refuse anyway.
+//
+// Best-effort, matching the field's contract: the guard is advisory, so a
+// backend that could not be enumerated reports no known slugs rather than
+// failing a deploy that is otherwise fine.
+func knownSlugs(ctx context.Context, awscfg aws.Config, substrate bootstrap.Deployed, slug string) []string {
+	if slug == "" || !substrate.Present || substrate.StateBucket == "" {
+		return nil
+	}
+	passphrase, err := bootstrap.ReadPassphrase(ctx, ssm.NewFromConfig(awscfg))
+	if err != nil {
+		return nil
+	}
+	pulumiCmd, err := pulumirt.Ensure(ctx, nil)
+	if err != nil {
+		return nil
+	}
+	slugs, err := deploy.ProjectSlugsBesides(ctx, deploy.ListConfig{
+		Region:      awscfg.Region,
+		BackendURL:  "s3://" + substrate.StateBucket,
+		Passphrase:  passphrase,
+		ProjectName: pulumiProjectName,
+		Slug:        slug,
+		Pulumi:      pulumiCmd,
+	})
+	if err != nil {
+		return nil
+	}
+	return slugs
 }
 
 // preflightResponse maps the discovered substrates to a PreflightResponse for
@@ -104,10 +144,7 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 // exists, the other is reported so the caller's class guard fires an
 // informative mismatch; an empty account is reported absent.
 func preflightResponse(required deploymentsv1.Environment_Class, preview, production bootstrap.Deployed) *deploymentsv1.PreflightResponse {
-	wanted, other := production, preview
-	if required == deploymentsv1.Environment_CLASS_PREVIEW {
-		wanted, other = preview, production
-	}
+	wanted, other := requiredSubstrate(required, preview, production)
 	switch {
 	case wanted.Present:
 		return &deploymentsv1.PreflightResponse{InfraClass: classToEnum(wanted.Class), InfrastructurePresent: true}
@@ -116,6 +153,15 @@ func preflightResponse(required deploymentsv1.Environment_Class, preview, produc
 	default:
 		return &deploymentsv1.PreflightResponse{InfraClass: deploymentsv1.Environment_CLASS_UNSPECIFIED, InfrastructurePresent: false}
 	}
+}
+
+// requiredSubstrate splits the two discovered substrates into the one the
+// calling command requires and the one it doesn't. Pure.
+func requiredSubstrate(required deploymentsv1.Environment_Class, preview, production bootstrap.Deployed) (wanted, other bootstrap.Deployed) {
+	if required == deploymentsv1.Environment_CLASS_PREVIEW {
+		return preview, production
+	}
+	return production, preview
 }
 
 // classToEnum maps a bootstrap class marker to the provider contract enum.
