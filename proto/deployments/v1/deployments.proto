@@ -176,13 +176,15 @@ message Manifest {
   // schema_version lets a provider reject a manifest shape it doesn't
   // understand, e.g. "provider.v1".
   string schema_version = 1;
-  string project_id = 2;
   repeated ManifestResource resources = 3;
   repeated ManifestFunction functions = 4;
 
-  // slug is the project's stable, human-authored deployment identity (a
-  // DNS-label string). It keys the project's own instance in the shared
-  // deployments-store worker, distinct from project_id (the dev-cloud link).
+  reserved 2;
+
+  // slug is the project's identity: a stable, human-authored DNS-label string.
+  // Everything project-scoped derives from it — Pulumi stack names, root-stack
+  // state keys, and the project's instance in the shared deployments-store
+  // worker.
   string slug = 7;
 
   // domains maps a lowercased environment class ("production") to the custom
@@ -291,7 +293,7 @@ message DeployRequest {
 }
 
 // BootstrapRequest is the request for DeploymentService.Bootstrap. Bootstrap
-// is account-global, so it carries no manifest and no project id: only the
+// is account-global, so it carries no manifest and no slug: only the
 // provider's opaque options and the pinned protocol version.
 message BootstrapRequest {
   // options is always UTF-8 JSON bytes: `{}` when the provider was given no
@@ -324,17 +326,17 @@ message DestroyPreviewRequest {
   // request it can't speak.
   string protocol_version = 3;
 
-  // project_id scopes the teardown to one project. The Pulumi state backend is
+  // slug scopes the teardown to one project. The Pulumi state backend is
   // account-global, so identity alone is ambiguous across projects; the
   // provider addresses the exact per-project stack with it.
-  string project_id = 4;
+  string slug = 4;
 }
 
 // DestroyProjectRequest is the request for DeploymentService.DestroyProject. It
 // names no environment: a whole production project is the unit, so the provider
 // enumerates and tears down every stack the project owns. Like PruneRequest it
 // is project-scoped, carrying only the provider's opaque options, the pinned
-// protocol version, and the project id.
+// protocol version, and the slug.
 message DestroyProjectRequest {
   // options is always UTF-8 JSON bytes: `{}` when the provider was given no
   // options, never absent and never an empty string. The CLI never inspects
@@ -345,10 +347,10 @@ message DestroyProjectRequest {
   // request it can't speak.
   string protocol_version = 2;
 
-  // project_id scopes the teardown to one project. The Pulumi state backend is
+  // slug scopes the teardown to one project. The Pulumi state backend is
   // account-global, so the provider addresses this project's per-project stacks
   // (root state, infra stack, and every app-deploy stack) with it.
-  string project_id = 3;
+  string slug = 3;
 
   // environment selects the substrate to tear down. Absent (or production class)
   // destroys the whole production project. A preview environment destroys the
@@ -372,8 +374,8 @@ message PlanDestroyProjectRequest {
   // request it can't speak.
   string protocol_version = 2;
 
-  // project_id scopes the plan to one project.
-  string project_id = 3;
+  // slug scopes the plan to one project.
+  string slug = 3;
 }
 
 // PlanDestroyProjectResponse is the reply from
@@ -407,10 +409,10 @@ message ListEnvironmentsRequest {
   // request it can't speak.
   string protocol_version = 2;
 
-  // project_id scopes the listing to one project. The Pulumi state backend is
+  // slug scopes the listing to one project. The Pulumi state backend is
   // account-global, so the provider filters to this project's preview stacks
   // rather than every project's in the account.
-  string project_id = 3;
+  string slug = 3;
 }
 
 // ListEnvironmentsResponse is the reply from DeploymentService.ListEnvironments:
@@ -550,7 +552,7 @@ message ListPromotionsRequest {
   // request it can't speak.
   string protocol_version = 2;
 
-  string project_id = 3;
+  string slug = 3;
 }
 
 // ListPromotionsResponse is the reply from DeploymentService.ListPromotions:
@@ -570,7 +572,7 @@ message RollbackRequest {
   // request it can't speak.
   string protocol_version = 2;
 
-  string project_id = 3;
+  string slug = 3;
 
   // to is the promotion id to roll back to. Empty means "the promotion
   // immediately before the currently active one".
@@ -598,7 +600,7 @@ message PruneRequest {
   // request it can't speak.
   string protocol_version = 2;
 
-  string project_id = 3;
+  string slug = 3;
 
   // keep_n is how many of the newest Promotions to keep, always additionally
   // pinning the currently active one even if it falls outside this window.
