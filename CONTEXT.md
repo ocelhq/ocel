@@ -3,6 +3,29 @@
 The ubiquitous language for this project. Glossary only — no implementation
 details, no specs. See `docs/adr/` for decisions with lasting consequence.
 
+## Project identity & the cloud boundary
+
+- **Slug** — the project's sole identity: a DNS label in `ocel.config.ts`.
+  Everything project-scoped derives from it (Pulumi stack names, root-stack state
+  keys, the deployments-store DO instance), so it is effectively immutable —
+  changing it forks a new project with fresh infrastructure. Wherever these
+  entries say "per-project" or `<project>`, the key is the slug.
+
+- **Ocel Cloud** — the hosted control plane, layered *above* the CLI and
+  poppable. It is required for `ocel dev` (dev sandboxes are a cloud feature) and
+  for nothing else: `init`, `bootstrap`, `deploy`, `preview`, `destroy`,
+  `rollback`, and `deployments` run offline or on the user's own AWS
+  credentials.
+
+- **Link** — the association between a working tree and an Ocel Cloud
+  organization/project, held in `.ocel/link.json` (untracked) rather than in
+  `ocel.config.ts`, so a clone can be pointed at a different account. Created
+  inline by the first `ocel dev`; managed with `ocel link` / `ocel unlink`.
+
+- **Project root** — the nearest ancestor directory containing `ocel.config.ts`
+  or `.ocel/`, falling back to cwd. It anchors resource discovery and is the key
+  for dev leader election: one dev server per working tree.
+
 ## Deployment & Rollback
 
 - **Deployment** — the immutable set of artifacts produced for one app by a
