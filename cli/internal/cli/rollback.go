@@ -83,7 +83,7 @@ func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, 
 		resp, err := runner.Rollback(ctx, &deploymentsv1.RollbackRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 			To:              opts.to,
 			Tag:             opts.tag,
 		})

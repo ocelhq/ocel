@@ -22,7 +22,7 @@ const functionsGoldenPath = "testdata/golden_manifest_functions.json"
 // encoding/json instead, purely for this test's comparisons.
 type goldenManifest struct {
 	SchemaVersion string           `json:"schema_version"`
-	ProjectID     string           `json:"project_id"`
+	Slug          string           `json:"slug"`
 	Resources     []goldenResource `json:"resources"`
 	Functions     []goldenFunction `json:"functions,omitempty"`
 }
@@ -48,7 +48,7 @@ type goldenPostgres struct {
 }
 
 func toGolden(m *deploymentsv1.Manifest) goldenManifest {
-	g := goldenManifest{SchemaVersion: m.GetSchemaVersion(), ProjectID: m.GetProjectId()}
+	g := goldenManifest{SchemaVersion: m.GetSchemaVersion(), Slug: m.GetSlug()}
 	for _, r := range m.GetResources() {
 		gr := goldenResource{
 			LogicalName: r.GetLogicalName(),
@@ -96,22 +96,22 @@ func synthFunctions() []Function {
 	}
 }
 
-func TestBuild_CarriesProjectIdAndSlug(t *testing.T) {
-	manifest, err := Build("proj_1", "acme-web", nil, nil, nil, nil)
+func TestBuild_CarriesSlug(t *testing.T) {
+	manifest, err := Build("acme-web", nil, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if manifest.GetProjectId() != "proj_1" || manifest.GetSlug() != "acme-web" {
-		t.Errorf("projectId/slug = %q/%q, want proj_1/acme-web", manifest.GetProjectId(), manifest.GetSlug())
+	if manifest.GetSlug() != "acme-web" {
+		t.Errorf("slug = %q, want acme-web", manifest.GetSlug())
 	}
 }
 
 func TestBuild_GoldenFile_DeterministicOutput(t *testing.T) {
-	first, err := Build("proj_1", "proj-1", nil, nil, synthDeclarations(), nil)
+	first, err := Build("proj-1", nil, nil, synthDeclarations(), nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	second, err := Build("proj_1", "proj-1", nil, nil, synthDeclarations(), nil)
+	second, err := Build("proj-1", nil, nil, synthDeclarations(), nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -133,13 +133,13 @@ func TestBuild_GoldenFile_DeterministicOutput(t *testing.T) {
 
 func TestBuild_ReorderInvariance(t *testing.T) {
 	declarations := synthDeclarations()
-	inOrder, err := Build("proj_1", "proj-1", nil, nil, declarations, nil)
+	inOrder, err := Build("proj-1", nil, nil, declarations, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
 	reversed := []Declaration{declarations[1], declarations[0]}
-	reorderedManifest, err := Build("proj_1", "proj-1", nil, nil, reversed, nil)
+	reorderedManifest, err := Build("proj-1", nil, nil, reversed, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestBuild_ReorderInvariance(t *testing.T) {
 
 func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 	base := synthDeclarations()
-	before, err := Build("proj_1", "proj-1", nil, nil, base, nil)
+	before, err := Build("proj-1", nil, nil, base, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -163,7 +163,7 @@ func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 	withExtra := append(append([]Declaration{}, base...), Declaration{
 		Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "billing", Source: "app/billing.ts:2",
 	})
-	after, err := Build("proj_1", "proj-1", nil, nil, withExtra, nil)
+	after, err := Build("proj-1", nil, nil, withExtra, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -184,7 +184,7 @@ func TestBuild_AddResourceLeavesExistingLogicalNamesUnchanged(t *testing.T) {
 }
 
 func TestBuild_TypedConfigRoundTripsAsOneof(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, nil, []Declaration{
+	manifest, err := Build("proj-1", nil, nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Postgres: &resourcesv1.PostgresConfig{Version: "17"}, Source: "app/db.ts:5"},
 	}, nil)
 	if err != nil {
@@ -205,7 +205,7 @@ func TestBuild_TypedConfigRoundTripsAsOneof(t *testing.T) {
 }
 
 func TestBuild_BucketConfigRoundTripsAsOneof(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, nil, []Declaration{
+	manifest, err := Build("proj-1", nil, nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_BUCKET, ID: "storage", Bucket: &resourcesv1.BucketConfig{AllowedOrigins: []string{"https://app.example.com"}}, Source: "app/storage.ts:3"},
 	}, nil)
 	if err != nil {
@@ -229,7 +229,7 @@ func TestBuild_BucketConfigRoundTripsAsOneof(t *testing.T) {
 }
 
 func TestBuild_DuplicateTypeAndID_NamesBothDeclarationsAndSources(t *testing.T) {
-	_, err := Build("proj_1", "proj-1", nil, nil, []Declaration{
+	_, err := Build("proj-1", nil, nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/db.ts:5"},
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: "main", Source: "app/other.ts:12"},
 	}, nil)
@@ -257,7 +257,7 @@ func TestBuild_DuplicateTypeAndID_NamesBothDeclarationsAndSources(t *testing.T) 
 }
 
 func TestBuild_UnsupportedResourceType(t *testing.T) {
-	_, err := Build("proj_1", "proj-1", nil, nil, []Declaration{
+	_, err := Build("proj-1", nil, nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_UNSPECIFIED, ID: "main"},
 	}, nil)
 	if err == nil {
@@ -266,7 +266,7 @@ func TestBuild_UnsupportedResourceType(t *testing.T) {
 }
 
 func TestBuild_EmptyID(t *testing.T) {
-	_, err := Build("proj_1", "proj-1", nil, nil, []Declaration{
+	_, err := Build("proj-1", nil, nil, []Declaration{
 		{Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES, ID: ""},
 	}, nil)
 	if err == nil {
@@ -292,11 +292,11 @@ func TestNormalizeLogicalName(t *testing.T) {
 }
 
 func TestBuild_FunctionsGoldenFile_DeterministicOutput(t *testing.T) {
-	first, err := Build("proj_1", "proj-1", nil, nil, synthDeclarations(), synthFunctions())
+	first, err := Build("proj-1", nil, nil, synthDeclarations(), synthFunctions())
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	second, err := Build("proj_1", "proj-1", nil, nil, synthDeclarations(), synthFunctions())
+	second, err := Build("proj-1", nil, nil, synthDeclarations(), synthFunctions())
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -318,13 +318,13 @@ func TestBuild_FunctionsGoldenFile_DeterministicOutput(t *testing.T) {
 
 func TestBuild_FunctionsReorderInvariance(t *testing.T) {
 	functions := synthFunctions()
-	inOrder, err := Build("proj_1", "proj-1", nil, nil, nil, functions)
+	inOrder, err := Build("proj-1", nil, nil, nil, functions)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
 	reversed := []Function{functions[1], functions[0]}
-	reordered, err := Build("proj_1", "proj-1", nil, nil, nil, reversed)
+	reordered, err := Build("proj-1", nil, nil, nil, reversed)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -336,7 +336,7 @@ func TestBuild_FunctionsReorderInvariance(t *testing.T) {
 
 func TestBuild_CarriesDomains(t *testing.T) {
 	domains := map[string][]string{"production": {"app.acme.com", "www.acme.com"}}
-	manifest, err := Build("proj_1", "proj-1", domains, nil, nil, nil)
+	manifest, err := Build("proj-1", domains, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -346,7 +346,7 @@ func TestBuild_CarriesDomains(t *testing.T) {
 }
 
 func TestBuild_FunctionLogicalNameNormalized(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, nil, nil, []Function{
+	manifest, err := Build("proj-1", nil, nil, nil, []Function{
 		{Name: "Web API", Runtime: "nodejs24.x", Handler: "app/api.ts", ArtifactPath: "dist/api.zip", Framework: "express"},
 	})
 	if err != nil {
@@ -361,7 +361,7 @@ func TestBuild_FunctionLogicalNameNormalized(t *testing.T) {
 }
 
 func TestBuild_FunctionRouteIDCarriedDistinctFromLogicalName(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, nil, nil, []Function{
+	manifest, err := Build("proj-1", nil, nil, nil, []Function{
 		{Name: "api/documents", Runtime: "nodejs24.x", Handler: "route.js", ArtifactPath: "functions/api/documents.func", Framework: "next", RouteID: "/api/documents"},
 	})
 	if err != nil {
@@ -381,7 +381,7 @@ func TestBuild_CarriesAppsSortedByName(t *testing.T) {
 		{Name: "web", Framework: "next", Domains: map[string][]string{"production": {"example.com"}}},
 		{Name: "admin", Framework: "express"},
 	}
-	manifest, err := Build("proj_1", "proj-1", nil, apps, nil, []Function{
+	manifest, err := Build("proj-1", nil, apps, nil, []Function{
 		{Name: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "web"},
 		{Name: "admin", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b", Framework: "express", App: "admin"},
 	})
@@ -408,7 +408,7 @@ func TestBuild_CarriesAppsSortedByName(t *testing.T) {
 }
 
 func TestBuild_FunctionRecordsOwningApp(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, []App{{Name: "web", Framework: "express"}}, nil, []Function{
+	manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, nil, []Function{
 		{Name: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
 	})
 	if err != nil {
@@ -422,7 +422,7 @@ func TestBuild_FunctionRecordsOwningApp(t *testing.T) {
 // A project that configures no apps still deploys: the builder detects one at
 // the project root and names it, and that name must reach the manifest.
 func TestBuild_SynthesizesAppFromFunctionsWhenNoneConfigured(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, nil, nil, []Function{
+	manifest, err := Build("proj-1", nil, nil, nil, []Function{
 		{Name: "api/documents", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "next", App: "storefront"},
 		{Name: "index", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "b", Framework: "next", App: "storefront"},
 	})
@@ -444,7 +444,7 @@ func TestBuild_SynthesizesAppFromFunctionsWhenNoneConfigured(t *testing.T) {
 // Config may omit framework and let the builder detect it; the manifest app
 // should still report the framework its functions were built with.
 func TestBuild_ConfiguredAppFrameworkFilledFromItsFunctions(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, []App{{Name: "web"}}, nil, []Function{
+	manifest, err := Build("proj-1", nil, []App{{Name: "web"}}, nil, []Function{
 		{Name: "web", Runtime: "nodejs24.x", Handler: "h.js", ArtifactPath: "a", Framework: "express", App: "web"},
 	})
 	if err != nil {
@@ -457,7 +457,7 @@ func TestBuild_ConfiguredAppFrameworkFilledFromItsFunctions(t *testing.T) {
 
 // A configured app that emits no functions is still part of the project.
 func TestBuild_ConfiguredAppWithNoFunctionsStillAppears(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, []App{{Name: "web", Framework: "express"}}, nil, nil)
+	manifest, err := Build("proj-1", nil, []App{{Name: "web", Framework: "express"}}, nil, nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}
@@ -467,7 +467,7 @@ func TestBuild_ConfiguredAppWithNoFunctionsStillAppears(t *testing.T) {
 }
 
 func TestBuild_NoAppsAndNoFunctionsYieldsNoApps(t *testing.T) {
-	manifest, err := Build("proj_1", "proj-1", nil, nil, synthDeclarations(), nil)
+	manifest, err := Build("proj-1", nil, nil, synthDeclarations(), nil)
 	if err != nil {
 		t.Fatalf("Build: %v", err)
 	}

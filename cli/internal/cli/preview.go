@@ -294,7 +294,7 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 			Environment:     env,
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 		}
 		if err := runner.DestroyPreview(ctx, req, ui.Event); err != nil {
 			return err
@@ -329,7 +329,7 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 		resp, err := runner.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 		})
 		if err != nil {
 			return err
@@ -383,7 +383,7 @@ func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, 
 		if err := runner.Prune(ctx, &deploymentsv1.PruneRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
-			ProjectId:       cfg.ProjectID,
+			Slug:            cfg.Slug,
 			KeepN:           int32(opts.keep),
 			Environment:     env,
 		}, ui.Event); err != nil {

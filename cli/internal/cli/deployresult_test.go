@@ -35,8 +35,8 @@ func TestRunDeploy_Success_WritesDeployResult(t *testing.T) {
 	if got.SchemaVersion != deployresult.SchemaVersion {
 		t.Errorf("schemaVersion = %d, want %d", got.SchemaVersion, deployresult.SchemaVersion)
 	}
-	if got.ProjectID != "proj_deploy_happy" {
-		t.Errorf("projectId = %q, want the resolved config's", got.ProjectID)
+	if got.Slug != "test-app" {
+		t.Errorf("slug = %q, want the resolved config's", got.Slug)
 	}
 	if got.Environment.Class != "production" {
 		t.Errorf("environment.class = %q, want %q", got.Environment.Class, "production")
