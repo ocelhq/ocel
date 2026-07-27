@@ -1,0 +1,3536 @@
+{
+  "schema": 2,
+  "lastSweepId": "sweep-2026-07-28a",
+  "lastRunAt": "2026-07-27T22:08:35.081Z",
+  "notes": "sweep-2026-07-27g (8 waves x 5, 43 suites dispatched, 39 of them never-covered ground; rot checks dropped from wave 2 onward at the user's direction since no e2e-next issue is closed). Lambda quota verified 1000; ZERO throttles, consistent with sweep-f. Adapter-only pass rate 94.1% (80/85). FIVE failure clusters reduced to THREE root causes: two collapsed into the existing P0 ocelhq-9q8, two merged into one new issue ocelhq-slzm, one new issue ocelhq-2f8x. The headline lesson is that three of five clusters were NOT what their assertions said: 9q8's cases were content-type mislabelling surfacing as missing metadata and NaN timings, and slzm's were correct-but-late responses surfacing as broken actions. A WEAK confirm verdict on ocelhq-iud was escalated to a debugger and turned out CORRECT, which also uncovered a second, worker-side half of that bug (index.ts:471 static branch uses the original request URL, so no request path can retrieve the object). New structural trap 6 recorded: fixtures shipping nodejs-runtime middleware/proxy die at build under ocelhq-dly and burn a slot invisibly to all five earlier screens. Footprint: 52/52 slugs verified clean, account-wide ocel:project lambda count 0, 0 sweep-matching Cloudflare worker scripts.",
+  "totalSuitesInTree": 690,
+  "suites": {
+    "test/e2e/app-dir/actions/app-action.test.ts": {
+      "lastRun": "sweep-2026-07-28a",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 55,
+        "failed": 20,
+        "known": 0,
+        "skipped": 3
+      },
+      "projectSlug": "e2e-sweep-2026-07-28a-b32d822b",
+      "openIssues": [
+        "ocelhq-7og",
+        "ocelhq-dan",
+        "ocelhq-e7w",
+        "ocelhq-qcpc",
+        "ocelhq-r6ul"
+      ],
+      "failedTests": {
+        "app-dir action handling should push new route when redirecting": "ocelhq-qcpc",
+        "app-dir action handling should support formData and redirect": null,
+        "app-dir action handling should support hoc auth wrappers": null,
+        "app-dir action handling should support importing actions in client components": null,
+        "app-dir action handling should handle actions executed in quick succession": "ocelhq-r6ul",
+        "app-dir action handling should forward action request to a worker that contains the action handler (node)": "ocelhq-7og",
+        "app-dir action handling should forward action request to a worker that contains the action handler (edge)": "ocelhq-7og",
+        "app-dir action handling should not error when a forwarded action triggers a redirect (node)": "ocelhq-7og",
+        "app-dir action handling should not error when a forwarded action triggers a redirect (edge)": "ocelhq-7og",
+        "app-dir action handling Edge SSR should handle calls to redirect() with a relative URL in a single pass": "ocelhq-qcpc",
+        "app-dir action handling Edge SSR should handle calls to redirect() with a absolute URL in a single pass": "ocelhq-dan",
+        "app-dir action handling Edge SSR should handle unicode search params": null,
+        "app-dir action handling fetch actions should handle calls to redirect() with a relative URL in a single pass": "ocelhq-qcpc",
+        "app-dir action handling fetch actions should handle calls to redirect() with a absolute URL in a single pass": "ocelhq-dan",
+        "app-dir action handling fetch actions should handle redirects to routes that provide an invalid RSC response": "ocelhq-e7w",
+        "app-dir action handling should work with interception routes": null,
+        "app-dir action handling redirects redirects properly when route handler uses `redirect`": null,
+        "app-dir action handling redirects redirects properly when route handler uses `permanentRedirect`": null,
+        "app-dir action handling redirects redirects properly when route handler redirects with a 307 status code": "ocelhq-7og",
+        "app-dir action handling redirects redirects properly when route handler redirects with a 308 status code": "ocelhq-7og"
+      }
+    },
+    "test/e2e/app-dir/app-middleware/app-middleware.test.ts": {
+      "lastRun": "sweep-2026-07-28a",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 20,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-28a-73849947",
+      "openIssues": [
+        "ocelhq-i96"
+      ],
+      "failedTests": {
+        "app-dir with middleware should ignore x-middleware-set-cookie as a request header": "ocelhq-i96"
+      }
+    },
+    "test/e2e/app-dir/metadata/metadata.test.ts": {
+      "lastRun": "sweep-2026-07-27a",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 39,
+        "failed": 8,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27a-84c4be70",
+      "openIssues": [
+        "ocelhq-8xo",
+        "ocelhq-9q8",
+        "ocelhq-sae"
+      ],
+      "failedTests": {
+        "app dir - metadata basic should support other basic tags": "ocelhq-8xo",
+        "app dir - metadata basic should support other basic tags (edge)": "ocelhq-8xo",
+        "app dir - metadata basic should not contain query in canonical url after client navigation": "ocelhq-9q8",
+        "app dir - metadata static routes should have /favicon.ico as route": "ocelhq-sae",
+        "app dir - metadata static routes should have icons as route": "ocelhq-sae",
+        "app dir - metadata static routes should support root dir robots.txt": "ocelhq-sae",
+        "app dir - metadata static routes should support sitemap.xml under every routes": "ocelhq-sae",
+        "app dir - metadata static routes should support static manifest.webmanifest": "ocelhq-sae"
+      }
+    },
+    "test/e2e/app-dir/navigation/navigation.test.ts": {
+      "lastRun": "sweep-2026-07-27a",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 45,
+        "failed": 7,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27a-7887b178",
+      "openIssues": [
+        "ocelhq-e7w",
+        "ocelhq-e8z",
+        "ocelhq-hzp",
+        "ocelhq-iud"
+      ],
+      "failedTests": {
+        "app dir - navigation query string useParams identity between renders should be stable in pages": "ocelhq-iud",
+        "app dir - navigation redirect next.config.js redirects should redirect from next.config.js": "ocelhq-e8z",
+        "app dir - navigation redirect next.config.js redirects should redirect from next.config.js with link navigation": "ocelhq-e8z",
+        "app dir - navigation navigation between pages and app should not contain _rsc query while navigating from app to pages": "ocelhq-e7w",
+        "app dir - navigation navigation between pages and app should not contain _rsc query while navigating from pages to app": "ocelhq-e7w",
+        "app dir - navigation navigation between pages and app should not omit the hash while navigating from app to pages": "ocelhq-e7w",
+        "app dir - navigation browser back after a push followed by a refresh should load the previous page": "ocelhq-hzp"
+      }
+    },
+    "test/e2e/app-dir/rsc-basic/rsc-basic.test.ts": {
+      "lastRun": "sweep-2026-07-27a",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 37,
+        "failed": 2,
+        "known": 0,
+        "skipped": 1
+      },
+      "projectSlug": "e2e-sweep-2026-07-27a-5260b19f",
+      "openIssues": [
+        "ocelhq-bvm",
+        "ocelhq-e7w"
+      ],
+      "failedTests": {
+        "app dir - rsc basics should not use bundled react for pages with app": "ocelhq-e7w",
+        "app dir - rsc basics node should handle dynamic routes when URL segment matches the folder bracket syntax": "ocelhq-bvm"
+      }
+    },
+    "test/e2e/app-dir/mjs-as-extension/mjs-as-extension.test.ts": {
+      "lastRun": "sweep-2026-07-27b",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27b-01a922dc",
+      "openIssues": [],
+      "failedTests": {},
+      "note": "Preflight smoke run, doubling as this sweep's rot check (the only previously-all-green suite). Still green - no regression."
+    },
+    "test/e2e/app-dir/app-routes/app-custom-routes.test.ts": {
+      "lastRun": "sweep-2026-07-27b",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 60,
+        "failed": 2,
+        "known": 0,
+        "skipped": 1
+      },
+      "projectSlug": "e2e-sweep-2026-07-27b-2465a6fd",
+      "authoritativeRun": "wave 3 solo re-run",
+      "openIssues": [
+        "ocelhq-38u",
+        "env-cloudflare-robots"
+      ],
+      "failedTests": {
+        "app-custom-routes › body › can read a JSON encoded body for DELETE requests": "ocelhq-38u",
+        "app-custom-routes › customized metadata routes › should work if conflict with metadata routes convention": "env-cloudflare-robots"
+      },
+      "note": "Ran twice. Wave 1 (concurrent with a second suite) gave 57P/5F; wave 3 solo gave 60P/2F with zero source changes. The 3 extra wave-1 failures were quota-contention artifacts, filed and closed as ocelhq-nbk. The solo run is authoritative. Both logs and result JSONs retained in .coverage/."
+    },
+    "test/e2e/app-dir/trailingslash/trailingslash.test.ts": {
+      "lastRun": "sweep-2026-07-27b",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 4,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27b-e7a1d023",
+      "openIssues": [
+        "ocelhq-e8z",
+        "ocelhq-xlj"
+      ],
+      "failedTests": {
+        "app-dir trailingSlash handling should redirect route when requesting it directly": "ocelhq-e8z",
+        "app-dir trailingSlash handling should redirect route when clicking link": "ocelhq-xlj",
+        "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=true)": "ocelhq-e8z",
+        "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=false)": "ocelhq-e8z"
+      },
+      "note": "Attempt 1 died infra (transient SSM 502 during ocel preview bootstrap, zero test results); attempt 2 succeeded and is recorded here. Both retained. This suite settled ocelhq-e8z's previously-untested trailing-slash note: CONFIRMED, and it also exposed a second distinct defect downstream (ocelhq-xlj). Also note `should redirect route when requesting it directly by browser` PASSES FOR THE WRONG REASON - /a serves the page at 200 instead of redirecting, satisfying a weaker assertion. It will start depending on ocelhq-xlj once e8z is fixed."
+    },
+    "test/e2e/app-dir/app-static/app-static.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 88,
+        "failed": 1,
+        "known": 1,
+        "skipped": 5,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-dfc078de",
+      "openIssues": [
+        "ocelhq-14y"
+      ],
+      "failedTests": {
+        "app-dir static/dynamic handling should cache correctly with post method and revalidate edge": "ocelhq-14y"
+      }
+    },
+    "test/e2e/app-dir/x-forwarded-headers/x-forwarded-headers.test.ts": {
+      "lastRun": "sweep-2026-07-27b",
+      "lastOutcome": "skipped-structural",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "skipped": 4
+      },
+      "projectSlug": null,
+      "openIssues": [],
+      "failedTests": {},
+      "note": "UNRUNNABLE in deploy mode: sets skipDeployment:true, so the harness substituted a synthetic `should skip next deploy` case (test/lib/e2e-utils/index.ts:335). Nothing deployed. Its 4 real assertions on x-forwarded-* propagation across the Cloudflare-worker -> Function-URL hop have never been exercised and cannot be by this suite. Upstream skips it because the suite manipulates the host header, which \"doesn't work in a deployed environment\" - its localhost-relative expectations would fail against a correct adapter. Covering that surface needs a purpose-built adapter-side test. Do not re-dispatch this suite."
+    },
+    "test/e2e/app-dir/app/index.test.ts": {
+      "lastRun": "sweep-2026-07-27c",
+      "lastOutcome": "infra",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "skipped": 5
+      },
+      "projectSlug": "e2e-sweep-2026-07-27c-c5a4d06a",
+      "openIssues": [
+        "ocelhq-e7w"
+      ],
+      "failedTests": {},
+      "note": "BLOCKED AT BUILD TIME, never deployed. `ocel build` exited 1 in the adapter's onBuildComplete with EEXIST mkdir '<appdir>/.ocel/output/apps/app/static/dynamic-pages-route-app-overlap'. All 103 non-skipped cases blocked with the identical 'Custom deploy script failed' error, so there is no per-test signal. Root cause is ocelhq-e7w, which this run RAISED P2 -> P0: the fixture needs static/x as both a file (pages/x.js prerender, written extensionless) and a directory (pages/x/[slug].js, app/x/app-dir/page.js). Zero adapter-runtime coverage until e7w is fixed; re-dispatch this suite then. Nothing was provisioned (get-resources empty); the teardown orphan warning was the ocelhq-3p1 false alarm."
+    },
+    "test/e2e/app-dir/metadata-dynamic-routes/index.test.ts": {
+      "lastRun": "sweep-2026-07-27c",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 16,
+        "failed": 5,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27c-87be18d5",
+      "openIssues": [
+        "ocelhq-4lw",
+        "ocelhq-sae",
+        "env-cloudflare-robots"
+      ],
+      "failedTests": {
+        "app dir - metadata dynamic routes › social image routes › should render og image with twitter-image dynamic routes": "ocelhq-4lw",
+        "app dir - metadata dynamic routes › should generate unique path for image routes under group routes": "ocelhq-4lw",
+        "app dir - metadata dynamic routes › sitemap › should handle sitemap.[ext] dynamic routes": "ocelhq-sae",
+        "app dir - metadata dynamic routes › social image routes › should handle manifest.[ext] dynamic routes": "ocelhq-sae",
+        "app dir - metadata dynamic routes › robots.txt › should handle robots.[ext] dynamic routes": "env-cloudflare-robots"
+      },
+      "note": "The 8 isNextStart-only cases were never declared in deploy mode (absent, not skipped). Both ocelhq-sae attributions were justified by MECHANISM, not route shape: the content-types are literally Go mime.TypeByExtension output and the Pulumi destroy list contains no Lambda for those routes, so despite being .ts 'dynamic' routes they were prerendered into the asset store. The /robots.txt failure asserted on cache-control, which sae's overMatchWarning wrongly routed to sae; refuted by probing after teardown, where /robots.txt still returned 200 with Managed content and no cache-control while the origin 522'd."
+    },
+    "test/e2e/app-dir/app-prefetch/prefetching.test.ts": {
+      "lastRun": "sweep-2026-07-27c",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 12,
+        "failed": 6,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27c-8e4a3299",
+      "openIssues": [
+        "ocelhq-a9x",
+        "ocelhq-9q8",
+        "ocelhq-7gk"
+      ],
+      "failedTests": {
+        "app dir - prefetching › fetch priority › should prefetch links in viewport with low priority": "ocelhq-a9x",
+        "app dir - prefetching › fetch priority › should have an auto priority for all other fetch operations": "ocelhq-a9x",
+        "app dir - prefetching › fetch priority › should respect multiple prefetch types to the same URL": "ocelhq-a9x",
+        "app dir - prefetching › should not fetch again when a static page was prefetched": "ocelhq-9q8",
+        "app dir - prefetching › should not unintentionally modify the requested prefetch by escaping the uri encoded query params": "ocelhq-9q8",
+        "app dir - prefetching › should not suppress prefetches after navigating back": "ocelhq-7gk"
+      },
+      "note": "Every failure attributed; zero unexplained. 3 are the harness defect ocelhq-a9x (2 real fetch-priority assertions plus 1 cascade whose only errors belong to the PREVIOUS test's request handler), 1 is the headed deviation ocelhq-7gk, and 2 were confirmed as ocelhq-9q8 by a follow-up staged probe (project e2e-stg4-6bd7a09e) that captured content-type: text/html on RSC requests whose bodies are correct flight data. POSITIVE REFUTATION of ocelhq-hzp for this suite: no 'router state header ... could not be parsed' anywhere, and the two tests that hand-craft Next-Router-State-Tree both PASSED."
+    },
+    "test/e2e/app-dir/next-image/next-image.test.ts": {
+      "lastRun": "sweep-2026-07-27c",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 10,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27c-5706eb2a",
+      "openIssues": [
+        "ocelhq-kpd",
+        "ocelhq-68p"
+      ],
+      "failedTests": {
+        "app dir - next-image › image content › should render images on / route": "ocelhq-kpd",
+        "app dir - next-image › image content › should render images on /client route": "ocelhq-kpd",
+        "app dir - next-image › image content › should render images nested under page dir on /nested route": "ocelhq-kpd",
+        "app dir - next-image › image content › should render legacy images under /legacy route": "ocelhq-kpd",
+        "app dir - next-image › image content › should render legacy images in edge runtime on /legacy-edge-runtime route": "ocelhq-kpd",
+        "app dir - next-image › ssr content › should include images in /": "ocelhq-68p",
+        "app dir - next-image › ssr content › should include images in /client": "ocelhq-68p",
+        "app dir - next-image › ssr content › should include images in /nested": "ocelhq-68p",
+        "app dir - next-image › browser content › should include images in /": "ocelhq-68p",
+        "app dir - next-image › browser content › should include images in /client": "ocelhq-68p"
+      },
+      "note": "TWO defects, do not attribute the suite to either alone. 5 'image content' tests are ocelhq-kpd (no /_next/image optimizer at all); 5 ssr/browser tests are ocelhq-68p (harness demands a &dpl= token Ocel correctly never stamps). The 11th case ('should handle HEAD requests for uncached images') is guarded by if (!isNextDeploy) and is never declared. A follow-up staged probe (e2e-stg3-ccb6672b) CLEARED the static-media confounder: /_next/static/media/*.png|jpg serve correctly with valid magic bytes and x-matched-path, so the unoptimized-passthrough interim for kpd is viable. 2 hydration timeouts (ocelhq-a9x) did not mask anything - the browser failures are the same deterministic string mismatch as their ssr twins."
+    },
+    "test/e2e/app-dir/rewrites-redirects/rewrites-redirects.test.ts": {
+      "lastRun": "sweep-2026-07-27c",
+      "lastOutcome": "skipped-structural",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27c-c0c26be4",
+      "openIssues": [
+        "ocelhq-e8z"
+      ],
+      "failedTests": {},
+      "note": "SELF-SKIPS in deploy mode: rewrites-redirects.test.ts:12-15 bails at describe scope with if ((global as any).isNextDeploy) { it('should skip for deploy', ...); return }, so the 12 navigation and 2 exotic-scheme cases are never declared. The single pass is that no-op. All value came from manual curl probes, which produced the strongest ocelhq-e8z evidence yet and CONFIRMED that next.config.js REWRITES and middleware redirects both work. Do not re-dispatch for Jest signal; a purpose-built probe is the only way to cover this surface. Second wave slot lost this programme to a describe-scope isNextDeploy guard."
+    },
+    "test/e2e/app-dir/edge-route-catchall/edge-route-catchall.test.ts": {
+      "lastRun": "sweep-2026-07-27c",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27c-745adb17",
+      "openIssues": [
+        "ocelhq-dc4"
+      ],
+      "failedTests": {
+        "edge-route-catchall › should handle catchall segments": "ocelhq-dc4",
+        "edge-route-catchall › should handle root segment": "ocelhq-dc4"
+      },
+      "note": "Extra probe, not a wave slot: run to decide whether ocelhq-4lw means 'the edge path is broken' or only 'next/og edge routes are broken'. VERDICT: the edge path WORKS - three sequential requests returned 200 with content-type application/json, x-matched-path /edge/[[...slug]] and the handler's real output, so the 42 other edge-fixture suites are NOT presumptively blocked by 4lw. But both tests still failed on a new defect (ocelhq-dc4): dynamic params are always empty, {} instead of {\"slug\":[\"one\"]}."
+    },
+    "test/e2e/app-dir/actions-navigation/index.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-a82b9093",
+      "openIssues": [
+        "ocelhq-hzp"
+      ],
+      "failedTests": {
+        "app-dir action handling should handle actions correctly after navigation / redirection events": "ocelhq-hzp"
+      }
+    },
+    "test/e2e/app-dir/actions-streaming/actions-streaming.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-75b0d5fc",
+      "openIssues": [
+        "ocelhq-vqw"
+      ],
+      "failedTests": {
+        "actions-streaming actions returning a ReadableStream should properly stream the response without buffering": "ocelhq-vqw"
+      }
+    },
+    "test/e2e/app-dir/app-basepath/index.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 9,
+        "failed": 4,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-cba4967a",
+      "openIssues": [
+        "ocelhq-e7w",
+        "ocelhq-dan"
+      ],
+      "failedTests": {
+        "should successfully hard navigate from pages -> app": "ocelhq-e7w",
+        "should properly stream an internal server action redirect() with a relative URL": "ocelhq-dan",
+        "should properly stream an internal server action redirect() with a absolute URL": "ocelhq-dan",
+        "should redirect externally when encountering absolute URLs on the same host outside the basePath": "ocelhq-dan"
+      }
+    },
+    "test/e2e/app-dir/app-client-cache/client-cache.parallel-routes.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "infra",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": null,
+      "openIssues": [],
+      "failedTests": {},
+      "infraError": "no test results; EXIT=0"
+    },
+    "test/e2e/app-dir/app-fetch-deduping/app-fetch-deduping.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {},
+      "structuralNoOp": true,
+      "note": "Describe-scope isNextDeploy guard: the only case is 'should skip other scenarios', it runs in 0.6s and never deploys. Recorded green in an earlier sweep but yields NO adapter signal. Do not schedule as a rot-check slot."
+    },
+    "test/e2e/app-dir/app-prefetch-false/app-prefetch-false.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/app-prefetch-static/app-prefetch-static.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/app-routes-trailing-slash/app-routes-trailing-slash.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-326f818e",
+      "openIssues": [
+        "ocelhq-e8z"
+      ],
+      "failedTests": {
+        "should handle trailing slash for edge runtime": "ocelhq-e8z",
+        "should handle trailing slash for node runtime": "ocelhq-e8z"
+      }
+    },
+    "test/e2e/app-dir/app-simple-routes/app-simple-routes.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/asset-prefix/asset-prefix.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-57107f60",
+      "openIssues": [
+        "ocelhq-e8z",
+        "ocelhq-zpu"
+      ],
+      "failedTests": {
+        "app-dir assetPrefix handling should redirect route when requesting it directly": "ocelhq-e8z",
+        "app-dir assetPrefix handling rewrites rewrites that do not start with assetPrefix should still work": "ocelhq-zpu"
+      }
+    },
+    "test/e2e/app-dir/catchall-specificity/catchall-specificity.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/draft-mode/draft-mode.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 19,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-38d13d7f",
+      "openIssues": [
+        "ocelhq-e8z"
+      ],
+      "failedTests": {
+        "app dir - draft mode in edge runtime should use initial rand when draft mode is disabled on /with-edge/index": "ocelhq-e8z",
+        "app dir - draft mode in edge runtime should generate rand when draft mode enabled": "ocelhq-e8z"
+      }
+    },
+    "test/e2e/app-dir/dynamic-requests/dynamic-requests.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/external-redirect/external-redirect.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/interception-route-prefetch-cache/interception-route-prefetch-cache.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-a749723c",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-image-files/metadata-image-files.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-b83e553d",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-static-file/metadata-static-file-static-route.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-6428b19b",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-streaming/metadata-streaming.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 18,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-4f65b0ae",
+      "openIssues": [
+        "ocelhq-wiw"
+      ],
+      "failedTests": {
+        "app-dir - metadata-streaming should still load viewport meta tags even if metadata is delayed": "ocelhq-wiw"
+      }
+    },
+    "test/e2e/app-dir/next-after-app-deploy/index.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 8,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-3b8edefe",
+      "openIssues": [
+        "ocelhq-h9f"
+      ],
+      "failedTests": {
+        "after() in nodejs runtime triggers revalidate from a page": "ocelhq-h9f",
+        "after() in nodejs runtime triggers revalidate from a server action": "ocelhq-h9f",
+        "after() in nodejs runtime triggers revalidate from a route handler": "ocelhq-h9f",
+        "after() in nodejs runtime triggers revalidate from middleware": "ocelhq-h9f",
+        "after() in edge runtime triggers revalidate from a page": "ocelhq-h9f",
+        "after() in edge runtime triggers revalidate from a server action": "ocelhq-h9f",
+        "after() in edge runtime triggers revalidate from a route handler": "ocelhq-h9f",
+        "after() in edge runtime triggers revalidate from middleware": "ocelhq-h9f"
+      }
+    },
+    "test/e2e/app-dir/no-duplicate-headers-middleware/no-duplicate-headers-middleware.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-b3dfce2f",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/no-duplicate-headers-next-config/no-duplicate-headers-next-config.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-0a1f3988",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/parallel-routes-catchall/parallel-routes-catchall.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-62606238",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/prerender-encoding/prerender-encoding.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-ed847f84",
+      "openIssues": [
+        "ocelhq-cr8"
+      ],
+      "failedTests": {
+        "prerender-encoding should respond with the prerendered page correctly": "ocelhq-cr8"
+      }
+    },
+    "test/e2e/app-dir/react-max-headers-length/react-max-headers-length.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-f44bf8d7",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/redirect-rewrite-dynamic/redirect-rewrite-dynamic.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "infra",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-eb663a41",
+      "openIssues": [],
+      "failedTests": {},
+      "infraError": "ocel: the nodejs middleware runtime is not supported — middleware must export `config = { runtime: 'edge' }`"
+    },
+    "test/e2e/app-dir/resource-url-encoding/resource-url-encoding.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-01cf43ff",
+      "openIssues": [
+        "ocelhq-e7w"
+      ],
+      "failedTests": {
+        "scripts encodes characters in pages router": "ocelhq-e7w",
+        "styles encodes characters in pages router": "ocelhq-e7w"
+      }
+    },
+    "test/e2e/app-dir/revalidate-dynamic/revalidate-dynamic.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-9c8158a0",
+      "openIssues": [
+        "ocelhq-h9f"
+      ],
+      "failedTests": {
+        "app-dir revalidate-dynamic should revalidate the data with /api/revalidate-path": "ocelhq-h9f",
+        "app-dir revalidate-dynamic should revalidate the data with /api/revalidate-tag": "ocelhq-h9f"
+      }
+    },
+    "test/e2e/app-dir/revalidate-path-with-rewrites/revalidate-path-with-rewrites.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-7df3c029",
+      "openIssues": [
+        "ocelhq-h9f"
+      ],
+      "failedTests": {
+        "revalidatePath with rewrites static page should revalidate a static page that was rewritten": "ocelhq-h9f"
+      }
+    },
+    "test/e2e/app-dir/root-layout-redirect/root-layout-redirect.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-f3b86475",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/rsc-redirect/rsc-redirect.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-7d291de4",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/segment-cache/vary-params-base-dynamic/vary-params-base-dynamic.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 14,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-5578b5eb",
+      "openIssues": [],
+      "failedTests": {
+        "segment cache - vary params base dynamic keeps dynamic segment params valid before and after time-based revalidation": null
+      }
+    },
+    "test/e2e/app-dir/server-action-headers-redirect/server-action-headers-redirect.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-eec1f0b5",
+      "openIssues": [
+        "ocelhq-81a"
+      ],
+      "failedTests": {
+        "server-action-headers-redirect redirects after a server action that reads headers()": "ocelhq-81a"
+      }
+    },
+    "test/e2e/app-dir/server-actions-relative-redirect/server-actions-relative-redirect.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-a3f6337a",
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "should work with multi-level relative redirect from subdir": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/service-worker/service-worker-register.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 6,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-0756c530",
+      "openIssues": [
+        "ocelhq-2d0"
+      ],
+      "failedTests": {
+        "app dir - service worker register serves the worker chunk as a revalidated, mutable asset": "ocelhq-2d0",
+        "app dir - service worker register (basePath) serves the worker chunk as a revalidated, mutable asset": "ocelhq-2d0"
+      }
+    },
+    "test/e2e/app-dir/sitemap-group/sitemap-group.test.ts": {
+      "lastRun": "sweep-2026-07-27d",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27d-3b25351a",
+      "openIssues": [
+        "ocelhq-sae"
+      ],
+      "failedTests": {
+        "sitemap-group should not add suffix to sitemap under group routes": "ocelhq-sae",
+        "sitemap-group should not add suffix to static sitemap.xml under group routes": "ocelhq-sae"
+      }
+    },
+    "test/e2e/app-dir/static-generation-status/index.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-970a6928",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/use-cache-private/use-cache-private.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-ac416364",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/app-client-cache/client-cache.defaults.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 10,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-9cd78594",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/app-inline-css/index.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 6,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-d1030771",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/asset-prefix-with-basepath/asset-prefix-with-basepath.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-b0d47a26",
+      "openIssues": [
+        "ocelhq-e8z",
+        "ocelhq-34gs"
+      ],
+      "failedTests": {
+        "app-dir assetPrefix with basePath handling › should redirect route when requesting it directly": "ocelhq-e8z",
+        "app-dir assetPrefix with basePath handling › bundles should return 200 on served assetPrefix": "ocelhq-34gs"
+      }
+    },
+    "test/e2e/app-dir/catch-error/catch-error.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-9646018d",
+      "openIssues": [
+        "ocelhq-e7w"
+      ],
+      "failedTests": {
+        "app-dir - catchError should recover after reset on Pages Router": "ocelhq-e7w",
+        "app-dir - catchError should throw when retry is called on Pages Router": "ocelhq-e7w"
+      }
+    },
+    "test/e2e/app-dir/error-boundary-navigation/index.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-df3dcafa",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/headers-static-bailout/headers-static-bailout.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-607f3acd",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/interception-dynamic-segment/interception-dynamic-segment.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 9,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-d7028cb5",
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should navigate to /simple-page without 404 (no parallel routes)": "ocelhq-9q8",
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should navigate to /has-page without 404 (page fills children)": "ocelhq-9q8",
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should navigate to /no-parallel-routes/deeper without 404": "ocelhq-9q8",
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should navigate to /has-both without 404 (has both @sidebar and page)": "ocelhq-9q8",
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should navigate to /test-nested without 404 (auto null default)": "ocelhq-9q8",
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should navigate to /test-nested/deeper without 404": "ocelhq-9q8",
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should navigate to /explicit-layout/deeper without 404": "ocelhq-9q8",
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should handle repeated interceptions without 404": "ocelhq-9q8",
+        "interception-dynamic-segment › Default.tsx injection validation (no 404s allowed) › should navigate between different interception routes without 404": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/interception-dynamic-single-segment/interception-dynamic-single-segment.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-245e4ed2",
+      "openIssues": [
+        "ocelhq-4fg",
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "interception-dynamic-single-segment should intercept with consecutive dynamic segments": "ocelhq-4fg",
+        "interception-dynamic-single-segment should intercept with purely static multi-segment paths": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/javascript-urls/javascript-urls.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 4,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-4bff24fa",
+      "openIssues": [
+        "ocelhq-e7w"
+      ],
+      "failedTests": {
+        "javascript-urls › should prevent javascript URLs in pages router Link component": "ocelhq-e7w",
+        "javascript-urls › should prevent javascript URLs in pages router Link as prop": "ocelhq-e7w",
+        "javascript-urls › should prevent javascript URLs in pages router router.push": "ocelhq-e7w",
+        "javascript-urls › should prevent javascript URLs in pages router router.replace": "ocelhq-e7w"
+      }
+    },
+    "test/e2e/app-dir/layout-params/layout-params.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 6,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-111b53f2",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/mdx/mdx.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "infra",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-fdcf6ce0",
+      "openIssues": [],
+      "failedTests": {},
+      "infraError": "ocel build failed before deploy — EISDIR: illegal operation on a directory, copyfile '/tmp/next-test-1785173535859-519/.next/server/pages/pages.html' -> '/tmp/next-test-1785173535859-519/.ocel/output/apps/app/static/pages'. This is ocelhq-e7w (pages-router static HTML written WITHOUT the .html extension): the adapter tries to write 'static/pages' as a file, but 'static/pages' already exists as a directory, so copyfile raises EISDIR. Attributed as known-cause to ocelhq-e7w, not a new defect and not an environment fault — the deploy never happened, so the suite produced no test signal."
+    },
+    "test/e2e/app-dir/metadata-icons/metadata-icons.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 9,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-61544953",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-navigation/metadata-navigation.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-f8598e13",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-streaming-static-generation/metadata-streaming-static-generation.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-c7183faf",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/optimistic-routing/optimistic-routing.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "infra",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-b9c074ce",
+      "openIssues": [],
+      "failedTests": {},
+      "infraError": "ocel build exited with 1 before deploy: \"ocel: the nodejs middleware runtime is not supported — middleware must export `config = { runtime: 'edge' }`\" thrown from onBuildComplete in packages/next-runtime/dist/next-adapter.mjs:78. Exact signature of ocelhq-dly. The suite's 9 test cases are all reported failed by Jest ONLY because beforeAll could not deploy — they produced no adapter signal and must NOT be counted as test failures."
+    },
+    "test/e2e/app-dir/pages-to-app-routing/pages-to-app-routing.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 3,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-41b37bac",
+      "openIssues": [
+        "ocelhq-l2ef",
+        "ocelhq-k8pr"
+      ],
+      "failedTests": {
+        "pages-to-app-routing with cross-router shadowing › should still client-navigate to a real pages dynamic route (no spurious hard navigation)": "ocelhq-l2ef",
+        "pages-to-app-routing with cross-router shadowing via a catch-all › should client-navigate to a single-segment app route shadowed by the pages catch-all": "ocelhq-k8pr",
+        "pages-to-app-routing with cross-router shadowing via a catch-all › should client-navigate to a multi-segment app route shadowed by the pages catch-all": "ocelhq-k8pr"
+      }
+    },
+    "test/e2e/app-dir/parallel-routes-root-param-dynamic-child/parallel-routes-root-param-dynamic-child.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 13,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-511bbcbc",
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "parallel-routes-root-param-dynamic-child With generateStaticParams (gsp) Static params (static-123) should render a 200 for /fr/gsp/stories/static-123": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/partial-fallback-shell-upgrade/partial-fallback-shell-upgrade.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 5,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-none",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/ppr/ppr.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": null,
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/resume-data-cache/resume-data-cache.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-9abb1bb5",
+      "openIssues": [
+        "ocelhq-h9f"
+      ],
+      "failedTests": {
+        "resume-data-cache should have consistent data between static and dynamic renders with use cache": "ocelhq-h9f",
+        "resume-data-cache should have consistent data between static and dynamic renders with fetch cache": "ocelhq-h9f"
+      }
+    },
+    "test/e2e/app-dir/router-autoscroll/router-autoscroll.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 16,
+        "failed": 1,
+        "known": 0,
+        "skipped": 1,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-c6bd68c6",
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "router autoscrolling on navigation > vertical scroll > should scroll to top of document with new metadata": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/searchparams-reuse-loading/searchparams-reuse-loading.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 9,
+        "failed": 2,
+        "known": 1,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-3a713c31",
+      "openIssues": [
+        "ocelhq-e7w",
+        "ocelhq-2gz3"
+      ],
+      "failedTests": {
+        "searchparams-reuse-loading when aliasing is skipped should work for navigating to pages dir": "ocelhq-e7w",
+        "searchparams-reuse-loading Without Middleware should correctly return different RSC data for full prefetches with different searchParam values": "ocelhq-2gz3"
+      }
+    },
+    "test/e2e/app-dir/searchparams-static-bailout/searchparams-static-bailout.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-93554d69",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/shallow-routing/shallow-routing.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 15,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-2ded0cdf",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/static-siblings/static-siblings.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 8,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-c32f6c5f",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/use-cache-metadata-route-handler/use-cache-metadata-route-handler.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 7,
+        "failed": 2,
+        "known": 0,
+        "skipped": 0,
+        "env": 1
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-4d039018",
+      "openIssues": [
+        "ocelhq-sae"
+      ],
+      "failedTests": {
+        "use-cache-metadata-route-handler › should generate sitemaps with a metadata route handler that uses \"use cache\"": "ocelhq-sae",
+        "use-cache-metadata-route-handler › should generate manifest.json with a metadata route handler that uses \"use cache\"": "ocelhq-sae"
+      }
+    },
+    "test/e2e/app-dir/use-params/use-params.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 6,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-56c872ae",
+      "openIssues": [
+        "ocelhq-iud"
+      ],
+      "failedTests": {
+        "use-params › should work on pages router": "ocelhq-iud"
+      }
+    },
+    "test/e2e/app-dir/use-router-bfcache-id/use-router-bfcache-id.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 8,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-11ce45e4",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/use-selected-layout-segment-s/use-selected-layout-segment-s.test.ts": {
+      "lastRun": "sweep-2026-07-27e",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 8,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0,
+        "env": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27e-a6f86497",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/interception-routes-multiple-catchall/interception-routes-multiple-catchall.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-icons-parallel-routes/metadata-icons-parallel-routes.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/navigation-focus/navigation-focus.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 4,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "navigation-focus navigation to an interactive segment": "ocelhq-9q8",
+        "navigation-focus navigation to a segment with a focusable descendant": "ocelhq-9q8",
+        "navigation-focus navigation to a fragment within a page": "ocelhq-9q8",
+        "navigation-focus navigation within a page to fragments": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/parallel-routes-leaf-segments/parallel-routes-leaf-segments.no-build-error.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/actions/app-action-form-state.test.ts": {
+      "lastRun": "sweep-2026-07-28a",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-28a-0a8598f1",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/actions-discarded-navigation-revert/actions-discarded-navigation-revert.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/app-root-params-getters/generate-static-params.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/back-forward-cache/back-forward-cache.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 2,
+        "known": 0,
+        "skipped": 1
+      },
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "back/forward cache React state is preserved when navigating with back/forward buttons": "ocelhq-9q8",
+        "back/forward cache bfcache only preserves up to N entries": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/client-module-with-package-type/index.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/hello-world/hello-world.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/mdx-no-mdx-components/mdx.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-streaming-parallel-routes/metadata-streaming-parallel-routes.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/middleware-rewrite-catchall-priority-with-parallel-route/middleware-rewrite-catchall-priority-with-parallel-route.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/parallel-routes-breadcrumbs/parallel-routes-breadcrumbs.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/parallel-routes-use-selected-layout-segment/parallel-routes-use-selected-layout-segment.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "parallel-routes-use-selected-layout-segment hard nav to router page and soft nav to parallel routes": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/script-before-interactive/script-before-interactive.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/third-parties/basic.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/unstable-rethrow/unstable-rethrow.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/action-in-pages-router/action-in-pages-router.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/_allow-underscored-root-directory/_allow-underscored-root-directory.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/app-esm-js/index.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 1,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [
+        "ocelhq-2435"
+      ],
+      "failedTests": {
+        "app-dir - esm js extension should be able to render nextjs api in app router": "ocelhq-2435"
+      }
+    },
+    "test/e2e/app-dir/edge-runtime-node-compatibility/edge-runtime-node-compatibility.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/experimental-lightningcss-features/experimental-lightningcss-features.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/interception-dynamic-segment-middleware/interception-dynamic-segment-middleware.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/interception-segments-two-levels-above/interception-segments-two-levels-above.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 3,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "interception-segments-two-levels-above should work when interception route is paired with segments two levels above": "ocelhq-9q8",
+        "interception-segments-two-levels-above should intercept consistently with back/forward navigation": "ocelhq-9q8",
+        "interception-segments-two-levels-above should intercept multiple times from same route": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/mdx-font-preload/mdx-font-preload.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-static-file/metadata-static-file-dynamic-route.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/preferred-region/preferred-region.test.ts": {
+      "lastRun": "sweep-2026-07-27f",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "skipped": 0
+      },
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/actions/app-action-progressive-enhancement.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-920ce98c",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/actions-revalidate-remount/actions-revalidate-remount.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-b980b27d",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/app-catch-all-optional/app-catch-all-optional.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-17dc7bc4",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/app-root-params-getters/multiple-roots.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-0bf3a2fc",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/basepath-fallback-params/basepath-fallback-params.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-9686fb2e",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/bfcache-regression/bfcache-regression.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-6f2186e9",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/cache-components/cache-components.server-action.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 1,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-18ae21a0",
+      "openIssues": [
+        "ocelhq-slzm"
+      ],
+      "failedTests": {
+        "cache-components › should not fail decoding server action arguments": "ocelhq-slzm"
+      }
+    },
+    "test/e2e/app-dir/catchall-parallel-routes-group/catchall-parallel-routes-group.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-81b995c9",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/concurrent-navigations/server-patch-history.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "infra",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-b3c8f502",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/conflicting-search-and-route-params/conflicting-search-and-route-params.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-737619d5",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/default-error-page-ui/default-error-page-ui.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 5,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-f3818d99",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/dynamic-interception-route-revalidate/dynamic-interception-route-revalidate.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-a4e14cb1",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/edge-route-rewrite/edge-route-rewrite.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 1,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-9a5bdcd2",
+      "openIssues": [
+        "ocelhq-dc4"
+      ],
+      "failedTests": {
+        "edge-route-rewrite › it should support a rewrite to a dynamic edge route": "ocelhq-dc4"
+      }
+    },
+    "test/e2e/app-dir/interception-routes-root-catchall/interception-routes-root-catchall.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-c997ecc2",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-dynamic-routes-async-deps/index.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-312512a6",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-route-like-pages/metadata-route-like-pages.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-7501c0c2",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-soft-nav-cache-components/metadata-soft-nav-cache-components.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-54aca539",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-static-file/metadata-static-file-intercepting-route.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 1,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-d0e1c65e",
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "metadata-files-static-output-intercepting-route › should have correct link tags for intercepting page": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/metadata-static-generation/metadata-static-generation.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-7c168102",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/metadata-streaming/metadata-streaming-customized-rule.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "infra",
+      "counts": {
+        "passed": 0,
+        "failed": 2,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-7e66aed2",
+      "openIssues": [],
+      "failedTests": {
+        "app-dir - metadata-streaming-customized-rule › should send the blocking response for html limited bots": null,
+        "app-dir - metadata-streaming-customized-rule › should send streaming response for headless browser bots": null
+      }
+    },
+    "test/e2e/app-dir/middleware-rewrite-dynamic/middleware-rewrite-dynamic.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-11207de2",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/navigation-with-queued-actions/index.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 1,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-d8b2eb62",
+      "openIssues": [
+        "ocelhq-slzm"
+      ],
+      "failedTests": {
+        "actions › works": "ocelhq-slzm"
+      }
+    },
+    "test/e2e/app-dir/next-dynamic-css/next-dynamic-css.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-e37a94d1",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/parallel-route-navigations/parallel-route-navigations.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-370fca55",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/parallel-route-not-found/parallel-route-not-found.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 4,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 3
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-21979aa6",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/parallel-routes-and-interception-basepath/parallel-routes-and-interception-basepath.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-37ebb939",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/params-hooks-compat/index.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 2,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-76b1337a",
+      "openIssues": [
+        "ocelhq-iud"
+      ],
+      "failedTests": {
+        "app-dir - params hooks compat › should only access search params with useSearchParams": "ocelhq-iud",
+        "app-dir - params hooks compat › should only access path params with useParams": "ocelhq-iud"
+      }
+    },
+    "test/e2e/app-dir/partial-prefetching-config/partial-prefetching-config.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-e2a6a4af",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/partial-prefetching-deep-propagation/partial-prefetching-deep-propagation.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-3a700982",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/partial-prefetching-segment-config/partial-prefetching-segment-config.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-15a8b2ba",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/ppr-root-param-rsc-fallback/ppr-root-param-rsc-fallback.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-9c7df5ad",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/prefetch-true-instant/prefetch-true-instant.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-ed4f1140",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/redirect-rewrite-dynamic-basepath/redirect-rewrite-dynamic-basepath.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "infra",
+      "counts": {
+        "passed": 0,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 2,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-87bb2c55",
+      "openIssues": [
+        "ocelhq-dly"
+      ],
+      "failedTests": {
+        "redirect to a rewritten dynamic route with basePath › hard navigation to /a redirects to the basePath root": "ocelhq-dly",
+        "redirect to a rewritten dynamic route with basePath › client-side navigation to /a should keep the basePath in the URL": "ocelhq-dly"
+      }
+    },
+    "test/e2e/app-dir/rsc-query-routing/rsc-query-routing.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 1,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-2db78e63",
+      "openIssues": [
+        "ocelhq-e8z"
+      ],
+      "failedTests": {
+        "rsc-query-routing › should contain rsc query in rsc request when redirect the page": "ocelhq-e8z"
+      }
+    },
+    "test/e2e/app-dir/server-actions-redirect-middleware-rewrite/server-actions-redirect-middleware-rewrite.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 1,
+        "failed": 1,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-a56f6798",
+      "openIssues": [
+        "ocelhq-2f8x"
+      ],
+      "failedTests": {
+        "app-dir - server-actions-redirect-middleware-rewrite.test › should redirect correctly in edge runtime with middleware rewrite": "ocelhq-2f8x"
+      }
+    },
+    "test/e2e/app-dir/static-rsc-cache-components/static-rsc-cache-components.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 0,
+        "failed": 1,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-44457f7c",
+      "openIssues": [
+        "ocelhq-9q8"
+      ],
+      "failedTests": {
+        "static-rsc-cache-components › navigates to prerendered route without waiting for dynamic render": "ocelhq-9q8"
+      }
+    },
+    "test/e2e/app-dir/transition-indicator/transition-indicator.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-5114bdfc",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/underscore-ignore-app-paths/underscore-ignore-app-paths.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-9e845151",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/use-cache-default-profile-expire-zero/use-cache-default-profile-expire-zero.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-850149fc",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/use-cache-with-server-function-props/use-cache-with-server-function-props.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 2,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-c86a0a44",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/use-offline/use-offline.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-73230f84",
+      "openIssues": [],
+      "failedTests": {}
+    },
+    "test/e2e/app-dir/use-server-inserted-html/use-server-inserted-html.test.ts": {
+      "lastRun": "sweep-2026-07-27g",
+      "lastOutcome": "completed",
+      "counts": {
+        "passed": 3,
+        "failed": 0,
+        "known": 0,
+        "knownCause": 0,
+        "skipped": 0
+      },
+      "projectSlug": "e2e-sweep-2026-07-27g-56e8f022",
+      "openIssues": [],
+      "failedTests": {}
+    }
+  },
+  "runs": [
+    {
+      "sweepId": "sweep-2026-07-27a",
+      "ranAt": "2026-07-27T08:28:07.344Z",
+      "waves": 1,
+      "suitesPerWave": 5,
+      "suites": 6,
+      "passed": 189,
+      "failed": 43,
+      "known": 3,
+      "infra": 0,
+      "skipped": 4,
+      "lambdaConcurrencyQuota": 10,
+      "note": "5 suites run in parallel under a Lambda concurrency quota of 10; 15 failures were throttling artifacts later attributed to ocelhq-9d3."
+    },
+    {
+      "sweepId": "sweep-2026-07-27b",
+      "ranAt": "2026-07-27T09:56:30.000Z",
+      "waves": 3,
+      "suitesPerWave": 2,
+      "suites": 5,
+      "passed": 154,
+      "failed": 6,
+      "known": 1,
+      "knownCause": 6,
+      "infra": 1,
+      "skipped": 10,
+      "lambdaConcurrencyQuota": 10,
+      "passRate": "96.25% (154/160)",
+      "naivePassRate": "94.4% (151/160) if wave 1 had been taken at face value - the 1.85pt gap is 3 phantom adapter defects created by running 2 suites concurrently",
+      "note": "Counts one authoritative result per suite, preferring the uncontaminated run where a controlled pair exists (app-custom-routes solo over concurrent). Zero throttle-CLASSIFIED failures, so raw and infra-adjusted rates coincide - unlike sweep-2026-07-27a (81.4% raw vs 87.0% adjusted). infra:1 counts the trailingslash attempt-1 deploy failure, not a test. Every failure is attributed; zero unexplained. 2 wave slots were lost to skipDeployment suites and 1 to a transient SSM 502."
+    },
+    {
+      "sweepId": "sweep-2026-07-27c",
+      "ranAt": "2026-07-27T11:35:00.000Z",
+      "waves": 5,
+      "suitesPerWave": 1,
+      "suites": 6,
+      "passed": 29,
+      "failed": 23,
+      "known": 0,
+      "knownCause": 23,
+      "infra": 1,
+      "skipped": 5,
+      "lambdaConcurrencyQuota": 10,
+      "passRate": "55.8% (29/52)",
+      "adapterOnlyPassRate": "69.0% (29/42) excluding the 10 failures that are not adapter defects: ocelhq-68p x5 and ocelhq-a9x x3 and ocelhq-7gk x1 (all harness-contract defects in the sweep's own scripts) plus env-cloudflare-robots x1 (a Cloudflare zone setting). The raw rate understates the adapter badly this run, because two of the five suites target surfaces that are unimplemented rather than broken",
+      "note": "Zero throttle-classified failures, so the raw rate needs no infra adjustment (unlike sweep-a's 81.4% vs 87.0%). Every one of the 23 failures is attributed; zero unexplained. Deliberately sampled UNCOVERED surfaces, so the low pass rate reflects newly-lit territory rather than regression: next-image is 0/10 because /_next/image is unimplemented, and the edge probe is 0/2 on a new defect. 6 new issues filed (ocelhq-4lw, dc4, kpd, a9x, 68p, 7gk) and ocelhq-e7w raised P2 -> P0. 2 of 5 wave slots produced no Jest signal for structural reasons: wave 1 died at build (e7w) and wave 5 self-skips on isNextDeploy. Three harness defects found in the sweep's own scripts (a9x, 68p, 7gk), one of which (a9x) has silently affected every browser-driven test in all three sweeps. Footprint clean: all 6 run projects and all 4 staged projects torn down and verified empty via get-resources; zero stranded."
+    },
+    {
+      "sweepId": "sweep-2026-07-27d",
+      "ranAt": "2026-07-27T13:29:00.495Z",
+      "waves": 7,
+      "suitesPerWave": 5,
+      "suites": 37,
+      "passRate": 77.8,
+      "lambdaConcurrencyQuota": 1000,
+      "throttleFailures": 0,
+      "notes": "All slots to new coverage; no verify candidates (all e2e-next issues open at dispatch). Preflight found and fixed a TDZ bug in deploy.mjs (CHILD_ENV used at module-eval time, declared later) that would have failed every deploy. Two new structural traps recorded: unconditional upstream describe.skip, and suite bodies gated on isNextStart/isNextDev.",
+      "passed": 119,
+      "failed": 34,
+      "known": 0,
+      "skipped": 0,
+      "infra": 2
+    },
+    {
+      "sweepId": "sweep-2026-07-27e",
+      "ranAt": "2026-07-27T18:33:33.109Z",
+      "waves": 7,
+      "suitesPerWave": 5,
+      "suites": 35,
+      "passRate": 90.4,
+      "lambdaConcurrencyQuota": 1000,
+      "throttleFailures": 0,
+      "notes": "36 slots: 28 new coverage + 7 rot checks + 1 substitute. No verify candidates (all 33 e2e-next issues open at dispatch). All 7 rot checks clean. Zero throttles; Lambda quota confirmed at 1000. Zero stranded projects - every run project self-tore-down and the reclaim pass found 0 live Lambdas across all 52 slugs; account function count unchanged at 29. SIX new issues filed: 14y (per-fetch next.revalidate TTL clamped to page minimum), 4fg (worker originUrl drops resolveRoutes resolved query so nxtP* never reach the Lambda), 34gs (assetPrefix+basePath: rewrite matches but static lookup misses, so no client JS ships), k8pr (site root / 404s when pages/index.tsx is auto-static-optimized: dispatch key is /index), l2ef (pages _next/data nested dynamic route gets empty params), 2gz3 (prefetch-arrival race, not a payload defect), plus ktl (harness: NEXT_ENABLE_ADAPTER never set, silently skipping 8 adapter-gated suites). ocelhq-9q8 was widened from 3 to 12 attributed tests across 4 suites and is now the dominant cause. TWO new structural traps recorded: (4) top-level unconditional describe.skip (17 app-dir suites), (5) COMPUTED skipDeployment via !isAdapterTest, which the literal skipDeployment:true screen misses.",
+      "passed": 300,
+      "failed": 32,
+      "known": 2,
+      "skipped": 11,
+      "infra": 2,
+      "env": 1
+    },
+    {
+      "sweepId": "sweep-2026-07-27f",
+      "ranAt": "2026-07-27T19:45:46.929Z",
+      "waves": 7,
+      "suitesPerWave": 5,
+      "notes": "Lambda ConcurrentExecutions quota re-verified at 1000; zero throttle-classified failures (hazard 1 stays resolved). Cloudflare RUM could NOT be disabled: the API token is active but lacks the Web Analytics scope (10000 Authentication error on both account and zone RUM endpoints). Hazard 2 remained live for this run. HEADLESS=true was set (ocelhq-7gk). ocelhq-a9x fix confirmed working in practice: hydration fires immediately ('Next.js page already hydrated'), and waves completed in ~7min against a 15min budget. NEW 4th STRUCTURAL TRAP: 27 of 92 sized candidates are dev-only (isNextDev-gated or dev:true) or set skipStart:true, and no-op under deploy mode exactly like skipDeployment. Screen for these pre-dispatch alongside the three documented traps. HOUSEKEEPING HAZARD: .coverage/ is NOT cleaned between sweeps. 36 result files from sweep-2026-07-27e were still present and would have been merged into this run's totals by any glob-based reader. Drive merging and reporting from _ledger.json, not from a directory glob. TRIAGE: 12 failures collapsed to 3 root causes. ocelhq-9q8 owns 10 of 12 across FOUR suites (navigation-focus, back-forward-cache, parallel-routes-use-selected-layout-segment, interception-segments-two-levels-above). ocelhq-hzp was REFUTED four independent times - RSC requests carrying Next-Router-State-Tree return 200 with a valid flight body, not 500. Do not schedule debuggers against hzp on that evidence again without re-verifying it. ocelhq-9q8 IS A RACE, not deterministic. RSC:1 alone returns content-type text/html (x-ocel-cache: MISS); RSC:1 + Next-Router-Prefetch:1 correctly returns text/x-component (x-ocel-cache: PRERENDER). Prefetches land ~1.4-2.7s after page load, so a click that beats the prefetch gets a hard reload and a click after it passes. Inserting ~3s waits made all four navigation-focus assertions pass. This makes 9q8 an intermittent, retry-flaky failure across ANY suite that clicks a Link, and it interacts with ocelhq-2gz3 (prefetch landing latency), which widens the window. Origin-isolated by direct aws lambda invoke - Cloudflare is exonerated. Root cause: the cache entry holds BOTH value.headers (html) and value.rscHeaders (text/x-component) and the html set is served; routing-manifest declares routes.rsc.contentTypeHeader but nothing in workers/nextjs/src reads it. ocelhq-9d3 NEEDS RETITLING. Its 'concurrency quota is 10' framing is obsolete (quota is now 1000) but the defect is real and reproduced: the first server-action POST after an idle gap gets a Cloudflare 502 (text/html, retry-after: 60, no x-amzn-requestid), then iterations 1-13 succeed. NEW EVIDENCE CORRECTS THE ISSUE BODY: the Lambda WAS invoked (START RequestId, REPORT Duration 2.27ms, CF 502 delivered 167ms later) at concurrency 1 with no x-amzn-errortype, so this is NOT throttling and the response/streaming leg is implicated, not just the request leg. NEW ISSUES FILED: ocelhq-d2wo (P0) - any dynamic param outside generateStaticParams 500s with NEXT_STATIC_GEN_BAILOUT because the adapter renders cache MISSes in prerender mode instead of dynamically; found incidentally, not the cause of any Jest failure this run. ocelhq-2435 (P2) - app-esm-js missing a DOM subtree in-sweep but complete on redeploy; suspected cause is that deploy.mjs returns the URL with no edge-readiness gate, same shape as ocelhq-zpu, which would be a sweep-wide source of phantom failures.",
+      "suites": 35,
+      "passed": 98,
+      "failed": 12,
+      "known": 0,
+      "skipped": 1,
+      "infra": 0
+    },
+    {
+      "sweepId": "sweep-2026-07-27g",
+      "ranAt": "2026-07-27T21:26:45.081Z",
+      "waves": 8,
+      "suitesPerWave": 5,
+      "suites": 43,
+      "passed": 80,
+      "failed": 5,
+      "known": 0,
+      "knownCause": 6,
+      "skipped": 3,
+      "infra": 3,
+      "lambdaConcurrencyQuota": 1000,
+      "notes": "Rot checks dropped from wave 2 onward at the user's direction: no e2e-next issue is closed, so a rot check cannot verify a fix and only re-spends a slot. 39 of 43 suites were never-covered ground. failed:5 counts adapter defects only; the 2 further failed rows in metadata-streaming-customized-rule belong to its infra 522 and are excluded. infra:3 = one Cloudflare 522 (deploy exited 0, every request 522 in <300ms, NO CloudWatch log group) and two ocelhq-dly build rejections. TRIAGE: 5 clusters -> 2 collapsed into ocelhq-9q8 (static-rsc-cache-components, metadata-static-file-intercepting-route), 2 merged into ONE new issue ocelhq-slzm, 1 new issue ocelhq-2f8x. Footprint: all 52 project slugs verified 0 lambdas; account-wide ocel:project lambda count 0; 0 Cloudflare worker scripts matching this sweep."
+    },
+    {
+      "sweepId": "sweep-2026-07-28a",
+      "ranAt": "2026-07-27T22:08:35.081Z",
+      "waves": 1,
+      "suitesPerWave": 3,
+      "suites": 3,
+      "passed": 79,
+      "failed": 7,
+      "known": 0,
+      "skipped": 3,
+      "infra": 0,
+      "knownCause": 14,
+      "lambdaConcurrencyQuota": 1000,
+      "notes": "TARGETED VERIFICATION RUN, not a coverage sweep. Single wave re-running only the 3 suites holding tests attributed to ocelhq-9d3 (AWS Lambda ConcurrentExecutions quota = 10). Quota re-verified at 1000 on both service-quotas and lambda get-account-settings. RESULT: 11 of the 16 9d3-attributed tests now pass with no source change; 5 do not, proving they were MISATTRIBUTED to throttling in sweep-2026-07-27a. All 5 re-homed with zero un-triaged residual: ocelhq-dan x2 (absolute-URL single-pass roundtrip count), ocelhq-qcpc x2 NEW (relative-URL redirect produces no client navigation), ocelhq-r6ul x1 NEW (first-POST Cloudflare 502, unconfirmed member). ocelhq-9d3 CLOSED. NEW ISSUE ocelhq-qcpc (P1): redirect() given a RELATIVE path produces no navigation while the same action given an absolute URL works; origin returns a correct 303 in BOTH cases, only the x-action-redirect value differs. Reproduces across two unrelated fixtures (/client/redirects and /header setCookieAndRedirect) and on BOTH nodejs and edge runtimes, which REFUTES ocelhq-2f8x as the cause. NEW ISSUE ocelhq-r6ul (P1): carries forward the non-throttle half of 9d3 - a Cloudflare-generated 502 with retry-after:60 and NO x-amzn-* headers on an early POST, clearing on retry; a deliberate 75s idle gap did NOT reproduce it, so the inherited idle-gap trigger is downgraded to UNKNOWN. NEW STRUCTURAL TRAP: jest -t is a REGEX, so a pattern containing literal parentheses such as 'redirect() with a relative URL' silently matches NOTHING - the stage exits 0 reporting all tests skipped and looks like a clean run. Escape as redirect\\(\\). Cost one staging deploy. Footprint: all 3 run projects self-tore-down, the 1 staged project torn down manually, reclaim pass found 0 Lambdas across all 4 slugs, account function count 29. The 7 remaining app-action failures are pre-existing and OUTSIDE this run's targeted scope; they are recorded verbatim and left un-triaged by design."
+    }
+  ],
+  "issues": {
+    "ocelhq-9d3": {
+      "status": "closed",
+      "priority": "P0",
+      "kind": "environment",
+      "tests": 18,
+      "oneLine": "AWS Lambda ConcurrentExecutions quota is 10; bursts throttle and surface as 502",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "status of 502",
+          "confidence": "broad",
+          "check": "Throttle iff the response carries no x-amzn-requestid AND CloudWatch shows no START RequestId for the function. Otherwise it is a real origin error."
+        },
+        {
+          "kind": "http-header",
+          "pattern": "x-amzn-errortype: TooManyRequestsException",
+          "confidence": "specific"
+        },
+        {
+          "kind": "latency-anomaly",
+          "pattern": "semantically wrong 200 (redirect that does not redirect, notFound() returning 200, handler headers absent) with NO throttle marker",
+          "confidence": "broad",
+          "check": "MANDATORY re-run solo before spawning any debugger. Quota contention also corrupts responses silently: the request reaches Lambda, returns 200 and carries x-amzn-requestid, so the \"no x-amzn-* AND no CloudWatch START\" rule correctly declines to call it a throttle. The only signal is latency - affected requests are ~2x slower than their own neighbours in the same run. Confirmed iff the failures vanish on a solo re-run with no source change."
+        }
+      ],
+      "note": "Two failure modes. (1) Loud: 429 TooManyRequestsException, or a Cloudflare-generated 502 with no x-amzn-* headers. (2) Silent, characterised in sweep-2026-07-27b: semantically wrong 200s with no throttle marker of any kind - see the closed ocelhq-nbk for the controlled proof. Mode 2 is indistinguishable from a genuine adapter defect on response evidence alone and cost a full debugger budget. Calibration: 16 concurrent GETs return 429s that DO carry x-amzn-requestid, so a 429 proves throttling but its absence proves nothing. Operationally: SUITES_PER_WAVE must be 1 until this quota is raised. sweep-2026-07-27g, NEW DATA from the ocelhq-slzm triage: the idle-gap 502 was reproduced on two independent previews (first POST after a 25-35s idle gap), and the Lambda IS invoked — 2.25ms and 2.47ms with no output. Reinforces that this is the worker->Function-URL response leg, not throttling. Retitle recommended.",
+      "closedBy": "sweep-2026-07-28a",
+      "closeNote": "Premise dead: quota is 1000. 11/16 attributed tests recovered unchanged; the other 5 were misattributions, re-homed to ocelhq-dan, ocelhq-qcpc and ocelhq-r6ul. Non-throttle 502 evidence carried forward by ocelhq-r6ul."
+    },
+    "ocelhq-7og": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 6,
+      "oneLine": "Redirect Location leaks the Lambda loopback origin (https://localhost:<ephemeral-port>)",
+      "fixSite": "cloud/aws/cmd/lambdanode/bootstrap/event.go",
+      "inMembraneLayer": true,
+      "matchers": [
+        {
+          "kind": "http-header",
+          "pattern": "location:\\s*https?://(localhost|127\\.0\\.0\\.1):\\d+",
+          "confidence": "specific"
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "ERR_SSL_WRONG_VERSION_NUMBER|chrome-error://chromewebdata",
+          "confidence": "broad",
+          "check": "Confirm the Location or fetch target names localhost/127.0.0.1 with an ephemeral port."
+        }
+      ]
+    },
+    "ocelhq-e7w": {
+      "status": "open",
+      "priority": "P0",
+      "kind": "adapter",
+      "tests": 5,
+      "oneLine": "Pages-router prerendered HTML written to static/ without .html: EEXIST kills `ocel build` outright, and served as application/octet-stream",
+      "fixSite": "next-adapter.mts:233-241 (the mkdir on :239 is what throws)",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "Download is starting",
+          "confidence": "specific"
+        },
+        {
+          "kind": "http-header",
+          "pattern": "content-type:\\s*application/octet-stream",
+          "confidence": "specific"
+        },
+        {
+          "kind": "deploy-error",
+          "pattern": "EEXIST: file already exists, mkdir '.*/\\.ocel/output/.*/static/",
+          "confidence": "specific"
+        }
+      ],
+      "note": "RAISED P2 -> P0 in sweep-2026-07-27c. Two faces, one defect. (1) Response-time: served as octet-stream, 'Download is starting'. (2) BUILD-TIME: stripping the extension makes a pages-router prerender at /x occupy the FILE name static/x, which is the DIRECTORY name any static output under /x/ needs; mkdir(recursive:true) tolerates an existing dir but throws EEXIST on an existing file. Verified the .html fix alone resolves it against a 5-file synthetic app; no separate collision guard needed. Ordering is irrelevant - child-first makes mkdir create static/x as a directory and the parent's copyFile then fails EISDIR. AFFECTS REAL APPS: pages/blog.js + pages/blog/[slug].js is ordinary routing; with an app/ dir present even a getStaticProps child triggers it via the .rsc fallback static file. Blast radius: blocks app-dir/app (and its 4 sibling suites experimental-compile, useReportWebVitals, standalone, standalone-gsp), app-dir/hooks, e2e/dynamic-routing, e2e/index-index. Ruled out: custom-routes, switchable-runtime, basepath, prerender, telemetry."
+    },
+    "ocelhq-sae": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 5,
+      "oneLine": "Static metadata assets stamped with Go mime.TypeByExtension at upload; immutable cache-control applied unconditionally",
+      "fixSite": "cloud/aws/deploy/assets.go:78, workers/nextjs/src/assets.ts:113-114",
+      "needsSidecarRebuild": true,
+      "matchers": [
+        {
+          "kind": "route",
+          "pattern": "^/(favicon\\.ico|robots\\.txt|sitemap\\.xml|manifest\\.webmanifest|apple-icon.*)$",
+          "confidence": "specific"
+        }
+      ],
+      "overMatchWarning": "Its route matcher covers /robots.txt, which caused a Cloudflare Managed-robots.txt environment artifact to be auto-attributed here in sweep-2026-07-27b. Before attributing a /robots.txt failure to this issue, confirm the defect is content-type/cache-control AND that the body carries no Cloudflare Managed content. AMENDED in sweep-2026-07-27c: the Managed transform also STRIPS cache-control, so a null cache-control on /robots.txt is the zone artifact, not sae - the previous wording ('the defect is content-type/cache-control') actively misroutes that case. serveStaticAsset sets cache-control unconditionally, so an ABSENT cache-control can never have come from the asset path at all."
+    },
+    "ocelhq-e8z": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 8,
+      "oneLine": "next.config.js redirects 404 with a correct Location header (processRoutes guards on a destination Next never sets)",
+      "matchers": [
+        {
+          "kind": "http",
+          "pattern": "any non-3xx response carrying a location header",
+          "confidence": "specific",
+          "check": "Broadened in sweep-2026-07-27b. The status is DATA-DEPENDENT on whether a prerender exists under the slash-free key: /a and /metadata give 200+location (prerender exists), /en and /nope give 404+location (none). The old matcher said \"404 with a location header present\", which could not match the 200-face at all - that gap cost a full debugging budget when a runner concluded the mechanisms differed."
+        },
+        {
+          "kind": "note",
+          "pattern": "also breaks trailing-slash normalization redirects",
+          "confidence": "specific",
+          "check": "CONFIRMED in sweep-2026-07-27b, not refuted. A runner initially refuted it by reading \"200, no redirect\" and \"404 with location\" as different mechanisms; a debugger overturned that with header evidence showing they are one rule with a data-dependent status. Do not strike this note."
+        },
+        {
+          "confidence": "specific",
+          "pattern": "Expected: 308\\s+Received: (200|404) on a path differing only by a trailing slash"
+        },
+        {
+          "confidence": "specific",
+          "pattern": "manifest carries status 308 for the built-in normalizer vs 307 for config redirects"
+        }
+      ],
+      "note": "WIDENED in sweep-2026-07-27c: no longer trailing-slash-specific. On a fixture with NO trailingSlash anywhere, all four next.config.js redirects returned 200 carrying a byte-correct Location (correct :path* substitution and query string), each with x-amzn-requestid so throttling is ruled out. Rule loading and matching are FINE - only the status is never set to 3xx, and browsers ignore Location on a 200 so the user silently lands on the wrong page. Mechanism: result.redirect is never populated, so dispatch falls past index.ts:458 to resolvedPathname -> Lambda -> catch-all renders 200 while the rule's location is merged on at :390-392. NARROWED: middleware redirects WORK (307, answered in-worker, no x-amzn-*), and next.config.js REWRITES WORK (verified by body: /config-rewrite-before renders page_config-rewrite-after). So the rule pipeline applies rewrites but not redirect statuses. REFUTED: an earlier probe in this same sweep saw HTTP 522 on the itms-apps:// (with slashes) destination and hypothesised an external-scheme doFetch failure at index.ts:464-465; on a clean deployment it returns the same 200+location face as the other three. That 522 was teardown contamination - do not chase a separate external-scheme defect. Downstream partner remains ocelhq-xlj. Shared fix site: workers/nextjs/src/index.ts."
+    },
+    "ocelhq-8xo": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "not-a-bug",
+      "tests": 2,
+      "oneLine": "crossOrigin assertion is Vercel-specific (VERCEL_ENV=preview); adapter is correct - belongs in the manifest",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "crossOrigin.*use-credentials",
+          "confidence": "specific"
+        }
+      ]
+    },
+    "ocelhq-hzp": {
+      "status": "open",
+      "priority": "P0",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Every RSC request carrying Next-Router-State-Tree 500s; router.refresh() is broken",
+      "matchers": [
+        {
+          "kind": "origin-error",
+          "pattern": "router state header was sent but could not be parsed",
+          "confidence": "specific"
+        }
+      ]
+    },
+    "ocelhq-9q8": {
+      "status": "open",
+      "priority": "P0",
+      "kind": "adapter",
+      "tests": 15,
+      "oneLine": "Prerendered app-page RSC responses carry content-type text/html; client navigation degrades to a full page reload",
+      "fixSite": "packages/lambda-entrypoints/src/next/cache-handler.mts",
+      "inMembraneLayer": true,
+      "matchers": [
+        {
+          "kind": "http",
+          "pattern": "RSC: 1 request answered with content-type text/html instead of text/x-component",
+          "confidence": "specific"
+        },
+        {
+          "kind": "http-header",
+          "pattern": "content-type:\\s*text/html.*on a request carrying `RSC: 1`",
+          "confidence": "specific",
+          "check": "Send `RSC: 1` (with or without ?_rsc=) to a prerendered app page. Confirmed sweep-2026-07-27c: body is correct flight data (starts `1:I[...]`, zero DOCTYPE occurrences) but content-type is text/html; charset=utf-8 instead of text/x-component, so the client router discards the prefetch and refetches."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "Received string:\\s*\"MODAL SLOT:\\s*catch-all\"",
+          "confidence": "specific",
+          "check": "Interception fixtures (interception-dynamic-segment, interception-dynamic-single-segment). The (.) route IS matched server-side (x-matched-path: /(.)<route>), but the RSC response is labelled text/html, so the client router aborts the soft navigation and hard-loads the URL; a document load carries no Next-Url, so no interception happens and @modal/[...catchAll] fills the slot."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "page\\.waitForSelector: Timeout \\d+ms exceeded[\\s\\S]*waiting for locator\\('#modal h3'\\)",
+          "confidence": "specific",
+          "check": "Same defect, other assertion face: the catch-all modal page renders no <h3>, so any '#modal h3' wait times out."
+        },
+        {
+          "kind": "http-header",
+          "pattern": "200 + x-matched-path naming a `/(.)` interception route + content-type text/html on an RSC request",
+          "confidence": "broad",
+          "check": "Never a 404 and never a routing bug. Curl the intercepted path with `RSC: 1` and `Next-Url: /`: x-matched-path shows the (.) route and the body is valid flight, only content-type is wrong. Interception routes that go x-nextjs-cache: MISS (Lambda-rendered, no build-time cache entry) return text/x-component and PASS - that pass/fail split is the fingerprint, not prerendered-vs-not."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "expectScrolledTo|waitForScrollToComplete[\\s\\S]*\\\"top\\\": (?!0\\b)\\d+",
+          "confidence": "specific",
+          "check": "router-autoscroll 'should scroll to top of document with new metadata' ONLY, and only when the received top equals the PREVIOUS page's scroll position exactly (unchanged, not partial). Confirm by curling the click target with `RSC: 1` + `Next-Router-State-Tree` (no Next-Router-Prefetch): if it answers text/html the router hard-reloads and scrollTop reads off the OLD document until the reload commits (~1.5-2.0s warm, x-ocel-cache: MISS), so a 3000ms retry window fails under load. Do NOT match a bare scroll-position mismatch: partial/animated scroll offsets, sticky/fixed/invisible-first-element cases and horizontal-scroll assertions are separate behaviours."
+        },
+        {
+          "kind": "latency-anomaly",
+          "pattern": "soft client navigation silently replaced by a full document load (all static chunks re-fetched) after a click on a next/link",
+          "confidence": "broad",
+          "check": "Trace the click in a browser. If the non-prefetch RSC fetch returns text/html and is immediately followed by a plain document GET of the same path, it is this defect. Any assertion with a retry budget under ~3s that reads DOM/scroll/URL state during that window will see the OLD document's values unchanged."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "Received string:\\s*\"default\"",
+          "confidence": "specific",
+          "check": "A parallel-route @modal slot rendering default.tsx after a would-be soft nav. Confirm with: curl -D- <target> -H 'RSC: 1' -H 'Next-Url: <source>' returns content-type text/html and x-nextjs-prerender: 1."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "Received:\\s+NaN",
+          "confidence": "broad",
+          "check": "Fires when the expected value was read from a window.* variable (e.g. window.__navStart) set BEFORE a next/link click. NaN means the variable no longer exists, i.e. the soft navigation became a full document load. Confirm: curl -D- -H \"RSC: 1\" <target> returns content-type text/html while adding -H \"Next-Router-Prefetch: 1\" returns text/x-component."
+        },
+        {
+          "kind": "http-header",
+          "pattern": "content-type: text/html with x-ocel-cache: MISS and x-amzn-requestid present on an `RSC: 1` request whose PREFETCH variant is text/x-component with x-ocel-cache: PRERENDER",
+          "confidence": "specific",
+          "check": "The prefetch/non-prefetch content-type split on one URL is the fingerprint. The prefetch variant PASSING is what hides this defect from most navigation tests, so a fixture using prefetch={false} is the reliable repro."
+        },
+        {
+          "kind": "build-artifact",
+          "pattern": ".ocel/output/apps/<app>/cache/*.cache.json with value.headers content-type text/html and value.rscHeaders content-type text/x-component",
+          "confidence": "specific",
+          "check": "STATIC confirmation, no deploy needed: the entry stores both variants and the Lambda cache-handler serves value.headers. Cheapest possible detection for future sweeps."
+        }
+      ],
+      "note": "Confirmed on new evidence in sweep-2026-07-27c and now owns 3 tests across 2 suites (metadata added app-prefetch's 2 prefetch-reuse failures). The payload is RIGHT and only the label is wrong. SECOND OBSERVATION worth its own issue: every RSC request is x-ocel-cache: MISS with x-amzn-requestid present (invokes Lambda) while the equivalent HTML request is PRERENDER/HIT and never touches Lambda, despite cache-control: s-maxage=31536000. Every prefetch of a static page therefore costs an invocation, which interacts badly with ocelhq-9d3's quota of 10. sweep-2026-07-27e: also owns all 9 failures in interception-dynamic-segment. Those look like an interception/route-selection defect (modal slot resolves to @modal/[...catchAll]) but are purely downstream of this content-type: the worker/Lambda select the (.) route correctly. Ruled out vs ocelhq-hzp (these are 200s, and Next-Router-State-Tree + RSC:1 on this preview returned 200, not 500) and vs ocelhq-dan (no action redirect, no per-route-split involvement). sweep-2026-07-27e: ALSO owns router-autoscroll 'should scroll to top of document with new metadata'. Reproduced live on e2e-stg-534df07b: the click's non-prefetch RSC fetch returns text/html, the router hard-reloads, and document.documentElement.scrollTop keeps reading the OLD page's 8388 until the reload commits at ~1500ms - the earlier rebuttal ('a hard load would land at top:0 so it would PASS') was wrong about the interval, not the endpoint. Metadata is a red herring: the passing control /hoisted takes the identical hard-reload path and passes only because its reload lands inside the 3000ms retry budget. Refuted en route: the __NEXT_EXPERIMENTAL_APP_NEW_SCROLL_HANDLER harness-gap theory (the failing test is ungated, predates the flag via next.js f8afd611df / #74748, and upstream CI runs the suite with the flag set to false); also ruled out ocelhq-wiw (head-rewrite, different path - the delivered <head> here is correct) and ocelhq-14y (no fetches, no revalidate in the fixture). sweep-2026-07-27g: gained 2 more suites (static-rsc-cache-components, metadata-static-file-intercepting-route), both confirmed at HTTP level. NEW MECHANISM DETAIL: the build-time cache entry stores BOTH variants — value.headers -> text/html and value.rscHeaders -> text/x-component — and the Lambda cache-handler replays the wrong one, so the prefetch path is correct while the non-prefetch path is broken. Also NOT confined to plain prerenders: the static-rsc-cache-components fixture uses cacheComponents: true with a 'use cache' page. In the intercepting-route case the hard nav lands on a DIFFERENT route tree, so interception is lost entirely and the suite reports \"missing metadata\" when the real failure is \"the intercepted route was never rendered\".",
+      "relatedIssues": [
+        "ocelhq-4fg"
+      ],
+      "notes": "Also the cause of interception-dynamic-single-segment 'should intercept with purely static multi-segment paths' (modal reads 'default'): the degraded hard reload drops next-url, so the @modal slot falls to default.tsx. Only interception targets with dispatch kind: prerender are affected; kind: lambda interception routes serve text/x-component correctly. Sibling failure in that suite is ocelhq-4fg, not this."
+    },
+    "ocelhq-iud": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Dynamic pages-router prerender stored under the literal bracket key but read by request path",
+      "fixSite": "workers/nextjs/src/assets.ts:108",
+      "matchers": [
+        {
+          "kind": "http",
+          "pattern": "404 with x-matched-path containing a literal [ or ]",
+          "confidence": "specific"
+        },
+        {
+          "kind": "symptom",
+          "pattern": "pages-router dynamic route 404",
+          "confidence": "broad",
+          "check": "ls <appDir>/.ocel/output/apps/app/static — a path segment containing a literal [..] confirms it."
+        }
+      ],
+      "note": "sweep-2026-07-27g settled a WEAK auto-attribution and CONFIRMED it. /pages/foobar -> 404, text/html, x-matched-path: /pages/[slug], NO x-amzn-requestid (worker-served, never reached Lambda), while the app-router twin /app/foobar returns 200 + x-amzn-requestid on the same preview. Build output: static/pages/[slug] (extensionless HTML) + static/pages/[slug].rsc, dispatch['/pages/[slug]'] = {kind:static}, no real-path entry. IMPORTANT: getStaticProps/getStaticPaths are NOT required — a data-fetching-free dynamic pages route is AUTOMATICALLY statically optimized and Next emits it at the literal bracket path, so an earlier 'no prerender exists' objection was wrong. SECOND HALF OF THE BUG, worker-side: index.ts:471 dispatches on result.resolvedPathname (correct) but the static branch calls serveStaticAsset with the ORIGINAL request URL, so the lookup misses — even /pages/%5Bslug%5D 404s, meaning NO request path can retrieve that object today. Ruled DISTINCT from ocelhq-e7w (same emit site, artifact IS extensionless, but the build SUCCEEDED and the response is 404 text/html not 200 octet-stream; adding .html would not make it resolve) and same-family-but-distinct from ocelhq-k8pr (/index vs / rather than [slug] vs foobar; shared worker-side half, different emit-side normalization).",
+      "relatedIssues": [
+        "ocelhq-k8pr",
+        "ocelhq-e7w"
+      ]
+    },
+    "ocelhq-bvm": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Worker forwards unencoded path chars to the Function URL; AWS 400s before invoke",
+      "fixSite": "workers/nextjs/src/index.ts:718-721",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "ERR_HTTP_RESPONSE_CODE_FAILURE",
+          "confidence": "broad",
+          "check": "400 with content-length 0 and no x-amzn-* headers, on a path containing an unencoded [ ] or |."
+        }
+      ]
+    },
+    "ocelhq-i96": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Client-supplied x-middleware-set-cookie is forwarded to the Lambda and seeds cookies()",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "x-middleware-set-cookie",
+          "confidence": "specific"
+        }
+      ]
+    },
+    "ocelhq-dan": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Per-route Lambda split prevents Next single-pass action redirect (extra RSC roundtrip)",
+      "blockedBy": [
+        "ocelhq-hzp"
+      ],
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "toHaveLength\\(1\\).*[Rr]eceived.*2",
+          "confidence": "broad",
+          "check": "Confirm the extra request is an RSC roundtrip on a redirect, not an unrelated count assertion."
+        }
+      ]
+    },
+    "ocelhq-e7f": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "tooling",
+      "tests": 0,
+      "oneLine": "MAX_SLUG_LEN (52) exceeds the real Pulumi stack-name budget (~31)",
+      "matchers": [
+        {
+          "kind": "deploy-error",
+          "pattern": "a stack name cannot exceed 100 characters",
+          "confidence": "specific"
+        }
+      ]
+    },
+    "env-cloudflare-rum": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "environment",
+      "tests": 2,
+      "oneLine": "Cloudflare RUM injects /cdn-cgi/rum beacons into asserted request lists - disable RUM on the zone",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "/cdn-cgi/rum",
+          "confidence": "specific"
+        }
+      ]
+    },
+    "ocelhq-38u": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Worker SigV4-signs a payload hash the Workers runtime never sends for DELETE/OPTIONS with a body; Function URL 403s before invoke",
+      "fixSite": "workers/nextjs/src/signing.ts (edgeOriginFetch)",
+      "matchers": [
+        {
+          "kind": "http-header",
+          "pattern": "x-amzn-errortype:\\s*InvalidSignatureException",
+          "confidence": "specific"
+        },
+        {
+          "kind": "http",
+          "pattern": "403 on DELETE or OPTIONS carrying a non-empty request body",
+          "confidence": "specific",
+          "check": "Trigger is method in {DELETE, OPTIONS} AND non-empty body. Route-independent, size/content-type/framing-independent. The same methods bodiless reach the handler, and POST/PUT/PATCH with the identical body reach the handler. The 403 carries x-amzn-requestid and that id is absent from the function CloudWatch log group."
+        }
+      ],
+      "note": "Distinct from ocelhq-bvm despite both being pre-invoke AWS rejections: bvm corrupts the CanonicalURI term (unencoded path chars -> 400), this corrupts the payload-hash term (-> 403). Fixing bvm does not touch this. Reproduced deterministically in two independent runs at 423ms and 425ms."
+    },
+    "ocelhq-xlj": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "With trailingSlash, the canonical with-slash URL 404s for every statically-prerendered pathname (/a/ -> 404 while /a -> 200)",
+      "fixSite": "workers/nextjs/src/index.ts - normalization must run AFTER the beforeMiddleware 308 rules",
+      "blockedBy": [
+        "ocelhq-e8z"
+      ],
+      "matchers": [
+        {
+          "kind": "http",
+          "pattern": "with-slash path 404s with no location, no x-matched-path and no x-amzn-requestid while its slash-free form 200s",
+          "confidence": "specific",
+          "check": "The 404 is the /404 static asset - it never reached Lambda. Cause: @next/routing matchesPathname is exact string equality against a pathnames list that is always emitted slash-free, and nothing strips the trailing slash before the filesystem phase. Dynamic routes escape it because their sourceRegex ends (?:/)?$."
+        }
+      ],
+      "note": "Second of two defects in the trailing-slash cluster. D1 = ocelhq-e8z (the 308 is never emitted), D2 = this (the redirect target 404s). Fixing e8z alone leaves the suite red. trailingSlash IS correctly read at build time - the emitted routing-manifest.json carries the 308 rules, so config propagation was never the problem."
+    },
+    "ocelhq-3p1": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "tooling",
+      "tests": 0,
+      "oneLine": "cleanup.mjs raises a false orphan alarm when the preview stack was never created",
+      "matchers": [
+        {
+          "kind": "deploy-error",
+          "pattern": "no stack named .*--infra found",
+          "confidence": "specific",
+          "check": "If the deploy failed before provisioning, cleanup treats the absent stack as a teardown failure and prints the standard \"Lambdas, worker scripts and DNS label are still live\" warning. Verify with get-resources before believing it."
+        }
+      ],
+      "note": "The orphan warning is the sweep's only footprint-control signal, so a version that fires on a deploy which provisioned nothing trains operators to ignore it. Fix: treat \"stack absent\" as success; only \"stack present but destroy failed\" warrants the alarm."
+    },
+    "ocelhq-nbk": {
+      "status": "closed",
+      "priority": "P2",
+      "kind": "harness-artifact",
+      "tests": 3,
+      "oneLine": "CLOSED - three route handlers answered bare 200s only when a second suite ran concurrently; quota contention, not an adapter defect",
+      "matchers": [],
+      "note": "Kept in the registry deliberately as a negative result. Resolved by a controlled solo re-run: all 3 passed with latencies dropping 5371/5837/5373ms -> 2594/2269/2706ms and no source change. The mechanism it exposed is recorded on ocelhq-9d3 as the silent mode. If a future sweep sees a semantically wrong 200 on /hooks/permanent-redirect, /hooks/not-found or a catch-all params route, re-run solo BEFORE spawning a debugger."
+    },
+    "env-cloudflare-robots": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "environment",
+      "tests": 2,
+      "oneLine": "Cloudflare zone-level Managed robots.txt prepends ~61 lines of Content-Signals policy to /robots.txt - disable it on the ocel.site zone",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "BEGIN Cloudflare Managed content|END Cloudflare Managed Content|Content-Signal:",
+          "confidence": "specific"
+        },
+        {
+          "kind": "route",
+          "pattern": "^/robots\\.txt$",
+          "confidence": "broad",
+          "check": "Environment iff the response is 200 with the app's own bytes intact and Cloudflare Managed content prepended. If instead the content-type or cache-control is wrong, it is ocelhq-sae."
+        }
+      ],
+      "note": "Documented in sweep-prompt.md prose as environment hazard #3 but MISSING from this registry until sweep-2026-07-27b, which is exactly why the auto-attribution rule matched it to ocelhq-sae on route shape alone and booked a zone artifact as an adapter defect. Same family as env-cloudflare-rum. AMENDED in sweep-2026-07-27c: the transform STRIPS cache-control as well as prepending its Content-Signals body. Proven by probing after teardown - with the origin returning 522 on / and /sitemap.xml, /robots.txt still returned 200, text/plain; charset=utf-8, NO cache-control, body = Managed policy with the app's own bytes appended intact. Note the masking: the metadata-dynamic-routes test fails at the cache-control assertion before reaching the inline body snapshot, so fixing the zone clears both, but fixing only cache-control would expose a second failure on the same test."
+    },
+    "ocelhq-4lw": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 2,
+      "oneLine": "Edge bundle drops Next's wasm binding names, so every next/og edge route 500s with 'Edge invocation failed'",
+      "fixSite": "next-adapter.mts:501 (carry a wasmBindings map) + renderEdgeShim :392-419 (assign globals)",
+      "matchers": [
+        {
+          "kind": "http-body",
+          "pattern": "^Edge invocation failed$",
+          "confidence": "specific",
+          "check": "Body is exactly 'Edge invocation failed' (22 B) with content-type text/plain;charset=UTF-8 (NO space after the semicolon - Cloudflare's own error pages use a space). That string is the catch-all at workers/nextjs/src/index.ts:814, so the invoker THREW; it is not a missing entry."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "Expected: \"image/png\"\\s+Received: \"text/plain;charset=UTF-8\"",
+          "confidence": "specific"
+        }
+      ],
+      "note": "Next's middleware-manifest.json gives each edge wasm as {name, filePath} and the NAME is load-bearing - the Turbopack chunk resolves wasm via a bare GLOBAL of that name. next-adapter.mts:501 destructures only { modules: wasmModules } from moduleIds, discarding idByKey - the exact opposite of :496, which keeps it for chunks. Bytes ship as w/0.wasm / w/1.wasm with no record of which binding they satisfy, and renderEdgeShim never imports them or assigns any global, so compileModule catches a ReferenceError. NOT the accepted limitation: README.md:103-104 ('emits nodejs functions only and skips edge routes') is STALE - the adapter has a full edge path and the route is matched and invoked, so this is not a clean decline. Correct that README line with the fix. SCOPE: a probe (edge-route-catchall) proved the edge path otherwise WORKS, so this is wasm-specific; of 45 app-dir suites with an edge fixture only 3 are confirmed blocked (metadata-dynamic-routes, metadata-font, metadata-edge - the last imports ImageResponse indirectly and a naive grep misses it). Latent follow-up: the manifest's binary `assets` (the Geist font) is also not carried and is likely the next failure once wasm resolves."
+    },
+    "ocelhq-dc4": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 2,
+      "oneLine": "Dynamic route params always empty for runtime='edge' routes; worker never injects Next's nxtP query params",
+      "fixSite": "workers/nextjs/src/index.ts:493-501 (the edge branch, NOT originUrl's shared body)",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "Received: \"{}\"",
+          "confidence": "broad",
+          "check": "Route has `export const runtime = 'edge'` and a dynamic/catch-all segment. Live request returns 200 with x-matched-path showing the bracketed route (e.g. /edge/[[...slug]]) but an empty params object. Not a 500 and not 'Edge invocation failed' - that is ocelhq-4lw."
+        }
+      ],
+      "note": "An edge entry is a single-route bundle and cannot re-match a pathname, so the invoker must inject dynamic params as nxtP-prefixed query entries. edge-route-module-wrapper.ts:106-109 derives params SOLELY from request.nextUrl.searchParams, and NEXT_QUERY_PARAM_PREFIX='nxtP' (constants.ts:6) is PRODUCED by Next's own build adapter at build/adapter/build-complete.ts:1727,1755,1759 - so the deployment layer is contractually expected to populate them, this is not an optional convention. originUrl (index.ts:718-721) forwards the pathname plus the ORIGINAL search string and injects nothing. EDGE-ONLY: case 'lambda' (:484-488) forwards to a full route module whose prepare() re-matches params (route-module.ts:808-822, fallback :940-949). DISTINCT from ocelhq-bvm despite both citing :718-721 - bvm ENCODES a path already forwarded and its fix belongs inside originUrl's shared body, whereas this one must NOT go there because lambda and prerender callers must keep forwarding the untouched search string. Fails as WRONG DATA AT 200, which per ocelhq-9d3's history is the more dangerous mode."
+    },
+    "ocelhq-kpd": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 5,
+      "oneLine": "No /_next/image optimizer: every next/image src 404s (worker finds no route, falls through to the 404 asset)",
+      "fixSite": "packages/next-runtime/src/next-adapter.mts:247 (routingManifest.dispatch) + workers/nextjs/src/index.ts",
+      "matchers": [
+        {
+          "kind": "http-request",
+          "pattern": "^/_next/image\\?",
+          "confidence": "specific",
+          "check": "Any request to /_next/image returning 404. The adapter emits no dispatch entry for this path, so it is unconditional."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "Expected: 200\\s+Received: 404",
+          "confidence": "broad",
+          "check": "Attribute here ONLY if the fetched URL is /_next/image. A bare 200-vs-404 matches ocelhq-e8z, ocelhq-xlj and ocelhq-iud too. Confirm the response carries NO x-matched-path AND NO x-ocel-cache AND NO x-amzn-requestid - present headers mean the request DID reach a handler and this is not the cause."
+        }
+      ],
+      "note": "UNBUILT FEATURE, not a regression - filed as a bug because the gap is unacknowledged and fails silently. The adapter never reads Next's images config at all (images|imageSizes|deviceSizes|remotePatterns|unoptimized|imagesManifest return zero hits across worker, lambda-entrypoints and next-runtime), and the emitter's dispatch map has exactly four kinds - lambda, edge, static, prerender - so no image entry is possible BY CONSTRUCTION. ocelhq-94l's milestones do not include image optimization and there is no acknowledgement in CONTEXT.md, docs/adr/ or package READMEs. DO NOT attribute the whole app-dir/next-image suite here - it is TWO defects; the 5 ssr/browser tests are ocelhq-68p. Confounder CLEARED in a follow-up probe: /_next/static/media/*.png|jpg serve correctly (200, image/png/jpeg, valid magic bytes, x-matched-path present), so the wave-4 static-media 404s were teardown contamination and the passthrough interim is VIABLE. Recommended: (1) unoptimized-style passthrough - and it MUST validate against localPatterns/remotePatterns or it becomes an open SSRF proxy; (2) independently, warn at build when next/image is used with no optimizer. Blast radius: 60 test/e2e suite dirs use next/image or next/legacy/image; next-image-new/unoptimized is a useful control that should pass today."
+    },
+    "ocelhq-a9x": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "harness",
+      "tests": 3,
+      "oneLine": "__NEXT_TEST_MODE never set for custom-script deploys: no fetch-priority header, and every next.browser() burns a flat 10s hydration timeout",
+      "fixSite": "scripts/e2e-next/deploy.mjs:152-157 (add NEXT_PRIVATE_TEST_MODE=e2e to the spawnSync env)",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "req\\.priority === '(low|auto)'|next-test-fetch-priority",
+          "confidence": "specific",
+          "check": "Any assertion on next-test-fetch-priority is unsatisfiable until NEXT_PRIVATE_TEST_MODE=e2e reaches the build. Never an adapter defect."
+        },
+        {
+          "kind": "log-timing",
+          "pattern": "Waiting hydration .* -> Hydration complete .* delta == 10.00s",
+          "confidence": "specific",
+          "check": "grep 'Waiting hydration|Hydration complete' in the run log and diff the timestamps. Exactly 10.0s means next-webdriver.ts:188 hit its setTimeout fallback and hydration was NEVER detected. Present in 196/202 page loads across sweeps a, b and c."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "request\\.allHeaders: Target page, context or browser has been closed",
+          "confidence": "broad",
+          "check": "Cascade, not a defect. Compare the reported source line against the ENCLOSING test: a page.on('request') handler line belonging to the PREVIOUS test means Jest mis-attributed a late unhandled rejection."
+        }
+      ],
+      "note": "Harness/tooling, not adapter. deployUsingCustomScript (next-deploy.ts:47, env :53-58) passes only {...process.env, NEXT_TEST_DIR, ...this.env}; the Vercel path injects --build-env NEXT_PRIVATE_TEST_MODE=e2e (:446) and the local path injects __NEXT_TEST_MODE (base.ts:673) - the custom-script path injects NEITHER. Consequences: (1) fetch-server-response.ts:689 never emits next-test-fetch-priority; (2) window.__NEXT_HYDRATED never fires (client/index.tsx:601, app-index.tsx:318), so next-webdriver.ts:188 hits its hard 10s fallback on EVERY page load. Measured: 202 waits, 1967s (32.8 min) across sweeps a/b/c, 196 of them exactly 10.00s; __NEXT_HYDRATED_CB has NEVER fired in any sweep. CORRECTNESS RULING (conservative): the flag does not disable hydration, only the SIGNAL, so this is a race, not a systematic wrong answer - NO existing finding is plausibly an artifact, since hzp, 9q8, 7og, xlj, e7w and sae all rest on curl-reproducible HTTP evidence. The real cost is that green BROWSER results are weaker evidence than assumed (negative assertions can pass vacuously). Fix chain verified end to end: deploy.mjs env -> spawnSync -> ocel build -> next build -> loadConfig runs the shim at base.ts:470-478 -> sets __NEXT_TEST_MODE -> define-env.ts:269 inlines it. Use NEXT_PRIVATE_TEST_MODE, not __NEXT_TEST_MODE directly. Also: test/e2e/instrumentation-client-hook and app-dir/instant-navigation-testing-api read window.__NEXT_HYDRATED directly and would fail outright in deploy mode."
+    },
+    "ocelhq-68p": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "tooling",
+      "tests": 5,
+      "oneLine": "logs.mjs omits NEXT_SUPPORTS_IMMUTABLE_ASSETS, so the harness demands a &dpl= token Ocel never stamps",
+      "fixSite": "scripts/e2e-next/logs.mjs:33 + lib.mjs:144-151",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "&dpl=[0-9a-f]{32}",
+          "confidence": "specific",
+          "check": "Expected string carries &dpl=<32-hex promotionId> and Received is byte-identical minus that suffix. Confirm the run log's 'Got buildId: ... supportsImmutableAssets: false' line."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "dpl=",
+          "confidence": "broad",
+          "check": "Only this defect if the assertion requires dpl= to be PRESENT. Negative assertions (not.toContain('dpl=')) and optional-group regexes are unrelated."
+        }
+      ],
+      "note": "Harness-contract defect in scripts/e2e-next, NOT an adapter bug - Ocel's assets ARE content-hashed, so carrying no dpl= token is correct and arguably better than what the harness assumes. The `0` comes from the harness's own injected post-build script at base.ts:320 (chained :329), evaluating (VERCEL_IMMUTABLE_STATIC_FILES_ENABLED && NEXT_ENABLE_ADAPTER==='1') ? 1 : 0 - false because we are not on Vercel, NOT because config.deploymentId is unset. THE CRUX: repo-wide grep for IMMUTABLE_ASSET_TOKEN across all of Next.js returns exactly ONE hit and it is a COMMENT, so the opt-out lib.mjs:144-146 documents does not exist and lib.mjs:151 is inert. FIX (a): emit NEXT_SUPPORTS_IMMUTABLE_ASSETS: 1 from logs.mjs ahead of the replayed build log - this states the TRUTH about the deployment and has zero runtime effect. Fix (b) (set config.deploymentId) REJECTED: it makes the test pass by degrading the product, rotating every asset's CDN cache key on every deploy - precisely the cost content-hashing exists to avoid. Caveats: the marker is honoured only under IS_TURBOPACK_TEST (next-deploy.ts:43-45), so (a) silently no-ops on webpack; and (a) does NOT fix next-image-legacy/default, because getDeploymentIdQuery (base.ts:865-868) never consults supportsImmutableAssets - that suite needs a manifest exclusion (note its sibling base-path already carries skipDeployment with a comment about this exact problem). Blast radius: app-dir/next-image, app-dir/worker, next-image-legacy/default. No prior misattribution: zero dpl= occurrences in either archived sweep. Sibling harness defects: ocelhq-a9x, ocelhq-7gk."
+    },
+    "ocelhq-7gk": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "harness",
+      "tests": 1,
+      "oneLine": "Sweep runs headed (HEADLESS unset), so itHeaded tests upstream always skips execute and time out",
+      "fixSite": "scripts/e2e-next/sweep-prompt.md:198-212 and fix-prompt.md:408-414 (add HEADLESS=true)",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "at itHeaded \\(",
+          "confidence": "specific",
+          "check": "The stack frame names itHeaded. run-tests.js:701-703 sets HEADLESS=true, so upstream CI has never executed this test. No upstream baseline exists; never an adapter defect."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "thrown: \"Exceeded timeout of \\d+ ms for a test\\.",
+          "confidence": "broad",
+          "check": "Check whether the test is declared with itHeaded (grep 'itHeaded' in the suite file). If so this is the HEADLESS deviation, not a timeout defect."
+        }
+      ],
+      "note": "Independent of ocelhq-a9x - neither causes the other; fix both in the same pass. Ruling: set HEADLESS=true. Nothing of value is lost - the sweep's premise is differential comparison against upstream, and a path upstream never runs has no reference result, so a failure there is uninterpretable rather than extra coverage. If headed coverage is ever wanted it needs its own lane with its own headed baseline."
+    },
+    "ocelhq-h9f": {
+      "status": "open",
+      "title": "revalidation reaches the store but the edge read path lags the tag-snapshot replica TTL",
+      "matchers": [
+        {
+          "confidence": "specific",
+          "pattern": "x-nextjs-cache:\\s*STALE on the first read after a revalidate call"
+        },
+        {
+          "confidence": "specific",
+          "pattern": "toBeGreaterThan.*Expected: > (\\d{13})\\s+Received:\\s+\\1"
+        },
+        {
+          "confidence": "broad",
+          "pattern": "not\\.(toEqual|toBe).*Expected: not \"0\\.\\d+\"",
+          "check": "the assertion re-reads a value after revalidatePath/revalidateTag and gets the pre-revalidation body"
+        }
+      ],
+      "related": [
+        "ocelhq-14y"
+      ]
+    },
+    "ocelhq-cr8": {
+      "status": "open",
+      "title": "prerender written under a decoded route key, read with the raw encoded pathname",
+      "matchers": [
+        {
+          "confidence": "specific",
+          "pattern": "prerendered path containing %2[06] returns the 404 page while its decoded form resolves"
+        },
+        {
+          "confidence": "broad",
+          "pattern": "next-error-h1.*404This page could not be found",
+          "check": "the requested path contains percent-encoded characters"
+        }
+      ],
+      "note": " sweep-2026-07-27g corroborated independently while triaging W6-C1: the percent-encoded form %28..%29intercept-me/icon.png DOES 404, while the literal (..) href Next actually emits serves 200 image/png. So cr8 is real but was NOT the cause of the intercepting-route metadata failure."
+    },
+    "ocelhq-dly": {
+      "status": "open",
+      "title": "ocel build rejects proxy.* — Next 16 emits proxy as nodejs middleware",
+      "matchers": [
+        {
+          "confidence": "specific",
+          "pattern": "ocel: the nodejs middleware runtime is not supported"
+        },
+        {
+          "confidence": "specific",
+          "pattern": "node-builder failed: ⨯ Failed to run onBuildComplete from ocel-adapter"
+        }
+      ]
+    },
+    "ocelhq-81a": {
+      "status": "open",
+      "title": "server-action redirect() under cacheComponents produces no navigation",
+      "matchers": [
+        {
+          "confidence": "specific",
+          "pattern": "toEndWith.*Expected string to end with:\\s*\"/destination\""
+        },
+        {
+          "confidence": "broad",
+          "pattern": "a server action redirect leaves the browser on the app root",
+          "check": "the fixture sets cacheComponents: true and the action reads headers()"
+        }
+      ]
+    },
+    "ocelhq-2d0": {
+      "status": "open",
+      "title": "service-worker chunk served immutable; assets.ts has no asset-class cache table",
+      "matchers": [
+        {
+          "confidence": "specific",
+          "pattern": "not\\.toContain.*\"immutable\".*Received: \"public, max-age=31536000, immutable\""
+        },
+        {
+          "confidence": "specific",
+          "pattern": "cache-control on a service-worker chunk contains immutable"
+        }
+      ]
+    },
+    "ocelhq-wiw": {
+      "status": "open",
+      "title": "whitespace lost from served HTML at a split-and-rejoin boundary",
+      "matchers": [
+        {
+          "confidence": "specific",
+          "pattern": "width=device-width,initial-scale=1"
+        },
+        {
+          "confidence": "broad",
+          "pattern": "expected and received differ only by whitespace inside an HTML attribute"
+        }
+      ]
+    },
+    "ocelhq-vqw": {
+      "status": "open",
+      "title": "streamed action response re-chunked across the worker + Function URL hops",
+      "matchers": [
+        {
+          "confidence": "specific",
+          "pattern": "Received \\d+ chunks.*Expected.*Received 50 chunks"
+        },
+        {
+          "confidence": "broad",
+          "pattern": "chunk count differs while body content is byte-identical"
+        }
+      ]
+    },
+    "ocelhq-zpu": {
+      "status": "open",
+      "title": "next.config afterFiles rewrite 404'd in-run but does not reproduce live (UNKNOWN)",
+      "matchers": [
+        {
+          "confidence": "broad",
+          "pattern": "an afterFiles rewrite whose source does not start with assetPrefix returns 404",
+          "check": "re-run the suite before treating as real — did not reproduce against a live preview"
+        }
+      ]
+    },
+    "ocelhq-14y": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Per-fetch next.revalidate TTL not honoured in the deployed fetch cache: revalidate:30 entries expire in ~12s, so back-to-back reads of the same page disagree",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "Exceeded timeout of 60000 ms for a test",
+          "confidence": "broad",
+          "check": "Only this issue when the test body is a check() loop fetching /variable-revalidate-edge/post-method (or /variable-revalidate/post-method) twice and comparing #layout-data/#page-data/#data-body1..4. A bare 'Exceeded timeout' with any other route is NOT this issue."
+        },
+        {
+          "kind": "test-name",
+          "pattern": "should cache correctly with post method and revalidate edge",
+          "confidence": "specific"
+        },
+        {
+          "kind": "route",
+          "pattern": "/variable-revalidate-edge/post-method",
+          "confidence": "specific"
+        },
+        {
+          "kind": "content-drift",
+          "pattern": "a fetch declaring next:{revalidate:30} changes value in under ~20s (observed 11-15s) on consecutive reads",
+          "confidence": "specific"
+        },
+        {
+          "kind": "http-header",
+          "pattern": "no x-nextjs-cache, no age, and no cache-control on a kind:\"edge\" app-page response",
+          "confidence": "broad",
+          "check": "Confirms the edge route has no page-level response cache (dispatch entry is kind:'edge', id:null). Supporting evidence only, not sufficient alone."
+        }
+      ],
+      "related": [
+        "ocelhq-h9f"
+      ]
+    },
+    "ocelhq-4fg": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Worker's originUrl() forwards the resolved pathname with the CLIENT's search string, dropping resolveRoutes' invocationTarget.query; interception routes with a dynamic segment at the (.) marker get params.a === '(.)x'",
+      "fixSite": "workers/nextjs/src/index.ts:717-721 (originUrl) and the RouteResult.invocationTarget type at :173",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "Received string:\\s*\"[^\"]*\\(\\.{1,3}\\)",
+          "confidence": "specific",
+          "check": "An interception marker ((.), (..), (...)) appearing verbatim inside a rendered param value."
+        },
+        {
+          "kind": "route",
+          "pattern": "^/\\(\\.{1,3}\\)[^/]*\\[",
+          "confidence": "specific",
+          "check": "x-matched-path is an interception template whose marker sits on a DYNAMIC segment (e.g. /(.)[a]/[b]/[c]/item). Markers on static segments (/(.)groups/[id]/new) are unaffected."
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "interception",
+          "confidence": "broad",
+          "check": "Only this bug if the intercepted component DID render (modal text is present) and solely the param VALUE is wrong. If the modal shows default.tsx or a catch-all instead, that is ocelhq-9q8. If the request 404s, that is ocelhq-cr8/ocelhq-iud."
+        }
+      ],
+      "relatedIssues": [
+        "ocelhq-9q8"
+      ],
+      "notes": "Same suite (app-dir/interception-dynamic-single-segment) also carries one ocelhq-9q8 failure ('purely static multi-segment paths' -> modal reads 'default'). Do not fold the two together. Generalises beyond interception: the destination query is dropped for ALL rewrites."
+    },
+    "ocelhq-2gz3": {
+      "status": "open",
+      "priority": "P2",
+      "kind": "harness",
+      "tests": 2,
+      "oneLine": "prefetch=\"auto\" loading-shell responses land ~2.4-3.0s after load; the test's 500ms prefetch-readiness gate opens first, so the click misses the prefetch cache and #loading never renders",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "waiting for locator\\('#loading'\\) to be visible",
+          "confidence": "broad",
+          "check": "Scope to searchparams-reuse-loading's 'full prefetches with different searchParam values' tests (either Without/With Middleware). Confirm iff the prefetch RSC responses are 200 text/x-component and their bodies DO contain the {\"id\":\"loading\",\"children\":\"Loading...\"} boundary - i.e. the payload is correct and only its arrival time is late. If the payload is wrong or non-200, it is a different defect."
+        },
+        {
+          "kind": "latency-anomaly",
+          "pattern": "prefetch RSC response (Next-Router-Prefetch: 1) for a dynamic app route arrives >500ms after it was issued",
+          "confidence": "specific",
+          "check": "Reproduce with scripts that mirror the test's route interception: inserting a ~6s wait between the readiness gate and the click flips the failure to a pass with exactly one stalled RSC request."
+        }
+      ],
+      "note": "NOT a payload/content-type defect - ocelhq-9q8 is ruled out here (content-type: text/x-component on both prefetch and non-prefetch). Dynamic-route prefetches are cache-control: private, no-store with no prerender artifact, so every ?id=N variant costs a live origin round trip (~0.44-1.19s warm; edge-cached static baseline from the same client is ~0.37-0.59s, so the Lambda adds only ~70-100ms - this is RTT-bound, not compute-bound). The 'With Middleware' variant is already excused by baseline-manifest.json while 'Without Middleware' is not, despite a shared root cause."
+    },
+    "ocelhq-34gs": {
+      "title": "assetPrefix+basePath: every client JS bundle 404s — rewrite matches but static lookup misses",
+      "status": "open",
+      "priority": "P1",
+      "firstSeen": "sweep-2026-07-27e",
+      "suites": [
+        "test/e2e/app-dir/asset-prefix-with-basepath/asset-prefix-with-basepath.test.ts"
+      ],
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "Expected: 200\\s+Received: 404",
+          "confidence": "broad",
+          "check": "Attribute ONLY if the fetched URL is under the configured assetPrefix and contains /_next/static/. Confirm by fetching the same file under the basePath instead: if that returns 200 text/javascript while the assetPrefix form 404s, it is this issue. A 404 carrying x-matched-path pointing at the basePath-rewritten path is decisive — it proves the rewrite matched and the STATIC LOOKUP missed, which is what distinguishes this from a routing/dispatch gap."
+        },
+        {
+          "kind": "http-header",
+          "pattern": "x-matched-path: <basePath>/_next/static/.* on a 404 response",
+          "confidence": "specific"
+        }
+      ],
+      "notes": "Do NOT attribute to ocelhq-zpu: zpu's own test ('rewrites that do not start with assetPrefix should still work') PASSED in sweep-2026-07-27e, so that run was a non-reproduction of zpu. Do NOT attribute to ocelhq-kpd: its 200/404 matcher is scoped to /_next/image. Masking hazard: browser tests in the same suite still PASS with every bundle 404ing, because the hydration check short-circuits ('Not a next.js page, resolving hydrate check') — see ocelhq-a9x."
+    },
+    "ocelhq-k8pr": {
+      "title": "site root / 404s when pages/index.tsx is auto-static-optimized — dispatch key is /index",
+      "status": "open",
+      "priority": "P1",
+      "firstSeen": "sweep-2026-07-27e",
+      "suites": [
+        "test/e2e/app-dir/pages-to-app-routing/pages-to-app-routing.test.ts"
+      ],
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "Expected: 200\\s+Received: 404",
+          "confidence": "broad",
+          "check": "Attribute ONLY if the 404 is on the site ROOT '/' AND the app has a pages/index.tsx with no getStaticProps/getServerSideProps (auto-static-optimized). Decisive control: if the same fixture family has an 'optional catch-all' variant where '/' is served by pages/[[...slug]].tsx (getServerSideProps) and that variant PASSES the identical tests, it is this issue."
+        },
+        {
+          "kind": "symptom",
+          "pattern": "warmUpRoute(next, '/') exhausts its retries, then the browser loads '/' and logs a 404 resource error before hydrating the 404 page",
+          "confidence": "specific"
+        }
+      ],
+      "notes": "SIBLING of ocelhq-e7w, not a duplicate, and e7w's fix will NOT fix this. e7w is the FILE NAME (static/<route> missing .html); this is the DISPATCH KEY ('/index' vs '/'). None of e7w's three specific matchers fire here — no 'Download is starting', no application/octet-stream, no EEXIST/EISDIR; the build succeeds. Same family as ocelhq-iud (route stored under its on-disk key rather than its runtime path)."
+    },
+    "ocelhq-l2ef": {
+      "title": "pages-router _next/data navigation to a nested dynamic SSR route gets empty params",
+      "status": "open",
+      "priority": "P2",
+      "firstSeen": "sweep-2026-07-27e",
+      "suites": [
+        "test/e2e/app-dir/pages-to-app-routing/pages-to-app-routing.test.ts"
+      ],
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "Received: \"Pages Category: undefined \\(\\)\"",
+          "confidence": "specific"
+        },
+        {
+          "kind": "symptom",
+          "pattern": "pages-router client navigation renders the CORRECT component at the CORRECT URL, but getServerSideProps receives params = {} (all params undefined) on the /_next/data/<buildId>/... request",
+          "confidence": "broad",
+          "check": "Confirm the same route loaded as a full DOCUMENT returns correct params — if the document path works and only the _next/data path has empty params, it is this issue."
+        }
+      ],
+      "notes": "Shares the 'params always empty' SHAPE with ocelhq-dc4 but is NOT the same: dc4 is scoped to runtime='edge' app routes; this is a nodejs Lambda on the pages router. Do not merge on symptom shape alone. They may share a param-propagation seam."
+    },
+    "ocelhq-ktl": {
+      "title": "harness: sweep never sets NEXT_ENABLE_ADAPTER=1, silently skipping 8 adapter-gated suites",
+      "status": "open",
+      "priority": "P1",
+      "firstSeen": "sweep-2026-07-27e",
+      "category": "harness",
+      "suites": [
+        "test/e2e/app-dir/partial-fallback-shell-upgrade/partial-fallback-shell-upgrade.test.ts"
+      ],
+      "matchers": [
+        {
+          "kind": "symptom",
+          "pattern": "Jest reports a suite as '<n> skipped, 1 passed' where the single pass is the synthetic 'should skip next deploy' case, AND the suite sets skipDeployment: !isAdapterTest",
+          "confidence": "specific"
+        }
+      ],
+      "notes": "NOT an adapter defect — a harness configuration gap present in every sweep a..e. Affected: partial-fallback-shell-upgrade, partial-fallback-root-blocking, cache-components-prerender-matrix, sub-shell-generation, sub-shell-generation-middleware (app-dir), plus i18n-api-support, not-found-with-pages-i18n, middleware-rewrites. Setting the var is safe: the other NEXT_ENABLE_ADAPTER consumers in next-deploy.ts live in the Vercel CLI branch, which the custom-deploy-script path short-circuits past at line 48. Check ocelhq-68p afterwards (base.ts:320 gates NEXT_SUPPORTS_IMMUTABLE_ASSETS on the same var)."
+    },
+    "ocelhq-slzm": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 2,
+      "oneLine": "Server action result arrives correct but LATE — cold per-route Lambda start pushes it past the test retry budget",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "Received: \"initial\"",
+          "confidence": "broad",
+          "check": "Correlate the click timestamp in the jest log with INIT_START/START/END in the route Lambda's CloudWatch group. If the handler ran and END lands after click+3000ms with a 200 text/x-component body, it is this issue — NOT a broken action."
+        }
+      ],
+      "note": "Discovered sweep-2026-07-27g, merging two clusters that looked like separate action bugs. The action is not broken, it is late. Warm curl returns 200 text/x-component, x-amzn-requestid present, x-ocel-cache: BYPASS, body 1:\"result\". CloudWatch shows exactly ONE successful invocation per action: cache-components click 21:14:40.058 -> INIT_START 21:14:42.087 (2.03s pre-Lambda latency) -> END 21:14:43.805, i.e. 0.75s past retry()'s 3000ms budget; navigation-with-queued-actions ended ~0.3s past budget. Routing is correct (kind prerender with bypassFor next-action; dispatchPrerender bypasses cache for any non-GET). The per-route Lambda split is the upstream cause: every action route meets a cold function. Silent failure mode — a well-formed RSC payload arrives after the assertion gave up, so the UI shows a stale value rather than an error.",
+      "relatedIssues": [
+        "ocelhq-dan",
+        "ocelhq-81a",
+        "ocelhq-9d3"
+      ],
+      "notes": "Ruled DISTINCT from ocelhq-9d3 (no 502 during either failing run), ocelhq-dan (no redirect, no request-count assertion; per-route split is upstream not identical) and ocelhq-81a (here the response is correct and does arrive). NOTE flagged on ocelhq-81a: its log shape (six 500ms retries, no error) matches this cluster and 81a may itself be a late-response case rather than a no-navigation case."
+    },
+    "ocelhq-2f8x": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "Server action redirect() 500s on every runtime='edge' route — requestMeta.initURL is always undefined in the edge shim",
+      "fixSite": "edge bundle shim + edge-ssr-app.ts (requestMeta plumbing)",
+      "matchers": [
+        {
+          "kind": "http",
+          "pattern": "edge-dispatched route: POST with next-action returns 500 with x-edge-runtime: 1, content-type text/x-component and a flight body containing E{\"digest\", while the same action id on a nodejs route returns 303 + x-action-redirect",
+          "confidence": "specific"
+        },
+        {
+          "kind": "symptom",
+          "pattern": "a suite whose nodejs variant passes while the runtime='edge' variant of the same fixture times out",
+          "confidence": "broad",
+          "check": "curl -sS -o /dev/null -D - -X POST \"$URL/<edge-route>\" -H \"next-action: $ID\" -F '1_$ACTION_ID_'\"$ID\"'=' | grep -i 'HTTP/2 500\\|x-edge-runtime'"
+        }
+      ],
+      "note": "Discovered sweep-2026-07-27g. Same action id returns 303 + x-action-redirect: /redirect;push + x-amzn-requestid on /server-action/node, but 500 with x-edge-runtime: 1, no x-action-redirect and body 1:E{\"digest\":\"676858681\"} on /server-action/edge. The edge route IS emitted and HEALTHY: dispatch[/server-action/edge] = {kind:edge, entryKey:middleware_app/server-action/edge/page}; GET, non-action POST and RSC POST all 200; a bogus next-action id 404s with x-nextjs-action-not-found: 1, so the action is found and runs. Middleware is incidental — bypassing it via x-prerender-revalidate reproduces the identical 500. ROOT CAUSE: the edge bundle's shim invokes handler(request, { ..., requestMeta: {} }) and edge-ssr-app.ts forwards that verbatim, so getRequestMeta(req,'initURL') is always undefined on edge; action-handler.ts:400-418 then throws InvariantError('Missing initURL') on the redirect path (no __NEXT_PRIVATE_ORIGIN in bundle.json env). The nodejs path is saved by the node-only back-fill at route-module.ts:694-700.",
+      "relatedIssues": [
+        "ocelhq-dc4",
+        "ocelhq-4lw"
+      ],
+      "notes": "Ruled DISTINCT from ocelhq-dc4 (same 'empty edge invocation context' FAMILY but a different missing input — params via nextUrl.searchParams vs origin via requestMeta.initURL; neither fix resolves the other), ocelhq-4lw (4lw throws on chunk evaluation and yields the worker's 22-byte 'Edge invocation failed'; here the bundle evaluates and bundle.json wasm is []), ocelhq-81a and ocelhq-dan. DOC FINDING: the repo README claim that the adapter 'emits nodejs functions only and skips edge routes' is STALE — edge routes ARE emitted and dispatch as kind:edge."
+    },
+    "ocelhq-qcpc": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 3,
+      "oneLine": "server action redirect() to a RELATIVE URL produces no client navigation; absolute URL to the same target works",
+      "matchers": [
+        {
+          "kind": "jest-error",
+          "pattern": "browser.url\\(\\) expected <origin>/redirect-target but received <origin>/client/redirects",
+          "confidence": "specific"
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "waiting for locator\\('#redirected'\\) to be visible",
+          "confidence": "specific"
+        },
+        {
+          "kind": "symptom",
+          "pattern": "a server action redirect() given a relative path leaves the browser on the action page, while the absolute-URL variant of the same action navigates",
+          "confidence": "broad",
+          "check": "Confirm the origin returns 303 with a RELATIVE x-action-redirect value. If x-action-redirect is absolute, this is not qcpc."
+        }
+      ],
+      "note": "Runtime-independent (fails on both nodejs and edge), which refutes ocelhq-2f8x. Distinct from ocelhq-dan, which fails only AFTER a successful navigation on toHaveLength(1)/received 2. Check whether ocelhq-81a collapses into this."
+    },
+    "ocelhq-r6ul": {
+      "status": "open",
+      "priority": "P1",
+      "kind": "adapter",
+      "tests": 1,
+      "oneLine": "first/early server-action POST intermittently gets a Cloudflare 502 with no x-amzn-* headers (non-throttle half of the closed ocelhq-9d3)",
+      "matchers": [
+        {
+          "kind": "http",
+          "pattern": "502 with server: cloudflare and retry-after: 60 and NO x-amzn-* header of any kind, on a POST carrying next-action",
+          "confidence": "specific"
+        },
+        {
+          "kind": "jest-error",
+          "pattern": "status of 502",
+          "confidence": "broad",
+          "check": "Confirm absence of x-amzn-requestid before attributing. Quota is 1000, so this is NOT throttling; sweep-f/g CloudWatch shows the Lambda IS invoked, implicating the worker->Function-URL response leg."
+        }
+      ],
+      "note": "Inherited from ocelhq-9d3. Trigger UNKNOWN: a deliberate 75s idle gap did not reproduce it. Distinct from ocelhq-slzm (late but correct 200)."
+    }
+  },
+  "suiteCounts": {
+    "totalTestFilesInTree": 690,
+    "appDirSuites": 508,
+    "appDirDeployCapable": 318,
+    "appDirSkipDeployment": 190,
+    "measuredAt": "sweep-2026-07-27b",
+    "note": "grep -c skipDeployment over test/e2e/app-dir/*/*.test.ts. 190 of 508 app-dir suites (37%) set skipDeployment:true, so under NEXT_TEST_MODE=deploy the harness replaces the suite body with a synthetic `should skip next deploy` case and no adapter signal is obtainable. Coverage percentages against 690 therefore overstate reachable coverage. Check this flag BEFORE spending a wave slot - two slots were lost to it in sweep-2026-07-27b. ADDITION from sweep-2026-07-27c: skipDeployment is not the only structural trap. A suite can also bail at DESCRIBE SCOPE on `if ((global as any).isNextDeploy)`, substituting a single no-op case - rewrites-redirects does exactly this and cost a wave slot. Inventory `grep -l isNextDeploy` alongside skipDeployment before composing a wave."
+  },
+  "baselineManifest": {
+    "status": "empty",
+    "path": "scripts/e2e-next/baseline-manifest.json",
+    "note": "The file contains literally {} - no baseline has ever been recorded. The README promotion rule (\"delete the case line when a fix makes it pass\") has nothing to act on, and NEXT_EXTERNAL_TESTS_FILTERS is not set by the sweep runner command anyway. The `known` bucket in these sweeps therefore derives entirely from Next.js upstream test/deploy-tests-manifest.json, which this repo does not own. Recording drift against it is informational only."
+  },
+  "structuralTraps": {
+    "note": "Screen EVERY candidate against all SIX before composing a wave. Each has burned at least one slot.",
+    "traps": [
+      {
+        "id": 1,
+        "name": "literal skipDeployment: true",
+        "screen": "grep -l 'skipDeployment: true'",
+        "count": "184 of 508 app-dir suites"
+      },
+      {
+        "id": 2,
+        "name": "describe-scope isNextDeploy guard",
+        "screen": "grep -l isNextDeploy, then READ the hit",
+        "count": "37 app-dir suites mention it"
+      },
+      {
+        "id": 3,
+        "name": "blocked by ocelhq-e7w at build",
+        "screen": "see the e7w blocklist in sweep-prompt.md",
+        "count": "8 suites"
+      },
+      {
+        "id": 4,
+        "name": "top-level unconditional describe.skip",
+        "screen": "grep -l '^\\s*describe\\.skip('",
+        "count": "17 app-dir suites",
+        "firstSeen": "sweep-2026-07-27e (ppr.test.ts:6 burned a slot)"
+      },
+      {
+        "id": 5,
+        "name": "COMPUTED skipDeployment (e.g. !isAdapterTest)",
+        "screen": "grep -n 'skipDeployment:' | grep -v 'skipDeployment: true'",
+        "count": "5 app-dir suites",
+        "firstSeen": "sweep-2026-07-27e (partial-fallback-shell-upgrade burned a slot; see ocelhq-ktl)"
+      },
+      {
+        "id": 6,
+        "name": "fixture ships nodejs-runtime middleware/proxy (ocelhq-dly kills the build)",
+        "screen": "for each fixture dir, find middleware|proxy.(ts|js|tsx|mjs) and require /runtime:\\s*['\\\"]edge['\\\"]/ in at least one",
+        "count": "5 suites hit in sweep-2026-07-27g (2 burned a slot, 3 caught pre-dispatch)",
+        "firstSeen": "sweep-2026-07-27g",
+        "why": "Invisible to all five earlier screens because it lives in the FIXTURE, not the test file. Behaves exactly like skipDeployment: burns a full slot and yields no adapter signal. Suites hit: redirect-rewrite-dynamic-basepath and concurrent-navigations/server-patch-history (dispatched, lost), plus app-middleware/app-middleware-in-src-dir, action-forward-loop and next-after-pages (screened out before dispatch)."
+      }
+    ]
+  }
+}
