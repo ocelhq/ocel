@@ -61,6 +61,8 @@ func init() {
 	rootCmd.AddCommand(bootstrapCmd)
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)
+	rootCmd.AddCommand(linkCmd)
+	rootCmd.AddCommand(unlinkCmd)
 }
 
 // effectiveAPIURL resolves the Ocel API origin a command should target, in
