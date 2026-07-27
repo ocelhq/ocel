@@ -237,7 +237,7 @@ func (p *provider) DeployApp(ctx context.Context, app edge.AppDeployment) (edge.
 		return edge.AppResult{}, fmt.Errorf("put worker script: %w", err)
 	}
 
-	if err := p.reconcileWorkerRoutes(ctx, up, app.Domains, app.Warn); err != nil {
+	if err := p.reconcileWorkerRoutes(ctx, up, routePlan{desired: app.Domains, prune: true}, app.Warn); err != nil {
 		return edge.AppResult{}, err
 	}
 	url, err := p.setSubdomain(ctx, up, len(app.Domains) == 0)
@@ -552,30 +552,46 @@ func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (s
 	return fmt.Sprintf("https://%s.%s.workers.dev", up.scriptName, account.Subdomain), nil
 }
 
-// reconcileWorkerRoutes makes the worker's attached hostnames exactly desired,
-// each as a Cloudflare worker route "<hostname>/*", or none when desired is
-// empty. Every hostname — a plain production apex, a "www" host, or a "*."
-// wildcard (multitenant production or a preview base) — routes the same way, so
-// production and preview can share a base domain and Cloudflare's most-specific
-// route wins per request. It is the single hostname path for both classes,
-// replacing the earlier custom-domain-for-production split.
+// routePlan is how one deploy wants its worker's hostnames attached. Mirrors the
+// intent fields of edge.RootStackSpec, which document why each choice exists.
+type routePlan struct {
+	desired        []string
+	prune          bool
+	requiredRecord string
+}
+
+// reconcileWorkerRoutes attaches the worker to every hostname in plan.desired,
+// each as a Cloudflare worker route "<hostname>/*", or to none when desired is
+// empty. Every hostname — a plain production apex, a "www" host, an exact
+// preview pointer host, or a "*." wildcard (multitenant production or a preview
+// base) — routes the same way, so production and preview can share a base domain
+// and Cloudflare's most-specific route wins per request. It is the single
+// hostname path for both classes, replacing the earlier
+// custom-domain-for-production split.
 //
-// It converges idempotently: it ensures a route and its proxied placeholder
-// record for each desired hostname, deletes any route for this script whose
-// hostname is no longer desired (removing only Ocel's own placeholder record),
-// and detaches any custom domain still bound to this script from before the
+// It converges idempotently. A hostname reaches Cloudflare's edge only through a
+// proxied DNS record, so it either plants its own placeholder record per hostname
+// or verifies plan.requiredRecord instead. A pruning plan then drops the routes
+// this deploy did not ask for, along with only Ocel's own placeholder records. It
+// always detaches any custom domain still bound to this script from before the
 // switch to routes — a custom domain would otherwise reject an overlapping
 // route. warn, when non-nil, receives non-fatal advisories (a hostname the
 // zone's Universal SSL does not cover, a user-managed record blocking a route).
-func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, desired []string, warn func(string)) error {
+func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan routePlan, warn func(string)) error {
 	warn = nilSafeWarn(warn)
 
 	if err := p.detachCustomDomains(ctx, up.accountID, up.scriptName); err != nil {
 		return err
 	}
 
-	wanted := make(map[string]bool, len(desired))
-	for _, host := range desired {
+	if plan.requiredRecord != "" && len(plan.desired) > 0 {
+		if err := p.verifyProxiedRecord(ctx, up.accountID, plan.requiredRecord); err != nil {
+			return err
+		}
+	}
+
+	wanted := make(map[string]bool, len(plan.desired))
+	for _, host := range plan.desired {
 		zoneID, zoneName, err := p.resolveZone(ctx, up.accountID, routeBaseDomain(host))
 		if err != nil {
 			return err
@@ -587,11 +603,17 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, desired
 		if err := p.ensureRoute(ctx, zoneID, host+"/*", up.scriptName); err != nil {
 			return err
 		}
+		if plan.requiredRecord != "" {
+			continue
+		}
 		if err := p.ensureProxiedRecord(ctx, zoneID, host, warn); err != nil {
 			return err
 		}
 	}
 
+	if !plan.prune {
+		return nil
+	}
 	return p.pruneStaleRoutes(ctx, up, wanted)
 }
 
@@ -716,21 +738,40 @@ func (p *provider) ensureRoute(ctx context.Context, zoneID, pattern, scriptName 
 	return nil
 }
 
-// ensureProxiedRecord plants the proxied placeholder record for hostname so it
-// resolves to Cloudflare's edge, where the route fires — a route without a
-// proxied address record at its hostname never fires. Only address records (A,
-// AAAA, CNAME) govern whether the hostname reaches the edge; TXT/MX and the like
-// share the name but are inherently unproxiable, so they are ignored here. It
-// never overwrites an address record the user (or a prior deploy) already put
-// there: if a proxied one exists the route already resolves and it is left
-// alone; if address records exist but none is proxied the route cannot fire, so
-// it warns rather than silently serve nothing — but still leaves them untouched.
-func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname string, warn func(string)) error {
+// verifyProxiedRecord fails unless a proxied address record already exists at
+// name, in the account zone that owns it. It is ensureProxiedRecord's
+// counterpart for a record whose lifecycle is not one deploy's to own — a
+// wildcard shared by every hostname under a preview base domain — so it only
+// reports, never plants. A record that exists unproxied is as fatal as a missing
+// one: an unproxied hostname never reaches Cloudflare's edge, so its worker route
+// can never fire.
+func (p *provider) verifyProxiedRecord(ctx context.Context, accountID, name string) error {
+	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(name))
+	if err != nil {
+		return err
+	}
+	haveAddress, haveProxied, err := p.addressRecordsAt(ctx, zoneID, name)
+	if err != nil {
+		return err
+	}
+	switch {
+	case !haveAddress:
+		return fmt.Errorf("no DNS record for %q, which the hostnames this deploy serves resolve through — add a proxied (orange cloud) record at %q in Cloudflare and re-run", name, name)
+	case !haveProxied:
+		return fmt.Errorf("the DNS record for %q is not proxied through Cloudflare, so no worker route under it can ever fire — set %q to proxied (orange cloud) and re-run", name, name)
+	}
+	return nil
+}
+
+// addressRecordsAt reports whether the zone holds any address record (A, AAAA,
+// CNAME) at hostname and whether one of them is proxied — the two facts that
+// decide whether a worker route there can fire. TXT/MX and the like share the
+// name but are inherently unproxiable, so they are ignored.
+func (p *provider) addressRecordsAt(ctx context.Context, zoneID, hostname string) (haveAddress, haveProxied bool, err error) {
 	existing := p.client.DNS.Records.ListAutoPaging(ctx, dns.RecordListParams{
 		ZoneID: cf.F(zoneID),
 		Name:   cf.F(dns.RecordListParamsName{Exact: cf.F(hostname)}),
 	})
-	var haveAddress, haveProxied bool
 	for existing.Next() {
 		rec := existing.Current()
 		if !isAddressRecord(rec.Type) {
@@ -742,7 +783,22 @@ func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname str
 		}
 	}
 	if err := existing.Err(); err != nil {
-		return fmt.Errorf("list DNS records for %q: %w", hostname, err)
+		return false, false, fmt.Errorf("list DNS records for %q: %w", hostname, err)
+	}
+	return haveAddress, haveProxied, nil
+}
+
+// ensureProxiedRecord plants the proxied placeholder record for hostname so it
+// resolves to Cloudflare's edge, where the route fires — a route without a
+// proxied address record at its hostname never fires. It never overwrites an
+// address record the user (or a prior deploy) already put there: if a proxied one
+// exists the route already resolves and it is left alone; if address records
+// exist but none is proxied the route cannot fire, so it warns rather than
+// silently serve nothing — but still leaves them untouched.
+func (p *provider) ensureProxiedRecord(ctx context.Context, zoneID, hostname string, warn func(string)) error {
+	haveAddress, haveProxied, err := p.addressRecordsAt(ctx, zoneID, hostname)
+	if err != nil {
+		return err
 	}
 	if haveAddress {
 		if !haveProxied {

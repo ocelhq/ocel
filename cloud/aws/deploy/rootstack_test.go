@@ -33,15 +33,27 @@ type recordingRootStack struct {
 	pruned            []int
 	prunePointers     []string
 	removedPointers   []string
+	removedRoutes     []routeRemoval
 	historyPointers   []string
 	destroyed         int
 	destroyedWorkers  []string
 	destroyedInstance int
 	listedPrefixes    []string
 
-	history         []edge.HistoryEntry
-	deployedWorkers []string
-	pruneResult     edge.PruneResult
+	history             []edge.HistoryEntry
+	deployedWorkers     []string
+	pruneResult         edge.PruneResult
+	destroyRootStackErr error
+	// pointerRemoval is what RemovePointer reports beyond pruneResult: the routes
+	// the pointer carried and how many pointers the project has left.
+	pointerRemoval edge.PointerRemoval
+}
+
+// routeRemoval is one RemoveRoute call: which worker script lost a route, and
+// which hostname's.
+type routeRemoval struct {
+	worker   string
+	hostname string
 }
 
 var _ edge.RootStack = (*recordingRootStack)(nil)
@@ -106,18 +118,25 @@ func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state e
 	return f.pruneResult, nil
 }
 
-func (f *recordingRootStack) RemovePointer(_ context.Context, state edge.RootStackState, pointer string) (edge.PruneResult, error) {
+func (f *recordingRootStack) RemovePointer(_ context.Context, state edge.RootStackState, pointer string) (edge.PointerRemoval, error) {
 	if err := f.checkAuth(state); err != nil {
-		return edge.PruneResult{}, err
+		return edge.PointerRemoval{}, err
 	}
 	f.removedPointers = append(f.removedPointers, pointer)
-	return f.pruneResult, nil
+	removal := f.pointerRemoval
+	removal.PruneResult = f.pruneResult
+	return removal, nil
+}
+
+func (f *recordingRootStack) RemoveRoute(_ context.Context, worker, hostname string) error {
+	f.removedRoutes = append(f.removedRoutes, routeRemoval{worker: worker, hostname: hostname})
+	return nil
 }
 
 func (f *recordingRootStack) DestroyRootStack(_ context.Context, workers []string) error {
 	f.destroyedWorkers = append(f.destroyedWorkers, workers...)
 	f.destroyed++
-	return nil
+	return f.destroyRootStackErr
 }
 
 func (f *recordingRootStack) ListDeployedWorkers(_ context.Context, prefix string) ([]string, error) {

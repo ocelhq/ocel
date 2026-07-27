@@ -99,29 +99,39 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	if err != nil {
 		return nil, err
 	}
+
+	// A route is per hostname, not per project version, so an up-to-date root
+	// stack still has route work: without it a second preview pointer would
+	// never get a route.
+	genericUp := upload{accountID: accountID, scriptName: spec.GenericName}
+	if !upToDate {
+		genericUp.worker = bindCodeLoader(bindObjectStore(
+			withVar(withService(spec.Generic, genericStoreBinding, spec.StoreScriptName), genericSlugBinding, slug),
+			spec.Values,
+		))
+		assetsJWT, err := p.uploadAssets(ctx, genericUp)
+		if err != nil {
+			return nil, fmt.Errorf("upload generic worker assets: %w", err)
+		}
+		if err := p.putScript(ctx, genericUp, assetsJWT); err != nil {
+			return nil, fmt.Errorf("put generic worker: %w", err)
+		}
+	}
+
+	if err := p.reconcileWorkerRoutes(ctx, genericUp, routePlan{
+		desired:        spec.Domains,
+		prune:          spec.PruneRoutes,
+		requiredRecord: spec.RequiredRecord,
+	}, spec.Warn); err != nil {
+		return nil, err
+	}
 	if upToDate {
 		return prior, nil
 	}
 
-	generic := bindCodeLoader(bindObjectStore(
-		withVar(withService(spec.Generic, genericStoreBinding, spec.StoreScriptName), genericSlugBinding, slug),
-		spec.Values,
-	))
-	genericUp := upload{accountID: accountID, scriptName: spec.GenericName, worker: generic}
-	assetsJWT, err := p.uploadAssets(ctx, genericUp)
-	if err != nil {
-		return nil, fmt.Errorf("upload generic worker assets: %w", err)
-	}
-	if err := p.putScript(ctx, genericUp, assetsJWT); err != nil {
-		return nil, fmt.Errorf("put generic worker: %w", err)
-	}
-	if err := p.reconcileWorkerRoutes(ctx, genericUp, spec.Domains, spec.Warn); err != nil {
-		return nil, err
-	}
 	if _, err := p.setSubdomain(ctx, genericUp, len(spec.Domains) == 0); err != nil {
 		return nil, fmt.Errorf("set generic worker subdomain: %w", err)
 	}
-
 	if err := p.putVersionStamp(ctx, endpoint, slug, id.secret, spec.Version); err != nil {
 		return nil, fmt.Errorf("set root-stack version stamp: %w", err)
 	}
@@ -242,6 +252,37 @@ func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// RemoveRoute deletes the worker route "<hostname>/*" off the named script,
+// resolving the hostname's owning zone the way the deploy path does and touching
+// no DNS record. A route that is already gone is not an error, so a re-run
+// resumes (edge.RootStack).
+func (p *provider) RemoveRoute(ctx context.Context, worker, hostname string) error {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return fmt.Errorf("%s is not set; it is required to remove a worker route", envAccountID)
+	}
+	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
+	if err != nil {
+		return err
+	}
+
+	pattern := hostname + "/*"
+	routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
+	for routes.Next() {
+		route := routes.Current()
+		if route.Script != worker || route.Pattern != pattern {
+			continue
+		}
+		if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
+			return fmt.Errorf("delete worker route %q: %w", pattern, err)
+		}
+	}
+	if err := routes.Err(); err != nil {
+		return fmt.Errorf("list worker routes in zone %s: %w", zoneID, err)
+	}
+	return nil
 }
 
 // ListDeployedWorkers returns the account's worker script names beginning with
@@ -480,10 +521,10 @@ func (p *provider) History(ctx context.Context, state edge.RootStackState, point
 	return history, nil
 }
 
-func (p *provider) RemovePointer(ctx context.Context, state edge.RootStackState, pointer string) (edge.PruneResult, error) {
-	var result edge.PruneResult
+func (p *provider) RemovePointer(ctx context.Context, state edge.RootStackState, pointer string) (edge.PointerRemoval, error) {
+	var result edge.PointerRemoval
 	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
-		return edge.PruneResult{}, err
+		return edge.PointerRemoval{}, err
 	}
 	return result, nil
 }

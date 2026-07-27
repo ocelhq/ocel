@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -28,6 +29,7 @@ type cfMock struct {
 	deletedRecords       []string
 	deletedRoutes        []string
 	deletedCustomDomains []string
+	putScripts           []string
 }
 
 func (m *cfMock) server(t *testing.T) *httptest.Server {
@@ -78,6 +80,15 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 		}
 	})
 
+	mux.HandleFunc("PUT /accounts/acct/workers/scripts/{name}", func(w http.ResponseWriter, r *http.Request) {
+		m.putScripts = append(m.putScripts, r.PathValue("name"))
+		writeResult(w, map[string]any{"id": r.PathValue("name")})
+	})
+
+	mux.HandleFunc("POST /accounts/acct/workers/scripts/{name}/subdomain", func(w http.ResponseWriter, r *http.Request) {
+		writeResult(w, map[string]any{"enabled": false, "previews_enabled": false})
+	})
+
 	mux.HandleFunc("/accounts/acct/workers/domains", func(w http.ResponseWriter, r *http.Request) {
 		writeResult(w, m.existingCustomDomains)
 	})
@@ -97,7 +108,7 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 				writeResult(w, []any{})
 				return
 			}
-			writeResult(w, m.existingRecords)
+			writeResult(w, matchingRecords(m.existingRecords, r.URL.Query()))
 		case http.MethodPost:
 			var body map[string]any
 			_ = json.NewDecoder(r.Body).Decode(&body)
@@ -119,12 +130,35 @@ func (m *cfMock) server(t *testing.T) *httptest.Server {
 	return srv
 }
 
+// matchingRecords applies the "name.exact" and "type" filters the way the real
+// API does. Serving the whole zone regardless would let an assertion that only
+// one hostname's record was touched pass vacuously.
+func matchingRecords(records []map[string]any, query url.Values) []map[string]any {
+	matched := []map[string]any{}
+	for _, rec := range records {
+		if name := query.Get("name.exact"); name != "" && rec["name"] != name {
+			continue
+		}
+		if recordType := query.Get("type"); recordType != "" && rec["type"] != recordType {
+			continue
+		}
+		matched = append(matched, rec)
+	}
+	return matched
+}
+
 func (m *cfMock) provider(t *testing.T) *provider {
 	srv := m.server(t)
 	return &provider{client: cf.NewClient(
 		option.WithBaseURL(srv.URL+"/"),
 		option.WithAPIToken("test"),
 	)}
+}
+
+// prunedPlan is the production-shaped route plan: these hostnames, each resolved
+// by Ocel's own placeholder record, and any other route on the script pruned.
+func prunedPlan(desired ...string) routePlan {
+	return routePlan{desired: desired, prune: true}
 }
 
 // A worker route only matches traffic that already reaches Cloudflare's edge, so
@@ -135,7 +169,7 @@ func TestReconcileWorkerRoutes_PlantsProxiedRecord(t *testing.T) {
 	p := m.provider(t)
 
 	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"*.preview.app.com"}, nil); err != nil {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("*.preview.app.com"), nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 
@@ -171,7 +205,7 @@ func TestReconcileWorkerRoutes_AttachesEveryDomain(t *testing.T) {
 	p := m.provider(t)
 
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"app.com", "www.app.com"}, nil); err != nil {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com", "www.app.com"), nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 
@@ -203,7 +237,7 @@ func TestReconcileWorkerRoutes_ExistingRecordIsLeftAlone(t *testing.T) {
 	p := m.provider(t)
 
 	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"*.preview.app.com"}, nil); err != nil {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("*.preview.app.com"), nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 
@@ -233,7 +267,7 @@ func TestReconcileWorkerRoutes_PrunesDroppedDomain(t *testing.T) {
 	p := m.provider(t)
 
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"app.com"}, nil); err != nil {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 
@@ -242,6 +276,107 @@ func TestReconcileWorkerRoutes_PrunesDroppedDomain(t *testing.T) {
 	}
 	if len(m.deletedRecords) != 1 || m.deletedRecords[0] != "wwwrec" {
 		t.Errorf("deleted records = %v, want [wwwrec]", m.deletedRecords)
+	}
+}
+
+// ocelhq-5w3: a preview app's pointers share one worker script and hold one
+// exact route each, and a reconcile knows only the pointer it is deploying — so
+// pruning would black-hole the pointers deploying concurrently beside it.
+func TestReconcileWorkerRoutes_WithoutPruningLeavesSiblingRoutes(t *testing.T) {
+	m := &cfMock{
+		zoneID:   "zone1",
+		zoneName: "app.com",
+		existingRoutes: []map[string]any{
+			{"id": "sibling", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+		},
+		existingRecords: []map[string]any{
+			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+		},
+	}
+	p := m.provider(t)
+
+	up := upload{accountID: "acct", scriptName: "ocel-preview"}
+	plan := routePlan{desired: []string{"pr-2-abc1234567.preview.app.com"}, requiredRecord: "*.preview.app.com"}
+	if err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil); err != nil {
+		t.Fatalf("reconcileWorkerRoutes: %v", err)
+	}
+
+	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "pr-2-abc1234567.preview.app.com/*" {
+		t.Errorf("created routes = %v, want just this pointer's own route", m.createdRoutes)
+	}
+	if len(m.deletedRoutes) != 0 {
+		t.Errorf("deleted routes = %v, want none: a sibling pointer's route is not this reconcile's to prune", m.deletedRoutes)
+	}
+	if len(m.deletedRecords) != 0 {
+		t.Errorf("deleted records = %v, want none", m.deletedRecords)
+	}
+}
+
+// A required record is shared by every hostname under the base domain, so a
+// reconcile confirms it and plants nothing of its own.
+func TestReconcileWorkerRoutes_RequiredRecordPresentPlantsNothing(t *testing.T) {
+	m := &cfMock{
+		zoneID:   "zone1",
+		zoneName: "app.com",
+		existingRecords: []map[string]any{
+			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+		},
+	}
+	p := m.provider(t)
+
+	up := upload{accountID: "acct", scriptName: "ocel-preview"}
+	plan := routePlan{desired: []string{"pr-1-abc1234567.preview.app.com"}, requiredRecord: "*.preview.app.com"}
+	if err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil); err != nil {
+		t.Fatalf("reconcileWorkerRoutes: %v", err)
+	}
+
+	if len(m.createdRoutes) != 1 {
+		t.Errorf("created routes = %v, want the pointer's route", m.createdRoutes)
+	}
+	if len(m.createdRecords) != 0 {
+		t.Errorf("created records = %v, want none: the required record is not this deploy's to plant", m.createdRecords)
+	}
+}
+
+// Without the required record the pointer hostname never resolves, so the deploy
+// fails up front naming the record to add rather than shipping a dead hostname.
+func TestReconcileWorkerRoutes_RequiredRecordMissingFails(t *testing.T) {
+	m := &cfMock{zoneID: "zone1", zoneName: "app.com"}
+	p := m.provider(t)
+
+	up := upload{accountID: "acct", scriptName: "ocel-preview"}
+	plan := routePlan{desired: []string{"pr-1-abc1234567.preview.app.com"}, requiredRecord: "*.preview.app.com"}
+	err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil)
+	if err == nil {
+		t.Fatal("reconcileWorkerRoutes err = nil, want a failure for the missing required record")
+	}
+	if !strings.Contains(err.Error(), "*.preview.app.com") {
+		t.Errorf("error = %v, want it to name the record to add", err)
+	}
+	if len(m.createdRecords) != 0 {
+		t.Errorf("created records = %v, want none: reconcile must never create the required record", m.createdRecords)
+	}
+}
+
+// An unproxied record never reaches a worker, so it is as fatal as a missing one.
+func TestReconcileWorkerRoutes_RequiredRecordUnproxiedFails(t *testing.T) {
+	m := &cfMock{
+		zoneID:   "zone1",
+		zoneName: "app.com",
+		existingRecords: []map[string]any{
+			{"id": "wildcard", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": false},
+		},
+	}
+	p := m.provider(t)
+
+	up := upload{accountID: "acct", scriptName: "ocel-preview"}
+	plan := routePlan{desired: []string{"pr-1-abc1234567.preview.app.com"}, requiredRecord: "*.preview.app.com"}
+	err := p.reconcileWorkerRoutes(context.Background(), up, plan, nil)
+	if err == nil {
+		t.Fatal("reconcileWorkerRoutes err = nil, want a failure for the unproxied required record")
+	}
+	if !strings.Contains(err.Error(), "proxied") || !strings.Contains(err.Error(), "*.preview.app.com") {
+		t.Errorf("error = %v, want it to name the record and say it must be proxied", err)
 	}
 }
 
@@ -256,7 +391,7 @@ func TestReconcileWorkerRoutes_DetachesLeftoverCustomDomains(t *testing.T) {
 	p := m.provider(t)
 
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"app.com"}, nil); err != nil {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), nil); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
 	}
 
@@ -273,7 +408,7 @@ func TestReconcileWorkerRoutes_WarnsOnUncoveredTLS(t *testing.T) {
 
 	var warnings []string
 	up := upload{accountID: "acct", scriptName: "ocel-preview"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"*.preview.app.com"}, func(s string) {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("*.preview.app.com"), func(s string) {
 		warnings = append(warnings, s)
 	}); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
@@ -298,7 +433,7 @@ func TestReconcileWorkerRoutes_WarnsOnUnproxiedRecord(t *testing.T) {
 
 	var warnings []string
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"app.com"}, func(s string) {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), func(s string) {
 		warnings = append(warnings, s)
 	}); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
@@ -328,7 +463,7 @@ func TestReconcileWorkerRoutes_PlantsDespiteTXTRecord(t *testing.T) {
 
 	var warnings []string
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"app.com"}, func(s string) {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), func(s string) {
 		warnings = append(warnings, s)
 	}); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
@@ -356,7 +491,7 @@ func TestReconcileWorkerRoutes_ProxiedAddressRecordLeftAlone(t *testing.T) {
 
 	var warnings []string
 	up := upload{accountID: "acct", scriptName: "ocel-prod"}
-	if err := p.reconcileWorkerRoutes(context.Background(), up, []string{"app.com"}, func(s string) {
+	if err := p.reconcileWorkerRoutes(context.Background(), up, prunedPlan("app.com"), func(s string) {
 		warnings = append(warnings, s)
 	}); err != nil {
 		t.Fatalf("reconcileWorkerRoutes: %v", err)
@@ -417,5 +552,33 @@ func TestDetachRouteRecords_LeavesUserRecords(t *testing.T) {
 
 	if len(m.deletedRecords) != 0 {
 		t.Errorf("deleted records = %v, want none", m.deletedRecords)
+	}
+}
+
+// ocelhq-5w3: every project under a preview base domain resolves through the
+// wildcard record there, byte-identical though it is to a record Ocel plants.
+// What keeps a teardown off it is that nothing routes the wildcard itself: a
+// pointer holds an exact route, and teardown only reclaims the record at a
+// hostname its own routes name.
+func TestDetachRouteRecords_LeavesTheSharedPreviewBaseRecord(t *testing.T) {
+	m := &cfMock{
+		zoneID:   "zone1",
+		zoneName: "app.com",
+		existingRoutes: []map[string]any{
+			{"id": "route1", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+			{"id": "route2", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+		},
+		existingRecords: []map[string]any{
+			{"id": "base", "name": "*.preview.app.com", "type": "AAAA", "content": "100::", "proxied": true},
+		},
+	}
+	p := m.provider(t)
+
+	if err := p.detachRouteRecords(context.Background(), "acct", "ocel-preview"); err != nil {
+		t.Fatalf("detachRouteRecords: %v", err)
+	}
+
+	if len(m.deletedRecords) != 0 {
+		t.Errorf("deleted records = %v, want none: every other deployment under *.preview.app.com resolves through it", m.deletedRecords)
 	}
 }
