@@ -124,6 +124,40 @@ func runLink(ctx context.Context, projectDir, project string, opts linkOptions, 
 	return nil
 }
 
+// ensureLinked returns projectDir's Ocel Cloud link for the control plane at
+// apiURL, running the interactive link flow inline when there is none — the
+// first `ocel dev` in a fresh clone links and then carries straight on.
+//
+// Without a terminal there is no flow to run, so it points at `ocel link`,
+// which takes the project non-interactively.
+func ensureLinked(ctx context.Context, projectDir, apiURL string, stdout, stderr io.Writer, stdin io.Reader) (*cloudlink.Link, error) {
+	link, err := cloudlink.Read(projectDir, apiURL)
+	if err != nil {
+		return nil, err
+	}
+	if link != nil {
+		return link, nil
+	}
+
+	if !isReaderTTY(stdin) {
+		return nil, fmt.Errorf("%s isn't linked to an Ocel Cloud project — run `ocel link <project>` (or `ocel link --create`) first", projectDir)
+	}
+
+	fmt.Fprintln(stdout, "This directory isn't linked to an Ocel Cloud project yet.")
+	if err := runLink(ctx, projectDir, "", linkOptions{apiURL: apiURL}, stdout, stderr, stdin); err != nil {
+		return nil, err
+	}
+
+	link, err = cloudlink.Read(projectDir, apiURL)
+	if err != nil {
+		return nil, err
+	}
+	if link == nil {
+		return nil, errors.New("linking recorded no project — run `ocel link` and try again")
+	}
+	return link, nil
+}
+
 // selectProject resolves which project to link to: the one named by project,
 // a newly created one, or an interactive pick among the organization's
 // projects.

@@ -48,12 +48,18 @@ func runRun(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []strin
 		return &ExitError{Code: 1}
 	}
 
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.ResolveOptional(cwd)
 	if err != nil {
 		return err
 	}
 
-	role, err := election.Elect(cfg.ProjectID)
+	apiURL := effectiveAPIURL(cmd, creds.APIURL)
+	link, err := ensureLinked(ctx, cfg.Dir, apiURL, stdout, stderr, stdin)
+	if err != nil {
+		return err
+	}
+
+	role, err := election.Elect(link.ProjectID)
 	if err != nil {
 		return fmt.Errorf("determine leader/follower role: %w", err)
 	}
@@ -61,7 +67,7 @@ func runRun(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []strin
 	if role.Role == election.Follower {
 		return runOnceAsFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 	}
-	return runStandalone(ctx, creds, effectiveAPIURL(cmd, creds.APIURL), cfg, appArgs, stdout, stderr, stdin)
+	return runStandalone(ctx, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin)
 }
 
 // runOnceAsFollower connects to the leader at leaderAddr, takes the first
@@ -89,8 +95,8 @@ func runOnceAsFollower(ctx context.Context, leaderAddr string, appArgs []string,
 // and tears the server down before returning. It never writes a lockfile, so
 // it never advertises itself as a leader to other ocel dev/run processes.
 // apiURL is the resolved Ocel API origin provisioning is authenticated
-// against (see effectiveAPIURL).
-func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+// against (see effectiveAPIURL); projectID is the linked cloud project.
+func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("start dev server: %w", err)
@@ -98,7 +104,7 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL st
 
 	devServerAddr := "http://" + listener.Addr().String()
 
-	srv := devserver.New(apiURL, creds.AccessToken, cfg.ProjectID, devServerAddr)
+	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()

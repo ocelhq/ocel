@@ -49,11 +49,13 @@ var devCmd = &cobra.Command{
 	},
 }
 
-// runDev resolves the project config, verifies auth, discovers and syncs
-// resources, and spawns appArgs verbatim with the resolved environment. It
-// does not start appArgs if auth, discovery, or sync fail. cmd carries the
-// root --api-url flag so an explicit override wins over the persisted
-// credentials' API URL (see effectiveAPIURL); it may be nil in tests.
+// runDev resolves the project root, verifies auth and the cloud link,
+// discovers and syncs resources, and spawns appArgs verbatim with the resolved
+// environment. It does not start appArgs if auth, linking, discovery, or sync
+// fail. ocel.config.ts is optional here — dev needs only the project root and
+// discovery.paths. cmd carries the root --api-url flag so an explicit override
+// wins over the persisted credentials' API URL (see effectiveAPIURL); it may
+// be nil in tests.
 func runDev(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	creds, err := loadCredentials()
 	if err != nil {
@@ -61,18 +63,22 @@ func runDev(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []strin
 		return &ExitError{Code: 1}
 	}
 
-	cfg, err := projectconfig.Resolve(cwd)
+	cfg, err := projectconfig.ResolveOptional(cwd)
 	if err != nil {
 		return err
 	}
 
 	apiURL := effectiveAPIURL(cmd, creds.APIURL)
+	link, err := ensureLinked(ctx, cfg.Dir, apiURL, stdout, stderr, stdin)
+	if err != nil {
+		return err
+	}
 
 	// A concurrent `ocel dev` can create the lockfile between our Elect and
 	// runLeader's exclusive lockfile.Create; on that loss, re-elect to join
 	// the winner as a follower.
 	for range 3 {
-		role, err := election.Elect(cfg.ProjectID)
+		role, err := election.Elect(link.ProjectID)
 		if err != nil {
 			return fmt.Errorf("determine leader/follower role: %w", err)
 		}
@@ -80,7 +86,7 @@ func runDev(ctx context.Context, cmd *cobra.Command, cwd string, appArgs []strin
 		if role.Role == election.Follower {
 			return runFollower(ctx, role.LeaderAddr, appArgs, stdout, stderr, stdin)
 		}
-		if err := runLeader(ctx, creds, apiURL, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, errLostElection) {
+		if err := runLeader(ctx, creds, apiURL, link.ProjectID, cfg, appArgs, stdout, stderr, stdin); !errors.Is(err, errLostElection) {
 			return err
 		}
 	}
@@ -95,8 +101,9 @@ var errLostElection = errors.New("another process became leader first")
 // connected followers, and spawns appArgs verbatim with that same
 // environment. It does not start appArgs if auth, discovery, or sync fail.
 // apiURL is the resolved Ocel API origin provisioning is authenticated
-// against (see effectiveAPIURL).
-func runLeader(ctx context.Context, creds credentials.Credentials, apiURL string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+// against (see effectiveAPIURL); projectID is the linked cloud project the
+// dev sandbox is provisioned under.
+func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("start dev server: %w", err)
@@ -105,7 +112,7 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL string
 	addr := listener.Addr().String()
 	devServerAddr := "http://" + addr
 
-	srv := devserver.New(apiURL, creds.AccessToken, cfg.ProjectID, devServerAddr)
+	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
@@ -116,13 +123,13 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL string
 		fmt.Fprintln(stderr, "upload detection:", err)
 	})
 
-	if err := lockfile.Create(cfg.ProjectID, addr); err != nil {
+	if err := lockfile.Create(projectID, addr); err != nil {
 		if errors.Is(err, os.ErrExist) {
 			return errLostElection
 		}
 		return fmt.Errorf("write leader lockfile: %w", err)
 	}
-	defer lockfile.Remove(cfg.ProjectID)
+	defer lockfile.Remove(projectID)
 
 	resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, stdout, stderr)
 	if err != nil {
