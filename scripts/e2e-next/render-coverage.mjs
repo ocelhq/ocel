@@ -277,7 +277,7 @@ without spending a debugger budget rediscovering it. <strong>Specific</strong> m
   <tr><th>Issue</th><th>Matcher</th><th>Confidence</th><th>Check before attributing</th></tr>
   ${Object.entries(state.issues)
     .flatMap(([id, i]) =>
-      i.matchers.map(
+      (i.matchers ?? []).map(
         (m) =>
           `<tr><td>${issueRef(id)}</td><td><code>${esc(m.pattern)}</code></td><td>${esc(m.confidence)}</td><td>${esc(m.check ?? "—")}</td></tr>`,
       ),
