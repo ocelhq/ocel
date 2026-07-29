@@ -72,6 +72,16 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 
 	if removed {
 		errs = append(errs, reclaimPreviewEdge(ctx, stack, state, slug, removal, report))
+
+		// Artifact keys carry no pointer, so identical code under two pointers is
+		// one object: only the last pointer's removal leaves a prefix no live
+		// preview still points at. The `removed` guard above is load-bearing —
+		// RemainingPointers is also zero when RemovePointer failed, and purging on
+		// that would take every sibling pointer's artifacts with it.
+		if removal.RemainingPointers == 0 {
+			report("Purging preview function artifacts — no previews remain")
+			errs = append(errs, purgeProjectArtifacts(ctx, cfg, slug))
+		}
 	}
 
 	return errors.Join(errs...)
@@ -308,11 +318,12 @@ func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (P
 
 // purgePreviewAssets deletes a project's whole preview R2/S3 footprint: its
 // static assets and edge bundles (env-agnostic, one project-rooted prefix
-// each) and each pointer's env-scoped ISR/prerender entries (in both the asset
-// bucket and the cache store). Deleting a prefix nothing was written to is a
-// no-op.
+// each), each pointer's env-scoped ISR/prerender entries (in both the asset
+// bucket and the cache store), and its function artifacts from the preview
+// substrate's own artifact bucket. Deleting a prefix nothing was written to is
+// a no-op.
 func purgePreviewAssets(ctx context.Context, cfg Config, slug string, pointers []string) error {
-	var errs []error
+	errs := []error{purgeProjectArtifacts(ctx, cfg, slug)}
 	for _, prefix := range []string{projectAssetR2Prefix(slug), projectEdgeR2Prefix(slug)} {
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, prefix); err != nil {
 			errs = append(errs, err)

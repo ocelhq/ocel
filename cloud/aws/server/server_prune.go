@@ -99,8 +99,10 @@ func pruneSummaryLines(result edge.PruneResult) []string {
 // storage: the Pulumi backend a stack destroy selects against, and the S3/R2
 // buckets+clients a build's static-asset and ISR/prerender prefixes are
 // deleted from. It reuses the same bootstrap reads runDeploy's production
-// path does, narrowed to only what Reclaim touches — no artifact bucket, no
-// edge credentials/values, no per-app manifest state.
+// path does, narrowed to what Reclaim and DestroyProject touch — no edge
+// credentials/values, no per-app manifest state. The artifact bucket is
+// carried for DestroyProject's project-scoped artifact purge; a prune never
+// reaches it, since artifacts are content-addressed across builds.
 func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -145,6 +147,7 @@ func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 		ProjectName:        pulumiProjectName,
 		Pulumi:             pulumiCmd,
 		AssetBucket:        deployed.AssetBucket,
+		ArtifactBucket:     deployed.ArtifactBucket,
 		Uploader:           s3.NewFromConfig(awscfg),
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
