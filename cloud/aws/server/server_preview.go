@@ -266,6 +266,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		ProjectName:        pulumiProjectName,
 		Pulumi:             pulumiCmd,
 		AssetBucket:        deployed.AssetBucket,
+		ArtifactBucket:     deployed.ArtifactBucket,
 		Uploader:           s3.NewFromConfig(awscfg),
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),

@@ -194,11 +194,11 @@ func PlanProjectTeardown(ctx context.Context, cfg Config, slug string) (ProjectT
 }
 
 // purgeProjectAssets deletes a project's whole R2/S3 footprint: its static
-// assets and edge bundles (in the adopted cache store) and its ISR/prerender
-// entries (which land in both the asset bucket and the cache store), rooted at
-// the project prefix so every app and build under it goes at once. Deleting a
-// prefix nothing was written to is a no-op, mirroring Reclaim's per-build sweep
-// at project scope.
+// assets and edge bundles (in the adopted cache store), its ISR/prerender
+// entries (which land in both the asset bucket and the cache store), and its
+// function deployment artifacts, rooted at the project prefix so every app and
+// build under it goes at once. Deleting a prefix nothing was written to is a
+// no-op, mirroring Reclaim's per-build sweep at project scope.
 func purgeProjectAssets(ctx context.Context, cfg Config, slug string) error {
 	assets := projectAssetR2Prefix(slug)
 	isr := projectISRPrefix(cfg.Env, slug)
@@ -217,7 +217,21 @@ func purgeProjectAssets(ctx context.Context, cfg Config, slug string) error {
 			errs = append(errs, err)
 		}
 	}
+	if err := purgeProjectArtifacts(ctx, cfg, slug); err != nil {
+		errs = append(errs, err)
+	}
 	return errors.Join(errs...)
+}
+
+// purgeProjectArtifacts deletes every function deployment artifact a project
+// uploaded to its substrate's artifact bucket. The artifact bucket's own
+// expire-artifacts lifecycle rule would reap them eventually — this reclaims
+// the storage at teardown instead of a month later. Safe only at whole-project
+// scope: artifactKey is content-addressed and carries no env, pointer or build
+// segment, so two deployments running identical code share one object and only
+// the project prefix bounds a set nothing live still points at.
+func purgeProjectArtifacts(ctx context.Context, cfg Config, slug string) error {
+	return deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.ArtifactBucket, projectArtifactPrefix(slug))
 }
 
 // projectAssetR2Prefix is the static-assets prefix root under which every app
@@ -233,6 +247,14 @@ func projectAssetR2Prefix(slug string) string {
 // trailing-slashed for the same reason projectAssetR2Prefix is.
 func projectEdgeR2Prefix(slug string) string {
 	return path.Join("edge", slug) + "/"
+}
+
+// projectArtifactPrefix is the function-artifact prefix root under which every
+// function and content hash of a project lives (artifactKey without the
+// function/hash tail), trailing-slashed for the same reason
+// projectAssetR2Prefix is.
+func projectArtifactPrefix(slug string) string {
+	return slug + "/"
 }
 
 // projectISRPrefix is the ISR/prerender prefix root for a project in one
