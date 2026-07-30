@@ -287,6 +287,177 @@ describe("a prerender whose parent is a node bundle", () => {
   });
 });
 
+describe("a PPR prerender whose parent is a node bundle", () => {
+  const pprTarget = {
+    kind: "prerender" as const,
+    id: "bundle-0",
+    entryKey: "app/ppr/page",
+    config: {
+      allowHeader: ["host"],
+      renderingMode: "PARTIALLY_STATIC" as const,
+      bypassToken: "TOKEN",
+    },
+    fallback: { initialRevalidate: 60 },
+  };
+
+  const shellEntry = (lastModified: number) => ({
+    lastModified,
+    value: {
+      kind: "APP_PAGE",
+      html: "<html>shell</html>",
+      status: 200,
+      headers: {},
+      postponed: "STATE",
+    },
+  });
+
+  function pprDeps(
+    origin: ReturnType<typeof recorder>,
+    lastModified: number,
+    over: { now?: number; waitUntil?: (p: Promise<unknown>) => void } = {},
+    target: typeof pprTarget | Omit<typeof pprTarget, "entryKey"> = pprTarget,
+  ): RouteDeps {
+    return deps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/ppr": target },
+      },
+      functionUrls: { "bundle-0": "https://fn.example.com" },
+      fetch: origin.fetch,
+      cache: missingCache(over.waitUntil),
+      interception: {
+        config: { isrPrefix },
+        now: () => over.now ?? 2_000,
+        store: storeOf({ [cacheObject("ppr")]: shellEntry(lastModified) }),
+      },
+    });
+  }
+
+  it("carries the entry on the resume forward that renders the dynamic half", async () => {
+    const origin = recorder();
+    const res = await dispatchTo("/ppr", pprDeps(origin, 1_000));
+
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(await res.text()).toBe("<html>shell</html>from-lambda");
+    // The resume bypasses forward() entirely, building its own header set.
+    expect(origin.entries()).toEqual(["app/ppr/page"]);
+  });
+
+  it("carries the entry on the stale shell's blocking revalidate", async () => {
+    const pending: Promise<unknown>[] = [];
+    const origin = recorder();
+    const res = await dispatchTo(
+      "/ppr",
+      // 61s past a 60s revalidate window: stale, not expired.
+      pprDeps(origin, 1_000, {
+        now: 1_000 + 61_000,
+        waitUntil: (p) => pending.push(p),
+      }),
+    );
+
+    expect(await res.text()).toBe("<html>shell</html>from-lambda");
+    await Promise.all(pending);
+
+    // Both the resume and the regenerating forward name the bundle entry.
+    expect(origin.requests.length).toBeGreaterThanOrEqual(2);
+    expect(new Set(origin.entries())).toEqual(new Set(["app/ppr/page"]));
+    expect(
+      origin.requests.some(
+        (r) => r.headers.get("x-prerender-revalidate") === "TOKEN",
+      ),
+    ).toBe(true);
+  });
+
+  it("drops a client's entry header on the resume of an entryless prerender", async () => {
+    const origin = recorder();
+    const { entryKey: _omitted, ...entryless } = pprTarget;
+    await dispatchTo(
+      "/ppr",
+      pprDeps(origin, 1_000, {}, entryless),
+      new Request("https://app.example/ppr", {
+        headers: { [ENTRY_HEADER]: "attacker/admin/page" },
+      }),
+    );
+
+    expect(origin.requests[0].headers.has(ENTRY_HEADER)).toBe(false);
+  });
+});
+
+describe("a client-supplied control header", () => {
+  const lambdaDeps = (
+    origin: ReturnType<typeof recorder>,
+    target: Record<string, unknown>,
+  ) =>
+    deps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/blog/hello": target as never },
+      },
+      functionUrls: { legacy: "https://fn.example.com", "bundle-0": "https://fn.example.com" },
+      fetch: origin.fetch,
+    });
+
+  const smuggled = (headers: Record<string, string>) =>
+    new Request("https://app.example/blog/hello", { headers });
+
+  it("is never forwarded when the target names no entry", async () => {
+    const origin = recorder();
+    await dispatchTo(
+      "/blog/hello",
+      lambdaDeps(origin, { kind: "lambda", id: "legacy" }),
+      smuggled({ [ENTRY_HEADER]: "attacker/admin/page" }),
+    );
+
+    expect(origin.requests[0].headers.has(ENTRY_HEADER)).toBe(false);
+  });
+
+  it("is replaced, not appended to, by the entry the worker chose", async () => {
+    const origin = recorder();
+    await dispatchTo(
+      "/blog/hello",
+      lambdaDeps(origin, {
+        kind: "lambda",
+        id: "bundle-0",
+        entryKey: "app/blog/[slug]/page",
+      }),
+      smuggled({ [ENTRY_HEADER]: "attacker/admin/page" }),
+    );
+
+    expect(origin.requests[0].headers.get(ENTRY_HEADER)).toBe(
+      "app/blog/[slug]/page",
+    );
+    expect(
+      [...origin.requests[0].headers].filter(([n]) => n === ENTRY_HEADER),
+    ).toHaveLength(1);
+  });
+
+  it("is dropped for the whole x-ocel-* namespace, not just the entry", async () => {
+    const origin = recorder();
+    await dispatchTo(
+      "/blog/hello",
+      lambdaDeps(origin, { kind: "lambda", id: "legacy" }),
+      smuggled({
+        "x-ocel-empty-body": "1",
+        "x-ocel-cache": "HIT",
+        "x-ocel-entry-modified": "0",
+        "x-ocel-request-id": "spoofed",
+      }),
+    );
+
+    expect(
+      [...origin.requests[0].headers.keys()].filter((n) =>
+        n.startsWith("x-ocel-"),
+      ),
+    ).toEqual([]);
+  });
+});
+
 describe("a prerender whose parent renders on the edge", () => {
   const edgeTarget = {
     kind: "prerender" as const,
