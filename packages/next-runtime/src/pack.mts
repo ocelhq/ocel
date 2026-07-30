@@ -21,7 +21,9 @@ export interface PackOptions<T> {
   // are plumbed through they become this key and the packer stays unchanged.
   partitionBy?: (member: T) => string;
   budgetBytes?: number;
-  sizeOf?: (absPath: string) => number;
+  // undefined for a path that does not exist, which is reported and charged
+  // nothing rather than costing a silent zero.
+  sizeOf?: (absPath: string) => number | undefined;
 }
 
 // packBundles packs members into the fewest Lambda artifacts their assets fit
@@ -30,6 +32,9 @@ export interface PackOptions<T> {
 // members' assets and a second route usually costs only its delta. Members are
 // packed in entry-key order and bundles named in the order they are opened, so
 // identical input always yields an identical artifact.
+//
+// Two members that map one dest key to different sources cannot share a bundle,
+// so the second one opens a new bundle and gets its own copy.
 export function packBundles<T>(
   members: readonly T[],
   opts: PackOptions<T>,
@@ -42,17 +47,14 @@ export function packBundles<T>(
     sizeOf = sizeOfPath,
   } = opts;
 
-  assertOneSourcePerKey(members, assetsOf);
+  assertUniqueEntryKeys(members, entryKeyOf);
 
-  const sizes = new Map<string, number>();
+  const sizes = new Map<string, number | undefined>();
   const sizeOfCached = (abs: string) => {
-    let size = sizes.get(abs);
-    if (size === undefined) {
-      size = sizeOf(abs);
-      sizes.set(abs, size);
-    }
-    return size;
+    if (!sizes.has(abs)) sizes.set(abs, sizeOf(abs));
+    return sizes.get(abs);
   };
+  const missing: string[] = [];
 
   const partitions = new Map<string, T[]>();
   for (const member of [...members].sort(byKey(entryKeyOf))) {
@@ -74,25 +76,36 @@ export function packBundles<T>(
     return bundle;
   };
 
+  const absorb = (bundle: Bundle<T>, assets: Record<string, string>) => {
+    for (const [dest, abs] of Object.entries(assets)) {
+      if (dest in bundle.assets) continue;
+      bundle.assets[dest] = abs;
+      const size = sizeOfCached(abs);
+      if (size === undefined) missing.push(dest);
+      else bundle.sizeBytes += size;
+    }
+  };
+
   for (const key of [...partitions.keys()].sort()) {
     let bundle = open();
 
     for (const member of partitions.get(key)!) {
-      const added = Object.entries(assetsOf(member)).filter(
-        ([dest]) => !(dest in bundle.assets),
+      const assets = assetsOf(member);
+      const entries = Object.entries(assets);
+      const conflicts = entries.some(
+        ([dest, abs]) => dest in bundle.assets && bundle.assets[dest] !== abs,
       );
-      const delta = added.reduce((sum, [, abs]) => sum + sizeOfCached(abs), 0);
+      const delta = entries
+        .filter(([dest]) => !(dest in bundle.assets))
+        .reduce((sum, [, abs]) => sum + (sizeOfCached(abs) ?? 0), 0);
 
-      if (bundle.members.length > 0 && bundle.sizeBytes + delta > budgetBytes) {
+      if (
+        bundle.members.length > 0 &&
+        (conflicts || bundle.sizeBytes + delta > budgetBytes)
+      ) {
         bundle = open();
-        for (const [dest, abs] of Object.entries(assetsOf(member))) {
-          bundle.assets[dest] = abs;
-          bundle.sizeBytes += sizeOfCached(abs);
-        }
-      } else {
-        for (const [dest, abs] of added) bundle.assets[dest] = abs;
-        bundle.sizeBytes += delta;
       }
+      absorb(bundle, assets);
       bundle.members.push(member);
 
       // Nothing can be packed with a member that overflows the budget alone, so
@@ -108,50 +121,55 @@ export function packBundles<T>(
     if (bundle.members.length === 0) bundles.pop();
   }
 
+  if (missing.length > 0) {
+    console.warn(
+      `ocel: ${missing.length} traced asset(s) have no source on disk and were packed as 0 bytes — a route needing one of them fails at runtime: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? ", …" : ""}`,
+    );
+  }
+
   return bundles;
 }
 
 function byKey<T>(entryKeyOf: (member: T) => string) {
-  return (a: T, b: T) => (entryKeyOf(a) < entryKeyOf(b) ? -1 : 1);
+  return (a: T, b: T) => {
+    const left = entryKeyOf(a);
+    const right = entryKeyOf(b);
+    return left < right ? -1 : left > right ? 1 : 0;
+  };
 }
 
-// Dest-keys are repo-root-relative, so two members naming one key with
-// different sources should be impossible — and a silent last-writer-wins copy
-// would be far harder to find than this.
-function assertOneSourcePerKey<T>(
+// Entry keys index the launcher's route table, so a duplicate would silently
+// drop one route and serve another route's module in its place.
+function assertUniqueEntryKeys<T>(
   members: readonly T[],
-  assetsOf: (member: T) => Record<string, string>,
+  entryKeyOf: (member: T) => string,
 ): void {
-  const sourceByDest = new Map<string, string>();
+  const seen = new Set<string>();
   for (const member of members) {
-    for (const [dest, abs] of Object.entries(assetsOf(member))) {
-      const seen = sourceByDest.get(dest);
-      if (seen !== undefined && seen !== abs) {
-        throw new Error(
-          `ocel: asset "${dest}" maps to two different sources — "${seen}" and "${abs}"`,
-        );
-      }
-      sourceByDest.set(dest, abs);
+    const key = entryKeyOf(member);
+    if (seen.has(key)) {
+      throw new Error(`ocel: two members share the entry key "${key}"`);
     }
+    seen.add(key);
   }
 }
 
 // A path's size on disk as the asset copy will land it: a directory asset is
 // copied whole, so it costs its recursive contents; a symlink is preserved as a
 // link and costs only itself, with its target copied under its own asset entry.
-// A path that has vanished costs nothing, matching the copy skipping it.
-function sizeOfPath(absPath: string): number {
+// A path that is not there has no size, which the packer reports.
+function sizeOfPath(absPath: string): number | undefined {
   let info;
   try {
     info = lstatSync(absPath);
   } catch {
-    return 0;
+    return undefined;
   }
   if (!info.isDirectory()) return info.size;
 
   let total = 0;
   for (const entry of readdirSync(absPath, { withFileTypes: true })) {
-    total += sizeOfPath(join(absPath, entry.name));
+    total += sizeOfPath(join(absPath, entry.name)) ?? 0;
   }
   return total;
 }

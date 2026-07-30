@@ -144,35 +144,107 @@ test("a partition splits on budget independently of the others", () => {
   ]);
 });
 
-test("one dest-key mapped to two source paths throws naming both", () => {
-  expect(() =>
-    pack([
-      { key: "a", assets: { "shared.js": "/abs/one" } },
-      { key: "b", assets: { "shared.js": "/abs/two" } },
-    ]),
-  ).toThrow(/shared\.js[\s\S]*\/abs\/one[\s\S]*\/abs\/two/);
+test("members disagreeing on one dest-key never share a bundle", () => {
+  const bundles = pack([
+    { key: "a", assets: { "shared.js": "/abs/one" } },
+    { key: "b", assets: { "shared.js": "/abs/two" } },
+  ]);
+
+  expect(bundles.map((b) => [b.members.map((m) => m.key), b.assets])).toEqual([
+    [["a"], { "shared.js": "/abs/one" }],
+    [["b"], { "shared.js": "/abs/two" }],
+  ]);
 });
 
-test("a conflict across partitions is still a conflict", () => {
-  expect(() =>
-    pack(
-      [
-        { key: "a", assets: { "shared.js": "/abs/one" }, group: "x" },
-        { key: "b", assets: { "shared.js": "/abs/two" }, group: "y" },
-      ],
-      {},
-      { partitionBy: (r) => r.group! },
-    ),
-  ).toThrow(/shared\.js/);
+test("a conflict splits once and later agreeing members keep packing", () => {
+  const bundles = pack([
+    { key: "a", assets: { "shared.js": "/abs/one", "a.js": "/abs/a" } },
+    { key: "b", assets: { "shared.js": "/abs/two" } },
+    { key: "c", assets: { "shared.js": "/abs/two", "c.js": "/abs/c" } },
+  ]);
+
+  expect(bundles.map((b) => b.members.map((m) => m.key))).toEqual([
+    ["a"],
+    ["b", "c"],
+  ]);
+  expect(bundles[1]!.assets).toEqual({
+    "shared.js": "/abs/two",
+    "c.js": "/abs/c",
+  });
+});
+
+test("conflict splitting is deterministic regardless of input order", () => {
+  const routes: Route[] = [
+    { key: "a", assets: { "shared.js": "/abs/one" } },
+    { key: "b", assets: { "shared.js": "/abs/two" } },
+    { key: "c", assets: { "shared.js": "/abs/one" } },
+  ];
+
+  const forward = pack(routes);
+  const reversed = pack([...routes].reverse());
+
+  expect(JSON.stringify(reversed)).toBe(JSON.stringify(forward));
+  expect(forward.map((b) => [b.name, b.members.map((m) => m.key)])).toEqual([
+    ["bundle-0", ["a"]],
+    ["bundle-1", ["b"]],
+    ["bundle-2", ["c"]],
+  ]);
+});
+
+test("a conflict across partitions costs nothing extra", () => {
+  const bundles = pack(
+    [
+      { key: "a", assets: { "shared.js": "/abs/one" }, group: "x" },
+      { key: "b", assets: { "shared.js": "/abs/two" }, group: "y" },
+    ],
+    {},
+    { partitionBy: (r) => r.group! },
+  );
+
+  expect(bundles).toHaveLength(2);
 });
 
 test("the same dest-key at the same path is the expected sharing", () => {
+  const bundles = pack([
+    { key: "a", assets: { "shared.js": "/abs/one" } },
+    { key: "b", assets: { "shared.js": "/abs/one" } },
+  ]);
+
+  expect(bundles).toHaveLength(1);
+  expect(bundles[0]!.sizeBytes).toBe(1);
+});
+
+test("two members sharing one entry key throws", () => {
   expect(() =>
     pack([
-      { key: "a", assets: { "shared.js": "/abs/one" } },
-      { key: "b", assets: { "shared.js": "/abs/one" } },
+      { key: "a", assets: { "a.js": "/abs/a" } },
+      { key: "a", assets: { "b.js": "/abs/b" } },
     ]),
-  ).not.toThrow();
+  ).toThrow(/entry key "a"/);
+});
+
+test("an asset source that does not exist is warned about, not silently free", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  const bundles = packBundles(
+    [
+      { key: "a", assets: { "gone.js": "/abs/gone", "a.js": "/abs/a" } },
+      { key: "b", assets: { "vanished.js": "/abs/vanished" } },
+    ] satisfies Route[],
+    {
+      entryKeyOf: (r) => r.key,
+      assetsOf: (r) => r.assets,
+      sizeOf: (abs) => (abs.startsWith("/abs/a") ? 7 : undefined),
+    },
+  );
+
+  expect(bundles).toHaveLength(1);
+  expect(bundles[0]!.sizeBytes).toBe(7);
+  expect(bundles[0]!.assets["gone.js"]).toBe("/abs/gone");
+  expect(warn).toHaveBeenCalledTimes(1);
+  expect(warn.mock.calls[0]![0]).toMatch(/\b2\b/);
+  expect(warn.mock.calls[0]![0]).toMatch(/gone\.js/);
+  expect(warn.mock.calls[0]![0]).toMatch(/vanished\.js/);
 });
 
 test("a member larger than the budget gets its own bundle and a warning", () => {
