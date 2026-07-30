@@ -6,6 +6,16 @@ const declareEnvMock = vi.hoisted(() =>
 );
 const reportEnvProblemsMock = vi.hoisted(() => vi.fn(() => Promise.resolve({})));
 
+// callSite names the file a declaration was written in, which is the identity
+// a key is owned by. Overriding it is how one test file stands in for two
+// definition files, and for one definition file running twice.
+const source = vi.hoisted(() => ({ override: undefined as string | undefined }));
+
+vi.mock("./scope.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./scope.js")>();
+  return { ...actual, callSite: () => source.override ?? actual.callSite() };
+});
+
 vi.mock("../utils/rpc", () => ({
   rpc: {
     resource: {
@@ -32,22 +42,62 @@ function cell(key: string, value: string, folder = "") {
   return { key, folder, value };
 }
 
+interface Problem {
+  key: string;
+  folder: string;
+  kind: number;
+  detail: string;
+}
+
+function reportedProblems(): Problem[] {
+  const [call] = reportEnvProblemsMock.mock.calls as unknown as [
+    [{ problems: Problem[] }],
+  ];
+  return call![0].problems;
+}
+
+// A schema whose complaint quotes the value it rejected. Zod's own messages do
+// this and a custom message may do anything, so it is the shape the redaction
+// has to survive rather than an exotic one.
+function echoingSchema() {
+  return z.string().refine(() => false, {
+    error: (issue) => `received ${issue.input}`,
+  });
+}
+
 beforeEach(() => {
   declareEnvMock.mockClear();
   reportEnvProblemsMock.mockClear();
   declareEnvMock.mockResolvedValue({ cells: [] });
   globalThis.__ocelRegister = [];
+  source.override = undefined;
 });
 
 describe("definition errors", () => {
-  it("rejects a key already declared by another defineEnv call", () => {
+  it("rejects a key another definitions file already declared", () => {
+    source.override = "/project/env.first.ts";
     defineEnv({ DUPE_KEY: { class: "plain" } });
+
+    source.override = "/project/env.second.ts";
     expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(
       EnvDefinitionError,
     );
     expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(
       /DUPE_KEY/,
     );
+    expect(() => defineEnv({ DUPE_KEY: { class: "secret" } })).toThrow(
+      /env\.first\.ts/,
+    );
+  });
+
+  // A definitions file is re-executed on every reload under `ocel dev`, and a
+  // file re-stating what it already declared is that reload, not a second
+  // claim on the key.
+  it("lets the file that declared a key declare it again", () => {
+    source.override = "/project/env.reloaded.ts";
+    defineEnv({ RELOADED_KEY: { class: "plain" } });
+
+    expect(() => defineEnv({ RELOADED_KEY: { class: "sensitive" } })).not.toThrow();
   });
 
   it("rejects a platform-owned name for a bare-key class", () => {
@@ -75,11 +125,16 @@ describe("definition errors", () => {
     );
   });
 
-  it("rejects client access on an encrypted class", () => {
+  // The type of a definition refuses this pairing outright — env.test-d.ts
+  // holds that proof — so what is left to check here is the caller the
+  // compiler never sees, since the union is erased by the time this runs.
+  it("rejects client access on an encrypted class from an untyped caller", () => {
     expect(() =>
+      // @ts-expect-error the pairing this asserts on does not typecheck
       defineEnv({ CLIENT_SENSITIVE: { class: "sensitive", client: true } }),
     ).toThrow(/client/i);
     expect(() =>
+      // @ts-expect-error the pairing this asserts on does not typecheck
       defineEnv({ CLIENT_SECRET_KEY: { class: "secret", client: true } }),
     ).toThrow(/client/i);
   });
@@ -217,6 +272,74 @@ describe("validation against the stored cells", () => {
   });
 });
 
+// A schema's complaint is written by the developer and computed from the value
+// it rejected, so it is not safe to forward for a class whose values are
+// confidential. What survives is the fact of the failure and the cell it
+// happened in; the reason survives only for the plaintext class.
+describe("the confidentiality of a schema's complaint", () => {
+  const SECRET_VALUE = "sk_live_super_secret";
+
+  it("echoes the value it rejected, which is what makes this worth guarding", () => {
+    const result = echoingSchema()["~standard"].validate(SECRET_VALUE);
+    expect(result).not.toBeInstanceOf(Promise);
+    expect(JSON.stringify(result)).toContain(SECRET_VALUE);
+  });
+
+  it("keeps an encrypted value out of the problem it reports", async () => {
+    declareEnvMock.mockResolvedValue({
+      cells: [cell("REDACT_SENSITIVE", SECRET_VALUE)],
+    });
+    defineEnv({ REDACT_SENSITIVE: { class: "sensitive", schema: echoingSchema() } });
+    await flushDeclarations();
+
+    expect(JSON.stringify(reportEnvProblemsMock.mock.calls)).not.toContain(
+      SECRET_VALUE,
+    );
+    const [problem] = reportedProblems();
+    expect(problem!.key).toBe("REDACT_SENSITIVE");
+    expect(problem!.kind).toBe(2);
+    expect(problem!.detail).not.toBe("");
+  });
+
+  it("keeps the schema's own words for a plaintext value, which is not confidential", async () => {
+    declareEnvMock.mockResolvedValue({
+      cells: [cell("REDACT_PLAIN", "pk_test_123")],
+    });
+    defineEnv({ REDACT_PLAIN: { class: "plain", schema: echoingSchema() } });
+    await flushDeclarations();
+
+    expect(reportedProblems()[0]!.detail).toContain("received pk_test_123");
+  });
+
+  it("keeps an encrypted value out of the error a read throws", () => {
+    vi.stubEnv("OCEL_PHASE", "");
+    vi.stubEnv("OCEL_VAR_REDACT_READ_SEALED", SECRET_VALUE);
+    const env = defineEnv({
+      REDACT_READ_SEALED: { class: "sensitive", schema: echoingSchema() },
+    });
+
+    expect(() => env.REDACT_READ_SEALED).toThrow(EnvValueError);
+    let thrown = "";
+    try {
+      env.REDACT_READ_SEALED;
+    } catch (error) {
+      thrown = String(error);
+    }
+    expect(thrown).not.toContain(SECRET_VALUE);
+    expect(thrown).toContain("REDACT_READ_SEALED");
+  });
+
+  it("keeps the schema's own words in the error a plaintext read throws", () => {
+    vi.stubEnv("OCEL_PHASE", "");
+    vi.stubEnv("REDACT_READ_PLAIN", "pk_test_456");
+    const env = defineEnv({
+      REDACT_READ_PLAIN: { class: "plain", schema: echoingSchema() },
+    });
+
+    expect(() => env.REDACT_READ_PLAIN).toThrow(/received pk_test_456/);
+  });
+});
+
 describe("reading a variable", () => {
   beforeEach(() => {
     vi.stubEnv("OCEL_PHASE", "");
@@ -235,7 +358,7 @@ describe("reading a variable", () => {
   it("gives a plaintext value the same answer through the object and the process environment", () => {
     vi.stubEnv("READ_INTEROP", "pk_live_123");
     const env = defineEnv({ READ_INTEROP: { class: "plain" } });
-    expect(env.READ_INTEROP).toBe(process.env.READ_INTEROP);
+    expect(env.READ_INTEROP).toBe("pk_live_123");
     expect(process.env.READ_INTEROP).toBe("pk_live_123");
   });
 

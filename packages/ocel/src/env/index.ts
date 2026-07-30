@@ -2,6 +2,7 @@ import type { StandardSchemaV1 } from "@standard-schema/spec";
 import { defer } from "../utils/defer.js";
 import { declareEnv } from "./declare.js";
 import {
+  complaint,
   parse,
   validateDefinitions,
   type Definitions,
@@ -37,11 +38,11 @@ export type Env<TDefinitions extends Definitions> = {
 export function defineEnv<const TDefinitions extends Definitions>(
   definitions: TDefinitions,
 ): Env<TDefinitions> {
-  validateDefinitions(definitions);
+  const source = callSite();
+  validateDefinitions(definitions, source);
 
-  // intentionally defined repeatedly like this for dead code elimination when in prod
   if (process.env.OCEL_PHASE === "discovery") {
-    defer(declareEnv(definitions, callSite()));
+    defer(declareEnv(definitions, source));
   }
 
   const resolved = new Map<string, unknown>();
@@ -86,7 +87,7 @@ function resolve(key: string, definition: VariableDefinition): unknown {
   if (result.ok) return result.value;
   if (raw === undefined) throw unset(key);
   throw new EnvValueError(
-    `'${key}' is set but does not satisfy its schema: ${result.message}. Fix it with \`ocel env set ${key} <VALUE>\`.`,
+    `'${key}' is set but does not satisfy its schema: ${complaint(definition, result.message)}. Fix it with \`ocel env set ${key} <VALUE>\`.`,
   );
 }
 

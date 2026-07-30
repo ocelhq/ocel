@@ -5,6 +5,7 @@ import {
 } from "../gen/proto/resources/v1/env_pb.js";
 import { rpc } from "../utils/rpc.js";
 import {
+  complaint,
   isRequired,
   parse,
   type Definitions,
@@ -76,7 +77,12 @@ function validate(
       const result = parse(definition.schema, cell.value);
       if (!result.ok) {
         problems.push(
-          problem(key, cell.folder, VariableProblem_Kind.INVALID, result.message),
+          problem(
+            key,
+            cell.folder,
+            VariableProblem_Kind.INVALID,
+            complaint(definition, result.message),
+          ),
         );
       }
     }
