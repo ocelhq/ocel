@@ -59,15 +59,43 @@ globalThis.__ocelRegister.push(
 export {};
 `
 
+// envDeclareOnlyScript is a declaring process that reports nothing back: an
+// older SDK, or a defineEnv that throws after DeclareEnv. It exists because the
+// gate's verdict must not be the child process's alone — a run that says
+// nothing must not be read as a run that found nothing.
+const envDeclareOnlyScript = `
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+globalThis.__ocelRegister ??= [];
+
+globalThis.__ocelRegister.push(
+  (async () => {
+    const res = await fetch(new URL("/resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ definitions: JSON.parse(process.env.OCEL_TEST_ENV_DEFINITIONS!) }),
+    });
+    if (!res.ok) throw new Error("DeclareEnv failed: " + res.status + " " + (await res.text()));
+  })(),
+);
+export {};
+`
+
 // setUpEnvGateFixture extends the deploy fixture with a definitions file
 // declaring definitions, and points the fake provider at a store file the
 // deploy and any `ocel env set` priming it share.
 func setUpEnvGateFixture(t *testing.T, definitions string) string {
 	t.Helper()
+	return setUpEnvGateFixtureWith(t, definitions, envDeclarationScript)
+}
+
+func setUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
+	t.Helper()
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(envFakeStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
 	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", definitions)
-	writeFile(t, filepath.Join(root, "ocel", "env.ts"), envDeclarationScript)
+	writeFile(t, filepath.Join(root, "ocel", "env.ts"), script)
 	return root
 }
 
@@ -109,6 +137,33 @@ func TestRunDeploy_MissingValue_RefusesBeforeAnythingIsBuilt(t *testing.T) {
 	}
 	if strings.Contains(out, "DEPLOY ") {
 		t.Errorf("stdout = %q, want no Deploy to have been driven", out)
+	}
+}
+
+// TestRunDeploy_MissingValue_RefusesThoughDiscoveryReportedNothing is the same
+// refusal driven by a declaring process that never reports: the value would
+// otherwise be missing inside the deployed function, which is exactly what
+// failing at deploy time exists to prevent.
+func TestRunDeploy_MissingValue_RefusesThoughDiscoveryReportedNothing(t *testing.T) {
+	root := setUpEnvGateFixtureWith(t,
+		`[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`,
+		envDeclareOnlyScript)
+	built := false
+	stubAppBuildRecorder(t, &built)
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want the gate to refuse on what it knows itself")
+	}
+	out := stdout.String()
+	for _, want := range []string{"STRIPE_API_KEY", "ocel env set STRIPE_API_KEY <VALUE>"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("stdout = %q, want it to contain %q", out, want)
+		}
+	}
+	if built {
+		t.Error("the app was built, want the gate to refuse before any build runs")
 	}
 }
 

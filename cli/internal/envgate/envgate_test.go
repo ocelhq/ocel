@@ -203,6 +203,106 @@ func TestGate_NothingReportedLetsTheDeployProceed(t *testing.T) {
 	}
 }
 
+// TestGate_RequiredCellWithNoValueRefusesThoughDiscoveryReportedNothing proves
+// the refusal does not depend on the declaring process saying so. An older SDK,
+// a defineEnv that throws after declaring, or any bug in the reporting half
+// leaves the gate with nothing but its own knowledge — and presence is not a
+// schema question, so the gate already has the answer.
+func TestGate_RequiredCellWithNoValueRefusesThoughDiscoveryReportedNothing(t *testing.T) {
+	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
+
+	err := g.Check()
+	if err == nil {
+		t.Fatal("Check err = nil, want a required value nothing holds to refuse without being told")
+	}
+	for _, want := range []string{"STRIPE_API_KEY", "no value is set", "ocel env set STRIPE_API_KEY <VALUE>", "api"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal = %q, want it to contain %q", err.Error(), want)
+		}
+	}
+}
+
+// TestGate_UnreportedMissingFolderCellNamesTheFolderThatOwesIt proves the
+// gate's own verdict follows the same two-hop resolution the deploy does: only
+// the app bound to the empty folder is short, and the refusal addresses that
+// folder rather than the project root.
+func TestGate_UnreportedMissingFolderCellNamesTheFolderThatOwesIt(t *testing.T) {
+	values := newFakeValues()
+	values.set("POSTHOG_ID", "/web", "ph_web")
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
+		{Name: "web", Folder: "/web"},
+		{Name: "admin", Folder: "/admin"},
+	}})
+	declare(t, g, &resourcesv1.VariableDefinition{
+		Key:      "POSTHOG_ID",
+		Class:    resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+		Required: true,
+		Folders:  []string{"/web", "/admin"},
+	})
+
+	err := g.Check()
+	if err == nil {
+		t.Fatal("Check err = nil, want the folder holding no value to refuse")
+	}
+	if !strings.Contains(err.Error(), "ocel env set POSTHOG_ID <VALUE> --folder /admin") {
+		t.Errorf("refusal = %q, want it to address the folder that owes the value", err.Error())
+	}
+	if strings.Contains(err.Error(), "--folder /web") {
+		t.Errorf("refusal = %q, want the folder that already holds a value left out", err.Error())
+	}
+}
+
+// TestGate_UnsetOptionalValueIsNotARefusal is the counterweight: the gate
+// forming its own verdict must not turn every empty cell into a stop.
+func TestGate_UnsetOptionalValueIsNotARefusal(t *testing.T) {
+	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, &resourcesv1.VariableDefinition{
+		Key:   "ANALYTICS_ID",
+		Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+	})
+
+	if err := g.Check(); err != nil {
+		t.Fatalf("Check err = %v, want an optional value nothing set to proceed", err)
+	}
+}
+
+// TestGate_ReportedProblemIsNotDoubledByTheGatesOwnVerdict proves the two
+// halves of the verdict meet as one list: a cell both sides call missing is
+// named once.
+func TestGate_ReportedProblemIsNotDoubledByTheGatesOwnVerdict(t *testing.T) {
+	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+	report(t, g, &resourcesv1.VariableProblem{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING})
+
+	var refusal *envgate.Refusal
+	if !errors.As(g.Check(), &refusal) {
+		t.Fatal("Check err is not an *envgate.Refusal")
+	}
+	if len(refusal.Problems) != 1 {
+		t.Errorf("refusal carries %d problems, want the one cell named once: %+v", len(refusal.Problems), refusal.Problems)
+	}
+}
+
+// TestGate_SchemaInvalidCellIsStillTheDeclaringProcessesToReport proves the
+// gate's own verdict does not displace the SDK's: a value that is present but
+// wrong is only knowable where the schema lives, and it must still refuse.
+func TestGate_SchemaInvalidCellIsStillTheDeclaringProcessesToReport(t *testing.T) {
+	values := newFakeValues()
+	values.set("WEBHOOK_URL", "", "not-a-url")
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("WEBHOOK_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+	report(t, g, &resourcesv1.VariableProblem{Key: "WEBHOOK_URL", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "invalid url"})
+
+	err := g.Check()
+	if err == nil {
+		t.Fatal("Check err = nil, want the schema complaint to refuse")
+	}
+	if !strings.Contains(err.Error(), "invalid url") {
+		t.Errorf("refusal = %q, want the schema's own complaint", err.Error())
+	}
+}
+
 func TestGate_RefusalCarriesTheProblemsSoARecoveryPathCanPrefillThem(t *testing.T) {
 	g := prefetched(t, newFakeValues())
 	declare(t, g, def("A_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))

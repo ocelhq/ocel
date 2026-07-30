@@ -3,10 +3,13 @@
 // declaring process the cells the store already holds, and refuses the deploy
 // when that process reports a cell it cannot run with.
 //
-// The verdict is not formed here. Schemas are live objects in the
-// application's own language and cannot be serialised, so the declaring
-// process decides what is missing or malformed; this package decides what a
-// refusal costs and what it says.
+// The verdict has two halves. Whether a value satisfies its schema is only
+// knowable where the schema is: schemas are live objects in the application's
+// own language and cannot be serialised, so the declaring process reports
+// that. Whether a required value is there at all is not a schema question and
+// this package answers it itself, from the declarations and the store — so a
+// declaring process that reports nothing, because it is older or because it
+// threw after declaring, cannot let a missing value through to runtime.
 package envgate
 
 import (
@@ -137,13 +140,21 @@ func (g *Gate) Definitions() []*resourcesv1.VariableDefinition {
 	return append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 }
 
-// Check is the gate itself: it returns a *Refusal when discovery reported any
-// cell the project cannot run with, and nil otherwise.
+// Check is the gate itself: it returns a *Refusal when any app cannot resolve
+// a required cell, or when discovery reported one it cannot run with, and nil
+// otherwise.
 func (g *Gate) Check() error {
 	g.mu.Lock()
 	problems := append([]*resourcesv1.VariableProblem(nil), g.problems...)
+	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
+	apps := readers(g.scope.Apps)
+	held := make(map[Cell]bool, len(g.cells))
+	for _, cell := range g.cells {
+		held[cell] = true
+	}
 	g.mu.Unlock()
 
+	problems = append(problems, unresolved(definitions, apps, held, problems)...)
 	if len(problems) == 0 {
 		return nil
 	}
@@ -154,6 +165,45 @@ func (g *Gate) Check() error {
 		return problems[i].GetFolder() < problems[j].GetFolder()
 	})
 	return &Refusal{Problems: problems, Scope: g.scope}
+}
+
+// unresolved is the gate's own half of the verdict: every required cell an app
+// cannot resolve, from the same two-hop rule the deploy resolves values by, so
+// what the gate refuses on and what the build would have run with are one
+// answer. A cell the declaring process already complained about is left to it —
+// its message is the more specific of the two.
+func unresolved(definitions []*resourcesv1.VariableDefinition, apps []App, held map[Cell]bool, reported []*resourcesv1.VariableProblem) []*resourcesv1.VariableProblem {
+	named := make(map[Cell]bool, len(reported))
+	for _, problem := range reported {
+		named[Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}] = true
+	}
+
+	var problems []*resourcesv1.VariableProblem
+	for _, app := range apps {
+		for _, cell := range missing(definitions, app.Folder, held) {
+			if named[cell] {
+				continue
+			}
+			named[cell] = true
+			problems = append(problems, &resourcesv1.VariableProblem{
+				Key:    cell.Key,
+				Folder: cell.Folder,
+				Kind:   resourcesv1.VariableProblem_KIND_MISSING,
+			})
+		}
+	}
+	return problems
+}
+
+// readers is who a verdict is formed for. A project that configures no apps
+// still deploys one, bound to the project root, so an empty scope stands for
+// that app rather than for no reader at all — otherwise a gate with nothing
+// configured would have nothing to be short of.
+func readers(apps []App) []App {
+	if len(apps) == 0 {
+		return []App{{}}
+	}
+	return append([]App(nil), apps...)
 }
 
 // Refusal is a deploy stopped before anything was built. It carries the

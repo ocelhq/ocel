@@ -140,7 +140,11 @@ func TestGate_ALiveValueIsResolvedAsAnAddressWithoutItsPlaintext(t *testing.T) {
 }
 
 func TestGate_ARefusalNamesOnlyTheAppsThatReadTheFailingCell(t *testing.T) {
-	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{
+	values := newFakeValues()
+	// Only /web is short: every other folder the key names is filled, so the
+	// refusal has exactly one cell to attribute.
+	values.set("POSTHOG_ID", "/admin", "ph_admin")
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
 		{Name: "web", Folder: "/web"},
 		{Name: "admin", Folder: "/admin"},
 		{Name: "api"},
