@@ -53,6 +53,20 @@ const RSC_FORWARD_HEADERS = new Set([
 // per-route launcher ignores the header — so it is omitted rather than empty.
 const ENTRY_HEADER = "x-ocel-entry";
 
+// x-ocel-* is the control plane's own namespace — x-ocel-entry selects which code
+// the origin runs — so no value in it may ever come from a client. The whole
+// namespace is dropped from every inbound request before anything is built from
+// it, which makes the forwarded values exactly the ones this worker stamped.
+const CONTROL_PREFIX = "x-ocel-";
+
+function withoutControlHeaders(headers: Headers): Headers {
+  const kept = new Headers(headers);
+  for (const name of [...headers.keys()]) {
+    if (name.toLowerCase().startsWith(CONTROL_PREFIX)) kept.delete(name);
+  }
+  return kept;
+}
+
 export interface Env {
   // The service binding to the shared deployments-store worker (ADR 0002),
   // through which the active Deployment is resolved at request time.
@@ -395,7 +409,11 @@ export async function dispatchResult(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
-  const response = await dispatch(result, request, deps);
+  const response = await dispatch(
+    result,
+    new Request(request, { headers: withoutControlHeaders(request.headers) }),
+    deps,
+  );
   await noteRevalidation(response, deps);
   if (!result.resolvedHeaders && !result.resolvedPathname) return response;
 
@@ -457,7 +475,9 @@ async function dispatch(
   const url = new URL(request.url);
   // Middleware may have rewritten the request's headers; everything downstream
   // forwards those, not the ones the client sent.
-  const headers = result.middleware?.headers ?? request.headers;
+  const headers = withoutControlHeaders(
+    result.middleware?.headers ?? request.headers,
+  );
 
   if (result.middlewareResponded) {
     return middlewareResponse(result.middleware, result.status);
@@ -819,11 +839,13 @@ export function forward(
 // withEntry names the bundle entry an already-built forward must run. It wraps
 // the request rather than any one header set, because a prerender forwards under
 // several (raw, allowHeader-filtered, revalidating) and the origin needs the
-// entry on all of them.
+// entry on all of them. With no entry to name the header is removed, never left
+// as it was found: an entryless target's launcher ignores the header, but a
+// forward carrying one it did not choose is one this worker did not author.
 function withEntry(request: Request, entryKey: string | undefined): Request {
-  if (!entryKey) return request;
   const headers = new Headers(request.headers);
-  headers.set(ENTRY_HEADER, entryKey);
+  if (entryKey) headers.set(ENTRY_HEADER, entryKey);
+  else headers.delete(ENTRY_HEADER);
   return new Request(request, { headers });
 }
 
