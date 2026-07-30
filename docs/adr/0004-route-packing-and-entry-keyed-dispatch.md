@@ -27,7 +27,17 @@ Three things open a new bundle: an artifact-size budget, two members mapping one
 destination key to different sources (the second gets its own copy), and a
 differing **config class**. A member that overflows the budget on its own ships
 as-is and lets AWS reject it with its own clear error, rather than being split
-into something that cannot work.
+into something that cannot work. A dest-key conflict is therefore a packing
+decision, not an error; a *duplicate entry key* is the error, since the launcher's
+table is keyed by it and the second member would silently serve the first's
+module.
+
+**A manifest may never name something the build did not emit.** Every id and entry
+key in the routing manifest is looked up rather than constructed: a route whose
+entry no emitted bundle carries, and a prerender whose `parentOutputId` names an
+output that renders on neither a Lambda nor the edge, both fail the build. The
+alternative is a per-request 502 in production that nothing on either side of the
+manifest can catch.
 
 **The route is named per-request, not per-function.** A bundle has one Function
 URL, so the request carries an **entry key** in the `x-ocel-entry` header naming
@@ -44,11 +54,17 @@ worker authored.
 **One entry per bundle is primed at INIT.** Routes are only ever required whole
 (a Turbopack chunk evaluated out of order fails with its dependency's factory
 unavailable), so the bundle eagerly requires its **primary entry** — the member
-with the most assets — while the handler module is still loading. That is the
-INIT phase, which runs at full vCPU regardless of the memory setting, so priming
-the graph its bundle-mates share costs nothing. It is best-effort: a throwing
-entry is reported and re-surfaced as that key's own 502 rather than taking down
-every route in the bundle.
+tracing the most *bytes* of assets, ties broken by entry key so the choice is
+stable — while the handler module is still loading. Bytes and not file count,
+because what priming buys is the shared chunk graph and that graph's cost is
+bytes; on a real build the two measures disagree. The bytes are the packer's own,
+the same sizing the budget rests on, so the election and the size accounting
+cannot disagree about what a route weighs. That is the INIT phase, which
+runs at full vCPU regardless of the memory setting, so priming the graph its
+bundle-mates share costs nothing. It is best-effort: the prime is caught, so a
+primary that throws on import does not fail the container's boot — the failure is
+memoized and re-surfaced as that key's own 502, and every other route in the
+bundle still serves.
 
 **The provider sizes a bundled function differently.** Because each entry a
 container has served stays resident (CommonJS modules cannot be unloaded), peak
@@ -77,8 +93,12 @@ evaluate lazily-required entries.
   request latency. This is what the full-vCPU memory setting buys back.
 - The manifest gains a level of indirection: a pathname resolves to a bundle id
   *and* an entry key, and a prerender's id is the bundle carrying its parent
-  route. A prerender parented by an edge route carries an `edgeEntryKey`
-  instead, since it has no Function URL to fall back to.
+  route. A prerender parented by an edge route carries an `edgeEntryKey` as well,
+  and **the presence of that key alone selects the edge path** — never a failed
+  `functionUrls` lookup, which would send an edge render at a Lambda the moment a
+  bundle id and a route id collided. Its `id` is consequently optional to the
+  worker and read by nothing on that path; the adapter still fills it with the
+  parent output's own name for legibility.
 - The header is omitted rather than sent empty for a manifest built before
   bundling, whose per-route launcher ignores it.
 - **Config class is a stub.** It is constant, so it currently partitions
