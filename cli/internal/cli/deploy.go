@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -238,8 +239,14 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 
 	if prebuilt {
 		fmt.Fprintln(buildOut, "using prebuilt output in .ocel/output")
-	} else if err := buildApp(ctx, cfg, buildEnv(variables), buildOut); err != nil {
-		return nil, err
+	} else {
+		env, warnings := buildEnv(variables)
+		for _, warning := range warnings {
+			fmt.Fprintln(buildOut, "warning: "+warning)
+		}
+		if err := buildApp(ctx, cfg, env, buildOut); err != nil {
+			return nil, err
+		}
 	}
 
 	functions, err := collectAppFunctions(cfg.Dir)
@@ -315,28 +322,59 @@ func variablesByApp(variables map[string][]manifestbuilder.Variable, functions [
 	return byApp
 }
 
-// buildEnv is what the app build runs with. Only the plaintext class belongs
-// in a build process's environment at all; and one build process serves every
-// app, so a key two apps resolve differently cannot be expressed there and is
-// left out rather than given one app's value.
-func buildEnv(variables map[string][]manifestbuilder.Variable) map[string]string {
+// buildEnv is what the app build runs with, and what could not be put there.
+// Only the plaintext class belongs in a build process's environment at all;
+// and one build process serves every app, so a key two apps resolve
+// differently cannot be expressed there and is left out rather than given one
+// app's value.
+//
+// Leaving it out is reported rather than done quietly. The deploy still hands
+// each app its own value, so only a build-time reader is short — and a
+// framework that inlines the key emits an unset one, a failure that would
+// otherwise surface in the artifact instead of at the deploy that caused it.
+func buildEnv(variables map[string][]manifestbuilder.Variable) (map[string]string, []string) {
+	apps := make([]string, 0, len(variables))
+	for app := range variables {
+		apps = append(apps, app)
+	}
+	sort.Strings(apps)
+
 	env := make(map[string]string)
-	diverged := make(map[string]bool)
-	for _, list := range variables {
-		for _, v := range list {
+	setBy := make(map[string]string)
+	diverged := make(map[string][]string)
+	for _, app := range apps {
+		for _, v := range variables[app] {
 			if v.Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
 				continue
 			}
-			if prior, seen := env[v.Key]; seen && prior != v.Value {
-				diverged[v.Key] = true
+			prior, seen := env[v.Key]
+			if !seen {
+				env[v.Key], setBy[v.Key] = v.Value, app
+				continue
 			}
-			env[v.Key] = v.Value
+			if prior != v.Value {
+				if len(diverged[v.Key]) == 0 {
+					diverged[v.Key] = []string{setBy[v.Key]}
+				}
+				diverged[v.Key] = append(diverged[v.Key], app)
+			}
 		}
 	}
+
+	keys := make([]string, 0, len(diverged))
 	for key := range diverged {
-		delete(env, key)
+		keys = append(keys, key)
 	}
-	return env
+	sort.Strings(keys)
+
+	warnings := make([]string, 0, len(keys))
+	for _, key := range keys {
+		delete(env, key)
+		warnings = append(warnings, fmt.Sprintf(
+			"%s resolves to a different value for %s. One build process serves them all, so it is left out of the build environment and reads as unset in anything the build inlines. Each app is still deployed with its own value.",
+			key, strings.Join(diverged[key], " and ")))
+	}
+	return env, warnings
 }
 
 // envScope is what a gate refusal has to name to be actionable: the apps that

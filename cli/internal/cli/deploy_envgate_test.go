@@ -248,6 +248,34 @@ func TestRunDeploy_AFolderNoAppBindsIsAWarningNotARefusal(t *testing.T) {
 	}
 }
 
+// TestRunDeploy_ADivergedBuildValueIsWarnedAboutOnTheBuildOutput proves the one
+// resolved value the shared build cannot carry is named where the deploy's
+// other diagnostics are. Without it the key's absence surfaces only inside the
+// built artifact, which is the wrong layer to discover it in.
+func TestRunDeploy_ADivergedBuildValueIsWarnedAboutOnTheBuildOutput(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
+	writeAppsConfig(t, root, `
+    { name: "web", path: "apps/web", framework: "express", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "express", folder: "/admin" }`)
+	envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
+	envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
+
+	built := false
+	stubAppBuildRecorder(t, &built)
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v, want divergence to warn, not stop the deploy; stdout=%s", err, stdout.String())
+	}
+	if !built {
+		t.Fatal("the app was never built, so nothing proves what the build was warned about")
+	}
+	out := stdout.String() + stderr.String()
+	if !strings.Contains(out, "POSTHOG_ID") || !strings.Contains(out, "warning") {
+		t.Errorf("output = %q, want a warning naming the key the shared build cannot export", out)
+	}
+}
+
 func TestRunDeploy_AHalfCompletedFolderRenameStopsTheDeployNamingBothFiles(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
 	writeAppsConfig(t, root, `

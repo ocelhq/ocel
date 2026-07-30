@@ -2,6 +2,7 @@ package cli
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -74,7 +75,7 @@ func TestBuildEnv_ExportsOnlyPlaintextValuesEveryAppAgreesOn(t *testing.T) {
 		},
 	}
 
-	env := buildEnv(variables)
+	env, _ := buildEnv(variables)
 	if got, want := env["SHARED_ID"], "same"; got != want {
 		t.Errorf("SHARED_ID = %q, want %q", got, want)
 	}
@@ -83,6 +84,40 @@ func TestBuildEnv_ExportsOnlyPlaintextValuesEveryAppAgreesOn(t *testing.T) {
 	}
 	if _, ok := env["STRIPE_API_KEY"]; ok {
 		t.Errorf("env = %v, must not carry an encrypted-class value", env)
+	}
+}
+
+// TestBuildEnv_ADivergedKeyIsWarnedAboutRatherThanQuietlyDropped proves the
+// key a shared build cannot express is reported. Dropping it silently moves the
+// failure into the built artifact — a framework that inlines the key emits an
+// unset one — and nothing else on this path fails that far downstream.
+func TestBuildEnv_ADivergedKeyIsWarnedAboutRatherThanQuietlyDropped(t *testing.T) {
+	variables := map[string][]manifestbuilder.Variable{
+		"storefront": {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}},
+		"admin":      {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}},
+	}
+
+	_, warnings := buildEnv(variables)
+	if len(warnings) != 1 {
+		t.Fatalf("warnings = %q, want exactly one, naming the key a shared build cannot export", warnings)
+	}
+	for _, want := range []string{"POSTHOG_ID", "admin", "storefront"} {
+		if !strings.Contains(warnings[0], want) {
+			t.Errorf("warning = %q, want it to name %q", warnings[0], want)
+		}
+	}
+}
+
+// TestBuildEnv_AKeyEveryAppAgreesOnIsNotWarnedAbout is the counterweight: the
+// warning must describe divergence, not merely the presence of two apps.
+func TestBuildEnv_AKeyEveryAppAgreesOnIsNotWarnedAbout(t *testing.T) {
+	variables := map[string][]manifestbuilder.Variable{
+		"storefront": {{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"}},
+		"admin":      {{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"}},
+	}
+
+	if _, warnings := buildEnv(variables); len(warnings) != 0 {
+		t.Errorf("warnings = %q, want none for a value every app resolves the same", warnings)
 	}
 }
 
