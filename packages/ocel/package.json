@@ -48,6 +48,7 @@
   },
   "license": "MIT",
   "dependencies": {
+    "@bufbuild/protobuf": "^2.12.1",
     "@connectrpc/connect": "^2.1.2",
     "@connectrpc/connect-node": "^2.1.2",
     "zod": "^4.4.3"

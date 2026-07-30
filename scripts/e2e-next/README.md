@@ -96,6 +96,29 @@ identity the credentials actually resolve to against them and hard-fails on a
 mismatch, in the build job and again in every job that deploys. A rotated or
 mistyped secret must never spray infrastructure into a real account.
 
+## Repacking the sidecar
+
+The sidecar is the only thing a temp app sees of Ocel: `deploy.mjs` symlinks both
+`<temp-app>/node_modules/ocel` and `<temp-app>/node_modules/@ocel` at it. CI
+builds one per run (`test-e2e-deploy.yml`); local runs reuse a long-lived one
+pointed at by `OCEL_E2E_SIDECAR_DIR`.
+
+A sidecar packed before `@ocel/sdk` folded into the root `ocel` package has no
+`node_modules/ocel`, and `linkSidecar` now fails on it rather than deploying an
+app whose `ocel.config.ts` cannot resolve `ocel/config`. Repack it once:
+
+```bash
+SIDECAR=<sidecar dir>
+TARBALLS=$(mktemp -d)
+cd <adapter repo> && pnpm --filter ocel build
+for pkg in ocel @ocel/provider-aws @ocel/provider-aws-linux-x64; do
+  pnpm --filter "$pkg" exec pnpm pack --pack-destination "$TARBALLS"
+done
+cd "$SIDECAR" && npm init -y >/dev/null
+npm install --no-audit --no-fund "$TARBALLS"/*.tgz
+test -d node_modules/ocel && test -x node_modules/@ocel/provider-aws-linux-x64/bin/deploy
+```
+
 ## Recording a baseline
 
 `NEXT_EXTERNAL_TESTS_FILTERS` points the harness at a manifest of known

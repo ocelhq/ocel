@@ -18,8 +18,9 @@ verification loop in Step 5 is the load-bearing part of this document.
 - Ocel adapter repo: `/home/vndaba/Dev/ocelhq` (branch `fix/e2e-concurrency-safeness`)
 - Next.js repo: `/home/vndaba/Dev/next.js` (branch `canary`) — every `pnpm jest`
   invocation runs from here
-- Shared sidecar (prebuilt `@ocel` packages): `/home/vndaba/Dev/ocelhq-work/sidecar`
-  — **read-only for this run**; see Step 5B for why you may need your own.
+- Shared sidecar (prebuilt `ocel` and `@ocel/*` packages):
+  `/home/vndaba/Dev/ocelhq-work/sidecar` — **read-only for this run**; see Step 5B
+  for why you may need your own, and for the one-time repack it needs.
 - Results dir: `/home/vndaba/Dev/ocelhq/.coverage` (already gitignored)
 - Last sweep's evidence: `/home/vndaba/Dev/ocelhq/.coverage/report.html`,
   `failures.json`, `_ledger.json`
@@ -374,6 +375,18 @@ node builder no longer lives there at all — it is at `cli/platform/**`, esbuil
 into `cli/platform/dist` and embedded in the Go binary at `go generate`, so it
 reaches a deploy through the `ADAPTER_DIR` CLI build like the rest of `cli/**`.
 
+**Precondition — the shared sidecar must carry `ocel`.** It was packed before
+`@ocel/sdk` folded into the root `ocel` package, so it holds only
+`node_modules/{@bufbuild,@connectrpc,@ocel,zod}` and `linkSidecar` hard-fails on
+it. Check first, and if `node_modules/ocel` is absent, tell the user to run the
+one-time repack in `scripts/e2e-next/README.md` ("Repacking the sidecar") —
+do **not** repack it yourself while other runs may be using it:
+
+```bash
+test -d /home/vndaba/Dev/ocelhq-work/sidecar/node_modules/ocel \
+  || echo "STOP: shared sidecar needs the one-time repack"
+```
+
 **Never rebuild `/home/vndaba/Dev/ocelhq-work/sidecar`.** A concurrent
 implementer's deploy would silently pick up your code. Build your own:
 
@@ -479,8 +492,11 @@ ref, and the temp app directory is not a repo. `--prebuilt` ships the
 
 You can **skip `ocel build`** when the change cannot affect build output —
 worker-only (`workers/nextjs/**`) or provider-only (`cloud/aws/**`) changes go
-straight to `preview up --prebuilt`, which is much faster. Adapter changes
-(`packages/next-runtime/**`, `packages/ocel/**`) require the rebuild.
+straight to `preview up --prebuilt`, which is much faster. Changes that feed the
+build output require it: the node builder (`cli/platform/**`, which also needs
+`go generate` via `build-native.mjs --target cli`), the Next adapter
+(`packages/next-runtime/**`), and the SDK (`packages/ocel/src/**`, which the
+builder traces into the app's function bundles).
 
 Then re-check the failing route with `curl`, always capturing headers:
 

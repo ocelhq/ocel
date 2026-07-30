@@ -30,6 +30,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: pnpm --filter @ocel/cli-platform typecheck
+        # go generate esbuilds the node builder, which strips types without
+        # checking them. This is the only gate on cli/platform/src/**.
+        run: pnpm --filter @ocel/cli-platform typecheck
+
       - name: go generate (cli platform dist)
         working-directory: cli
         # The platform dist is embedded but not committed, so nothing compiles
@@ -46,3 +51,8 @@ jobs:
 
       - name: pnpm --filter ocel build (tsc)
         run: pnpm --filter ocel build
+
+      - name: JS unit tests
+        run: |
+          pnpm --filter ocel test
+          pnpm --filter @ocel/cli-platform test

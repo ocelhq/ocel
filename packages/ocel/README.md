@@ -18,7 +18,7 @@ running app. The CLI binary is delivered through platform-specific
 ## CLI
 
 ```sh
-npx ocel init          # write ocel.config.ts and add the provider to dependencies
+npx ocel init          # write ocel.config.ts and add ocel + the provider to dependencies
 npx ocel dev -- <cmd>  # run <cmd> with resource connections in its environment
 npx ocel deploy        # deploy to the provider configured in ocel.config.ts
 ```
@@ -32,7 +32,7 @@ npx ocel deploy        # deploy to the provider configured in ocel.config.ts
 | `ocel run -- <cmd>` | Run a one-off command with your project's resource connections |
 | `ocel build` | Build your project's apps into `.ocel/output` without deploying |
 | `ocel deploy` | Deploy your project to its configured cloud provider |
-| `ocel preview up\|rm\|ls\|prune` | Manage per-branch preview environments |
+| `ocel preview up\|rm\|ls\|prune` | Stand up a preview environment for the current branch |
 | `ocel rollback` | Roll production back to a previous deployment |
 | `ocel deployments ls\|prune` | Manage production deployments |
 | `ocel destroy` | Permanently destroy this project's entire production deployment |
@@ -79,7 +79,12 @@ export const db = postgres("main");
 
 export const uploads = bucket("uploads", {
   uploaders: {
-    avatar: uploader({}, { accept: ["image/*"] }),
+    // The first argument authorizes the upload and returns the metadata the
+    // rest of the uploader — paths, limits, onUploadComplete — receives.
+    avatar: uploader(
+      { middleware: ({ req }) => ({ userId: req.headers.get("x-user-id") }) },
+      { accept: ["image/*"], limits: { maxFileCount: 1 } },
+    ),
   },
 });
 ```

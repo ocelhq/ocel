@@ -158,7 +158,17 @@ because there was nobody to ask.
    It was raised to **1000** on 2026-07-27. Confirm it is still 1000 and note the
    value in the artifacts. If it has somehow dropped back to 10, hold
    `SUITES_PER_WAVE` at 2 and treat any 502 as `infra` (hazard 1).
-6. **Smoke run.** Run one throwaway suite yourself, serially, end to end, and
+6. **The sidecar carries `ocel`.** It was packed before `@ocel/sdk` folded into
+   the root `ocel` package, so it may hold only `@ocel/*` — and `linkSidecar`
+   hard-fails on that, failing every deploy at link time.
+   ```bash
+   test -d /home/vndaba/Dev/ocelhq-work/sidecar/node_modules/ocel \
+     || echo "STOP: sidecar needs the one-time repack"
+   ```
+   If it is absent, do the one-time repack in
+   `scripts/e2e-next/README.md` ("Repacking the sidecar") before dispatching —
+   and only when no other run is using the sidecar.
+7. **Smoke run.** Run one throwaway suite yourself, serially, end to end, and
    confirm it deploys, tests, and cleans up. Only then start wave 1.
    (`test/e2e/app-dir/mjs-as-extension/mjs-as-extension.test.ts` is a good
    choice — one test, ~3 minutes.)

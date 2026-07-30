@@ -89,7 +89,7 @@ function deploy() {
 // ensureDeps installs the temp app's dependencies when the harness left it
 // without them: without a resolvable `next`, the build fails before Ocel does
 // anything. It runs before linkSidecar because an install can rewrite
-// node_modules, which would drop the @ocel symlink.
+// node_modules, which would drop the `ocel` and `@ocel` symlinks.
 function ensureDeps() {
   if (existsSync(join(appDir, "node_modules", ".bin", "next"))) {
     return;
@@ -112,7 +112,12 @@ function linkSidecar(sidecarDir) {
   for (const name of ["ocel", "@ocel"]) {
     const target = join(sidecarDir, "node_modules", name);
     if (!existsSync(target)) {
-      throw new Error(`sidecar has no ${name} package at ${target}`);
+      throw new Error(
+        `sidecar has no ${name} package at ${target}. A sidecar packed before ` +
+          `@ocel/sdk folded into the root ocel package carries only @ocel/*; ` +
+          `repack it from the ocel and @ocel/provider-aws* tarballs — see ` +
+          `"Repacking the sidecar" in scripts/e2e-next/README.md.`,
+      );
     }
     const link = join(modules, name);
     if (existsSync(link) || isSymlink(link)) {
