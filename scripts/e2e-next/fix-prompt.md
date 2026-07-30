@@ -15,7 +15,7 @@ verification loop in Step 5 is the load-bearing part of this document.
 
 ## Repos and paths (all absolute, all verified to exist)
 
-- Ocel adapter repo: `/home/vndaba/Dev/ocelhq` (branch `fix/e2e-concurrency-safeness`)
+- Ocel adapter repo: `/home/vndaba/Dev/ocelhq`
 - Next.js repo: `/home/vndaba/Dev/next.js` (branch `canary`) — every `pnpm jest`
   invocation runs from here
 - Shared sidecar (prebuilt `ocel` and `@ocel/*` packages):
