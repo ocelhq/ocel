@@ -28,6 +28,8 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
 )
 
 // DefaultReadyTimeout is how long Ready waits for the readiness sentinel
@@ -133,6 +135,7 @@ type Runner struct {
 
 	network, address string
 	client           deploymentsv1connect.DeploymentServiceClient
+	vars             envv1connect.EnvVarsServiceClient
 
 	closeOnce sync.Once
 }
@@ -274,12 +277,52 @@ func (r *Runner) dial(addr string) error {
 		},
 	}
 
-	r.client = deploymentsv1connect.NewDeploymentServiceClient(
-		httpClient,
-		"http://provider",
-		connect.WithInterceptors(authInterceptor{token: r.token}),
-	)
+	auth := connect.WithInterceptors(authInterceptor{token: r.token})
+	r.client = deploymentsv1connect.NewDeploymentServiceClient(httpClient, "http://provider", auth)
+	r.vars = envv1connect.NewEnvVarsServiceClient(httpClient, "http://provider", auth)
 	return nil
+}
+
+// ErrVarsUnavailable reports that a caller reached for the store before the
+// provider was ready to serve it.
+var ErrVarsUnavailable = errors.New("providerrunner: the variable store was reached before a successful Ready")
+
+// SetValue, ListValues, GetValue, DeleteValue and ListVersions drive the
+// provider's variable store. The CLI has no cloud SDK dependency, so every
+// read and write of a value is one of these calls.
+func (r *Runner) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars.SetValue(ctx, req)
+}
+
+func (r *Runner) ListValues(ctx context.Context, req *envv1.ListValuesRequest) (*envv1.ListValuesResponse, error) {
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars.ListValues(ctx, req)
+}
+
+func (r *Runner) GetValue(ctx context.Context, req *envv1.GetValueRequest) (*envv1.GetValueResponse, error) {
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars.GetValue(ctx, req)
+}
+
+func (r *Runner) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest) (*envv1.DeleteValueResponse, error) {
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars.DeleteValue(ctx, req)
+}
+
+func (r *Runner) ListVersions(ctx context.Context, req *envv1.ListVersionsRequest) (*envv1.ListVersionsResponse, error) {
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars.ListVersions(ctx, req)
 }
 
 // Deploy calls the provider's Deploy RPC and streams DeployEvents to

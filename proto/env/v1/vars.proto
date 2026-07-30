@@ -1,0 +1,184 @@
+syntax = "proto3";
+package env.v1;
+
+option go_package = "github.com/ocelhq/ocel/pkg/proto/env/v1;envv1";
+
+import "deployments/v1/deployments.proto";
+
+// EnvVarsService is the store's whole surface. It is served by the same
+// provider binary as DeploymentService, over the same channel and the same
+// session-token handshake, because the values live in the user's own cloud
+// account and only the provider can reach them: the CLI has no cloud SDK
+// dependency and must not gain one. It is generated for Go only and excluded
+// from client codegen for that reason.
+//
+// The store holds values, versions and references, and nothing else. Which
+// variables a project requires, what class each carries and what schema it
+// must satisfy are declared in code — a field here that expressed any of them
+// would be a second source of truth for something the application already
+// owns.
+service EnvVarsService {
+    // SetValue writes a value, recording a new version. Concurrency is
+    // optimistic: see SetValueRequest.expected_version.
+    rpc SetValue(SetValueRequest) returns (SetValueResponse);
+
+    // ListValues enumerates every current value a project holds, as metadata
+    // only. There is deliberately no reveal flag: a listing is the routine
+    // operation and must never print secrets to a shared terminal.
+    rpc ListValues(ListValuesRequest) returns (ListValuesResponse);
+
+    // GetValue reads one cell, revealing the plaintext only when asked.
+    rpc GetValue(GetValueRequest) returns (GetValueResponse);
+
+    // DeleteValue removes a cell's current pointer. Its version history is
+    // left in place: history is an audit record of what the value once was,
+    // and deleting the value does not unmake that.
+    rpc DeleteValue(DeleteValueRequest) returns (DeleteValueResponse);
+
+    // ListVersions reads one cell's change history, newest first, bounded by
+    // the window each write prunes to.
+    rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
+}
+
+// Coordinate addresses exactly one cell. Its four components are the only
+// axes a value varies along, and every one of them is part of the store's key
+// structure rather than an attribute, so each operation is a point read or a
+// single prefix query.
+message Coordinate {
+  // slug is the owning project. Cross-project references name another
+  // project's slug here, which is why it travels per operation rather than
+  // per session.
+  string slug = 1;
+
+  // folder is the app-divergence axis, a leading-slash path ("/checkout").
+  // Empty means the project root. Nesting is organisation only: a folder is
+  // addressed exactly, never as a parent of the folders under it.
+  string folder = 2;
+
+  // key is the variable's name as application code declares it.
+  string key = 3;
+
+  // environment is the named-environment override axis: the identity of one
+  // preview environment. Empty means the value that binds class-wide, which is
+  // the only kind production has.
+  string environment = 4;
+}
+
+// ValueMetadata is everything about a value except the value: what a listing
+// shows, and what a reveal adds the plaintext to.
+message ValueMetadata {
+  Coordinate coordinate = 1;
+
+  // version is the value's current version number, counting from one. It is
+  // what a subsequent write passes as expected_version.
+  int64 version = 2;
+
+  // updated_at is when this version was written, epoch seconds.
+  int64 updated_at = 3;
+
+  // size is the plaintext's length in bytes, so a listing can show that a
+  // value is present and roughly how big without disclosing it.
+  int64 size = 4;
+}
+
+// VersionEntry is one entry of a cell's change history.
+message VersionEntry {
+  int64 version = 1;
+  int64 created_at = 2;
+  int64 size = 3;
+
+  // value is the plaintext this version held, populated only when the request
+  // asked to reveal.
+  string value = 4;
+}
+
+message SetValueRequest {
+  // options is always UTF-8 JSON bytes: `{}` when the provider was given no
+  // options, never absent and never an empty string. The CLI never inspects
+  // this field; only the provider unmarshals it.
+  bytes options = 1;
+
+  // protocol_version pins the wire contract so a provider can reject a
+  // request it can't speak.
+  string protocol_version = 2;
+
+  // class selects the substrate, and with it the table and the key the value
+  // encrypts under. Preview and production ciphertext are encrypted under
+  // different keys, so this is not a filter — it is which store is opened.
+  deployments.v1.Environment.Class class = 3;
+
+  Coordinate coordinate = 4;
+  string value = 5;
+
+  // expected_version is the version the writer believes is current: absent
+  // for a blind write, zero to require that no value exists yet. A write whose
+  // expectation no longer holds is rejected rather than applied, so two people
+  // editing at once cannot silently lose one edit. A blind write still loses
+  // to a writer that commits between its read and its own commit.
+  optional int64 expected_version = 6;
+}
+
+message SetValueResponse {
+  ValueMetadata metadata = 1;
+}
+
+message ListValuesRequest {
+  bytes options = 1;
+  string protocol_version = 2;
+  deployments.v1.Environment.Class class = 3;
+
+  // slug is the project whose values to enumerate. Resolution — which of them
+  // an app actually reads — happens on the CLI side; the provider returns raw
+  // cells.
+  string slug = 4;
+}
+
+message ListValuesResponse {
+  repeated ValueMetadata values = 1;
+}
+
+message GetValueRequest {
+  bytes options = 1;
+  string protocol_version = 2;
+  deployments.v1.Environment.Class class = 3;
+  Coordinate coordinate = 4;
+
+  // reveal asks for the plaintext. Without it the provider never decrypts.
+  bool reveal = 5;
+}
+
+message GetValueResponse {
+  // found distinguishes an unset cell from a set one, so a caller never has to
+  // read "no value" out of an empty string.
+  bool found = 1;
+  ValueMetadata metadata = 2;
+
+  // value is populated only when the request asked to reveal.
+  string value = 3;
+}
+
+message DeleteValueRequest {
+  bytes options = 1;
+  string protocol_version = 2;
+  deployments.v1.Environment.Class class = 3;
+  Coordinate coordinate = 4;
+}
+
+message DeleteValueResponse {
+  // deleted is false when there was nothing to delete. Deleting is idempotent
+  // either way.
+  bool deleted = 1;
+}
+
+message ListVersionsRequest {
+  bytes options = 1;
+  string protocol_version = 2;
+  deployments.v1.Environment.Class class = 3;
+  Coordinate coordinate = 4;
+  bool reveal = 5;
+}
+
+message ListVersionsResponse {
+  // versions are newest first.
+  repeated VersionEntry versions = 1;
+}

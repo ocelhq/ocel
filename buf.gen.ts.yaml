@@ -6,6 +6,10 @@ inputs:
     exclude_paths:
       - proto/dev
       - proto/deployments
+      # The variable store is reached only through the provider binary, so its
+      # service has no client. Excluded by file, not by directory: the rest of
+      # proto/env is SDK-facing.
+      - proto/env/v1/vars.proto
 plugins:
   - local: protoc-gen-es
     out: packages/ocel/src/gen/proto

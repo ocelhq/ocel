@@ -15,6 +15,7 @@ import (
 	"github.com/ocelhq/ocel/pkg/channel"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/pkg/proto/deployments/v1/deploymentsv1connect"
+	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
 )
 
 // deployFakeProviderEnvVar, when set to "1" in a re-exec of this test
@@ -85,11 +86,18 @@ func runDeployFakeProvider() int {
 	}
 	defer ln.Close()
 
-	mux := http.NewServeMux()
-	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(&deployFakeProviderServer{
+	fake := &deployFakeProviderServer{
 		token: os.Getenv(channel.SessionTokenEnvVar),
 		mode:  os.Getenv(deployFakeProviderModeEnvVar),
-	})
+	}
+
+	mux := http.NewServeMux()
+	path, handler := deploymentsv1connect.NewDeploymentServiceHandler(fake)
+	mux.Handle(path, handler)
+
+	// The variable store rides the same channel as the deployment service, so
+	// the fake serves both (see env_fakeprovider_test.go).
+	path, handler = envv1connect.NewEnvVarsServiceHandler(fake)
 	mux.Handle(path, handler)
 
 	// Printed only once the listener is bound and the handler mounted, per
