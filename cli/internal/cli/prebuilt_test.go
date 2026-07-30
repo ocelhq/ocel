@@ -42,7 +42,7 @@ func recordBuildApp(t *testing.T) *bool {
 	t.Helper()
 	ran := false
 	prev := buildApp
-	buildApp = func(context.Context, *projectconfig.Config, io.Writer) error {
+	buildApp = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) error {
 		ran = true
 		return nil
 	}
@@ -56,7 +56,8 @@ func TestCollectAndBuildManifest_Prebuilt_SkipsTheBuild(t *testing.T) {
 	ran := recordBuildApp(t)
 
 	var out bytes.Buffer
-	manifest, err := collectAndBuildManifest(context.Background(), prebuiltConfig(root), noGate(), true, &out)
+	cfg := prebuiltConfig(root)
+	manifest, err := collectAndBuildManifest(context.Background(), cfg, noGate(cfg), true, &out)
 	if err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
@@ -84,7 +85,8 @@ func TestCollectAndBuildManifest_NotPrebuilt_RunsTheBuild(t *testing.T) {
 	writePrebuiltFunction(t, root, "api", "index")
 	ran := recordBuildApp(t)
 
-	if _, err := collectAndBuildManifest(context.Background(), prebuiltConfig(root), noGate(), false, io.Discard); err != nil {
+	cfg := prebuiltConfig(root)
+	if _, err := collectAndBuildManifest(context.Background(), cfg, noGate(cfg), false, io.Discard); err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
 	if !*ran {
@@ -97,7 +99,8 @@ func TestCollectAndBuildManifest_NotPrebuilt_RunsTheBuild(t *testing.T) {
 func TestCollectAndBuildManifest_Prebuilt_NoOutput_Errors(t *testing.T) {
 	recordBuildApp(t)
 
-	_, err := collectAndBuildManifest(context.Background(), prebuiltConfig(t.TempDir()), noGate(), true, io.Discard)
+	cfg := prebuiltConfig(t.TempDir())
+	_, err := collectAndBuildManifest(context.Background(), cfg, noGate(cfg), true, io.Discard)
 	if err == nil {
 		t.Fatal("collectAndBuildManifest succeeded with no build output, want error")
 	}
@@ -166,7 +169,12 @@ func TestRunDeploy_Prebuilt_NoOutput_AbortsBeforeSpawn(t *testing.T) {
 
 // noGate is a gate over a store holding nothing, for the paths that declare
 // no variables and so never consult it.
-func noGate() *envgate.Gate { return envgate.New(emptyValues{}, envgate.Scope{}) }
+// noGate is a gate over a store that holds nothing. Its scope is the project's
+// own, because that is what the deploy path builds it from: an app the scope
+// does not name has no folder to resolve from.
+func noGate(cfg *projectconfig.Config) *envgate.Gate {
+	return envgate.New(emptyValues{}, envScope(cfg, false))
+}
 
 type emptyValues struct{}
 

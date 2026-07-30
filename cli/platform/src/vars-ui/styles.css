@@ -1,0 +1,497 @@
+/* The variables matrix is an engineering drawing of a requirement: hairline
+   rules, a socket per cell, and exactly two saturated colours — one for a cell
+   that is owed, one for a cell that is held. State is carried by shape as well
+   as colour, so the drawing survives being read without colour at all. */
+
+:root {
+  color-scheme: light dark;
+
+  --paper: #f2f4f3;
+  --sheet: #fbfcfc;
+  --ink: #10171c;
+  --ink-soft: #5b6a73;
+  --rule: rgba(16, 23, 28, 0.14);
+  --rule-strong: rgba(16, 23, 28, 0.3);
+  --owed: #c0391f;
+  --held: #0e7460;
+  --focus: #1e5fbd;
+
+  --mono: ui-monospace, SFMono-Regular, "SF Mono", "Cascadia Mono", Menlo,
+    Consolas, monospace;
+  --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto,
+    "Helvetica Neue", sans-serif;
+
+  --step: 8px;
+  --socket: 15px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #0f1417;
+    --sheet: #161d21;
+    --ink: #dfe7ea;
+    --ink-soft: #8b9aa3;
+    --rule: rgba(223, 231, 234, 0.16);
+    --rule-strong: rgba(223, 231, 234, 0.34);
+    --owed: #ff7a5c;
+    --held: #46c2a4;
+    --focus: #7fb0ff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+.loading {
+  padding: calc(var(--step) * 6);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+}
+
+/* ---- frame ------------------------------------------------------------- */
+
+.frame {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 25rem);
+  min-height: 100vh;
+}
+
+@media (max-width: 900px) {
+  .frame {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.sheet {
+  min-width: 0;
+  padding: calc(var(--step) * 4);
+}
+
+/* ---- masthead ---------------------------------------------------------- */
+
+.masthead {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 2);
+  align-items: baseline;
+  justify-content: space-between;
+  padding-bottom: calc(var(--step) * 2);
+  border-bottom: 1px solid var(--rule-strong);
+}
+
+.slug {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: clamp(1.5rem, 4vw, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.slug .substrate {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.tally {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+.tally[data-owed="0"] {
+  color: var(--held);
+}
+
+.tally[data-owed]:not([data-owed="0"]) {
+  color: var(--owed);
+}
+
+/* ---- eyebrow ----------------------------------------------------------- */
+
+.eyebrow {
+  margin: calc(var(--step) * 4) 0 calc(var(--step) * 1.5);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.eyebrow .axis {
+  font-weight: 400;
+  letter-spacing: 0.04em;
+  text-transform: none;
+}
+
+/* ---- apps -------------------------------------------------------------- */
+
+.apps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--step);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.app {
+  display: flex;
+  gap: var(--step);
+  align-items: center;
+  padding: calc(var(--step) * 0.75) calc(var(--step) * 1.5);
+  border: 1px solid var(--rule);
+  border-radius: 2px;
+  background: var(--sheet);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  cursor: default;
+}
+
+.app:hover,
+.app:focus-visible {
+  border-color: var(--rule-strong);
+}
+
+.app .binding {
+  color: var(--ink-soft);
+}
+
+.app .verdict[data-resolves="true"] {
+  color: var(--held);
+}
+
+.app .verdict[data-resolves="false"] {
+  color: var(--owed);
+}
+
+/* ---- matrix ------------------------------------------------------------ */
+
+.scroller {
+  overflow-x: auto;
+}
+
+.matrix {
+  border-collapse: collapse;
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+}
+
+.matrix th,
+.matrix td {
+  padding: calc(var(--step) * 1.25) calc(var(--step) * 1.5);
+  border-bottom: 1px solid var(--rule);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.matrix thead th {
+  border-bottom: 1px solid var(--rule-strong);
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.matrix thead th.column {
+  text-align: center;
+}
+
+.matrix tbody th {
+  font-weight: 500;
+  padding-right: calc(var(--step) * 4);
+}
+
+.key {
+  display: block;
+}
+
+.class {
+  display: block;
+  font-size: 0.6875rem;
+  color: var(--ink-soft);
+}
+
+.matrix td {
+  text-align: center;
+}
+
+/* A cell is a socket. Held is solid, owed is a hollow ring, free is a faint
+   ring, forbidden is a hatched square with nothing to press. */
+
+.socket {
+  display: inline-grid;
+  place-items: center;
+  width: calc(var(--socket) * 2.2);
+  height: calc(var(--socket) * 2.2);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 2px;
+  background: none;
+  cursor: pointer;
+}
+
+.socket:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.socket[aria-pressed="true"] {
+  border-color: var(--rule-strong);
+  background: var(--sheet);
+}
+
+.socket .pip {
+  width: var(--socket);
+  height: var(--socket);
+  border-radius: 50%;
+}
+
+.socket[data-state="held"] .pip {
+  background: var(--held);
+}
+
+.socket[data-state="free"] .pip {
+  border: 1px solid var(--rule-strong);
+}
+
+.socket[data-state="owed"] .pip {
+  border: 2px dashed var(--owed);
+  animation: breathe 3.2s ease-in-out infinite;
+}
+
+.socket[data-state="faulty"] .pip {
+  background: var(--owed);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--owed) 24%, transparent);
+}
+
+.socket.forbidden {
+  cursor: not-allowed;
+}
+
+.socket.forbidden .pip {
+  border-radius: 0;
+  background: repeating-linear-gradient(
+    -45deg,
+    var(--rule) 0 1px,
+    transparent 1px 4px
+  );
+}
+
+/* The thread: hovering an app lights the cells its two hops actually read. */
+.matrix[data-threading="true"] .socket:not(.threaded) {
+  opacity: 0.24;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .socket[data-state="owed"] .pip {
+    animation: none;
+  }
+}
+
+/* ---- legend ------------------------------------------------------------ */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 2);
+  margin-top: calc(var(--step) * 2);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--ink-soft);
+}
+
+.legend > span {
+  display: flex;
+  gap: calc(var(--step) * 0.75);
+  align-items: center;
+}
+
+.legend .socket {
+  width: auto;
+  height: auto;
+  cursor: default;
+}
+
+/* ---- inspector --------------------------------------------------------- */
+
+.inspector {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--step) * 2);
+  padding: calc(var(--step) * 4);
+  border-left: 1px solid var(--rule-strong);
+  background: var(--sheet);
+}
+
+@media (max-width: 900px) {
+  .inspector {
+    border-left: 0;
+    border-top: 1px solid var(--rule-strong);
+  }
+}
+
+.inspector h2 {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 1.0625rem;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.coordinate {
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.verdict-line {
+  margin: 0;
+  font-size: 0.8125rem;
+}
+
+.verdict-line[data-tone="owed"] {
+  color: var(--owed);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--step) * 0.75);
+}
+
+.field label {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.field input {
+  padding: calc(var(--step) * 1.25);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 0.875rem;
+}
+
+.field input:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.actions {
+  display: flex;
+  gap: var(--step);
+}
+
+.actions button {
+  padding: calc(var(--step) * 1.25) calc(var(--step) * 2);
+  border: 1px solid var(--rule-strong);
+  border-radius: 2px;
+  background: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.actions button:hover:not(:disabled) {
+  border-color: var(--ink);
+}
+
+.actions button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.actions .save {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.problem {
+  margin: 0;
+  padding: var(--step) calc(var(--step) * 1.5);
+  border-left: 2px solid var(--owed);
+  color: var(--owed);
+  font-size: 0.8125rem;
+}
+
+.history {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+
+.history li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--step);
+  padding: calc(var(--step) * 0.5) 0;
+  border-bottom: 1px solid var(--rule);
+}
+
+.empty {
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 0.8125rem;
+}
+
+/* ---- footer ------------------------------------------------------------ */
+
+.done {
+  margin-top: auto;
+  padding: calc(var(--step) * 1.5) calc(var(--step) * 2);
+  border: 1px solid var(--ink);
+  border-radius: 2px;
+  background: var(--ink);
+  color: var(--paper);
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.done:disabled {
+  border-color: var(--rule-strong);
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: not-allowed;
+}
+
+.farewell {
+  padding: calc(var(--step) * 6);
+  font-family: var(--mono);
+  color: var(--ink-soft);
+}

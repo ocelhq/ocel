@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -241,6 +242,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		StateTableARN: stateTableARN,
 
 		VarsKeyARN: deployed.VarsKeyARN,
+		VarsKMS:    kms.NewFromConfig(awscfg),
 
 		CacheStoreParam:    cacheStoreParam,
 		CacheStoreParamARN: cacheStoreParamARN,

@@ -76,7 +76,7 @@ func prefetched(t *testing.T, values envgate.Values, scope ...envgate.Scope) *en
 }
 
 func TestGate_MissingCellNamesTheKeyAndTheCommandThatFixesIt(t *testing.T) {
-	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []string{"api", "web"}})
+	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "api"}, {Name: "web"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE))
 	report(t, g, &resourcesv1.VariableProblem{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING})
 

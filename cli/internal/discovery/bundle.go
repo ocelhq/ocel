@@ -51,9 +51,13 @@ func Bundle(configDir string, files []string) (string, error) {
 		},
 		Bundle:   true,
 		Platform: api.PlatformNode,
-		Format:   api.FormatESModule,
-		Outfile:  outfile,
-		Write:    true,
+		// Inline, so a declaration that names its own file names the file the
+		// user wrote rather than this bundle. Node needs --enable-source-maps
+		// to read it; the discovery run passes that.
+		Sourcemap: api.SourceMapInline,
+		Format:    api.FormatESModule,
+		Outfile:   outfile,
+		Write:     true,
 		// Bundled CJS dependencies (e.g. node-postgres) load node builtins
 		// through require calls esbuild leaves in place; in ESM output those
 		// throw "Dynamic require of ... is not supported" unless a real

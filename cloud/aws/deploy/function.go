@@ -403,9 +403,30 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 	return role, nil
 }
 
+// functionEnv is the complete environment one function is deployed with: the
+// entries every function in the deploy shares (resource payloads and the app's
+// plaintext variables), the two the membrane needs, and the app's cache
+// coordinates when it keeps one. Pure and total, so what the deploy accounts
+// against the platform's budget is exactly what it deploys.
+//
+// The lambdanode bootstrap (in the membrane layer) takes over as the runtime
+// and imports the user entrypoint at /var/task/<handler>; the Lambda's own
+// Handler config is vestigial under this exec wrapper.
+func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[string]string {
+	env := make(map[string]string, len(base)+len(isr.env()))
+	maps.Copy(env, base)
+	env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
+	env["OCEL_HANDLER"] = "/var/task/" + args.Handler
+	if isr != nil {
+		maps.Copy(env, isr.env())
+	}
+	return env
+}
+
 // registerFunction realizes one ManifestFunction as an AWS Lambda from its
-// `.func` artifact plus a public Function URL, with env carrying every
-// manifest resource (env). The function assumes its own app's execution role
+// `.func` artifact plus a public Function URL. base is the environment every
+// function in the deploy shares, completed per function by functionEnv. The
+// function assumes its own app's execution role
 // (roleArn, from newFunctionRole). artifact points at the S3 object the provider
 // already uploaded the `.func` deployment package to; its content-addressed key
 // changes when the code changes, so Pulumi redeploys exactly the changed
@@ -414,21 +435,10 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 // The Function URL is exported under logicalName for collectFunctionOutput,
 // which is the identity everything downstream uses; the Pulumi resource name is
 // the clamped lambdaResourceName, so a long route still fits AWS's name limit.
-func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, env pulumi.StringMap, isr *isrConfig, roleArn pulumi.StringInput) error {
-	// env is shared across every function in the deploy, so per-function
-	// additions are made on a copy.
-	env = maps.Clone(env)
-
-	// The lambdanode bootstrap (in the membrane layer) takes over as the runtime and
-	// imports the user entrypoint at /var/task/<handler>. The Lambda's own
-	// Handler config is vestigial under this exec wrapper.
-	env["AWS_LAMBDA_EXEC_WRAPPER"] = pulumi.String(execWrapper)
-	env["OCEL_HANDLER"] = pulumi.String("/var/task/" + args.Handler)
-
-	if isr != nil {
-		for k, v := range isr.env() {
-			env[k] = pulumi.String(v)
-		}
+func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, roleArn pulumi.StringInput) error {
+	env := pulumi.StringMap{}
+	for key, value := range functionEnv(base, args, isr) {
+		env[key] = pulumi.String(value)
 	}
 
 	resourceName := lambdaResourceName(logicalName)

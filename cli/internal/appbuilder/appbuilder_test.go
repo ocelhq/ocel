@@ -17,7 +17,7 @@ import (
 	"github.com/ocelhq/ocel/cli/platform"
 )
 
-func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath, adapterPath string, request []byte, stderr io.Writer) error) {
+func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath, adapterPath string, request []byte, env map[string]string, stderr io.Writer) error) {
 	t.Helper()
 	prev := builderExec
 	builderExec = fn
@@ -69,7 +69,7 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 	var gotScript string
 	var gotReq builderRequest
 	var gotAdapter string
-	swapExec(t, func(_ context.Context, scriptPath, adapterPath string, request []byte, _ io.Writer) error {
+	swapExec(t, func(_ context.Context, scriptPath, adapterPath string, request []byte, _ map[string]string, _ io.Writer) error {
 		gotScript = scriptPath
 		gotAdapter = adapterPath
 		if err := json.Unmarshal(request, &gotReq); err != nil {
@@ -81,7 +81,7 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 		return nil
 	})
 
-	if err := Build(context.Background(), cfg, io.Discard); err != nil {
+	if err := Build(context.Background(), cfg, nil, io.Discard); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -141,7 +141,7 @@ func TestBuild_MissingBuilder(t *testing.T) {
 		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
 	}
 
-	err := Build(context.Background(), cfg, io.Discard)
+	err := Build(context.Background(), cfg, nil, io.Discard)
 	if err == nil {
 		t.Fatal("Build succeeded with no materialized builder, want error")
 	}
@@ -158,12 +158,12 @@ func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 		functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express", App: "stale"})
 
 	var gotReq builderRequest
-	swapExec(t, func(_ context.Context, _, _ string, request []byte, _ io.Writer) error {
+	swapExec(t, func(_ context.Context, _, _ string, request []byte, _ map[string]string, _ io.Writer) error {
 		// Simulate the builder running detection and finding nothing to build.
 		return json.Unmarshal(request, &gotReq)
 	})
 
-	if err := Build(context.Background(), &projectconfig.Config{Dir: root}, io.Discard); err != nil {
+	if err := Build(context.Background(), &projectconfig.Config{Dir: root}, nil, io.Discard); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
 
@@ -193,11 +193,11 @@ func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
 		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
 	}
 
-	swapExec(t, func(_ context.Context, _, _ string, _ []byte, _ io.Writer) error {
+	swapExec(t, func(_ context.Context, _, _ string, _ []byte, _ map[string]string, _ io.Writer) error {
 		return errors.New("node-builder failed: no entrypoint resolved for app \"api\"")
 	})
 
-	err := Build(context.Background(), cfg, io.Discard)
+	err := Build(context.Background(), cfg, nil, io.Discard)
 	if err == nil {
 		t.Fatal("Build succeeded, want error")
 	}
@@ -425,7 +425,7 @@ func TestBuild_Integration(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	if err := Build(context.Background(), cfg, &stderr); err != nil {
+	if err := Build(context.Background(), cfg, nil, &stderr); err != nil {
 		t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 	}
 
@@ -467,7 +467,7 @@ func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 	}
 
 	var stderr bytes.Buffer
-	if err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, &stderr); err != nil {
+	if err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, nil, &stderr); err != nil {
 		t.Fatalf("Build: %v; stderr=%s", err, stderr.String())
 	}
 
@@ -523,5 +523,53 @@ func TestCollectFunctions_MissingApp_Errors(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "requires runtime, handler, framework, and app") {
 		t.Errorf("error = %q, want it to explain the required fields", err)
+	}
+}
+
+// TestBuild_ExportsResolvedValuesIntoTheBuildEnvironment proves a resolved
+// value is present before the framework build runs, which is the only moment a
+// framework can inline one into what it emits.
+func TestBuild_ExportsResolvedValuesIntoTheBuildEnvironment(t *testing.T) {
+	root := t.TempDir()
+	writeBuilder(t, root)
+
+	var got map[string]string
+	swapExec(t, func(_ context.Context, _, _ string, _ []byte, env map[string]string, _ io.Writer) error {
+		got = env
+		return nil
+	})
+
+	vars := map[string]string{"POSTHOG_ID": "ph-123"}
+	if err := Build(context.Background(), &projectconfig.Config{Dir: root}, vars, io.Discard); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	if got["POSTHOG_ID"] != "ph-123" {
+		t.Fatalf("build environment = %v, want the resolved value", got)
+	}
+}
+
+// TestBuilderEnv_AddsResolvedValuesWithoutLosingTheBuildersOwn proves the
+// export is additive: the builder's own entries and the inherited environment
+// still reach it.
+func TestBuilderEnv_AddsResolvedValuesWithoutLosingTheBuildersOwn(t *testing.T) {
+	env := builderEnv("/adapters/next.js", map[string]string{"POSTHOG_ID": "ph-123"})
+
+	var sawAdapter, sawVariable bool
+	for _, entry := range env {
+		switch entry {
+		case "NEXT_ADAPTER_PATH=/adapters/next.js":
+			sawAdapter = true
+		case "POSTHOG_ID=ph-123":
+			sawVariable = true
+		}
+	}
+	if !sawAdapter {
+		t.Error("the adapter path the builder needs is missing")
+	}
+	if !sawVariable {
+		t.Error("the resolved value is missing")
+	}
+	if len(env) <= 2 {
+		t.Errorf("env holds %d entries, want the inherited environment as well", len(env))
 	}
 }

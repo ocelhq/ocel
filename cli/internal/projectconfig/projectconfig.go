@@ -13,6 +13,8 @@ import (
 	"strings"
 
 	"github.com/evanw/esbuild/pkg/api"
+
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 )
 
 // ConfigFileName is the name of the file Resolve looks for.
@@ -65,6 +67,12 @@ type App struct {
 	// normalization, is never user-settable, and is never serialized onto
 	// the manifest wire.
 	Compute string
+	// Folder is the variable folder this app's values come from — the reason
+	// two apps in one project can require one key name and get different
+	// values. Empty means the app reads the project root. Binding is a
+	// deployment concern, which is why it lives here and not in the code that
+	// declares the variables.
+	Folder string
 }
 
 // Config is the resolved, defaulted project configuration read from
@@ -113,6 +121,7 @@ type rawConfig struct {
 		Path       string     `json:"path"`
 		Framework  string     `json:"framework"`
 		Entrypoint string     `json:"entrypoint"`
+		Folder     string     `json:"folder"`
 		Domains    rawDomains `json:"domains"`
 	} `json:"apps"`
 	Domains rawDomains `json:"domains"`
@@ -383,6 +392,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 
 	apps := make([]App, 0, len(raw.Apps))
 	seen := make(map[string]bool, len(raw.Apps))
+	boundFolders := make(map[string]string, len(raw.Apps))
 	for _, a := range raw.Apps {
 		if a.Name == "" {
 			return nil, fmt.Errorf("app is missing required \"name\"")
@@ -399,6 +409,16 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			return nil, fmt.Errorf("app %q is missing required \"path\"", a.Name)
 		}
 
+		if a.Folder != "" {
+			if err := envgate.ValidateFolder(a.Folder); err != nil {
+				return nil, fmt.Errorf("app %q: %w", a.Name, err)
+			}
+			if other, taken := boundFolders[a.Folder]; taken {
+				return nil, fmt.Errorf("apps %q and %q both bind folder %q — a folder holds one app's values, so two apps sharing one would defeat the divergence folders exist for", other, a.Name, a.Folder)
+			}
+			boundFolders[a.Folder] = a.Name
+		}
+
 		domains, err := normalizeDomains(a.Domains)
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)
@@ -410,6 +430,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			Entrypoint: a.Entrypoint,
 			Domains:    domains,
 			Compute:    defaultCompute,
+			Folder:     a.Folder,
 		})
 	}
 

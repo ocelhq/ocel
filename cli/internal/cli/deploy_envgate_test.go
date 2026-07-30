@@ -43,9 +43,16 @@ globalThis.__ocelRegister.push(
     const out = process.env.OCEL_TEST_ENV_CELLS_OUT;
     if (out) await (await import("node:fs/promises")).writeFile(out, JSON.stringify(cells));
 
-    const problems = definitions
-      .filter((d: any) => !cells.some((c: any) => c.key === d.key && !c.folder))
-      .map((d: any) => ({ key: d.key, kind: "KIND_MISSING" }));
+    // The required-cell matrix, as ocel/env computes it: a scoped variable
+    // owes a value to every folder it names and none to the root.
+    const problems = definitions.flatMap((d: any) =>
+      (d.folders?.length ? d.folders : [""])
+        .filter(
+          (folder: string) =>
+            !cells.some((c: any) => c.key === d.key && (c.folder ?? "") === folder),
+        )
+        .map((folder: string) => ({ key: d.key, folder, kind: "KIND_MISSING" })),
+    );
     if (problems.length > 0) await call("ReportEnvProblems", { problems });
   })(),
 );
@@ -69,7 +76,7 @@ func setUpEnvGateFixture(t *testing.T, definitions string) string {
 func stubAppBuildRecorder(t *testing.T, built *bool) {
 	t.Helper()
 	prev := buildApp
-	buildApp = func(context.Context, *projectconfig.Config, io.Writer) error {
+	buildApp = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) error {
 		*built = true
 		return nil
 	}
@@ -155,5 +162,60 @@ func TestRunDeploy_LiveValueIsNeverHandedToTheDeclaringProcess(t *testing.T) {
 	}
 	if byKey["BAKED_KEY"] != "baked_value" {
 		t.Errorf("BAKED_KEY = %q, want the plaintext its schema is checked against", byKey["BAKED_KEY"])
+	}
+}
+
+// writeAppsConfig rewrites the fixture's config with apps bound to folders,
+// which is the only place an app-to-folder binding is declared.
+func writeAppsConfig(t *testing.T, root, apps string) {
+	t.Helper()
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  apps: [`+apps+`],
+};
+`)
+}
+
+func TestRunDeploy_AFolderNoAppBindsIsAWarningNotARefusal(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+	writeAppsConfig(t, root, `{ name: "api", path: "apps/api", framework: "express" }`)
+	envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v, want a dead scope to warn, not stop the deploy; stdout=%s", err, stdout.String())
+	}
+	out := stdout.String() + stderr.String()
+	if !strings.Contains(out, "POSTHOG_ID") || !strings.Contains(out, "/web") {
+		t.Errorf("output = %q, want a warning naming the key and the folder no app binds", out)
+	}
+}
+
+func TestRunDeploy_AHalfCompletedFolderRenameStopsTheDeployNamingBothFiles(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
+	writeAppsConfig(t, root, `
+    { name: "web", path: "apps/web", framework: "express", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "express", folder: "/administration" }`)
+	envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
+	envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
+
+	built := false
+	stubAppBuildRecorder(t, &built)
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want a half-finished folder rename to stop the deploy")
+	}
+	out := stdout.String() + stderr.String() + err.Error()
+	for _, want := range []string{"POSTHOG_ID", "/admin", "ocel.config.ts", "env.ts"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output = %q, want it to name %q", out, want)
+		}
+	}
+	if built {
+		t.Error("the app was built, want the lint to refuse before any build runs")
 	}
 }

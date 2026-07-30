@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -27,6 +28,7 @@ import (
 	"github.com/ocelhq/ocel/cli/platform"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 // deployReadyTimeout overrides how long `ocel deploy` waits for the spawned
@@ -216,15 +218,27 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 		return nil, err
 	}
 
-	// The gate stands between discovery and the build on purpose: a deploy
+	// Both checks stand between discovery and the build on purpose: a deploy
 	// that cannot succeed must not cost one.
+	warnings, err := envgate.Lint(gate.Definitions(), envApps(cfg), filepath.Join(cfg.Dir, projectconfig.ConfigFileName))
+	if err != nil {
+		return nil, err
+	}
+	for _, warning := range warnings {
+		fmt.Fprintln(buildOut, "warning: "+warning)
+	}
 	if err := gate.Check(); err != nil {
+		return nil, err
+	}
+
+	variables, err := resolveVariables(ctx, gate, cfg)
+	if err != nil {
 		return nil, err
 	}
 
 	if prebuilt {
 		fmt.Fprintln(buildOut, "using prebuilt output in .ocel/output")
-	} else if err := buildApp(ctx, cfg, buildOut); err != nil {
+	} else if err := buildApp(ctx, cfg, buildEnv(variables), buildOut); err != nil {
 		return nil, err
 	}
 
@@ -240,18 +254,107 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 		fmt.Fprintln(buildOut, "no functions to deploy; deploying infrastructure only")
 	}
 
-	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions)
+	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions, variablesByApp(variables, functions))
+}
+
+// rootApp stands in for the app a project that configures none still deploys:
+// the one the builder detects at the project root, whose name nothing knows
+// until the build has run. It binds no folder, so it resolves exactly what the
+// project root holds, and variablesByApp re-keys that resolution onto the
+// detected app once the build has named it.
+const rootApp = "this project's app"
+
+// resolveVariables is what each app is deployed with: the gate's resolution
+// paired with the class each key was declared under. The class decides
+// delivery and the resolution decides the value, so neither half alone is
+// deployable.
+func resolveVariables(ctx context.Context, gate *envgate.Gate, cfg *projectconfig.Config) (map[string][]manifestbuilder.Variable, error) {
+	definitions := gate.Definitions()
+	variables := make(map[string][]manifestbuilder.Variable, len(cfg.Apps))
+	for _, app := range envApps(cfg) {
+		resolved, err := gate.Resolve(ctx, app.Name)
+		if err != nil {
+			return nil, err
+		}
+		variables[app.Name] = appVariables(definitions, resolved)
+	}
+	return variables, nil
+}
+
+// appVariables joins one app's resolution to the declarations. A key the app
+// resolves no cell for is absent rather than empty: the SDK's named error is
+// the whole remedy for reading one, and a blank value would defeat it.
+func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]envgate.Resolved) []manifestbuilder.Variable {
+	variables := make([]manifestbuilder.Variable, 0, len(definitions))
+	for _, definition := range definitions {
+		cell, ok := resolved[definition.GetKey()]
+		if !ok {
+			continue
+		}
+		variables = append(variables, manifestbuilder.Variable{
+			Key:   definition.GetKey(),
+			Class: definition.GetClass(),
+			Value: cell.Value,
+		})
+	}
+	return variables
+}
+
+// variablesByApp keys a resolution by the app name the manifest will carry.
+// Only the root stand-in needs re-keying, and it applies to every app the
+// build produced, because a project that configures none deploys exactly one.
+func variablesByApp(variables map[string][]manifestbuilder.Variable, functions []manifestbuilder.Function) map[string][]manifestbuilder.Variable {
+	root, ok := variables[rootApp]
+	if !ok {
+		return variables
+	}
+	byApp := make(map[string][]manifestbuilder.Variable, len(functions))
+	for _, f := range functions {
+		byApp[f.App] = root
+	}
+	return byApp
+}
+
+// buildEnv is what the app build runs with. Only the plaintext class belongs
+// in a build process's environment at all; and one build process serves every
+// app, so a key two apps resolve differently cannot be expressed there and is
+// left out rather than given one app's value.
+func buildEnv(variables map[string][]manifestbuilder.Variable) map[string]string {
+	env := make(map[string]string)
+	diverged := make(map[string]bool)
+	for _, list := range variables {
+		for _, v := range list {
+			if v.Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+				continue
+			}
+			if prior, seen := env[v.Key]; seen && prior != v.Value {
+				diverged[v.Key] = true
+			}
+			env[v.Key] = v.Value
+		}
+	}
+	for key := range diverged {
+		delete(env, key)
+	}
+	return env
 }
 
 // envScope is what a gate refusal has to name to be actionable: the apps that
-// read a root cell — every app, until an app can bind a folder — and the
-// substrate the fixing command must address.
+// read a cell, with the folders they bind, and the substrate the fixing
+// command must address.
 func envScope(cfg *projectconfig.Config, preview bool) envgate.Scope {
-	apps := make([]string, 0, len(cfg.Apps))
-	for _, a := range cfg.Apps {
-		apps = append(apps, a.Name)
+	return envgate.Scope{Apps: envApps(cfg), Preview: preview}
+}
+
+func envApps(cfg *projectconfig.Config) []envgate.App {
+	if len(cfg.Apps) == 0 {
+		return []envgate.App{{Name: rootApp}}
 	}
-	return envgate.Scope{Apps: apps, Preview: preview}
+	apps := make([]envgate.App, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		apps = append(apps, envgate.App{Name: a.Name, Folder: a.Folder})
+	}
+	return apps
 }
 
 // runnerValues reaches the variable store the only way the CLI can: through
@@ -311,6 +414,7 @@ func toApps(apps []projectconfig.App) []manifestbuilder.App {
 			Name:      a.Name,
 			Framework: a.Framework,
 			Domains:   a.Domains,
+			Folder:    a.Folder,
 		})
 	}
 	return out

@@ -30,7 +30,15 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to resolve cache store config: %v", err))
 	}
 
-	membrane, err := startNode(storeEnv, startupBudget-time.Since(start))
+	// Encrypted-baked values are opened here for the same reason: they travel
+	// in the child's environment. Their ciphertext already rode in with the
+	// package, so this is one small unwrap rather than a fetch of the values.
+	bakedEnv, err := resolveBakedVarsEnv(ctx)
+	if err != nil {
+		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
+	}
+
+	membrane, err := startNode(append(storeEnv, bakedEnv...), startupBudget-time.Since(start))
 	if err != nil {
 		// Must report init failure BEFORE we start polling the Runtime API.
 		fatalInit(fmt.Sprintf("failed to start node runtime: %v", err))

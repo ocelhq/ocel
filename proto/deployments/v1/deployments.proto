@@ -3,6 +3,7 @@ package deployments.v1;
 
 option go_package = "github.com/ocelhq/ocel/pkg/proto/deployments/v1;deploymentsv1";
 
+import "resources/v1/env.proto";
 import "resources/v1/resources.proto";
 
 // DeploymentService is served by a provider binary (e.g. the AWS provider,
@@ -224,6 +225,29 @@ message ManifestApp {
   // so a persistent preview can gain a domain without a schema change. Absent
   // entries mean the default vendor subdomain.
   map<string, DomainList> domains = 3;
+
+  // variables are this app's resolved variables. They sit on the app rather
+  // than on the manifest because resolution is per app: two apps in one
+  // project may resolve the same key to different values.
+  repeated ManifestVariable variables = 4;
+
+  // folder is the variable folder this app binds, which is what decided where
+  // its variables resolved from. It travels so the runtime can say what an app
+  // is bound to when it reads a key scoped elsewhere. Empty is the project
+  // root — the absence of a binding is the only spelling of it.
+  string folder = 5;
+}
+
+// ManifestVariable is one variable resolved for one app. The class travels
+// with the value because the class is what decides delivery, and a provider
+// must not have to infer it from where the value happens to sit.
+message ManifestVariable {
+  string key = 1;
+  resources.v1.VariableClass class = 2;
+
+  // value is the resolved plaintext. A live-class variable never carries one:
+  // it is fetched at runtime, so its plaintext never reaches a build host.
+  string value = 3;
 }
 
 // ManifestFunction is a deployable function unit. Being listed in

@@ -27,6 +27,12 @@ export interface AppConfig {
   framework: "next" | "express" | "fastify";
   entrypoint?: string;
   domains?: DomainConfig;
+  // folder is the variable folder this app's values come from — an absolute
+  // path like "/checkout", and the reason two apps in one project can require
+  // the same key name and get different values. Omit it to read the project
+  // root. Binding is a deployment concern, which is why it is declared here
+  // and not beside the variables themselves.
+  folder?: string;
 }
 
 export interface OcelConfig {

@@ -192,3 +192,46 @@ func TestRunEnvSet_RefusesOnPreviewInfrastructure(t *testing.T) {
 		t.Fatal("runEnvSet against preview infrastructure err = nil, want a class-mismatch refusal")
 	}
 }
+
+func TestRunEnvSet_RefusesARootValueForAScopedKey(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
+
+	var stdout, stderr bytes.Buffer
+	err := runEnvSet(context.Background(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: nothing could ever read it")
+	}
+	for _, want := range []string{"POSTHOG_ID", "/web", "/admin"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to name %q", err, want)
+		}
+	}
+}
+
+func TestRunEnvSet_RefusesAScopedKeyInAFolderItDoesNotName(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+
+	var stdout, stderr bytes.Buffer
+	err := runEnvSet(context.Background(), root, "POSTHOG_ID", "ph", envOptions{folder: "/admin"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runEnvSet err = nil, want a folder outside the key's scope refused")
+	}
+	if !strings.Contains(err.Error(), "/admin") {
+		t.Errorf("err = %v, want it to name the folder it refused", err)
+	}
+}
+
+func TestRunEnvSet_AcceptsAScopedKeyInAFolderItNames(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+
+	if out := envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"}); !strings.Contains(out, "/web") {
+		t.Errorf("set stdout = %q, want the folder it wrote named", out)
+	}
+}
+
+func TestRunEnvSet_LeavesAnUnscopedKeyWritableAtRootAndInAFolder(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"LOG_LEVEL","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+
+	envSet(t, root, "LOG_LEVEL", "info", envOptions{})
+	envSet(t, root, "LOG_LEVEL", "debug", envOptions{folder: "/web"})
+}

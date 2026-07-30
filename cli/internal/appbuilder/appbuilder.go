@@ -93,13 +93,25 @@ type functionConfig struct {
 // into the output) without spawning node.
 var builderExec = runNode
 
+// builderEnv is the environment the node builder runs under: the CLI's own,
+// plus the adapter path the builder resolves its framework adapter from, plus
+// the project's resolved plaintext values — exported before the build because
+// that is the only moment a framework can inline one into what it emits.
+func builderEnv(adapterPath string, vars map[string]string) []string {
+	env := append(os.Environ(), "NEXT_ADAPTER_PATH="+adapterPath)
+	for key, value := range vars {
+		env = append(env, key+"="+value)
+	}
+	return env
+}
+
 // Build resets the project's build output and runs the node builder over it.
 // The builder always runs: with no configured apps it attempts to auto-detect a
 // single app at the project root, so whether there is anything to deploy is
 // decided by CollectFunctions walking the output afterward, not up front. Builder
 // progress and failure output are forwarded to stderr; a non-zero exit is
 // surfaced as an error so callers can abort before spawning a provider.
-func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) error {
+func Build(ctx context.Context, cfg *projectconfig.Config, env map[string]string, stderr io.Writer) error {
 	outputDir := filepath.Join(cfg.Dir, scratchDirName, outputDirName)
 	relOutput := filepath.Join(scratchDirName, outputDirName)
 
@@ -131,7 +143,7 @@ func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) err
 	if err != nil {
 		return fmt.Errorf("marshal build request: %w", err)
 	}
-	return builderExec(ctx, builderPath, platform.AdapterPath(cfg.Dir), payload, stderr)
+	return builderExec(ctx, builderPath, platform.AdapterPath(cfg.Dir), payload, env, stderr)
 }
 
 // CollectFunctions returns the functions in a project's build output,
@@ -283,13 +295,13 @@ func readFunction(outputDir, functionsDir, funcDir, app string) (manifestbuilder
 // (next/dist/server/config-shared.js), reaching `next build` by env
 // inheritance through the builder, so it must be set here rather than passed
 // in the request.
-func runNode(ctx context.Context, scriptPath, adapterPath string, request []byte, stderr io.Writer) error {
+func runNode(ctx context.Context, scriptPath, adapterPath string, request []byte, env map[string]string, stderr io.Writer) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
-	cmd.Env = append(os.Environ(), "NEXT_ADAPTER_PATH="+adapterPath)
+	cmd.Env = builderEnv(adapterPath, env)
 	cmd.Stdin = bytes.NewReader(request)
 	cmd.Stdout = stderr
 

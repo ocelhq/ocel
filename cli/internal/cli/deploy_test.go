@@ -298,7 +298,7 @@ func TestRunDeploy_AppBuildFailure_AbortsBeforeSpawn(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	addAppToFixtureConfig(t, root)
 	prev := buildApp
-	buildApp = func(context.Context, *projectconfig.Config, io.Writer) error {
+	buildApp = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) error {
 		return errors.New("boom: app build failed")
 	}
 	t.Cleanup(func() { buildApp = prev })
@@ -589,7 +589,7 @@ export default {
 func stubAppFunctions(t *testing.T, functions []manifestbuilder.Function) {
 	t.Helper()
 	prevBuild, prevCollect := buildApp, collectAppFunctions
-	buildApp = func(context.Context, *projectconfig.Config, io.Writer) error { return nil }
+	buildApp = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) error { return nil }
 	collectAppFunctions = func(string) ([]manifestbuilder.Function, error) {
 		return functions, nil
 	}

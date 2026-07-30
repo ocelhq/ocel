@@ -34,6 +34,23 @@ await build({
   format: "esm",
 });
 
+// The variables UI. It is served from the binary over loopback and never
+// materialized, so it is bundled to fixed names index.html asks for, with no
+// runtime, no network and no external font — offline is the whole point.
+await build({
+  entryPoints: [join(platformDir, "src/vars-ui/main.ts")],
+  outfile: join(dist, "vars-ui/app.js"),
+  bundle: true,
+  platform: "browser",
+  format: "esm",
+  target: "es2022",
+  minify: true,
+});
+await copyFile(
+  join(platformDir, "src/vars-ui/index.html"),
+  join(dist, "vars-ui/index.html"),
+);
+
 // Stay unbundled: the adapter copies these into the user's app verbatim —
 // edge-cache-handler.cjs so its bare `require("next/dist/...")` binds to that
 // app's own Next, next-dispatch.cjs because it is the bundle launcher's runtime

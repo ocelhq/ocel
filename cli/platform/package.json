@@ -6,7 +6,7 @@
   "description": "the node side of the ocel cli — bundled by generate.sh and embedded in the Go binary",
   "scripts": {
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.vars-ui.json"
   },
   "license": "MIT",
   "dependencies": {

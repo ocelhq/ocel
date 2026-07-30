@@ -23,7 +23,7 @@ export default {
 
 	var built *projectconfig.Config
 	prev := buildApp
-	buildApp = func(_ context.Context, cfg *projectconfig.Config, _ io.Writer) error {
+	buildApp = func(_ context.Context, cfg *projectconfig.Config, _ map[string]string, _ io.Writer) error {
 		built = cfg
 		writePrebuiltFunction(t, cfg.Dir, "api", "index")
 		return nil
@@ -50,7 +50,7 @@ export default { slug: "test-app" };
 `)
 
 	prev := buildApp
-	buildApp = func(context.Context, *projectconfig.Config, io.Writer) error {
+	buildApp = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) error {
 		return errors.New("boom: app build failed")
 	}
 	t.Cleanup(func() { buildApp = prev })

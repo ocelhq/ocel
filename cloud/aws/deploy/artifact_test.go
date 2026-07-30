@@ -71,11 +71,11 @@ func TestHashArtifact_Deterministic(t *testing.T) {
 	a := writeTree(t, files)
 	b := writeTree(t, files)
 
-	ha, err := hashArtifact(a)
+	ha, err := hashArtifact(a, nil)
 	if err != nil {
 		t.Fatalf("hashArtifact(a): %v", err)
 	}
-	hb, err := hashArtifact(b)
+	hb, err := hashArtifact(b, nil)
 	if err != nil {
 		t.Fatalf("hashArtifact(b): %v", err)
 	}
@@ -88,15 +88,15 @@ func TestHashArtifact_Deterministic(t *testing.T) {
 // file's contents change and when a file is renamed, so a real code change
 // yields a new key (and Pulumi redeploys the function).
 func TestHashArtifact_SensitiveToContentAndPaths(t *testing.T) {
-	base, err := hashArtifact(writeTree(t, map[string]string{"a.js": "one"}))
+	base, err := hashArtifact(writeTree(t, map[string]string{"a.js": "one"}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedContent, err := hashArtifact(writeTree(t, map[string]string{"a.js": "two"}))
+	changedContent, err := hashArtifact(writeTree(t, map[string]string{"a.js": "two"}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	changedPath, err := hashArtifact(writeTree(t, map[string]string{"b.js": "one"}))
+	changedPath, err := hashArtifact(writeTree(t, map[string]string{"b.js": "one"}), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -261,7 +261,7 @@ func TestZipDir_PreservesSymlinks(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	data, err := zipDir(dir)
+	data, err := zipDir(dir, nil)
 	if err != nil {
 		t.Fatalf("zipDir: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestHashArtifact_SensitiveToSymlinkTarget(t *testing.T) {
 		if err := os.Symlink(target, filepath.Join(dir, "link.js")); err != nil {
 			t.Fatal(err)
 		}
-		h, err := hashArtifact(dir)
+		h, err := hashArtifact(dir, nil)
 		if err != nil {
 			t.Fatalf("hashArtifact: %v", err)
 		}
@@ -323,7 +323,7 @@ func TestZipDir_RoundTrips(t *testing.T) {
 		"src/server.js": "handler",
 		"package.json":  "{}",
 	})
-	data, err := zipDir(dir)
+	data, err := zipDir(dir, nil)
 	if err != nil {
 		t.Fatalf("zipDir: %v", err)
 	}
@@ -336,5 +336,54 @@ func TestZipDir_RoundTrips(t *testing.T) {
 		if got[k] != v {
 			t.Errorf("zip[%q] = %q, want %q", k, got[k], v)
 		}
+	}
+}
+
+// TestZipDir_CarriesTheOverlay proves a file the deploy renders — the sealed
+// encrypted-baked values — ships inside the package at the path the membrane
+// reads, alongside the built tree rather than instead of any of it.
+func TestZipDir_CarriesTheOverlay(t *testing.T) {
+	dir := writeTree(t, map[string]string{"src/server.js": "handler"})
+
+	data, err := zipDir(dir, map[string][]byte{".ocel/variables.enc": []byte("sealed")})
+	if err != nil {
+		t.Fatalf("zipDir: %v", err)
+	}
+	got := readZip(t, data)
+	if got["src/server.js"] != "handler" {
+		t.Errorf("zip lost the built tree: %v", got)
+	}
+	if got[".ocel/variables.enc"] != "sealed" {
+		t.Errorf("zip[.ocel/variables.enc] = %q, want the sealed bytes", got[".ocel/variables.enc"])
+	}
+}
+
+// TestHashArtifact_SensitiveToTheOverlay proves rotating a baked value lands at
+// a new content-addressed key. Uploads are skip-if-exists, so an overlay
+// outside the hash would leave a rotation pointing at the object holding the
+// ciphertext it was meant to replace.
+func TestHashArtifact_SensitiveToTheOverlay(t *testing.T) {
+	files := map[string]string{"src/server.js": "handler"}
+	hash := func(overlay map[string][]byte) string {
+		t.Helper()
+		h, err := hashArtifact(writeTree(t, files), overlay)
+		if err != nil {
+			t.Fatalf("hashArtifact: %v", err)
+		}
+		return h
+	}
+
+	bare := hash(nil)
+	first := hash(map[string][]byte{".ocel/variables.enc": []byte("one")})
+	second := hash(map[string][]byte{".ocel/variables.enc": []byte("two")})
+
+	if bare == first {
+		t.Error("hash unchanged after an overlay was added")
+	}
+	if first == second {
+		t.Error("hash unchanged after the overlay's contents changed")
+	}
+	if again := hash(map[string][]byte{".ocel/variables.enc": []byte("one")}); again != first {
+		t.Error("hash of one tree and one overlay is not stable")
 	}
 }

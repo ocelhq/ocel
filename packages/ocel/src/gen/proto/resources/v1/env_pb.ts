@@ -10,7 +10,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file resources/v1/env.proto.
  */
 export const file_resources_v1_env: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZXNvdXJjZXMvdjEvZW52LnByb3RvEgxyZXNvdXJjZXMudjEiegoSVmFyaWFibGVEZWZpbml0aW9uEgsKA2tleRgBIAEoCRIqCgVjbGFzcxgCIAEoDjIbLnJlc291cmNlcy52MS5WYXJpYWJsZUNsYXNzEhkKEWNsaWVudF9hY2Nlc3NpYmxlGAMgASgIEhAKCHJlcXVpcmVkGAQgASgIIkoKEURlY2xhcmVFbnZSZXF1ZXN0EjUKC2RlZmluaXRpb25zGAEgAygLMiAucmVzb3VyY2VzLnYxLlZhcmlhYmxlRGVmaW5pdGlvbiI6CgxWYXJpYWJsZUNlbGwSCwoDa2V5GAEgASgJEg4KBmZvbGRlchgCIAEoCRINCgV2YWx1ZRgDIAEoCSI/ChJEZWNsYXJlRW52UmVzcG9uc2USKQoFY2VsbHMYASADKAsyGi5yZXNvdXJjZXMudjEuVmFyaWFibGVDZWxsIrIBCg9WYXJpYWJsZVByb2JsZW0SCwoDa2V5GAEgASgJEg4KBmZvbGRlchgCIAEoCRIwCgRraW5kGAMgASgOMiIucmVzb3VyY2VzLnYxLlZhcmlhYmxlUHJvYmxlbS5LaW5kEg4KBmRldGFpbBgEIAEoCSJACgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIQCgxLSU5EX01JU1NJTkcQARIQCgxLSU5EX0lOVkFMSUQQAiJLChhSZXBvcnRFbnZQcm9ibGVtc1JlcXVlc3QSLwoIcHJvYmxlbXMYASADKAsyHS5yZXNvdXJjZXMudjEuVmFyaWFibGVQcm9ibGVtIhsKGVJlcG9ydEVudlByb2JsZW1zUmVzcG9uc2UqggEKDVZhcmlhYmxlQ2xhc3MSHgoaVkFSSUFCTEVfQ0xBU1NfVU5TUEVDSUZJRUQQABIYChRWQVJJQUJMRV9DTEFTU19QTEFJThABEhwKGFZBUklBQkxFX0NMQVNTX1NFTlNJVElWRRACEhkKFVZBUklBQkxFX0NMQVNTX1NFQ1JFVBADQjtaOWdpdGh1Yi5jb20vb2NlbGhxL29jZWwvcGtnL3Byb3RvL3Jlc291cmNlcy92MTtyZXNvdXJjZXN2MWIGcHJvdG8z");
+  fileDesc("ChZyZXNvdXJjZXMvdjEvZW52LnByb3RvEgxyZXNvdXJjZXMudjEimwEKElZhcmlhYmxlRGVmaW5pdGlvbhILCgNrZXkYASABKAkSKgoFY2xhc3MYAiABKA4yGy5yZXNvdXJjZXMudjEuVmFyaWFibGVDbGFzcxIZChFjbGllbnRfYWNjZXNzaWJsZRgDIAEoCBIQCghyZXF1aXJlZBgEIAEoCBIPCgdmb2xkZXJzGAUgAygJEg4KBnNvdXJjZRgGIAEoCSJKChFEZWNsYXJlRW52UmVxdWVzdBI1CgtkZWZpbml0aW9ucxgBIAMoCzIgLnJlc291cmNlcy52MS5WYXJpYWJsZURlZmluaXRpb24iOgoMVmFyaWFibGVDZWxsEgsKA2tleRgBIAEoCRIOCgZmb2xkZXIYAiABKAkSDQoFdmFsdWUYAyABKAkiPwoSRGVjbGFyZUVudlJlc3BvbnNlEikKBWNlbGxzGAEgAygLMhoucmVzb3VyY2VzLnYxLlZhcmlhYmxlQ2VsbCKyAQoPVmFyaWFibGVQcm9ibGVtEgsKA2tleRgBIAEoCRIOCgZmb2xkZXIYAiABKAkSMAoEa2luZBgDIAEoDjIiLnJlc291cmNlcy52MS5WYXJpYWJsZVByb2JsZW0uS2luZBIOCgZkZXRhaWwYBCABKAkiQAoES2luZBIUChBLSU5EX1VOU1BFQ0lGSUVEEAASEAoMS0lORF9NSVNTSU5HEAESEAoMS0lORF9JTlZBTElEEAIiSwoYUmVwb3J0RW52UHJvYmxlbXNSZXF1ZXN0Ei8KCHByb2JsZW1zGAEgAygLMh0ucmVzb3VyY2VzLnYxLlZhcmlhYmxlUHJvYmxlbSIbChlSZXBvcnRFbnZQcm9ibGVtc1Jlc3BvbnNlKoIBCg1WYXJpYWJsZUNsYXNzEh4KGlZBUklBQkxFX0NMQVNTX1VOU1BFQ0lGSUVEEAASGAoUVkFSSUFCTEVfQ0xBU1NfUExBSU4QARIcChhWQVJJQUJMRV9DTEFTU19TRU5TSVRJVkUQAhIZChVWQVJJQUJMRV9DTEFTU19TRUNSRVQQA0I7WjlnaXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw");
 
 /**
  * VariableDefinition is one variable exactly as application code declares it.
@@ -46,6 +46,26 @@ export type VariableDefinition = Message<"resources.v1.VariableDefinition"> & {
    * @generated from field: bool required = 4;
    */
   required: boolean;
+
+  /**
+   * folders scopes the variable to the apps bound to exactly these folders.
+   * Empty is the unscoped case: the value lives at the project root, and an
+   * app bound to a folder may override it there. A scoped variable is
+   * mandatory in every folder it names and has no root value at all, so the
+   * two modes never mix.
+   *
+   * @generated from field: repeated string folders = 5;
+   */
+  folders: string[];
+
+  /**
+   * source is the file the declaration was written in, so a cross-file
+   * complaint can name it alongside the config that binds the folders. It is
+   * best-effort: a bundler that drops the mapping leaves it empty.
+   *
+   * @generated from field: string source = 6;
+   */
+  source: string;
 };
 
 /**

@@ -1,0 +1,163 @@
+package cli
+
+import (
+	"context"
+	"fmt"
+	"io"
+
+	"github.com/pkg/browser"
+	"github.com/spf13/cobra"
+
+	"github.com/ocelhq/ocel/cli/internal/deploycollector"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/providerrunner"
+	"github.com/ocelhq/ocel/cli/internal/varsui"
+	"github.com/ocelhq/ocel/cli/platform"
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+)
+
+var envUICmd = &cobra.Command{
+	Use:   "ui",
+	Short: "Open the variables matrix in a browser",
+	Long: "Open the required-cell matrix for this project: a row per variable your code declares, " +
+		"a column per folder, and the cells that are still owed.\n\n" +
+		"The page ships inside this binary and is served over loopback from the provider session " +
+		"this command already holds, so it needs no hosted service and no network beyond the " +
+		"provider's own calls.",
+	Args: cobra.NoArgs,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
+			return runEnvUI(ctx, cwd, envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		})
+	},
+}
+
+func init() {
+	envUICmd.Flags().BoolVar(&envOpts.preview, "preview", false, "Manage the preview substrate instead of production")
+	envCmd.AddCommand(envUICmd)
+}
+
+func runEnvUI(ctx context.Context, cwd string, opts envOptions, stdout, stderr io.Writer) error {
+	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+		gate, err := discoverVariables(ctx, cfg, runner, provider, opts, stderr)
+		if err != nil {
+			return err
+		}
+
+		session, err := OpenVarsUI(ctx, cfg, provider, runner, opts.preview, gate, stdout)
+		if err != nil {
+			return err
+		}
+		defer session.Close()
+		return session.Wait(ctx)
+	})
+}
+
+// OpenVarsUI starts the bundled variables UI over a provider session the caller
+// already holds, prints and opens its URL, and returns the session to wait on.
+// The gate is passed in rather than built here because the caller that needs
+// this most is a deploy that already ran discovery and refused: it hands over
+// the same gate, so the matrix opens describing precisely the cells that
+// stopped it.
+func OpenVarsUI(
+	ctx context.Context,
+	cfg *projectconfig.Config,
+	provider *projectconfig.ProviderDescriptor,
+	runner *providerrunner.Runner,
+	preview bool,
+	gate *envgate.Gate,
+	stdout io.Writer,
+) (*varsui.Session, error) {
+	assets, err := platform.VarsUI()
+	if err != nil {
+		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
+	}
+
+	store := runnerValues{
+		runner:  runner,
+		options: []byte(provider.Options),
+		slug:    cfg.Slug,
+		class:   envClass(envOptions{preview: preview}),
+	}
+	session, err := varsui.Serve(ctx, varsui.Options{
+		Assets:  assets,
+		Gate:    gate,
+		Store:   store,
+		Slug:    cfg.Slug,
+		Preview: preview,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, session.URL)
+	if err := browser.OpenURL(session.URL); err != nil {
+		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
+	}
+	return session, nil
+}
+
+// discoverVariables runs the project's discovery pass and returns the gate it
+// filled: what the code declares, what the store holds for it, and what the
+// declaring process refused to run with.
+func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
+	gate := envgate.New(runnerValues{
+		runner:  runner,
+		options: []byte(provider.Options),
+		slug:    cfg.Slug,
+		class:   envClass(opts),
+	}, envScope(cfg, opts.preview))
+	if _, err := deploycollector.Collect(ctx, cfg, gate, io.Discard, stderr); err != nil {
+		return nil, err
+	}
+	return gate, nil
+}
+
+// The write half of the store, alongside the reads runnerValues already
+// answers for the gate. Both go through the provider binary: the CLI has no
+// cloud SDK dependency and must not gain one.
+
+func (v runnerValues) Set(ctx context.Context, cell envgate.Cell, value string) error {
+	_, err := v.runner.SetValue(ctx, &envv1.SetValueRequest{
+		Options:         v.options,
+		ProtocolVersion: manifestbuilder.SchemaVersion,
+		Class:           v.class,
+		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
+		Value:           value,
+	})
+	return err
+}
+
+func (v runnerValues) Delete(ctx context.Context, cell envgate.Cell) error {
+	_, err := v.runner.DeleteValue(ctx, &envv1.DeleteValueRequest{
+		Options:         v.options,
+		ProtocolVersion: manifestbuilder.SchemaVersion,
+		Class:           v.class,
+		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
+	})
+	return err
+}
+
+func (v runnerValues) History(ctx context.Context, cell envgate.Cell) ([]varsui.Version, error) {
+	resp, err := v.runner.ListVersions(ctx, &envv1.ListVersionsRequest{
+		Options:         v.options,
+		ProtocolVersion: manifestbuilder.SchemaVersion,
+		Class:           v.class,
+		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	versions := make([]varsui.Version, 0, len(resp.GetVersions()))
+	for _, entry := range resp.GetVersions() {
+		versions = append(versions, varsui.Version{
+			Version:   entry.GetVersion(),
+			CreatedAt: entry.GetCreatedAt(),
+			Size:      entry.GetSize(),
+		})
+	}
+	return versions, nil
+}

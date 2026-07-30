@@ -809,3 +809,76 @@ func TestNormalizeProductionDomains_DedupesAndRejectsPreviewCollision(t *testing
 		t.Fatal("want error when a production hostname equals the preview wildcard")
 	}
 }
+
+func TestResolve_AppBindsToAFolder(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [
+    { name: "web", path: "apps/web", framework: "next", folder: "/web" },
+    { name: "admin", path: "apps/admin", framework: "next" },
+  ],
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if cfg.Apps[0].Folder != "/web" {
+		t.Errorf("Apps[0].Folder = %q, want %q", cfg.Apps[0].Folder, "/web")
+	}
+	if cfg.Apps[1].Folder != "" {
+		t.Errorf("Apps[1].Folder = %q, want empty: an app that binds nothing reads the project root", cfg.Apps[1].Folder)
+	}
+}
+
+func TestResolve_AppFolderMustBeAWellShapedPath(t *testing.T) {
+	for folder, want := range map[string]string{
+		"web":         "must start with",
+		"/web/":       "must not end with",
+		"/web//admin": "empty path segment",
+		"/we#b":       `may not contain "#"`,
+		"/":           "is the project root",
+	} {
+		t.Run(folder, func(t *testing.T) {
+			root := t.TempDir()
+			writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "web", path: "apps/web", framework: "next", folder: "`+folder+`" }],
+};
+`)
+
+			_, err := Resolve(root)
+			if err == nil {
+				t.Fatalf("Resolve(folder=%q) err = nil, want a rejection", folder)
+			}
+			if !strings.Contains(err.Error(), folder) || !strings.Contains(err.Error(), want) {
+				t.Errorf("err = %v, want it to name %q and say %q", err, folder, want)
+			}
+		})
+	}
+}
+
+func TestResolve_TwoAppsCannotBindTheSameFolder(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [
+    { name: "web", path: "apps/web", framework: "next", folder: "/shared" },
+    { name: "admin", path: "apps/admin", framework: "next", folder: "/shared" },
+  ],
+};
+`)
+
+	_, err := Resolve(root)
+	if err == nil {
+		t.Fatal("Resolve err = nil, want two apps sharing one folder rejected")
+	}
+	if !strings.Contains(err.Error(), "/shared") {
+		t.Errorf("err = %v, want it to name the folder both apps bound", err)
+	}
+}

@@ -51,7 +51,7 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate,
 		return nil, fmt.Errorf("bundle discovery entrypoint: %w", err)
 	}
 
-	nodeCmd := exec.CommandContext(ctx, "node", entry)
+	nodeCmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
 	nodeCmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+collectorAddr)
 	nodeCmd.Stdout = stdout
 	nodeCmd.Stderr = stderr

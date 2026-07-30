@@ -9,6 +9,7 @@ import {
   parse,
   type Definitions,
   type VariableClass,
+  type VariableDefinition,
 } from "./definition.js";
 
 const WIRE_CLASS: Record<VariableClass, WireClass> = {
@@ -21,13 +22,18 @@ const WIRE_CLASS: Record<VariableClass, WireClass> = {
 // store answers with, and reports what a deploy must not proceed on. The
 // verdict is formed here because the schemas are here: they are live objects
 // in this language and could not travel to the CLI.
-export async function declareEnv(definitions: Definitions): Promise<void> {
+export async function declareEnv(
+  definitions: Definitions,
+  source: string,
+): Promise<void> {
   const { cells } = await rpc.resource.declareEnv({
     definitions: Object.entries(definitions).map(([key, definition]) => ({
       key,
       class: WIRE_CLASS[definition.class],
       clientAccessible: definition.client === true,
       required: isRequired(definition),
+      folders: [...(definition.folders ?? [])],
+      source,
     })),
   });
 
@@ -52,11 +58,13 @@ function validate(
 
   for (const [key, definition] of Object.entries(definitions)) {
     const stored = cells.filter((c) => c.key === key);
-    if (stored.length === 0) {
-      if (isRequired(definition)) {
-        problems.push(problem(key, "", VariableProblem_Kind.MISSING, ""));
+
+    if (isRequired(definition)) {
+      for (const folder of requiredFolders(definition)) {
+        if (!stored.some((c) => c.folder === folder)) {
+          problems.push(problem(key, folder, VariableProblem_Kind.MISSING, ""));
+        }
       }
-      continue;
     }
 
     // A live cell arrives as presence without plaintext, so there is nothing
@@ -75,6 +83,14 @@ function validate(
   }
 
   return problems;
+}
+
+// requiredFolders is the required-cell matrix for one key. A scoped variable
+// owes a value to every folder it names and none to the root, so a root value
+// could never be read; an unscoped one owes exactly the root, and a value in a
+// folder is an override the root still has to back.
+function requiredFolders(definition: VariableDefinition): readonly string[] {
+  return definition.folders?.length ? definition.folders : [""];
 }
 
 function problem(

@@ -1,4 +1,5 @@
 import type { StandardSchemaV1 } from "@standard-schema/spec";
+import { scopeProblem } from "./scope.js";
 
 export type VariableClass = "plain" | "sensitive" | "secret";
 
@@ -15,6 +16,13 @@ export interface VariableDefinition<
 
   // client marks a value the browser may read. It forces the plaintext class.
   client?: boolean;
+
+  // folders scopes the variable to the apps bound to exactly these folders,
+  // for the one case folders exist to serve: two apps that need the same key
+  // name and different values. It is then mandatory in every folder it names
+  // and has no root value at all — an unscoped variable lives at the root and
+  // a bound app may override it there, and the two modes never mix.
+  folders?: readonly string[];
 }
 
 export type Definitions = Record<string, VariableDefinition>;
@@ -75,6 +83,12 @@ function validateDefinition(key: string, definition: VariableDefinition): void {
     throw new EnvDefinitionError(
       `'${key}' starts with a reserved prefix (${RESERVED_PREFIXES.join(", ")}). A '${definition.class}' variable is delivered under its own name, so the platform would overwrite it.`,
     );
+  }
+  if (definition.folders) {
+    const problem = scopeProblem(definition.folders);
+    if (problem) {
+      throw new EnvDefinitionError(`'${key}' has an unusable folder scope: ${problem}`);
+    }
   }
   if (LIVE_CLASSES.has(definition.class) && !isRequired(definition)) {
     throw new EnvDefinitionError(

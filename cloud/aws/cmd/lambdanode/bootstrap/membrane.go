@@ -220,11 +220,7 @@ func handshake(ln net.Listener, log *lastLog) (*nodeReady, error) {
 
 func entrypointPath() string {
 	const nodeEntry = "/opt/ocel/node/entrypoint.mjs"
-	root := os.Getenv("LAMBDA_TASK_ROOT")
-	if root == "" {
-		root = "/var/task"
-	}
-	data, err := os.ReadFile(filepath.Join(root, "config.json"))
+	data, err := os.ReadFile(filepath.Join(taskRoot(), "config.json"))
 	if err != nil {
 		return nodeEntry
 	}

@@ -40,6 +40,17 @@ type App struct {
 	// hostnames this app is served on, mirroring the project-level shape.
 	// Production may carry several; preview carries one wildcard.
 	Domains map[string][]string
+	// Folder is the variable folder this app binds. Empty is the project root.
+	Folder string
+}
+
+// Variable is one variable the gate resolved for one app: the pure input to
+// Build for that app's variables. Value is the resolved plaintext, empty for a
+// live class whose value never reaches a build host.
+type Variable struct {
+	Key   string
+	Class resourcesv1.VariableClass
+	Value string
 }
 
 // Function is a single collected function unit: the pure input to Build for
@@ -128,7 +139,7 @@ func normalizeLogicalName(s string) string {
 // one never changes an existing entry's logical name. Two declarations sharing
 // the same (type, id) are a hard error naming both declarations and their
 // source locations.
-func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, functions []Function) (*deploymentsv1.Manifest, error) {
+func Build(slug string, domains map[string][]string, apps []App, declarations []Declaration, functions []Function, variables map[string][]Variable) (*deploymentsv1.Manifest, error) {
 	type identity struct {
 		typ resourcesv1.ResourceType
 		id  string
@@ -199,7 +210,7 @@ func Build(slug string, domains map[string][]string, apps []App, declarations []
 		Resources:     resources,
 		Functions:     manifestFunctions,
 		Domains:       domainLists(domains),
-		Apps:          buildApps(apps, functions),
+		Apps:          buildApps(apps, functions, variables),
 	}, nil
 }
 
@@ -228,7 +239,10 @@ func domainLists(domains map[string][]string) map[string]*deploymentsv1.DomainLi
 // configured apps the builder detects one at the project root and only the
 // functions it emitted carry its name. A configured app's empty framework is
 // filled from its functions, which is where detection's result surfaces.
-func buildApps(apps []App, functions []Function) []*deploymentsv1.ManifestApp {
+//
+// variables is keyed by app name: what an app resolves is its own, because the
+// folder it binds is what decides where a value comes from.
+func buildApps(apps []App, functions []Function, variables map[string][]Variable) []*deploymentsv1.ManifestApp {
 	frameworkByApp := make(map[string]string, len(functions))
 	for _, f := range functions {
 		if f.App != "" && f.Framework != "" {
@@ -250,6 +264,8 @@ func buildApps(apps []App, functions []Function) []*deploymentsv1.ManifestApp {
 			Name:      a.Name,
 			Framework: framework,
 			Domains:   domainLists(a.Domains),
+			Variables: manifestVariables(variables[a.Name]),
+			Folder:    a.Folder,
 		})
 	}
 
@@ -261,9 +277,24 @@ func buildApps(apps []App, functions []Function) []*deploymentsv1.ManifestApp {
 		manifestApps = append(manifestApps, &deploymentsv1.ManifestApp{
 			Name:      f.App,
 			Framework: frameworkByApp[f.App],
+			Variables: manifestVariables(variables[f.App]),
 		})
 	}
 
 	sort.Slice(manifestApps, func(i, j int) bool { return manifestApps[i].Name < manifestApps[j].Name })
 	return manifestApps
+}
+
+// manifestVariables lowers one app's resolved variables, sorted by key so the
+// same resolution always produces the same manifest.
+func manifestVariables(variables []Variable) []*deploymentsv1.ManifestVariable {
+	if len(variables) == 0 {
+		return nil
+	}
+	out := make([]*deploymentsv1.ManifestVariable, 0, len(variables))
+	for _, v := range variables {
+		out = append(out, &deploymentsv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
+	return out
 }

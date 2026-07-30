@@ -48,7 +48,9 @@ func runBuild(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	if err := buildApp(ctx, cfg, stderr); err != nil {
+	// `ocel build` holds no provider session, so it resolves no values: the
+	// variables a build can inline arrive with the deploy that resolves them.
+	if err := buildApp(ctx, cfg, nil, stderr); err != nil {
 		return err
 	}
 

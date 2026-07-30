@@ -7,6 +7,7 @@ import {
   type Definitions,
   type VariableDefinition,
 } from "./definition.js";
+import { assertInScope, callSite } from "./scope.js";
 
 export {
   EnvDefinitionError,
@@ -14,6 +15,7 @@ export {
   type VariableClass,
   type VariableDefinition,
 } from "./definition.js";
+export { EnvScopeError } from "./scope.js";
 
 // EnvValueError is a variable that cannot be read: nothing set it, or what is
 // set does not satisfy its schema. It names the key and the command that
@@ -39,7 +41,7 @@ export function defineEnv<const TDefinitions extends Definitions>(
 
   // intentionally defined repeatedly like this for dead code elimination when in prod
   if (process.env.OCEL_PHASE === "discovery") {
-    defer(declareEnv(definitions));
+    defer(declareEnv(definitions, callSite()));
   }
 
   const resolved = new Map<string, unknown>();
@@ -72,6 +74,8 @@ function resolve(key: string, definition: VariableDefinition): unknown {
     );
   }
 
+  assertInScope(key, definition.folders ?? []);
+
   const raw = read(key);
   if (!definition.schema) {
     if (raw === undefined) throw unset(key);
@@ -86,10 +90,19 @@ function resolve(key: string, definition: VariableDefinition): unknown {
   );
 }
 
+// BAKED_PREFIX is the namespaced name the membrane injects an encrypted-baked
+// value under, after opening the ciphertext that shipped inside the bundle. It
+// is namespaced precisely because such a value must not be readable from the
+// environment under the name the user chose.
+const BAKED_PREFIX = "OCEL_VAR_";
+
 // read is the one place a value's delivery is known. Every class resolves to
 // a plain property read above it, so how a class arrives changes only here.
+// The namespaced name is consulted first: a value delivered there was
+// delivered there deliberately, and nothing sharing its bare name may stand in
+// for it.
 function read(key: string): string | undefined {
-  return process.env[key];
+  return process.env[BAKED_PREFIX + key] ?? process.env[key];
 }
 
 function unset(key: string): EnvValueError {

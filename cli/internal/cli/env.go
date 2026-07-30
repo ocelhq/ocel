@@ -11,11 +11,13 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 // envOptions are the flags every `ocel env` subcommand shares. folder and
@@ -163,7 +165,20 @@ func envCoordinate(slug, key string, opts envOptions) *envv1.Coordinate {
 }
 
 func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
+	if opts.folder != "" {
+		if err := envgate.ValidateFolder(opts.folder); err != nil {
+			return err
+		}
+	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+		definitions, err := declaredVariables(ctx, cfg, runner, provider, opts, stderr)
+		if err != nil {
+			return err
+		}
+		if err := envgate.CheckWritable(definitions, key, opts.folder); err != nil {
+			return err
+		}
+
 		resp, err := runner.SetValue(ctx, &envv1.SetValueRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,
@@ -177,6 +192,18 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 		fmt.Fprintf(stdout, "Set %s (version %d).\n", describeCell(key, opts), resp.GetMetadata().GetVersion())
 		return nil
 	})
+}
+
+// declaredVariables runs the project's discovery pass to learn what its code
+// declares. A write has to know a key's folder scope to reject a cell nothing
+// could read, and code is the only authority on scope — the store holds values
+// and nothing else, so it cannot answer this from its own side.
+func declaredVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
+	gate, err := discoverVariables(ctx, cfg, runner, provider, opts, stderr)
+	if err != nil {
+		return nil, err
+	}
+	return gate.Definitions(), nil
 }
 
 func runEnvLs(ctx context.Context, cwd string, opts envOptions, stdout, stderr io.Writer) error {

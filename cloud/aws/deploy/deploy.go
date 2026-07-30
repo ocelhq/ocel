@@ -86,6 +86,10 @@ type Config struct {
 	// resolved from this substrate's bootstrap rather than derived, so a deploy
 	// can only ever grant its own class's key.
 	VarsKeyARN string
+	// VarsKMS wraps the data key each app's encrypted-baked values are sealed
+	// under. The aws-sdk-go-v2 KMS client satisfies it; only a deploy carrying
+	// such a value ever calls it.
+	VarsKMS DataKeyMaker
 
 	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
 	// deploys. Packaging it (building + zipping the handler binary) rides the

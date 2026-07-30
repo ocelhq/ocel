@@ -19,6 +19,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,7 +83,15 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
-	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, progress)
+	// Sealed before the artifacts are packaged: the ciphertext rides inside
+	// each function's deployment package, so it has to exist before anything
+	// is hashed or uploaded.
+	baked, err := renderBakedBundles(ctx, cfg, manifest)
+	if err != nil {
+		return Result{}, err
+	}
+
+	artifacts, err := uploadFunctionArtifacts(ctx, cfg, manifest, baked, progress)
 	if err != nil {
 		return Result{}, err
 	}
@@ -146,7 +155,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		go func() {
 			defer wg.Done()
 			id := identities[app.GetName()]
-			outs, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, log)
+			outs, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], log)
 			appOutputs[i] = outs
 			record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs)
 			if err == nil {
@@ -830,7 +839,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 // resource outputs, reduced to plain strings) into each function's env as a
 // concrete value rather than a cross-stack Pulumi reference — the two stacks
 // never share a Pulumi program. Opt-in-e2e only.
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked bakedBundle, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
 	name := app.GetName()
 	functions := appFunctions(manifest, name)
 
@@ -839,9 +848,17 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil, err
 	}
 
-	env := pulumi.StringMap{}
-	for k, v := range resourceEnv {
-		env[k] = pulumi.String(v)
+	env := make(map[string]string, len(resourceEnv))
+	maps.Copy(env, resourceEnv)
+	maps.Copy(env, variableEnv(app))
+	maps.Copy(env, baked.env())
+
+	// Accounted before the stack runs: an over-budget environment is a deploy
+	// that cannot succeed, and it must not cost any provisioning first.
+	for _, fn := range functions {
+		if err := checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name])); err != nil {
+			return nil, err
+		}
 	}
 
 	program := func(pctx *pulumi.Context) error {

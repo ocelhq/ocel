@@ -22,8 +22,8 @@ import (
 // Cell addresses one stored value. Only the class-wide cells matter to the
 // gate: a named-environment override is a value, not a requirement.
 type Cell struct {
-	Key    string
-	Folder string
+	Key    string `json:"key"`
+	Folder string `json:"folder"`
 }
 
 // Values is the store as the gate needs it. The CLI has no cloud SDK
@@ -38,10 +38,18 @@ type Values interface {
 	Reveal(ctx context.Context, cell Cell) (string, bool, error)
 }
 
+// App is one application and the variable folder it binds. An empty Folder is
+// an app that reads the project root, which is every app until one needs to
+// diverge.
+type App struct {
+	Name   string
+	Folder string
+}
+
 // Scope is what a refusal has to name to be actionable: which apps read the
 // cell, and which substrate the fixing command has to address.
 type Scope struct {
-	Apps    []string
+	Apps    []App
 	Preview bool
 }
 
@@ -162,7 +170,7 @@ func (r *Refusal) Error() string {
 	for _, problem := range r.Problems {
 		cell := Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}
 		fmt.Fprintf(&b, "\n  %s\n    %s\n    fix: %s\n",
-			describe(cell)+readBy(r.Scope.Apps), why(problem), fixCommand(cell, r.Scope))
+			describe(cell)+readBy(r.Scope.Apps, cell.Folder), why(problem), fixCommand(cell, r.Scope))
 	}
 	b.WriteString("\nSet the values above, then run this command again.")
 	return b.String()
@@ -189,11 +197,19 @@ func describe(cell Cell) string {
 	return cell.Key + " (" + cell.Folder + ")"
 }
 
-func readBy(apps []string) string {
-	if len(apps) == 0 {
+// readBy names the apps a failing cell actually belongs to. A root cell is the
+// fallback for every app; a folder cell is read only by the app bound there.
+func readBy(apps []App, folder string) string {
+	var names []string
+	for _, app := range apps {
+		if folder == "" || app.Folder == folder {
+			names = append(names, app.Name)
+		}
+	}
+	if len(names) == 0 {
 		return ""
 	}
-	return ", read by " + strings.Join(apps, ", ")
+	return ", read by " + strings.Join(names, ", ")
 }
 
 func fixCommand(cell Cell, scope Scope) string {

@@ -1,7 +1,10 @@
-// Package platform carries the Node side of the CLI — the app builder, the Next
-// adapter and the edge worker bundles — embedded in the binary and materialized
-// into a project's .ocel/dist on demand. Callers resolve artifacts through the
-// path helpers here rather than stitching paths of their own.
+// Package platform carries the CLI's built JavaScript, embedded in the binary
+// by one generate step. Most of it is the Node side — the app builder, the Next
+// adapter and the edge worker bundles — materialized into a project's
+// .ocel/dist on demand; callers resolve those through the path helpers here
+// rather than stitching paths of their own. The variables UI is the exception:
+// it is a browser page served straight out of the binary, so it is read as a
+// file system and never written to disk.
 package platform
 
 import (
@@ -10,6 +13,7 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 )
 
@@ -51,6 +55,16 @@ func StoreWorkerBundles(projectDir string) map[string]string {
 	}
 }
 
+// varsUIDir is the one subtree Ensure leaves behind: the variables UI is served
+// from memory, so writing it into a project would put bytes on disk that
+// nothing ever opens.
+const varsUIDir = "vars-ui"
+
+// VarsUI is the built variables UI, with index.html at its root.
+func VarsUI() (fs.FS, error) {
+	return fs.Sub(embedded, path.Join("dist", varsUIDir))
+}
+
 // Ensure materializes the embedded tree into projectDir, skipping the work when
 // the on-disk STAMP already matches. STAMP is written last, so a run interrupted
 // part way is redone rather than trusted.
@@ -80,18 +94,21 @@ func writeTree(dir string) error {
 	if err != nil {
 		return err
 	}
-	return fs.WalkDir(tree, ".", func(path string, entry fs.DirEntry, err error) error {
+	return fs.WalkDir(tree, ".", func(name string, entry fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		out := filepath.Join(dir, filepath.FromSlash(path))
+		if name == varsUIDir {
+			return fs.SkipDir
+		}
+		out := filepath.Join(dir, filepath.FromSlash(name))
 		if entry.IsDir() {
 			return os.MkdirAll(out, 0o755)
 		}
-		if path == "STAMP" {
+		if name == "STAMP" {
 			return nil
 		}
-		content, err := fs.ReadFile(tree, path)
+		content, err := fs.ReadFile(tree, name)
 		if err != nil {
 			return err
 		}

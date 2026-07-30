@@ -141,7 +141,17 @@ type VariableDefinition struct {
 	ClientAccessible bool `protobuf:"varint,3,opt,name=client_accessible,json=clientAccessible,proto3" json:"client_accessible,omitempty"`
 	// required is false when the schema supplies a default, the one place a
 	// default may come from.
-	Required      bool `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
+	Required bool `protobuf:"varint,4,opt,name=required,proto3" json:"required,omitempty"`
+	// folders scopes the variable to the apps bound to exactly these folders.
+	// Empty is the unscoped case: the value lives at the project root, and an
+	// app bound to a folder may override it there. A scoped variable is
+	// mandatory in every folder it names and has no root value at all, so the
+	// two modes never mix.
+	Folders []string `protobuf:"bytes,5,rep,name=folders,proto3" json:"folders,omitempty"`
+	// source is the file the declaration was written in, so a cross-file
+	// complaint can name it alongside the config that binds the folders. It is
+	// best-effort: a bundler that drops the mapping leaves it empty.
+	Source        string `protobuf:"bytes,6,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -202,6 +212,20 @@ func (x *VariableDefinition) GetRequired() bool {
 		return x.Required
 	}
 	return false
+}
+
+func (x *VariableDefinition) GetFolders() []string {
+	if x != nil {
+		return x.Folders
+	}
+	return nil
+}
+
+func (x *VariableDefinition) GetSource() string {
+	if x != nil {
+		return x.Source
+	}
+	return ""
 }
 
 type DeclareEnvRequest struct {
@@ -517,12 +541,14 @@ var File_resources_v1_env_proto protoreflect.FileDescriptor
 
 const file_resources_v1_env_proto_rawDesc = "" +
 	"\n" +
-	"\x16resources/v1/env.proto\x12\fresources.v1\"\xa2\x01\n" +
+	"\x16resources/v1/env.proto\x12\fresources.v1\"\xd4\x01\n" +
 	"\x12VariableDefinition\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1b.resources.v1.VariableClassR\x05class\x12+\n" +
 	"\x11client_accessible\x18\x03 \x01(\bR\x10clientAccessible\x12\x1a\n" +
-	"\brequired\x18\x04 \x01(\bR\brequired\"W\n" +
+	"\brequired\x18\x04 \x01(\bR\brequired\x12\x18\n" +
+	"\afolders\x18\x05 \x03(\tR\afolders\x12\x16\n" +
+	"\x06source\x18\x06 \x01(\tR\x06source\"W\n" +
 	"\x11DeclareEnvRequest\x12B\n" +
 	"\vdefinitions\x18\x01 \x03(\v2 .resources.v1.VariableDefinitionR\vdefinitions\"N\n" +
 	"\fVariableCell\x12\x10\n" +

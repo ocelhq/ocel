@@ -1,6 +1,8 @@
 package platform
 
 import (
+	"bytes"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"testing"
@@ -114,5 +116,29 @@ func TestEnsureRedoesInterruptedRun(t *testing.T) {
 	}
 	if _, err := os.Stat(stampPath); err != nil {
 		t.Errorf("STAMP not written: %v", err)
+	}
+}
+
+func TestVarsUIIsServableAndNeverMaterialized(t *testing.T) {
+	assets, err := VarsUI()
+	if err != nil {
+		t.Fatalf("VarsUI: %v", err)
+	}
+	page, err := fs.ReadFile(assets, "index.html")
+	if err != nil {
+		t.Fatalf("read the UI's index page: %v", err)
+	}
+	if !bytes.Contains(page, []byte("app.js")) {
+		t.Errorf("index.html = %q, want it to load the bundled script", page)
+	}
+
+	// The UI is served from the binary over loopback. Writing it into a
+	// project would put bytes on disk that nothing ever opens.
+	dir := t.TempDir()
+	if err := Ensure(dir); err != nil {
+		t.Fatalf("Ensure: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(DistDir(dir), varsUIDir)); !os.IsNotExist(err) {
+		t.Errorf("stat %s = %v, want it absent", filepath.Join(DistDir(dir), varsUIDir), err)
 	}
 }

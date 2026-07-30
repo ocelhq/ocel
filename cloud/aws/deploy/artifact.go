@@ -78,13 +78,27 @@ func walkRegularFiles(dir string) ([]string, error) {
 	return rels, nil
 }
 
+// overlayPaths are an overlay's paths in sorted order, so hashing and zipping
+// see the same set in the same order.
+func overlayPaths(overlay map[string][]byte) []string {
+	rels := make([]string, 0, len(overlay))
+	for rel := range overlay {
+		rels = append(rels, rel)
+	}
+	sort.Strings(rels)
+	return rels
+}
+
 // hashArtifact computes a deterministic content hash over a `.func` source
-// tree: the sorted set of regular files, each folded in as its relative path,
-// executable bit, and contents. It is independent of zip encoding (mod times,
-// entry order), so the same source always hashes identically — which is what
-// makes the content-addressed S3 key dedup across deploys. The hash changes iff
-// a file's path, contents, or executable bit changes.
-func hashArtifact(dir string) (string, error) {
+// tree plus the overlay deployed with it: the sorted set of regular files,
+// each folded in as its relative path, executable bit, and contents. It is
+// independent of zip encoding (mod times, entry order), so the same source
+// always hashes identically — which is what makes the content-addressed S3 key
+// dedup across deploys. The hash changes iff a file's path, contents, or
+// executable bit changes, and the overlay is folded in for exactly that
+// reason: skip-if-exists uploads would otherwise leave a rotated value
+// pointing at the object holding the ciphertext it replaced.
+func hashArtifact(dir string, overlay map[string][]byte) (string, error) {
 	rels, err := walkRegularFiles(dir)
 	if err != nil {
 		return "", err
@@ -130,6 +144,11 @@ func hashArtifact(dir string) (string, error) {
 		}
 		f.Close()
 	}
+	for _, rel := range overlayPaths(overlay) {
+		writeLenPrefixed(h, []byte(rel))
+		h.Write([]byte{0})
+		writeLenPrefixed(h, overlay[rel])
+	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
@@ -148,11 +167,12 @@ func artifactKey(slug, logicalName, hash string) string {
 	return fmt.Sprintf("%s/%s/%s.zip", slug, logicalName, hash)
 }
 
-// zipDir archives a `.func` source tree into an in-memory Lambda deployment
-// package: every regular file at its relative path, preserving the executable
-// bit. It mirrors what pulumi.NewFileArchive produced, so the packaged Lambda
-// is byte-for-byte equivalent in layout.
-func zipDir(dir string) ([]byte, error) {
+// zipDir archives a `.func` source tree, plus the overlay the deploy renders
+// for it, into an in-memory Lambda deployment package: every regular file at
+// its relative path, preserving the executable bit. It mirrors what
+// pulumi.NewFileArchive produced, so the packaged Lambda is byte-for-byte
+// equivalent in layout.
+func zipDir(dir string, overlay map[string][]byte) ([]byte, error) {
 	rels, err := walkRegularFiles(dir)
 	if err != nil {
 		return nil, err
@@ -188,6 +208,15 @@ func zipDir(dir string) ([]byte, error) {
 			continue
 		}
 		if err := copyFileInto(w, full); err != nil {
+			return nil, fmt.Errorf("zip artifact %s: %w", dir, err)
+		}
+	}
+	for _, rel := range overlayPaths(overlay) {
+		w, err := zw.Create(rel)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := w.Write(overlay[rel]); err != nil {
 			return nil, fmt.Errorf("zip artifact %s: %w", dir, err)
 		}
 	}
@@ -277,7 +306,11 @@ type artifactRef struct {
 // so the content-addressed objects the Lambdas point at already exist. Uploads
 // are skip-if-exists, and the (potentially large) zip is deferred behind that
 // presence check, so an unchanged function re-deploying is a cheap HeadObject.
-func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, progress Progress) (map[string]artifactRef, error) {
+//
+// baked is each app's sealed encrypted-baked values, keyed by app name; every
+// function of an app packages its app's bundle, which is what puts the
+// ciphertext inside the artifact rather than in the function's configuration.
+func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]bakedBundle, progress Progress) (map[string]artifactRef, error) {
 	functions := manifest.GetFunctions()
 	refs := make(map[string]artifactRef, len(functions))
 	if len(functions) == 0 {
@@ -301,13 +334,14 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 	for _, fn := range functions {
 		g.Go(func() error {
 			dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
-			hash, err := hashArtifact(dir)
+			overlay := baked[fn.GetApp()].overlay()
+			hash, err := hashArtifact(dir, overlay)
 			if err != nil {
 				return err
 			}
 			key := artifactKey(manifest.GetSlug(), fn.GetLogicalName(), hash)
 			if err := uploadArtifact(ctx, cfg.Uploader, cfg.ArtifactBucket, key, "", func() ([]byte, error) {
-				return zipDir(dir)
+				return zipDir(dir, overlay)
 			}); err != nil {
 				return err
 			}
