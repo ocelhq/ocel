@@ -2,7 +2,7 @@
 
 ## Repos and paths (all absolute, all verified to exist)
 
-- Ocel adapter repo: `/home/vndaba/Dev/ocelhq` (branch `fix/e2e-concurrency-safeness`)
+- Ocel adapter repo: `/home/vndaba/Dev/ocelhq`
 - Next.js repo: `/home/vndaba/Dev/next.js` (branch `canary`) — all `pnpm jest`
   invocations run from here
 - Sidecar (prebuilt `ocel` and `@ocel/*` packages): `/home/vndaba/Dev/ocelhq-work/sidecar`
