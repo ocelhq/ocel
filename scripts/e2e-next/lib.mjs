@@ -122,6 +122,24 @@ export function withBuildScript(pkg) {
 }
 
 /**
+ * The smoke app's revalidation probe, and the window it declares. Mirrors
+ * `revalidate` and the marker in smoke-app/app/isr/page.tsx — assert-isr.mjs
+ * reads them from here so the page and its assertion cannot drift apart.
+ */
+export const ISR_ROUTE = "/isr";
+export const ISR_REVALIDATE_SECONDS = 5;
+
+/**
+ * isrToken pulls the probe page's per-render token out of its html. Null when
+ * the marker is absent, which means the response was not that page at all —
+ * a redirect, an error page, or a build that dropped the route — and must be
+ * reported as such rather than compared as a value.
+ */
+export function isrToken(html) {
+  return /isr-token:(\d+)/.exec(String(html ?? ""))?.[1] ?? null;
+}
+
+/**
  * deployURL is the URL the harness reads from the deploy script's stdout, taken
  * from the CLI's deploy result. A successful deploy that featured no app URL is
  * a failure for our purposes: the harness has nothing to test.

@@ -212,6 +212,14 @@ jobs:
           echo "::error::$SMOKE_URL never returned 200"
           exit 1
 
+      # A 200 from every route cannot see revalidation dying: the worker's
+      # `revalidates` flag going wrong leaves every route serving correctly and
+      # only stops cache entries being rewritten. This asserts a rewrite.
+      - name: Assert the ISR route's cache entry is rewritten
+        env:
+          NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
+        run: node "$ADAPTER_DIR/scripts/e2e-next/assert-isr.mjs"
+
       - name: Assert the logs script emits all three markers
         working-directory: ${{ env.SMOKE_APP }}
         env:

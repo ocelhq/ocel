@@ -10,6 +10,8 @@ isolated app per test suite and calls three scripts per app; these are ours:
 | `logs.mjs`        | `NEXT_TEST_DEPLOY_LOGS_SCRIPT_PATH` | prints the three marker lines, then build, CLI and CloudWatch logs  |
 | `cleanup.mjs`     | `NEXT_TEST_CLEANUP_SCRIPT_PATH`     | tears the deployment down, synchronously                            |
 
+`assert-isr.mjs` is a smoke-job assertion rather than a harness script: it takes
+the deployment URL and proves a revalidating route's cache entry is rewritten.
 `lib.mjs` holds the shared pure logic (unit tested: `pnpm --filter
 @ocel-scripts/e2e-next test`). `merge-baseline.mjs` records the known-failure
 baseline. `stage-smoke-app.mjs` stages the smoke job's app. `guard-accounts.sh`
@@ -36,11 +38,21 @@ behind.
 `build` → `smoke` → `test` (16 groups) → `baseline` (recording runs only).
 
 The `smoke` job drives `deploy.mjs`, `logs.mjs` and `cleanup.mjs` **directly**
-against one trivial app, because what it asserts — a 200 from the URL plus all
-three marker lines — is not observable through `run-tests.js`. Its app is
-installed off the `nextjs` checkout by the harness's own
-`test/lib/create-next-install`, so it builds against the same Next the matrix
-tests; only `react`/`react-dom` come from `smoke-app/package.json`.
+against one trivial app, because what it asserts — a 200 from the URL, a
+revalidating route's cache entry actually being rewritten, plus all three marker
+lines — is not observable through `run-tests.js`. Its app is installed off the
+`nextjs` checkout by the harness's own `test/lib/create-next-install`, so it
+builds against the same Next the matrix tests; only `react`/`react-dom` come
+from `smoke-app/package.json`.
+
+`assert-isr.mjs` is the revalidation half of that. Serving a 200 proves nothing
+about ISR: the worker gates a tier's self-refresh on `revalidates =
+!edgeEntryKey`, and a wrong value there leaves every route answering correctly
+with only revalidation dead. The probe route (`smoke-app/app/isr/page.tsx`,
+`revalidate = 5`) renders a fresh token per render, so the assertion waits out
+the window and requires the token to change **on a cached tier** —
+`x-ocel-cache` of `HIT`/`PRERENDER`/`STALE`. A change on a `MISS` is reported as
+a distinct failure: that is a fresh render with nothing stored.
 
 The tradeoff: the smoke job does **not** exercise `run-tests.js`,
 `NEXT_TEST_MODE=deploy`, or the `NEXT_TEST_*_SCRIPT_PATH` indirection. That
