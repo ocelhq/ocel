@@ -22,7 +22,7 @@ all: cli provider layer lib
 generate: proto
 
 lib: 
-	pnpm -F=@ocel/sdk -F=@ocel/next-runtime -F=@ocel/worker-nextjs -F=@ocel/worker-deployments-store build
+	pnpm -F=ocel -F=@ocel/next-runtime -F=@ocel/worker-nextjs -F=@ocel/worker-deployments-store build
 
 # ---- Binaries ------------------------------------------------------------
 

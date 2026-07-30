@@ -189,13 +189,13 @@ jobs:
           chmod +x packages/native-lib/cli-darwin-x64/bin/ocel
           chmod +x packages/native-lib/cli-linux-x64/bin/ocel
 
-      - name: Build @ocel/sdk
-        run: pnpm --filter @ocel/sdk build
+      - name: Build ocel (tsc)
+        run: pnpm --filter ocel build
 
       - name: Publish packages
         run: |
           set -euo pipefail
-          for pkg in sdk ocel native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
+          for pkg in ocel native-lib/cli-darwin-arm64 native-lib/cli-darwin-x64 native-lib/cli-linux-x64 native-lib/cli-win32-x64; do
             (cd "packages/$pkg" && pnpm publish --access public --provenance --no-git-checks)
           done
         env:

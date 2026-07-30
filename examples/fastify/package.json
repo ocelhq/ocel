@@ -12,7 +12,7 @@
   "type": "module",
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
-    "@ocel/sdk": "workspace:^",
-    "fastify": "^5.10.0"
+    "fastify": "^5.10.0",
+    "ocel": "workspace:^"
   }
 }

@@ -7,7 +7,7 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@ocel/sdk": "workspace:^"
+    "ocel": "workspace:^"
   },
   "devDependencies": {
     "typescript": "^5"

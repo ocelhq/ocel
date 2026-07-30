@@ -1,4 +1,4 @@
-import { defineConfig } from "@ocel/sdk/config";
+import { defineConfig } from "ocel/config";
 import awsProvider from "@ocel/provider-aws";
 
 export default defineConfig({

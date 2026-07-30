@@ -86,13 +86,12 @@ jobs:
         working-directory: nextjs
         run: pnpm playwright install --with-deps chromium
 
-      # @ocel/sdk's built dist is what the sidecar packs. The CLI bundles the
+      # ocel's built dist is what the sidecar packs. The CLI bundles the
       # builder, the Next adapter and the worker bundles itself at `go generate`.
       - name: Install & build the adapter workspace
         working-directory: adapter
         run: |
           pnpm install --frozen-lockfile
-          pnpm --filter @ocel/sdk build
           pnpm --filter ocel build
           pnpm --filter @ocel/next-runtime build
           pnpm --filter @ocel/worker-nextjs build
@@ -108,16 +107,16 @@ jobs:
           node scripts/build-native.mjs --host --target provider
 
       # The sidecar is the only thing the harness's temp apps see of Ocel:
-      # ocel.config.ts is bundled and executed from the app dir (so @ocel/sdk and
+      # ocel.config.ts is bundled and executed from the app dir (so `ocel` and
       # @ocel/provider-aws must resolve from there), and providerlocator
       # require.resolve's @ocel/provider-aws-linux-x64 from the app dir too.
-      # deploy.mjs symlinks <temp-app>/node_modules/@ocel at this directory.
-      - name: Build the @ocel sidecar
+      # deploy.mjs symlinks <temp-app>/node_modules/{ocel,@ocel} at this directory.
+      - name: Build the ocel sidecar
         working-directory: adapter
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/sidecar" "$GITHUB_WORKSPACE/tarballs"
-          for pkg in @ocel/sdk @ocel/provider-aws @ocel/provider-aws-linux-x64; do
+          for pkg in ocel @ocel/provider-aws @ocel/provider-aws-linux-x64; do
             pnpm --filter "$pkg" exec pnpm pack --pack-destination "$GITHUB_WORKSPACE/tarballs"
           done
           cd "$GITHUB_WORKSPACE/sidecar"
