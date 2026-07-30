@@ -562,13 +562,18 @@ test("fails the build when a route's entry lands in no bundle", async () => {
     return {
       ...actual,
       // A packer that loses a member — the drift the manifest must not paper over.
-      packBundles: (members: never, opts: never) =>
-        actual.packBundles(members, opts as never).map((bundle) => ({
-          ...bundle,
-          members: bundle.members.filter(
-            (m: { id: string }) => m.id !== "/api/documents",
-          ),
-        })),
+      packBundles: (members: never, opts: never) => {
+        const result = actual.packBundles(members, opts as never);
+        return {
+          ...result,
+          bundles: result.bundles.map((bundle) => ({
+            ...bundle,
+            members: bundle.members.filter(
+              (m) => (m.member as { id: string }).id !== "/api/documents",
+            ),
+          })),
+        };
+      },
     };
   });
   try {
@@ -636,11 +641,68 @@ test("warns once, aggregated, about traced assets with no source", async () => {
     warn.mockRestore();
   }
 
-  const lines = warned.filter((l) => l.includes("not copied into the bundle"));
+  // One line for the build, from one side of the pack/copy seam: the packer
+  // sizes these and the copy site reports them, so neither half warns twice
+  // about the same dest keys.
+  const lines = warned.filter((l) => l.includes("no source on disk"));
   expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("not copied into the bundle");
   expect(lines[0]).toContain("2 traced asset(s)");
   expect(lines[0]).toContain("chunks/ghost-one.js");
   expect(lines[0]).toContain("chunks/ghost-two.js");
+});
+
+// The same dest keys land in more than one bundle when the routes that trace
+// them cannot share one, and the report is still one line for the build.
+test("warns once about missing sources spanning several bundles", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const ghost = join(projectDir, ".next/server/chunks", "ghost.js");
+  args.outputs.appRoutes[0]!.assets = { "chunks/ghost.js": ghost };
+  args.outputs.appRoutes[1]!.assets = args.outputs.appRoutes[0]!.assets;
+  args.outputs.appPages[0]!.assets = { "chunks/ghost.js": `${ghost}.other` };
+  args.outputs.appPages[1]!.assets = args.outputs.appPages[0]!.assets;
+
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const warned: string[] = [];
+  const adapter = await loadAdapterIn(projectDir);
+  try {
+    await adapter.onBuildComplete(args as never);
+    warned.push(...warn.mock.calls.map((c) => String(c[0])));
+  } finally {
+    warn.mockRestore();
+  }
+
+  const { real } = await partitionFuncDirs(projectDir);
+  expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
+  const lines = warned.filter((l) => l.includes("no source on disk"));
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("1 traced asset(s)");
+});
+
+// Both halves size a path the same way because there is only one sizer: a
+// directory asset's recursive contents count toward the primary election exactly
+// as they count toward the budget.
+test("elects the primary on a directory asset's recursive bytes", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const tree = join(projectDir, ".next/server/chunks/tree");
+  await mkdir(join(tree, "nested"), { recursive: true });
+  await writeFile(join(tree, "a.js"), "x".repeat(8 * 1024));
+  await writeFile(join(tree, "nested", "b.js"), "x".repeat(8 * 1024));
+
+  const lone = join(projectDir, ".next/server/chunks/lone.js");
+  await writeFile(lone, "x".repeat(12 * 1024));
+
+  // The api route traces one 12KB file; the page traces a directory whose bytes
+  // only add up to more than that when its nested file is counted too.
+  args.outputs.appRoutes[0]!.assets = { "chunks/lone.js": lone };
+  args.outputs.appRoutes[1]!.assets = args.outputs.appRoutes[0]!.assets;
+  args.outputs.appPages[0]!.assets = { "chunks/tree": tree };
+  args.outputs.appPages[1]!.assets = args.outputs.appPages[0]!.assets;
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  expect((await readLauncher(projectDir)).primary).toBe("/");
 });
 
 test("gives variants one shared bundle id and one shared entry key", async () => {
