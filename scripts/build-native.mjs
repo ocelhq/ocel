@@ -42,8 +42,8 @@ const TARGETS = {
     goModuleDir: join(REPO_ROOT, "cli"),
     pkgPrefix: "cli",
     versionLdflagPkg: "github.com/ocelhq/ocel/cli/internal/cli",
-    // The CLI embeds cli/dist, which is generated, uncommitted, and required
-    // for the module to compile at all. The provider embeds nothing.
+    // The CLI embeds cli/platform/dist, which is generated, uncommitted, and
+    // required for the module to compile at all. The provider embeds nothing.
     generate: true,
     binaries: [{ cmd: "./ocel", name: "ocel" }],
   },

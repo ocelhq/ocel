@@ -1,23 +1,23 @@
 #!/bin/sh
-# Builds cli/dist, the Node platform tree platform.go embeds. Gated on a hash of
-# its inputs so a repeat `go generate` is free.
+# Builds cli/platform/dist, the Node platform tree platform.go embeds. Gated on
+# a hash of its inputs so a repeat `go generate` is free.
 set -eu
 
-cli_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root=$(CDPATH= cd -- "$cli_dir/.." && pwd)
-dist="$cli_dir/dist"
+platform_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$platform_dir/../.." && pwd)
+dist="$platform_dir/dist"
 
 sha256() {
   if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi
 }
 
 inputs() {
-  find "$root/packages/ocel/src/builder" "$root/packages/next-runtime/src" -type f
+  find "$platform_dir/src/builder" "$root/packages/next-runtime/src" -type f
   find "$root"/workers/*/src -type f
   ls "$root"/workers/*/wrangler.jsonc
   echo "$root/pnpm-lock.yaml"
-  echo "$cli_dir/generate.sh"
-  echo "$cli_dir/build-platform.mjs"
+  echo "$platform_dir/generate.sh"
+  echo "$platform_dir/build-platform.mjs"
 }
 
 stamp=$(
@@ -31,7 +31,7 @@ if [ -f "$dist/STAMP" ] && [ "$(cat "$dist/STAMP")" = "$stamp" ]; then
   exit 0
 fi
 
-node "$cli_dir/build-platform.mjs"
+node "$platform_dir/build-platform.mjs"
 
 (
   cd "$root"
