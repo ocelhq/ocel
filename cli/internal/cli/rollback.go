@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
@@ -63,6 +64,10 @@ func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, 
 
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
+		return err
+	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 	provider, err := cfg.RequireProvider()

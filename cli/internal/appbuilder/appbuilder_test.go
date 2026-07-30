@@ -12,15 +12,30 @@ import (
 	"strings"
 	"testing"
 
+	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
-func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath string, request []byte, stderr io.Writer) error) {
+func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath, adapterPath string, request []byte, stderr io.Writer) error) {
 	t.Helper()
 	prev := builderExec
 	builderExec = fn
 	t.Cleanup(func() { builderExec = prev })
+}
+
+// writeBuilder puts a stub builder where platform.Ensure would have
+// materialized the real one, so Build's existence check passes.
+func writeBuilder(t *testing.T, projectDir string) string {
+	t.Helper()
+	path := platform.BuilderPath(projectDir)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 // writeFuncConfig simulates one thing the builder does: writing a `.func`
@@ -42,8 +57,7 @@ func writeFuncConfig(t *testing.T, outDir, app, funcRel string, cfg functionConf
 
 func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 	root := t.TempDir()
-	builderPath := filepath.Join(t.TempDir(), "cli.js")
-	t.Setenv("OCEL_BUILDER_PATH", builderPath)
+	builderPath := writeBuilder(t, root)
 	cfg := &projectconfig.Config{
 		Dir: root,
 		Apps: []projectconfig.App{
@@ -54,8 +68,10 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 
 	var gotScript string
 	var gotReq builderRequest
-	swapExec(t, func(_ context.Context, scriptPath string, request []byte, _ io.Writer) error {
+	var gotAdapter string
+	swapExec(t, func(_ context.Context, scriptPath, adapterPath string, request []byte, _ io.Writer) error {
 		gotScript = scriptPath
+		gotAdapter = adapterPath
 		if err := json.Unmarshal(request, &gotReq); err != nil {
 			return err
 		}
@@ -109,37 +125,40 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 		t.Errorf("app[1].entrypoint = %q, want empty", gotReq.Apps[1].Entrypoint)
 	}
 
-	// The builder entry is read verbatim from OCEL_BUILDER_PATH.
+	// Both artifacts are resolved from the project's materialized platform dist.
 	if gotScript != builderPath {
 		t.Errorf("script path = %q, want %q", gotScript, builderPath)
 	}
+	if got, want := gotAdapter, platform.AdapterPath(root); got != want {
+		t.Errorf("adapter path = %q, want %q", got, want)
+	}
 }
 
-func TestBuild_MissingBuilderPath(t *testing.T) {
-	t.Setenv("OCEL_BUILDER_PATH", "")
+func TestBuild_MissingBuilder(t *testing.T) {
+	root := t.TempDir()
 	cfg := &projectconfig.Config{
-		Dir:  t.TempDir(),
+		Dir:  root,
 		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
 	}
 
 	err := Build(context.Background(), cfg, io.Discard)
 	if err == nil {
-		t.Fatal("Build succeeded with OCEL_BUILDER_PATH unset, want error")
+		t.Fatal("Build succeeded with no materialized builder, want error")
 	}
-	if !strings.Contains(err.Error(), "OCEL_BUILDER_PATH") {
-		t.Errorf("error = %q, want it to mention OCEL_BUILDER_PATH", err)
+	if !strings.Contains(err.Error(), platform.BuilderPath(root)) {
+		t.Errorf("error = %q, want it to name the missing builder path", err)
 	}
 }
 
 func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 	root := t.TempDir()
-	t.Setenv("OCEL_BUILDER_PATH", filepath.Join(t.TempDir(), "cli.js"))
+	writeBuilder(t, root)
 	// A stale artifact from a previous build must not survive to be deployed.
 	writeFuncConfig(t, filepath.Join(root, ".ocel", "output"), "stale", "index.func",
 		functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express", App: "stale"})
 
 	var gotReq builderRequest
-	swapExec(t, func(_ context.Context, _ string, request []byte, _ io.Writer) error {
+	swapExec(t, func(_ context.Context, _, _ string, request []byte, _ io.Writer) error {
 		// Simulate the builder running detection and finding nothing to build.
 		return json.Unmarshal(request, &gotReq)
 	})
@@ -167,13 +186,14 @@ func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 }
 
 func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
-	t.Setenv("OCEL_BUILDER_PATH", filepath.Join(t.TempDir(), "cli.js"))
+	root := t.TempDir()
+	writeBuilder(t, root)
 	cfg := &projectconfig.Config{
-		Dir:  t.TempDir(),
+		Dir:  root,
 		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
 	}
 
-	swapExec(t, func(_ context.Context, _ string, _ []byte, _ io.Writer) error {
+	swapExec(t, func(_ context.Context, _, _ string, _ []byte, _ io.Writer) error {
 		return errors.New("node-builder failed: no entrypoint resolved for app \"api\"")
 	})
 
@@ -378,26 +398,23 @@ func TestCollectFunctions_InvalidJSON_Errors(t *testing.T) {
 	}
 }
 
-// TestBuild_Integration spawns the real node builder (resolved from
-// OCEL_BUILDER_PATH) with the user's node over the express-app fixture, then
-// discovers the built function from its config.json. It is heavy (needs node +
-// the fixture's installed node_modules + the ocel package built) so it is
-// skipped under -short.
+// TestBuild_Integration materializes the embedded platform dist into the
+// express-app fixture and spawns the real node builder over it with the user's
+// node, then discovers the built function from its config.json. It is heavy
+// (needs node + the fixture's installed node_modules) so it is skipped under
+// -short.
 func TestBuild_Integration(t *testing.T) {
 	if testing.Short() {
 		t.Skip("integration test: spawns real node over the builder")
 	}
 
-	ocelRoot := repoRelPath(t, "packages", "ocel")
-	builderPath := filepath.Join(ocelRoot, "dist", "builder", "cli.js")
-	if _, err := os.Stat(builderPath); err != nil {
-		t.Skipf("builder not built: %v; run `pnpm --filter ocel build` first", err)
-	}
-	t.Setenv("OCEL_BUILDER_PATH", builderPath)
-
 	fixtureRoot := repoRelPath(t, "packages", "ocel", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
+	}
+	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
+	if err := platform.Ensure(fixtureRoot); err != nil {
+		t.Fatalf("platform.Ensure: %v", err)
 	}
 
 	// The config Dir is the express-app itself so app Path "." points at the
@@ -406,7 +423,6 @@ func TestBuild_Integration(t *testing.T) {
 		Dir:  fixtureRoot,
 		Apps: []projectconfig.App{{Name: "api", Path: ".", Framework: "express", Compute: "serverless"}},
 	}
-	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
 
 	var stderr bytes.Buffer
 	if err := Build(context.Background(), cfg, &stderr); err != nil {
@@ -441,17 +457,14 @@ func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 		t.Skip("integration test: spawns real node over the builder")
 	}
 
-	builderPath := filepath.Join(repoRelPath(t, "packages", "ocel"), "dist", "builder", "cli.js")
-	if _, err := os.Stat(builderPath); err != nil {
-		t.Skipf("builder not built: %v; run `pnpm --filter ocel build` first", err)
-	}
-	t.Setenv("OCEL_BUILDER_PATH", builderPath)
-
 	fixtureRoot := repoRelPath(t, "packages", "ocel", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
 	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
+	if err := platform.Ensure(fixtureRoot); err != nil {
+		t.Fatalf("platform.Ensure: %v", err)
+	}
 
 	var stderr bytes.Buffer
 	if err := Build(context.Background(), &projectconfig.Config{Dir: fixtureRoot}, &stderr); err != nil {

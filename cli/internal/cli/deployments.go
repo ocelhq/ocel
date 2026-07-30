@@ -14,6 +14,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/spf13/cobra"
 
+	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -78,6 +79,10 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 	if err != nil {
 		return err
 	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
+		return err
+	}
 	provider, err := cfg.RequireProvider()
 	if err != nil {
 		return err
@@ -109,6 +114,10 @@ func runDeploymentsLs(ctx context.Context, cwd string, stdout, stderr io.Writer)
 func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, stderr io.Writer) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
+		return err
+	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 	provider, err := cfg.RequireProvider()

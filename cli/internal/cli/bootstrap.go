@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -59,6 +60,10 @@ func init() {
 func runBootstrap(ctx context.Context, cwd string, opts bootstrapOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
+		return err
+	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 

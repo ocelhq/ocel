@@ -1,11 +1,11 @@
-// Package appbuilder runs the node builder that ships with the ocel npm
-// package over a project's normalized apps, then discovers the built functions
-// by walking the build output. The builder is "dumb": it writes each `.func`
-// (carrying a `config.json`) under `.ocel/output/apps/<app>/functions` and never reports
+// Package appbuilder runs the node builder embedded in the CLI over a
+// project's normalized apps, then discovers the built functions by walking the
+// build output. The builder is "dumb": it writes each `.func` (carrying a
+// `config.json`) under `.ocel/output/apps/<app>/functions` and never reports
 // anything back over stdout — this package reads those trees into the functions
-// the manifest builder consumes. It resolves the builder entry from
-// OCEL_BUILDER_PATH (exported by the npm launcher) and spawns it with the
-// user's node, never talking to any provider or the dev server.
+// the manifest builder consumes. It resolves the builder entry from the
+// project's materialized platform dist and spawns it with the user's node,
+// never talking to any provider or the dev server.
 package appbuilder
 
 import (
@@ -22,6 +22,7 @@ import (
 	"sort"
 	"strings"
 
+	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
@@ -111,9 +112,9 @@ func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) err
 		return fmt.Errorf("create %s: %w", relOutput, err)
 	}
 
-	builderPath := os.Getenv("OCEL_BUILDER_PATH")
-	if builderPath == "" {
-		return fmt.Errorf("OCEL_BUILDER_PATH is not set; the ocel CLI must be run through its npm launcher")
+	builderPath := platform.BuilderPath(cfg.Dir)
+	if _, err := os.Stat(builderPath); err != nil {
+		return fmt.Errorf("node builder not found at %s: %w", builderPath, err)
 	}
 
 	req := builderRequest{OutDir: outputDir, ProjectRoot: cfg.Dir, Apps: make([]appInput, 0, len(cfg.Apps))}
@@ -130,7 +131,7 @@ func Build(ctx context.Context, cfg *projectconfig.Config, stderr io.Writer) err
 	if err != nil {
 		return fmt.Errorf("marshal build request: %w", err)
 	}
-	return builderExec(ctx, builderPath, payload, stderr)
+	return builderExec(ctx, builderPath, platform.AdapterPath(cfg.Dir), payload, stderr)
 }
 
 // CollectFunctions returns the functions in a project's build output,
@@ -278,12 +279,17 @@ func readFunction(outputDir, functionsDir, funcDir, app string) (manifestbuilder
 	}, nil
 }
 
-func runNode(ctx context.Context, scriptPath string, request []byte, stderr io.Writer) error {
+// runNode spawns the builder. NEXT_ADAPTER_PATH is read by Next itself
+// (next/dist/server/config-shared.js), reaching `next build` by env
+// inheritance through the builder, so it must be set here rather than passed
+// in the request.
+func runNode(ctx context.Context, scriptPath, adapterPath string, request []byte, stderr io.Writer) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
+	cmd.Env = append(os.Environ(), "NEXT_ADAPTER_PATH="+adapterPath)
 	cmd.Stdin = bytes.NewReader(request)
 	cmd.Stdout = stderr
 
