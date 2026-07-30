@@ -4,13 +4,29 @@ import { join } from "node:path";
 // AWS Lambda's ceiling on an unzipped direct-upload artifact.
 export const defaultBudgetBytes = 200 * 1024 * 1024;
 
+export interface PackedMember<T> {
+  member: T;
+  // Every asset this member names, sized as the copy will land it. Its own
+  // traced weight, not its delta in the bundle: bundle-mates share nearly all
+  // of their assets, so a delta says more about packing order than the member.
+  sizeBytes: number;
+}
+
 export interface Bundle<T> {
   name: string;
-  members: T[];
+  members: PackedMember<T>[];
   // The union of every member's assets: dest-key relative to the repo root,
   // absolute source path on disk.
   assets: Record<string, string>;
   sizeBytes: number;
+}
+
+export interface PackResult<T> {
+  bundles: Bundle<T>[];
+  // Dest keys whose source is not on disk: charged nothing and packed anyway,
+  // since the copy will skip them too. Returned rather than reported so the
+  // copy site owns the single aggregate warning per build.
+  missingAssets: string[];
 }
 
 export interface PackOptions<T> {
@@ -21,8 +37,8 @@ export interface PackOptions<T> {
   // are plumbed through they become this key and the packer stays unchanged.
   partitionBy?: (member: T) => string;
   budgetBytes?: number;
-  // undefined for a path that does not exist, which is reported and charged
-  // nothing rather than costing a silent zero.
+  // undefined for a path that does not exist, which is charged nothing and
+  // named in the result rather than costing a silent zero.
   sizeOf?: (absPath: string) => number | undefined;
 }
 
@@ -38,7 +54,7 @@ export interface PackOptions<T> {
 export function packBundles<T>(
   members: readonly T[],
   opts: PackOptions<T>,
-): Bundle<T>[] {
+): PackResult<T> {
   const {
     entryKeyOf,
     assetsOf,
@@ -54,7 +70,7 @@ export function packBundles<T>(
     if (!sizes.has(abs)) sizes.set(abs, sizeOf(abs));
     return sizes.get(abs);
   };
-  const missing: string[] = [];
+  const missing = new Set<string>();
 
   const partitions = new Map<string, T[]>();
   for (const member of [...members].sort(byKey(entryKeyOf))) {
@@ -76,12 +92,15 @@ export function packBundles<T>(
     return bundle;
   };
 
+  const bytesOf = (entries: [string, string][]) =>
+    entries.reduce((sum, [, abs]) => sum + (sizeOfCached(abs) ?? 0), 0);
+
   const absorb = (bundle: Bundle<T>, assets: Record<string, string>) => {
     for (const [dest, abs] of Object.entries(assets)) {
       if (dest in bundle.assets) continue;
       bundle.assets[dest] = abs;
       const size = sizeOfCached(abs);
-      if (size === undefined) missing.push(dest);
+      if (size === undefined) missing.add(dest);
       else bundle.sizeBytes += size;
     }
   };
@@ -95,9 +114,9 @@ export function packBundles<T>(
       const conflicts = entries.some(
         ([dest, abs]) => dest in bundle.assets && bundle.assets[dest] !== abs,
       );
-      const delta = entries
-        .filter(([dest]) => !(dest in bundle.assets))
-        .reduce((sum, [, abs]) => sum + (sizeOfCached(abs) ?? 0), 0);
+      const delta = bytesOf(
+        entries.filter(([dest]) => !(dest in bundle.assets)),
+      );
 
       if (
         bundle.members.length > 0 &&
@@ -106,7 +125,7 @@ export function packBundles<T>(
         bundle = open();
       }
       absorb(bundle, assets);
-      bundle.members.push(member);
+      bundle.members.push({ member, sizeBytes: bytesOf(entries) });
 
       // Nothing can be packed with a member that overflows the budget alone, so
       // it ships as-is and AWS rejects the artifact with its own clear error.
@@ -121,13 +140,7 @@ export function packBundles<T>(
     if (bundle.members.length === 0) bundles.pop();
   }
 
-  if (missing.length > 0) {
-    console.warn(
-      `ocel: ${missing.length} traced asset(s) have no source on disk and were packed as 0 bytes — a route needing one of them fails at runtime: ${missing.slice(0, 5).join(", ")}${missing.length > 5 ? ", …" : ""}`,
-    );
-  }
-
-  return bundles;
+  return { bundles, missingAssets: [...missing].sort() };
 }
 
 function byKey<T>(entryKeyOf: (member: T) => string) {
@@ -157,7 +170,7 @@ function assertUniqueEntryKeys<T>(
 // A path's size on disk as the asset copy will land it: a directory asset is
 // copied whole, so it costs its recursive contents; a symlink is preserved as a
 // link and costs only itself, with its target copied under its own asset entry.
-// A path that is not there has no size, which the packer reports.
+// A path that is not there has no size, which the packer returns.
 function sizeOfPath(absPath: string): number | undefined {
   let info;
   try {

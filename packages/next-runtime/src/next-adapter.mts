@@ -15,7 +15,7 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
-import { packBundles } from "./pack.mjs";
+import { packBundles, type PackedMember } from "./pack.mjs";
 
 const launcherName = "__next_launcher.cjs";
 const dispatchName = "__ocel_dispatch.cjs";
@@ -183,14 +183,16 @@ const adapter = {
       [relative(repoRoot, route.filePath)]: route.filePath,
     });
 
-    const bundles = packBundles(entryRoutes, {
+    const { bundles, missingAssets } = packBundles(entryRoutes, {
       entryKeyOf: (route) => route.id,
       assetsOf,
       partitionBy: configClass,
     });
 
     const bundleNameByEntryKey = new Map(
-      bundles.flatMap((b) => b.members.map((m) => [m.id, b.name] as const)),
+      bundles.flatMap((b) =>
+        b.members.map((m) => [m.member.id, b.name] as const),
+      ),
     );
 
     // A manifest that names a bundle no build emitted is a 502 per request for
@@ -206,16 +208,12 @@ const adapter = {
       return name;
     };
 
-    const assetBytes = cachedAssetBytes();
-    const missingAssets = new Set<string>();
-
     await Promise.all(
       bundles.map(async (bundle) => {
         const funcDir = join(outputRoot, "functions", `${bundle.name}.func`);
 
         for (const [destRel, srcAbs] of Object.entries(bundle.assets)) {
-          const copied = await copyAsset(srcAbs, join(funcDir, destRel));
-          if (!copied) missingAssets.add(destRel);
+          await copyAsset(srcAbs, join(funcDir, destRel));
         }
 
         const dispatchDest = join(funcDir, appRel, dispatchName);
@@ -230,12 +228,13 @@ const adapter = {
           join(funcDir, launcherRel),
           renderLauncher(
             Object.fromEntries(
-              bundle.members.map((m) => [
-                m.id,
-                "./" + relative(projectDir, m.filePath).split(sep).join("/"),
+              bundle.members.map(({ member }) => [
+                member.id,
+                "./" +
+                  relative(projectDir, member.filePath).split(sep).join("/"),
               ]),
             ),
-            await primaryEntryKey(bundle.members, assetsOf, assetBytes),
+            primaryEntryKey(bundle.members),
           ),
         );
 
@@ -258,11 +257,12 @@ const adapter = {
     // A traced asset whose source is gone ships a bundle missing a module some
     // route requires — and if the primed entry requires it, every route in that
     // bundle. It predates bundling and is not known to be fatal, so it is loud
-    // rather than a failed build: one aggregate line, never one per file.
-    if (missingAssets.size > 0) {
-      const sample = [...missingAssets].sort().slice(0, 5);
+    // rather than a failed build: one aggregate line, never one per file. The
+    // packer names them because it sized them; the copy skipped exactly these.
+    if (missingAssets.length > 0) {
+      const sample = missingAssets.slice(0, 5);
       console.warn(
-        `ocel: ${missingAssets.size} traced asset(s) have no source on disk and were not copied into the bundle — a route requiring one of them fails at runtime: ${sample.join(", ")}${missingAssets.size > sample.length ? ", …" : ""}`,
+        `ocel: ${missingAssets.length} traced asset(s) have no source on disk and were not copied into the bundle — a route requiring one of them fails at runtime: ${sample.join(", ")}${missingAssets.length > sample.length ? ", …" : ""}`,
       );
     }
 
@@ -433,54 +433,17 @@ function configClass(_route: NodeRoute): string {
 
 // The entry required at INIT, which primes the chunk graph its bundle-mates
 // share: the one tracing the most bytes of it, since that graph's cost is bytes
-// and not file count. Ties broken by entry key so an unchanged build produces
+// and not file count. The bytes are the packer's own — the same sizing the
+// budget rests on, so the election and the accounting cannot disagree about what
+// a route weighs. Ties broken by entry key so an unchanged build produces
 // byte-identical output.
-async function primaryEntryKey(
-  members: readonly NodeRoute[],
-  assetsOf: (route: NodeRoute) => Record<string, string>,
-  assetBytes: (absPath: string) => Promise<number>,
-): Promise<string | null> {
-  const weighed = await Promise.all(
-    members.map(async (route) => {
-      const sizes = await Promise.all(
-        Object.values(assetsOf(route)).map(assetBytes),
-      );
-      return { id: route.id, bytes: sizes.reduce((sum, size) => sum + size, 0) };
-    }),
+function primaryEntryKey(
+  members: readonly PackedMember<NodeRoute>[],
+): string | null {
+  const weighed = [...members].sort(
+    (a, b) => b.sizeBytes - a.sizeBytes || (a.member.id < b.member.id ? -1 : 1),
   );
-  weighed.sort((a, b) => b.bytes - a.bytes || (a.id < b.id ? -1 : 1));
-  return weighed[0]?.id ?? null;
-}
-
-// What an asset costs in the artifact, as copyAsset lands it: a symlink costs
-// itself and a directory its recursive contents. A source that does not exist
-// costs nothing, matching the copy skipping it (which reports it). Sizes are
-// memoized because bundle-mates trace overwhelmingly the same assets.
-function cachedAssetBytes(): (absPath: string) => Promise<number> {
-  const cache = new Map<string, Promise<number>>();
-  const measure = async (absPath: string): Promise<number> => {
-    let info;
-    try {
-      info = await lstat(absPath);
-    } catch {
-      return 0;
-    }
-    if (!info.isDirectory()) return info.size;
-    const entries = await readdir(absPath, { withFileTypes: true });
-    const sizes = await Promise.all(
-      entries.map((entry) => sized(join(absPath, entry.name))),
-    );
-    return sizes.reduce((sum, size) => sum + size, 0);
-  };
-  const sized = (absPath: string): Promise<number> => {
-    let pending = cache.get(absPath);
-    if (!pending) {
-      pending = measure(absPath);
-      cache.set(absPath, pending);
-    }
-    return pending;
-  };
-  return sized;
+  return weighed[0]?.member.id ?? null;
 }
 
 // Every output that runs on the edge: the `runtime: 'edge'` routes and, when the
@@ -989,14 +952,14 @@ async function collectPublicFiles(
   return files;
 }
 
-// Copies one traced asset, reporting whether its source existed at all: the
-// caller aggregates the misses into a single warning.
-async function copyAsset(srcAbs: string, dest: string): Promise<boolean> {
+// Copies one traced asset, skipping a source that is not there — the packer
+// already sized those as missing and the caller warns about them once.
+async function copyAsset(srcAbs: string, dest: string): Promise<void> {
   let info;
   try {
     info = await lstat(srcAbs);
   } catch {
-    return false;
+    return;
   }
   await mkdir(dirname(dest), { recursive: true });
   // Preserve symlinks verbatim: the tracer emits pnpm's node_modules as a
@@ -1005,14 +968,13 @@ async function copyAsset(srcAbs: string, dest: string): Promise<boolean> {
   if (info.isSymbolicLink()) {
     await rm(dest, { recursive: true, force: true });
     await symlink(await readlink(srcAbs), dest);
-    return true;
+    return;
   }
   if (info.isDirectory()) {
     await cp(srcAbs, dest, { recursive: true });
-    return true;
+    return;
   }
   await copyFile(srcAbs, dest);
-  return true;
 }
 
 export default adapter;
