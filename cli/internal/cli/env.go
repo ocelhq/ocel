@@ -340,7 +340,7 @@ func renderVersions(stdout io.Writer, cell string, versions []*envv1.VersionEntr
 
 func folderOrRoot(folder string) string {
 	if folder == "" {
-		return "/"
+		return "(project root)"
 	}
 	return folder
 }

@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
 // setUpEnvFixture reuses the deploy fixture (project config, fake provider
@@ -72,6 +74,29 @@ func TestRunEnvLs_ShowsKeysAndMetadataButNeverValues(t *testing.T) {
 	for _, secret := range []string{"sk_live_secret", "ph_public_id"} {
 		if strings.Contains(out, secret) {
 			t.Errorf("ls stdout = %q, want no value printed (found %q)", out, secret)
+		}
+	}
+}
+
+// A root value's FOLDER cell must not print a spelling `ocel env set --folder`
+// rejects, so a value copied straight out of `ls` can be copied straight back
+// in.
+func TestRenderValues_RootFolderDoesNotPrintARejectedSlash(t *testing.T) {
+	var stdout bytes.Buffer
+	renderValues(&stdout, []*envv1.ValueMetadata{
+		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
+	})
+
+	out := stdout.String()
+	if !strings.Contains(out, "(project root)") {
+		t.Errorf("ls stdout = %q, want the root cell rendered as %q", out, "(project root)")
+	}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		for _, f := range fields {
+			if f == "/" {
+				t.Errorf("ls stdout = %q, want no field spelled %q: --folder / is rejected", out, "/")
+			}
 		}
 	}
 }
