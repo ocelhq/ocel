@@ -845,7 +845,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	}
 
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, executionRole{App: name, Cache: caches[name]})
+		role, err := newFunctionRole(pctx, appExecutionRole(cfg, name, caches))
 		if err != nil {
 			return err
 		}

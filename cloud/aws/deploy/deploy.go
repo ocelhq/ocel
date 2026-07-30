@@ -82,6 +82,11 @@ type Config struct {
 	CacheStoreParam    string
 	CacheStoreParamARN string
 
+	// VarsKeyARN is the KMS key the substrate's variable store encrypts under,
+	// resolved from this substrate's bootstrap rather than derived, so a deploy
+	// can only ever grant its own class's key.
+	VarsKeyARN string
+
 	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
 	// deploys. Packaging it (building + zipping the handler binary) rides the
 	// provider's distribution workflow, which is deferred with provider publish;

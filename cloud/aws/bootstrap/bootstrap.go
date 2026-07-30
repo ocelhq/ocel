@@ -97,6 +97,12 @@ type Deployed struct {
 	// are uploaded to, keyed by build id; the deploy path crawls a Next app's
 	// output for them and the runtime reads them to serve ISR.
 	AssetBucket string
+	// VarsTable is the account-global DynamoDB table variable values live in,
+	// separate from the state table.
+	VarsTable string
+	// VarsKeyARN is the KMS key every encrypted value of this substrate's class
+	// is encrypted under.
+	VarsKeyARN string
 	// Class is the class the substrate was stamped with at bootstrap
 	// (ClassProduction or ClassPreview), or "" for an older bootstrap predating
 	// the marker.
@@ -161,6 +167,10 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 			d.ArtifactBucket = aws.ToString(o.OutputValue)
 		case outputAssetBucket:
 			d.AssetBucket = aws.ToString(o.OutputValue)
+		case outputVarsTable:
+			d.VarsTable = aws.ToString(o.OutputValue)
+		case outputVarsKeyARN:
+			d.VarsKeyARN = aws.ToString(o.OutputValue)
 		case outputInfraClass:
 			d.Class = aws.ToString(o.OutputValue)
 		case outputVersion:
@@ -412,17 +422,17 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%s%sOutputs:
+%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
-%s%s%s  %s:
+%s%s%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), edgeUserResource(EdgeUserName, trust), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), edgeUserResource(EdgeUserName, trust), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
@@ -454,17 +464,17 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%s%sOutputs:
+%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
     Value: !Ref StateBucket
-%s%s%s  %s:
+%s%s%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), edgeUserResource(EdgePreviewUserName, trust), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), edgeUserResource(EdgePreviewUserName, trust), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
 }
 
 // stateTableResource renders the StateTable resource block shared by both

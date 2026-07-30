@@ -98,61 +98,6 @@ func TestAppCaches_OmitsAnAppWithNoPrerenderedContent(t *testing.T) {
 	}
 }
 
-// TestExecutionRoles_OnePerApp proves each app gets exactly one execution role,
-// however many functions it owns, and that a single-app project still provisions
-// exactly one.
-func TestExecutionRoles_OnePerApp(t *testing.T) {
-	roles := executionRoles(map[string]*isrConfig{}, []*deploymentsv1.ManifestFunction{
-		{LogicalName: "web_index", App: "web"},
-		{LogicalName: "web_blog", App: "web"},
-		{LogicalName: "admin_index", App: "admin"},
-	})
-	if len(roles) != 2 {
-		t.Fatalf("got %d roles, want one per app", len(roles))
-	}
-	// Manifest order, so redeploys declare the same roles in the same order.
-	if roles[0].App != "web" || roles[1].App != "admin" {
-		t.Errorf("roles = %q/%q, want web then admin", roles[0].App, roles[1].App)
-	}
-
-	single := executionRoles(map[string]*isrConfig{}, []*deploymentsv1.ManifestFunction{
-		{LogicalName: "web_index", App: "web"},
-		{LogicalName: "web_blog", App: "web"},
-	})
-	if len(single) != 1 {
-		t.Fatalf("a single-app project got %d roles, want exactly 1", len(single))
-	}
-}
-
-// TestExecutionRoles_CarryOnlyTheirOwnAppsCache proves a role's cache grant is
-// its own app's and no other's, and that an app with no cache gets no grant.
-func TestExecutionRoles_CarryOnlyTheirOwnAppsCache(t *testing.T) {
-	caches := map[string]*isrConfig{
-		"web":   {Prefix: "prod/proj/web/WEB1"},
-		"admin": {Prefix: "prod/proj/admin/ADM1"},
-	}
-	roles := executionRoles(caches, []*deploymentsv1.ManifestFunction{
-		{LogicalName: "web_index", App: "web"},
-		{LogicalName: "admin_index", App: "admin"},
-		{LogicalName: "api_index", App: "api"},
-	})
-	if len(roles) != 3 {
-		t.Fatalf("got %d roles, want 3", len(roles))
-	}
-	for _, r := range roles {
-		switch r.App {
-		case "api":
-			if r.Cache != nil {
-				t.Errorf("api role carries a cache grant %+v, want none", r.Cache)
-			}
-		default:
-			if r.Cache != caches[r.App] {
-				t.Errorf("%s role carries %+v, want its own app's cache", r.App, r.Cache)
-			}
-		}
-	}
-}
-
 // TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix proves every app's
 // seeded cache entries land under that app's prefix, not one shared with its
 // neighbours.

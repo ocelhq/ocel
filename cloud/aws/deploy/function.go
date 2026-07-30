@@ -347,34 +347,25 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutpu
 	}
 }
 
-// executionRole is one app's Lambda execution role: the app it belongs to and
-// the ISR cache it grants, nil when the app keeps none.
+// executionRole is one app's Lambda execution role: the app it belongs to, the
+// ISR cache it grants (nil when the app keeps none), and the class key its
+// functions decrypt variable values under.
 type executionRole struct {
-	App   string
-	Cache *isrConfig
+	App        string
+	Cache      *isrConfig
+	VarsKeyARN string
 }
 
-// executionRoles is the set of roles a manifest needs — one per app, in
-// first-appearance order so redeploys declare them identically. A role's grant
-// is its own app's cache and nothing else, which is what keeps one app's
-// functions out of another app's cached pages.
-func executionRoles(caches map[string]*isrConfig, functions []*deploymentsv1.ManifestFunction) []executionRole {
-	var roles []executionRole
-	seen := map[string]bool{}
-	for _, fn := range functions {
-		app := fn.GetApp()
-		if seen[app] {
-			continue
-		}
-		seen[app] = true
-		roles = append(roles, executionRole{App: app, Cache: caches[app]})
-	}
-	return roles
+// appExecutionRole is the role one app needs: its own cache and no other's,
+// plus the substrate's variable key off the deploy's config rather than
+// derived per app.
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig) executionRole {
+	return executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
 }
 
 // newFunctionRole creates the IAM role every Lambda belonging to one app
-// assumes: the CloudWatch Logs grant every function needs, plus the app's own
-// ISR cache grant when it has one.
+// assumes: the CloudWatch Logs grant every function needs, decrypt on the
+// substrate's class key, and the app's own ISR cache grant when it has one.
 func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 	name := "ocel-fn-" + safeName(r.App)
 	role, err := newServiceRole(ctx, name, "lambda.amazonaws.com", nil)
@@ -398,6 +389,16 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 		}); err != nil {
 			return nil, err
 		}
+	}
+	varsPolicy, err := varsDecryptPolicy(r.VarsKeyARN)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := iam.NewRolePolicy(ctx, name+"-vars", &iam.RolePolicyArgs{
+		Role:   role.Name,
+		Policy: pulumi.String(varsPolicy),
+	}); err != nil {
+		return nil, err
 	}
 	return role, nil
 }

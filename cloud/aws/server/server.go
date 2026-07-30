@@ -146,6 +146,9 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	if deployed.StateTable == "" {
 		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its state table is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
 	}
+	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
+		return deploy.Result{}, fmt.Errorf("account bootstrap is present but its variable store is missing (a partial rollback?); re-run `%s`", bootstrapCmd)
+	}
 
 	passphrase, err := bootstrap.ReadPassphrase(ctx, ssmClient)
 	if err != nil {
@@ -236,6 +239,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		Secrets:       secretsmanager.NewFromConfig(awscfg),
 		StateTable:    deployed.StateTable,
 		StateTableARN: stateTableARN,
+
+		VarsKeyARN: deployed.VarsKeyARN,
 
 		CacheStoreParam:    cacheStoreParam,
 		CacheStoreParamARN: cacheStoreParamARN,

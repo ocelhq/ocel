@@ -20,8 +20,11 @@ import "fmt"
 // tag-sync index — that index shipped without one, so an account bootstrapped
 // before it never received it. Both are in-place updates, but neither reaches an
 // account that is never told to re-run bootstrap, and an edge running under the
-// narrower policy 403s every cache write.
-const RequiredBootstrapVersion = 6
+// narrower policy 403s every cache write. Version 7 added the variable store:
+// its own table, separate from the state table, and one KMS key per env class.
+// An account bootstrapped before it has nowhere to put a value, so it is told
+// to re-run bootstrap rather than failing at the first write.
+const RequiredBootstrapVersion = 7
 
 // Compatibility is the outcome of comparing the deployed bootstrap version
 // against the version a provider requires.
