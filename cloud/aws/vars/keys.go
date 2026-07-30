@@ -23,7 +23,10 @@ const (
 	classWideEnvironment = "*"
 
 	// rootFolder is the folder component of a value that is not scoped to any
-	// app folder.
+	// app folder. It is a spelling the key structure uses and a caller never
+	// does: above the store root is the absence of a folder, so validate
+	// rejects it as an incoming folder rather than accepting a second name for
+	// the same place.
 	rootFolder = "/"
 
 	// currentPrefix and historyPrefixToken open the two sort-key namespaces.
@@ -93,7 +96,10 @@ func (c Coordinate) validate() error {
 		if !strings.HasPrefix(c.Folder, "/") {
 			return fmt.Errorf("folder %q must start with %q", c.Folder, "/")
 		}
-		if c.Folder != rootFolder && strings.HasSuffix(c.Folder, "/") {
+		if c.Folder == rootFolder {
+			return fmt.Errorf("folder %q is the project root, which is what an unbound app already reads; leave the folder off instead", c.Folder)
+		}
+		if strings.HasSuffix(c.Folder, "/") {
 			return fmt.Errorf("folder %q must not end with %q", c.Folder, "/")
 		}
 		if strings.Contains(c.Folder, "//") {

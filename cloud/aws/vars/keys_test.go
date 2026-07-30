@@ -92,6 +92,20 @@ func TestValidateRejectsMalformedFolders(t *testing.T) {
 	}
 }
 
+// Root is the absence of a folder, spelled as the empty string. Accepting "/"
+// as a second spelling of it would let a direct RPC address root by a name the
+// CLI refuses, so the store rejects it on its own account rather than trusting
+// the caller to have been through the CLI's guard.
+func TestValidateRejectsTheRootFolderAsASecondSpellingOfRoot(t *testing.T) {
+	err := Coordinate{Slug: "shop", Key: "K", Folder: rootFolder}.validate()
+	if err == nil {
+		t.Fatalf("validate() accepted folder %q, want it rejected as a second spelling of root", rootFolder)
+	}
+	if !strings.Contains(err.Error(), "leave the folder off") {
+		t.Errorf("validate() err = %v, want it to say to leave the folder off instead", err)
+	}
+}
+
 func TestValidateRequiresSlugAndKey(t *testing.T) {
 	if err := (Coordinate{Key: "K"}).validate(); err == nil {
 		t.Error("validate() accepted a coordinate with no slug")
