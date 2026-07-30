@@ -4,8 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
+	"net"
 	"net/http"
+	"runtime"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -20,8 +23,9 @@ import (
 // and the writes the UI makes, sharing one map so a write is visible to the
 // next read exactly as it is through a provider.
 type fakeStore struct {
-	cells  map[envgate.Cell]string
-	setErr error
+	cells   map[envgate.Cell]string
+	setErr  error
+	deletes int
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{cells: map[envgate.Cell]string{}} }
@@ -48,6 +52,7 @@ func (s *fakeStore) Set(_ context.Context, cell envgate.Cell, value string) erro
 }
 
 func (s *fakeStore) Delete(_ context.Context, cell envgate.Cell) error {
+	s.deletes++
 	delete(s.cells, cell)
 	return nil
 }
@@ -91,7 +96,14 @@ func session(t *testing.T, store *fakeStore, definitions ...*resourcesv1.Variabl
 
 func serve(t *testing.T, store *fakeStore, gate *envgate.Gate) *varsui.Session {
 	t.Helper()
-	s, err := varsui.Serve(context.Background(), varsui.Options{
+	return serveUnder(t, context.Background(), store, gate)
+}
+
+// serveUnder starts a session under a context the test can end, which is how a
+// deploy hands the UI its own cancellation.
+func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *envgate.Gate) *varsui.Session {
+	t.Helper()
+	s, err := varsui.Serve(ctx, varsui.Options{
 		Assets: fstest.MapFS{"index.html": {Data: []byte("<title>vars</title>")}},
 		Gate:   gate,
 		Store:  store,
@@ -113,6 +125,11 @@ func origin(s *varsui.Session) string {
 // request is an API call exactly as the session's own page makes it.
 func request(t *testing.T, s *varsui.Session, method, path string, body any) *http.Response {
 	t.Helper()
+	return do(t, newRequest(t, s, method, path, body))
+}
+
+func newRequest(t *testing.T, s *varsui.Session, method, path string, body any) *http.Request {
+	t.Helper()
 	var payload io.Reader
 	if body != nil {
 		encoded, err := json.Marshal(body)
@@ -127,7 +144,7 @@ func request(t *testing.T, s *varsui.Session, method, path string, body any) *ht
 	}
 	req.Header.Set("Origin", strings.TrimSuffix(origin(s), "/"))
 	req.Header.Set("Authorization", "Bearer "+s.Token)
-	return do(t, req)
+	return req
 }
 
 func do(t *testing.T, req *http.Request) *http.Response {
@@ -300,6 +317,42 @@ func TestSession_AWriteToAForbiddenCellIsRefusedWithTheReasonAndNeverReachesTheS
 	}
 }
 
+// Root is the empty folder everywhere above the store, and a folder is matched
+// whole. A cell addressed any other way is one no app could ever resolve, so
+// the UI refuses it exactly as `ocel env set` does rather than writing a value
+// that is invisible from the moment it lands.
+func TestSession_AWriteToAnUnaddressableFolderIsRefusedAndNeverReachesTheStore(t *testing.T) {
+	for _, folder := range []string{"web", "/", "/web/", "/web//api"} {
+		t.Run(folder, func(t *testing.T) {
+			store := newFakeStore()
+			s := session(t, store, def("API_URL"))
+
+			resp := request(t, s, http.MethodPut, "/api/value", map[string]string{"key": "API_URL", "folder": folder, "value": "https://x.example"})
+
+			if resp.StatusCode != http.StatusBadRequest {
+				t.Errorf("PUT to folder %q = %d, want %d", folder, resp.StatusCode, http.StatusBadRequest)
+			}
+			if len(store.cells) != 0 {
+				t.Errorf("store holds %v, want nothing — nothing resolves a value in %q", store.cells, folder)
+			}
+		})
+	}
+}
+
+func TestSession_ADeleteOfAnUnaddressableFolderIsRefusedAndNeverReachesTheStore(t *testing.T) {
+	store := newFakeStore()
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=web", nil)
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("DELETE in folder %q = %d, want %d", "web", resp.StatusCode, http.StatusBadRequest)
+	}
+	if store.deletes != 0 {
+		t.Errorf("store saw %d deletes, want none — a folder the store cannot address names no cell to delete", store.deletes)
+	}
+}
+
 func TestSession_AWriteToAPermittedCellReachesTheStoreAndTheMatrixShowsItFilled(t *testing.T) {
 	store := newFakeStore()
 	s := session(t, store, def("POSTHOG_ID", "/web"))
@@ -383,11 +436,19 @@ func TestSession_HistoryIsReadableNewestFirst(t *testing.T) {
 func TestSession_WaitReturnsWhenTheDeveloperSaysTheMatrixIsDone(t *testing.T) {
 	s := session(t, newFakeStore(), def("API_URL"))
 
+	// The page posts while the caller is blocked in Wait, which is the only
+	// order this ever happens in, and it has to get its answer: finishing tears
+	// the server down, and a page that reads that as a failed request would
+	// tell the developer their completed matrix did not take.
+	type posted struct {
+		resp *http.Response
+		err  error
+	}
+	answers := make(chan posted, 1)
+	req := newRequest(t, s, http.MethodPost, "/api/done", nil)
 	go func() {
-		resp := request(t, s, http.MethodPost, "/api/done", nil)
-		if resp.StatusCode != http.StatusOK {
-			t.Errorf("POST /api/done = %d", resp.StatusCode)
-		}
+		resp, err := http.DefaultClient.Do(req)
+		answers <- posted{resp, err}
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -395,17 +456,104 @@ func TestSession_WaitReturnsWhenTheDeveloperSaysTheMatrixIsDone(t *testing.T) {
 	if err := s.Wait(ctx); err != nil {
 		t.Errorf("Wait = %v, want nil — the developer finished", err)
 	}
+	if err := s.Wait(context.Background()); err != nil {
+		t.Errorf("second Wait = %v, want nil — a completed matrix stays complete however often the caller looks", err)
+	}
+
+	answer := <-answers
+	if answer.err != nil {
+		t.Fatalf("POST /api/done: %v — the page must be told the matrix was accepted before the session goes away", answer.err)
+	}
+	defer answer.resp.Body.Close()
+	if answer.resp.StatusCode != http.StatusOK {
+		t.Errorf("POST /api/done = %d, want %d", answer.resp.StatusCode, http.StatusOK)
+	}
 }
 
-func TestSession_WaitReturnsTheInterruptionWhenTheCallerGivesUp(t *testing.T) {
-	s := session(t, newFakeStore(), def("API_URL"))
+// The interruption has to be legible however the race falls. Cancelling closes
+// the session from a watcher goroutine, so by the time a caller reaches Wait
+// the session may already be closed — and a session closed by an interruption
+// looks exactly like one closed by a developer who finished, unless Wait can
+// tell them apart. Each round leaves the gap the scheduler would otherwise
+// close for us, and there are enough rounds that passing is not luck.
+func TestSession_WaitReturnsTheInterruptionEvenAfterTheWatcherHasAlreadyClosedTheSession(t *testing.T) {
+	for round := range 30 {
+		ctx, cancel := context.WithCancel(context.Background())
+		store := newFakeStore()
+		s := serveUnder(t, ctx, store, discovered(t, store, def("API_URL")))
 
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
+		cancel()
+		awaitStopped(t, s)
 
-	if err := s.Wait(ctx); err != context.Canceled {
-		t.Errorf("Wait = %v, want context.Canceled — an interrupted deploy must not be trapped waiting on a browser", err)
+		if err := s.Wait(ctx); err != context.Canceled {
+			t.Fatalf("round %d: Wait = %v, want context.Canceled — an interrupted deploy must not be trapped waiting on a browser, nor told it may go on", round, err)
+		}
 	}
+}
+
+// The deploy this UI interrupts resumes only on a completed matrix, and it may
+// look again on a context of its own. A session that ended without the
+// developer finishing must keep saying so, or a killed deploy resumes.
+func TestSession_WaitKeepsReportingAnAbandonedSessionOnAFreshContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store := newFakeStore()
+	s := serveUnder(t, ctx, store, discovered(t, store, def("API_URL")))
+
+	cancel()
+	awaitStopped(t, s)
+
+	err := s.Wait(context.Background())
+	if err == nil {
+		t.Fatal("Wait = nil on a session nobody completed, want an abandonment — a deploy would resume the command the developer killed")
+	}
+	if !errors.Is(err, varsui.ErrAbandoned) {
+		t.Errorf("Wait = %v, want varsui.ErrAbandoned so a caller can tell an abandoned session from a completed one", err)
+	}
+}
+
+// A command may open the UI more than once — a gate that fails again after a
+// fix reopens it — under a context that lives as long as the command. Each
+// closed session has to let go of that context, or the command accumulates a
+// goroutine per session for the rest of its run.
+func TestSession_ClosingASessionStopsItWatchingTheCallersContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const sessions, slack = 30, 10
+	before := runtime.NumGoroutine()
+	for range sessions {
+		store := newFakeStore()
+		s := serveUnder(t, ctx, store, discovered(t, store, def("API_URL")))
+		if err := s.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
+	}
+
+	deadline := time.Now().Add(5 * time.Second)
+	for runtime.NumGoroutine() > before+slack && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if got := runtime.NumGoroutine(); got > before+slack {
+		t.Errorf("%d goroutines after closing %d sessions, up from %d — a closed session still watches a context it can no longer act on", got, sessions, before)
+	}
+}
+
+// awaitStopped blocks until the session's listener stops accepting, which is
+// how a test observes that the watcher's Close has already run.
+func awaitStopped(t *testing.T, s *varsui.Session) {
+	t.Helper()
+	address := strings.TrimPrefix(origin(s), "http://")
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		conn, err := net.DialTimeout("tcp", address, 100*time.Millisecond)
+		if err != nil {
+			return
+		}
+		_ = conn.Close()
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("the session at %s still accepts connections, so it never closed", address)
 }
 
 func mustGet(t *testing.T, url string) *http.Request {

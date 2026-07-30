@@ -27,6 +27,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 )
 
+// ErrAbandoned is what Wait reports for a session that ended without the
+// developer marking the matrix complete. A caller that resumes work on a
+// completed matrix must treat this as a refusal, not a finish.
+var ErrAbandoned = errors.New("the variables UI closed before the matrix was complete")
+
 // Store is the value store as the UI writes to it. Reads come through the
 // gate, which already holds the project's cells; these are the operations that
 // change them.
@@ -77,7 +82,11 @@ type Session struct {
 	listener net.Listener
 	server   *http.Server
 
+	// done is closed exactly once, by whatever ended the session, and outcome
+	// records which that was: nil for a developer who finished, ErrAbandoned
+	// for anything else. Wait cannot read a closed channel as a completion.
 	done     chan struct{}
+	outcome  error
 	closeOne sync.Once
 }
 
@@ -109,27 +118,45 @@ func Serve(ctx context.Context, opts Options) (*Session, error) {
 
 	go func() { _ = s.server.Serve(listener) }()
 	go func() {
-		<-ctx.Done()
-		_ = s.Close()
+		select {
+		case <-ctx.Done():
+			_ = s.Close()
+		case <-s.done:
+		}
 	}()
 	return s, nil
 }
 
 // Wait blocks until the developer marks the matrix complete, or the caller's
 // context ends — an interrupted deploy is never trapped waiting on a browser.
+// It answers the same way however late it is asked: nil only for a matrix the
+// developer finished, and never for a session that ended any other way.
 func (s *Session) Wait(ctx context.Context) error {
+	// An already-ended context is the interruption, whether or not its watcher
+	// has closed the session yet. Reading it first is what makes the answer to
+	// a cancelled deploy ctx.Err() every time rather than whichever of two
+	// ready channels a select happened to pick.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	select {
 	case <-s.done:
-		return nil
+		return s.outcome
 	case <-ctx.Done():
 		return ctx.Err()
 	}
 }
 
-// Close stops serving and releases anyone in Wait.
+// Close stops serving and releases anyone in Wait with ErrAbandoned: a session
+// closed by anything but the developer left the matrix unfinished.
 func (s *Session) Close() error {
+	return s.finish(ErrAbandoned)
+}
+
+func (s *Session) finish(outcome error) error {
 	var err error
 	s.closeOne.Do(func() {
+		s.outcome = outcome
 		close(s.done)
 		err = s.server.Close()
 	})
@@ -189,7 +216,7 @@ func refuse(w http.ResponseWriter, reason string) {
 }
 
 func (s *Session) handleState(w http.ResponseWriter, r *http.Request) {
-	s.writeState(w, r.Context())
+	s.writeState(r.Context(), w)
 }
 
 type valueRequest struct {
@@ -206,9 +233,13 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 	}
 	cell := envgate.Cell{Key: req.Key, Folder: req.Folder}
 
-	// The same check the CLI's own write path makes. The matrix draws a
-	// forbidden cell unfillable, so reaching here means something bypassed the
-	// page — and the rule holds anyway.
+	// The same checks the CLI's own write path makes. The matrix draws only
+	// cells that exist and draws a forbidden one unfillable, so reaching here
+	// means something bypassed the page — and the rules hold anyway.
+	if err := addressable(cell.Folder); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
 	if err := envgate.CheckWritable(s.opts.Gate.Definitions(), cell.Key, cell.Folder); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
@@ -221,17 +252,21 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 	// Discovery's complaint was about the value that was there. Whatever is
 	// wrong with the new one is the next discovery run's to find.
 	s.opts.Gate.Forget(cell)
-	s.writeState(w, r.Context())
+	s.writeState(r.Context(), w)
 }
 
 func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 	cell := queryCell(r)
+	if err := addressable(cell.Folder); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
 	if err := s.opts.Store.Delete(r.Context(), cell); err != nil {
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
 	s.opts.Gate.Forget(cell)
-	s.writeState(w, r.Context())
+	s.writeState(r.Context(), w)
 }
 
 func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
@@ -246,9 +281,25 @@ func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"versions": versions})
 }
 
+// handleDone is the one path that ends a session as a completion. Closing tears
+// down live connections, so the answer goes out before it starts rather than
+// leaving the page to read a completed session as a failed request.
 func (s *Session) handleDone(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	go func() { _ = s.Close() }()
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	go func() { _ = s.finish(nil) }()
+}
+
+// addressable refuses a folder no app could read a value back from. Root is
+// the absence of a folder, spelled as the empty string above the store, so
+// that is the one folder ValidateFolder is not asked about.
+func addressable(folder string) error {
+	if folder == "" {
+		return nil
+	}
+	return envgate.ValidateFolder(folder)
 }
 
 func queryCell(r *http.Request) envgate.Cell {
@@ -257,7 +308,7 @@ func queryCell(r *http.Request) envgate.Cell {
 
 // writeState re-reads the store before answering, so every mutation returns
 // the matrix as it now stands and the page never renders from its own guess.
-func (s *Session) writeState(w http.ResponseWriter, ctx context.Context) {
+func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 	if err := s.opts.Gate.Prefetch(ctx); err != nil {
 		fail(w, http.StatusBadGateway, err)
 		return
@@ -272,11 +323,13 @@ func (s *Session) substrate() string {
 	return "production"
 }
 
+// writeJSON ignores a failed write because by then the only party that could
+// be told is the one that stopped listening: the status line is already out
+// and this server has no log of its own — it borrows the command's terminal,
+// where a note about a browser that navigated away is noise.
 func writeJSON(w http.ResponseWriter, payload any) {
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(payload); err != nil && !errors.Is(err, http.ErrHandlerTimeout) {
-		return
-	}
+	_ = json.NewEncoder(w).Encode(payload)
 }
 
 func fail(w http.ResponseWriter, status int, err error) {
