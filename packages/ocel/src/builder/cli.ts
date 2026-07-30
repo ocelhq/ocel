@@ -2,8 +2,8 @@ import { buildApps, detectApp } from "./build.js";
 import type { AppInput, BuildOptions } from "./types.js";
 
 /**
- * Runnable entry the CLI resolves via OCEL_BUILDER_PATH. Reads a build request
- * as JSON from argv[2] or stdin: `{ outDir, projectRoot, apps }`. With apps it
+ * Runnable entry the CLI resolves from its materialized platform dist. Reads a
+ * build request as JSON from argv[2] or stdin: `{ outDir, projectRoot, apps }`. With apps it
  * builds each; with none it detects a single app at projectRoot. It writes
  * nothing to stdout — the Go CLI discovers built functions by walking outDir.
  */

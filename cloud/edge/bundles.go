@@ -6,20 +6,22 @@ import (
 	"os"
 )
 
-// EnvWorkerBundles names the environment variable the npm launcher exports the
-// worker bundle manifest in: a JSON object of framework -> edge -> path to that
-// pairing's compiled worker entrypoint.
+// EnvWorkerBundles names the environment variable the CLI exports the worker
+// bundle manifest in: a JSON object of framework -> edge -> path to that
+// pairing's compiled worker entrypoint, resolved from the project's
+// materialized platform dist. The provider binary is a separate process, so
+// env is how it learns those paths.
 const EnvWorkerBundles = "OCEL_WORKER_BUNDLES"
 
-// BundleManifest is every worker bundle the launcher shipped, keyed by the
+// BundleManifest is every worker bundle the CLI shipped, keyed by the
 // framework that produced it and the edge it runs on.
 type BundleManifest map[Framework]map[Kind]string
 
-// LoadBundleManifest reads the manifest the npm launcher exported.
+// LoadBundleManifest reads the manifest the CLI exported.
 func LoadBundleManifest() (BundleManifest, error) {
 	raw := os.Getenv(EnvWorkerBundles)
 	if raw == "" {
-		return nil, fmt.Errorf("%s is not set; the ocel CLI must be run through its npm launcher", EnvWorkerBundles)
+		return nil, fmt.Errorf("%s is not set; the ocel CLI exports it when spawning a provider", EnvWorkerBundles)
 	}
 	var m BundleManifest
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
@@ -37,23 +39,23 @@ func (m BundleManifest) Path(f Framework, k Kind) (string, error) {
 	return "", fmt.Errorf("no worker bundle for framework %q on edge %q", f, k)
 }
 
-// EnvStoreWorkerBundles names the environment variable the npm launcher
-// exports the deployments-store worker's bundle manifest in (ADR 0001): a JSON
+// EnvStoreWorkerBundles names the environment variable the CLI exports the
+// deployments-store worker's bundle manifest in (ADR 0001): a JSON
 // object of edge -> path to that edge's compiled deployments-store
 // entrypoint. Separate from EnvWorkerBundles because the store worker is not a
 // framework's worker — it is the root stack's own, one per edge kind rather
 // than one per (framework, edge) pairing.
 const EnvStoreWorkerBundles = "OCEL_STORE_WORKER_BUNDLES"
 
-// StoreBundleManifest is the deployments-store worker bundle the launcher
-// shipped for each edge kind.
+// StoreBundleManifest is the deployments-store worker bundle the CLI shipped
+// for each edge kind.
 type StoreBundleManifest map[Kind]string
 
-// LoadStoreBundleManifest reads the manifest the npm launcher exported.
+// LoadStoreBundleManifest reads the manifest the CLI exported.
 func LoadStoreBundleManifest() (StoreBundleManifest, error) {
 	raw := os.Getenv(EnvStoreWorkerBundles)
 	if raw == "" {
-		return nil, fmt.Errorf("%s is not set; the ocel CLI must be run through its npm launcher", EnvStoreWorkerBundles)
+		return nil, fmt.Errorf("%s is not set; the ocel CLI exports it when spawning a provider", EnvStoreWorkerBundles)
 	}
 	var m StoreBundleManifest
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {

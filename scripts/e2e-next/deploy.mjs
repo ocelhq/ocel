@@ -139,10 +139,10 @@ function ensureBuildScript() {
   }
 }
 
-// runOcel drives the npm launcher (which exports the adapter/builder/worker
-// paths the Go CLI reads) with every byte of output appended to the build log:
-// the harness reads this process's stdout as the deployment URL and nothing
-// else, and logs.mjs replays the whole log afterward.
+// runOcel drives the npm launcher (which execs the Go binary) with every byte
+// of output appended to the build log: the harness reads this process's stdout
+// as the deployment URL and nothing else, and logs.mjs replays the whole log
+// afterward.
 function runOcel(adapterDir, args) {
   run(`ocel ${args[0]}`, process.execPath, [join(adapterDir, "packages", "ocel", "bin", "run.js"), ...args]);
 }

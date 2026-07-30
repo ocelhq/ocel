@@ -1,35 +1,10 @@
 #!/usr/bin/env node
 
-import { dirname, join } from "path";
-import { fileURLToPath } from "node:url";
+import { join } from "path";
 import { createRequire } from "node:module";
 
 const { platform, arch } = process;
 const require = createRequire(import.meta.url);
-
-// The ocel package root: this file lives at <root>/bin/run.js, so root is the
-// parent of bin/. The Go binary reads OCEL_BUILDER_PATH to locate the node
-// builder entry directly, without any path stitching of its own.
-const packageRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const builderPath = join(packageRoot, "dist", "builder", "cli.js");
-
-const nextAdapterPath = require.resolve("@ocel/next-runtime");
-
-// Every edge worker bundle this launcher ships, keyed by the framework that
-// produced it and the edge it runs on. A framework/edge pairing absent from it
-// has no worker to deploy.
-const workerBundles = {
-  next: {
-    cloudflare: require.resolve("@ocel/worker-nextjs"),
-  },
-};
-
-// The deployments-store worker bundle (ADR 0001/0002), keyed by edge: the
-// root stack's own worker, not a framework's — one per edge kind rather than
-// one per (framework, edge) pairing.
-const storeWorkerBundles = {
-  cloudflare: require.resolve("@ocel/worker-deployments-store"),
-};
 
 let packageName = "";
 
@@ -54,20 +29,7 @@ try {
   const binaryPath = require.resolve(join(binaryPkg, "bin", binary));
 
   const { spawnSync } = require("child_process");
-  // OCEL_HOME (the package root) is no longer read by the Go CLI, which now
-  // locates the builder via OCEL_BUILDER_PATH; it is kept exported for future
-  // tooling that may need to resolve other package-relative assets.
-  const result = spawnSync(binaryPath, process.argv.slice(2), {
-    stdio: "inherit",
-    env: {
-      ...process.env,
-      OCEL_HOME: packageRoot,
-      OCEL_BUILDER_PATH: builderPath,
-      NEXT_ADAPTER_PATH: nextAdapterPath,
-      OCEL_WORKER_BUNDLES: JSON.stringify(workerBundles),
-      OCEL_STORE_WORKER_BUNDLES: JSON.stringify(storeWorkerBundles),
-    },
-  });
+  const result = spawnSync(binaryPath, process.argv.slice(2), { stdio: "inherit" });
   process.exit(result.status);
 } catch (e) {
   console.error(`Failed to locate binary for ${binaryPkg}.`);

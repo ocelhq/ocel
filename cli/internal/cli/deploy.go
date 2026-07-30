@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
@@ -102,6 +104,10 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
+		return err
+	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 
@@ -261,10 +267,16 @@ func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider
 		return fmt.Errorf("locate provider binary: %w", err)
 	}
 
+	env, err := workerBundleEnv(cfg.Dir)
+	if err != nil {
+		return err
+	}
+
 	runner, err := providerrunner.Spawn(ctx, providerrunner.Config{
 		BinaryPath:   binPath,
 		Stdout:       stdout,
 		Stderr:       stderr,
+		Env:          env,
 		ReadyTimeout: deployReadyTimeout,
 	})
 	if err != nil {
@@ -276,6 +288,25 @@ func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider
 		return err
 	}
 	return drive(runner)
+}
+
+// workerBundleEnv is the provider's environment: the inherited one plus the
+// two manifests naming the edge worker bundles in the project's materialized
+// platform dist. The provider binary is a separate process in a separate Go
+// module, so env is how it learns those paths (see cloud/edge/bundles.go).
+func workerBundleEnv(projectDir string) ([]string, error) {
+	bundles, err := json.Marshal(platform.WorkerBundles(projectDir))
+	if err != nil {
+		return nil, fmt.Errorf("marshal worker bundles: %w", err)
+	}
+	store, err := json.Marshal(platform.StoreWorkerBundles(projectDir))
+	if err != nil {
+		return nil, fmt.Errorf("marshal store worker bundles: %w", err)
+	}
+	return append(os.Environ(),
+		"OCEL_WORKER_BUNDLES="+string(bundles),
+		"OCEL_STORE_WORKER_BUNDLES="+string(store),
+	), nil
 }
 
 // confirmDeploy prints the "Deploy <project> with <provider>? [y/N]" prompt

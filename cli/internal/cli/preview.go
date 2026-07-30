@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
@@ -173,6 +174,10 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 	if err != nil {
 		return err
 	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
+		return err
+	}
 	provider, err := cfg.RequireProvider()
 	if err != nil {
 		return err
@@ -249,6 +254,10 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 	if err != nil {
 		return err
 	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
+		return err
+	}
 	provider, err := cfg.RequireProvider()
 	if err != nil {
 		return err
@@ -305,6 +314,10 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 	if err != nil {
 		return err
 	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
+		return err
+	}
 	provider, err := cfg.RequireProvider()
 	if err != nil {
 		return err
@@ -340,6 +353,10 @@ func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, 
 
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
+		return err
+	}
+
+	if err := platform.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 	provider, err := cfg.RequireProvider()
