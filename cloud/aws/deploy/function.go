@@ -37,6 +37,17 @@ const (
 	defaultFunctionMemoryMB       = 1024
 	defaultFunctionTimeoutSeconds = 30
 
+	// A Next function is a bundle: one container serves many routes, and each
+	// distinct route entry it has served stays resident (CommonJS modules cannot
+	// be unloaded), so peak RSS grows with the routes that reach it instead of
+	// holding at the 109MB a single resident module measures. 1769MB is the exact
+	// point Lambda allocates a full vCPU, which is what this buys twice over:
+	// headroom for the accumulated modules, and the CPU for evaluating them —
+	// bundling `require`s every entry but the primed one lazily on first request,
+	// moving that work out of the free full-vCPU INIT phase into the billed
+	// INVOKE phase, where a fractional core lands in request latency.
+	nextFunctionMemoryMB = 1769
+
 	// lambdaConfigHandler is the Lambda's own Handler config value. Under the
 	// lambdanode exec-wrapper the Go bootstrap owns the Runtime API loop, so
 	// this is vestigial — but the managed nodejs runtime still requires a
@@ -242,7 +253,8 @@ func isrPolicy(c isrConfig) (string, error) {
 
 // translateFunction lowers a ManifestFunction into the concrete Lambda
 // arguments the provider provisions. Empty runtime/handler fall back to the
-// pinned Node defaults. Handler is the user entrypoint path OCEL_HANDLER
+// pinned Node defaults, and a Next function is sized for a route bundle rather
+// than a single module. Handler is the user entrypoint path OCEL_HANDLER
 // resolves as /var/task/<handler>.
 func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	runtime := defaultFunctionRuntime
@@ -253,10 +265,14 @@ func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	if h := fn.GetHandler(); h != "" {
 		handler = h
 	}
+	memoryMB := defaultFunctionMemoryMB
+	if fn.GetFramework() == frameworkNext {
+		memoryMB = nextFunctionMemoryMB
+	}
 	return functionArgs{
 		Runtime:        runtime,
 		Handler:        handler,
-		MemorySizeMB:   defaultFunctionMemoryMB,
+		MemorySizeMB:   memoryMB,
 		TimeoutSeconds: defaultFunctionTimeoutSeconds,
 	}
 }
