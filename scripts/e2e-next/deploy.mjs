@@ -98,25 +98,28 @@ function ensureDeps() {
   run("pnpm install", "pnpm", ["install", "--prefer-offline"]);
 }
 
-// linkSidecar points the temp app at the prebuilt @ocel packages. Only the
-// @ocel scope is linked: the harness owns the rest of node_modules (notably its
-// isolated `next`), and replacing the directory would break the app it built.
+// linkSidecar points the temp app at the prebuilt Ocel packages. Only `ocel`
+// and the @ocel scope are linked: the harness owns the rest of node_modules
+// (notably its isolated `next`), and replacing the directory would break the
+// app it built.
 //
-// `@ocel/sdk` (the bundled ocel.config.ts imports it) and
+// `ocel` (the bundled ocel.config.ts imports ocel/config) and
 // `@ocel/provider-aws-<platform>` (providerlocator require.resolve's it from the
 // project dir) are the two that must resolve from here.
 function linkSidecar(sidecarDir) {
-  const target = join(sidecarDir, "node_modules", "@ocel");
-  if (!existsSync(target)) {
-    throw new Error(`sidecar has no @ocel packages at ${target}`);
-  }
   const modules = join(appDir, "node_modules");
   mkdirSync(modules, { recursive: true });
-  const link = join(modules, "@ocel");
-  if (existsSync(link) || isSymlink(link)) {
-    rmSync(link, { recursive: true, force: true });
+  for (const name of ["ocel", "@ocel"]) {
+    const target = join(sidecarDir, "node_modules", name);
+    if (!existsSync(target)) {
+      throw new Error(`sidecar has no ${name} package at ${target}`);
+    }
+    const link = join(modules, name);
+    if (existsSync(link) || isSymlink(link)) {
+      rmSync(link, { recursive: true, force: true });
+    }
+    symlinkSync(target, link, "dir");
   }
-  symlinkSync(target, link, "dir");
 }
 
 function isSymlink(path) {

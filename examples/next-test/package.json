@@ -10,8 +10,8 @@
   },
   "dependencies": {
     "@ocel/provider-aws": "workspace:^",
-    "@ocel/sdk": "workspace:^",
     "next": "16.2.10",
+    "ocel": "workspace:^",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },

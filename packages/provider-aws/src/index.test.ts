@@ -1,4 +1,4 @@
-import { defineConfig } from "@ocel/sdk/config";
+import { defineConfig } from "ocel/config";
 import { describe, expect, it } from "vitest";
 import awsProvider from "./index";
 
