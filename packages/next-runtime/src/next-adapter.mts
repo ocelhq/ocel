@@ -15,8 +15,10 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
+import { packBundles } from "./pack.mjs";
 
 const launcherName = "__next_launcher.cjs";
+const dispatchName = "__ocel_dispatch.cjs";
 
 // The ocel builder passes this app's own subtree; a bare `next build` outside
 // ocel falls back to the flat cwd path.
@@ -143,18 +145,11 @@ const adapter = {
     // every `.func` picks the cache handler up through the normal asset copy.
     await patchCacheHandlers(distDir);
 
-    const funcDirFor = (pathname: string) =>
-      join(
-        outputRoot,
-        "functions",
-        `${pathname === "/" ? "index" : pathname}.func`,
-      );
-
     // Routes sharing a filePath and config are the same compiled function —
-    // e.g. a page and its `.rsc` variant. Emit one real `.func` per group and
-    // symlink the rest to it, mirroring the Vercel Build Output API. The parent
-    // is the group's shortest pathname: the base route the variants extend, and
-    // the id prerenders reference via parentOutputId.
+    // e.g. a page and its `.rsc` variant — so they resolve to one entry inside
+    // whichever bundle carries them. The group's entry key is its shortest
+    // pathname's id: the base route the variants extend, and the id prerenders
+    // reference via parentOutputId.
     const groups = new Map<string, typeof functionRoutes>();
     for (const route of functionRoutes) {
       const key = `${route.filePath}\0${JSON.stringify(route.config)}`;
@@ -163,33 +158,68 @@ const adapter = {
       else groups.set(key, [route]);
     }
 
-    const parentIdByPathname = new Map<string, string>();
+    const entryKeyByPathname = new Map<string, string>();
+    const entryKeyByRouteId = new Map<string, string>();
+    const entryRoutes: typeof functionRoutes = [];
     for (const members of groups.values()) {
       members.sort(
         (a, b) =>
           a.pathname.length - b.pathname.length ||
           (a.pathname < b.pathname ? -1 : 1),
       );
-      const parentId = members[0]!.id;
-      for (const m of members) parentIdByPathname.set(m.pathname, parentId);
+      const entry = members[0]!;
+      entryRoutes.push(entry);
+      for (const m of members) {
+        entryKeyByPathname.set(m.pathname, entry.id);
+        entryKeyByRouteId.set(m.id, entry.id);
+      }
     }
 
-    await Promise.all(
-      [...groups.values()].map(async (members) => {
-        const parent = members[0]!;
-        const variants = members.slice(1);
-        const funcDir = funcDirFor(parent.pathname);
-        const handlerRel = relative(repoRoot, parent.filePath);
+    // A route's compiled module is an asset like any other here: it is what the
+    // launcher requires, and leaving it out of the union would hide every
+    // route's own bytes from the size accounting the packing rests on.
+    const assetsOf = (route: NodeRoute) => ({
+      ...route.assets,
+      [relative(repoRoot, route.filePath)]: route.filePath,
+    });
 
-        for (const [destRel, srcAbs] of Object.entries(parent.assets)) {
+    const bundles = packBundles(entryRoutes, {
+      entryKeyOf: (route) => route.id,
+      assetsOf,
+      partitionBy: configClass,
+    });
+
+    const bundleNameByEntryKey = new Map(
+      bundles.flatMap((b) => b.members.map((m) => [m.id, b.name] as const)),
+    );
+
+    await Promise.all(
+      bundles.map(async (bundle) => {
+        const funcDir = join(outputRoot, "functions", `${bundle.name}.func`);
+
+        for (const [destRel, srcAbs] of Object.entries(bundle.assets)) {
           await copyAsset(srcAbs, join(funcDir, destRel));
         }
-        await copyAsset(parent.filePath, join(funcDir, handlerRel));
+
+        const dispatchDest = join(funcDir, appRel, dispatchName);
+        await mkdir(dirname(dispatchDest), { recursive: true });
+        await copyFile(
+          new URL("next-dispatch.cjs", import.meta.url),
+          dispatchDest,
+        );
 
         const launcherRel = join(appRel, launcherName);
         await writeFile(
           join(funcDir, launcherRel),
-          renderLauncher(relative(projectDir, parent.filePath)),
+          renderLauncher(
+            Object.fromEntries(
+              bundle.members.map((m) => [
+                m.id,
+                "./" + relative(projectDir, m.filePath).split(sep).join("/"),
+              ]),
+            ),
+            primaryEntryKey(bundle.members, assetsOf),
+          ),
         );
 
         await writeFile(
@@ -198,22 +228,13 @@ const adapter = {
             runtime: "nodejs24.x",
             handler: launcherRel,
             framework: "next",
-            // The route's framework-native identity, carried through to
+            // The bundle's identity, carried through to
             // ManifestFunction.route_id so the routing layer can key
             // FUNCTION_URLS by it (the Lambda itself keeps an infra-safe name).
-            id: parent.id,
+            id: bundle.name,
             app: appName,
           }),
         );
-
-        // Each variant reuses the parent Lambda: a relative symlink to the
-        // sibling parent `.func`, so the CLI's function walk (which skips
-        // symlinked `.func` dirs) deploys the parent only.
-        for (const variant of variants) {
-          const variantDir = funcDirFor(variant.pathname);
-          await mkdir(dirname(variantDir), { recursive: true });
-          await symlink(relative(dirname(variantDir), funcDir), variantDir);
-        }
       }),
     );
 
@@ -267,13 +288,22 @@ const adapter = {
       }),
 
       dispatch: Object.fromEntries([
-        ...functionRoutes.map((o) => [
-          o.pathname,
-          { kind: "lambda", id: parentIdByPathname.get(o.pathname) ?? o.id },
-        ]),
+        // One bundle serves many routes, so the id names the Lambda and the
+        // entry key names which of its routes to render.
+        ...functionRoutes.map((o) => {
+          const entryKey = entryKeyByPathname.get(o.pathname) ?? o.id;
+          return [
+            o.pathname,
+            {
+              kind: "lambda",
+              id: bundleNameByEntryKey.get(entryKey) ?? entryKey,
+              entryKey,
+            },
+          ];
+        }),
         // Edge variants (`.rsc`, `_next/data`) share one compiled entry, so
-        // several pathnames simply name the same entryKey — no grouping or
-        // symlinking as the nodejs path needs.
+        // several pathnames simply name the same entryKey — a different
+        // namespace from the node bundles' entry keys.
         ...edgeRoutes.map((o) => [
           o.pathname,
           { kind: "edge", entryKey: edgeEntryOf(o).entryKey },
@@ -282,8 +312,8 @@ const adapter = {
         ...publicFiles.map((p) => [p.pathname, { kind: "static" }]),
 
         // A prerendered pathname resolves to a prerender: its cache entry lives
-        // in the asset bucket (keyed by build id) and its id is the parent
-        // output's function — the base route deployed as a Lambda that
+        // in the asset bucket (keyed by build id) and its id is the bundle
+        // carrying the parent output — the base route deployed as a Lambda that
         // regenerates the entry. Spread last so it replaces the plain lambda
         // entry a prerendered function route also produced above.
         //
@@ -295,13 +325,16 @@ const adapter = {
         ...outputs.prerenders.map((p) => {
           const allowQuery = p.config?.allowQuery;
           const tags = cacheTags(p);
-          const entryKey = edgeEntryByOutputId.get(p.parentOutputId);
+          const entryKey = entryKeyByRouteId.get(p.parentOutputId);
+          const edgeEntryKey = edgeEntryByOutputId.get(p.parentOutputId);
 
           return [
             p.pathname,
             {
               kind: "prerender",
-              id: parentIdByPathname.get(p.pathname) ?? p.parentOutputId,
+              id:
+                (entryKey && bundleNameByEntryKey.get(entryKey)) ??
+                p.parentOutputId,
               config: p.config,
               fallback: {
                 initialRevalidate: p.fallback?.initialRevalidate,
@@ -310,10 +343,13 @@ const adapter = {
               ...(p.pprChain && { pprChain: p.pprChain }),
               ...(tags.length > 0 && { tags }),
               ...(allowQuery && { allowQuery }),
+              // Which entry of the parent's bundle regenerates this route.
+              ...(entryKey && { entryKey }),
               // Set only when the parent renders on the edge: there is no
               // Function URL to fall back to, so the worker regenerates this
-              // route through the bundle entry instead.
-              ...(entryKey && { entryKey }),
+              // route through the edge bundle's entry instead — and reads the
+              // key's absence as "this tier may revalidate".
+              ...(edgeEntryKey && { edgeEntryKey }),
             },
           ];
         }),
@@ -332,6 +368,34 @@ const adapter = {
     ]);
   },
 } satisfies NextAdapter;
+
+// Every route that runs on Lambda.
+type NodeRoute =
+  | AdapterOutput["PAGES"]
+  | AdapterOutput["PAGES_API"]
+  | AdapterOutput["APP_PAGE"]
+  | AdapterOutput["APP_ROUTE"];
+
+// Routes that cannot share a Lambda. Becomes the route's (maxDuration,
+// preferredRegion) class once those reach the manifest (bd ocelhq-kay2): both
+// are function-level settings, so routes in one bundle cannot disagree on them.
+function configClass(_route: NodeRoute): string {
+  return "";
+}
+
+// The entry required at INIT, which primes the chunk graph its bundle-mates
+// share: the one with the most assets, ties broken by entry key so an unchanged
+// build produces byte-identical output.
+function primaryEntryKey(
+  members: readonly NodeRoute[],
+  assetsOf: (route: NodeRoute) => Record<string, string>,
+): string | null {
+  const weight = (route: NodeRoute) => Object.keys(assetsOf(route)).length;
+  const ranked = [...members].sort(
+    (a, b) => weight(b) - weight(a) || (a.id < b.id ? -1 : 1),
+  );
+  return ranked[0]?.id ?? null;
+}
 
 // Every output that runs on the edge: the `runtime: 'edge'` routes and, when the
 // app has one, middleware.
@@ -791,14 +855,24 @@ async function emitFetchEntries(
   );
 }
 
-function renderLauncher(moduleRel: string): string {
-  const requirePath = "./" + moduleRel.split(sep).join("/");
+// The bundle's Lambda handler: the entry table, and the dispatcher wired to the
+// launcher's own `require` so the table's relative specifiers resolve from here.
+function renderLauncher(
+  entries: Record<string, string>,
+  primary: string | null,
+): string {
   return (
     [
       `const { AsyncLocalStorage } = require('node:async_hooks')`,
       `globalThis.AsyncLocalStorage = AsyncLocalStorage`,
       `process.env.NODE_ENV ||= 'production'`,
-      `module.exports = require(${JSON.stringify(requirePath)})`,
+      `const ENTRIES = ${JSON.stringify(entries)}`,
+      `const PRIMARY = ${JSON.stringify(primary)}`,
+      `module.exports = require(${JSON.stringify(`./${dispatchName}`)})({`,
+      `  entries: ENTRIES,`,
+      `  primary: PRIMARY,`,
+      `  load: (specifier) => require(specifier),`,
+      `})`,
     ].join("\n") + "\n"
   );
 }
