@@ -92,8 +92,11 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
 
 - **Primary entry** — the one entry a bundle requires eagerly, as its handler
   module loads, so the work lands in Lambda's INIT phase and primes the chunk
-  graph its bundle-mates share. Every other entry loads lazily, on the first
-  request naming it.
+  graph its bundle-mates share. It is the member tracing the most bytes of
+  assets (ties broken by entry key), since that graph's cost is bytes and not
+  file count. Every other entry loads lazily, on the first request naming it. A
+  primary that throws on import does not sink the bundle: the failure surfaces
+  as that entry key's own 502 and its bundle-mates still serve.
 
 - **Config class** — the partition key separating routes that cannot share a
   bundle because they disagree on a Lambda-level setting (`maxDuration`,
