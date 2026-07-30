@@ -413,7 +413,7 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 // and imports the user entrypoint at /var/task/<handler>; the Lambda's own
 // Handler config is vestigial under this exec wrapper.
 func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[string]string {
-	env := make(map[string]string, len(base)+len(isr.env()))
+	env := make(map[string]string, len(base))
 	maps.Copy(env, base)
 	env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
 	env["OCEL_HANDLER"] = "/var/task/" + args.Handler
