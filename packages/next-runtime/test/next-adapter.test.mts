@@ -391,6 +391,47 @@ async function readLauncher(projectDir: string, bundle = "bundle-0") {
   return { source, entries: table("ENTRIES"), primary: table("PRIMARY") };
 }
 
+// Joins the two halves of the build's output: the manifest names an (id,
+// entryKey) pair per route and the launcher of the bundle that id names has to
+// carry that key, or the route is a guaranteed runtime 502. Nothing about either
+// half alone can catch a producer/consumer drift, so every dispatch test that
+// emits bundles runs this.
+async function expectManifestJoinsLaunchers(projectDir: string) {
+  const entriesByBundle = new Map<string, Record<string, string>>();
+  for (const name of await readdir(functionsDir(projectDir))) {
+    if (!name.endsWith(".func")) continue;
+    const bundle = name.slice(0, -".func".length);
+    const { entries, primary } = await readLauncher(projectDir, bundle);
+    entriesByBundle.set(bundle, entries);
+    // The primed entry is required at INIT, so a bad key fails the whole bundle.
+    expect(Object.keys(entries)).toContain(primary);
+  }
+  expect(entriesByBundle.size).toBeGreaterThan(0);
+
+  const dispatch = (await readManifest(projectDir)).dispatch as Record<
+    string,
+    { kind: string; id?: string; entryKey?: string; edgeEntryKey?: string }
+  >;
+  let joined = 0;
+  for (const [pathname, target] of Object.entries(dispatch)) {
+    if (target.kind !== "lambda" && target.kind !== "prerender") continue;
+    // An edge-parented prerender regenerates through the edge bundle; it names
+    // no node entry and the worker ignores its id.
+    if (target.kind === "prerender" && target.edgeEntryKey !== undefined) {
+      expect(target.entryKey).toBeUndefined();
+      continue;
+    }
+    const entries = entriesByBundle.get(target.id!);
+    expect(entries, `${target.kind} ${pathname}: id ${target.id}`).toBeDefined();
+    expect(
+      Object.keys(entries!),
+      `${target.kind} ${pathname}: entryKey ${target.entryKey}`,
+    ).toContain(target.entryKey);
+    joined += 1;
+  }
+  expect(joined).toBeGreaterThan(0);
+}
+
 test("packs every node route into one bundle .func", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -455,8 +496,8 @@ test("declares every entry in the launcher with a POSIX relative specifier", asy
 });
 
 // Requiring one entry at INIT primes the chunk graph the bundle shares; the
-// largest entry primes the most of it, and the tie-break keeps builds
-// byte-identical.
+// entry with the most traced bytes primes the most of it, and the tie-break
+// keeps builds byte-identical.
 test("primes the largest entry at INIT", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -466,6 +507,140 @@ test("primes the largest entry at INIT", async () => {
   // "/" traces the shared chunk on top of its own module; the api route only
   // its own.
   expect((await readLauncher(projectDir)).primary).toBe("/");
+});
+
+// Priming is about warming the shared chunk graph, which is measured in bytes:
+// an entry tracing many small files primes less of it than one tracing a single
+// large chunk.
+test("elects the primary by traced bytes, not asset count", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const chunks = join(projectDir, ".next/server/chunks");
+  const small: [string, string][] = [];
+  for (const n of ["a", "b", "c"]) {
+    const p = join(chunks, `small-${n}.js`);
+    await writeFile(p, "x".repeat(64));
+    small.push([`chunks/small-${n}.js`, p]);
+  }
+  const big = join(chunks, "big.js");
+  await writeFile(big, "x".repeat(64 * 1024));
+
+  // The page traces three small assets, the api route one large one.
+  args.outputs.appPages[1]!.assets = Object.fromEntries(small);
+  args.outputs.appPages[0]!.assets = args.outputs.appPages[1]!.assets;
+  args.outputs.appRoutes[0]!.assets = { "chunks/big.js": big };
+  args.outputs.appRoutes[1]!.assets = args.outputs.appRoutes[0]!.assets;
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const { entries, primary } = await readLauncher(projectDir);
+  expect(Object.keys(entries)).toHaveLength(2);
+  expect(primary).toBe("/api/documents");
+});
+
+// The join a deploy would otherwise be the first to catch: the manifest names
+// (id, entryKey) pairs and the launcher tables are what answer them.
+test("joins every dispatch entry to its bundle's launcher table", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  await expectManifestJoinsLaunchers(projectDir);
+});
+
+// A route whose entry landed in no bundle can only be found here: at runtime it
+// is one 502 per request, per route, in production. Never a guess.
+test("fails the build when a route's entry lands in no bundle", async () => {
+  const { projectDir, args } = await synthDedupProject();
+
+  process.chdir(projectDir);
+  vi.resetModules();
+  vi.doMock("../src/pack.mts", async () => {
+    const actual =
+      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    return {
+      ...actual,
+      // A packer that loses a member — the drift the manifest must not paper over.
+      packBundles: (members: never, opts: never) =>
+        actual.packBundles(members, opts as never).map((bundle) => ({
+          ...bundle,
+          members: bundle.members.filter(
+            (m: { id: string }) => m.id !== "/api/documents",
+          ),
+        })),
+    };
+  });
+  try {
+    const { default: adapter } = await import("../src/next-adapter.mts");
+    await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(
+      /\/api\/documents/,
+    );
+  } finally {
+    vi.doUnmock("../src/pack.mts");
+    vi.resetModules();
+  }
+});
+
+// A prerender pointing at a parent that renders neither on Lambda nor on the
+// edge has nothing to regenerate it, and no id worth writing down.
+test("fails the build when a prerender's parent renders nowhere", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  (args.outputs.prerenders[0] as Record<string, unknown>).parentOutputId =
+    "/ghost";
+  const adapter = await loadAdapterIn(projectDir);
+
+  await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(
+    /\/ghost/,
+  );
+});
+
+// An empty entry key is a real key in the launcher table, and `??`/truthiness
+// would drop it — writing a route with no entry key at all into the manifest.
+test("carries an empty-string entry key instead of dropping it", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  args.outputs.appPages[1]!.id = "";
+  for (const p of args.outputs.prerenders) p.parentOutputId = "";
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const entry = (await readManifest(projectDir)).dispatch["/"];
+  expect(entry.id).toBe("bundle-0");
+  expect(entry.entryKey).toBe("");
+  expect(Object.keys((await readLauncher(projectDir)).entries)).toEqual([""]);
+});
+
+// A traced asset with no source on disk ships a bundle missing a module some
+// route requires — and if the primed entry requires it, every route in the
+// bundle. It predates bundling and is not fatal, so it is loud but not a
+// failure: one aggregate line, never one per file.
+test("warns once, aggregated, about traced assets with no source", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const ghosts = Object.fromEntries(
+    ["one", "two"].map((n) => [
+      `chunks/ghost-${n}.js`,
+      join(projectDir, ".next/server/chunks", `ghost-${n}.js`),
+    ]),
+  );
+  args.outputs.appRoutes[0]!.assets = ghosts;
+  args.outputs.appRoutes[1]!.assets = ghosts;
+
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const warned: string[] = [];
+  const adapter = await loadAdapterIn(projectDir);
+  try {
+    await adapter.onBuildComplete(args as never);
+    warned.push(...warn.mock.calls.map((c) => String(c[0])));
+  } finally {
+    warn.mockRestore();
+  }
+
+  const lines = warned.filter((l) => l.includes("not copied into the bundle"));
+  expect(lines).toHaveLength(1);
+  expect(lines[0]).toContain("2 traced asset(s)");
+  expect(lines[0]).toContain("chunks/ghost-one.js");
+  expect(lines[0]).toContain("chunks/ghost-two.js");
 });
 
 test("gives variants one shared bundle id and one shared entry key", async () => {
@@ -606,8 +781,8 @@ test("marks prerendered pathnames as prerender in dispatch", async () => {
     id: "bundle-0",
     entryKey: "/",
   });
-  // Even the PPR segment, which is a prerender output alone, resolves to its
-  // parent's bundle rather than to a route id no function carries.
+  // A PPR segment is a prerender output alone — it appears in no route list —
+  // so the only thing that can name its renderer is its parentOutputId.
   expect(manifest.dispatch["/index.segments/_tree.segment.rsc"]).toMatchObject({
     kind: "prerender",
     id: "bundle-0",
@@ -651,6 +826,7 @@ test("separates a node prerender's entryKey from an edge prerender's edgeEntryKe
   expect(manifest.dispatch["/"].edgeEntryKey).toBeUndefined();
   expect(manifest.dispatch["/edgy"].edgeEntryKey).toBe("app/edgy/page");
   expect(manifest.dispatch["/edgy"].entryKey).toBeUndefined();
+  await expectManifestJoinsLaunchers(projectDir);
 });
 
 test("lists every prerender pathname (including .segment.rsc) so resolveRoutes can match it", async () => {

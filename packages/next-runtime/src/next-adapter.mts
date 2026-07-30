@@ -193,12 +193,29 @@ const adapter = {
       bundles.flatMap((b) => b.members.map((m) => [m.id, b.name] as const)),
     );
 
+    // A manifest that names a bundle no build emitted is a 502 per request for
+    // that route, in production, and nothing on either side of the manifest can
+    // catch it — so an unmappable route fails the build instead.
+    const bundleNameOf = (entryKey: string, pathname: string): string => {
+      const name = bundleNameByEntryKey.get(entryKey);
+      if (name === undefined) {
+        throw new Error(
+          `ocel: route "${pathname}" resolves to entry "${entryKey}", which no emitted bundle carries — this build cannot be served`,
+        );
+      }
+      return name;
+    };
+
+    const assetBytes = cachedAssetBytes();
+    const missingAssets = new Set<string>();
+
     await Promise.all(
       bundles.map(async (bundle) => {
         const funcDir = join(outputRoot, "functions", `${bundle.name}.func`);
 
         for (const [destRel, srcAbs] of Object.entries(bundle.assets)) {
-          await copyAsset(srcAbs, join(funcDir, destRel));
+          const copied = await copyAsset(srcAbs, join(funcDir, destRel));
+          if (!copied) missingAssets.add(destRel);
         }
 
         const dispatchDest = join(funcDir, appRel, dispatchName);
@@ -218,7 +235,7 @@ const adapter = {
                 "./" + relative(projectDir, m.filePath).split(sep).join("/"),
               ]),
             ),
-            primaryEntryKey(bundle.members, assetsOf),
+            await primaryEntryKey(bundle.members, assetsOf, assetBytes),
           ),
         );
 
@@ -237,6 +254,17 @@ const adapter = {
         );
       }),
     );
+
+    // A traced asset whose source is gone ships a bundle missing a module some
+    // route requires — and if the primed entry requires it, every route in that
+    // bundle. It predates bundling and is not known to be fatal, so it is loud
+    // rather than a failed build: one aggregate line, never one per file.
+    if (missingAssets.size > 0) {
+      const sample = [...missingAssets].sort().slice(0, 5);
+      console.warn(
+        `ocel: ${missingAssets.size} traced asset(s) have no source on disk and were not copied into the bundle — a route requiring one of them fails at runtime: ${sample.join(", ")}${missingAssets.size > sample.length ? ", …" : ""}`,
+      );
+    }
 
     // public/ assets. Next's outputs.staticFiles covers _next/static and the
     // prerendered error pages but never the project's public/ directory, so the
@@ -291,12 +319,17 @@ const adapter = {
         // One bundle serves many routes, so the id names the Lambda and the
         // entry key names which of its routes to render.
         ...functionRoutes.map((o) => {
-          const entryKey = entryKeyByPathname.get(o.pathname) ?? o.id;
+          const entryKey = entryKeyByPathname.get(o.pathname);
+          if (entryKey === undefined) {
+            throw new Error(
+              `ocel: node route "${o.pathname}" resolves to no bundle entry — this build cannot be served`,
+            );
+          }
           return [
             o.pathname,
             {
               kind: "lambda",
-              id: bundleNameByEntryKey.get(entryKey) ?? entryKey,
+              id: bundleNameOf(entryKey, o.pathname),
               entryKey,
             },
           ];
@@ -317,6 +350,12 @@ const adapter = {
         // regenerates the entry. Spread last so it replaces the plain lambda
         // entry a prerendered function route also produced above.
         //
+        // The renderer is named by parentOutputId, never by the prerender's own
+        // pathname: a segment prerender has no route of its own, a prerender's
+        // pathname can collide with a different group's function pathname, and
+        // parentOutputId can name a non-representative member of its group —
+        // which the by-route-id map resolves to that group's entry.
+        //
         // The fallback is projected down to the two freshness windows rather
         // than spread: the shell, the postponed state, and the entry's own
         // status/headers all travel in the cache entry, so carrying build-time
@@ -327,14 +366,23 @@ const adapter = {
           const tags = cacheTags(p);
           const entryKey = entryKeyByRouteId.get(p.parentOutputId);
           const edgeEntryKey = edgeEntryByOutputId.get(p.parentOutputId);
+          if (entryKey === undefined && edgeEntryKey === undefined) {
+            throw new Error(
+              `ocel: prerender "${p.pathname}" is parented by output "${p.parentOutputId}", which renders on neither a Lambda nor the edge — nothing can regenerate it`,
+            );
+          }
 
           return [
             p.pathname,
             {
               kind: "prerender",
+              // An edge-parented prerender has no bundle at all: the worker
+              // regenerates it through edgeEntryKey and never reads the id, so
+              // it carries the parent output's own name for legibility.
               id:
-                (entryKey && bundleNameByEntryKey.get(entryKey)) ??
-                p.parentOutputId,
+                entryKey === undefined
+                  ? p.parentOutputId
+                  : bundleNameOf(entryKey, p.pathname),
               config: p.config,
               fallback: {
                 initialRevalidate: p.fallback?.initialRevalidate,
@@ -344,12 +392,12 @@ const adapter = {
               ...(tags.length > 0 && { tags }),
               ...(allowQuery && { allowQuery }),
               // Which entry of the parent's bundle regenerates this route.
-              ...(entryKey && { entryKey }),
+              ...(entryKey !== undefined && { entryKey }),
               // Set only when the parent renders on the edge: there is no
               // Function URL to fall back to, so the worker regenerates this
               // route through the edge bundle's entry instead — and reads the
               // key's absence as "this tier may revalidate".
-              ...(edgeEntryKey && { edgeEntryKey }),
+              ...(edgeEntryKey !== undefined && { edgeEntryKey }),
             },
           ];
         }),
@@ -384,17 +432,55 @@ function configClass(_route: NodeRoute): string {
 }
 
 // The entry required at INIT, which primes the chunk graph its bundle-mates
-// share: the one with the most assets, ties broken by entry key so an unchanged
-// build produces byte-identical output.
-function primaryEntryKey(
+// share: the one tracing the most bytes of it, since that graph's cost is bytes
+// and not file count. Ties broken by entry key so an unchanged build produces
+// byte-identical output.
+async function primaryEntryKey(
   members: readonly NodeRoute[],
   assetsOf: (route: NodeRoute) => Record<string, string>,
-): string | null {
-  const weight = (route: NodeRoute) => Object.keys(assetsOf(route)).length;
-  const ranked = [...members].sort(
-    (a, b) => weight(b) - weight(a) || (a.id < b.id ? -1 : 1),
+  assetBytes: (absPath: string) => Promise<number>,
+): Promise<string | null> {
+  const weighed = await Promise.all(
+    members.map(async (route) => {
+      const sizes = await Promise.all(
+        Object.values(assetsOf(route)).map(assetBytes),
+      );
+      return { id: route.id, bytes: sizes.reduce((sum, size) => sum + size, 0) };
+    }),
   );
-  return ranked[0]?.id ?? null;
+  weighed.sort((a, b) => b.bytes - a.bytes || (a.id < b.id ? -1 : 1));
+  return weighed[0]?.id ?? null;
+}
+
+// What an asset costs in the artifact, as copyAsset lands it: a symlink costs
+// itself and a directory its recursive contents. A source that does not exist
+// costs nothing, matching the copy skipping it (which reports it). Sizes are
+// memoized because bundle-mates trace overwhelmingly the same assets.
+function cachedAssetBytes(): (absPath: string) => Promise<number> {
+  const cache = new Map<string, Promise<number>>();
+  const measure = async (absPath: string): Promise<number> => {
+    let info;
+    try {
+      info = await lstat(absPath);
+    } catch {
+      return 0;
+    }
+    if (!info.isDirectory()) return info.size;
+    const entries = await readdir(absPath, { withFileTypes: true });
+    const sizes = await Promise.all(
+      entries.map((entry) => sized(join(absPath, entry.name))),
+    );
+    return sizes.reduce((sum, size) => sum + size, 0);
+  };
+  const sized = (absPath: string): Promise<number> => {
+    let pending = cache.get(absPath);
+    if (!pending) {
+      pending = measure(absPath);
+      cache.set(absPath, pending);
+    }
+    return pending;
+  };
+  return sized;
 }
 
 // Every output that runs on the edge: the `runtime: 'edge'` routes and, when the
@@ -903,12 +989,14 @@ async function collectPublicFiles(
   return files;
 }
 
-async function copyAsset(srcAbs: string, dest: string) {
+// Copies one traced asset, reporting whether its source existed at all: the
+// caller aggregates the misses into a single warning.
+async function copyAsset(srcAbs: string, dest: string): Promise<boolean> {
   let info;
   try {
     info = await lstat(srcAbs);
   } catch {
-    return;
+    return false;
   }
   await mkdir(dirname(dest), { recursive: true });
   // Preserve symlinks verbatim: the tracer emits pnpm's node_modules as a
@@ -917,13 +1005,14 @@ async function copyAsset(srcAbs: string, dest: string) {
   if (info.isSymbolicLink()) {
     await rm(dest, { recursive: true, force: true });
     await symlink(await readlink(srcAbs), dest);
-    return;
+    return true;
   }
   if (info.isDirectory()) {
     await cp(srcAbs, dest, { recursive: true });
-    return;
+    return true;
   }
   await copyFile(srcAbs, dest);
+  return true;
 }
 
 export default adapter;
