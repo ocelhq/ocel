@@ -379,10 +379,12 @@ test("dispatches each edge pathname to its entry key", async () => {
     kind: "edge",
     entryKey: "middleware_app/api/edge/route",
   });
-  // The nodejs route is untouched by any of this.
+  // The nodejs route is untouched by any of this: its own bundle, its own
+  // entry-key namespace.
   expect(manifest.dispatch["/api/docs"]).toEqual({
     kind: "lambda",
-    id: "app/api/docs/route",
+    id: "bundle-0",
+    entryKey: "app/api/docs/route",
   });
   expect(manifest.pathnames).toContain("/edge-page.rsc");
 });
@@ -577,10 +579,14 @@ test("names the edge entry that regenerates a prerender its edge route parents",
   // Function URL an edge-rendered route never has.
   expect(manifest.dispatch["/edge-page"]).toMatchObject({
     kind: "prerender",
-    entryKey: "middleware_app/edge-page/page",
+    edgeEntryKey: "middleware_app/edge-page/page",
   });
-  // A prerender its Lambda regenerates carries none.
-  expect(manifest.dispatch["/api/docs"]).not.toHaveProperty("entryKey");
+  expect(manifest.dispatch["/edge-page"]).not.toHaveProperty("entryKey");
+  // A prerender its Lambda regenerates carries no edge key at all — that
+  // absence is what tells the worker it may revalidate — only the entry inside
+  // the bundle that renders it.
+  expect(manifest.dispatch["/api/docs"]).not.toHaveProperty("edgeEntryKey");
+  expect(manifest.dispatch["/api/docs"].entryKey).toBe("app/api/docs/route");
 });
 
 test("prints the bundle size, chunk count and entry count", async () => {

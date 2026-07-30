@@ -5,8 +5,6 @@ import {
   readFile,
   readdir,
   stat,
-  lstat,
-  readlink,
   utimes,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -346,14 +344,6 @@ async function synthPrerenderProject() {
   return { projectDir, args };
 }
 
-async function isSymlink(p: string): Promise<boolean> {
-  try {
-    return (await lstat(p)).isSymbolicLink();
-  } catch {
-    return false;
-  }
-}
-
 function functionsDir(projectDir: string): string {
   return join(projectDir, ".ocel/output/functions");
 }
@@ -390,60 +380,169 @@ async function readManifest(projectDir: string) {
   );
 }
 
-test("creates one real .func per shared filePath and symlinks the variants", async () => {
+// Reads a bundle's generated launcher and recovers the two tables it declares.
+async function readLauncher(projectDir: string, bundle = "bundle-0") {
+  const source = await readFile(
+    join(functionsDir(projectDir), `${bundle}.func/__next_launcher.cjs`),
+    "utf8",
+  );
+  const table = (name: string) =>
+    JSON.parse(source.match(new RegExp(`^const ${name} = (.*)$`, "m"))![1]!);
+  return { source, entries: table("ENTRIES"), primary: table("PRIMARY") };
+}
+
+test("packs every node route into one bundle .func", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
-  const fns = functionsDir(projectDir);
-  // Exactly one real .func per group — no accidental extra function.
   const { real, links } = await partitionFuncDirs(projectDir);
-  expect(real).toEqual(["api/documents.func", "index.func"]);
-  expect(links).toEqual(["api/documents.rsc.func", "index.rsc.func"]);
-  // Variants symlink to their sibling parent, relatively.
-  expect(await readlink(join(fns, "index.rsc.func"))).toBe("index.func");
-  expect(await readlink(join(fns, "api/documents.rsc.func"))).toBe(
-    "documents.func",
-  );
+  expect(real).toEqual(["bundle-0.func"]);
+  // Variants are dispatch entries now, not symlinked functions.
+  expect(links).toEqual([]);
+
+  // The bundle carries both members' compiled modules, the shared chunk, the
+  // launcher and the dispatcher it requires.
+  const bundle = join(functionsDir(projectDir), "bundle-0.func");
+  for (const rel of [
+    ".next/server/app/page.js",
+    ".next/server/app/api/documents/route.js",
+    "chunks/shared.js",
+    "__next_launcher.cjs",
+    "__ocel_dispatch.cjs",
+  ]) {
+    expect(await exists(join(bundle, rel))).toBe(true);
+  }
 });
 
-test("variant .func symlinks carry no copied assets or config of their own", async () => {
+test("copies the dispatcher into the bundle verbatim", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
-  const fns = functionsDir(projectDir);
-  // The variant is purely a symlink — no directory of its own to copy into.
-  expect(await isSymlink(join(fns, "index.rsc.func"))).toBe(true);
-  // The parent owns the sole config.json, carrying the parent's id; reading it
-  // through the variant symlink resolves to that same file.
-  const parentCfg = JSON.parse(
-    await readFile(join(fns, "index.func/config.json"), "utf8"),
+  expect(
+    await readFile(
+      join(functionsDir(projectDir), "bundle-0.func/__ocel_dispatch.cjs"),
+      "utf8",
+    ),
+  ).toBe(
+    await readFile(
+      fileURLToPath(new URL("../src/next-dispatch.cjs", import.meta.url)),
+      "utf8",
+    ),
   );
-  const viaSymlink = JSON.parse(
-    await readFile(join(fns, "index.rsc.func/config.json"), "utf8"),
-  );
-  expect(parentCfg.id).toBe("/");
-  expect(viaSymlink).toEqual(parentCfg);
 });
 
-test("repoints variant dispatch ids to the parent function", async () => {
+// The launcher is the whole bundle's handler: it names every entry by its key
+// and hands the table to the dispatcher, which selects one per request.
+test("declares every entry in the launcher with a POSIX relative specifier", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const { entries, source } = await readLauncher(projectDir);
+  expect(entries).toEqual({
+    "/": "./.next/server/app/page.js",
+    "/api/documents": "./.next/server/app/api/documents/route.js",
+  });
+  expect(source).toContain(`require("./__ocel_dispatch.cjs")`);
+  // AsyncLocalStorage must be a global for Next's runtime, as on the edge.
+  expect(source).toContain("globalThis.AsyncLocalStorage = AsyncLocalStorage");
+  expect(source).toContain("process.env.NODE_ENV ||= 'production'");
+});
+
+// Requiring one entry at INIT primes the chunk graph the bundle shares; the
+// largest entry primes the most of it, and the tie-break keeps builds
+// byte-identical.
+test("primes the largest entry at INIT", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  // "/" traces the shared chunk on top of its own module; the api route only
+  // its own.
+  expect((await readLauncher(projectDir)).primary).toBe("/");
+});
+
+test("gives variants one shared bundle id and one shared entry key", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
   const manifest = await readManifest(projectDir);
-  // Every route stays a distinct dispatch key.
-  expect(manifest.dispatch["/"].id).toBe("/");
-  expect(manifest.dispatch["/index.rsc"].id).toBe("/");
-  expect(manifest.dispatch["/api/documents"].id).toBe("/api/documents");
-  expect(manifest.dispatch["/api/documents.rsc"].id).toBe("/api/documents");
+  // Every route stays a distinct dispatch key, resolving to the same Lambda and
+  // the same entry inside it — whether the pair is prerendered (the root page)
+  // or rendered on every request (the api route).
+  expect(manifest.dispatch["/"]).toMatchObject({
+    kind: "prerender",
+    id: "bundle-0",
+    entryKey: "/",
+  });
+  expect(manifest.dispatch["/index.rsc"]).toEqual(manifest.dispatch["/"]);
+  expect(manifest.dispatch["/api/documents"]).toEqual({
+    kind: "lambda",
+    id: "bundle-0",
+    entryKey: "/api/documents",
+  });
+  expect(manifest.dispatch["/api/documents.rsc"]).toEqual(
+    manifest.dispatch["/api/documents"],
+  );
   // Both variants remain routable.
   expect(manifest.pathnames).toContain("/index.rsc");
   expect(manifest.pathnames).toContain("/api/documents.rsc");
+});
+
+// A bundle that overflows the artifact ceiling splits, and each route's dispatch
+// entry has to follow its own half.
+test("splits over the budget and points each route at its own bundle", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const filler = join(projectDir, ".next/server/chunks/filler.js");
+  await writeFile(filler, "x".repeat(4096));
+  (args.outputs.appRoutes[0] as Record<string, unknown>).assets = {
+    "chunks/filler.js": filler,
+  };
+  args.outputs.appRoutes[1]!.assets = args.outputs.appRoutes[0]!.assets;
+  const shared = args.outputs.appPages[0]!.assets["chunks/shared.js"]!;
+  await writeFile(shared, "x".repeat(4096));
+
+  process.chdir(projectDir);
+  vi.resetModules();
+  vi.doMock("../src/pack.mts", async () => {
+    const actual =
+      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    return {
+      ...actual,
+      packBundles: (members: never, opts: never) =>
+        actual.packBundles(members, { ...(opts as object), budgetBytes: 6000 }),
+    };
+  });
+  try {
+    const { default: adapter } = await import("../src/next-adapter.mts");
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    vi.doUnmock("../src/pack.mts");
+    vi.resetModules();
+  }
+
+  const { real } = await partitionFuncDirs(projectDir);
+  expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"].id).toBe("bundle-0");
+  expect(manifest.dispatch["/index.rsc"].id).toBe("bundle-0");
+  expect(manifest.dispatch["/api/documents"].id).toBe("bundle-1");
+  expect(manifest.dispatch["/api/documents.rsc"].id).toBe("bundle-1");
+
+  // Each bundle's launcher declares only its own member.
+  expect(Object.keys((await readLauncher(projectDir, "bundle-0")).entries)).toEqual(["/"]);
+  expect(
+    Object.keys((await readLauncher(projectDir, "bundle-1")).entries),
+  ).toEqual(["/api/documents"]);
 });
 
 test("copies public/ files into the static output, recursively", async () => {
@@ -495,12 +594,63 @@ test("marks prerendered pathnames as prerender in dispatch", async () => {
 
   const manifest = await readManifest(projectDir);
   // The prerender marker replaces the plain lambda entry; the id stays the
-  // parent function so the runtime can invoke it to regenerate.
-  expect(manifest.dispatch["/"]).toMatchObject({ kind: "prerender", id: "/" });
+  // parent's bundle and the entry key its route inside it, so the runtime can
+  // invoke it to regenerate.
+  expect(manifest.dispatch["/"]).toMatchObject({
+    kind: "prerender",
+    id: "bundle-0",
+    entryKey: "/",
+  });
   expect(manifest.dispatch["/index.rsc"]).toMatchObject({
     kind: "prerender",
-    id: "/",
+    id: "bundle-0",
+    entryKey: "/",
   });
+  // Even the PPR segment, which is a prerender output alone, resolves to its
+  // parent's bundle rather than to a route id no function carries.
+  expect(manifest.dispatch["/index.segments/_tree.segment.rsc"]).toMatchObject({
+    kind: "prerender",
+    id: "bundle-0",
+    entryKey: "/",
+  });
+});
+
+// The worker reads `!edgeEntryKey` as "this tier may revalidate", so a node
+// prerender must never carry that key — and an edge-parented one must never
+// carry a plain entryKey, which would name a Lambda entry that does not exist.
+test("separates a node prerender's entryKey from an edge prerender's edgeEntryKey", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const edgePage = join(projectDir, ".next/server/app/edgy/page.js");
+  await mkdir(dirname(edgePage), { recursive: true });
+  await writeFile(edgePage, "module.exports = () => {}");
+  args.outputs.appPages.push({
+    pathname: "/edgy",
+    id: "/edgy",
+    assets: {},
+    runtime: "edge",
+    filePath: edgePage,
+    config: {},
+    type: "APP_PAGE",
+    edgeRuntime: { entryKey: "app/edgy/page", handlerExport: "default" },
+  } as never);
+  args.outputs.prerenders.push({
+    pathname: "/edgy",
+    id: "/edgy",
+    type: "PRERENDER",
+    parentOutputId: "/edgy",
+    groupId: 9,
+    fallback: { filePath: join(projectDir, ".next/server/app/edgy.html") },
+    config: {},
+  } as never);
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"].entryKey).toBe("/");
+  expect(manifest.dispatch["/"].edgeEntryKey).toBeUndefined();
+  expect(manifest.dispatch["/edgy"].edgeEntryKey).toBe("app/edgy/page");
+  expect(manifest.dispatch["/edgy"].entryKey).toBeUndefined();
 });
 
 test("lists every prerender pathname (including .segment.rsc) so resolveRoutes can match it", async () => {
@@ -568,7 +718,9 @@ test("records the ocel app name (from OCEL_APP_NAME) in the routing manifest", a
   expect(manifest.appName).toBe("marketing");
 });
 
-test("writes each function's route id into its config.json", async () => {
+// The id is the functionUrls key the worker looks up, and one bundle serves many
+// routes — so it names the bundle, never a route.
+test("writes the bundle name into its config.json", async () => {
   const { projectDir, args } = await synthProject();
   const adapter = await loadAdapterIn(projectDir);
 
@@ -576,15 +728,13 @@ test("writes each function's route id into its config.json", async () => {
 
   const config = JSON.parse(
     await readFile(
-      join(
-        projectDir,
-        ".ocel/output/functions/api/documents.func/config.json",
-      ),
+      join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"),
       "utf8",
     ),
   );
 
-  expect(config.id).toBe("/api/documents");
+  expect(config.id).toBe("bundle-0");
+  expect(config.handler).toBe("__next_launcher.cjs");
   expect(config.framework).toBe("next");
 });
 
@@ -601,7 +751,7 @@ test("records the owning app in each function's config.json", async () => {
 
   const config = JSON.parse(
     await readFile(
-      join(projectDir, ".ocel/output/functions/api/documents.func/config.json"),
+      join(projectDir, ".ocel/output/functions/bundle-0.func/config.json"),
       "utf8",
     ),
   );
@@ -882,7 +1032,7 @@ test("writes every output under OCEL_OUTPUT_DIR when the builder sets it", async
   await adapter.onBuildComplete(args as never);
 
   expect(await exists(join(outputRoot, "routing-manifest.json"))).toBe(true);
-  expect(await exists(join(outputRoot, "functions/index.func/config.json"))).toBe(true);
+  expect(await exists(join(outputRoot, "functions/bundle-0.func/config.json"))).toBe(true);
   expect(await exists(join(outputRoot, "cache/index.cache.json"))).toBe(true);
   // Nothing may fall back to the cwd-derived flat tree.
   expect(await exists(join(projectDir, ".ocel/output"))).toBe(false);
@@ -904,16 +1054,20 @@ test("two apps exposing the same route path do not overwrite each other", async 
   for (const app of ["storefront", "admin"]) {
     const outputRoot = join(outRoot, "apps", app);
     const config = JSON.parse(
-      await readFile(join(outputRoot, "functions/api/documents.func/config.json"), "utf8"),
+      await readFile(join(outputRoot, "functions/bundle-0.func/config.json"), "utf8"),
     );
     expect(config.app).toBe(app);
-    // Same route id in both apps: the worker dispatches on it, so it must NOT
-    // be app-qualified.
-    expect(config.id).toBe("/api/documents");
+    // Same bundle name in both apps: the worker dispatches on it per app, so it
+    // must NOT be app-qualified.
+    expect(config.id).toBe("bundle-0");
 
     const manifest = JSON.parse(await readFile(join(outputRoot, "routing-manifest.json"), "utf8"));
     expect(manifest.appName).toBe(app);
-    expect(manifest.dispatch["/api/documents"]).toEqual({ kind: "lambda", id: "/api/documents" });
+    expect(manifest.dispatch["/api/documents"]).toEqual({
+      kind: "lambda",
+      id: "bundle-0",
+      entryKey: "/api/documents",
+    });
     expect(await exists(join(outputRoot, "static/next.svg"))).toBe(true);
   }
 });
