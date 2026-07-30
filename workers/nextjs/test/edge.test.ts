@@ -731,7 +731,7 @@ describe("edge-parented prerenders", () => {
           "/edge-blog": {
             kind: "prerender",
             id: "/edge-blog",
-            entryKey: "middleware_app/edge-blog",
+            edgeEntryKey: "middleware_app/edge-blog",
             config: {},
             fallback: { initialRevalidate: 60 },
           },
