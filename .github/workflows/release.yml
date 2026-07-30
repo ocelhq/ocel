@@ -119,7 +119,7 @@ jobs:
           cache: pnpm
 
       # build-native.mjs runs `go generate` for the cli target, which bundles
-      # cli/dist with esbuild and wrangler from the workspace.
+      # cli/platform/dist with esbuild and wrangler from the workspace.
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
@@ -191,9 +191,6 @@ jobs:
 
       - name: Build @ocel/sdk
         run: pnpm --filter @ocel/sdk build
-
-      - name: Build ocel CLI + builder
-        run: pnpm --filter ocel build
 
       - name: Publish packages
         run: |

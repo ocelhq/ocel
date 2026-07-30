@@ -22,9 +22,9 @@ import (
 	"sort"
 	"strings"
 
-	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/platform"
 )
 
 // scratchDirName is the Ocel-internal build-artifact folder written next to
@@ -41,7 +41,7 @@ const outputDirName = "output"
 // route path never write over each other.
 //
 // This name is a cross-process, cross-language contract with no single home:
-// packages/ocel/src/builder/layout.ts (APPS_DIR) writes the layout, this
+// cli/platform/src/builder/layout.ts (APPS_DIR) writes the layout, this
 // package discovers functions in it, and cloud/aws/deploy/edgeworker.go
 // (appsDirName) reads each app's artifacts from it. Change one, change all three.
 const appsDirName = "apps"

@@ -5,9 +5,9 @@ import { copyFile, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const cliDir = dirname(fileURLToPath(import.meta.url));
-const root = dirname(cliDir);
-const dist = join(cliDir, "dist");
+const platformDir = dirname(fileURLToPath(import.meta.url));
+const root = dirname(dirname(platformDir));
+const dist = join(platformDir, "dist");
 
 await rm(dist, { recursive: true, force: true });
 await mkdir(join(dist, "workers"), { recursive: true });
@@ -16,7 +16,7 @@ await mkdir(join(dist, "workers"), { recursive: true });
 // its `__filename` references. The externals and loaders are the mock-only and
 // asset paths inside @mapbox/node-pre-gyp, reached through @vercel/nft.
 await build({
-  entryPoints: [join(root, "packages/ocel/src/builder/cli.ts")],
+  entryPoints: [join(platformDir, "src/builder/cli.ts")],
   outfile: join(dist, "builder/cli.cjs"),
   bundle: true,
   platform: "node",

@@ -12,8 +12,7 @@ export const examplesDir = path.join(repoRoot, "examples");
 // The built Go CLI. `cd cli && go build -o bin/ocel ./ocel` produces this
 // (output goes to cli/bin/ - a gitignored path - because the CLI's own main
 // package already lives at cli/ocel/, so `-o ocel` would collide with that
-// directory, and cli/dist/ is the embedded platform tree). Override with
-// OCEL_BIN to point at any binary.
+// directory). Override with OCEL_BIN to point at any binary.
 export const ocelBin =
   process.env.OCEL_BIN ?? path.join(repoRoot, "cli", "bin", "ocel");
 

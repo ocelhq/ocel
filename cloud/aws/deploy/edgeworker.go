@@ -147,7 +147,7 @@ func appRoutes(functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.M
 // assets, cache entries and routing manifest.
 //
 // This name is a cross-process, cross-language contract with no single home:
-// packages/ocel/src/builder/layout.ts (APPS_DIR) writes the layout,
+// cli/platform/src/builder/layout.ts (APPS_DIR) writes the layout,
 // cli/internal/appbuilder (appsDirName) discovers functions in it, and this
 // package reads each app's artifacts from it. Change one, change all three.
 const appsDirName = "apps"

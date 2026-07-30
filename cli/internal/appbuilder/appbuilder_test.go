@@ -12,9 +12,9 @@ import (
 	"strings"
 	"testing"
 
-	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/platform"
 )
 
 func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath, adapterPath string, request []byte, stderr io.Writer) error) {
@@ -408,7 +408,7 @@ func TestBuild_Integration(t *testing.T) {
 		t.Skip("integration test: spawns real node over the builder")
 	}
 
-	fixtureRoot := repoRelPath(t, "packages", "ocel", "test", "fixtures", "express-app")
+	fixtureRoot := repoRelPath(t, "cli", "platform", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
@@ -457,7 +457,7 @@ func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 		t.Skip("integration test: spawns real node over the builder")
 	}
 
-	fixtureRoot := repoRelPath(t, "packages", "ocel", "test", "fixtures", "express-app")
+	fixtureRoot := repoRelPath(t, "cli", "platform", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}

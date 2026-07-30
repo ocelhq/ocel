@@ -10,8 +10,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	platform "github.com/ocelhq/ocel/cli"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/platform"
 )
 
 // buildCmd builds the project's apps into .ocel/output without deploying
