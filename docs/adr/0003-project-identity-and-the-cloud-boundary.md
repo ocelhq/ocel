@@ -117,3 +117,10 @@ than showing the routine-update prompt. `--yes` bypasses it for CI.
   confirmation prompt.
 - A fresh clone can deploy with nothing but `ocel.config.ts` and AWS credentials;
   `.ocel/link.json` is needed only to run `ocel dev`.
+
+## Superseded paths (2026-07-30)
+
+The decision above stands unchanged; only where the code lives has moved. The
+`@ocel/sdk` package was folded back into the root `ocel` package, so
+`packages/sdk/src/config.ts` is now `packages/ocel/src/config.ts` and the
+`OcelConfig` it declares is imported as `ocel/config`, not `@ocel/sdk/config`.

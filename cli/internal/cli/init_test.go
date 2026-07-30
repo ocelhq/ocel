@@ -76,7 +76,7 @@ func TestRunInit_ExplicitSlug_WritesDeployableConfig(t *testing.T) {
 
 	content := readConfig(t, dir)
 	for _, want := range []string{
-		`import { defineConfig } from "@ocel/sdk/config";`,
+		`import { defineConfig } from "ocel/config";`,
 		`import awsProvider from "@ocel/provider-aws";`,
 		`slug: "my-app"`,
 		`provider: awsProvider()`,
@@ -159,8 +159,28 @@ func TestRunInit_ProviderFlag_OverridesTheDefaultPackage(t *testing.T) {
 	if !strings.Contains(content, `import gcpProvider from "@acme/provider-gcp";`) || !strings.Contains(content, "provider: gcpProvider()") {
 		t.Fatalf("config = %q, want it to use the overridden provider", content)
 	}
-	if got := *argv; len(got) == 0 || got[len(got)-1] != "@acme/provider-gcp" {
-		t.Fatalf("ran %v, want the overridden package added", got)
+	if got := *argv; !slices.Equal(got, []string{"npm", "install", sdkPackage, "@acme/provider-gcp"}) {
+		t.Fatalf("ran %v, want the overridden package added alongside %s", got, sdkPackage)
+	}
+}
+
+// The scaffolded config imports from `ocel`, so init has to install it too:
+// leaving it out scaffolds a config whose very first line cannot resolve.
+func TestRunInit_InstallsTheSDKAlongsideTheProvider(t *testing.T) {
+	argv := stubPackageManager(t, nil)
+	dir := initTestDir(t, "proj")
+
+	var stdout bytes.Buffer
+	if err := runInit(context.Background(), dir, "my-app", initOptions{}, &stdout, &bytes.Buffer{}); err != nil {
+		t.Fatalf("runInit err = %v", err)
+	}
+
+	want := []string{"npm", "install", sdkPackage, defaultProviderPackage}
+	if got := *argv; !slices.Equal(got, want) {
+		t.Fatalf("ran %v, want %v", got, want)
+	}
+	if !strings.Contains(readConfig(t, dir), `from "`+sdkPackage+`/config"`) {
+		t.Fatalf("config = %q, want it to import from %s/config", readConfig(t, dir), sdkPackage)
 	}
 }
 
@@ -169,11 +189,11 @@ func TestRunInit_AddsProviderWithThePackageManagerTheLockfileNames(t *testing.T)
 		lockfile string
 		want     []string
 	}{
-		{"pnpm-lock.yaml", []string{"pnpm", "add", defaultProviderPackage}},
-		{"yarn.lock", []string{"yarn", "add", defaultProviderPackage}},
-		{"bun.lockb", []string{"bun", "add", defaultProviderPackage}},
-		{"package-lock.json", []string{"npm", "install", defaultProviderPackage}},
-		{"", []string{"npm", "install", defaultProviderPackage}},
+		{"pnpm-lock.yaml", []string{"pnpm", "add", sdkPackage, defaultProviderPackage}},
+		{"yarn.lock", []string{"yarn", "add", sdkPackage, defaultProviderPackage}},
+		{"bun.lockb", []string{"bun", "add", sdkPackage, defaultProviderPackage}},
+		{"package-lock.json", []string{"npm", "install", sdkPackage, defaultProviderPackage}},
+		{"", []string{"npm", "install", sdkPackage, defaultProviderPackage}},
 	}
 	for _, tc := range cases {
 		name := tc.lockfile
@@ -196,8 +216,8 @@ func TestRunInit_AddsProviderWithThePackageManagerTheLockfileNames(t *testing.T)
 			if got := *argv; !slices.Equal(got, tc.want) {
 				t.Fatalf("ran %v, want %v", got, tc.want)
 			}
-			if !strings.Contains(stdout.String(), "Added "+defaultProviderPackage) {
-				t.Fatalf("stdout = %q, want it to report the added package", stdout.String())
+			if !strings.Contains(stdout.String(), "Added "+sdkPackage+" "+defaultProviderPackage) {
+				t.Fatalf("stdout = %q, want it to report the added packages", stdout.String())
 			}
 		})
 	}
@@ -217,7 +237,7 @@ func TestRunInit_NoPackageJSON_SkipsTheInstallAndSaysSo(t *testing.T) {
 	if *argv != nil {
 		t.Fatalf("ran %v, want no package manager call", *argv)
 	}
-	if !strings.Contains(stdout.String(), "npm install "+defaultProviderPackage) {
+	if !strings.Contains(stdout.String(), "npm install "+sdkPackage+" "+defaultProviderPackage) {
 		t.Fatalf("stdout = %q, want the command to run later", stdout.String())
 	}
 }
@@ -236,7 +256,7 @@ func TestRunInit_PackageManagerFails_KeepsTheConfigAndPrintsTheCommand(t *testin
 	if !strings.Contains(readConfig(t, dir), `slug: "my-app"`) {
 		t.Fatal("config should still have been written")
 	}
-	if !strings.Contains(stdout.String(), "pnpm add "+defaultProviderPackage) {
+	if !strings.Contains(stdout.String(), "pnpm add "+sdkPackage+" "+defaultProviderPackage) {
 		t.Fatalf("stdout = %q, want the command the user should run", stdout.String())
 	}
 }
