@@ -205,7 +205,7 @@ func TestRecordingRootStack_ReconcileRedeploysOnVersionBump(t *testing.T) {
 func TestRecordingRootStack_StoreOpsRejectAnUnreconciledState(t *testing.T) {
 	f := &recordingRootStack{}
 	ctx := context.Background()
-	record := edge.DeploymentRecord{App: "web", BuildID: "b1"}
+	record := edge.DeploymentRecord{App: "web", Identity: "b1"}
 
 	if err := f.PutStaged(ctx, edge.RootStackState{}, record); err == nil {
 		t.Error("expected PutStaged to reject a state no reconcile ever produced")
@@ -227,7 +227,7 @@ func TestRecordingRootStack_StoreOpsRecordCallsAfterReconcile(t *testing.T) {
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
-	record := edge.DeploymentRecord{App: "web", BuildID: "b1"}
+	record := edge.DeploymentRecord{App: "web", Identity: "b1"}
 	if err := f.PutStaged(ctx, state, record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
 	}

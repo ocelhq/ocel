@@ -152,7 +152,7 @@ func TestBuildDeploymentRecord_EdgeWorkersNamesTheBundleAndItsRuntime(t *testing
 	manifest := nextManifest()
 	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-	record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
+	record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestBuildDeploymentRecord_NoEdgeOutputOmitsEdgeWorkers(t *testing.T) {
 	manifest := twoAppManifest()
 	app := &deploymentsv1.ManifestApp{Name: "admin", Framework: frameworkNext}
 
-	record, err := buildDeploymentRecord(cfg, manifest, app, "ADM1", nil)
+	record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("ADM1"), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}

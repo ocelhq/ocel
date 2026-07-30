@@ -6,19 +6,13 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// BuildIDs maps each app name (ManifestApp.name) to the build id its
-// Deployment carries this deploy — a Next app's routing-manifest buildId, or
-// a host-generated id for a framework with none. The deploy host assigns
-// these before planning; BuildPlan only arranges them.
-type BuildIDs map[string]string
-
 // Promotion is the project-wide unit one production deploy produces: a
-// promotion id grouping the per-app build ids it makes active. Mirrors
-// Promotion in workers/deployments-store/src/store.ts — the two must agree
-// on shape since the host writes this straight to the deployments store.
+// promotion id grouping the per-app Deployment identities it makes active.
+// Mirrors Promotion in workers/deployments-store/src/store.ts — the two must
+// agree on shape since the host writes this straight to the deployments store.
 type Promotion struct {
 	PromotionID string
-	Builds      map[string]string // app -> build id
+	Builds      map[string]string // app -> rendered Deployment identity
 }
 
 // Plan is the stack plan one production deploy realizes: the stable
@@ -50,44 +44,57 @@ func PreviewInfraStackName(slug, pointer string) string {
 }
 
 // PreviewAppDeployStackName returns the per-deploy Pulumi stack name for one
-// app's app-deploy stack in a preview: unique per (project, pointer, app, build
-// id). The fixed "preview-<pointer>" segment keeps it distinct from any
-// production app-deploy stack even in a shared backend. Pure.
-func PreviewAppDeployStackName(slug, pointer, app, buildID string) string {
-	return safeName(slug) + "--preview-" + safeName(pointer) + "--" + safeName(app) + "--" + safeName(buildID)
+// app's app-deploy stack in a preview: unique per (project, pointer, app,
+// Deployment identity). The fixed "preview-<pointer>" segment keeps it distinct
+// from any production app-deploy stack even in a shared backend. Pure.
+func PreviewAppDeployStackName(slug, pointer, app string, id DeploymentIdentity) string {
+	return safeName(slug) + "--preview-" + safeName(pointer) + "--" + safeName(app) + identityNameSegments(id)
 }
 
 // AppDeployStackName returns the deterministic, per-deploy Pulumi stack name
-// for one app's app-deploy stack: unique per (project, app, build id), so
-// every deploy of an app gets its own stack instead of mutating the last one
-// — the prior stack, and the Deployment it produced, stays live until prune
-// reclaims it. Each segment runs through safeName before joining, so no
-// segment can itself contain the "--" delimiter (safeName collapses runs of
-// "-" to one) — two different (project, app, build id) triples can never
-// join into the same name. Pure.
-func AppDeployStackName(slug, app, buildID string) string {
-	return safeName(slug) + "--" + safeName(app) + "--" + safeName(buildID)
+// for one app's app-deploy stack: unique per (project, app, Deployment
+// identity), so every deploy of an app gets its own stack instead of mutating
+// the last one — the prior stack, and the Deployment it produced, stays live
+// until prune reclaims it. Each segment runs through safeName before joining, so
+// no segment can itself contain the "--" delimiter (safeName collapses runs of
+// "-" to one) — two different (project, app, identity) triples can never join
+// into the same name. Pure.
+func AppDeployStackName(slug, app string, id DeploymentIdentity) string {
+	return safeName(slug) + "--" + safeName(app) + identityNameSegments(id)
+}
+
+// identityNameSegments is the identity's tail of an app-deploy stack name: the
+// build id, plus the value fingerprint as a segment of its own when there is
+// one. A fingerprint-free identity therefore names exactly the stack the build
+// id alone named, and a fingerprint can never blur into a build id that carries
+// the delimiter itself. Pure.
+func identityNameSegments(id DeploymentIdentity) string {
+	name := "--" + safeName(id.BuildID)
+	if id.Fingerprint != "" {
+		name += "--" + safeName(id.Fingerprint)
+	}
+	return name
 }
 
 // BuildPlan turns a manifest, its environment, a promotion id, and the per-app
-// build ids into the stack Plan the deploy and prune paths consume. Preview
-// stacks are scoped by the environment identity (the store pointer); an
+// Deployment identities into the stack Plan the deploy and prune paths consume.
+// Preview stacks are scoped by the environment identity (the store pointer); an
 // ephemeral preview gets no infra stack (InfraStack is ""). Every app the
-// manifest declares must have an entry in builds, else BuildPlan errors.
-func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, promotionID string, builds BuildIDs) (Plan, error) {
+// manifest declares must have an entry in identities, else BuildPlan errors.
+func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment, promotionID string, identities DeploymentIdentities) (Plan, error) {
 	slug := manifest.GetSlug()
 	apps := manifest.GetApps()
 
 	var (
 		infraStack string
-		appStack   func(app, buildID string) string
+		appStack   func(app string, id DeploymentIdentity) string
 		ephemeral  bool
 	)
 	switch env.GetClass() {
 	case deploymentsv1.Environment_CLASS_PRODUCTION:
 		infraStack = InfraStackName(slug)
-		appStack = func(app, buildID string) string {
-			return AppDeployStackName(slug, app, buildID)
+		appStack = func(app string, id DeploymentIdentity) string {
+			return AppDeployStackName(slug, app, id)
 		}
 	case deploymentsv1.Environment_CLASS_PREVIEW:
 		pointer := env.GetIdentity()
@@ -99,8 +106,8 @@ func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment,
 		if !ephemeral {
 			infraStack = PreviewInfraStackName(slug, pointer)
 		}
-		appStack = func(app, buildID string) string {
-			return PreviewAppDeployStackName(slug, pointer, app, buildID)
+		appStack = func(app string, id DeploymentIdentity) string {
+			return PreviewAppDeployStackName(slug, pointer, app, id)
 		}
 	default:
 		return Plan{}, fmt.Errorf("deploy plan supports production and preview, got class %s", env.GetClass())
@@ -116,12 +123,12 @@ func BuildPlan(manifest *deploymentsv1.Manifest, env *deploymentsv1.Environment,
 	}
 	for _, app := range apps {
 		name := app.GetName()
-		buildID, ok := builds[name]
+		id, ok := identities[name]
 		if !ok {
-			return Plan{}, fmt.Errorf("missing build id for app %q", name)
+			return Plan{}, fmt.Errorf("missing deployment identity for app %q", name)
 		}
-		plan.AppStacks[name] = appStack(name, buildID)
-		plan.Promotion.Builds[name] = buildID
+		plan.AppStacks[name] = appStack(name, id)
+		plan.Promotion.Builds[name] = id.String()
 	}
 	return plan, nil
 }

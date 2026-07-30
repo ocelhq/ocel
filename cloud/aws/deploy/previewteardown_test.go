@@ -34,7 +34,7 @@ func TestPreviewReclaimTargets_UsePointerScopedStackNames(t *testing.T) {
 	for _, tg := range targets {
 		byApp[tg.App] = tg
 	}
-	if got, want := byApp["web"].Stack, PreviewAppDeployStackName("shop", "pr-1", "web", "b1"); got != want {
+	if got, want := byApp["web"].Stack, PreviewAppDeployStackName("shop", "pr-1", "web", buildOnly("b1")); got != want {
 		t.Errorf("web stack = %q, want the pointer-scoped preview stack %q", got, want)
 	}
 	// The production reclaim of the same record must resolve a different stack —
@@ -50,14 +50,14 @@ func TestReclaimTargetsFor_BranchesOnPointer(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reclaimTargetsFor(production): %v", err)
 	}
-	if prod[0].Stack != AppDeployStackName("shop", "web", "b1") {
+	if prod[0].Stack != AppDeployStackName("shop", "web", buildOnly("b1")) {
 		t.Errorf("empty pointer must resolve production stacks, got %q", prod[0].Stack)
 	}
 	preview, err := reclaimTargetsFor("shop", "pr-1", "preview-pr-1", []string{"record:web/b1"})
 	if err != nil {
 		t.Fatalf("reclaimTargetsFor(preview): %v", err)
 	}
-	if preview[0].Stack != PreviewAppDeployStackName("shop", "pr-1", "web", "b1") {
+	if preview[0].Stack != PreviewAppDeployStackName("shop", "pr-1", "web", buildOnly("b1")) {
 		t.Errorf("named pointer must resolve preview stacks, got %q", preview[0].Stack)
 	}
 }
@@ -65,21 +65,21 @@ func TestReclaimTargetsFor_BranchesOnPointer(t *testing.T) {
 func TestClassifyPreviewStacks_SplitsInfraAppAndPointers(t *testing.T) {
 	got := classifyPreviewStacks("shop", []string{
 		PreviewInfraStackName("shop", "staging"),
-		PreviewAppDeployStackName("shop", "staging", "web", "b1"),
-		PreviewAppDeployStackName("shop", "pr-1", "web", "b2"),
-		PreviewAppDeployStackName("shop", "pr-1", "api", "b3"),
-		InfraStackName("shop"),                  // production infra — not a preview stack
-		AppDeployStackName("shop", "web", "b9"), // production app — not a preview stack
-		"other--preview-x--web--b1",             // another project's preview
+		PreviewAppDeployStackName("shop", "staging", "web", buildOnly("b1")),
+		PreviewAppDeployStackName("shop", "pr-1", "web", buildOnly("b2")),
+		PreviewAppDeployStackName("shop", "pr-1", "api", buildOnly("b3")),
+		InfraStackName("shop"),                             // production infra — not a preview stack
+		AppDeployStackName("shop", "web", buildOnly("b9")), // production app — not a preview stack
+		"other--preview-x--web--b1",                        // another project's preview
 	})
 
 	sort.Strings(got.InfraStacks)
 	sort.Strings(got.AppStacks)
 	wantInfra := []string{PreviewInfraStackName("shop", "staging")}
 	wantApps := []string{
-		PreviewAppDeployStackName("shop", "pr-1", "api", "b3"),
-		PreviewAppDeployStackName("shop", "pr-1", "web", "b2"),
-		PreviewAppDeployStackName("shop", "staging", "web", "b1"),
+		PreviewAppDeployStackName("shop", "pr-1", "api", buildOnly("b3")),
+		PreviewAppDeployStackName("shop", "pr-1", "web", buildOnly("b2")),
+		PreviewAppDeployStackName("shop", "staging", "web", buildOnly("b1")),
 	}
 	sort.Strings(wantApps)
 	if !reflect.DeepEqual(got.InfraStacks, wantInfra) {
@@ -259,7 +259,7 @@ func TestRemovePreview_NoRootStackStateTouchesNothingEdgeSide(t *testing.T) {
 func TestClassifyPreviewStacks_ExcludesProductionAndSiblings(t *testing.T) {
 	got := classifyPreviewStacks("shop", []string{
 		InfraStackName("shop"),
-		AppDeployStackName("shop", "web", "b1"),
+		AppDeployStackName("shop", "web", buildOnly("b1")),
 		"shopfoo--preview-x--web--b1", // sibling project whose id has ours as a prefix
 	})
 	if len(got.InfraStacks) != 0 || len(got.AppStacks) != 0 || len(got.Pointers) != 0 {

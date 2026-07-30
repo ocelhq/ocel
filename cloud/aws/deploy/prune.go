@@ -23,12 +23,14 @@ import (
 
 // PruneTarget is one reclaimed Deployment record's worth of cleanup: the
 // app-deploy stack to destroy and the storage prefixes to delete. Derived
-// purely from the (app, build id) pair edge.PruneResult.RemovedRecordKeys
-// names — Reclaim never needs to re-read the record itself.
+// purely from the (app, Deployment identity) pair
+// edge.PruneResult.RemovedRecordKeys names — Reclaim never needs to re-read the
+// record itself.
 type PruneTarget struct {
-	App     string
-	BuildID string
-	// Stack is the app-deploy Pulumi stack this build's Lambdas live in.
+	App      string
+	Identity DeploymentIdentity
+	// Stack is the app-deploy Pulumi stack this Deployment's Lambdas live in,
+	// named by the identity — the one target here that is not build-keyed.
 	Stack string
 	// AssetPrefix is the R2 static-assets prefix uploadStaticAssets wrote
 	// this build's output under (ADR 0002).
@@ -39,30 +41,37 @@ type PruneTarget struct {
 	CachePrefix string
 	// EdgePrefix is the R2 prefix uploadEdgeBundles wrote this build's edge
 	// bundle under (ADR 0002). Build-scoped like the rest, so reclaiming it
-	// can never take out a bundle another deployment still loads.
+	// can never take out a bundle another build still loads.
 	EdgePrefix string
 }
 
 // removedRecordKeyPrefix is the store's own record-key prefix (recordKey in
-// workers/deployments-store/src/store.ts): "record:<app>/<buildId>".
+// workers/deployments-store/src/store.ts): "record:<app>/<identity>".
 // edge.PruneResult.RemovedRecordKeys carries the store's keys verbatim, so a
-// reader has to strip it before splitting out app/buildId.
+// reader has to strip it before splitting out the app and the identity.
 const removedRecordKeyPrefix = "record:"
 
-// splitRemovedRecordKey splits one store record key into the (app, build id)
-// pair it names, reporting ok=false for anything not shaped like one. The single
-// place that knows the key's layout. Pure.
-func splitRemovedRecordKey(key string) (app, buildID string, ok bool) {
-	app, buildID, ok = strings.Cut(strings.TrimPrefix(key, removedRecordKeyPrefix), "/")
-	return app, buildID, ok && app != "" && buildID != ""
+// splitRemovedRecordKey splits one store record key into the app and Deployment
+// identity it names, reporting ok=false for anything not shaped like one. The
+// single place that knows the key's layout. Pure.
+func splitRemovedRecordKey(key string) (app string, id DeploymentIdentity, ok bool) {
+	app, rendered, split := strings.Cut(strings.TrimPrefix(key, removedRecordKeyPrefix), "/")
+	if !split || app == "" {
+		return "", DeploymentIdentity{}, false
+	}
+	id, err := ParseDeploymentIdentity(rendered)
+	if err != nil {
+		return "", DeploymentIdentity{}, false
+	}
+	return app, id, true
 }
 
 // ReclaimTargets turns edge.PruneResult.RemovedRecordKeys (the store's own
-// "record:<app>/<buildId>" keys) into the concrete production stack name and
+// "record:<app>/<identity>" keys) into the concrete production stack name and
 // storage prefixes each one leaves to reclaim. Pure.
 func ReclaimTargets(slug, env string, removedRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(slug, env, removedRecordKeys, func(app, buildID string) string {
-		return AppDeployStackName(slug, app, buildID)
+	return reclaimTargets(slug, env, removedRecordKeys, func(app string, id DeploymentIdentity) string {
+		return AppDeployStackName(slug, app, id)
 	})
 }
 
@@ -72,32 +81,33 @@ func ReclaimTargets(slug, env string, removedRecordKeys []string) ([]PruneTarget
 // preview's stacks. The storage prefixes are keyed the same way (the asset
 // prefix carries no env; the cache prefix carries the preview env segment). Pure.
 func PreviewReclaimTargets(slug, pointer, env string, removedRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(slug, env, removedRecordKeys, func(app, buildID string) string {
-		return PreviewAppDeployStackName(slug, pointer, app, buildID)
+	return reclaimTargets(slug, env, removedRecordKeys, func(app string, id DeploymentIdentity) string {
+		return PreviewAppDeployStackName(slug, pointer, app, id)
 	})
 }
 
-// reclaimTargets is the shared core: it splits every removed record key into its
-// (app, build id) pair and the storage prefixes to delete, deferring only the
-// app-deploy stack name to stackFor so production and preview differ in exactly
-// that one axis. Pure.
-func reclaimTargets(slug, env string, removedRecordKeys []string, stackFor func(app, buildID string) string) ([]PruneTarget, error) {
+// reclaimTargets is the shared core: it splits every removed record key into the
+// app and Deployment identity it names and the storage prefixes to delete —
+// those keyed by the identity's build id, since that is what the uploads were
+// keyed by — deferring only the app-deploy stack name to stackFor so production
+// and preview differ in exactly that one axis. Pure.
+func reclaimTargets(slug, env string, removedRecordKeys []string, stackFor func(app string, id DeploymentIdentity) string) ([]PruneTarget, error) {
 	if len(removedRecordKeys) == 0 {
 		return nil, nil
 	}
 	targets := make([]PruneTarget, 0, len(removedRecordKeys))
 	for _, key := range removedRecordKeys {
-		app, buildID, ok := splitRemovedRecordKey(key)
+		app, id, ok := splitRemovedRecordKey(key)
 		if !ok {
-			return nil, fmt.Errorf("malformed removed record key %q, want %q", key, removedRecordKeyPrefix+"app/buildId")
+			return nil, fmt.Errorf("malformed removed record key %q, want %q", key, removedRecordKeyPrefix+"app/identity")
 		}
 		targets = append(targets, PruneTarget{
 			App:         app,
-			BuildID:     buildID,
-			Stack:       stackFor(app, buildID),
-			AssetPrefix: appAssetR2Prefix(slug, app, buildID),
-			CachePrefix: appAssetPrefixFor(env, slug, app, buildID),
-			EdgePrefix:  appEdgeR2Prefix(slug, app, buildID),
+			Identity:    id,
+			Stack:       stackFor(app, id),
+			AssetPrefix: appAssetR2Prefix(slug, app, id.BuildID),
+			CachePrefix: appAssetPrefixFor(env, slug, app, id.BuildID),
+			EdgePrefix:  appEdgeR2Prefix(slug, app, id.BuildID),
 		})
 	}
 	return targets, nil
@@ -171,7 +181,7 @@ func asPrefixDeleter(up ArtifactUploader) PrefixDeleter {
 func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, log func(string)) error {
 	for _, t := range targets {
 		if progress != nil {
-			progress(fmt.Sprintf("Reclaiming %s build %s", t.App, t.BuildID))
+			progress(fmt.Sprintf("Reclaiming %s deployment %s", t.App, t.Identity))
 		}
 		if err := Destroy(ctx, teardownConfig(cfg, t.Stack), progress, log); err != nil {
 			return fmt.Errorf("destroy app-deploy stack %s: %w", t.Stack, err)

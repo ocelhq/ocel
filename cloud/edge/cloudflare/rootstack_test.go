@@ -408,7 +408,7 @@ func TestPutStaged_RoundTrips(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
 	record := edge.DeploymentRecord{
-		App: "web", BuildID: "b1", FunctionURLs: map[string]string{"/": "https://fn"}, AssetPrefix: "b1", IsrPrefix: "prod/proj/web/b1", CreatedAt: 100,
+		App: "web", Identity: "b1", FunctionURLs: map[string]string{"/": "https://fn"}, AssetPrefix: "b1", IsrPrefix: "prod/proj/web/b1", CreatedAt: 100,
 	}
 	if err := p.PutStaged(context.Background(), testState(srv.URL, "s3cr3t"), record); err != nil {
 		t.Fatalf("PutStaged: %v", err)
@@ -418,7 +418,7 @@ func TestPutStaged_RoundTrips(t *testing.T) {
 func TestPutStaged_WrongSecretIsUnauthorized(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
-	err := p.PutStaged(context.Background(), testState(srv.URL, "wrong"), edge.DeploymentRecord{App: "web", BuildID: "b1"})
+	err := p.PutStaged(context.Background(), testState(srv.URL, "wrong"), edge.DeploymentRecord{App: "web", Identity: "b1"})
 	if err == nil {
 		t.Fatal("expected an error for the wrong write secret")
 	}
@@ -607,7 +607,7 @@ func TestPutThenGetVersionStamp_RoundTrips(t *testing.T) {
 
 func TestStoreRequest_NoEndpointErrors(t *testing.T) {
 	p := &provider{}
-	err := p.PutStaged(context.Background(), edge.RootStackState{}, edge.DeploymentRecord{App: "web", BuildID: "b1"})
+	err := p.PutStaged(context.Background(), edge.RootStackState{}, edge.DeploymentRecord{App: "web", Identity: "b1"})
 	if err == nil {
 		t.Fatal("expected an error when the root-stack state carries no endpoint")
 	}

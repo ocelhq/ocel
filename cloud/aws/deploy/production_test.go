@@ -389,7 +389,7 @@ func TestBuildDeploymentRecord_RouteHostnamesByClass(t *testing.T) {
 			Class:        deploymentsv1.Environment_CLASS_PREVIEW,
 			Identity:     "pr-42",
 		}
-		record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -405,7 +405,7 @@ func TestBuildDeploymentRecord_RouteHostnamesByClass(t *testing.T) {
 			Slug:         "proj",
 			Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
 		}
-		record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
+		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
@@ -512,8 +512,8 @@ func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testin
 	ctx := context.Background()
 	specs := []edge.RootStackSpec{{Version: "v1", GenericName: "web-generic"}}
 	results := []appDeployResult{
-		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
-		{App: "api", BuildID: "b2", Record: edge.DeploymentRecord{App: "api", BuildID: "b2"}},
+		{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
+		{App: "api", Identity: buildOnly("b2"), Record: edge.DeploymentRecord{App: "api", Identity: "b2"}},
 	}
 
 	state, err := finalizeDeploy(ctx, fake, specs, nil, "promo1", "", "", 100, results)
@@ -551,7 +551,7 @@ func TestFinalizeProductionDeploy_StampsTheTagOntoThePromotion(t *testing.T) {
 	fake := &recordingRootStack{}
 	ctx := context.Background()
 	results := []appDeployResult{
-		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
+		{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 	}
 
 	if _, err := finalizeDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", "", 100, results); err != nil {
@@ -566,7 +566,7 @@ func TestFinalizeProductionDeploy_StampsTheTagOntoThePromotion(t *testing.T) {
 func TestFinalizeDeploy_PromotesTheGivenPointer(t *testing.T) {
 	ctx := context.Background()
 	results := []appDeployResult{
-		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
+		{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 	}
 
 	prod := &recordingRootStack{}
@@ -692,7 +692,7 @@ func TestFinalizeProductionDeploy_StagesBeforeAnyPromote(t *testing.T) {
 	fake := &orderTrackingRootStack{recordingRootStack: &recordingRootStack{}}
 	ctx := context.Background()
 	results := []appDeployResult{
-		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
+		{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 	}
 
 	if _, err := finalizeDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
@@ -714,7 +714,7 @@ func TestFinalizeProductionDeploy_AppFailureAbortsPromote(t *testing.T) {
 	fake := &recordingRootStack{}
 	ctx := context.Background()
 	results := []appDeployResult{
-		{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}},
+		{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 		{App: "api", Err: errors.New("app-deploy stack failed")},
 	}
 
@@ -735,14 +735,14 @@ func TestFinalizeProductionDeploy_SecondDeployProducesNewPromotionRetainingPrior
 	fake := &recordingRootStack{}
 	ctx := context.Background()
 	specs := []edge.RootStackSpec{{Version: "v1"}}
-	results := []appDeployResult{{App: "web", BuildID: "b1", Record: edge.DeploymentRecord{App: "web", BuildID: "b1"}}}
+	results := []appDeployResult{{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}}}
 
 	state, err := finalizeDeploy(ctx, fake, specs, nil, "promo1", "", "", 100, results)
 	if err != nil {
 		t.Fatalf("first finalizeDeploy: %v", err)
 	}
 
-	results2 := []appDeployResult{{App: "web", BuildID: "b2", Record: edge.DeploymentRecord{App: "web", BuildID: "b2"}}}
+	results2 := []appDeployResult{{App: "web", Identity: buildOnly("b2"), Record: edge.DeploymentRecord{App: "web", Identity: "b2"}}}
 	if _, err := finalizeDeploy(ctx, fake, specs, state, "promo2", "", "", 200, results2); err != nil {
 		t.Fatalf("second finalizeDeploy: %v", err)
 	}
@@ -812,5 +812,117 @@ func TestReconcileRootStack_NoSpecsReturnsPriorUnchanged(t *testing.T) {
 	}
 	if state[edge.RootStackKeyEndpoint] != "https://prior" {
 		t.Errorf("state = %v, want prior unchanged", state)
+	}
+}
+
+// The identity is derived in exactly one place, and today it is the framework
+// build id with no fingerprint — so a Deployment's identity is byte-identical to
+// the build id it came from.
+func TestAssignIdentities_NextAppTakesItsBuildIDWithNoFingerprint(t *testing.T) {
+	cfg := Config{ArtifactRoot: writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+	})}
+	manifest := &deploymentsv1.Manifest{
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
+	}
+
+	ids, err := assignIdentities(cfg, manifest)
+	if err != nil {
+		t.Fatalf("assignIdentities: %v", err)
+	}
+	if got, want := ids["web"], buildOnly("WEB1"); got != want {
+		t.Errorf("identities[web] = %+v, want %+v", got, want)
+	}
+	if got := ids["web"].String(); got != "WEB1" {
+		t.Errorf("rendered identity = %q, want the bare build id %q", got, "WEB1")
+	}
+}
+
+func TestAssignIdentities_FrameworkWithNoBuildIDGetsAMintedOne(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
+	}
+
+	ids, err := assignIdentities(Config{ArtifactRoot: t.TempDir()}, manifest)
+	if err != nil {
+		t.Fatalf("assignIdentities: %v", err)
+	}
+	if ids["api"].BuildID == "" {
+		t.Error("identities[api] carries no build id")
+	}
+	if ids["api"].Fingerprint != "" {
+		t.Errorf("Fingerprint = %q, want empty: nothing is baked yet", ids["api"].Fingerprint)
+	}
+}
+
+// The record is keyed by the identity, but the bytes the build published are
+// keyed by the build id alone — two Deployments of one build share them.
+func TestBuildDeploymentRecord_IdentityKeysTheRecordAndTheBuildKeysTheBytes(t *testing.T) {
+	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
+	manifest := nextManifest()
+	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+	id := DeploymentIdentity{BuildID: "WEB1", Fingerprint: "fp1"}
+
+	record, err := buildDeploymentRecord(cfg, manifest, app, id, nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if record.Identity != id.String() {
+		t.Errorf("Identity = %q, want %q", record.Identity, id.String())
+	}
+	if want := "assets/proj/web/WEB1"; record.AssetPrefix != want {
+		t.Errorf("AssetPrefix = %q, want %q — static assets stay keyed by the build id", record.AssetPrefix, want)
+	}
+	if want := "prod/proj/web/WEB1"; record.IsrPrefix != want {
+		t.Errorf("IsrPrefix = %q, want %q", record.IsrPrefix, want)
+	}
+	if want := "edge/proj/web/WEB1/bundle.json"; record.EdgeWorkers.BundleKey != want {
+		t.Errorf("BundleKey = %q, want %q — two Deployments of one build share an edge bundle", record.EdgeWorkers.BundleKey, want)
+	}
+}
+
+// The record's wire name for its key predates identities and stays as it is:
+// the store and the frozen worker read this JSON.
+func TestBuildDeploymentRecord_IdentityIsWiredAsBuildId(t *testing.T) {
+	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
+	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+	id := DeploymentIdentity{BuildID: "WEB1", Fingerprint: "fp1"}
+
+	record, err := buildDeploymentRecord(cfg, nextManifest(), app, id, nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	raw, err := json.Marshal(record)
+	if err != nil {
+		t.Fatalf("marshal record: %v", err)
+	}
+	var wire map[string]any
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		t.Fatalf("unmarshal record: %v", err)
+	}
+	if wire["buildId"] != id.String() {
+		t.Errorf("record JSON buildId = %v, want %q", wire["buildId"], id.String())
+	}
+}
+
+// The promotion's per-app entry is what the store resolves a record by, so it
+// must be the identity, not the build both Deployments of a rotation share.
+func TestFinalizeDeploy_PromotionCarriesRenderedIdentities(t *testing.T) {
+	fake := &recordingRootStack{}
+	id := DeploymentIdentity{BuildID: "b1", Fingerprint: "fp1"}
+	results := []appDeployResult{
+		{App: "web", Identity: id, Record: edge.DeploymentRecord{App: "web", Identity: id.String()}},
+	}
+
+	if _, err := finalizeDeploy(context.Background(), fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+		t.Fatalf("finalizeDeploy: %v", err)
+	}
+	if len(fake.promotions) != 1 {
+		t.Fatalf("promotions = %d, want 1", len(fake.promotions))
+	}
+	if got := fake.promotions[0].Builds["web"]; got != id.String() {
+		t.Errorf("promotion.Builds[web] = %q, want %q", got, id.String())
 	}
 }

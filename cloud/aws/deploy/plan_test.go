@@ -10,20 +10,26 @@ func prodEnv() *deploymentsv1.Environment {
 	return &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 }
 
+// buildOnly is a Deployment identity carrying no value fingerprint — what every
+// deploy mints today.
+func buildOnly(buildID string) DeploymentIdentity {
+	return DeploymentIdentity{BuildID: buildID}
+}
+
 func TestAppDeployStackName_UniquePerDeploy(t *testing.T) {
-	a := AppDeployStackName("proj", "web", "build1")
-	b := AppDeployStackName("proj", "web", "build2")
+	a := AppDeployStackName("proj", "web", buildOnly("build1"))
+	b := AppDeployStackName("proj", "web", buildOnly("build2"))
 	if a == b {
 		t.Fatalf("stack names for different build ids collided: %q", a)
 	}
-	if got := AppDeployStackName("proj", "web", "build1"); got != a {
+	if got := AppDeployStackName("proj", "web", buildOnly("build1")); got != a {
 		t.Errorf("AppDeployStackName is not deterministic: got %q, want %q", got, a)
 	}
 }
 
 func TestAppDeployStackName_UniquePerApp(t *testing.T) {
-	a := AppDeployStackName("proj", "web", "build1")
-	b := AppDeployStackName("proj", "api", "build1")
+	a := AppDeployStackName("proj", "web", buildOnly("build1"))
+	b := AppDeployStackName("proj", "api", buildOnly("build1"))
 	if a == b {
 		t.Fatalf("stack names for different apps collided: %q", a)
 	}
@@ -33,10 +39,44 @@ func TestAppDeployStackName_UniquePerApp(t *testing.T) {
 // shift where the next segment starts, colliding two distinct triples onto
 // the same name.
 func TestAppDeployStackName_NoCollisionAcrossHyphenatedSegments(t *testing.T) {
-	a := AppDeployStackName("proj", "web-x", "1")
-	b := AppDeployStackName("proj-web", "x", "1")
+	a := AppDeployStackName("proj", "web-x", buildOnly("1"))
+	b := AppDeployStackName("proj-web", "x", buildOnly("1"))
 	if a == b {
 		t.Fatalf("distinct (project, app, build id) triples collided: %q", a)
+	}
+}
+
+// A fingerprint-free identity must name exactly the stack it named before
+// identities existed, so this prefactor moves no already-deployed stack.
+func TestAppDeployStackName_BuildOnlyIdentityNamesTheBuildIDsStack(t *testing.T) {
+	if got, want := AppDeployStackName("proj", "web", buildOnly("build1")), "proj--web--build1"; got != want {
+		t.Errorf("AppDeployStackName = %q, want %q", got, want)
+	}
+	if got, want := PreviewAppDeployStackName("proj", "pr-1", "web", buildOnly("build1")), "proj--preview-pr-1--web--build1"; got != want {
+		t.Errorf("PreviewAppDeployStackName = %q, want %q", got, want)
+	}
+}
+
+// A rotation reuses the build output, so its Deployment shares a build id with
+// the one it replaces and must still get a stack of its own.
+func TestAppDeployStackName_FingerprintSeparatesDeploymentsOfOneBuild(t *testing.T) {
+	plain := AppDeployStackName("proj", "web", buildOnly("build1"))
+	a := AppDeployStackName("proj", "web", DeploymentIdentity{BuildID: "build1", Fingerprint: "aaa"})
+	b := AppDeployStackName("proj", "web", DeploymentIdentity{BuildID: "build1", Fingerprint: "bbb"})
+	for _, pair := range [][2]string{{plain, a}, {plain, b}, {a, b}} {
+		if pair[0] == pair[1] {
+			t.Errorf("stack names for distinct identities of one build collided: %q", pair[0])
+		}
+	}
+}
+
+// The fingerprint is its own name segment, so it can never blur into a build id
+// that happens to contain the joining hyphen.
+func TestAppDeployStackName_NoCollisionBetweenFingerprintAndHyphenatedBuildID(t *testing.T) {
+	a := AppDeployStackName("proj", "web", DeploymentIdentity{BuildID: "b", Fingerprint: "f"})
+	b := AppDeployStackName("proj", "web", buildOnly("b-f"))
+	if a == b {
+		t.Fatalf("a fingerprinted identity collided with a hyphenated build id: %q", a)
 	}
 }
 
@@ -44,7 +84,7 @@ func TestInfraStackName_StableAcrossDeploys(t *testing.T) {
 	if got, want := InfraStackName("proj"), InfraStackName("proj"); got != want {
 		t.Errorf("InfraStackName is not deterministic: got %q, want %q", got, want)
 	}
-	if InfraStackName("proj") == AppDeployStackName("proj", "web", "build1") {
+	if InfraStackName("proj") == AppDeployStackName("proj", "web", buildOnly("build1")) {
 		t.Error("infra stack name collides with an app-deploy stack name")
 	}
 }
@@ -57,9 +97,9 @@ func TestBuildPlan_HappyPath(t *testing.T) {
 			{Name: "api"},
 		},
 	}
-	builds := BuildIDs{"web": "buildW", "api": "buildA"}
+	identities := DeploymentIdentities{"web": buildOnly("buildW"), "api": buildOnly("buildA")}
 
-	plan, err := BuildPlan(manifest, prodEnv(), "promo1", builds)
+	plan, err := BuildPlan(manifest, prodEnv(), "promo1", identities)
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -68,8 +108,8 @@ func TestBuildPlan_HappyPath(t *testing.T) {
 		t.Errorf("InfraStack = %q, want %q", plan.InfraStack, InfraStackName("proj"))
 	}
 
-	wantWeb := AppDeployStackName("proj", "web", "buildW")
-	wantAPI := AppDeployStackName("proj", "api", "buildA")
+	wantWeb := AppDeployStackName("proj", "web", buildOnly("buildW"))
+	wantAPI := AppDeployStackName("proj", "api", buildOnly("buildA"))
 	if plan.AppStacks["web"] != wantWeb {
 		t.Errorf("AppStacks[web] = %q, want %q", plan.AppStacks["web"], wantWeb)
 	}
@@ -94,14 +134,36 @@ func TestBuildPlan_HappyPath(t *testing.T) {
 	}
 }
 
+// The promotion's per-app entry is the Deployment record's key, so it carries
+// the whole identity — a rotation's promotion has to name the Deployment it
+// minted, not the build both Deployments share.
+func TestBuildPlan_PromotionCarriesTheRenderedIdentity(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
+	}
+	id := DeploymentIdentity{BuildID: "buildW", Fingerprint: "fp1"}
+
+	plan, err := BuildPlan(manifest, prodEnv(), "promo1", DeploymentIdentities{"web": id})
+	if err != nil {
+		t.Fatalf("BuildPlan: %v", err)
+	}
+	if got := plan.Promotion.Builds["web"]; got != id.String() {
+		t.Errorf("Promotion.Builds[web] = %q, want %q", got, id.String())
+	}
+	if plan.AppStacks["web"] != AppDeployStackName("proj", "web", id) {
+		t.Errorf("AppStacks[web] = %q, want %q", plan.AppStacks["web"], AppDeployStackName("proj", "web", id))
+	}
+}
+
 func TestBuildPlan_MissingBuildIDErrors(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		Slug: "proj",
 		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}},
 	}
-	builds := BuildIDs{"web": "buildW"} // api missing
+	identities := DeploymentIdentities{"web": buildOnly("buildW")} // api missing
 
-	if _, err := BuildPlan(manifest, prodEnv(), "promo1", builds); err == nil {
+	if _, err := BuildPlan(manifest, prodEnv(), "promo1", identities); err == nil {
 		t.Fatal("BuildPlan with a missing app build id should error, got nil")
 	}
 }
@@ -113,7 +175,7 @@ func TestBuildPlan_RejectsUnspecifiedClass(t *testing.T) {
 	}
 	env := &deploymentsv1.Environment{} // CLASS_UNSPECIFIED
 
-	if _, err := BuildPlan(manifest, env, "promo1", BuildIDs{"web": "b"}); err == nil {
+	if _, err := BuildPlan(manifest, env, "promo1", DeploymentIdentities{"web": buildOnly("b")}); err == nil {
 		t.Fatal("BuildPlan for an unspecified class should error, got nil")
 	}
 }
@@ -132,7 +194,7 @@ func TestBuildPlan_PersistentPreviewHasPerNameInfraStack(t *testing.T) {
 		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
 
-	plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "promo1", BuildIDs{"web": "b"})
+	plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_PERSISTENT), "promo1", DeploymentIdentities{"web": buildOnly("b")})
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -144,7 +206,7 @@ func TestBuildPlan_PersistentPreviewHasPerNameInfraStack(t *testing.T) {
 		t.Error("persistent preview infra stack collides with production infra stack")
 	}
 	// Preview app-deploy stacks must not collide with production's.
-	if plan.AppStacks["web"] == AppDeployStackName("proj", "web", "b") {
+	if plan.AppStacks["web"] == AppDeployStackName("proj", "web", buildOnly("b")) {
 		t.Error("preview app-deploy stack collides with the production one for the same build")
 	}
 }
@@ -155,7 +217,7 @@ func TestBuildPlan_EphemeralPreviewHasNoInfraStack(t *testing.T) {
 		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
 
-	plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_EPHEMERAL), "promo1", BuildIDs{"web": "b"})
+	plan, err := BuildPlan(manifest, previewEnv(deploymentsv1.Environment_LIFECYCLE_EPHEMERAL), "promo1", DeploymentIdentities{"web": buildOnly("b")})
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}
@@ -174,7 +236,7 @@ func TestBuildPlan_PreviewRequiresIdentity(t *testing.T) {
 	}
 	env := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW} // no identity
 
-	if _, err := BuildPlan(manifest, env, "promo1", BuildIDs{"web": "b"}); err == nil {
+	if _, err := BuildPlan(manifest, env, "promo1", DeploymentIdentities{"web": buildOnly("b")}); err == nil {
 		t.Fatal("BuildPlan for a preview with no identity should error, got nil")
 	}
 }
@@ -184,8 +246,8 @@ func TestBuildPlan_TwoPersistentPreviewsDoNotCollide(t *testing.T) {
 	staging := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "staging"}
 	demo := &deploymentsv1.Environment{Class: deploymentsv1.Environment_CLASS_PREVIEW, Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT, Identity: "demo"}
 
-	a, _ := BuildPlan(manifest, staging, "p", BuildIDs{"web": "b"})
-	b, _ := BuildPlan(manifest, demo, "p", BuildIDs{"web": "b"})
+	a, _ := BuildPlan(manifest, staging, "p", DeploymentIdentities{"web": buildOnly("b")})
+	b, _ := BuildPlan(manifest, demo, "p", DeploymentIdentities{"web": buildOnly("b")})
 	if a.InfraStack == b.InfraStack {
 		t.Errorf("two persistent previews share an infra stack: %q", a.InfraStack)
 	}
@@ -197,7 +259,7 @@ func TestBuildPlan_TwoPersistentPreviewsDoNotCollide(t *testing.T) {
 func TestBuildPlan_NoAppsYieldsEmptyPlan(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{Slug: "proj"}
 
-	plan, err := BuildPlan(manifest, prodEnv(), "promo1", BuildIDs{})
+	plan, err := BuildPlan(manifest, prodEnv(), "promo1", DeploymentIdentities{})
 	if err != nil {
 		t.Fatalf("BuildPlan: %v", err)
 	}

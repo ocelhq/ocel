@@ -45,10 +45,10 @@ const rootStackVersion = "9"
 // finalizeProductionDeploy after Run has driven that stack (Pulumi) to
 // completion or failure. Record is meaningless when Err is set.
 type appDeployResult struct {
-	App     string
-	BuildID string
-	Record  edge.DeploymentRecord
-	Err     error
+	App      string
+	Identity DeploymentIdentity
+	Record   edge.DeploymentRecord
+	Err      error
 }
 
 // realize runs one deploy under the stacked model, for both production and
@@ -96,7 +96,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
-	builds, err := assignBuildIDs(cfg, manifest)
+	identities, err := assignIdentities(cfg, manifest)
 	if err != nil {
 		return Result{}, err
 	}
@@ -104,7 +104,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return Result{}, err
 	}
-	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, builds)
+	plan, err := BuildPlan(manifest, planEnvironment(cfg), promotionID, identities)
 	if err != nil {
 		return Result{}, err
 	}
@@ -145,14 +145,14 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			buildID := builds[app.GetName()]
+			id := identities[app.GetName()]
 			outs, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, log)
 			appOutputs[i] = outs
-			record, recErr := buildDeploymentRecord(cfg, manifest, app, buildID, outs)
+			record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs)
 			if err == nil {
 				err = recErr
 			}
-			results[i] = appDeployResult{App: app.GetName(), BuildID: buildID, Record: record, Err: err}
+			results[i] = appDeployResult{App: app.GetName(), Identity: id, Record: record, Err: err}
 		}()
 	}
 	wg.Wait()
@@ -253,7 +253,7 @@ func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootS
 		if err := stack.PutStaged(ctx, state, r.Record); err != nil {
 			return fmt.Errorf("stage deployment for %s: %w", r.App, err)
 		}
-		builds[r.App] = r.BuildID
+		builds[r.App] = r.Identity.String()
 	}
 	if len(failed) > 0 {
 		return fmt.Errorf("app-deploy failed for %s; promote aborted, the previous Deployment keeps serving", strings.Join(failed, "; "))
@@ -607,8 +607,8 @@ func loadWorkerBundle(path string) (edge.Worker, error) {
 	}}, nil
 }
 
-// newRandomID mints a fresh random identity: a production deploy's Promotion
-// id, or a build id for a framework whose build carries none of its own.
+// newRandomID mints a fresh random id: a production deploy's Promotion id, or a
+// build id for a framework whose build carries none of its own.
 func newRandomID() (string, error) {
 	buf := make([]byte, 16)
 	if _, err := rand.Read(buf); err != nil {
@@ -617,28 +617,37 @@ func newRandomID() (string, error) {
 	return hex.EncodeToString(buf), nil
 }
 
-// assignBuildIDs is the deploy host's per-app build-id assignment BuildPlan
-// consumes: a Next app's routing-manifest buildId (assigned at build time,
-// immutable per build), or a freshly minted id for a framework with none.
-func assignBuildIDs(cfg Config, manifest *deploymentsv1.Manifest) (BuildIDs, error) {
-	builds := make(BuildIDs, len(manifest.GetApps()))
+// assignIdentities is the deploy host's per-app Deployment-identity assignment
+// BuildPlan consumes, and the one place an identity is derived: the app's build
+// id — a Next app's routing-manifest buildId (assigned at build time, immutable
+// per build), or a freshly minted id for a framework with none — plus the
+// fingerprint of the values baked into this Deployment. Nothing is baked yet, so
+// every identity here renders as its bare build id.
+func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest) (DeploymentIdentities, error) {
+	identities := make(DeploymentIdentities, len(manifest.GetApps()))
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
-		if app.GetFramework() == frameworkNext {
-			id, err := nextBuildID(cfg, name)
-			if err != nil {
-				return nil, err
-			}
-			builds[name] = id
-			continue
-		}
-		id, err := newRandomID()
+		buildID, err := appBuildID(cfg, app)
 		if err != nil {
 			return nil, err
 		}
-		builds[name] = id
+		id, err := NewDeploymentIdentity(buildID, "")
+		if err != nil {
+			return nil, fmt.Errorf("deployment identity for %s: %w", name, err)
+		}
+		identities[name] = id
 	}
-	return builds, nil
+	return identities, nil
+}
+
+// appBuildID is the build id one app's build carries: a Next app's
+// routing-manifest buildId, or a freshly minted id for a framework whose build
+// stamps none.
+func appBuildID(cfg Config, app *deploymentsv1.ManifestApp) (string, error) {
+	if app.GetFramework() == frameworkNext {
+		return nextBuildID(cfg, app.GetName())
+	}
+	return newRandomID()
 }
 
 // nextBuildID reads the buildId a Next app's build stamped into its
@@ -666,12 +675,12 @@ func nextBuildID(cfg Config, app string) (string, error) {
 // output in the R2 cache store (Next apps only — see below), so the frozen
 // worker can read it back with no project/app knowledge beyond what the
 // record itself carries.
-func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, buildID string, outs []*deploymentsv1.ResourceOutput) (edge.DeploymentRecord, error) {
+func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id DeploymentIdentity, outs []*deploymentsv1.ResourceOutput) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	record := edge.DeploymentRecord{
 		App:          name,
-		BuildID:      buildID,
+		Identity:     id.String(),
 		FunctionURLs: appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
 		CreatedAt:    time.Now().Unix(),
 	}
@@ -681,7 +690,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	// Only a Next app ever has static output for uploadStaticAssets to have
 	// published; leaving AssetPrefix set for any other app would point at a
 	// prefix nothing was ever uploaded to.
-	record.AssetPrefix = appAssetR2Prefix(manifest.GetSlug(), name, buildID)
+	record.AssetPrefix = appAssetR2Prefix(manifest.GetSlug(), name, id.BuildID)
 
 	routeHostnames, err := recordedRouteHostnames(cfg, manifest, name)
 	if err != nil {
@@ -707,7 +716,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		record.IsrPrefix = isr.Prefix
 	}
 
-	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetSlug(), name, buildID)
+	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetSlug(), name, id.BuildID)
 	if err != nil {
 		return edge.DeploymentRecord{}, err
 	}

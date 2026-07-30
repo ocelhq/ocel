@@ -30,10 +30,10 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
 
 - **Deployment** — the immutable set of artifacts produced for one app by a
   single `ocel deploy` (its bundles, its edge bundle, static assets, routing
-  manifest, and per-deploy metadata). Identified by a build id. Deployments are never
-  mutated after creation; a new `ocel deploy` produces new ones rather than
-  updating in place. Production only — previews do not produce rollback-able
-  deployments.
+  manifest, and per-deploy metadata). Identified by a deployment identity.
+  Deployments are never mutated after creation; a new `ocel deploy` produces new
+  ones rather than updating in place. Production only — previews do not produce
+  rollback-able deployments.
 
 - **Active-deployment pointer** — the per-app record in the deployments store
   naming which Deployment an app's worker currently serves. A worker reads only
@@ -55,14 +55,22 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
   deployment are retained. Out of scope for the serverless work.
 
 - **Build id** — the per-app identity of one app's built artifacts (Next assigns
-  one per build). A Deployment record is keyed by (app, build id).
+  one per build). Static assets, ISR entries and the edge bundle are keyed by it,
+  because those bytes are exactly what the build produced.
+
+- **Deployment identity** — what tells one Deployment of an app from another: its
+  build id plus an optional fingerprint of the values baked into it, so a
+  vars-only deploy reusing the same build output still mints a Deployment of its
+  own. A Deployment record is keyed by (app, deployment identity), and the
+  app-deploy stack is named after it. Renders as the bare build id when nothing
+  is baked.
 
 - **Promotion** — the project-wide unit one `ocel deploy` produces: a single
-  promotion id grouping that deploy's per-app build ids. The deployments store
-  keeps an ordered promotion history; the active pointer is a promotion id (the
-  store derives each app's active build id from it). Rollback and retention/GC
-  both operate in promotions. See also the verb sense of *Promotion* under
-  Deployment & Rollback.
+  promotion id grouping that deploy's per-app deployment identities. The
+  deployments store keeps an ordered promotion history; the active pointer is a
+  promotion id (the store derives each app's active Deployment from it).
+  Rollback and retention/GC both operate in promotions. See also the verb sense
+  of *Promotion* under Deployment & Rollback.
 
 ## Bundles & dispatch
 
@@ -124,18 +132,18 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
 
 - **Deployments store** — the deployments-DO worker in the root stack, one per
   project. Holds a single Durable Object instance for the whole project: every
-  app's Deployment records keyed by (app, build id), plus the active-deployment
-  pointer map (app → build id). Framework workers read it via a service binding
-  and cache the result in-isolate with a TTL, so the single actor is not hit on
-  the hot path.
+  app's Deployment records keyed by (app, deployment identity), plus the
+  active-deployment pointer map (app → deployment identity). Framework workers
+  read it via a service binding and cache the result in-isolate with a TTL, so
+  the single actor is not hit on the hot path.
 
 - **Deployment record** — one entry in the deployments store describing a
   single app Deployment: everything the frozen generic worker needs to serve it
   that used to be baked into the per-deploy worker script — the routing
   manifest, the function-URL map, the tag namespace, the R2 asset prefix (the
   full `assets/<project>/<app>/<build id>` key root), and creation metadata.
-  Immutable once written (records are keyed by build
-  id), so a worker caches a record indefinitely; only the active-deployment
+  Immutable once written (records are keyed by deployment
+  identity), so a worker caches a record indefinitely; only the active-deployment
   pointer carries a short TTL (~5s), which bounds how long a rollback takes to
   propagate.
 

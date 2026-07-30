@@ -20,16 +20,16 @@ func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
 	want := []PruneTarget{
 		{
 			App:         "web",
-			BuildID:     "build-1",
-			Stack:       AppDeployStackName("proj1", "web", "build-1"),
+			Identity:    buildOnly("build-1"),
+			Stack:       AppDeployStackName("proj1", "web", buildOnly("build-1")),
 			AssetPrefix: appAssetR2Prefix("proj1", "web", "build-1"),
 			CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "build-1"),
 			EdgePrefix:  appEdgeR2Prefix("proj1", "web", "build-1"),
 		},
 		{
 			App:         "api",
-			BuildID:     "build-2",
-			Stack:       AppDeployStackName("proj1", "api", "build-2"),
+			Identity:    buildOnly("build-2"),
+			Stack:       AppDeployStackName("proj1", "api", buildOnly("build-2")),
 			AssetPrefix: appAssetR2Prefix("proj1", "api", "build-2"),
 			CachePrefix: appAssetPrefixFor("prod", "proj1", "api", "build-2"),
 			EdgePrefix:  appEdgeR2Prefix("proj1", "api", "build-2"),
@@ -58,6 +58,36 @@ func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
 	}
 	if other[0].EdgePrefix == got[0].EdgePrefix {
 		t.Error("two builds of one app resolved the same edge prefix; pruning one would take the other's bundle")
+	}
+}
+
+// Two Deployments of one build (a rotation) are distinct records with distinct
+// stacks, but the bytes the build produced are keyed by the build id alone — so
+// a reclaim splits the record key back into its identity and reads the build id
+// off it.
+func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testing.T) {
+	id := DeploymentIdentity{BuildID: "build-1", Fingerprint: "fp1"}
+	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()})
+	if err != nil {
+		t.Fatalf("ReclaimTargets: %v", err)
+	}
+	want := PruneTarget{
+		App:         "web",
+		Identity:    id,
+		Stack:       AppDeployStackName("proj1", "web", id),
+		AssetPrefix: appAssetR2Prefix("proj1", "web", "build-1"),
+		CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "build-1"),
+		EdgePrefix:  appEdgeR2Prefix("proj1", "web", "build-1"),
+	}
+	if !reflect.DeepEqual(got, []PruneTarget{want}) {
+		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+	}
+	plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"})
+	if err != nil {
+		t.Fatalf("ReclaimTargets: %v", err)
+	}
+	if plain[0].Stack == got[0].Stack {
+		t.Error("two Deployments of one build resolved the same app-deploy stack")
 	}
 }
 

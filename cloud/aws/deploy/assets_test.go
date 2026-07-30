@@ -156,7 +156,7 @@ func TestBuildDeploymentRecord_AssetPrefixIsTheFullR2KeyRoot(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{Slug: "proj"}
 	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-	record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
+	record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -177,7 +177,7 @@ func TestBuildDeploymentRecord_IsrPrefixIsTheIsrKeyRoot(t *testing.T) {
 	manifest := nextManifest()
 	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
 
-	record, err := buildDeploymentRecord(cfg, manifest, app, "WEB1", nil)
+	record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}
@@ -195,7 +195,7 @@ func TestBuildDeploymentRecord_NonNextAppHasNoAssetPrefix(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{Slug: "proj"}
 	app := &deploymentsv1.ManifestApp{Name: "api", Framework: "express"}
 
-	record, err := buildDeploymentRecord(cfg, manifest, app, "API1", nil)
+	record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("API1"), nil)
 	if err != nil {
 		t.Fatalf("buildDeploymentRecord: %v", err)
 	}

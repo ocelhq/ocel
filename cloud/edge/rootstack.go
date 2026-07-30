@@ -196,8 +196,13 @@ const (
 // workers/deployments-store/src/store.ts — the two must agree on shape since
 // the host writes this straight to the store over HTTP.
 type DeploymentRecord struct {
-	App             string            `json:"app"`
-	BuildID         string            `json:"buildId"`
+	App string `json:"app"`
+	// Identity is the Deployment's own identity — the framework build id plus
+	// the fingerprint of the values baked into it — and is what the store keys
+	// the record by. The wire name predates identities: a Deployment with
+	// nothing baked renders as its bare build id, which is exactly what this
+	// field used to carry.
+	Identity        string            `json:"buildId"`
 	RoutingManifest any               `json:"routingManifest"`
 	FunctionURLs    map[string]string `json:"functionUrls"`
 	// AssetPrefix is the full R2 key root this build's static assets were
