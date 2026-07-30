@@ -3,6 +3,7 @@ package vars
 import (
 	"context"
 	"errors"
+	"maps"
 	"strings"
 	"testing"
 
@@ -295,7 +296,7 @@ func TestGetReportsAnUnsetCoordinate(t *testing.T) {
 	}
 }
 
-func TestDeleteRemovesTheCurrentPointerAndKeepsHistory(t *testing.T) {
+func TestDeleteUnsetsTheValueAndKeepsHistory(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
 
@@ -323,6 +324,155 @@ func TestDeleteRemovesTheCurrentPointerAndKeepsHistory(t *testing.T) {
 	}
 	if len(versions) != 2 {
 		t.Errorf("history after Delete = %d entries, want 2 kept", len(versions))
+	}
+}
+
+// A delete must not rewind the version sequence. If the next write restarted
+// at 1 it would land on top of the history row version 1 already occupies,
+// rewriting what that version was and leaving the newest entry buried under
+// older ones.
+func TestSetAfterDeleteContinuesTheVersionSequence(t *testing.T) {
+	store, _, _ := newTestStore(t)
+	c := testCoordinate()
+
+	for _, v := range []string{"one", "two"} {
+		if _, err := store.Set(context.Background(), c, v, nil); err != nil {
+			t.Fatalf("Set %q err = %v", v, err)
+		}
+	}
+	if _, err := store.Delete(context.Background(), c); err != nil {
+		t.Fatalf("Delete err = %v", err)
+	}
+
+	written, err := store.Set(context.Background(), c, "three", nil)
+	if err != nil {
+		t.Fatalf("Set after Delete err = %v", err)
+	}
+	if written.Version != 3 {
+		t.Errorf("version written after a delete = %d, want 3", written.Version)
+	}
+
+	got, err := store.Get(context.Background(), c, true)
+	if err != nil {
+		t.Fatalf("Get err = %v", err)
+	}
+	if got.Plaintext != "three" || got.Version != 3 {
+		t.Errorf("Get after the rewrite = %q at version %d, want %q at 3", got.Plaintext, got.Version, "three")
+	}
+
+	versions, err := store.Versions(context.Background(), c, true)
+	if err != nil {
+		t.Fatalf("Versions err = %v", err)
+	}
+	wantNumbers := []int64{3, 2, 1}
+	wantValues := []string{"three", "two", "one"}
+	if len(versions) != len(wantValues) {
+		t.Fatalf("history depth = %d, want %d; the write after a delete overwrote an existing version", len(versions), len(wantValues))
+	}
+	for i, v := range versions {
+		if v.Version != wantNumbers[i] || v.Plaintext != wantValues[i] {
+			t.Errorf("versions[%d] = %d/%q, want %d/%q", i, v.Version, v.Plaintext, wantNumbers[i], wantValues[i])
+		}
+	}
+}
+
+// Pruning deletes the version computed as next - historyWindow, so the window
+// only bounds history while the version sequence stays contiguous. A delete in
+// the middle of it must not break that arithmetic.
+func TestHistoryStaysCappedAcrossADelete(t *testing.T) {
+	store, _, _ := newTestStore(t)
+	c := testCoordinate()
+
+	for i := 0; i < historyWindow; i++ {
+		if _, err := store.Set(context.Background(), c, "v", nil); err != nil {
+			t.Fatalf("Set %d err = %v", i, err)
+		}
+	}
+	if _, err := store.Delete(context.Background(), c); err != nil {
+		t.Fatalf("Delete err = %v", err)
+	}
+	if _, err := store.Set(context.Background(), c, "after the delete", nil); err != nil {
+		t.Fatalf("Set after Delete err = %v", err)
+	}
+
+	versions, err := store.Versions(context.Background(), c, false)
+	if err != nil {
+		t.Fatalf("Versions err = %v", err)
+	}
+	if len(versions) != historyWindow {
+		t.Errorf("history depth = %d, want %d", len(versions), historyWindow)
+	}
+	if versions[0].Version != historyWindow+1 {
+		t.Errorf("newest version = %d, want %d", versions[0].Version, historyWindow+1)
+	}
+	if got := versions[len(versions)-1].Version; got != 2 {
+		t.Errorf("oldest version kept = %d, want 2", got)
+	}
+}
+
+// Deleting is what a create expects to find undone: the cell holds no value,
+// whatever its version sequence has reached.
+func TestSetWithExpectedVersionZeroSucceedsAfterADelete(t *testing.T) {
+	store, _, _ := newTestStore(t)
+	c := testCoordinate()
+
+	if _, err := store.Set(context.Background(), c, "first", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	if _, err := store.Delete(context.Background(), c); err != nil {
+		t.Fatalf("Delete err = %v", err)
+	}
+
+	create := int64(0)
+	written, err := store.Set(context.Background(), c, "recreated", &create)
+	if err != nil {
+		t.Fatalf("creating Set after Delete err = %v, want it to succeed on an unset cell", err)
+	}
+	if written.Version != 2 {
+		t.Errorf("version after the recreate = %d, want 2", written.Version)
+	}
+}
+
+func TestDeleteLeavesNoValueAtRest(t *testing.T) {
+	store, ddb, _ := newTestStore(t)
+	c := testCoordinate()
+
+	if _, err := store.Set(context.Background(), c, "sk_live_secret", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	if _, err := store.Delete(context.Background(), c); err != nil {
+		t.Fatalf("Delete err = %v", err)
+	}
+
+	current, ok := ddb.get(partitionKey(c.Slug, store.Class), currentSortKey(c.canonical()))
+	if !ok {
+		return
+	}
+	if len(binaryAttr(current, "ciphertext")) != 0 {
+		t.Error("the deleted cell still carries its ciphertext")
+	}
+}
+
+func TestListOmitsDeletedCells(t *testing.T) {
+	store, _, _ := newTestStore(t)
+	kept := Coordinate{Slug: "shop", Key: "POSTHOG_ID"}
+	removed := testCoordinate()
+
+	for _, c := range []Coordinate{kept, removed} {
+		if _, err := store.Set(context.Background(), c, "v", nil); err != nil {
+			t.Fatalf("Set %+v err = %v", c, err)
+		}
+	}
+	if _, err := store.Delete(context.Background(), removed); err != nil {
+		t.Fatalf("Delete err = %v", err)
+	}
+
+	got, err := store.List(context.Background(), "shop")
+	if err != nil {
+		t.Fatalf("List err = %v", err)
+	}
+	if len(got) != 1 || got[0].Coordinate != kept {
+		t.Errorf("List = %+v, want only %+v", got, kept)
 	}
 }
 
@@ -381,6 +531,89 @@ func TestListReturnsCurrentValuesWithoutHistoryOrPlaintext(t *testing.T) {
 	}
 	if !containsCoordinate(got, Coordinate{Slug: "shop", Folder: "", Key: "STRIPE_API_KEY", Environment: "staging"}) {
 		t.Errorf("List = %+v, want it to carry the named-environment cell's coordinate", got)
+	}
+}
+
+// One key serves a whole environment class, so the key alone binds a value to
+// nothing narrower than the class: every project in it, and every cell of
+// every project, is decryptable with the same grant. The encryption context is
+// what binds a blob to the one cell it was written for, and pinning its exact
+// contents is what keeps this test and the fake from drifting apart.
+func TestSetBindsTheCiphertextToItsCoordinate(t *testing.T) {
+	store, _, crypto := newTestStore(t)
+	c := Coordinate{Slug: "shop", Folder: "/web", Key: "STRIPE_API_KEY", Environment: "staging"}
+
+	if _, err := store.Set(context.Background(), c, "sk_live_secret", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+
+	want := map[string]string{
+		"slug":        "shop",
+		"folder":      "/web",
+		"key":         "STRIPE_API_KEY",
+		"environment": "staging",
+	}
+	if len(crypto.contexts) != 1 || !maps.Equal(crypto.contexts[0], want) {
+		t.Fatalf("encryption context = %v, want exactly one %v", crypto.contexts, want)
+	}
+}
+
+// A root, class-wide cell has no folder and no environment above the store, so
+// its context has to name the sentinels the key structure uses rather than
+// leave the components out: an absent component would bind the ciphertext to
+// less than the coordinate it was written at.
+func TestTheEncryptionContextNamesEveryComponentOfARootCell(t *testing.T) {
+	store, _, crypto := newTestStore(t)
+
+	if _, err := store.Set(context.Background(), testCoordinate(), "v", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+
+	want := map[string]string{
+		"slug":        "shop",
+		"folder":      rootFolder,
+		"key":         "STRIPE_API_KEY",
+		"environment": classWideEnvironment,
+	}
+	if len(crypto.contexts) != 1 || !maps.Equal(crypto.contexts[0], want) {
+		t.Fatalf("encryption context = %v, want exactly one %v", crypto.contexts, want)
+	}
+}
+
+// The bytes are the only thing a class key needs to decrypt, so a blob moved
+// to another cell — or into another project sharing the class key — must fail
+// to open rather than read back as that cell's value.
+func TestARelocatedCiphertextDoesNotDecrypt(t *testing.T) {
+	origin := Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}
+	for name, elsewhere := range map[string]Coordinate{
+		"a neighbouring environment": {Slug: "shop", Key: "STRIPE_API_KEY", Environment: "staging"},
+		"a neighbouring folder":      {Slug: "shop", Folder: "/web", Key: "STRIPE_API_KEY"},
+		"another variable":           {Slug: "shop", Key: "STRIPE_WEBHOOK_SECRET"},
+		"another project":            {Slug: "other", Key: "STRIPE_API_KEY"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store, ddb, _ := newTestStore(t)
+			if _, err := store.Set(context.Background(), origin, "sk_live_secret", nil); err != nil {
+				t.Fatalf("Set err = %v", err)
+			}
+
+			stored, ok := ddb.get(partitionKey(origin.Slug, store.Class), currentSortKey(origin.canonical()))
+			if !ok {
+				t.Fatal("the written value is missing")
+			}
+			moved := maps.Clone(stored)
+			moved["pk"] = &ddbtypes.AttributeValueMemberS{Value: partitionKey(elsewhere.Slug, store.Class)}
+			moved["sk"] = &ddbtypes.AttributeValueMemberS{Value: currentSortKey(elsewhere.canonical())}
+			ddb.put(moved)
+
+			got, err := store.Get(context.Background(), elsewhere, true)
+			if err == nil {
+				t.Fatalf("Get at %+v returned %q, want the relocated ciphertext to fail to open", elsewhere, got.Plaintext)
+			}
+			if got.Plaintext != "" {
+				t.Errorf("Get returned plaintext %q alongside its error", got.Plaintext)
+			}
+		})
 	}
 }
 

@@ -24,12 +24,12 @@ var ErrStaleVersion = errors.New("the value changed since it was read; re-read i
 
 // DynamoAPI is the subset of the DynamoDB client the store uses. Every
 // consumer operation maps to exactly one of these calls — a point read, a
-// prefix query, a transaction, or a point delete. Nothing here scans.
+// prefix query, a transaction, or a point write. Nothing here scans.
 type DynamoAPI interface {
 	GetItem(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)
 	Query(context.Context, *dynamodb.QueryInput, ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)
 	TransactWriteItems(context.Context, *dynamodb.TransactWriteItemsInput, ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error)
-	DeleteItem(context.Context, *dynamodb.DeleteItemInput, ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)
+	PutItem(context.Context, *dynamodb.PutItemInput, ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error)
 }
 
 // CryptoAPI is the subset of the KMS client the store uses. Values are
@@ -78,6 +78,11 @@ type Version struct {
 // item is one stored row. Current values and history entries share a shape:
 // a history entry is what a current value was, so giving them different
 // attributes would only mean two ways to read the same thing.
+//
+// Deleted marks the one row that is not a value: the tombstone a delete leaves
+// at a cell's current pointer. It carries the version the cell had reached and
+// nothing of what the value was, which is what keeps the next write's version
+// number ahead of every history row instead of back on top of one.
 type item struct {
 	PK         string `dynamodbav:"pk"`
 	SK         string `dynamodbav:"sk"`
@@ -85,6 +90,16 @@ type item struct {
 	Ciphertext []byte `dynamodbav:"ciphertext"`
 	Size       int64  `dynamodbav:"size"`
 	Ts         int64  `dynamodbav:"ts"`
+	Deleted    bool   `dynamodbav:"deleted"`
+}
+
+// liveVersion is the version a reader can observe: zero when the cell holds no
+// value, whether it never held one or holds a tombstone.
+func (i item) liveVersion() int64 {
+	if i.Deleted {
+		return 0
+	}
+	return i.Version
 }
 
 func (s *Store) now() int64 {
@@ -117,11 +132,11 @@ func (s *Store) Set(ctx context.Context, c Coordinate, plaintext string, expecte
 	if err != nil {
 		return Metadata{}, err
 	}
-	if expected != nil && *expected != current.Version {
+	if expected != nil && *expected != current.liveVersion() {
 		return Metadata{}, ErrStaleVersion
 	}
 
-	ciphertext, err := s.encrypt(ctx, plaintext)
+	ciphertext, err := s.encrypt(ctx, key, plaintext)
 	if err != nil {
 		return Metadata{}, err
 	}
@@ -180,13 +195,13 @@ func (s *Store) Get(ctx context.Context, c Coordinate, reveal bool) (Value, erro
 	if err != nil {
 		return Value{}, err
 	}
-	if stored.Version == 0 {
+	if stored.liveVersion() == 0 {
 		return Value{}, ErrNotFound
 	}
 
 	value := Value{Metadata: Metadata{Coordinate: c, Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size}}
 	if reveal {
-		if value.Plaintext, err = s.decrypt(ctx, stored.Ciphertext); err != nil {
+		if value.Plaintext, err = s.decrypt(ctx, c, stored.Ciphertext); err != nil {
 			return Value{}, err
 		}
 	}
@@ -207,6 +222,9 @@ func (s *Store) List(ctx context.Context, slug string) ([]Metadata, error) {
 
 	out := make([]Metadata, 0, len(items))
 	for _, stored := range items {
+		if stored.Deleted {
+			continue
+		}
 		c, err := parseCurrentSortKey(slug, stored.SK)
 		if err != nil {
 			return nil, err
@@ -216,22 +234,39 @@ func (s *Store) List(ctx context.Context, slug string) ([]Metadata, error) {
 	return out, nil
 }
 
-// Delete removes a cell's current pointer, reporting whether there was one. It
+// Delete unsets a cell, reporting whether there was a value to unset. It
 // leaves the version history: history records what the value was, and deleting
 // the value does not unmake that.
+//
+// The pointer is replaced by a tombstone rather than removed. Dropping it
+// would take the cell's version number with it, and the next write — which
+// derives its version from the pointer — would restart at one and land on top
+// of the history row that version already holds. The tombstone keeps the
+// number and drops the ciphertext, so the value is gone but the sequence is
+// not. It does not consume a version of its own: every version number stays
+// backed by exactly one history row, which is what the computed prune relies
+// on.
 func (s *Store) Delete(ctx context.Context, c Coordinate) (bool, error) {
 	if err := c.validate(); err != nil {
 		return false, err
 	}
-	out, err := s.Dynamo.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName:    aws.String(s.Table),
-		Key:          pointKey(partitionKey(c.Slug, s.Class), currentSortKey(c.canonical())),
-		ReturnValues: ddbtypes.ReturnValueAllOld,
-	})
+	pk, sk := partitionKey(c.Slug, s.Class), currentSortKey(c.canonical())
+	current, err := s.read(ctx, pk, sk)
 	if err != nil {
+		return false, err
+	}
+	if current.liveVersion() == 0 {
+		return false, nil
+	}
+
+	tombstone := item{PK: pk, SK: sk, Version: current.Version, Ts: s.now(), Deleted: true}
+	if _, err := s.Dynamo.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(s.Table),
+		Item:      marshal(tombstone),
+	}); err != nil {
 		return false, fmt.Errorf("delete %s: %w", c.Key, err)
 	}
-	return len(out.Attributes) > 0, nil
+	return true, nil
 }
 
 // Versions reads a cell's change history, newest first and no deeper than the
@@ -253,7 +288,7 @@ func (s *Store) Versions(ctx context.Context, c Coordinate, reveal bool) ([]Vers
 		}
 		entry := Version{Version: version, CreatedAt: stored.Ts, Size: stored.Size}
 		if reveal {
-			if entry.Plaintext, err = s.decrypt(ctx, stored.Ciphertext); err != nil {
+			if entry.Plaintext, err = s.decrypt(ctx, c, stored.Ciphertext); err != nil {
 				return nil, err
 			}
 		}
@@ -311,10 +346,28 @@ func (s *Store) query(ctx context.Context, pk, prefix string, ascending bool) ([
 	}
 }
 
-func (s *Store) encrypt(ctx context.Context, plaintext string) ([]byte, error) {
+// encryptionContext binds a ciphertext to the one cell it was written for. The
+// key is per environment class and serves every project in it, so without this
+// the bytes are all a decrypt needs: a blob moved to another cell, or to
+// another project sharing the class key, would open as that cell's value. KMS
+// authenticates the context on decrypt, so a relocated blob fails to open
+// instead. The canonical coordinate is what is bound, so root and class-wide
+// name their sentinels rather than binding to nothing.
+func encryptionContext(c Coordinate) map[string]string {
+	c = c.canonical()
+	return map[string]string{
+		"slug":        c.Slug,
+		"folder":      c.Folder,
+		"key":         c.Key,
+		"environment": c.Environment,
+	}
+}
+
+func (s *Store) encrypt(ctx context.Context, c Coordinate, plaintext string) ([]byte, error) {
 	out, err := s.KMS.Encrypt(ctx, &kms.EncryptInput{
-		KeyId:     aws.String(s.KeyARN),
-		Plaintext: []byte(plaintext),
+		KeyId:             aws.String(s.KeyARN),
+		Plaintext:         []byte(plaintext),
+		EncryptionContext: encryptionContext(c),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("encrypt value: %w", err)
@@ -322,10 +375,11 @@ func (s *Store) encrypt(ctx context.Context, plaintext string) ([]byte, error) {
 	return out.CiphertextBlob, nil
 }
 
-func (s *Store) decrypt(ctx context.Context, ciphertext []byte) (string, error) {
+func (s *Store) decrypt(ctx context.Context, c Coordinate, ciphertext []byte) (string, error) {
 	out, err := s.KMS.Decrypt(ctx, &kms.DecryptInput{
-		KeyId:          aws.String(s.KeyARN),
-		CiphertextBlob: ciphertext,
+		KeyId:             aws.String(s.KeyARN),
+		CiphertextBlob:    ciphertext,
+		EncryptionContext: encryptionContext(c),
 	})
 	if err != nil {
 		return "", fmt.Errorf("decrypt value: %w", err)
@@ -345,17 +399,22 @@ func number(n int64) ddbtypes.AttributeValue {
 }
 
 // marshal renders an item by hand rather than by reflection: the attribute set
-// is six fields wide and fixed, and a hand-written map is what the fakes and
-// the condition expressions read.
+// is narrow and fixed, and a hand-written map is what the fakes and the
+// condition expressions read. A tombstone carries no ciphertext attribute at
+// all, so the value is absent rather than empty.
 func marshal(i item) map[string]ddbtypes.AttributeValue {
-	return map[string]ddbtypes.AttributeValue{
-		"pk":         &ddbtypes.AttributeValueMemberS{Value: i.PK},
-		"sk":         &ddbtypes.AttributeValueMemberS{Value: i.SK},
-		"version":    number(i.Version),
-		"ciphertext": &ddbtypes.AttributeValueMemberB{Value: i.Ciphertext},
-		"size":       number(i.Size),
-		"ts":         number(i.Ts),
+	m := map[string]ddbtypes.AttributeValue{
+		"pk":      &ddbtypes.AttributeValueMemberS{Value: i.PK},
+		"sk":      &ddbtypes.AttributeValueMemberS{Value: i.SK},
+		"version": number(i.Version),
+		"size":    number(i.Size),
+		"ts":      number(i.Ts),
+		"deleted": &ddbtypes.AttributeValueMemberBOOL{Value: i.Deleted},
 	}
+	if len(i.Ciphertext) > 0 {
+		m["ciphertext"] = &ddbtypes.AttributeValueMemberB{Value: i.Ciphertext}
+	}
+	return m
 }
 
 func unmarshal(raw map[string]ddbtypes.AttributeValue) (item, error) {
@@ -368,6 +427,9 @@ func unmarshal(raw map[string]ddbtypes.AttributeValue) (item, error) {
 	}
 	if v, ok := raw["ciphertext"].(*ddbtypes.AttributeValueMemberB); ok {
 		i.Ciphertext = v.Value
+	}
+	if v, ok := raw["deleted"].(*ddbtypes.AttributeValueMemberBOOL); ok {
+		i.Deleted = v.Value
 	}
 	for name, field := range map[string]*int64{"version": &i.Version, "size": &i.Size, "ts": &i.Ts} {
 		v, ok := raw[name].(*ddbtypes.AttributeValueMemberN)

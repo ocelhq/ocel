@@ -3,6 +3,7 @@ package vars
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -18,18 +19,37 @@ import (
 // plaintext behind a marker, so a test can tell at a glance whether what
 // reached the table was encrypted, and can assert that a read which was not
 // asked to reveal never decrypted at all.
+//
+// It binds a blob to the encryption context it was sealed under, the way KMS
+// does: a decrypt presenting a different context fails. That is what makes a
+// test about ciphertext relocation a real failure rather than an assertion
+// about a field nobody enforces.
 type fakeKMS struct {
 	encrypts int
 	decrypts int
 	keyIDs   []string
+	contexts []map[string]string
 }
 
 const fakeCipherMarker = "enc:"
 
+// sealedContext renders an encryption context into the one string the fake
+// carries alongside a blob. Order cannot matter, so it is sorted.
+func sealedContext(ctx map[string]string) string {
+	pairs := make([]string, 0, len(ctx))
+	for k, v := range ctx {
+		pairs = append(pairs, k+"="+v)
+	}
+	sort.Strings(pairs)
+	return strings.Join(pairs, ",")
+}
+
 func (f *fakeKMS) Encrypt(_ context.Context, in *kms.EncryptInput, _ ...func(*kms.Options)) (*kms.EncryptOutput, error) {
 	f.encrypts++
 	f.keyIDs = append(f.keyIDs, aws.ToString(in.KeyId))
-	return &kms.EncryptOutput{CiphertextBlob: append([]byte(fakeCipherMarker), in.Plaintext...)}, nil
+	f.contexts = append(f.contexts, in.EncryptionContext)
+	blob := fakeCipherMarker + sealedContext(in.EncryptionContext) + "|" + string(in.Plaintext)
+	return &kms.EncryptOutput{CiphertextBlob: []byte(blob)}, nil
 }
 
 func (f *fakeKMS) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*kms.Options)) (*kms.DecryptOutput, error) {
@@ -38,7 +58,14 @@ func (f *fakeKMS) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*km
 	if !strings.HasPrefix(blob, fakeCipherMarker) {
 		return nil, errors.New("fakeKMS: not ciphertext this key produced")
 	}
-	return &kms.DecryptOutput{Plaintext: []byte(strings.TrimPrefix(blob, fakeCipherMarker))}, nil
+	sealed, plaintext, ok := strings.Cut(strings.TrimPrefix(blob, fakeCipherMarker), "|")
+	if !ok {
+		return nil, errors.New("fakeKMS: malformed ciphertext")
+	}
+	if presented := sealedContext(in.EncryptionContext); presented != sealed {
+		return nil, fmt.Errorf("fakeKMS: encryption context %q does not match the one this blob was sealed under (%q)", presented, sealed)
+	}
+	return &kms.DecryptOutput{Plaintext: []byte(plaintext)}, nil
 }
 
 // fakeDynamo is an in-memory stand-in for the variables table, keyed the same
@@ -51,7 +78,7 @@ type fakeDynamo struct {
 	items map[string]map[string]map[string]ddbtypes.AttributeValue
 
 	transactions [][]ddbtypes.TransactWriteItem
-	deletes      []*dynamodb.DeleteItemInput
+	puts         []*dynamodb.PutItemInput
 	queries      []*dynamodb.QueryInput
 
 	// beforeTransact runs between a store's read and its commit, so a test can
@@ -84,15 +111,10 @@ func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...
 	return &dynamodb.GetItemOutput{Item: item}, nil
 }
 
-func (f *fakeDynamo) DeleteItem(_ context.Context, in *dynamodb.DeleteItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
-	f.deletes = append(f.deletes, in)
-	pk, sk := stringAttr(in.Key, "pk"), stringAttr(in.Key, "sk")
-	out := &dynamodb.DeleteItemOutput{}
-	if item, ok := f.get(pk, sk); ok {
-		out.Attributes = item
-		delete(f.items[pk], sk)
-	}
-	return out, nil
+func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
+	f.puts = append(f.puts, in)
+	f.put(in.Item)
+	return &dynamodb.PutItemOutput{}, nil
 }
 
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
