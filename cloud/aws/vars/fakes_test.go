@@ -73,7 +73,8 @@ func (f *fakeKMS) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*km
 // emits — a point read and a prefix query — and exactly the one conditional
 // write it emits, so an optimistic-concurrency failure in a test is a genuine
 // condition failure rather than a canned error. TestSetEmitsTheOptimisticCondition
-// pins the condition's text so this fake and the store cannot drift apart.
+// and TestDeleteEmitsTheOptimisticCondition pin the condition's text so this
+// fake and the store cannot drift apart.
 type fakeDynamo struct {
 	items map[string]map[string]map[string]ddbtypes.AttributeValue
 
@@ -81,9 +82,12 @@ type fakeDynamo struct {
 	puts         []*dynamodb.PutItemInput
 	queries      []*dynamodb.QueryInput
 
-	// beforeTransact runs between a store's read and its commit, so a test can
-	// stage the interleaving only the table's own condition can catch.
+	// beforeTransact and beforePut run between a store's read and its commit,
+	// so a test can stage the interleaving only the table's own condition can
+	// catch. A write lands as a transaction, a delete as a point put, so each
+	// needs its own hook.
 	beforeTransact func()
+	beforePut      func()
 }
 
 func newFakeDynamo() *fakeDynamo {
@@ -113,8 +117,33 @@ func (f *fakeDynamo) GetItem(_ context.Context, in *dynamodb.GetItemInput, _ ...
 
 func (f *fakeDynamo) PutItem(_ context.Context, in *dynamodb.PutItemInput, _ ...func(*dynamodb.Options)) (*dynamodb.PutItemOutput, error) {
 	f.puts = append(f.puts, in)
+	fire(&f.beforePut)
+
+	if in.ConditionExpression != nil && !f.conditionHolds(in.Item, in.ExpressionAttributeValues) {
+		return nil, &ddbtypes.ConditionalCheckFailedException{}
+	}
 	f.put(in.Item)
 	return &dynamodb.PutItemOutput{}, nil
+}
+
+// conditionHolds evaluates the one condition the store writes under:
+// attribute_not_exists(pk) OR #version = :seen.
+func (f *fakeDynamo) conditionHolds(item, values map[string]ddbtypes.AttributeValue) bool {
+	current, exists := f.get(stringAttr(item, "pk"), stringAttr(item, "sk"))
+	seen := numberAttr(values, ":seen")
+	if !exists {
+		return seen == 0
+	}
+	return numberAttr(current, "version") == seen
+}
+
+func fire(hook *func()) {
+	if *hook == nil {
+		return
+	}
+	run := *hook
+	*hook = nil
+	run()
 }
 
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
@@ -143,22 +172,13 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 
 func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.TransactWriteItemsInput, _ ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {
 	f.transactions = append(f.transactions, in.TransactItems)
-	if f.beforeTransact != nil {
-		hook := f.beforeTransact
-		f.beforeTransact = nil
-		hook()
-	}
+	fire(&f.beforeTransact)
 
 	for _, w := range in.TransactItems {
 		if w.Put == nil || w.Put.ConditionExpression == nil {
 			continue
 		}
-		item, exists := f.get(stringAttr(w.Put.Item, "pk"), stringAttr(w.Put.Item, "sk"))
-		seen := numberAttr(w.Put.ExpressionAttributeValues, ":seen")
-		if exists && numberAttr(item, "version") != seen {
-			return nil, &ddbtypes.TransactionCanceledException{}
-		}
-		if !exists && seen != 0 {
+		if !f.conditionHolds(w.Put.Item, w.Put.ExpressionAttributeValues) {
 			return nil, &ddbtypes.TransactionCanceledException{}
 		}
 	}

@@ -22,6 +22,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -32,12 +33,24 @@ import (
 // completed matrix must treat this as a refusal, not a finish.
 var ErrAbandoned = errors.New("the variables UI closed before the matrix was complete")
 
+// ErrStaleValue is what a Store reports for a write whose expectation about the
+// current version no longer holds. The page that sent it was showing a value
+// somebody else has since changed, so the answer is to show it again — not to
+// apply the write, and not to report the store broken.
+var ErrStaleValue = errors.New("this value changed since the page read it; the page is showing it again — make your change against the value that is there now")
+
 // Store is the value store as the UI writes to it. Reads come through the
 // gate, which already holds the project's cells; these are the operations that
 // change them.
 type Store interface {
-	Set(ctx context.Context, cell envgate.Cell, value string) error
-	Delete(ctx context.Context, cell envgate.Cell) error
+	// Set writes a value and Delete unsets one. expected is the version the page
+	// rendered: zero for a cell it drew empty, which the store honours as "no
+	// live value", and nil only for a caller that rendered no version at all. A
+	// delete is expectation-bound for the same reason a write is — a page that
+	// renders a value somebody has since replaced must not be able to destroy
+	// the replacement.
+	Set(ctx context.Context, cell envgate.Cell, value string, expected *int64) error
+	Delete(ctx context.Context, cell envgate.Cell, expected *int64) error
 	History(ctx context.Context, cell envgate.Cell) ([]Version, error)
 }
 
@@ -220,9 +233,10 @@ func (s *Session) handleState(w http.ResponseWriter, r *http.Request) {
 }
 
 type valueRequest struct {
-	Key    string `json:"key"`
-	Folder string `json:"folder"`
-	Value  string `json:"value"`
+	Key     string `json:"key"`
+	Folder  string `json:"folder"`
+	Value   string `json:"value"`
+	Version *int64 `json:"version"`
 }
 
 func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
@@ -244,7 +258,11 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.opts.Store.Set(r.Context(), cell, req.Value); err != nil {
+	if err := s.opts.Store.Set(r.Context(), cell, req.Value, req.Version); err != nil {
+		if errors.Is(err, ErrStaleValue) {
+			fail(w, http.StatusConflict, err)
+			return
+		}
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
@@ -261,7 +279,16 @@ func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.opts.Store.Delete(r.Context(), cell); err != nil {
+	expected, err := queryVersion(r)
+	if err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.opts.Store.Delete(r.Context(), cell, expected); err != nil {
+		if errors.Is(err, ErrStaleValue) {
+			fail(w, http.StatusConflict, err)
+			return
+		}
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
@@ -304,6 +331,22 @@ func addressable(folder string) error {
 
 func queryCell(r *http.Request) envgate.Cell {
 	return envgate.Cell{Key: r.URL.Query().Get("key"), Folder: r.URL.Query().Get("folder")}
+}
+
+// queryVersion reads the expectation a delete carries. An absent one is the
+// blind delete; an unreadable one is refused rather than dropped, because
+// silently blinding a write the page meant to condition is the lost update the
+// expectation exists to stop.
+func queryVersion(r *http.Request) (*int64, error) {
+	raw := r.URL.Query().Get("version")
+	if raw == "" {
+		return nil, nil
+	}
+	version, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return nil, fmt.Errorf("read the version this request expects: %w", err)
+	}
+	return &version, nil
 }
 
 // writeState re-reads the store before answering, so every mutation returns

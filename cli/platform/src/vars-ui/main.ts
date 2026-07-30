@@ -14,6 +14,8 @@ interface MatrixCell {
   folder: string;
   state: CellState;
   set: boolean;
+  version: number;
+  overrides?: string[];
   problem?: string;
 }
 
@@ -62,6 +64,18 @@ let error = "";
 let thread: AppResolution | null = null;
 let saving = false;
 
+// ApiError carries the status because one of them is not a failure: a refused
+// write means this page was showing a value that has since changed, and the
+// answer to that is to show what is there now.
+class ApiError extends Error {
+  status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 async function api<T>(method: string, path: string, body?: unknown): Promise<T> {
   const response = await fetch(path, {
     method,
@@ -79,7 +93,7 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
     } catch {
       /* a guard rejection answers in plain text */
     }
-    throw new Error(message.trim());
+    throw new ApiError(response.status, message.trim());
   }
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
@@ -112,6 +126,31 @@ function socketState(cell: MatrixCell): string {
 
 function folderName(folder: string): string {
   return folder === "" ? "root" : folder;
+}
+
+// A project can hold a preview environment per open pull request, and naming
+// fifty of them is a wall of text where a sentence was meant. Past this many
+// the rest are counted rather than listed.
+const namedLimit = 5;
+
+function names(items: string[]): string {
+  const shown = items.slice(0, namedLimit);
+  const rest = items.length - shown.length;
+  if (rest > 0) shown.push(`${rest} other${rest === 1 ? "" : "s"}`);
+  if (shown.length <= 2) return shown.join(" and ");
+  return `${shown.slice(0, -1).join(", ")} and ${shown[shown.length - 1]}`;
+}
+
+// What this cell reaches. The class-wide value is the one every environment
+// reads, but only where none has been given its own — saying so unconditionally
+// would describe a cell that is not the one on screen.
+function coordinateLine(row: MatrixRow, cell: MatrixCell): string {
+  const where = `${folderName(cell.folder)} · ${row.class}`;
+  const overrides = cell.overrides ?? [];
+  if (overrides.length === 0) {
+    return `${where} · class-wide, every environment reads it`;
+  }
+  return `${where} · class-wide, except in ${names(overrides)}`;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -166,6 +205,18 @@ async function mutate(run: () => Promise<State>): Promise<void> {
     await refreshHistory();
   } catch (thrown) {
     error = thrown instanceof Error ? thrown.message : String(thrown);
+    if (thrown instanceof ApiError && thrown.status === 409) {
+      // A refusal promises the page is showing what is there now, and the
+      // other writer's version is the evidence that explains it. A re-read
+      // that fails leaves neither, so the promise is withdrawn rather than
+      // left standing over stale content.
+      try {
+        state = await api<State>("GET", "/api/state");
+        await refreshHistory();
+      } catch {
+        error = `${error} The page could not re-read this cell either, so what is on screen may still be out of date.`;
+      }
+    }
   } finally {
     saving = false;
     render();
@@ -335,13 +386,7 @@ function renderInspector(current: State): HTMLElement {
   }
 
   inspector.append(element("h2", undefined, row.key));
-  inspector.append(
-    element(
-      "p",
-      "coordinate",
-      `${folderName(cell.folder)} · ${row.class} · class-wide, every environment reads it`,
-    ),
-  );
+  inspector.append(element("p", "coordinate", coordinateLine(row, cell)));
 
   const verdict = element(
     "p",
@@ -392,14 +437,21 @@ function renderInspector(current: State): HTMLElement {
     const remove = element("button", "remove", "Remove");
     remove.type = "button";
     remove.disabled = saving;
-    remove.addEventListener("click", () => {
-      void mutate(() =>
-        api<State>("DELETE", `/api/value?${query(selected!)}`),
-      );
-    });
+    remove.addEventListener("click", () => void erase());
     actions.append(remove);
   }
   inspector.append(actions);
+
+  const overrides = cell.overrides ?? [];
+  if (overrides.length > 0) {
+    inspector.append(
+      element(
+        "p",
+        "empty",
+        `${names(overrides)} ${overrides.length === 1 ? "holds its own value" : "hold their own values"} for ${row.key}. Save and Remove here address the class-wide value only; reach ${overrides.length === 1 ? "that one" : "those"} with ocel env set --environment.`,
+      ),
+    );
+  }
 
   if (error) inspector.append(element("p", "problem", error));
 
@@ -429,8 +481,17 @@ function renderInspector(current: State): HTMLElement {
   async function write(): Promise<void> {
     const cellNow = selected!;
     const value = draft;
+    const version = cell!.version;
     await mutate(() =>
-      api<State>("PUT", "/api/value", { ...cellNow, value }),
+      api<State>("PUT", "/api/value", { ...cellNow, value, version }),
+    );
+  }
+
+  async function erase(): Promise<void> {
+    const cellNow = selected!;
+    const version = cell!.version;
+    await mutate(() =>
+      api<State>("DELETE", `/api/value?${query(cellNow)}&version=${version}`),
     );
   }
 }

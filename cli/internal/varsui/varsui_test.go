@@ -8,7 +8,9 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"reflect"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -23,19 +25,27 @@ import (
 // and the writes the UI makes, sharing one map so a write is visible to the
 // next read exactly as it is through a provider.
 type fakeStore struct {
-	cells   map[envgate.Cell]string
-	setErr  error
-	deletes int
+	cells     map[envgate.Cell]string
+	versions  map[envgate.Cell]int64
+	overrides []envgate.Stored
+	expected  []*int64
+	deletes   int
 }
 
-func newFakeStore() *fakeStore { return &fakeStore{cells: map[envgate.Cell]string{}} }
+func newFakeStore() *fakeStore {
+	return &fakeStore{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}}
+}
 
-func (s *fakeStore) List(context.Context) ([]envgate.Cell, error) {
-	out := make([]envgate.Cell, 0, len(s.cells))
+func (s *fakeStore) override(cell envgate.Cell, environment string) {
+	s.overrides = append(s.overrides, envgate.Stored{Cell: cell, Environment: environment, Version: 1})
+}
+
+func (s *fakeStore) List(context.Context) ([]envgate.Stored, error) {
+	out := make([]envgate.Stored, 0, len(s.cells)+len(s.overrides))
 	for cell := range s.cells {
-		out = append(out, cell)
+		out = append(out, envgate.Stored{Cell: cell, Version: s.versions[cell]})
 	}
-	return out, nil
+	return append(out, s.overrides...), nil
 }
 
 func (s *fakeStore) Reveal(_ context.Context, cell envgate.Cell) (string, bool, error) {
@@ -43,17 +53,31 @@ func (s *fakeStore) Reveal(_ context.Context, cell envgate.Cell) (string, bool, 
 	return value, ok, nil
 }
 
-func (s *fakeStore) Set(_ context.Context, cell envgate.Cell, value string) error {
-	if s.setErr != nil {
-		return s.setErr
+// stale is the store's whole concurrency rule: an expectation that no longer
+// describes the cell refuses the operation. Both mutations run it, so a session
+// that dropped a version on its way through is a test failure rather than a
+// fixture that was going to refuse regardless.
+func (s *fakeStore) stale(cell envgate.Cell, expected *int64) bool {
+	return expected != nil && *expected != s.versions[cell]
+}
+
+func (s *fakeStore) Set(_ context.Context, cell envgate.Cell, value string, expected *int64) error {
+	s.expected = append(s.expected, expected)
+	if s.stale(cell, expected) {
+		return varsui.ErrStaleValue
 	}
 	s.cells[cell] = value
 	return nil
 }
 
-func (s *fakeStore) Delete(_ context.Context, cell envgate.Cell) error {
+func (s *fakeStore) Delete(_ context.Context, cell envgate.Cell, expected *int64) error {
+	s.expected = append(s.expected, expected)
+	if s.stale(cell, expected) {
+		return varsui.ErrStaleValue
+	}
 	s.deletes++
 	delete(s.cells, cell)
+	delete(s.versions, cell)
 	return nil
 }
 
@@ -410,6 +434,155 @@ func TestSession_DeletingACellEmptiesItInTheStoreAndTheMatrix(t *testing.T) {
 	if cellState(t, state(t, s), "API_URL", "").Set {
 		t.Error("the matrix still reports API_URL filled, want it empty")
 	}
+}
+
+func TestSession_TheMatrixNamesTheEnvironmentsThatStillOverrideACell(t *testing.T) {
+	store := newFakeStore()
+	store.override(envgate.Cell{Key: "API_URL"}, "pr-42")
+	s := session(t, store, def("API_URL"))
+
+	c := cellState(t, state(t, s), "API_URL", "")
+	if c.Set {
+		t.Error("the matrix reports API_URL filled, want it empty — pr-42's value is not the one a deploy reads")
+	}
+	if !reflect.DeepEqual(c.Overrides, []string{"pr-42"}) {
+		t.Errorf("overrides = %q, want [pr-42] — a surviving override the page cannot see is one it lies about", c.Overrides)
+	}
+}
+
+func TestSession_AWriteExpectsTheVersionThePageRendered(t *testing.T) {
+	store := newFakeStore()
+	store.cells[envgate.Cell{Key: "API_URL"}] = "https://old.example"
+	store.versions[envgate.Cell{Key: "API_URL"}] = 3
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
+		"key": "API_URL", "folder": "", "value": "https://new.example", "version": 3,
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT = %d: %s", resp.StatusCode, bodyOf(t, resp))
+	}
+
+	if len(store.expected) != 1 || store.expected[0] == nil || *store.expected[0] != 3 {
+		t.Errorf("store saw expectations %v, want the one version the page rendered", format(store.expected))
+	}
+}
+
+// Zero is not "no expectation": the store reads it as "no live value", so a
+// cell the page drew empty is written under exactly that condition and loses
+// to anyone who filled it in between. Absence is the blind write, and only a
+// caller that never rendered a version sends that.
+func TestSession_AWriteToACellThePageDrewEmptyExpectsNoLiveValue(t *testing.T) {
+	store := newFakeStore()
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
+		"key": "API_URL", "folder": "", "value": "https://new.example", "version": 0,
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT = %d: %s", resp.StatusCode, bodyOf(t, resp))
+	}
+
+	if len(store.expected) != 1 || store.expected[0] == nil || *store.expected[0] != 0 {
+		t.Errorf("store saw expectations %v, want a zero expectation — an empty cell must be written only while it is still empty", format(store.expected))
+	}
+}
+
+func TestSession_AWriteThatQuotesNoVersionIsBlind(t *testing.T) {
+	store := newFakeStore()
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodPut, "/api/value", map[string]string{"key": "API_URL", "folder": "", "value": "https://new.example"})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT = %d: %s", resp.StatusCode, bodyOf(t, resp))
+	}
+
+	if len(store.expected) != 1 || store.expected[0] != nil {
+		t.Errorf("store saw expectations %v, want none — a caller that read no version cannot claim one", format(store.expected))
+	}
+}
+
+// Two people editing one cell is the case optimistic concurrency exists for.
+// The second write must be refused and the page told its view was stale, not
+// told the store is unreachable and not silently allowed to win.
+func TestSession_AWriteAgainstAVersionThatIsNoLongerCurrentIsRefusedAsAConflict(t *testing.T) {
+	store := newFakeStore()
+	store.cells[envgate.Cell{Key: "API_URL"}] = "https://someone-elses.example"
+	store.versions[envgate.Cell{Key: "API_URL"}] = 4
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
+		"key": "API_URL", "folder": "", "value": "https://mine.example", "version": 3,
+	})
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Errorf("stale PUT = %d, want %d — a refused write is a conflict, not a failed store", resp.StatusCode, http.StatusConflict)
+	}
+	if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://someone-elses.example" {
+		t.Errorf("store holds %q, want the value already there — a stale write must not be applied", got)
+	}
+}
+
+// Remove is the other half of the same race. A page whose cell was replaced
+// while it sat open must not be able to delete the replacement, so the delete
+// carries the version it rendered and is refused when that no longer holds.
+func TestSession_ADeleteAgainstAVersionThatIsNoLongerCurrentIsRefusedAsAConflict(t *testing.T) {
+	store := newFakeStore()
+	store.cells[envgate.Cell{Key: "API_URL"}] = "https://someone-elses.example"
+	store.versions[envgate.Cell{Key: "API_URL"}] = 4
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=&version=3", nil)
+
+	if resp.StatusCode != http.StatusConflict {
+		t.Errorf("stale DELETE = %d, want %d — a refused delete is a conflict, not a failed store", resp.StatusCode, http.StatusConflict)
+	}
+	if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://someone-elses.example" {
+		t.Errorf("store holds %q, want the value already there — a stale delete must not be applied", got)
+	}
+}
+
+func TestSession_ADeleteExpectsTheVersionThePageRendered(t *testing.T) {
+	store := newFakeStore()
+	store.cells[envgate.Cell{Key: "API_URL"}] = "https://old.example"
+	store.versions[envgate.Cell{Key: "API_URL"}] = 3
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=&version=3", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE = %d: %s", resp.StatusCode, bodyOf(t, resp))
+	}
+
+	if len(store.expected) != 1 || store.expected[0] == nil || *store.expected[0] != 3 {
+		t.Errorf("store saw expectations %v, want the one version the page rendered", format(store.expected))
+	}
+}
+
+func TestSession_ADeleteQuotingAnUnreadableVersionIsRefusedAndNeverReachesTheStore(t *testing.T) {
+	store := newFakeStore()
+	store.cells[envgate.Cell{Key: "API_URL"}] = "https://old.example"
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=&version=soon", nil)
+
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("DELETE quoting a version that is not a number = %d, want %d", resp.StatusCode, http.StatusBadRequest)
+	}
+	if store.deletes != 0 {
+		t.Errorf("store saw %d deletes, want none — an expectation that cannot be read is not an absent one", store.deletes)
+	}
+}
+
+func format(expected []*int64) []string {
+	out := make([]string, 0, len(expected))
+	for _, e := range expected {
+		if e == nil {
+			out = append(out, "none")
+			continue
+		}
+		out = append(out, strconv.FormatInt(*e, 10))
+	}
+	return out
 }
 
 func TestSession_HistoryIsReadableNewestFirst(t *testing.T) {

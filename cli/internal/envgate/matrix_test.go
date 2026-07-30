@@ -1,6 +1,7 @@
 package envgate_test
 
 import (
+	"errors"
 	"reflect"
 	"testing"
 
@@ -169,6 +170,102 @@ func TestMatrix_AMalformedValueKeepsItsCellFilledAndCarriesTheSchemasComplaint(t
 	}
 	if c.Problem != "must be a URL" {
 		t.Errorf("cell problem = %q, want the schema's own message", c.Problem)
+	}
+}
+
+// TestMatrix_AnOverrideIsNamedBesideACellItDoesNotFill is the whole of the
+// read-only surfacing: the cell reads exactly as empty as it is, and the
+// environments still holding a value are visible rather than silent.
+func TestMatrix_AnOverrideIsNamedBesideACellItDoesNotFill(t *testing.T) {
+	values := newFakeValues()
+	values.override("STRIPE_API_KEY", "", "pr-7")
+	values.override("STRIPE_API_KEY", "", "pr-42")
+
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+	c := cell(t, row(t, g.Matrix(), "STRIPE_API_KEY"), "")
+	if c.Set {
+		t.Error("the cell reports filled, want it empty — no deploy resolves a named environment's value")
+	}
+	want := []string{"pr-42", "pr-7"}
+	if !reflect.DeepEqual(c.Overrides, want) {
+		t.Errorf("overrides = %q, want %q — a surviving override must be visible, not silent", c.Overrides, want)
+	}
+}
+
+// The matrix is a snapshot, not a window onto the gate. A caller that sorts,
+// truncates or renames the environments a cell reports must not be editing the
+// gate's own record of them.
+func TestMatrix_TheEnvironmentsACellNamesAreTheCallersToKeep(t *testing.T) {
+	values := newFakeValues()
+	values.override("STRIPE_API_KEY", "", "pr-7")
+	values.override("STRIPE_API_KEY", "", "pr-42")
+
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+	cell(t, row(t, g.Matrix(), "STRIPE_API_KEY"), "").Overrides[0] = "clobbered"
+
+	want := []string{"pr-42", "pr-7"}
+	if got := cell(t, row(t, g.Matrix(), "STRIPE_API_KEY"), "").Overrides; !reflect.DeepEqual(got, want) {
+		t.Errorf("overrides = %q, want %q — one caller's edit reached the gate's own record", got, want)
+	}
+}
+
+// A folder nothing else names gets no column, and a cell that gets no column
+// has nowhere to report the environments still holding a value there. The
+// column an override earns has to stay inert: the cell it draws is one nobody
+// can be owed, nobody can be credited with, and no deploy is refused over.
+func TestMatrix_AnOverrideEarnsItsFolderAColumnThatSatisfiesNothing(t *testing.T) {
+	values := newFakeValues()
+	values.override("STRIPE_API_KEY", "/worker", "pr-42")
+
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+	m := g.Matrix()
+	if want := []string{"", "/worker"}; !reflect.DeepEqual(m.Columns, want) {
+		t.Fatalf("columns = %q, want %q — an override in a folder nothing else names is still a value to show", m.Columns, want)
+	}
+
+	c := cell(t, row(t, m, "STRIPE_API_KEY"), "/worker")
+	if c.Set {
+		t.Error("the /worker cell reports filled, want it empty — no deploy resolves a named environment's value")
+	}
+	if c.State != envgate.CellOptional {
+		t.Errorf("the /worker cell is %q, want %q — a column drawn for an override owes nobody anything", c.State, envgate.CellOptional)
+	}
+	if !reflect.DeepEqual(c.Overrides, []string{"pr-42"}) {
+		t.Errorf("overrides = %q, want [pr-42] — the column exists to carry exactly this", c.Overrides)
+	}
+
+	var refusal *envgate.Refusal
+	if !errors.As(g.Check(), &refusal) {
+		t.Fatal("Check err is not an *envgate.Refusal — the root cell is still owed")
+	}
+	var owed []envgate.Cell
+	for _, problem := range refusal.Problems {
+		owed = append(owed, envgate.Cell{Key: problem.GetKey(), Folder: problem.GetFolder()})
+	}
+	if want := []envgate.Cell{{Key: "STRIPE_API_KEY"}}; !reflect.DeepEqual(owed, want) {
+		t.Errorf("the deploy is refused over %+v, want %+v — a column drawn for an override must not reach the verdict", owed, want)
+	}
+}
+
+func TestMatrix_ACellCarriesTheVersionAWriteAgainstItMustExpect(t *testing.T) {
+	values := newFakeValues()
+	values.setAt("API_URL", "", "https://root.example", 4)
+
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
+	declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+
+	r := row(t, g.Matrix(), "API_URL")
+	if got := cell(t, r, "").Version; got != 4 {
+		t.Errorf("root cell version = %d, want 4 — the page quotes it back so a stale edit is refused", got)
+	}
+	if got := cell(t, r, "/web").Version; got != 0 {
+		t.Errorf("/web cell version = %d, want 0 — an unset cell expects no live value", got)
 	}
 }
 

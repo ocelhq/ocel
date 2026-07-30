@@ -23,6 +23,17 @@ type MatrixCell struct {
 	State  CellState `json:"state"`
 	Set    bool      `json:"set"`
 
+	// Version is the class-wide value's current version, zero when the cell
+	// holds none. A write quotes it back so an edit made against a value
+	// someone else has since replaced is refused rather than applied.
+	Version int64 `json:"version"`
+
+	// Overrides names the environments holding a value for this cell, which is
+	// never the value a deploy resolves. It is shown because a cell that reads
+	// empty while an override survives is a lie, not because anything here
+	// reads or writes one.
+	Overrides []string `json:"overrides,omitempty"`
+
 	// Problem is the schema's own complaint about the value that is there,
 	// empty when there is none. A missing cell needs no message: required and
 	// unset already says it.
@@ -69,8 +80,14 @@ func (g *Gate) Matrix() Matrix {
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	apps := append([]App(nil), g.scope.Apps...)
 	held := make(map[Cell]bool, len(g.cells))
-	for _, cell := range g.cells {
-		held[cell] = true
+	versions := make(map[Cell]int64, len(g.cells))
+	for _, row := range g.cells {
+		held[row.Cell] = true
+		versions[row.Cell] = row.Version
+	}
+	overrides := make(map[Cell][]string, len(g.overrides))
+	for cell, environments := range g.overrides {
+		overrides[cell] = append([]string(nil), environments...)
 	}
 	complaints := map[Cell]string{}
 	for _, problem := range g.problems {
@@ -80,7 +97,7 @@ func (g *Gate) Matrix() Matrix {
 	}
 	g.mu.Unlock()
 
-	columns := columns(definitions, apps, held)
+	columns := columns(definitions, apps, held, overrides)
 	m := Matrix{Columns: columns}
 	for _, definition := range definitions {
 		row := MatrixRow{
@@ -91,10 +108,12 @@ func (g *Gate) Matrix() Matrix {
 		for _, folder := range columns {
 			cell := Cell{Key: definition.GetKey(), Folder: folder}
 			row.Cells = append(row.Cells, MatrixCell{
-				Folder:  folder,
-				State:   state(definition, folder),
-				Set:     held[cell],
-				Problem: complaints[cell],
+				Folder:    folder,
+				State:     state(definition, folder),
+				Set:       held[cell],
+				Version:   versions[cell],
+				Overrides: overrides[cell],
+				Problem:   complaints[cell],
 			})
 		}
 		m.Rows = append(m.Rows, row)
@@ -152,10 +171,13 @@ func missing(definitions []*resourcesv1.VariableDefinition, binding string, held
 }
 
 // columns are the project root and every folder either side names — declared
-// in a scope, bound by an app, or already holding a value. A folder only the
-// store knows about still gets a column, so a value written before its folder
-// was bound is visible rather than hidden.
-func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held map[Cell]bool) []string {
+// in a scope, bound by an app, or holding a value class-wide or in some named
+// environment. A folder only the store knows about still gets a column, so a
+// value written before its folder was bound is visible rather than hidden. An
+// override's folder earns one on the same terms: the column carries nothing
+// required and nothing filled, but without it a surviving value has nowhere to
+// be named.
+func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held map[Cell]bool, overrides map[Cell][]string) []string {
 	seen := map[string]bool{}
 	for _, definition := range definitions {
 		for _, folder := range definition.GetFolders() {
@@ -168,6 +190,11 @@ func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held map
 		}
 	}
 	for cell := range held {
+		if cell.Folder != "" {
+			seen[cell.Folder] = true
+		}
+	}
+	for cell := range overrides {
 		if cell.Folder != "" {
 			seen[cell.Folder] = true
 		}

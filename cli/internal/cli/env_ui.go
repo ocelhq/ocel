@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 
+	connect "connectrpc.com/connect"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 
@@ -119,24 +120,37 @@ func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *p
 // answers for the gate. Both go through the provider binary: the CLI has no
 // cloud SDK dependency and must not gain one.
 
-func (v runnerValues) Set(ctx context.Context, cell envgate.Cell, value string) error {
+func (v runnerValues) Set(ctx context.Context, cell envgate.Cell, value string, expected *int64) error {
 	_, err := v.runner.SetValue(ctx, &envv1.SetValueRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
 		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
 		Value:           value,
+		ExpectedVersion: expected,
 	})
-	return err
+	return staleOrBroken(err)
 }
 
-func (v runnerValues) Delete(ctx context.Context, cell envgate.Cell) error {
+func (v runnerValues) Delete(ctx context.Context, cell envgate.Cell, expected *int64) error {
 	_, err := v.runner.DeleteValue(ctx, &envv1.DeleteValueRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
 		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
+		ExpectedVersion: expected,
 	})
+	return staleOrBroken(err)
+}
+
+// staleOrBroken separates the store's refusal of an expectation that no longer
+// holds from a store the UI could not reach. FAILED_PRECONDITION is the code
+// the wire contract reserves for it, so this reads a code rather than a
+// message and every provider answers it the same way.
+func staleOrBroken(err error) error {
+	if err != nil && connect.CodeOf(err) == connect.CodeFailedPrecondition {
+		return varsui.ErrStaleValue
+	}
 	return err
 }
 

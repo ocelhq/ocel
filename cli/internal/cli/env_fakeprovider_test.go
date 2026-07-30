@@ -79,6 +79,27 @@ func (s fakeStore) metadata(c *envv1.Coordinate) *envv1.ValueMetadata {
 	}
 }
 
+// liveVersion is the version a reader can observe, zero when the cell holds no
+// value — the same rule the real store applies, and what an expectation is
+// compared against.
+func (c *fakeCell) liveVersion() int64 {
+	if c == nil || c.Deleted {
+		return 0
+	}
+	return int64(len(c.Versions))
+}
+
+// checkExpectation is the provider half of optimistic concurrency: an
+// expectation that no longer describes the cell is FAILED_PRECONDITION, which
+// is the one code the wire contract reserves for it.
+func checkExpectation(cell *fakeCell, expected *int64) error {
+	if expected == nil || *expected == cell.liveVersion() {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition,
+		errors.New("the value changed since it was read; re-read it and try again"))
+}
+
 func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
@@ -90,17 +111,12 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetV
 
 	id := fakeCoordinateID(req.GetCoordinate())
 	cell := store[id]
+	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
+		return nil, err
+	}
 	if cell == nil {
 		cell = &fakeCell{}
 		store[id] = cell
-	}
-	current := int64(len(cell.Versions))
-	if cell.Deleted {
-		current = 0
-	}
-	if req.ExpectedVersion != nil && *req.ExpectedVersion != current {
-		return nil, connect.NewError(connect.CodeFailedPrecondition,
-			errors.New("the value changed since it was read; re-read it and try again"))
 	}
 
 	cell.Deleted = false
@@ -174,7 +190,10 @@ func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envv1.D
 	}
 
 	cell := store[fakeCoordinateID(req.GetCoordinate())]
-	if cell == nil || cell.Deleted {
+	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
+		return nil, err
+	}
+	if cell.liveVersion() == 0 {
 		return &envv1.DeleteValueResponse{}, nil
 	}
 	cell.Deleted = true

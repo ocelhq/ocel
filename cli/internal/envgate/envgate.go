@@ -29,12 +29,25 @@ type Cell struct {
 	Folder string `json:"folder"`
 }
 
+// Stored is one row the store holds: which cell it addresses, which named
+// environment it belongs to if any, and the version a write against it must
+// expect. Only a class-wide row's version is kept — nothing here writes to a
+// named environment, so an override is reduced to the name of the environment
+// holding it. Environment stays here rather than on Cell because a cell is a
+// map key throughout the verdict, and a key that varied by environment would
+// let an override stand in for the class-wide value nothing else can supply.
+type Stored struct {
+	Cell        Cell
+	Environment string
+	Version     int64
+}
+
 // Values is the store as the gate needs it. The CLI has no cloud SDK
 // dependency, so both operations are answered by the provider binary.
 type Values interface {
-	// List enumerates every class-wide cell the project holds, as presence
-	// without plaintext.
-	List(ctx context.Context) ([]Cell, error)
+	// List enumerates every value the project holds, class-wide and
+	// environment-scoped alike, as presence without plaintext.
+	List(ctx context.Context) ([]Stored, error)
 
 	// Reveal decrypts one cell. It is called only for classes whose values a
 	// build legitimately holds; a live-class value is never revealed.
@@ -61,8 +74,13 @@ type Gate struct {
 	values Values
 	scope  Scope
 
-	mu          sync.Mutex
-	cells       []Cell
+	mu sync.Mutex
+	// cells is the class-wide set and nothing else: it is what the gate's
+	// verdict, the matrix and every answer to a declaration are read from.
+	// overrides is the rest, held apart so a named-environment value can be
+	// shown without ever counting as the value a deploy resolves.
+	cells       []Stored
+	overrides   map[Cell][]string
 	definitions []*resourcesv1.VariableDefinition
 	problems    []*resourcesv1.VariableProblem
 }
@@ -75,14 +93,28 @@ func New(values Values, scope Scope) *Gate {
 // runs, so a store that cannot be reached fails the deploy up front rather
 // than in the middle of a declaration.
 func (g *Gate) Prefetch(ctx context.Context) error {
-	cells, err := g.values.List(ctx)
+	stored, err := g.values.List(ctx)
 	if err != nil {
 		return fmt.Errorf("read this project's variable values: %w", err)
+	}
+
+	var cells []Stored
+	overrides := map[Cell][]string{}
+	for _, row := range stored {
+		if row.Environment == "" {
+			cells = append(cells, row)
+			continue
+		}
+		overrides[row.Cell] = append(overrides[row.Cell], row.Environment)
+	}
+	for _, environments := range overrides {
+		sort.Strings(environments)
 	}
 
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.cells = cells
+	g.overrides = overrides
 	return nil
 }
 
@@ -92,14 +124,15 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 // ever holding a live secret.
 func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
 	g.mu.Lock()
-	stored := append([]Cell(nil), g.cells...)
+	stored := append([]Stored(nil), g.cells...)
 	g.definitions = append(g.definitions, req.GetDefinitions()...)
 	g.mu.Unlock()
 
 	var cells []*resourcesv1.VariableCell
 	for _, definition := range req.GetDefinitions() {
 		live := definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
-		for _, cell := range stored {
+		for _, row := range stored {
+			cell := row.Cell
 			if cell.Key != definition.GetKey() {
 				continue
 			}
@@ -149,8 +182,8 @@ func (g *Gate) Check() error {
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	apps := readers(g.scope.Apps)
 	held := make(map[Cell]bool, len(g.cells))
-	for _, cell := range g.cells {
-		held[cell] = true
+	for _, row := range g.cells {
+		held[row.Cell] = true
 	}
 	g.mu.Unlock()
 

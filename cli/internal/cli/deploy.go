@@ -404,7 +404,7 @@ type runnerValues struct {
 	class   deploymentsv1.Environment_Class
 }
 
-func (v runnerValues) List(ctx context.Context) ([]envgate.Cell, error) {
+func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
 	resp, err := v.runner.ListValues(ctx, &envv1.ListValuesRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
@@ -415,17 +415,16 @@ func (v runnerValues) List(ctx context.Context) ([]envgate.Cell, error) {
 		return nil, err
 	}
 
-	var cells []envgate.Cell
+	var stored []envgate.Stored
 	for _, value := range resp.GetValues() {
 		c := value.GetCoordinate()
-		// A named-environment override is a value for one preview, not a
-		// requirement: what a deploy needs is the class-wide cell.
-		if c.GetEnvironment() != "" {
-			continue
-		}
-		cells = append(cells, envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()})
+		stored = append(stored, envgate.Stored{
+			Cell:        envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()},
+			Environment: c.GetEnvironment(),
+			Version:     value.GetVersion(),
+		})
 	}
-	return cells, nil
+	return stored, nil
 }
 
 func (v runnerValues) Reveal(ctx context.Context, cell envgate.Cell) (string, bool, error) {

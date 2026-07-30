@@ -116,7 +116,7 @@ func (s *VarsServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequ
 	if err != nil {
 		return nil, err
 	}
-	deleted, err := store.Delete(ctx, toCoordinate(req.GetCoordinate()))
+	deleted, err := store.Delete(ctx, toCoordinate(req.GetCoordinate()), req.ExpectedVersion)
 	if err != nil {
 		return nil, varsError(err)
 	}

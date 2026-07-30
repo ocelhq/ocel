@@ -246,7 +246,13 @@ func (s *Store) List(ctx context.Context, slug string) ([]Metadata, error) {
 // not. It does not consume a version of its own: every version number stays
 // backed by exactly one history row, which is what the computed prune relies
 // on.
-func (s *Store) Delete(ctx context.Context, c Coordinate) (bool, error) {
+//
+// expected is read exactly as Set reads it: nil for a blind delete, zero to
+// require that no value is set — which an unset cell already satisfies, so
+// repeating a delete that landed stays idempotent. The tombstone is a write
+// rather than a removal, so the expectation is enforced the way a write's is:
+// by the condition the write itself carries, not by the read alone.
+func (s *Store) Delete(ctx context.Context, c Coordinate, expected *int64) (bool, error) {
 	if err := c.validate(); err != nil {
 		return false, err
 	}
@@ -255,15 +261,27 @@ func (s *Store) Delete(ctx context.Context, c Coordinate) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	if expected != nil && *expected != current.liveVersion() {
+		return false, ErrStaleVersion
+	}
 	if current.liveVersion() == 0 {
 		return false, nil
 	}
 
 	tombstone := item{PK: pk, SK: sk, Version: current.Version, Ts: s.now(), Deleted: true}
 	if _, err := s.Dynamo.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName: aws.String(s.Table),
-		Item:      marshal(tombstone),
+		TableName:                aws.String(s.Table),
+		Item:                     marshal(tombstone),
+		ConditionExpression:      aws.String("attribute_not_exists(pk) OR #version = :seen"),
+		ExpressionAttributeNames: map[string]string{"#version": "version"},
+		ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
+			":seen": number(current.Version),
+		},
 	}); err != nil {
+		var failed *ddbtypes.ConditionalCheckFailedException
+		if errors.As(err, &failed) {
+			return false, ErrStaleVersion
+		}
 		return false, fmt.Errorf("delete %s: %w", c.Key, err)
 	}
 	return true, nil

@@ -114,7 +114,11 @@ message SetValueRequest {
   // for a blind write, zero to require that no value exists yet. A write whose
   // expectation no longer holds is rejected rather than applied, so two people
   // editing at once cannot silently lose one edit. A blind write still loses
-  // to a writer that commits between its read and its own commit.
+  // to a writer that commits between its read and its own commit. The
+  // rejection is FAILED_PRECONDITION and nothing else: that code is how a
+  // caller tells a lost race from a store it could not reach, so a provider
+  // spending it on anything but a broken expectation tells a user their value
+  // changed when it did not.
   optional int64 expected_version = 6;
 }
 
@@ -162,6 +166,15 @@ message DeleteValueRequest {
   string protocol_version = 2;
   deployments.v1.Environment.Class class = 3;
   Coordinate coordinate = 4;
+
+  // expected_version is the version the deleter believes is current: absent
+  // for a blind delete, zero to require that no value is set — which an unset
+  // cell already satisfies, so a repeat of a delete that already landed stays
+  // idempotent rather than becoming a conflict. A delete whose expectation no
+  // longer holds is rejected rather than applied, so a page showing a value
+  // somebody has since replaced cannot destroy the replacement. Like a write,
+  // the rejection is FAILED_PRECONDITION and nothing else.
+  optional int64 expected_version = 5;
 }
 
 message DeleteValueResponse {

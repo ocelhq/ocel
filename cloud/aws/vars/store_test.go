@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 )
 
@@ -307,7 +308,7 @@ func TestDeleteUnsetsTheValueAndKeepsHistory(t *testing.T) {
 		t.Fatalf("Set err = %v", err)
 	}
 
-	deleted, err := store.Delete(context.Background(), c)
+	deleted, err := store.Delete(context.Background(), c, nil)
 	if err != nil {
 		t.Fatalf("Delete err = %v", err)
 	}
@@ -327,6 +328,124 @@ func TestDeleteUnsetsTheValueAndKeepsHistory(t *testing.T) {
 	}
 }
 
+// Two developers hold one cell open. A replaces the value; B, whose page still
+// shows the old one, clicks Remove. B's delete has to lose to A's write rather
+// than destroy it — the same race a stale write loses, from the other side.
+func TestDeleteRejectsADeleteAgainstAStaleVersion(t *testing.T) {
+	store, _, _ := newTestStore(t)
+	c := testCoordinate()
+
+	if _, err := store.Set(context.Background(), c, "first", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	if _, err := store.Set(context.Background(), c, "second", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+
+	stale := int64(1)
+	deleted, err := store.Delete(context.Background(), c, &stale)
+	if !errors.Is(err, ErrStaleVersion) {
+		t.Fatalf("Delete against a stale expected version err = %v, want ErrStaleVersion", err)
+	}
+	if deleted {
+		t.Error("Delete reported a deletion it refused to make")
+	}
+	got, err := store.Get(context.Background(), c, true)
+	if err != nil {
+		t.Fatalf("Get err = %v", err)
+	}
+	if got.Plaintext != "second" {
+		t.Errorf("value after the rejected delete = %q, want %q — a refused delete must not be applied", got.Plaintext, "second")
+	}
+
+	current := int64(2)
+	if deleted, err := store.Delete(context.Background(), c, &current); err != nil || !deleted {
+		t.Fatalf("Delete quoting the current version = (%v, %v), want it to land", deleted, err)
+	}
+	if _, err := store.Get(context.Background(), c, false); !errors.Is(err, ErrNotFound) {
+		t.Errorf("Get after the honoured delete err = %v, want ErrNotFound", err)
+	}
+}
+
+// A blind delete reads no version, so nothing in the process can tell it lost;
+// only the condition the tombstone carries can. Staging a competing write
+// between this deleter's read and its commit is the interleaving that proves
+// the tombstone is a conditioned write rather than an unconditional one.
+func TestDeleteRejectsADeleterOvertakenBetweenItsReadAndItsCommit(t *testing.T) {
+	store, ddb, _ := newTestStore(t)
+	c := testCoordinate()
+
+	if _, err := store.Set(context.Background(), c, "first", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	ddb.beforePut = func() {
+		if _, err := store.Set(context.Background(), c, "committed by the other writer", nil); err != nil {
+			t.Fatalf("competing Set err = %v", err)
+		}
+	}
+
+	if _, err := store.Delete(context.Background(), c, nil); !errors.Is(err, ErrStaleVersion) {
+		t.Fatalf("overtaken Delete err = %v, want ErrStaleVersion", err)
+	}
+	got, err := store.Get(context.Background(), c, true)
+	if err != nil {
+		t.Fatalf("Get err = %v", err)
+	}
+	if got.Plaintext != "committed by the other writer" {
+		t.Errorf("value after the overtaken delete = %q, want the write that got there first", got.Plaintext)
+	}
+}
+
+// Zero means "no value is set", which an already-unset cell satisfies. A repeat
+// of a delete that landed is the same idempotent no-op it always was, but a
+// cell somebody has since refilled is a conflict.
+func TestDeleteExpectingNoValueHoldsOnlyWhileTheCellIsUnset(t *testing.T) {
+	store, _, _ := newTestStore(t)
+	c := testCoordinate()
+	unset := int64(0)
+
+	if _, err := store.Set(context.Background(), c, "first", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	if _, err := store.Delete(context.Background(), c, &unset); !errors.Is(err, ErrStaleVersion) {
+		t.Fatalf("Delete expecting no value on a set cell err = %v, want ErrStaleVersion", err)
+	}
+
+	if _, err := store.Delete(context.Background(), c, nil); err != nil {
+		t.Fatalf("Delete err = %v", err)
+	}
+	deleted, err := store.Delete(context.Background(), c, &unset)
+	if err != nil {
+		t.Fatalf("repeated Delete expecting no value err = %v, want an idempotent no-op", err)
+	}
+	if deleted {
+		t.Error("the repeated Delete reported a deletion, want none — there was nothing left to unset")
+	}
+}
+
+func TestDeleteEmitsTheOptimisticCondition(t *testing.T) {
+	store, ddb, _ := newTestStore(t)
+	c := testCoordinate()
+
+	if _, err := store.Set(context.Background(), c, "v", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	if _, err := store.Delete(context.Background(), c, nil); err != nil {
+		t.Fatalf("Delete err = %v", err)
+	}
+
+	if len(ddb.puts) != 1 {
+		t.Fatalf("Delete emitted %d point writes, want exactly the tombstone", len(ddb.puts))
+	}
+	want := "attribute_not_exists(pk) OR #version = :seen"
+	if got := aws.ToString(ddb.puts[0].ConditionExpression); got != want {
+		t.Errorf("tombstone condition = %q, want %q", got, want)
+	}
+	if got := numberAttr(ddb.puts[0].ExpressionAttributeValues, ":seen"); got != 1 {
+		t.Errorf("tombstone conditions on version %d, want 1 — the version the delete read", got)
+	}
+}
+
 // A delete must not rewind the version sequence. If the next write restarted
 // at 1 it would land on top of the history row version 1 already occupies,
 // rewriting what that version was and leaving the newest entry buried under
@@ -340,7 +459,7 @@ func TestSetAfterDeleteContinuesTheVersionSequence(t *testing.T) {
 			t.Fatalf("Set %q err = %v", v, err)
 		}
 	}
-	if _, err := store.Delete(context.Background(), c); err != nil {
+	if _, err := store.Delete(context.Background(), c, nil); err != nil {
 		t.Fatalf("Delete err = %v", err)
 	}
 
@@ -388,7 +507,7 @@ func TestHistoryStaysCappedAcrossADelete(t *testing.T) {
 			t.Fatalf("Set %d err = %v", i, err)
 		}
 	}
-	if _, err := store.Delete(context.Background(), c); err != nil {
+	if _, err := store.Delete(context.Background(), c, nil); err != nil {
 		t.Fatalf("Delete err = %v", err)
 	}
 	if _, err := store.Set(context.Background(), c, "after the delete", nil); err != nil {
@@ -419,7 +538,7 @@ func TestSetWithExpectedVersionZeroSucceedsAfterADelete(t *testing.T) {
 	if _, err := store.Set(context.Background(), c, "first", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
-	if _, err := store.Delete(context.Background(), c); err != nil {
+	if _, err := store.Delete(context.Background(), c, nil); err != nil {
 		t.Fatalf("Delete err = %v", err)
 	}
 
@@ -440,7 +559,7 @@ func TestDeleteLeavesNoValueAtRest(t *testing.T) {
 	if _, err := store.Set(context.Background(), c, "sk_live_secret", nil); err != nil {
 		t.Fatalf("Set err = %v", err)
 	}
-	if _, err := store.Delete(context.Background(), c); err != nil {
+	if _, err := store.Delete(context.Background(), c, nil); err != nil {
 		t.Fatalf("Delete err = %v", err)
 	}
 
@@ -463,7 +582,7 @@ func TestListOmitsDeletedCells(t *testing.T) {
 			t.Fatalf("Set %+v err = %v", c, err)
 		}
 	}
-	if _, err := store.Delete(context.Background(), removed); err != nil {
+	if _, err := store.Delete(context.Background(), removed, nil); err != nil {
 		t.Fatalf("Delete err = %v", err)
 	}
 
@@ -478,7 +597,7 @@ func TestListOmitsDeletedCells(t *testing.T) {
 
 func TestDeleteIsIdempotent(t *testing.T) {
 	store, _, _ := newTestStore(t)
-	deleted, err := store.Delete(context.Background(), testCoordinate())
+	deleted, err := store.Delete(context.Background(), testCoordinate(), nil)
 	if err != nil {
 		t.Fatalf("Delete err = %v", err)
 	}

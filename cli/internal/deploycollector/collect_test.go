@@ -92,7 +92,7 @@ func writeFile(t *testing.T, path, contents string) {
 // variables and so never consult it.
 type emptyValues struct{}
 
-func (emptyValues) List(context.Context) ([]envgate.Cell, error) { return nil, nil }
+func (emptyValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
 
 func (emptyValues) Reveal(context.Context, envgate.Cell) (string, bool, error) {
 	return "", false, nil

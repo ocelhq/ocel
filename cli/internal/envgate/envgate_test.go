@@ -13,24 +13,40 @@ import (
 // fakeValues is the store as the gate sees it, recording every reveal so a
 // test can assert on what plaintext the build host was allowed to hold.
 type fakeValues struct {
-	cells    map[envgate.Cell]string
-	revealed []envgate.Cell
+	cells     map[envgate.Cell]string
+	versions  map[envgate.Cell]int64
+	overrides []envgate.Stored
+	revealed  []envgate.Cell
 }
 
 func newFakeValues() *fakeValues {
-	return &fakeValues{cells: map[envgate.Cell]string{}}
+	return &fakeValues{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}}
 }
 
 func (v *fakeValues) set(key, folder, value string) {
 	v.cells[envgate.Cell{Key: key, Folder: folder}] = value
 }
 
-func (v *fakeValues) List(context.Context) ([]envgate.Cell, error) {
-	out := make([]envgate.Cell, 0, len(v.cells))
+func (v *fakeValues) setAt(key, folder, value string, version int64) {
+	v.set(key, folder, value)
+	v.versions[envgate.Cell{Key: key, Folder: folder}] = version
+}
+
+// override is what `ocel env set --environment` writes.
+func (v *fakeValues) override(key, folder, environment string) {
+	v.overrides = append(v.overrides, envgate.Stored{
+		Cell:        envgate.Cell{Key: key, Folder: folder},
+		Environment: environment,
+		Version:     1,
+	})
+}
+
+func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
+	out := make([]envgate.Stored, 0, len(v.cells)+len(v.overrides))
 	for c := range v.cells {
-		out = append(out, c)
+		out = append(out, envgate.Stored{Cell: c, Version: v.versions[c]})
 	}
-	return out, nil
+	return append(out, v.overrides...), nil
 }
 
 func (v *fakeValues) Reveal(_ context.Context, cell envgate.Cell) (string, bool, error) {
@@ -301,6 +317,54 @@ func TestGate_SchemaInvalidCellIsStillTheDeclaringProcessesToReport(t *testing.T
 	if !strings.Contains(err.Error(), "invalid url") {
 		t.Errorf("refusal = %q, want the schema's own complaint", err.Error())
 	}
+}
+
+func TestGate_AnOverrideOnlyKeyDoesNotSatisfyTheDeployGate(t *testing.T) {
+	values := newFakeValues()
+	values.override("STRIPE_API_KEY", "", "pr-42")
+
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+	err := g.Check()
+	if err == nil {
+		t.Fatal("Check err = nil, want a refusal — pr-42 holds a value the deploy never resolves, so the class-wide cell is still empty")
+	}
+	for _, want := range []string{"STRIPE_API_KEY", "no value is set"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal = %q, want it to contain %q", err.Error(), want)
+		}
+	}
+}
+
+// Each class leaks differently, so each is asked the question it can answer: a
+// live class answers presence without reading, so a leaked override surfaces
+// as a cell; a readable class reads before answering, so it surfaces as a
+// decrypt onto the build host.
+func TestGate_AnOverrideIsNeverAnsweredToTheDeclaringProcess(t *testing.T) {
+	t.Run("a live class names no cell for it", func(t *testing.T) {
+		values := newFakeValues()
+		values.override("STRIPE_API_KEY", "", "pr-42")
+
+		g := prefetched(t, values)
+		resp := declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+		if len(resp.GetCells()) != 0 {
+			t.Errorf("cells = %+v, want none — only pr-42 holds a value and no deploy reads it", resp.GetCells())
+		}
+	})
+
+	t.Run("a readable class never decrypts it", func(t *testing.T) {
+		values := newFakeValues()
+		values.override("ANALYTICS_ID", "", "pr-42")
+
+		g := prefetched(t, values)
+		declare(t, g, def("ANALYTICS_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+
+		if len(values.revealed) != 0 {
+			t.Errorf("revealed = %+v, want nothing decrypted for a cell the class-wide set does not hold", values.revealed)
+		}
+	})
 }
 
 func TestGate_RefusalCarriesTheProblemsSoARecoveryPathCanPrefillThem(t *testing.T) {

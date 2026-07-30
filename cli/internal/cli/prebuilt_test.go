@@ -178,7 +178,7 @@ func noGate(cfg *projectconfig.Config) *envgate.Gate {
 
 type emptyValues struct{}
 
-func (emptyValues) List(context.Context) ([]envgate.Cell, error) { return nil, nil }
+func (emptyValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
 
 func (emptyValues) Reveal(context.Context, envgate.Cell) (string, bool, error) {
 	return "", false, nil

@@ -62,8 +62,8 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 
 	g.mu.Lock()
 	held := make(map[Cell]bool, len(g.cells))
-	for _, cell := range g.cells {
-		held[cell] = true
+	for _, row := range g.cells {
+		held[row.Cell] = true
 	}
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	g.mu.Unlock()

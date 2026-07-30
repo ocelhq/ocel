@@ -269,7 +269,11 @@ type SetValueRequest struct {
 	// for a blind write, zero to require that no value exists yet. A write whose
 	// expectation no longer holds is rejected rather than applied, so two people
 	// editing at once cannot silently lose one edit. A blind write still loses
-	// to a writer that commits between its read and its own commit.
+	// to a writer that commits between its read and its own commit. The
+	// rejection is FAILED_PRECONDITION and nothing else: that code is how a
+	// caller tells a lost race from a store it could not reach, so a provider
+	// spending it on anything but a broken expectation tells a user their value
+	// changed when it did not.
 	ExpectedVersion *int64 `protobuf:"varint,6,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -652,6 +656,14 @@ type DeleteValueRequest struct {
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
 	Coordinate      *Coordinate            `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	// expected_version is the version the deleter believes is current: absent
+	// for a blind delete, zero to require that no value is set — which an unset
+	// cell already satisfies, so a repeat of a delete that already landed stays
+	// idempotent rather than becoming a conflict. A delete whose expectation no
+	// longer holds is rejected rather than applied, so a page showing a value
+	// somebody has since replaced cannot destroy the replacement. Like a write,
+	// the rejection is FAILED_PRECONDITION and nothing else.
+	ExpectedVersion *int64 `protobuf:"varint,5,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -712,6 +724,13 @@ func (x *DeleteValueRequest) GetCoordinate() *Coordinate {
 		return x.Coordinate
 	}
 	return nil
+}
+
+func (x *DeleteValueRequest) GetExpectedVersion() int64 {
+	if x != nil && x.ExpectedVersion != nil {
+		return *x.ExpectedVersion
+	}
+	return 0
 }
 
 type DeleteValueResponse struct {
@@ -936,14 +955,16 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"\x10GetValueResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x121\n" +
 	"\bmetadata\x18\x02 \x01(\v2\x15.env.v1.ValueMetadataR\bmetadata\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value\"\xc6\x01\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\"\x8b\x02\n" +
 	"\x12DeleteValueRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
 	"\x05class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x122\n" +
 	"\n" +
 	"coordinate\x18\x04 \x01(\v2\x12.env.v1.CoordinateR\n" +
-	"coordinate\"/\n" +
+	"coordinate\x12.\n" +
+	"\x10expected_version\x18\x05 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01B\x13\n" +
+	"\x11_expected_version\"/\n" +
 	"\x13DeleteValueResponse\x12\x18\n" +
 	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xdf\x01\n" +
 	"\x13ListVersionsRequest\x12\x18\n" +
@@ -1031,6 +1052,7 @@ func file_env_v1_vars_proto_init() {
 		return
 	}
 	file_env_v1_vars_proto_msgTypes[3].OneofWrappers = []any{}
+	file_env_v1_vars_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
