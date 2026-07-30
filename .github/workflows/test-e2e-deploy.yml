@@ -86,9 +86,8 @@ jobs:
         working-directory: nextjs
         run: pnpm playwright install --with-deps chromium
 
-      # Every package the npm launcher require.resolve's has to exist as built
-      # output before the CLI can run: the node builder (ocel), the Next adapter,
-      # and both edge worker bundles.
+      # @ocel/sdk's built dist is what the sidecar packs. The CLI bundles the
+      # builder, the Next adapter and the worker bundles itself at `go generate`.
       - name: Install & build the adapter workspace
         working-directory: adapter
         run: |
@@ -99,9 +98,9 @@ jobs:
           pnpm --filter @ocel/worker-nextjs build
           pnpm --filter @ocel/worker-deployments-store build
 
-      # The npm launcher resolves the platform CLI and provider binaries out of
-      # packages/native-lib, so HEAD's Go code has to land there before anything
-      # is packed for the sidecar.
+      # The launcher resolves the CLI binary out of packages/native-lib, and the
+      # sidecar packs the provider package from there, so HEAD's Go code has to
+      # land there first.
       - name: Build the Go binaries for this host
         working-directory: adapter
         run: |

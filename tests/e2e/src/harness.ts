@@ -9,12 +9,13 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 export const repoRoot = path.resolve(here, "..", "..", "..");
 export const examplesDir = path.join(repoRoot, "examples");
 
-// The built Go CLI. `cd cli && go build -o dist/ocel ./ocel` produces this
-// (output goes to cli/dist/ - a gitignored path - because the CLI's own main
+// The built Go CLI. `cd cli && go build -o bin/ocel ./ocel` produces this
+// (output goes to cli/bin/ - a gitignored path - because the CLI's own main
 // package already lives at cli/ocel/, so `-o ocel` would collide with that
-// directory). Override with OCEL_BIN to point at any binary.
+// directory, and cli/dist/ is the embedded platform tree). Override with
+// OCEL_BIN to point at any binary.
 export const ocelBin =
-  process.env.OCEL_BIN ?? path.join(repoRoot, "cli", "dist", "ocel");
+  process.env.OCEL_BIN ?? path.join(repoRoot, "cli", "bin", "ocel");
 
 export const apiUrl = process.env.OCEL_API_URL ?? "http://localhost:3000";
 

@@ -34,13 +34,17 @@ function exeName(name, goos) {
 
 // TARGETS declares, per buildable distribution, its Go module directory, the
 // npm native-package family its binaries land in, the -X ldflags package for
-// its version string, and the binaries it ships (each an entrypoint dir under
-// cmd/ plus the output name and optional subdir inside the package's bin/).
+// its version string, whether it needs `go generate` first, and the binaries it
+// ships (each an entrypoint dir under cmd/ plus the output name and optional
+// subdir inside the package's bin/).
 const TARGETS = {
   cli: {
     goModuleDir: join(REPO_ROOT, "cli"),
     pkgPrefix: "cli",
     versionLdflagPkg: "github.com/ocelhq/ocel/cli/internal/cli",
+    // The CLI embeds cli/dist, which is generated, uncommitted, and required
+    // for the module to compile at all. The provider embeds nothing.
+    generate: true,
     binaries: [{ cmd: "./ocel", name: "ocel" }],
   },
   provider: {
@@ -157,6 +161,18 @@ function binaryOutPath(buildTarget, binary, platform) {
   return join(...parts);
 }
 
+// Stays off the cross-compile env: the generators are host-side Node/pnpm
+// builds whose output is platform independent.
+function generate(buildTarget) {
+  const result = spawnSync("go", ["generate", "./..."], {
+    cwd: buildTarget.goModuleDir,
+    stdio: "inherit",
+  });
+  if (result.status !== 0) {
+    process.exit(result.status ?? 1);
+  }
+}
+
 function buildOne(buildTarget, binary, platform, outPath, version) {
   mkdirSync(dirname(outPath), { recursive: true });
 
@@ -205,6 +221,10 @@ function main() {
     throw new Error(
       `--out is not supported for --target ${args.target} (it ships multiple binaries)`,
     );
+  }
+
+  if (buildTarget.generate) {
+    generate(buildTarget);
   }
 
   for (const binary of buildTarget.binaries) {
