@@ -118,6 +118,37 @@ describe("a lambda route's bundle entry", () => {
     expect(origin.requests[0].headers.has(ENTRY_HEADER)).toBe(false);
   });
 
+  it("stamps an empty entry key as an empty header, not as no header", async () => {
+    const origin = recorder();
+    await dispatchTo(
+      "/blog/hello",
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: {
+            "/blog/hello": { kind: "lambda", id: "bundle-0", entryKey: "" },
+          },
+        },
+        functionUrls: { "bundle-0": "https://fn.example.com" },
+        fetch: origin.fetch,
+      }),
+      // A client value must still lose to the worker's own — the empty one.
+      new Request("https://app.example/blog/hello", {
+        headers: { [ENTRY_HEADER]: "attacker/admin/page" },
+      }),
+    );
+
+    // The dispatcher reads req.headers["x-ocel-entry"] and 502s when it is not a
+    // string, then looks the value up in its own entry table. An empty key is a
+    // key the table can carry, so the producer emits it faithfully; omitting the
+    // header here would turn it into the unrecoverable "carries no header" 502.
+    expect(origin.requests[0].headers.has(ENTRY_HEADER)).toBe(true);
+    expect(origin.entries()).toEqual([""]);
+  });
+
   it("keeps a POST body intact while stamping the entry", async () => {
     const origin = recorder();
     await dispatchTo(
@@ -467,26 +498,41 @@ describe("a prerender whose parent renders on the edge", () => {
     fallback: { initialRevalidate: 60 },
   };
 
+  // The same route with no id at all: an edge-parented prerender has no parent
+  // bundle, so there is no Function URL for an id to name.
+  const unnamedTarget = (({ id: _unused, ...rest }) => rest)(edgeTarget);
+
   function edgeDeps(
     entry: unknown | null,
     now: number,
     pending: Promise<unknown>[],
-  ): { deps: RouteDeps; invocations: () => string[] } {
+    over: {
+      target?: typeof edgeTarget | typeof unnamedTarget;
+      functionUrls?: Record<string, string>;
+    } = {},
+  ): {
+    deps: RouteDeps;
+    invocations: () => string[];
+    urls: () => string[];
+  } {
     const invocations: string[] = [];
+    const urls: string[] = [];
     return {
       invocations: () => invocations,
+      urls: () => urls,
       deps: deps({
         manifest: {
           buildId: "t",
           basePath: "",
           pathnames: [],
           routes: {},
-          dispatch: { "/edge-blog": edgeTarget },
+          dispatch: { "/edge-blog": over.target ?? edgeTarget },
         },
         // No Function URL at all: the parent renders on the edge.
-        functionUrls: {},
-        edge: async (entryKey) => {
+        functionUrls: over.functionUrls ?? {},
+        edge: async (entryKey, request) => {
           invocations.push(entryKey);
+          urls.push(request.url);
           return new Response("<html>rendered-on-edge</html>", {
             status: 200,
             headers: { "cache-control": "s-maxage=60" },
@@ -538,5 +584,72 @@ describe("a prerender whose parent renders on the edge", () => {
 
     await Promise.all(pending);
     expect(invocations()).toEqual([]);
+  });
+
+  it("renders through the edge entry with no id to name a parent at all", async () => {
+    const pending: Promise<unknown>[] = [];
+    const { deps, invocations } = edgeDeps(null, 2_000, pending, {
+      target: unnamedTarget,
+    });
+
+    const res = await dispatchTo("/edge-blog", deps);
+
+    expect(await res.text()).toBe("<html>rendered-on-edge</html>");
+    expect(invocations()).toEqual(["middleware_app/edge-blog"]);
+  });
+
+  it("never revalidates an unnamed edge parent either", async () => {
+    const pending: Promise<unknown>[] = [];
+    const { deps, invocations } = edgeDeps(
+      {
+        lastModified: 1_000,
+        value: {
+          kind: "APP_PAGE",
+          html: "<html>from-store</html>",
+          status: 200,
+          headers: {},
+        },
+      },
+      1_000 + 61_000,
+      pending,
+      { target: unnamedTarget },
+    );
+
+    const res = await dispatchTo("/edge-blog", deps);
+
+    expect(res.headers.get("x-nextjs-cache")).toBe("STALE");
+    expect(await res.text()).toBe("<html>from-store</html>");
+
+    await Promise.all(pending);
+    expect(invocations()).toEqual([]);
+  });
+
+  it("502s when neither a Function URL nor an edge entry resolves", async () => {
+    const pending: Promise<unknown>[] = [];
+    const { edgeEntryKey: _none, ...orphan } = unnamedTarget;
+    const { deps, invocations } = edgeDeps(null, 2_000, pending, {
+      target: orphan as typeof unnamedTarget,
+    });
+
+    expect((await dispatchTo("/edge-blog", deps)).status).toBe(502);
+    expect(invocations()).toEqual([]);
+  });
+
+  // The edge path must be chosen by edgeEntryKey's presence, not by a
+  // functionUrls miss: bundle ids and route ids happen not to collide today, and
+  // a collision must not silently route an edge render to a Lambda.
+  it("ignores a Function URL that its id happens to name", async () => {
+    const pending: Promise<unknown>[] = [];
+    const { deps, invocations, urls } = edgeDeps(null, 2_000, pending, {
+      functionUrls: { "/edge-blog": "https://fn.example.com" },
+    });
+
+    const res = await dispatchTo("/edge-blog", deps);
+
+    expect(await res.text()).toBe("<html>rendered-on-edge</html>");
+    expect(invocations()).toEqual(["middleware_app/edge-blog"]);
+    // An edge entry renders the page a browser asked for, so it is invoked under
+    // the public origin — never under a Function URL it will never call.
+    expect(urls()).toEqual(["https://app.example/edge-blog"]);
   });
 });
