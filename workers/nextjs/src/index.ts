@@ -50,7 +50,11 @@ const RSC_FORWARD_HEADERS = new Set([
 // Many routes share one Lambda, so the Function URL alone does not say what to
 // run: this header names which entry of that bundle the launcher must invoke.
 // A manifest built before bundling carries no entryKey at all, and its
-// per-route launcher ignores the header — so it is omitted rather than empty.
+// per-route launcher ignores the header — so a *missing* entryKey means no
+// header, which is not the same as an entryKey the build declared as the empty
+// string. The launcher's dispatcher 502s on an absent header and looks any
+// present value — "" included — up in its own entry table, so the distinction
+// it draws is presence, not truthiness.
 const ENTRY_HEADER = "x-ocel-entry";
 
 // x-ocel-* is the control plane's own namespace — x-ocel-entry selects which code
@@ -140,7 +144,10 @@ type DispatchTarget =
     }
   | {
       kind: "prerender";
-      id: string;
+      // The parent bundle's identity, and the functionUrls key. Absent when the
+      // route that regenerates this prerender runs on the edge: there is no
+      // Function URL then, so there is nothing for an id to name.
+      id?: string;
       // The entry inside the parent bundle that regenerates this prerender.
       entryKey?: string;
       tags?: string[];
@@ -153,8 +160,8 @@ type DispatchTarget =
       // from the manifest rather than assumed.
       pprChain?: { headers: Record<string, string> };
       // Set when the route that regenerates this prerender runs on the edge:
-      // there is no Function URL to forward to, so every tier below the cache
-      // invokes this entry instead — and no tier can revalidate.
+      // its presence alone is what routes every tier below the cache to this
+      // entry instead of to a Function URL — and no tier can revalidate.
       edgeEntryKey?: string;
       config: {
         allowQuery?: string[];
@@ -562,9 +569,15 @@ async function dispatchPrerender(
   headers: Headers,
   deps: RouteDeps,
 ): Promise<Response> {
-  const fnUrl = deps.functionUrls[target.id];
+  // An edge-parented prerender is chosen by its edgeEntryKey, never by failing
+  // to find a Function URL: a bundle id and a route id that ever collided would
+  // otherwise route an edge render at a Lambda.
   const edgeEntryKey = target.edgeEntryKey;
-  if (!fnUrl && !edgeEntryKey) return noFunctionUrl(target.id);
+  const fnUrl =
+    edgeEntryKey || target.id === undefined
+      ? undefined
+      : deps.functionUrls[target.id];
+  if (!fnUrl && !edgeEntryKey) return noRenderer(target.id);
 
   // Every Function-URL call this function makes is signed when edge credentials
   // are bound; an edge-rendered route has no Function URL at all and reaches its
@@ -842,15 +855,25 @@ export function forward(
 // entry on all of them. With no entry to name the header is removed, never left
 // as it was found: an entryless target's launcher ignores the header, but a
 // forward carrying one it did not choose is one this worker did not author.
+// Only an absent entryKey means no entry — a declared empty one is stamped as
+// an empty value, matching what the manifest emits and what the launcher reads.
 function withEntry(request: Request, entryKey: string | undefined): Request {
   const headers = new Headers(request.headers);
-  if (entryKey) headers.set(ENTRY_HEADER, entryKey);
+  if (entryKey !== undefined) headers.set(ENTRY_HEADER, entryKey);
   else headers.delete(ENTRY_HEADER);
   return new Request(request, { headers });
 }
 
 function noFunctionUrl(id: string): Response {
   return new Response(`No function URL for ${id}`, { status: 502 });
+}
+
+// A prerender resolves to neither a Function URL nor an edge entry: nothing can
+// render it, so it fails closed like every other unresolvable target.
+function noRenderer(id: string | undefined): Response {
+  return id === undefined
+    ? new Response("No renderer for prerender", { status: 502 })
+    : noFunctionUrl(id);
 }
 
 function noEdgeEntry(pathname: string | null | undefined): Response {
