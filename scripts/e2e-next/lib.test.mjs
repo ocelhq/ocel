@@ -1,11 +1,15 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import {
   APP_NAME,
   DNS_LABEL,
+  ISR_REVALIDATE_SECONDS,
+  ISR_ROUTE,
   MAX_SLUG_LEN,
   buildBaselineManifest,
   deployURL,
+  isrToken,
   lambdaLogGroups,
   markerLines,
   mergeBaselineManifest,
@@ -120,6 +124,25 @@ describe("deployURL", () => {
   it("refuses a result with no URL, naming what it read", () => {
     expect(() => deployURL({ appUrls: [] })).toThrow(/no app URL/i);
     expect(() => deployURL({})).toThrow(/no app URL/i);
+  });
+});
+
+describe("isrToken", () => {
+  it("reads the probe page's per-render token", () => {
+    expect(isrToken('<p id="isr-token">isr-token:1769000000000</p>')).toBe("1769000000000");
+  });
+
+  it("is null when the response is not the probe page", () => {
+    expect(isrToken("<h1>500</h1>")).toBeNull();
+    expect(isrToken("")).toBeNull();
+    expect(isrToken(undefined)).toBeNull();
+  });
+
+  it("matches the marker the smoke app's page emits", () => {
+    const page = readFileSync(new URL("./smoke-app/app/isr/page.tsx", import.meta.url), "utf8");
+    expect(page).toContain("isr-token:");
+    expect(page).toContain(`export const revalidate = ${ISR_REVALIDATE_SECONDS};`);
+    expect(ISR_ROUTE).toBe("/isr");
   });
 });
 
