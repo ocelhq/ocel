@@ -34,9 +34,16 @@ await build({
   format: "esm",
 });
 
-// Stays unbundled: the adapter copies it into the user's app, where its bare
-// `require("next/dist/...")` must bind to that app's own Next.
-await copyFile(
-  join(root, "packages/next-runtime/src/edge-cache-handler.cjs"),
-  join(dist, "next-runtime/edge-cache-handler.cjs"),
+// Stay unbundled: the adapter copies these into the user's app verbatim —
+// edge-cache-handler.cjs so its bare `require("next/dist/...")` binds to that
+// app's own Next, next-dispatch.cjs because it is the bundle launcher's runtime
+// peer. The adapter resolves both relative to its own URL, so they must sit
+// beside the bundled adapter here exactly as they do in the package's dist.
+await Promise.all(
+  ["edge-cache-handler.cjs", "next-dispatch.cjs"].map((name) =>
+    copyFile(
+      join(root, "packages/next-runtime/src", name),
+      join(dist, "next-runtime", name),
+    ),
+  ),
 );
