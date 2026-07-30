@@ -112,7 +112,7 @@ async function waitForRigAddr(child: ChildProcess): Promise<string> {
 
 const runIt = (await minioReachable()) && goAvailable() ? it : it.skip;
 
-describe("@ocel/sdk/blob dev e2e (MinIO)", () => {
+describe("ocel/blob dev e2e (MinIO)", () => {
   let session: Awaited<ReturnType<typeof createTestSessionWithOrganization>>;
   let projectId: string;
   let rigBin: string;

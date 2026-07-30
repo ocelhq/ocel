@@ -281,9 +281,9 @@ const sdkResources: SdkResource[] = [
   },
 ];
 
-const sdkCode = `import { postgres } from "@ocel/sdk/postgres";
-import { bucket } from "@ocel/sdk/blob";
-import { queue } from "@ocel/sdk/queue";
+const sdkCode = `import { postgres } from "ocel/postgres";
+import { bucket } from "ocel/blob";
+import { queue } from "ocel/queue";
 
 export const db = postgres("main");
 export const uploads = bucket("uploads");

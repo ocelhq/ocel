@@ -337,7 +337,6 @@ from `ADAPTER_DIR`.
 ```bash
 cd <WORKTREE>
 pnpm install --frozen-lockfile
-pnpm --filter @ocel/sdk build
 pnpm --filter ocel build
 pnpm --filter @ocel/next-runtime build
 pnpm --filter @ocel/worker-nextjs build
@@ -352,19 +351,28 @@ the absolute path `/home/vndaba/Dev/ocelhq/.env`.
 ### 5B — Decide whether you need your own sidecar
 
 The sidecar is the only thing the harness's temp apps see of Ocel:
-`deploy.mjs` symlinks `<temp-app>/node_modules/@ocel` at it. Two things resolve
-from *there*, not from `ADAPTER_DIR`:
+`deploy.mjs` symlinks both `<temp-app>/node_modules/ocel` and
+`<temp-app>/node_modules/@ocel` at it. Two things resolve from *there*, not from
+`ADAPTER_DIR`:
 
-- `@ocel/sdk` — the generated `ocel.config.ts` is bundled and executed from the
-  app dir;
+- `ocel` — the generated `ocel.config.ts` imports `ocel/config`, and it is
+  bundled and executed from the app dir, so the SDK's built
+  `packages/ocel/dist` comes from the sidecar;
 - `@ocel/provider-aws-<platform>` — `cli/internal/providerlocator` resolves it
   from the app dir, and it ships **both** the deploy binary (`cloud/aws/cmd/deploy`)
   and the Lambda runtime binary (`cloud/aws/cmd/runtime`).
 
-So: a change under `cloud/aws/**`, `cloud/edge/**` or `packages/sdk/**` is
+So: a change under `cloud/aws/**`, `cloud/edge/**` or `packages/ocel/src/**` is
 **invisible** to a deploy that uses the shared sidecar. `ocelhq-sae` is a live
 example — static-asset content-type is stamped at upload time by
 `cloud/aws/deploy/assets.go` (`mime.TypeByExtension`), which is provider code.
+
+Note `packages/ocel` now has two faces and they resolve from opposite places:
+its `src/**` is the SDK and travels in the sidecar (rebuild needed), while its
+`bin/run.js` launcher is invoked straight out of `ADAPTER_DIR` (no rebuild). The
+node builder no longer lives there at all — it is at `cli/platform/**`, esbuilt
+into `cli/platform/dist` and embedded in the Go binary at `go generate`, so it
+reaches a deploy through the `ADAPTER_DIR` CLI build like the rest of `cli/**`.
 
 **Never rebuild `/home/vndaba/Dev/ocelhq-work/sidecar`.** A concurrent
 implementer's deploy would silently pick up your code. Build your own:
@@ -374,7 +382,7 @@ SIDECAR=/home/vndaba/Dev/ocelhq-work/sidecar-<ISSUE_ID>
 TARBALLS=$(mktemp -d)
 mkdir -p "$SIDECAR"
 cd <WORKTREE>
-for pkg in @ocel/sdk @ocel/provider-aws @ocel/provider-aws-linux-x64; do
+for pkg in ocel @ocel/provider-aws @ocel/provider-aws-linux-x64; do
   pnpm --filter "$pkg" exec pnpm pack --pack-destination "$TARBALLS"
 done
 cd "$SIDECAR" && npm init -y >/dev/null && npm install --no-audit --no-fund "$TARBALLS"/*.tgz
@@ -382,8 +390,9 @@ test -x node_modules/@ocel/provider-aws-linux-x64/bin/deploy
 ```
 
 If your change is confined to `workers/nextjs/**`, `packages/next-runtime/**`,
-`packages/ocel/**`, `cli/**` or `scripts/e2e-next/**`, use the shared sidecar
-read-only and skip this.
+`packages/ocel/bin/**`, `cli/**` (which includes the node builder at
+`cli/platform/**`) or `scripts/e2e-next/**`, use the shared sidecar read-only
+and skip this.
 
 ### 5C — Stage one live app (a single deploy that stays up)
 

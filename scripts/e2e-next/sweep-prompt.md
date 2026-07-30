@@ -5,7 +5,7 @@
 - Ocel adapter repo: `/home/vndaba/Dev/ocelhq` (branch `fix/e2e-concurrency-safeness`)
 - Next.js repo: `/home/vndaba/Dev/next.js` (branch `canary`) — all `pnpm jest`
   invocations run from here
-- Sidecar (prebuilt `@ocel` packages): `/home/vndaba/Dev/ocelhq-work/sidecar`
+- Sidecar (prebuilt `ocel` and `@ocel/*` packages): `/home/vndaba/Dev/ocelhq-work/sidecar`
 - Per-run scratch: `/home/vndaba/Dev/ocelhq/.coverage` — create it if absent;
   `.coverage/` is already in `.gitignore` and these artifacts are not committed
 - **Cumulative state (committed):** `/home/vndaba/Dev/ocelhq/scripts/e2e-next/sweep-state.json`

@@ -14,6 +14,10 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
+// sdkPackage is the package the scaffolded config imports from, so init
+// installs it alongside whichever provider it scaffolds with.
+const sdkPackage = "ocel"
+
 // defaultProviderPackage is the provider `ocel init` scaffolds with. It is the
 // only one, so init installs it without asking.
 const defaultProviderPackage = "@ocel/provider-aws"
@@ -29,7 +33,7 @@ var initOpts initOptions
 var initCmd = &cobra.Command{
 	Use:   "init [slug]",
 	Short: "Make this directory deployable",
-	Long: "Writes ocel.config.ts and adds the provider package to your dependencies.\n\n" +
+	Long: "Writes ocel.config.ts and adds ocel and the provider package to your dependencies.\n\n" +
 		"Runs entirely offline: it neither signs you in nor contacts Ocel Cloud.\n\n" +
 		"The slug is the project's deployment identity — every stack and resource\n" +
 		"ocel creates in your own cloud account is keyed on it, so changing it later\n" +
@@ -55,9 +59,9 @@ func init() {
 	initCmd.Flags().StringVar(&initOpts.provider, "provider", defaultProviderPackage, "Provider package to scaffold with")
 }
 
-// runInit scaffolds ocel.config.ts in projectDir and adds the provider package
-// to its dependencies. slug is the requested project slug, empty to derive one
-// from the directory name.
+// runInit scaffolds ocel.config.ts in projectDir and adds ocel and the provider
+// package to its dependencies. slug is the requested project slug, empty to
+// derive one from the directory name.
 func runInit(ctx context.Context, projectDir, slug string, opts initOptions, stdout, stderr io.Writer) error {
 	slug, err := resolveSlug(projectDir, slug)
 	if err != nil {
@@ -81,7 +85,7 @@ func runInit(ctx context.Context, projectDir, slug string, opts initOptions, std
 	}
 	fmt.Fprintf(stdout, "✓ Wrote %s (slug: %s)\n", projectconfig.ConfigFileName, slug)
 
-	addProviderDependency(ctx, projectDir, providerPkg, stdout, stderr)
+	addDependencies(ctx, projectDir, []string{sdkPackage, providerPkg}, stdout, stderr)
 
 	fmt.Fprintln(stdout)
 	fmt.Fprintln(stdout, "Run `ocel deploy` to deploy to your own cloud, or `ocel dev` to develop against Ocel Cloud.")
@@ -112,7 +116,7 @@ func resolveSlug(projectDir, requested string) (string, error) {
 // configTemplate renders the scaffolded ocel.config.ts.
 func configTemplate(slug, providerPkg string) string {
 	provider := providerIdentifier(providerPkg)
-	return fmt.Sprintf(`import { defineConfig } from "@ocel/sdk/config";
+	return fmt.Sprintf(`import { defineConfig } from "ocel/config";
 import %s from %q;
 
 export default defineConfig({
@@ -179,26 +183,27 @@ var runPackageManager = func(ctx context.Context, dir string, argv []string, out
 	return cmd.Run()
 }
 
-// addProviderDependency adds pkg to dir's dependencies with the package manager
-// its lockfile names. This is the one step that leaves the machine, so a
-// failure is reported rather than returned: the config is already written, and
-// a rerun of init would refuse to overwrite it.
-func addProviderDependency(ctx context.Context, dir, pkg string, stdout, stderr io.Writer) {
+// addDependencies adds pkgs to dir's dependencies with the package manager its
+// lockfile names. This is the one step that leaves the machine, so a failure is
+// reported rather than returned: the config is already written, and a rerun of
+// init would refuse to overwrite it.
+func addDependencies(ctx context.Context, dir string, pkgs []string, stdout, stderr io.Writer) {
 	pm := detectPackageManager(dir)
-	argv := []string{pm.name, pm.addCommand, pkg}
+	argv := append([]string{pm.name, pm.addCommand}, pkgs...)
 	command := strings.Join(argv, " ")
+	added := strings.Join(pkgs, " ")
 
 	if _, err := os.Stat(filepath.Join(dir, "package.json")); err != nil {
 		fmt.Fprintf(stdout, "! No package.json here — run `%s` once you have one.\n", command)
 		return
 	}
 
-	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", pkg), func() error {
+	err := withSpinner(stdout, fmt.Sprintf("Adding %s...", added), func() error {
 		return runPackageManager(ctx, dir, argv, stderr)
 	})
 	if err != nil {
-		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", pkg, err, command)
+		fmt.Fprintf(stdout, "! Could not add %s (%v) — run `%s` yourself.\n", added, err, command)
 		return
 	}
-	fmt.Fprintf(stdout, "✓ Added %s\n", pkg)
+	fmt.Fprintf(stdout, "✓ Added %s\n", added)
 }
