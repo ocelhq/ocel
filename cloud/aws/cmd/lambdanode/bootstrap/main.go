@@ -31,9 +31,9 @@ func main() {
 	}
 
 	// Encrypted-baked values are opened here for the same reason: they travel
-	// in the child's environment. Their ciphertext already rode in with the
-	// package, so this is one small unwrap rather than a fetch of the values.
-	bakedEnv, err := resolveBakedVarsEnv(ctx)
+	// in the child's environment. Both the ciphertext and its key already rode
+	// in with the deployment, so this is local decryption rather than a fetch.
+	bakedEnv, err := resolveBakedVarsEnv()
 	if err != nil {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}

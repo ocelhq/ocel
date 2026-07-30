@@ -10,10 +10,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
-
 	"github.com/ocelhq/ocel/cloud/aws/vars/baked"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -176,35 +172,17 @@ func TestCheckFunctionEnvBudget_NamesEveryKeysBytesAndTheRemedy(t *testing.T) {
 		t.Fatal("an over-budget environment was accepted")
 	}
 	msg := err.Error()
-	for _, want := range []string{"web_index", "BIG_ONE", "3007", "SMALL_ONE", "1209", "sensitive", "secret"} {
+	for _, want := range []string{"web_index", "BIG_ONE", "3007", "SMALL_ONE", "1209", "sensitive"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("message is missing %q:\n%s", want, msg)
 		}
 	}
+	if strings.Contains(msg, "secret") {
+		t.Errorf("the remedy names a class that is not delivered yet, so following it loses the value:\n%s", msg)
+	}
 	if strings.Index(msg, "BIG_ONE") > strings.Index(msg, "SMALL_ONE") {
 		t.Errorf("keys are not ordered by what they cost:\n%s", msg)
 	}
-}
-
-// fakeDataKeyMaker stands in for KMS: it hands back a data key and a wrapped
-// form of it that only this fake can unwrap, which is all the deploy side
-// needs to be exercised without a key.
-type fakeDataKeyMaker struct {
-	keyID string
-	spec  kmstypes.DataKeySpec
-	calls int
-	err   error
-}
-
-func (f *fakeDataKeyMaker) GenerateDataKey(_ context.Context, in *kms.GenerateDataKeyInput, _ ...func(*kms.Options)) (*kms.GenerateDataKeyOutput, error) {
-	f.calls++
-	if f.err != nil {
-		return nil, f.err
-	}
-	f.keyID = aws.ToString(in.KeyId)
-	f.spec = in.KeySpec
-	key := bytes.Repeat([]byte{7}, baked.KeyBytes)
-	return &kms.GenerateDataKeyOutput{Plaintext: key, CiphertextBlob: append([]byte("wrapped:"), key...)}, nil
 }
 
 // TestVariableEnv_CarriesTheAppsFolderBinding proves a bound app is told what
@@ -223,38 +201,30 @@ func TestVariableEnv_CarriesTheAppsFolderBinding(t *testing.T) {
 	}
 }
 
-// TestRenderBakedBundle_SealsTheValuesAndDisclosesOnlyTheWrappedKey proves the
-// whole point of the class: what reaches the function's configuration is a
-// data key wrapped under the substrate's own key, and the values themselves
-// exist only as ciphertext, which is what rides in the bundle.
-func TestRenderBakedBundle_SealsTheValuesAndDisclosesOnlyTheWrappedKey(t *testing.T) {
+// TestRenderBakedBundle_EnvelopeIsTheDataKeyAndTheValuesAreOnlyCiphertext
+// proves what the class actually delivers: the function configuration carries
+// the raw per-deploy data key and nothing else, and the values exist only as
+// ciphertext inside the bundle. The key being usable as-is is the point — the
+// membrane opens the bundle with it alone, so init makes no external call.
+func TestRenderBakedBundle_EnvelopeIsTheDataKeyAndTheValuesAreOnlyCiphertext(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name: "web",
 		Variables: []*deploymentsv1.ManifestVariable{
 			variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
 			variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
-			variable("WEBHOOK_SECRET", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
 		},
 	}
-	km := &fakeDataKeyMaker{}
 
-	bundle, err := renderBakedBundle(context.Background(), km, productionVarsKeyARN, app)
+	bundle, err := renderBakedBundle(app)
 	if err != nil {
 		t.Fatalf("renderBakedBundle: %v", err)
 	}
-	if km.keyID != productionVarsKeyARN {
-		t.Errorf("data key generated under %q, want the substrate's own key", km.keyID)
-	}
-	if km.spec != kmstypes.DataKeySpecAes256 {
-		t.Errorf("key spec = %v, want AES-256", km.spec)
-	}
-
 	if bytes.Contains(bundle.Ciphertext, []byte("sk-live")) {
 		t.Error("the bundle carries a sensitive value in the clear")
 	}
 	env := bundle.env()
 	if len(env) != 1 || env[baked.EnvelopeVar] == "" {
-		t.Fatalf("configuration = %v, want the wrapped data key alone", env)
+		t.Fatalf("configuration = %v, want the data key alone", env)
 	}
 	for _, value := range env {
 		if strings.Contains(value, "sk-live") {
@@ -262,11 +232,14 @@ func TestRenderBakedBundle_SealsTheValuesAndDisclosesOnlyTheWrappedKey(t *testin
 		}
 	}
 
-	wrapped, err := base64.StdEncoding.DecodeString(env[baked.EnvelopeVar])
+	key, err := base64.StdEncoding.DecodeString(env[baked.EnvelopeVar])
 	if err != nil {
 		t.Fatalf("envelope is not base64: %v", err)
 	}
-	values, err := baked.Open(bytes.TrimPrefix(wrapped, []byte("wrapped:")), bundle.Ciphertext)
+	if len(key) != baked.KeyBytes {
+		t.Fatalf("envelope holds %d bytes, want the %d-byte data key itself", len(key), baked.KeyBytes)
+	}
+	values, err := baked.Open(key, bundle.Ciphertext)
 	if err != nil {
 		t.Fatalf("the bundle does not open under the key its envelope carries: %v", err)
 	}
@@ -278,26 +251,147 @@ func TestRenderBakedBundle_SealsTheValuesAndDisclosesOnlyTheWrappedKey(t *testin
 	}
 }
 
+// TestRenderBakedBundle_EveryRenderGetsAFreshDataKey proves the key is drawn
+// per deploy rather than derived from anything the app carries: two renders of
+// the identical app share neither key nor ciphertext, which is what keeps one
+// deployment's artifact from opening another's.
+func TestRenderBakedBundle_EveryRenderGetsAFreshDataKey(t *testing.T) {
+	app := &deploymentsv1.ManifestApp{
+		Name:      "web",
+		Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+	}
+
+	first, err := renderBakedBundle(app)
+	if err != nil {
+		t.Fatalf("renderBakedBundle: %v", err)
+	}
+	second, err := renderBakedBundle(app)
+	if err != nil {
+		t.Fatalf("renderBakedBundle: %v", err)
+	}
+
+	if first.Envelope == second.Envelope {
+		t.Error("two renders share a data key; one deployment's key would open another's bundle")
+	}
+	if bytes.Equal(first.Ciphertext, second.Ciphertext) {
+		t.Error("two renders produce identical ciphertext; a rotation would reuse the old artifact")
+	}
+	other, err := base64.StdEncoding.DecodeString(second.Envelope)
+	if err != nil {
+		t.Fatalf("envelope is not base64: %v", err)
+	}
+	if _, err := baked.Open(other, first.Ciphertext); err == nil {
+		t.Error("the second render's key opens the first render's bundle")
+	}
+}
+
 // TestRenderBakedBundle_AnAppWithNoBakedValuesCostsNothing proves an app that
-// declares none neither reaches KMS nor gains a configuration entry: the class
-// is opt-in per app, and a wrapped key with nothing behind it would still be
-// spending the function environment budget.
+// declares none gains no configuration entry: the class is opt-in per app, and
+// a data key with nothing behind it would still spend the function environment
+// budget.
 func TestRenderBakedBundle_AnAppWithNoBakedValuesCostsNothing(t *testing.T) {
 	app := &deploymentsv1.ManifestApp{
 		Name:      "web",
 		Variables: []*deploymentsv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 	}
-	km := &fakeDataKeyMaker{}
 
-	bundle, err := renderBakedBundle(context.Background(), km, productionVarsKeyARN, app)
+	bundle, err := renderBakedBundle(app)
 	if err != nil {
 		t.Fatalf("renderBakedBundle: %v", err)
 	}
-	if km.calls != 0 {
-		t.Errorf("KMS was called %d times for an app with no baked values", km.calls)
-	}
 	if len(bundle.Ciphertext) != 0 || len(bundle.env()) != 0 || len(bundle.overlay()) != 0 {
 		t.Errorf("bundle = %+v, want nothing at all", bundle)
+	}
+}
+
+// TestRenderBakedBundle_AClassWithNoDeliveryFailsTheDeploy proves the gap fails
+// closed. A class this deploy path cannot deliver — `secret`, or an
+// unrecognised one from a newer client — must stop the deploy naming the
+// variable, because the alternative is a value that is simply absent at
+// runtime and a deploy that reported success.
+func TestRenderBakedBundle_AClassWithNoDeliveryFailsTheDeploy(t *testing.T) {
+	cases := []struct {
+		name  string
+		class resourcesv1.VariableClass
+	}{
+		{"secret", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
+		{"unspecified", resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED},
+		{"from a newer client", resourcesv1.VariableClass(99)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			app := &deploymentsv1.ManifestApp{
+				Name: "web",
+				Variables: []*deploymentsv1.ManifestVariable{
+					variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+					variable("WEBHOOK_SECRET", "whsec", tc.class),
+				},
+			}
+
+			_, err := renderBakedBundle(app)
+			if err == nil {
+				t.Fatal("renderBakedBundle = nil, want a class it cannot deliver refused")
+			}
+			for _, want := range []string{"web", "WEBHOOK_SECRET"} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error does not name %q: %v", want, err)
+				}
+			}
+		})
+	}
+}
+
+// TestRenderBakedBundles_SealsEachAppUnderItsOwnKey proves the render is
+// per-app across a whole manifest: each app's bundle opens under its own
+// envelope and under no other app's, and an app that bakes nothing contributes
+// no entry at all.
+func TestRenderBakedBundles_SealsEachAppUnderItsOwnKey(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{
+		{
+			Name:      "web",
+			Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-web", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+		},
+		{
+			Name:      "admin",
+			Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-admin", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+		},
+		{
+			Name:      "docs",
+			Variables: []*deploymentsv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
+		},
+	}}
+
+	bundles, err := renderBakedBundles(context.Background(), Config{}, manifest)
+	if err != nil {
+		t.Fatalf("renderBakedBundles: %v", err)
+	}
+	if len(bundles) != 2 {
+		t.Fatalf("bundles = %v, want one for each app that bakes a value", bundles)
+	}
+	if _, ok := bundles["docs"]; ok {
+		t.Error("an app that bakes nothing gained a bundle")
+	}
+
+	keys := make(map[string][]byte, len(bundles))
+	for name, bundle := range bundles {
+		key, err := base64.StdEncoding.DecodeString(bundle.Envelope)
+		if err != nil {
+			t.Fatalf("%s's envelope is not base64: %v", name, err)
+		}
+		keys[name] = key
+	}
+	for _, tc := range []struct{ app, want string }{{"web", "sk-web"}, {"admin", "sk-admin"}} {
+		values, err := baked.Open(keys[tc.app], bundles[tc.app].Ciphertext)
+		if err != nil {
+			t.Fatalf("%s's bundle does not open under its own key: %v", tc.app, err)
+		}
+		if got := values["STRIPE_API_KEY"]; got != tc.want {
+			t.Errorf("%s's STRIPE_API_KEY = %q, want %q", tc.app, got, tc.want)
+		}
+	}
+	if _, err := baked.Open(keys["web"], bundles["admin"].Ciphertext); err == nil {
+		t.Error("web's key opens admin's bundle; the apps do not have their own keys")
 	}
 }
 
@@ -342,7 +436,6 @@ func TestBakedDelivery_CiphertextRidesInTheBundleAndNeverTheConfiguration(t *tes
 		ArtifactBucket: "artifacts",
 		Uploader:       uploader,
 		VarsKeyARN:     productionVarsKeyARN,
-		VarsKMS:        &fakeDataKeyMaker{},
 	}
 	manifest.Functions[0].ArtifactPath = filepath.Base(dir)
 
@@ -380,24 +473,6 @@ func TestBakedDelivery_CiphertextRidesInTheBundleAndNeverTheConfiguration(t *tes
 		}
 	}
 	if env[baked.EnvelopeVar] == "" {
-		t.Error("the function environment carries no wrapped data key; the membrane could not open the bundle")
-	}
-}
-
-// TestRenderBakedBundle_WithoutAKeyMakerFailsBeforeAnythingIsPackaged proves a
-// deploy that cannot seal says so, rather than packaging an app whose values
-// silently never arrive.
-func TestRenderBakedBundle_WithoutAKeyMakerFailsBeforeAnythingIsPackaged(t *testing.T) {
-	manifest := &deploymentsv1.Manifest{Apps: []*deploymentsv1.ManifestApp{{
-		Name:      "web",
-		Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
-	}}}
-
-	_, err := renderBakedBundles(context.Background(), Config{VarsKeyARN: productionVarsKeyARN}, manifest)
-	if err == nil {
-		t.Fatal("renderBakedBundles = nil, want a deploy without a key maker refused")
-	}
-	if !strings.Contains(err.Error(), "web") {
-		t.Errorf("error does not name the app: %v", err)
+		t.Error("the function environment carries no data key; the membrane could not open the bundle")
 	}
 }

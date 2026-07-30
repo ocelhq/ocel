@@ -2,15 +2,12 @@ package deploy
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
-
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/service/kms"
-	kmstypes "github.com/aws/aws-sdk-go-v2/service/kms/types"
 
 	"github.com/ocelhq/ocel/cloud/aws/vars/baked"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -57,8 +54,10 @@ const appFolderEnv = "OCEL_APP_FOLDER"
 // contribute: the plaintext class only, under the bare key the user chose,
 // because interop with code that reads the process environment itself is the
 // property that distinguishes that class. Every other class is delivered off
-// the function's configuration entirely, so reading the configuration
-// discloses nothing that was meant to be encrypted. The app's folder binding
+// the function's configuration entirely, so a value meant to be encrypted is
+// never legible in a configuration listing. Any class this deploy cannot
+// deliver has already failed the deploy in renderBakedBundle, so the filter
+// here can never be the thing that drops a value. The app's folder binding
 // rides along because it is what decided every one of those resolutions.
 func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	env := make(map[string]string)
@@ -74,18 +73,11 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	return env
 }
 
-// DataKeyMaker is the subset of KMS the encrypted-baked render needs: one call
-// yielding a data key and the same key wrapped under the substrate's class
-// key. The aws-sdk-go-v2 KMS client satisfies it; tests substitute a fake.
-type DataKeyMaker interface {
-	GenerateDataKey(ctx context.Context, in *kms.GenerateDataKeyInput, optFns ...func(*kms.Options)) (*kms.GenerateDataKeyOutput, error)
-}
-
 // bakedBundle is one app's encrypted-baked values, split across the two places
 // they are delivered: the ciphertext rides inside every one of the app's
-// function packages, and the wrapped data key — which discloses nothing on its
-// own — is the single entry they contribute to function configuration. The
-// zero bundle is an app that declared none.
+// function packages, and the data key it was sealed under is the single entry
+// they contribute to function configuration. The zero bundle is an app that
+// declared none.
 type bakedBundle struct {
 	Envelope   string
 	Ciphertext []byte
@@ -112,13 +104,12 @@ func (b bakedBundle) overlay() map[string][]byte {
 }
 
 // renderBakedBundles seals every app's encrypted-baked values, keyed by app
-// name. A deploy where no app declares one never touches KMS, which is what
-// lets the provider be configured without a key maker until a project needs
-// the class.
-func renderBakedBundles(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest) (map[string]bakedBundle, error) {
+// name, and is where a variable whose class this deploy path cannot deliver
+// stops the deploy — before anything is packaged or provisioned.
+func renderBakedBundles(_ context.Context, _ Config, manifest *deploymentsv1.Manifest) (map[string]bakedBundle, error) {
 	bundles := make(map[string]bakedBundle, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
-		bundle, err := renderBakedBundle(ctx, cfg.VarsKMS, cfg.VarsKeyARN, app)
+		bundle, err := renderBakedBundle(app)
 		if err != nil {
 			return nil, err
 		}
@@ -130,36 +121,40 @@ func renderBakedBundles(ctx context.Context, cfg Config, manifest *deploymentsv1
 }
 
 // renderBakedBundle seals an app's encrypted-baked values under a data key
-// generated for this deploy and wrapped by the substrate's own class key. A
-// fresh key each time is what keeps preview compute unable to open production
-// ciphertext and what makes every rotation a distinct artifact.
-func renderBakedBundle(ctx context.Context, km DataKeyMaker, keyARN string, app *deploymentsv1.ManifestApp) (bakedBundle, error) {
+// drawn fresh for this render, which is what keeps one deployment's artifact
+// unopenable by another's configuration and makes every rotation a distinct
+// artifact. The key travels in the function's configuration rather than under
+// a substrate key, so the membrane opens the bundle with what it already has:
+// see the changeset for what that does and does not protect against.
+//
+// A class this path has no delivery for fails here rather than being skipped,
+// because a skipped variable is a deploy that reports success and an
+// application whose value is simply absent.
+func renderBakedBundle(app *deploymentsv1.ManifestApp) (bakedBundle, error) {
 	values := make(map[string]string)
 	for _, v := range app.GetVariables() {
-		if v.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE {
+		switch v.GetClass() {
+		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
+		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
 			values[v.GetKey()] = v.GetValue()
+		default:
+			return bakedBundle{}, fmt.Errorf("%s declares %s with class %s, which this deploy cannot deliver to a function yet; declare it as `plain` or `sensitive`", app.GetName(), v.GetKey(), v.GetClass())
 		}
 	}
 	if len(values) == 0 {
 		return bakedBundle{}, nil
 	}
-	if km == nil {
-		return bakedBundle{}, fmt.Errorf("%s declares `sensitive` variables but this deploy was configured without a key to seal them under", app.GetName())
-	}
 
-	out, err := km.GenerateDataKey(ctx, &kms.GenerateDataKeyInput{
-		KeyId:   aws.String(keyARN),
-		KeySpec: kmstypes.DataKeySpecAes256,
-	})
-	if err != nil {
+	key := make([]byte, baked.KeyBytes)
+	if _, err := rand.Read(key); err != nil {
 		return bakedBundle{}, fmt.Errorf("generate a data key for %s's encrypted variables: %w", app.GetName(), err)
 	}
-	ciphertext, err := baked.Seal(out.Plaintext, values)
+	ciphertext, err := baked.Seal(key, values)
 	if err != nil {
 		return bakedBundle{}, fmt.Errorf("seal %s's encrypted variables: %w", app.GetName(), err)
 	}
 	return bakedBundle{
-		Envelope:   base64.StdEncoding.EncodeToString(out.CiphertextBlob),
+		Envelope:   base64.StdEncoding.EncodeToString(key),
 		Ciphertext: ciphertext,
 	}, nil
 }
@@ -194,6 +189,6 @@ func checkFunctionEnvBudget(function string, env map[string]string) error {
 	for _, key := range keys {
 		fmt.Fprintf(&b, "\n  %s  %d bytes", key, len(key)+len(env[key]))
 	}
-	b.WriteString("\n\nReclassify a variable as `sensitive` or `secret` to deliver it outside the function environment.")
+	b.WriteString("\n\nReclassify a variable as `sensitive` to deliver it as ciphertext inside the bundle instead of in the function environment.")
 	return fmt.Errorf("%s", b.String())
 }

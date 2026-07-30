@@ -2,10 +2,11 @@
 // of how a sensitive variable is sealed into a deployment bundle and opened
 // again by the membrane that starts the application process.
 //
-// It deliberately carries no cloud dependency. The deploy wraps the data key
-// with KMS and the membrane unwraps it, but the bulk encryption is local on
-// both sides, so this package can be shared by the provider and by the runtime
-// bootstrap without the latter linking anything it does not call.
+// It deliberately carries no cloud dependency. The deploy draws a data key,
+// seals under it and ships the key in the function's configuration; the
+// membrane reads that key back and opens the bundle. Both sides are local, so
+// this package is shared by the provider and by the runtime bootstrap without
+// the latter linking anything it does not call.
 package baked
 
 import (
@@ -22,8 +23,9 @@ const (
 	FilePath = ".ocel/variables.enc"
 
 	// EnvelopeVar names the one function-configuration entry an encrypted-baked
-	// value contributes: its data key, wrapped under the substrate's class key.
-	// Wrapped, it discloses nothing to a reader of the configuration alone.
+	// value contributes: the base64 data key this deployment's bundle was
+	// sealed under. It is drawn per deploy, so it opens that bundle and no
+	// other, and the values themselves stay out of the configuration entirely.
 	EnvelopeVar = "OCEL_VARS_ENVELOPE"
 
 	// Prefix is the namespaced name the membrane injects an opened value under.
