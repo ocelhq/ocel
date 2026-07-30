@@ -29,8 +29,8 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
 ## Deployment & Rollback
 
 - **Deployment** — the immutable set of artifacts produced for one app by a
-  single `ocel deploy` (its Lambda functions, static assets, routing manifest,
-  and per-deploy metadata). Identified by a build id. Deployments are never
+  single `ocel deploy` (its bundles, its edge bundle, static assets, routing
+  manifest, and per-deploy metadata). Identified by a build id. Deployments are never
   mutated after creation; a new `ocel deploy` produces new ones rather than
   updating in place. Production only — previews do not produce rollback-able
   deployments.
@@ -63,6 +63,42 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
   store derives each app's active build id from it). Rollback and retention/GC
   both operate in promotions. See also the verb sense of *Promotion* under
   Deployment & Rollback.
+
+## Bundles & dispatch
+
+- **Bundle** — one Lambda artifact serving many of an app's routes. An app's
+  node routes are packed into the fewest bundles their traced assets fit in, and
+  bundles are named `bundle-0`, `bundle-1`, … in the order they are opened; that
+  name is the identity the routing manifest and the function-URL map key on.
+  Unqualified "bundle" means this one. _Avoid_: slice, group, pack.
+
+- **Edge bundle** — the single artifact per Deployment holding every edge chunk
+  (the `runtime: 'edge'` routes and middleware), which the edge worker compiles
+  into a dynamic worker. Deliberately *not* a Bundle: there is one per
+  Deployment rather than several, it is not a Lambda, and it carries its own
+  entry keys. This is the project's one knowing name collision — qualify the
+  word whenever both tiers are in view.
+
+- **Entry** — one compiled route module inside a bundle, and the unit a bundle
+  loads. Routes compiling to the same module (a page and its `.rsc` variant,
+  say) are one entry, so several pathnames can name it.
+
+- **Entry key** — which entry of a bundle to run. It travels per-request as the
+  `x-ocel-entry` header, which is what makes a bundle's single Function URL
+  sufficient to address one route. Always authored by the worker and never by a
+  client: `x-ocel-*` is the control plane's own header namespace, stripped from
+  every inbound request. Node entry keys and edge entry keys are separate
+  namespaces and are never interchangeable.
+
+- **Primary entry** — the one entry a bundle requires eagerly, as its handler
+  module loads, so the work lands in Lambda's INIT phase and primes the chunk
+  graph its bundle-mates share. Every other entry loads lazily, on the first
+  request naming it.
+
+- **Config class** — the partition key separating routes that cannot share a
+  bundle because they disagree on a Lambda-level setting (`maxDuration`,
+  `preferredRegion`). Constant today, so it partitions nothing yet (bd
+  `ocelhq-kay2`).
 
 ## Provisioning stacks
 
