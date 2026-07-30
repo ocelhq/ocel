@@ -64,6 +64,38 @@ func TestFunctionDefaults_ClearAWSImplicitCeilings(t *testing.T) {
 	}
 }
 
+// A Next function is a bundle: one container serves many routes, and every
+// distinct route entry it has served stays resident (CommonJS modules cannot be
+// unloaded), so its peak RSS grows with the routes that reach it rather than
+// staying at the one-module 109MB above.
+func TestTranslateFunction_NextGetsTheBundleMemoryDefault(t *testing.T) {
+	got := translateFunction(&deploymentsv1.ManifestFunction{Framework: frameworkNext})
+	if got.MemorySizeMB != nextFunctionMemoryMB {
+		t.Errorf("MemorySizeMB = %d, want the Next default %d", got.MemorySizeMB, nextFunctionMemoryMB)
+	}
+}
+
+// Express/fastify apps are already a single function, so nothing accumulates and
+// the flat default still fits.
+func TestTranslateFunction_NonNextKeepsTheFlatDefault(t *testing.T) {
+	got := translateFunction(&deploymentsv1.ManifestFunction{Framework: "express"})
+	if got.MemorySizeMB != defaultFunctionMemoryMB {
+		t.Errorf("MemorySizeMB = %d, want default %d", got.MemorySizeMB, defaultFunctionMemoryMB)
+	}
+}
+
+// The Next default is chosen for the full vCPU it buys: bundling moved route
+// module evaluation out of the free full-vCPU INIT phase into the billed INVOKE
+// phase, where a fractional core lands directly in request latency. Dropping
+// below the threshold silently undoes that.
+func TestNextFunctionMemory_BuysAFullVCPU(t *testing.T) {
+	const fullVCPUMemoryMB = 1769
+	if nextFunctionMemoryMB < fullVCPUMemoryMB {
+		t.Errorf("nextFunctionMemoryMB = %d, must be at least %dMB — the point Lambda allocates a full vCPU",
+			nextFunctionMemoryMB, fullVCPUMemoryMB)
+	}
+}
+
 func TestMembraneLayerARN_DefaultAndEnvOverride(t *testing.T) {
 	t.Setenv(membraneLayerARNEnv, "")
 	if got := membraneLayerARN(); got != defaultMembraneLayerARN {
