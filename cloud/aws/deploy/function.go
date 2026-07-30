@@ -46,7 +46,7 @@ const (
 	// bundling `require`s every entry but the primed one lazily on first request,
 	// moving that work out of the free full-vCPU INIT phase into the billed
 	// INVOKE phase, where a fractional core lands in request latency.
-	nextFunctionMemoryMB = 1769
+	nextBundleFunctionMemoryMB = 1769
 
 	// lambdaConfigHandler is the Lambda's own Handler config value. Under the
 	// lambdanode exec-wrapper the Go bootstrap owns the Runtime API loop, so
@@ -267,7 +267,7 @@ func translateFunction(fn *deploymentsv1.ManifestFunction) functionArgs {
 	}
 	memoryMB := defaultFunctionMemoryMB
 	if fn.GetFramework() == frameworkNext {
-		memoryMB = nextFunctionMemoryMB
+		memoryMB = nextBundleFunctionMemoryMB
 	}
 	return functionArgs{
 		Runtime:        runtime,
