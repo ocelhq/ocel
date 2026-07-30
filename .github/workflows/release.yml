@@ -123,6 +123,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # build-native.mjs embeds the esbuilt node builder in the shipped binary,
+      # and esbuild strips types without checking them.
+      - name: pnpm --filter @ocel/cli-platform typecheck
+        run: pnpm --filter @ocel/cli-platform typecheck
+
       - name: Read release version
         id: version
         run: |
