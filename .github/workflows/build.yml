@@ -30,6 +30,11 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: go generate (cli platform dist)
+        working-directory: cli
+        # cli/dist is embedded but not committed, so nothing compiles without it.
+        run: go generate ./...
+
       - name: go build (workspace)
         run: >-
           go build

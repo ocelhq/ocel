@@ -73,12 +73,17 @@ jobs:
         # builder) isn't exercised here - e2e drives the compiled Go binary.
         run: pnpm --filter @ocel/sdk build
 
+      - name: go generate (cli platform dist)
+        working-directory: cli
+        # cli/dist is embedded but not committed, so the build below needs it.
+        run: go generate ./...
+
       - name: Build ocel CLI binary
         working-directory: cli
-        # Output to cli/dist/ - the CLI's own main package lives at cli/ocel/,
-        # so `-o ocel` would collide with that directory. Matches the harness's
-        # default OCEL_BIN path.
-        run: go build -o dist/ocel ./ocel
+        # Output to cli/bin/ - the CLI's own main package lives at cli/ocel/, so
+        # `-o ocel` would collide with that directory, and cli/dist/ is the
+        # embedded platform tree. Matches the harness's default OCEL_BIN path.
+        run: go build -o bin/ocel ./ocel
 
       - name: Start Postgres services
         run: docker compose up -d

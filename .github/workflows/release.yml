@@ -107,10 +107,21 @@ jobs:
         with:
           go-version-file: cli/go.mod
 
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.10.0
+
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: pnpm
+
+      # build-native.mjs runs `go generate` for the cli target, which bundles
+      # cli/dist with esbuild and wrangler from the workspace.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
 
       - name: Read release version
         id: version
