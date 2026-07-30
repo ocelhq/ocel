@@ -1,0 +1,371 @@
+import { describe, expect, it } from "vitest";
+
+import { dispatchResult, type RouteDeps } from "../src/index";
+
+// Many routes share one Lambda ("a bundle"): dispatch[pathname].id is the
+// bundle's identity and the functionUrls key, while entryKey names which route
+// inside it runs — carried to the launcher on x-ocel-entry.
+const ENTRY_HEADER = "x-ocel-entry";
+
+function noAssets(): RouteDeps["assetStore"] {
+  return {
+    assetPrefix: "",
+    cache: { match: async () => undefined, put: async () => {} },
+    waitUntil: () => {},
+  };
+}
+
+function missingCache(waitUntil: (p: Promise<unknown>) => void = () => {}) {
+  return {
+    cache: {
+      match: async () => undefined,
+      put: async () => {},
+    } as unknown as Cache,
+    waitUntil,
+  };
+}
+
+const isrPrefix = "prod/p/app/build";
+const cacheObject = (routePath: string) =>
+  `${isrPrefix}/cache/${routePath}.cache.json`;
+
+function storeOf(entries: Record<string, unknown>) {
+  return {
+    async get(key: string) {
+      const entry = entries[key];
+      return entry === undefined
+        ? null
+        : { text: async () => JSON.stringify(entry) };
+    },
+  };
+}
+
+// Every origin forward, in the order they were made.
+function recorder() {
+  const requests: Request[] = [];
+  const fetch = (async (request: Request) => {
+    requests.push(request);
+    return new Response("from-lambda", {
+      status: 200,
+      headers: { "cache-control": "s-maxage=60" },
+    });
+  }) as unknown as typeof fetch;
+  return { requests, fetch, entries: () => requests.map((r) => r.headers.get(ENTRY_HEADER)) };
+}
+
+function deps(over: Partial<RouteDeps>): RouteDeps {
+  return {
+    manifest: { buildId: "t", basePath: "", pathnames: [], routes: {}, dispatch: {} },
+    functionUrls: {},
+    assetStore: noAssets(),
+    ...over,
+  };
+}
+
+const dispatchTo = (pathname: string, deps: RouteDeps, request?: Request) =>
+  dispatchResult(
+    { resolvedPathname: pathname, invocationTarget: { pathname } },
+    request ?? new Request(`https://app.example${pathname}`),
+    deps,
+  );
+
+describe("a lambda route's bundle entry", () => {
+  it("forwards x-ocel-entry naming the entry inside the bundle", async () => {
+    const origin = recorder();
+    const res = await dispatchTo(
+      "/blog/hello",
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: {
+            "/blog/hello": {
+              kind: "lambda",
+              id: "bundle-0",
+              entryKey: "app/blog/[slug]/page",
+            },
+          },
+        },
+        functionUrls: { "bundle-0": "https://fn.example.com" },
+        fetch: origin.fetch,
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(origin.requests[0].url).toBe("https://fn.example.com/blog/hello");
+    expect(origin.entries()).toEqual(["app/blog/[slug]/page"]);
+  });
+
+  it("omits the header entirely for a manifest with no entryKey", async () => {
+    const origin = recorder();
+    await dispatchTo(
+      "/api/documents",
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: { "/api/documents": { kind: "lambda", id: "/api/documents" } },
+        },
+        functionUrls: { "/api/documents": "https://fn.example.com" },
+        fetch: origin.fetch,
+      }),
+    );
+
+    expect(origin.requests[0].headers.has(ENTRY_HEADER)).toBe(false);
+  });
+
+  it("keeps a POST body intact while stamping the entry", async () => {
+    const origin = recorder();
+    await dispatchTo(
+      "/api/documents",
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: {
+            "/api/documents": {
+              kind: "lambda",
+              id: "bundle-0",
+              entryKey: "app/api/documents/route",
+            },
+          },
+        },
+        functionUrls: { "bundle-0": "https://fn.example.com" },
+        fetch: origin.fetch,
+      }),
+      new Request("https://app.example/api/documents", {
+        method: "POST",
+        body: "name=cachelab",
+      }),
+    );
+
+    expect(origin.entries()).toEqual(["app/api/documents/route"]);
+    expect(await origin.requests[0].text()).toBe("name=cachelab");
+  });
+
+  it("resolves every pathname of one bundle to its single Function URL", async () => {
+    const origin = recorder();
+    const shared = deps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/": { kind: "lambda", id: "bundle-0", entryKey: "app/page" },
+          "/about": { kind: "lambda", id: "bundle-0", entryKey: "app/about/page" },
+          "/api/hook": {
+            kind: "lambda",
+            id: "bundle-0",
+            entryKey: "app/api/hook/route",
+          },
+        },
+      },
+      functionUrls: { "bundle-0": "https://fn.example.com" },
+      fetch: origin.fetch,
+    });
+
+    for (const pathname of ["/", "/about", "/api/hook"]) {
+      await dispatchTo(pathname, shared);
+    }
+
+    expect(origin.requests.map((r) => new URL(r.url).origin)).toEqual([
+      "https://fn.example.com",
+      "https://fn.example.com",
+      "https://fn.example.com",
+    ]);
+    expect(origin.entries()).toEqual([
+      "app/page",
+      "app/about/page",
+      "app/api/hook/route",
+    ]);
+  });
+});
+
+describe("a prerender whose parent is a node bundle", () => {
+  const target = {
+    kind: "prerender" as const,
+    id: "bundle-0",
+    entryKey: "app/blog/page",
+    config: {
+      // Next's own allowHeader for a prerender: the entry header is not in it,
+      // and must survive the filter anyway.
+      allowHeader: ["host", "x-matched-path", "x-prerender-revalidate"],
+      bypassFor: [{ type: "cookie" as const, key: "preview" }],
+      bypassToken: "TOKEN",
+    },
+    fallback: { initialRevalidate: 60 },
+  };
+
+  function blogDeps(
+    origin: ReturnType<typeof recorder>,
+    entry: unknown | null,
+    over: { now?: number; waitUntil?: (p: Promise<unknown>) => void } = {},
+  ): RouteDeps {
+    return deps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/blog": target },
+      },
+      functionUrls: { "bundle-0": "https://fn.example.com" },
+      fetch: origin.fetch,
+      cache: missingCache(over.waitUntil),
+      interception: {
+        config: { isrPrefix },
+        now: () => over.now ?? 2_000,
+        store: storeOf(entry ? { [cacheObject("blog")]: entry } : {}),
+      },
+    });
+  }
+
+  const storedEntry = (lastModified: number) => ({
+    lastModified,
+    value: {
+      kind: "APP_PAGE",
+      html: "<html>from-store</html>",
+      status: 200,
+      headers: {},
+    },
+  });
+
+  it("carries the entry on the bypass path, which forwards the raw headers", async () => {
+    const origin = recorder();
+    const res = await dispatchTo(
+      "/blog",
+      blogDeps(origin, null),
+      new Request("https://app.example/blog", {
+        headers: { cookie: "preview=1" },
+      }),
+    );
+
+    expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
+    // The raw header set: cookies reach the origin, and so does the entry.
+    expect(origin.requests[0].headers.get("cookie")).toBe("preview=1");
+    expect(origin.entries()).toEqual(["app/blog/page"]);
+  });
+
+  it("carries the entry on the cached-miss path, past allowHeader's filter", async () => {
+    const origin = recorder();
+    const res = await dispatchTo("/blog", blogDeps(origin, null));
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(origin.entries()).toEqual(["app/blog/page"]);
+  });
+
+  it("revalidates a stale entry, carrying the entry on the blocking forward", async () => {
+    const pending: Promise<unknown>[] = [];
+    const origin = recorder();
+    const res = await dispatchTo(
+      "/blog",
+      blogDeps(origin, storedEntry(1_000), {
+        // 61s past a 60s revalidate window: stale, not expired.
+        now: 1_000 + 61_000,
+        waitUntil: (p) => pending.push(p),
+      }),
+    );
+
+    expect(res.headers.get("x-nextjs-cache")).toBe("STALE");
+    expect(await res.text()).toBe("<html>from-store</html>");
+
+    await Promise.all(pending);
+
+    // The rename guard: a node-parented prerender still revalidates, and the
+    // regenerating forward names the bundle entry — without it the launcher has
+    // nothing to run and answers 502.
+    expect(origin.requests).toHaveLength(1);
+    expect(origin.requests[0].headers.get("x-prerender-revalidate")).toBe("TOKEN");
+    expect(origin.entries()).toEqual(["app/blog/page"]);
+  });
+});
+
+describe("a prerender whose parent renders on the edge", () => {
+  const edgeTarget = {
+    kind: "prerender" as const,
+    id: "/edge-blog",
+    edgeEntryKey: "middleware_app/edge-blog",
+    config: {},
+    fallback: { initialRevalidate: 60 },
+  };
+
+  function edgeDeps(
+    entry: unknown | null,
+    now: number,
+    pending: Promise<unknown>[],
+  ): { deps: RouteDeps; invocations: () => string[] } {
+    const invocations: string[] = [];
+    return {
+      invocations: () => invocations,
+      deps: deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: [],
+          routes: {},
+          dispatch: { "/edge-blog": edgeTarget },
+        },
+        // No Function URL at all: the parent renders on the edge.
+        functionUrls: {},
+        edge: async (entryKey) => {
+          invocations.push(entryKey);
+          return new Response("<html>rendered-on-edge</html>", {
+            status: 200,
+            headers: { "cache-control": "s-maxage=60" },
+          });
+        },
+        fetch: (async () => {
+          throw new Error("an edge-parented prerender must not reach a Function URL");
+        }) as unknown as typeof fetch,
+        cache: missingCache((p) => pending.push(p)),
+        interception: {
+          config: { isrPrefix },
+          now: () => now,
+          store: storeOf(entry ? { [cacheObject("edge-blog")]: entry } : {}),
+        },
+      }),
+    };
+  }
+
+  it("renders through the edge entry when no cache tier can answer", async () => {
+    const pending: Promise<unknown>[] = [];
+    const { deps, invocations } = edgeDeps(null, 2_000, pending);
+
+    const res = await dispatchTo("/edge-blog", deps);
+
+    expect(await res.text()).toBe("<html>rendered-on-edge</html>");
+    expect(invocations()).toEqual(["middleware_app/edge-blog"]);
+  });
+
+  it("never revalidates: an edge render cannot rewrite the entry it refreshes", async () => {
+    const pending: Promise<unknown>[] = [];
+    const { deps, invocations } = edgeDeps(
+      {
+        lastModified: 1_000,
+        value: {
+          kind: "APP_PAGE",
+          html: "<html>from-store</html>",
+          status: 200,
+          headers: {},
+        },
+      },
+      1_000 + 61_000,
+      pending,
+    );
+
+    const res = await dispatchTo("/edge-blog", deps);
+
+    expect(res.headers.get("x-nextjs-cache")).toBe("STALE");
+    expect(await res.text()).toBe("<html>from-store</html>");
+
+    await Promise.all(pending);
+    expect(invocations()).toEqual([]);
+  });
+});

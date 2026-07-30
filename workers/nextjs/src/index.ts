@@ -47,6 +47,12 @@ const RSC_FORWARD_HEADERS = new Set([
   "next-url",
 ]);
 
+// Many routes share one Lambda, so the Function URL alone does not say what to
+// run: this header names which entry of that bundle the launcher must invoke.
+// A manifest built before bundling carries no entryKey at all, and its
+// per-route launcher ignores the header — so it is omitted rather than empty.
+const ENTRY_HEADER = "x-ocel-entry";
+
 export interface Env {
   // The service binding to the shared deployments-store worker (ADR 0002),
   // through which the active Deployment is resolved at request time.
@@ -109,10 +115,20 @@ type RouteHas =
 
 type DispatchTarget =
   | { kind: "static" }
-  | { kind: "lambda"; id: string; parent?: string; revalidate?: unknown }
+  | {
+      kind: "lambda";
+      // The bundle's identity, and the functionUrls key. Many pathnames share it.
+      id: string;
+      // Which entry inside that bundle renders this route.
+      entryKey?: string;
+      parent?: string;
+      revalidate?: unknown;
+    }
   | {
       kind: "prerender";
       id: string;
+      // The entry inside the parent bundle that regenerates this prerender.
+      entryKey?: string;
       tags?: string[];
       allowQuery?: string[];
       fallback?: {
@@ -124,8 +140,8 @@ type DispatchTarget =
       pprChain?: { headers: Record<string, string> };
       // Set when the route that regenerates this prerender runs on the edge:
       // there is no Function URL to forward to, so every tier below the cache
-      // invokes this entry instead.
-      entryKey?: string;
+      // invokes this entry instead — and no tier can revalidate.
+      edgeEntryKey?: string;
       config: {
         allowQuery?: string[];
         allowHeader?: string[];
@@ -484,7 +500,12 @@ async function dispatch(
     case "lambda": {
       const fnUrl = functionUrls[target.id];
       if (!fnUrl) return noFunctionUrl(target.id);
-      return doOrigin(forward(originUrl(fnUrl, url, result), request, headers));
+      return doOrigin(
+        withEntry(
+          forward(originUrl(fnUrl, url, result), request, headers),
+          target.entryKey,
+        ),
+      );
     }
 
     case "prerender":
@@ -522,16 +543,22 @@ async function dispatchPrerender(
   deps: RouteDeps,
 ): Promise<Response> {
   const fnUrl = deps.functionUrls[target.id];
-  const entryKey = target.entryKey;
-  if (!fnUrl && !entryKey) return noFunctionUrl(target.id);
+  const edgeEntryKey = target.edgeEntryKey;
+  if (!fnUrl && !edgeEntryKey) return noFunctionUrl(target.id);
 
   // Every Function-URL call this function makes is signed when edge credentials
   // are bound; an edge-rendered route has no Function URL at all and reaches its
   // renderer through the loader instead.
   const doFetch = originFetch(deps);
   const forwardUrl = originUrl(fnUrl ?? url.origin, url, result);
-  const render = (rendered: Request) =>
-    entryKey ? edgeResponse(deps, entryKey, rendered) : doFetch(rendered);
+  // Every tier's origin call goes through render, under its own header set — the
+  // bundle entry is stamped here so no tier can be built without it.
+  const render = (rendered: Request) => {
+    const entried = withEntry(rendered, target.entryKey);
+    return edgeEntryKey
+      ? edgeResponse(deps, edgeEntryKey, entried)
+      : doFetch(entried);
+  };
 
   if (!deps.cache) {
     return render(forward(forwardUrl, request, headers));
@@ -581,7 +608,7 @@ async function dispatchPrerender(
   // Edge chunks compile with no incremental cache handler, so an edge render can
   // never rewrite the ISR entry it was asked to refresh — scheduling one would
   // only burn an invocation. Edge ISR is bd ocelhq-b7l.
-  const revalidates = !entryKey;
+  const revalidates = !edgeEntryKey;
 
   // A pages-router data request (/_next/data/<build>/route.json) resolves to
   // the same prerender target as its html route, but must be answered with
@@ -787,6 +814,17 @@ export function forward(
     body,
     redirect: "manual",
   });
+}
+
+// withEntry names the bundle entry an already-built forward must run. It wraps
+// the request rather than any one header set, because a prerender forwards under
+// several (raw, allowHeader-filtered, revalidating) and the origin needs the
+// entry on all of them.
+function withEntry(request: Request, entryKey: string | undefined): Request {
+  if (!entryKey) return request;
+  const headers = new Headers(request.headers);
+  headers.set(ENTRY_HEADER, entryKey);
+  return new Request(request, { headers });
 }
 
 function noFunctionUrl(id: string): Response {
