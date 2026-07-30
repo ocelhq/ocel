@@ -88,21 +88,78 @@ type functionConfig struct {
 	ID string `json:"id,omitempty"`
 }
 
-// builderExec runs the builder script with the request on stdin. It is a
-// package var so tests can simulate the builder (writing config.json files
-// into the output) without spawning node.
+// builderExec runs the builder script with the request on stdin, under the
+// environment Build composed. It is a package var so tests can simulate the
+// builder (writing config.json files into the output) without spawning node.
 var builderExec = runNode
 
-// builderEnv is the environment the node builder runs under: the CLI's own,
-// plus the adapter path the builder resolves its framework adapter from, plus
-// the project's resolved plaintext values — exported before the build because
-// that is the only moment a framework can inline one into what it emits.
-func builderEnv(adapterPath string, vars map[string]string) []string {
-	env := append(os.Environ(), "NEXT_ADAPTER_PATH="+adapterPath)
-	for key, value := range vars {
-		env = append(env, key+"="+value)
+// adapterPathEnv points the builder — and, by inheritance, `next build` itself
+// — at the framework adapter in the project's materialized platform dist.
+const adapterPathEnv = "NEXT_ADAPTER_PATH"
+
+// appFolderEnv carries the variable folder the app being built binds. The SDK
+// reads it to decide whether a scoped key is this app's to read
+// (packages/ocel/src/env/scope.ts), so a build that does not state it is told
+// it binds the project root and refuses every scoped read — including the ones
+// whose values are in this very environment. cloud/aws/deploy sets the same
+// name on the deployed function; this is the build-time half of it.
+const appFolderEnv = "OCEL_APP_FOLDER"
+
+// buildOwnedNames are the entries the build environment owns rather than
+// carries: the two above, and the search path the builder finds node and the
+// framework CLI on.
+var buildOwnedNames = []string{adapterPathEnv, appFolderEnv, "PATH"}
+
+// checkVariableNames refuses a resolved value named like something the build
+// runs on. Either outcome of such a collision is wrong — honouring it breaks
+// the build with an error that names nothing, ignoring it silently drops a
+// value the project declared — so the collision itself is the report.
+func checkVariableNames(vars map[string]string) error {
+	for _, name := range buildOwnedNames {
+		if _, taken := vars[name]; taken {
+			return fmt.Errorf("a variable is declared as %s, which the build environment owns; rename it where it is declared", name)
+		}
 	}
-	return env
+	return nil
+}
+
+// builderEnv is the environment the node builder runs under: the CLI's own,
+// then the project's resolved plaintext values — exported before the build
+// because that is the only moment a framework can inline one into what it
+// emits — then the entries the build owns. Those go last because exec is
+// last-wins, so no resolved value can repoint the builder even if one reaches
+// here. The folder is always written, so a binding inherited from whatever
+// spawned the CLI never answers for this build.
+func builderEnv(adapterPath, folder string, vars map[string]string) []string {
+	keys := make([]string, 0, len(vars))
+	for key := range vars {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	env := os.Environ()
+	for _, key := range keys {
+		env = append(env, key+"="+vars[key])
+	}
+	return append(env, adapterPathEnv+"="+adapterPath, appFolderEnv+"="+folder)
+}
+
+// appFolder is the binding the build runs under. One builder process serves
+// every app, so it can only state a folder every app agrees on; where two apps
+// bind different ones it states the project root, which leaves an out-of-scope
+// read the named error it already is rather than handing one app the other's
+// scoped values.
+func appFolder(apps []projectconfig.App) string {
+	if len(apps) == 0 {
+		return ""
+	}
+	folder := apps[0].Folder
+	for _, app := range apps[1:] {
+		if app.Folder != folder {
+			return ""
+		}
+	}
+	return folder
 }
 
 // Build resets the project's build output and runs the node builder over it.
@@ -112,6 +169,10 @@ func builderEnv(adapterPath string, vars map[string]string) []string {
 // progress and failure output are forwarded to stderr; a non-zero exit is
 // surfaced as an error so callers can abort before spawning a provider.
 func Build(ctx context.Context, cfg *projectconfig.Config, env map[string]string, stderr io.Writer) error {
+	if err := checkVariableNames(env); err != nil {
+		return err
+	}
+
 	outputDir := filepath.Join(cfg.Dir, scratchDirName, outputDirName)
 	relOutput := filepath.Join(scratchDirName, outputDirName)
 
@@ -143,7 +204,7 @@ func Build(ctx context.Context, cfg *projectconfig.Config, env map[string]string
 	if err != nil {
 		return fmt.Errorf("marshal build request: %w", err)
 	}
-	return builderExec(ctx, builderPath, platform.AdapterPath(cfg.Dir), payload, env, stderr)
+	return builderExec(ctx, builderPath, builderEnv(platform.AdapterPath(cfg.Dir), appFolder(cfg.Apps), env), payload, stderr)
 }
 
 // CollectFunctions returns the functions in a project's build output,
@@ -291,17 +352,18 @@ func readFunction(outputDir, functionsDir, funcDir, app string) (manifestbuilder
 	}, nil
 }
 
-// runNode spawns the builder. NEXT_ADAPTER_PATH is read by Next itself
-// (next/dist/server/config-shared.js), reaching `next build` by env
-// inheritance through the builder, so it must be set here rather than passed
-// in the request.
-func runNode(ctx context.Context, scriptPath, adapterPath string, request []byte, env map[string]string, stderr io.Writer) error {
+// runNode spawns the builder under the environment Build composed. Everything
+// the build needs travels there rather than in the request, because `next
+// build` reads some of it (NEXT_ADAPTER_PATH, via
+// next/dist/server/config-shared.js) by env inheritance through the builder and
+// never sees the request at all.
+func runNode(ctx context.Context, scriptPath string, env []string, request []byte, stderr io.Writer) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
 
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
-	cmd.Env = builderEnv(adapterPath, env)
+	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(request)
 	cmd.Stdout = stderr
 

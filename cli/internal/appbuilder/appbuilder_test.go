@@ -17,11 +17,23 @@ import (
 	"github.com/ocelhq/ocel/cli/platform"
 )
 
-func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath, adapterPath string, request []byte, env map[string]string, stderr io.Writer) error) {
+func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath string, env []string, request []byte, stderr io.Writer) error) {
 	t.Helper()
 	prev := builderExec
 	builderExec = fn
 	t.Cleanup(func() { builderExec = prev })
+}
+
+// lookup answers what the spawned process would see for name: exec is
+// last-wins, so the last entry is the one that counts.
+func lookup(env []string, name string) (string, bool) {
+	value, found := "", false
+	for _, entry := range env {
+		if rest, ok := strings.CutPrefix(entry, name+"="); ok {
+			value, found = rest, true
+		}
+	}
+	return value, found
 }
 
 // writeBuilder puts a stub builder where platform.Ensure would have
@@ -68,10 +80,10 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 
 	var gotScript string
 	var gotReq builderRequest
-	var gotAdapter string
-	swapExec(t, func(_ context.Context, scriptPath, adapterPath string, request []byte, _ map[string]string, _ io.Writer) error {
+	var gotEnv []string
+	swapExec(t, func(_ context.Context, scriptPath string, env []string, request []byte, _ io.Writer) error {
 		gotScript = scriptPath
-		gotAdapter = adapterPath
+		gotEnv = env
 		if err := json.Unmarshal(request, &gotReq); err != nil {
 			return err
 		}
@@ -129,8 +141,8 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 	if gotScript != builderPath {
 		t.Errorf("script path = %q, want %q", gotScript, builderPath)
 	}
-	if got, want := gotAdapter, platform.AdapterPath(root); got != want {
-		t.Errorf("adapter path = %q, want %q", got, want)
+	if got, _ := lookup(gotEnv, "NEXT_ADAPTER_PATH"); got != platform.AdapterPath(root) {
+		t.Errorf("adapter path = %q, want %q", got, platform.AdapterPath(root))
 	}
 }
 
@@ -158,7 +170,7 @@ func TestBuild_NoApps_RunsBuilderForDetectionAndResetsOutput(t *testing.T) {
 		functionConfig{Runtime: "nodejs24.x", Handler: "h", Framework: "express", App: "stale"})
 
 	var gotReq builderRequest
-	swapExec(t, func(_ context.Context, _, _ string, request []byte, _ map[string]string, _ io.Writer) error {
+	swapExec(t, func(_ context.Context, _ string, _ []string, request []byte, _ io.Writer) error {
 		// Simulate the builder running detection and finding nothing to build.
 		return json.Unmarshal(request, &gotReq)
 	})
@@ -193,7 +205,7 @@ func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
 		Apps: []projectconfig.App{{Name: "api", Path: "apps/api", Framework: "express", Compute: "serverless"}},
 	}
 
-	swapExec(t, func(_ context.Context, _, _ string, _ []byte, _ map[string]string, _ io.Writer) error {
+	swapExec(t, func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
 		return errors.New("node-builder failed: no entrypoint resolved for app \"api\"")
 	})
 
@@ -533,8 +545,8 @@ func TestBuild_ExportsResolvedValuesIntoTheBuildEnvironment(t *testing.T) {
 	root := t.TempDir()
 	writeBuilder(t, root)
 
-	var got map[string]string
-	swapExec(t, func(_ context.Context, _, _ string, _ []byte, env map[string]string, _ io.Writer) error {
+	var got []string
+	swapExec(t, func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
 		got = env
 		return nil
 	})
@@ -543,8 +555,8 @@ func TestBuild_ExportsResolvedValuesIntoTheBuildEnvironment(t *testing.T) {
 	if err := Build(context.Background(), &projectconfig.Config{Dir: root}, vars, io.Discard); err != nil {
 		t.Fatalf("Build: %v", err)
 	}
-	if got["POSTHOG_ID"] != "ph-123" {
-		t.Fatalf("build environment = %v, want the resolved value", got)
+	if value, _ := lookup(got, "POSTHOG_ID"); value != "ph-123" {
+		t.Fatalf("build environment POSTHOG_ID = %q, want the resolved value", value)
 	}
 }
 
@@ -552,24 +564,133 @@ func TestBuild_ExportsResolvedValuesIntoTheBuildEnvironment(t *testing.T) {
 // export is additive: the builder's own entries and the inherited environment
 // still reach it.
 func TestBuilderEnv_AddsResolvedValuesWithoutLosingTheBuildersOwn(t *testing.T) {
-	env := builderEnv("/adapters/next.js", map[string]string{"POSTHOG_ID": "ph-123"})
+	env := builderEnv("/adapters/next.js", "", map[string]string{"POSTHOG_ID": "ph-123"})
 
-	var sawAdapter, sawVariable bool
-	for _, entry := range env {
-		switch entry {
-		case "NEXT_ADAPTER_PATH=/adapters/next.js":
-			sawAdapter = true
-		case "POSTHOG_ID=ph-123":
-			sawVariable = true
-		}
+	if got, _ := lookup(env, "NEXT_ADAPTER_PATH"); got != "/adapters/next.js" {
+		t.Errorf("NEXT_ADAPTER_PATH = %q, want the adapter path the builder needs", got)
 	}
-	if !sawAdapter {
-		t.Error("the adapter path the builder needs is missing")
+	if got, _ := lookup(env, "POSTHOG_ID"); got != "ph-123" {
+		t.Errorf("POSTHOG_ID = %q, want the resolved value", got)
 	}
-	if !sawVariable {
-		t.Error("the resolved value is missing")
-	}
-	if len(env) <= 2 {
+	if len(env) <= 3 {
 		t.Errorf("env holds %d entries, want the inherited environment as well", len(env))
+	}
+}
+
+// TestBuild_TellsTheBuildWhichFolderTheAppBinds proves an app can read its own
+// scoped key while it is being built. Resolution puts the value in the build
+// environment under its bare name, but the SDK checks the binding before
+// yielding it — so without this the app is told it is bound to the project root
+// and a scoped read throws, with the value sitting right there.
+func TestBuild_TellsTheBuildWhichFolderTheAppBinds(t *testing.T) {
+	root := t.TempDir()
+	writeBuilder(t, root)
+	// A binding left over from some other process must not answer for this build.
+	t.Setenv("OCEL_APP_FOLDER", "/stale")
+
+	var got []string
+	swapExec(t, func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
+		got = env
+		return nil
+	})
+
+	cfg := &projectconfig.Config{
+		Dir:  root,
+		Apps: []projectconfig.App{{Name: "web", Path: "apps/web", Framework: "next", Folder: "/web"}},
+	}
+	if err := Build(context.Background(), cfg, map[string]string{"API_URL": "https://web"}, io.Discard); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	value, found := lookup(got, "OCEL_APP_FOLDER")
+	if !found {
+		t.Fatal("the build was told no folder binding, so a scoped read during it cannot succeed")
+	}
+	if value != "/web" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want the folder the app binds", value)
+	}
+}
+
+// TestBuild_AppsBindingDifferentFoldersAreToldNoBinding proves the one thing a
+// shared build process can honestly say when its apps disagree. Naming one
+// app's folder would let the other read that app's scoped values; the project
+// root makes an out-of-scope read the named error it already is.
+func TestBuild_AppsBindingDifferentFoldersAreToldNoBinding(t *testing.T) {
+	root := t.TempDir()
+	writeBuilder(t, root)
+	t.Setenv("OCEL_APP_FOLDER", "/stale")
+
+	var got []string
+	swapExec(t, func(_ context.Context, _ string, env []string, _ []byte, _ io.Writer) error {
+		got = env
+		return nil
+	})
+
+	cfg := &projectconfig.Config{
+		Dir: root,
+		Apps: []projectconfig.App{
+			{Name: "web", Path: "apps/web", Framework: "next", Folder: "/web"},
+			{Name: "admin", Path: "apps/admin", Framework: "next", Folder: "/admin"},
+		},
+	}
+	if err := Build(context.Background(), cfg, nil, io.Discard); err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	value, found := lookup(got, "OCEL_APP_FOLDER")
+	if !found {
+		t.Fatal("no binding was stated, so a stale one from the parent environment still answers")
+	}
+	if value != "" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want the project root: one build cannot be bound to two folders", value)
+	}
+}
+
+// TestBuild_RefusesAResolvedValueTheBuildEnvironmentOwns proves a declared
+// variable cannot take a name the build process itself runs on. Applying it
+// would break the build in a way that names nothing; ignoring it would drop a
+// value the project declared. Refusing names the key while nothing has been
+// built.
+func TestBuild_RefusesAResolvedValueTheBuildEnvironmentOwns(t *testing.T) {
+	for _, name := range []string{"PATH", "NEXT_ADAPTER_PATH", "OCEL_APP_FOLDER"} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeBuilder(t, root)
+
+			ran := false
+			swapExec(t, func(_ context.Context, _ string, _ []string, _ []byte, _ io.Writer) error {
+				ran = true
+				return nil
+			})
+
+			err := Build(context.Background(), &projectconfig.Config{Dir: root}, map[string]string{name: "hijacked"}, io.Discard)
+			if err == nil {
+				t.Fatalf("Build succeeded with a variable declared as %s, want a refusal", name)
+			}
+			if !strings.Contains(err.Error(), name) {
+				t.Errorf("error = %q, want it to name %q", err, name)
+			}
+			if ran {
+				t.Error("the builder ran, want the refusal before anything is built")
+			}
+		})
+	}
+}
+
+// TestBuilderEnv_WhatTheBuildOwnsIsAppliedLast proves the ordering the refusal
+// above does not depend on: exec is last-wins, so the entries the build runs on
+// are written after the resolved values, and no path into this function can
+// repoint the builder.
+func TestBuilderEnv_WhatTheBuildOwnsIsAppliedLast(t *testing.T) {
+	env := builderEnv("/adapters/next.js", "/web", map[string]string{
+		"NEXT_ADAPTER_PATH": "/evil/adapter.js",
+		"OCEL_APP_FOLDER":   "/admin",
+	})
+
+	if got, _ := lookup(env, "NEXT_ADAPTER_PATH"); got != "/adapters/next.js" {
+		t.Errorf("NEXT_ADAPTER_PATH = %q, want the builder's own adapter", got)
+	}
+	if got, _ := lookup(env, "OCEL_APP_FOLDER"); got != "/web" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want the binding the build was given", got)
 	}
 }
