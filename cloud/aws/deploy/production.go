@@ -86,7 +86,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	// Sealed before the artifacts are packaged: the ciphertext rides inside
 	// each function's deployment package, so it has to exist before anything
 	// is hashed or uploaded.
-	baked, err := renderBakedBundles(ctx, cfg, manifest)
+	baked, err := renderBakedBundles(manifest)
 	if err != nil {
 		return Result{}, err
 	}
@@ -630,8 +630,8 @@ func newRandomID() (string, error) {
 // BuildPlan consumes, and the one place an identity is derived: the app's build
 // id — a Next app's routing-manifest buildId (assigned at build time, immutable
 // per build), or a freshly minted id for a framework with none — plus the
-// fingerprint of the values baked into this Deployment. Nothing is baked yet, so
-// every identity here renders as its bare build id.
+// fingerprint of the values baked into this Deployment. No path here computes
+// a fingerprint yet, so every identity renders as its bare build id.
 func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest) (DeploymentIdentities, error) {
 	identities := make(DeploymentIdentities, len(manifest.GetApps()))
 	for _, app := range manifestApps(manifest) {

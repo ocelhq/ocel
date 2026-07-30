@@ -1,7 +1,6 @@
 package deploy
 
 import (
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -106,7 +105,7 @@ func (b bakedBundle) overlay() map[string][]byte {
 // renderBakedBundles seals every app's encrypted-baked values, keyed by app
 // name, and is where a variable whose class this deploy path cannot deliver
 // stops the deploy — before anything is packaged or provisioned.
-func renderBakedBundles(_ context.Context, _ Config, manifest *deploymentsv1.Manifest) (map[string]bakedBundle, error) {
+func renderBakedBundles(manifest *deploymentsv1.Manifest) (map[string]bakedBundle, error) {
 	bundles := make(map[string]bakedBundle, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
 		bundle, err := renderBakedBundle(app)

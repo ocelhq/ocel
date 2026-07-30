@@ -362,7 +362,7 @@ func TestRenderBakedBundles_SealsEachAppUnderItsOwnKey(t *testing.T) {
 		},
 	}}
 
-	bundles, err := renderBakedBundles(context.Background(), Config{}, manifest)
+	bundles, err := renderBakedBundles(manifest)
 	if err != nil {
 		t.Fatalf("renderBakedBundles: %v", err)
 	}
@@ -439,7 +439,7 @@ func TestBakedDelivery_CiphertextRidesInTheBundleAndNeverTheConfiguration(t *tes
 	}
 	manifest.Functions[0].ArtifactPath = filepath.Base(dir)
 
-	bundles, err := renderBakedBundles(context.Background(), cfg, manifest)
+	bundles, err := renderBakedBundles(manifest)
 	if err != nil {
 		t.Fatalf("renderBakedBundles: %v", err)
 	}
