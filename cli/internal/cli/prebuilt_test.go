@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 )
 
@@ -55,7 +56,7 @@ func TestCollectAndBuildManifest_Prebuilt_SkipsTheBuild(t *testing.T) {
 	ran := recordBuildApp(t)
 
 	var out bytes.Buffer
-	manifest, err := collectAndBuildManifest(context.Background(), prebuiltConfig(root), true, &out)
+	manifest, err := collectAndBuildManifest(context.Background(), prebuiltConfig(root), noGate(), true, &out)
 	if err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
@@ -83,7 +84,7 @@ func TestCollectAndBuildManifest_NotPrebuilt_RunsTheBuild(t *testing.T) {
 	writePrebuiltFunction(t, root, "api", "index")
 	ran := recordBuildApp(t)
 
-	if _, err := collectAndBuildManifest(context.Background(), prebuiltConfig(root), false, io.Discard); err != nil {
+	if _, err := collectAndBuildManifest(context.Background(), prebuiltConfig(root), noGate(), false, io.Discard); err != nil {
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
 	if !*ran {
@@ -96,7 +97,7 @@ func TestCollectAndBuildManifest_NotPrebuilt_RunsTheBuild(t *testing.T) {
 func TestCollectAndBuildManifest_Prebuilt_NoOutput_Errors(t *testing.T) {
 	recordBuildApp(t)
 
-	_, err := collectAndBuildManifest(context.Background(), prebuiltConfig(t.TempDir()), true, io.Discard)
+	_, err := collectAndBuildManifest(context.Background(), prebuiltConfig(t.TempDir()), noGate(), true, io.Discard)
 	if err == nil {
 		t.Fatal("collectAndBuildManifest succeeded with no build output, want error")
 	}
@@ -161,4 +162,16 @@ func TestRunDeploy_Prebuilt_NoOutput_AbortsBeforeSpawn(t *testing.T) {
 	if strings.Contains(stdout.String(), "DEPLOY ") {
 		t.Errorf("stdout = %q, want no Deploy to have been driven", stdout.String())
 	}
+}
+
+// noGate is a gate over a store holding nothing, for the paths that declare
+// no variables and so never consult it.
+func noGate() *envgate.Gate { return envgate.New(emptyValues{}, envgate.Scope{}) }
+
+type emptyValues struct{}
+
+func (emptyValues) List(context.Context) ([]envgate.Cell, error) { return nil, nil }
+
+func (emptyValues) Reveal(context.Context, envgate.Cell) (string, bool, error) {
+	return "", false, nil
 }

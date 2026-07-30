@@ -341,7 +341,7 @@ var File_resources_v1_resources_proto protoreflect.FileDescriptor
 
 const file_resources_v1_resources_proto_rawDesc = "" +
 	"\n" +
-	"\x1cresources/v1/resources.proto\x12\fresources.v1\"X\n" +
+	"\x1cresources/v1/resources.proto\x12\fresources.v1\x1a\x16resources/v1/env.proto\"X\n" +
 	"\x12ResourceIdentifier\x12.\n" +
 	"\x04type\x18\x01 \x01(\x0e2\x1a.resources.v1.ResourceTypeR\x04type\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\"\x11\n" +
@@ -358,9 +358,12 @@ const file_resources_v1_resources_proto_rawDesc = "" +
 	"\fResourceType\x12\x1d\n" +
 	"\x19RESOURCE_TYPE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16RESOURCE_TYPE_POSTGRES\x10\x01\x12\x18\n" +
-	"\x14RESOURCE_TYPE_BUCKET\x10\x022Y\n" +
+	"\x14RESOURCE_TYPE_BUCKET\x10\x022\x90\x02\n" +
 	"\x0fResourceService\x12F\n" +
-	"\aDeclare\x12\x1c.resources.v1.DeclareRequest\x1a\x1d.resources.v1.DeclareResponseB;Z9github.com/ocelhq/ocel/pkg/proto/resources/v1;resourcesv1b\x06proto3"
+	"\aDeclare\x12\x1c.resources.v1.DeclareRequest\x1a\x1d.resources.v1.DeclareResponse\x12O\n" +
+	"\n" +
+	"DeclareEnv\x12\x1f.resources.v1.DeclareEnvRequest\x1a .resources.v1.DeclareEnvResponse\x12d\n" +
+	"\x11ReportEnvProblems\x12&.resources.v1.ReportEnvProblemsRequest\x1a'.resources.v1.ReportEnvProblemsResponseB;Z9github.com/ocelhq/ocel/pkg/proto/resources/v1;resourcesv1b\x06proto3"
 
 var (
 	file_resources_v1_resources_proto_rawDescOnce sync.Once
@@ -377,12 +380,16 @@ func file_resources_v1_resources_proto_rawDescGZIP() []byte {
 var file_resources_v1_resources_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_resources_v1_resources_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
 var file_resources_v1_resources_proto_goTypes = []any{
-	(ResourceType)(0),          // 0: resources.v1.ResourceType
-	(*ResourceIdentifier)(nil), // 1: resources.v1.ResourceIdentifier
-	(*DeclareResponse)(nil),    // 2: resources.v1.DeclareResponse
-	(*DeclareRequest)(nil),     // 3: resources.v1.DeclareRequest
-	(*PostgresConfig)(nil),     // 4: resources.v1.PostgresConfig
-	(*BucketConfig)(nil),       // 5: resources.v1.BucketConfig
+	(ResourceType)(0),                 // 0: resources.v1.ResourceType
+	(*ResourceIdentifier)(nil),        // 1: resources.v1.ResourceIdentifier
+	(*DeclareResponse)(nil),           // 2: resources.v1.DeclareResponse
+	(*DeclareRequest)(nil),            // 3: resources.v1.DeclareRequest
+	(*PostgresConfig)(nil),            // 4: resources.v1.PostgresConfig
+	(*BucketConfig)(nil),              // 5: resources.v1.BucketConfig
+	(*DeclareEnvRequest)(nil),         // 6: resources.v1.DeclareEnvRequest
+	(*ReportEnvProblemsRequest)(nil),  // 7: resources.v1.ReportEnvProblemsRequest
+	(*DeclareEnvResponse)(nil),        // 8: resources.v1.DeclareEnvResponse
+	(*ReportEnvProblemsResponse)(nil), // 9: resources.v1.ReportEnvProblemsResponse
 }
 var file_resources_v1_resources_proto_depIdxs = []int32{
 	0, // 0: resources.v1.ResourceIdentifier.type:type_name -> resources.v1.ResourceType
@@ -390,9 +397,13 @@ var file_resources_v1_resources_proto_depIdxs = []int32{
 	4, // 2: resources.v1.DeclareRequest.postgres:type_name -> resources.v1.PostgresConfig
 	5, // 3: resources.v1.DeclareRequest.bucket:type_name -> resources.v1.BucketConfig
 	3, // 4: resources.v1.ResourceService.Declare:input_type -> resources.v1.DeclareRequest
-	2, // 5: resources.v1.ResourceService.Declare:output_type -> resources.v1.DeclareResponse
-	5, // [5:6] is the sub-list for method output_type
-	4, // [4:5] is the sub-list for method input_type
+	6, // 5: resources.v1.ResourceService.DeclareEnv:input_type -> resources.v1.DeclareEnvRequest
+	7, // 6: resources.v1.ResourceService.ReportEnvProblems:input_type -> resources.v1.ReportEnvProblemsRequest
+	2, // 7: resources.v1.ResourceService.Declare:output_type -> resources.v1.DeclareResponse
+	8, // 8: resources.v1.ResourceService.DeclareEnv:output_type -> resources.v1.DeclareEnvResponse
+	9, // 9: resources.v1.ResourceService.ReportEnvProblems:output_type -> resources.v1.ReportEnvProblemsResponse
+	7, // [7:10] is the sub-list for method output_type
+	4, // [4:7] is the sub-list for method input_type
 	4, // [4:4] is the sub-list for extension type_name
 	4, // [4:4] is the sub-list for extension extendee
 	0, // [0:4] is the sub-list for field type_name
@@ -403,6 +414,7 @@ func file_resources_v1_resources_proto_init() {
 	if File_resources_v1_resources_proto != nil {
 		return
 	}
+	file_resources_v1_env_proto_init()
 	file_resources_v1_resources_proto_msgTypes[2].OneofWrappers = []any{
 		(*DeclareRequest_Postgres)(nil),
 		(*DeclareRequest_Bucket)(nil),

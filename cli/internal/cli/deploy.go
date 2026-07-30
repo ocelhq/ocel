@@ -19,12 +19,14 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerlocator"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/platform"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
 // deployReadyTimeout overrides how long `ocel deploy` waits for the spawned
@@ -142,7 +144,13 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		}
 
 		ui.Building()
-		manifest, err := collectAndBuildManifest(ctx, cfg, opts.prebuilt, ui.BuildWriter())
+		gate := envgate.New(runnerValues{
+			runner:  runner,
+			options: []byte(provider.Options),
+			slug:    cfg.Slug,
+			class:   deploymentsv1.Environment_CLASS_PRODUCTION,
+		}, envScope(cfg, false))
+		manifest, err := collectAndBuildManifest(ctx, cfg, gate, opts.prebuilt, ui.BuildWriter())
 		if err != nil {
 			return err
 		}
@@ -200,10 +208,17 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 // Any app-build failure aborts here, before any provider is spawned.
 //
 // prebuilt skips the framework build and deploys whatever is already in
-// .ocel/output; the infrastructure discovery pass runs either way.
-func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
-	resources, err := deploycollector.Collect(ctx, cfg, buildOut, buildOut)
+// .ocel/output; the infrastructure discovery pass, and the variable gate that
+// follows it, run either way.
+func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, prebuilt bool, buildOut io.Writer) (*deploymentsv1.Manifest, error) {
+	resources, err := deploycollector.Collect(ctx, cfg, gate, buildOut, buildOut)
 	if err != nil {
+		return nil, err
+	}
+
+	// The gate stands between discovery and the build on purpose: a deploy
+	// that cannot succeed must not cost one.
+	if err := gate.Check(); err != nil {
 		return nil, err
 	}
 
@@ -226,6 +241,64 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, pre
 	}
 
 	return manifestbuilder.Build(cfg.Slug, cfg.Domains, toApps(cfg.Apps), toDeclarations(resources), functions)
+}
+
+// envScope is what a gate refusal has to name to be actionable: the apps that
+// read a root cell — every app, until an app can bind a folder — and the
+// substrate the fixing command must address.
+func envScope(cfg *projectconfig.Config, preview bool) envgate.Scope {
+	apps := make([]string, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		apps = append(apps, a.Name)
+	}
+	return envgate.Scope{Apps: apps, Preview: preview}
+}
+
+// runnerValues reaches the variable store the only way the CLI can: through
+// the provider binary it already has a session with.
+type runnerValues struct {
+	runner  *providerrunner.Runner
+	options []byte
+	slug    string
+	class   deploymentsv1.Environment_Class
+}
+
+func (v runnerValues) List(ctx context.Context) ([]envgate.Cell, error) {
+	resp, err := v.runner.ListValues(ctx, &envv1.ListValuesRequest{
+		Options:         v.options,
+		ProtocolVersion: manifestbuilder.SchemaVersion,
+		Class:           v.class,
+		Slug:            v.slug,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	var cells []envgate.Cell
+	for _, value := range resp.GetValues() {
+		c := value.GetCoordinate()
+		// A named-environment override is a value for one preview, not a
+		// requirement: what a deploy needs is the class-wide cell.
+		if c.GetEnvironment() != "" {
+			continue
+		}
+		cells = append(cells, envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()})
+	}
+	return cells, nil
+}
+
+func (v runnerValues) Reveal(ctx context.Context, cell envgate.Cell) (string, bool, error) {
+	resp, err := v.runner.GetValue(ctx, &envv1.GetValueRequest{
+		Options:         v.options,
+		ProtocolVersion: manifestbuilder.SchemaVersion,
+		Class:           v.class,
+		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
+		Reveal:          true,
+	})
+	if err != nil {
+		return "", false, err
+	}
+	return resp.GetValue(), resp.GetFound(), nil
 }
 
 // toApps lowers the resolved config's apps into the manifest builder's input.

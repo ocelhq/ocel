@@ -15,11 +15,11 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/provision"
+	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
 	"github.com/ocelhq/ocel/pkg/proto/dev/v1/devv1connect"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
-	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 )
 
 // SyncResult is delivered on Server.Sync() once a /sync request has been
@@ -93,6 +93,20 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 
 	s.manifest.Add(manifest.Entry{Name: res.Name, Type: res.Type})
 	return &resourcesv1.DeclareResponse{}, nil
+}
+
+// DeclareEnv and ReportEnvProblems implement the declaration half of
+// resourcesv1connect.ResourceServiceHandler. Dev holds no variable store yet:
+// it answers with no cells and accepts whatever verdict follows without
+// gating, so a dev run is never blocked by a value only a deploy needs. That
+// divergence is deliberate and documented, and ends when dev gets its own
+// value source.
+func (s *Server) DeclareEnv(context.Context, *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+	return &resourcesv1.DeclareEnvResponse{}, nil
+}
+
+func (s *Server) ReportEnvProblems(context.Context, *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
+	return &resourcesv1.ReportEnvProblemsResponse{}, nil
 }
 
 // ResetManifest clears every declared resource, so the next full

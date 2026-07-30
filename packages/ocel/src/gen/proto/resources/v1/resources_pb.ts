@@ -4,13 +4,15 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import type { DeclareEnvRequestSchema, DeclareEnvResponseSchema, ReportEnvProblemsRequestSchema, ReportEnvProblemsResponseSchema } from "./env_pb.js";
+import { file_resources_v1_env } from "./env_pb.js";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file resources/v1/resources.proto.
  */
 export const file_resources_v1_resources: GenFile = /*@__PURE__*/
-  fileDesc("ChxyZXNvdXJjZXMvdjEvcmVzb3VyY2VzLnByb3RvEgxyZXNvdXJjZXMudjEiTAoSUmVzb3VyY2VJZGVudGlmaWVyEigKBHR5cGUYASABKA4yGi5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIq4BCg5EZWNsYXJlUmVxdWVzdBIyCghyZXNvdXJjZRgBIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAiABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYAyABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIiEKDlBvc3RncmVzQ29uZmlnEg8KB3ZlcnNpb24YASABKAkiJwoMQnVja2V0Q29uZmlnEhcKD2FsbG93ZWRfb3JpZ2lucxgBIAMoCSpjCgxSZXNvdXJjZVR5cGUSHQoZUkVTT1VSQ0VfVFlQRV9VTlNQRUNJRklFRBAAEhoKFlJFU09VUkNFX1RZUEVfUE9TVEdSRVMQARIYChRSRVNPVVJDRV9UWVBFX0JVQ0tFVBACMlkKD1Jlc291cmNlU2VydmljZRJGCgdEZWNsYXJlEhwucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXF1ZXN0Gh0ucmVzb3VyY2VzLnYxLkRlY2xhcmVSZXNwb25zZUI7WjlnaXRodWIuY29tL29jZWxocS9vY2VsL3BrZy9wcm90by9yZXNvdXJjZXMvdjE7cmVzb3VyY2VzdjFiBnByb3RvMw");
+  fileDesc("ChxyZXNvdXJjZXMvdjEvcmVzb3VyY2VzLnByb3RvEgxyZXNvdXJjZXMudjEiTAoSUmVzb3VyY2VJZGVudGlmaWVyEigKBHR5cGUYASABKA4yGi5yZXNvdXJjZXMudjEuUmVzb3VyY2VUeXBlEgwKBG5hbWUYAiABKAkiEQoPRGVjbGFyZVJlc3BvbnNlIq4BCg5EZWNsYXJlUmVxdWVzdBIyCghyZXNvdXJjZRgBIAEoCzIgLnJlc291cmNlcy52MS5SZXNvdXJjZUlkZW50aWZpZXISMAoIcG9zdGdyZXMYAiABKAsyHC5yZXNvdXJjZXMudjEuUG9zdGdyZXNDb25maWdIABIsCgZidWNrZXQYAyABKAsyGi5yZXNvdXJjZXMudjEuQnVja2V0Q29uZmlnSABCCAoGY29uZmlnIiEKDlBvc3RncmVzQ29uZmlnEg8KB3ZlcnNpb24YASABKAkiJwoMQnVja2V0Q29uZmlnEhcKD2FsbG93ZWRfb3JpZ2lucxgBIAMoCSpjCgxSZXNvdXJjZVR5cGUSHQoZUkVTT1VSQ0VfVFlQRV9VTlNQRUNJRklFRBAAEhoKFlJFU09VUkNFX1RZUEVfUE9TVEdSRVMQARIYChRSRVNPVVJDRV9UWVBFX0JVQ0tFVBACMpACCg9SZXNvdXJjZVNlcnZpY2USRgoHRGVjbGFyZRIcLnJlc291cmNlcy52MS5EZWNsYXJlUmVxdWVzdBodLnJlc291cmNlcy52MS5EZWNsYXJlUmVzcG9uc2USTwoKRGVjbGFyZUVudhIfLnJlc291cmNlcy52MS5EZWNsYXJlRW52UmVxdWVzdBogLnJlc291cmNlcy52MS5EZWNsYXJlRW52UmVzcG9uc2USZAoRUmVwb3J0RW52UHJvYmxlbXMSJi5yZXNvdXJjZXMudjEuUmVwb3J0RW52UHJvYmxlbXNSZXF1ZXN0GicucmVzb3VyY2VzLnYxLlJlcG9ydEVudlByb2JsZW1zUmVzcG9uc2VCO1o5Z2l0aHViLmNvbS9vY2VsaHEvb2NlbC9wa2cvcHJvdG8vcmVzb3VyY2VzL3YxO3Jlc291cmNlc3YxYgZwcm90bzM", [file_resources_v1_env]);
 
 /**
  * @generated from message resources.v1.ResourceIdentifier
@@ -154,6 +156,31 @@ export const ResourceService: GenService<{
     methodKind: "unary";
     input: typeof DeclareRequestSchema;
     output: typeof DeclareResponseSchema;
+  },
+  /**
+   * DeclareEnv declares every variable one defineEnv call holds and, unlike
+   * Declare, answers with a payload: the cells the store already holds for
+   * those keys. Validation happens in the declaring process because the
+   * schemas live there, so the values have to travel back to it.
+   *
+   * @generated from rpc resources.v1.ResourceService.DeclareEnv
+   */
+  declareEnv: {
+    methodKind: "unary";
+    input: typeof DeclareEnvRequestSchema;
+    output: typeof DeclareEnvResponseSchema;
+  },
+  /**
+   * ReportEnvProblems carries the verdict back: every cell that is missing
+   * or fails its schema. It is what the discovery gate refuses on, so the
+   * decision stays with the schemas and the message stays with the CLI.
+   *
+   * @generated from rpc resources.v1.ResourceService.ReportEnvProblems
+   */
+  reportEnvProblems: {
+    methodKind: "unary";
+    input: typeof ReportEnvProblemsRequestSchema;
+    output: typeof ReportEnvProblemsResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_resources_v1_resources, 0);

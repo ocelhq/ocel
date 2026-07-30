@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -52,7 +53,7 @@ export {};
 	}
 
 	var stdout, stderr bytes.Buffer
-	resources, err := Collect(context.Background(), cfg, &stdout, &stderr)
+	resources, err := Collect(context.Background(), cfg, envgate.New(emptyValues{}, envgate.Scope{}), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("Collect: %v; stderr=%s", err, stderr.String())
 	}
@@ -85,4 +86,14 @@ func writeFile(t *testing.T, path, contents string) {
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
 	}
+}
+
+// emptyValues is a store holding nothing, for the paths that declare no
+// variables and so never consult it.
+type emptyValues struct{}
+
+func (emptyValues) List(context.Context) ([]envgate.Cell, error) { return nil, nil }
+
+func (emptyValues) Reveal(context.Context, envgate.Cell) (string, bool, error) {
+	return "", false, nil
 }

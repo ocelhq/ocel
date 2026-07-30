@@ -2,6 +2,7 @@ package deploycollector
 
 import (
 	"context"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,7 +11,7 @@ import (
 )
 
 func TestCollector_Declare_RecordsFullTypedConfig(t *testing.T) {
-	c := New()
+	c := New(envgate.New(emptyValues{}, envgate.Scope{}))
 
 	_, err := c.Declare(context.Background(), &resourcesv1.DeclareRequest{
 		Resource: &resourcesv1.ResourceIdentifier{Name: "main", Type: resourcesv1.ResourceType_RESOURCE_TYPE_POSTGRES},
@@ -36,7 +37,7 @@ func TestCollector_Declare_RecordsFullTypedConfig(t *testing.T) {
 }
 
 func TestCollector_Declare_RejectsInvalidDeclare(t *testing.T) {
-	c := New()
+	c := New(envgate.New(emptyValues{}, envgate.Scope{}))
 
 	_, err := c.Declare(context.Background(), &resourcesv1.DeclareRequest{})
 	if err == nil {
@@ -48,7 +49,7 @@ func TestCollector_Declare_RejectsInvalidDeclare(t *testing.T) {
 }
 
 func TestCollector_Mux_AcksSyncWithoutProvisioning(t *testing.T) {
-	c := New()
+	c := New(envgate.New(emptyValues{}, envgate.Scope{}))
 	server := httptest.NewServer(c.Mux())
 	defer server.Close()
 

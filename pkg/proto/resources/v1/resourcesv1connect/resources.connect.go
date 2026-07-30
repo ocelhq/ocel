@@ -35,11 +35,26 @@ const (
 const (
 	// ResourceServiceDeclareProcedure is the fully-qualified name of the ResourceService's Declare RPC.
 	ResourceServiceDeclareProcedure = "/resources.v1.ResourceService/Declare"
+	// ResourceServiceDeclareEnvProcedure is the fully-qualified name of the ResourceService's
+	// DeclareEnv RPC.
+	ResourceServiceDeclareEnvProcedure = "/resources.v1.ResourceService/DeclareEnv"
+	// ResourceServiceReportEnvProblemsProcedure is the fully-qualified name of the ResourceService's
+	// ReportEnvProblems RPC.
+	ResourceServiceReportEnvProblemsProcedure = "/resources.v1.ResourceService/ReportEnvProblems"
 )
 
 // ResourceServiceClient is a client for the resources.v1.ResourceService service.
 type ResourceServiceClient interface {
 	Declare(context.Context, *v1.DeclareRequest) (*v1.DeclareResponse, error)
+	// DeclareEnv declares every variable one defineEnv call holds and, unlike
+	// Declare, answers with a payload: the cells the store already holds for
+	// those keys. Validation happens in the declaring process because the
+	// schemas live there, so the values have to travel back to it.
+	DeclareEnv(context.Context, *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error)
+	// ReportEnvProblems carries the verdict back: every cell that is missing
+	// or fails its schema. It is what the discovery gate refuses on, so the
+	// decision stays with the schemas and the message stays with the CLI.
+	ReportEnvProblems(context.Context, *v1.ReportEnvProblemsRequest) (*v1.ReportEnvProblemsResponse, error)
 }
 
 // NewResourceServiceClient constructs a client for the resources.v1.ResourceService service. By
@@ -59,12 +74,26 @@ func NewResourceServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(resourceServiceMethods.ByName("Declare")),
 			connect.WithClientOptions(opts...),
 		),
+		declareEnv: connect.NewClient[v1.DeclareEnvRequest, v1.DeclareEnvResponse](
+			httpClient,
+			baseURL+ResourceServiceDeclareEnvProcedure,
+			connect.WithSchema(resourceServiceMethods.ByName("DeclareEnv")),
+			connect.WithClientOptions(opts...),
+		),
+		reportEnvProblems: connect.NewClient[v1.ReportEnvProblemsRequest, v1.ReportEnvProblemsResponse](
+			httpClient,
+			baseURL+ResourceServiceReportEnvProblemsProcedure,
+			connect.WithSchema(resourceServiceMethods.ByName("ReportEnvProblems")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // resourceServiceClient implements ResourceServiceClient.
 type resourceServiceClient struct {
-	declare *connect.Client[v1.DeclareRequest, v1.DeclareResponse]
+	declare           *connect.Client[v1.DeclareRequest, v1.DeclareResponse]
+	declareEnv        *connect.Client[v1.DeclareEnvRequest, v1.DeclareEnvResponse]
+	reportEnvProblems *connect.Client[v1.ReportEnvProblemsRequest, v1.ReportEnvProblemsResponse]
 }
 
 // Declare calls resources.v1.ResourceService.Declare.
@@ -76,9 +105,36 @@ func (c *resourceServiceClient) Declare(ctx context.Context, req *v1.DeclareRequ
 	return nil, err
 }
 
+// DeclareEnv calls resources.v1.ResourceService.DeclareEnv.
+func (c *resourceServiceClient) DeclareEnv(ctx context.Context, req *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error) {
+	response, err := c.declareEnv.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ReportEnvProblems calls resources.v1.ResourceService.ReportEnvProblems.
+func (c *resourceServiceClient) ReportEnvProblems(ctx context.Context, req *v1.ReportEnvProblemsRequest) (*v1.ReportEnvProblemsResponse, error) {
+	response, err := c.reportEnvProblems.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ResourceServiceHandler is an implementation of the resources.v1.ResourceService service.
 type ResourceServiceHandler interface {
 	Declare(context.Context, *v1.DeclareRequest) (*v1.DeclareResponse, error)
+	// DeclareEnv declares every variable one defineEnv call holds and, unlike
+	// Declare, answers with a payload: the cells the store already holds for
+	// those keys. Validation happens in the declaring process because the
+	// schemas live there, so the values have to travel back to it.
+	DeclareEnv(context.Context, *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error)
+	// ReportEnvProblems carries the verdict back: every cell that is missing
+	// or fails its schema. It is what the discovery gate refuses on, so the
+	// decision stays with the schemas and the message stays with the CLI.
+	ReportEnvProblems(context.Context, *v1.ReportEnvProblemsRequest) (*v1.ReportEnvProblemsResponse, error)
 }
 
 // NewResourceServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -94,10 +150,26 @@ func NewResourceServiceHandler(svc ResourceServiceHandler, opts ...connect.Handl
 		connect.WithSchema(resourceServiceMethods.ByName("Declare")),
 		connect.WithHandlerOptions(opts...),
 	)
+	resourceServiceDeclareEnvHandler := connect.NewUnaryHandlerSimple(
+		ResourceServiceDeclareEnvProcedure,
+		svc.DeclareEnv,
+		connect.WithSchema(resourceServiceMethods.ByName("DeclareEnv")),
+		connect.WithHandlerOptions(opts...),
+	)
+	resourceServiceReportEnvProblemsHandler := connect.NewUnaryHandlerSimple(
+		ResourceServiceReportEnvProblemsProcedure,
+		svc.ReportEnvProblems,
+		connect.WithSchema(resourceServiceMethods.ByName("ReportEnvProblems")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/resources.v1.ResourceService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ResourceServiceDeclareProcedure:
 			resourceServiceDeclareHandler.ServeHTTP(w, r)
+		case ResourceServiceDeclareEnvProcedure:
+			resourceServiceDeclareEnvHandler.ServeHTTP(w, r)
+		case ResourceServiceReportEnvProblemsProcedure:
+			resourceServiceReportEnvProblemsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -109,4 +181,12 @@ type UnimplementedResourceServiceHandler struct{}
 
 func (UnimplementedResourceServiceHandler) Declare(context.Context, *v1.DeclareRequest) (*v1.DeclareResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("resources.v1.ResourceService.Declare is not implemented"))
+}
+
+func (UnimplementedResourceServiceHandler) DeclareEnv(context.Context, *v1.DeclareEnvRequest) (*v1.DeclareEnvResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("resources.v1.ResourceService.DeclareEnv is not implemented"))
+}
+
+func (UnimplementedResourceServiceHandler) ReportEnvProblems(context.Context, *v1.ReportEnvProblemsRequest) (*v1.ReportEnvProblemsResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("resources.v1.ResourceService.ReportEnvProblems is not implemented"))
 }

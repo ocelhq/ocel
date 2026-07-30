@@ -13,6 +13,7 @@ import (
 	"sync"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/pkg/proto/resources/v1/resourcesv1connect"
 )
@@ -22,13 +23,16 @@ import (
 // builder-ready structure (declare.Resource, config oneof included) for the
 // deploy manifest builder to consume.
 type Collector struct {
+	*envgate.Gate
+
 	mu        sync.Mutex
 	resources []declare.Resource
 }
 
-// New returns an empty Collector.
-func New() *Collector {
-	return &Collector{}
+// New returns an empty Collector serving gate's variable declarations
+// alongside its own resource declarations: one discovery run declares both.
+func New(gate *envgate.Gate) *Collector {
+	return &Collector{Gate: gate}
 }
 
 // Declare implements resourcesv1connect.ResourceServiceHandler, parsing req

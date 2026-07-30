@@ -16,6 +16,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
 	"github.com/ocelhq/ocel/cli/internal/deployui"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -195,22 +196,31 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 	ui := deployui.New(stdout, cfg.Dir, "ocel preview up", verboseEnabled())
 	defer ui.Close()
 
-	ui.Building()
-	manifest, err := collectAndBuildManifest(ctx, cfg, opts.prebuilt, ui.BuildWriter())
-	if err != nil {
-		return failSession(ctx, ui, err)
-	}
-	if manifest == nil {
-		ui.Finish("Nothing to deploy")
-		return nil
-	}
-	ui.BuildOK()
-
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
 		if err := preflightPreview(ctx, runner, provider, stdout); err != nil {
 			return err
 		}
+
+		// Building inside the session, as `ocel deploy` does: the variable
+		// gate runs between discovery and the build, and the store it reads
+		// is only reachable through the provider.
+		ui.Building()
+		gate := envgate.New(runnerValues{
+			runner:  runner,
+			options: []byte(provider.Options),
+			slug:    cfg.Slug,
+			class:   deploymentsv1.Environment_CLASS_PREVIEW,
+		}, envScope(cfg, true))
+		manifest, err := collectAndBuildManifest(ctx, cfg, gate, opts.prebuilt, ui.BuildWriter())
+		if err != nil {
+			return err
+		}
+		if manifest == nil {
+			ui.Finish("Nothing to deploy")
+			return nil
+		}
+		ui.BuildOK()
 
 		req := &deploymentsv1.DeployRequest{
 			Manifest:        manifest,
