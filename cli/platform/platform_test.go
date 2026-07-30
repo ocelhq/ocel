@@ -16,6 +16,7 @@ func TestEnsureWritesTree(t *testing.T) {
 		BuilderPath(dir),
 		AdapterPath(dir),
 		filepath.Join(filepath.Dir(AdapterPath(dir)), "edge-cache-handler.cjs"),
+		filepath.Join(filepath.Dir(AdapterPath(dir)), "next-dispatch.cjs"),
 		WorkerBundles(dir)["next"]["cloudflare"],
 		StoreWorkerBundles(dir)["cloudflare"],
 		filepath.Join(dir, ".ocel", "dist", "STAMP"),
