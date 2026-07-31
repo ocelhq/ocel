@@ -11,7 +11,13 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	ddbtypes "github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
+	"golang.org/x/sync/errgroup"
 )
+
+// revealConcurrency caps the decrypts a batched read has in flight. A function
+// declares a handful of live values, not thousands, so this is a guard against
+// a pathological manifest rather than a tuned number.
+const revealConcurrency = 16
 
 // ErrNotFound reports that no value is set at a coordinate. Callers
 // distinguish it from an empty value, which is a value.
@@ -126,7 +132,7 @@ func (s *Store) Set(ctx context.Context, c Coordinate, plaintext string, expecte
 	}
 
 	key := c.canonical()
-	pk := partitionKey(c.Slug, s.Class)
+	pk := PartitionKey(c.Slug, s.Class)
 
 	current, err := s.read(ctx, pk, currentSortKey(key))
 	if err != nil {
@@ -191,7 +197,7 @@ func (s *Store) Get(ctx context.Context, c Coordinate, reveal bool) (Value, erro
 	if err := c.validate(); err != nil {
 		return Value{}, err
 	}
-	stored, err := s.read(ctx, partitionKey(c.Slug, s.Class), currentSortKey(c.canonical()))
+	stored, err := s.read(ctx, PartitionKey(c.Slug, s.Class), currentSortKey(c.canonical()))
 	if err != nil {
 		return Value{}, err
 	}
@@ -215,7 +221,7 @@ func (s *Store) List(ctx context.Context, slug string) ([]Metadata, error) {
 	if slug == "" {
 		return nil, fmt.Errorf("a project slug is required")
 	}
-	items, err := s.query(ctx, partitionKey(slug, s.Class), currentPrefix, true)
+	items, err := s.query(ctx, PartitionKey(slug, s.Class), currentPrefix, true)
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +238,75 @@ func (s *Store) List(ctx context.Context, slug string) ([]Metadata, error) {
 		out = append(out, Metadata{Coordinate: c, Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size})
 	}
 	return out, nil
+}
+
+// Reveal reads a named set of a project's cells and returns their plaintext.
+// It is the runtime's read: a function resolving its live-class values wants
+// every one of them at once, on the cold path, so the cost is one query over
+// the project's current values plus one decrypt per cell. The decrypts run
+// concurrently because KMS has no batch decrypt and each cell is sealed under
+// its own coordinate's context, so N keys are genuinely N calls and only their
+// latency need be shared.
+//
+// A named cell that holds no value is absent from the result rather than an
+// error: what a missing value means is the declaring schema's business, and it
+// is decided where the schema is. A cell that is present but fails to decrypt
+// is an error for the whole batch — half a set of variables is an application
+// with one silently unset, which at the point of use reads as one that was
+// never required.
+func (s *Store) Reveal(ctx context.Context, slug string, cells []Coordinate) ([]Value, error) {
+	if slug == "" {
+		return nil, fmt.Errorf("a project slug is required")
+	}
+	if len(cells) == 0 {
+		return nil, nil
+	}
+
+	wanted := make(map[string]Coordinate, len(cells))
+	for _, c := range cells {
+		c.Slug = slug
+		if err := c.validate(); err != nil {
+			return nil, err
+		}
+		wanted[currentSortKey(c.canonical())] = c
+	}
+
+	items, err := s.query(ctx, PartitionKey(slug, s.Class), currentPrefix, true)
+	if err != nil {
+		return nil, err
+	}
+
+	var found []item
+	var at []Coordinate
+	for _, stored := range items {
+		c, ok := wanted[stored.SK]
+		if !ok || stored.Deleted {
+			continue
+		}
+		found = append(found, stored)
+		at = append(at, c)
+	}
+
+	values := make([]Value, len(found))
+	group, ctx := errgroup.WithContext(ctx)
+	group.SetLimit(revealConcurrency)
+	for i, stored := range found {
+		group.Go(func() error {
+			plaintext, err := s.decrypt(ctx, at[i], stored.Ciphertext)
+			if err != nil {
+				return err
+			}
+			values[i] = Value{
+				Metadata:  Metadata{Coordinate: at[i], Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size},
+				Plaintext: plaintext,
+			}
+			return nil
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return nil, err
+	}
+	return values, nil
 }
 
 // Delete unsets a cell, reporting whether there was a value to unset. It
@@ -256,7 +331,7 @@ func (s *Store) Delete(ctx context.Context, c Coordinate, expected *int64) (bool
 	if err := c.validate(); err != nil {
 		return false, err
 	}
-	pk, sk := partitionKey(c.Slug, s.Class), currentSortKey(c.canonical())
+	pk, sk := PartitionKey(c.Slug, s.Class), currentSortKey(c.canonical())
 	current, err := s.read(ctx, pk, sk)
 	if err != nil {
 		return false, err
@@ -296,7 +371,7 @@ func (s *Store) Versions(ctx context.Context, c Coordinate) ([]Version, error) {
 	if err := c.validate(); err != nil {
 		return nil, err
 	}
-	items, err := s.query(ctx, partitionKey(c.Slug, s.Class), historyPrefix(c.canonical()), false)
+	items, err := s.query(ctx, PartitionKey(c.Slug, s.Class), historyPrefix(c.canonical()), false)
 	if err != nil {
 		return nil, err
 	}

@@ -109,10 +109,13 @@ func (c Coordinate) validate() error {
 	return nil
 }
 
-// partitionKey partitions the table per project and per env class, so every
+// PartitionKey partitions the table per project and per env class, so every
 // operation is scoped to one project's values and a value can never be read
-// across the class boundary its key enforces.
-func partitionKey(slug, class string) string {
+// across the class boundary its key enforces. It is exported because a grant
+// is scoped to it too: a deploy conditions a function's read on this exact
+// prefix, and the condition and the key it constrains must be built by the
+// same function or they drift apart silently.
+func PartitionKey(slug, class string) string {
 	return "P" + delimiter + slug + delimiter + "C" + delimiter + class
 }
 

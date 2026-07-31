@@ -99,7 +99,7 @@ func TestSetRejectsAConcurrentWriteThatLostTheRace(t *testing.T) {
 		t.Fatalf("racing Set err = %v, want ErrStaleVersion", err)
 	}
 
-	item, ok := ddb.get(partitionKey(c.Slug, store.Class), currentSortKey(c.canonical()))
+	item, ok := ddb.get(PartitionKey(c.Slug, store.Class), currentSortKey(c.canonical()))
 	if !ok {
 		t.Fatal("current pointer missing")
 	}
@@ -577,7 +577,7 @@ func TestDeleteLeavesNoValueAtRest(t *testing.T) {
 		t.Fatalf("Delete err = %v", err)
 	}
 
-	current, ok := ddb.get(partitionKey(c.Slug, store.Class), currentSortKey(c.canonical()))
+	current, ok := ddb.get(PartitionKey(c.Slug, store.Class), currentSortKey(c.canonical()))
 	if !ok {
 		return
 	}
@@ -730,12 +730,12 @@ func TestARelocatedCiphertextDoesNotDecrypt(t *testing.T) {
 				t.Fatalf("Set err = %v", err)
 			}
 
-			stored, ok := ddb.get(partitionKey(origin.Slug, store.Class), currentSortKey(origin.canonical()))
+			stored, ok := ddb.get(PartitionKey(origin.Slug, store.Class), currentSortKey(origin.canonical()))
 			if !ok {
 				t.Fatal("the written value is missing")
 			}
 			moved := maps.Clone(stored)
-			moved["pk"] = &ddbtypes.AttributeValueMemberS{Value: partitionKey(elsewhere.Slug, store.Class)}
+			moved["pk"] = &ddbtypes.AttributeValueMemberS{Value: PartitionKey(elsewhere.Slug, store.Class)}
 			moved["sk"] = &ddbtypes.AttributeValueMemberS{Value: currentSortKey(elsewhere.canonical())}
 			ddb.put(moved)
 

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -25,10 +26,18 @@ import (
 // test about ciphertext relocation a real failure rather than an assertion
 // about a field nobody enforces.
 type fakeKMS struct {
+	// Reveal decrypts a batch concurrently, so what the fake records is written
+	// from several goroutines at once. Reading the fields back is safe unlocked:
+	// every caller waits for the batch to finish first.
+	mu       sync.Mutex
 	encrypts int
 	decrypts int
 	keyIDs   []string
 	contexts []map[string]string
+
+	// decryptContexts records what each decrypt presented, so a test can assert
+	// the context a read bound rather than only that the fake accepted it.
+	decryptContexts []map[string]string
 }
 
 const fakeCipherMarker = "enc:"
@@ -45,6 +54,8 @@ func sealedContext(ctx map[string]string) string {
 }
 
 func (f *fakeKMS) Encrypt(_ context.Context, in *kms.EncryptInput, _ ...func(*kms.Options)) (*kms.EncryptOutput, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.encrypts++
 	f.keyIDs = append(f.keyIDs, aws.ToString(in.KeyId))
 	f.contexts = append(f.contexts, in.EncryptionContext)
@@ -53,7 +64,10 @@ func (f *fakeKMS) Encrypt(_ context.Context, in *kms.EncryptInput, _ ...func(*km
 }
 
 func (f *fakeKMS) Decrypt(_ context.Context, in *kms.DecryptInput, _ ...func(*kms.Options)) (*kms.DecryptOutput, error) {
+	f.mu.Lock()
 	f.decrypts++
+	f.decryptContexts = append(f.decryptContexts, in.EncryptionContext)
+	f.mu.Unlock()
 	blob := string(in.CiphertextBlob)
 	if !strings.HasPrefix(blob, fakeCipherMarker) {
 		return nil, errors.New("fakeKMS: not ciphertext this key produced")
