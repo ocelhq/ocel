@@ -1,6 +1,7 @@
 import http from "node:http";
 import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
+import { awaitLiveValues } from "../shared/live-values.mjs";
 import { reportFatalBoot, serveInvoke, startServer, type Invoke } from "../shared/membrane.mjs";
 
 type Loaded =
@@ -144,6 +145,11 @@ function interceptListen(): ListenHook {
 }
 
 async function boot(): Promise<void> {
+  // The user's module scope runs inside the import below, and a live value read
+  // there must already be in hand. The membrane's fetch overlaps this process
+  // starting, so the wait is usually already over; a function that declares no
+  // live value never waits at all.
+  await awaitLiveValues();
   const loaded = await loadUserApp(process.env.OCEL_HANDLER!);
   if (loaded.kind === "server") {
     await startServer(loaded.value);

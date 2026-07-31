@@ -2,18 +2,54 @@ import net from "node:net";
 import http from "node:http";
 
 let controlSocket: net.Socket | null = null;
+const controlHandlers = new Set<(message: unknown) => void>();
 
 // The control socket is opened lazily on first use so importing this module has
 // no side effect (tests can load it without a live socket).
 function control(): net.Socket {
   if (!controlSocket) {
     controlSocket = net.createConnection(process.env.OCEL_CONTROL_SOCKET!);
+    receive(controlSocket);
   }
   return controlSocket;
 }
 
 export function sendControl(type: string, payload: unknown): void {
   control().write(JSON.stringify({ type, payload }) + "\n");
+}
+
+// onControlMessage subscribes to what the membrane writes back down the same
+// socket. Registering opens the connection: the membrane can only push once
+// this side has connected, so a subscriber that waited for a send to happen
+// first would miss everything sent before it.
+export function onControlMessage(handler: (message: unknown) => void): void {
+  controlHandlers.add(handler);
+  control();
+}
+
+// The framing is the one the membrane already reads in the other direction:
+// one JSON object per line. A line that is not JSON is dropped rather than
+// thrown on — the socket carries the app's own telemetry, and losing it to a
+// malformed frame would cost more than the frame did.
+function receive(socket: net.Socket): void {
+  let buffer = "";
+  socket.on("data", (chunk) => {
+    buffer += chunk.toString();
+    for (;;) {
+      const end = buffer.indexOf("\n");
+      if (end < 0) break;
+      const line = buffer.slice(0, end);
+      buffer = buffer.slice(end + 1);
+      if (!line.trim()) continue;
+      let message: unknown;
+      try {
+        message = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      for (const handler of controlHandlers) handler(message);
+    }
+  });
 }
 
 // Reports an error that killed the boot, before there is an app to serve or,

@@ -2,6 +2,7 @@ import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runWithWaitUntil } from "../shared/background.mjs";
 import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
+import { awaitLiveValues } from "../shared/live-values.mjs";
 import { reportFatalBoot, serveInvoke, type Invoke } from "../shared/membrane.mjs";
 
 async function boot(): Promise<void> {
@@ -11,6 +12,10 @@ async function boot(): Promise<void> {
   const handlerPath = process.env.OCEL_HANDLER!;
   const href = isAbsolute(handlerPath) ? pathToFileURL(handlerPath).href : handlerPath;
   const relativeProjectDir = relative(process.cwd(), dirname(handlerPath)) || ".";
+
+  // The app's module scope runs inside the import below, and a live value read
+  // there must already be in hand. A function that declares none never waits.
+  await awaitLiveValues();
 
   const mod: any = (await import(href)).default;
   const handler = mod?.handler;
