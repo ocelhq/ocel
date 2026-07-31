@@ -21,8 +21,8 @@ read the ciphertext it opens. Values in the variable store stay encrypted at
 rest under the substrate's own KMS key; this is about what a deployed
 function's configuration discloses, not about how the values are stored.
 
-A variable whose class this deploy path cannot deliver yet — `secret`, whose
-runtime fetch is not implemented — now fails the deploy naming the variable,
-rather than being dropped and leaving the value absent at runtime. A deployed
+A variable whose class this deploy path cannot deliver — an unrecognised one
+from a newer client — now fails the deploy naming the variable, rather than
+being dropped and leaving the value absent at runtime. A deployed
 app is also told the folder it binds, so a read outside a variable's scope
 names the real binding.
