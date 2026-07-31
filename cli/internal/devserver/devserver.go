@@ -15,6 +15,7 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
@@ -62,6 +63,19 @@ type Server struct {
 
 	liveMu   sync.Mutex
 	liveKeys map[string]struct{}
+
+	// declareMu keeps one declaration's record-then-answer whole against the
+	// concurrent ones the SDK issues.
+	declareMu sync.Mutex
+
+	// varsMu guards the pair below, which is replaced wholesale on every
+	// re-discovery. Both are nil until UseValues installs them: the blob rig
+	// serves declarations without gating them.
+	varsMu sync.Mutex
+	values map[string]string
+	scope  envgate.Scope
+	store  *flatValues
+	gate   *envgate.Gate
 
 	subMu       sync.Mutex
 	latestEnv   *devv1.EnvUpdate
@@ -113,28 +127,111 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 	return &resourcesv1.DeclareResponse{}, nil
 }
 
-// DeclareEnv and ReportEnvProblems implement the declaration half of
-// resourcesv1connect.ResourceServiceHandler. Dev holds no variable store yet:
-// it answers with no cells and accepts whatever verdict follows without
-// gating, so a dev run is never blocked by a value only a deploy needs. That
-// divergence is deliberate and documented, and ends when dev gets its own
-// value source.
+// UseValues gives dev a variable store — one flat map of root values, keyed by
+// nothing but the key name — and the scope a refusal has to name. Installing it
+// turns on the same gate a deploy runs: declarations are answered from these
+// values, the declaring process's schema verdict is kept, and CheckEnv refuses
+// a run no app could resolve.
 //
-// A live-class key is the one exception, and only because it has no other
-// route: every other class is delivered by the artifact a deploy builds, which
-// dev never builds, so dev already supplies them from the control plane's
-// project environment. A live key is recorded here and resolved at sync (see
-// handleSync), eagerly and once — the timing differs from a deploy's, the call
-// site does not.
-func (s *Server) DeclareEnv(_ context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+// It is a separate call rather than a New parameter because the store is dev's
+// alone. `ocel run` and the blob rig serve the same declarations with no store
+// behind them and must keep answering with no cells.
+func (s *Server) UseValues(values map[string]string, scope envgate.Scope) {
+	s.varsMu.Lock()
+	defer s.varsMu.Unlock()
+	s.values = values
+	s.scope = scope
+	s.store = newFlatValues(values)
+	s.gate = envgate.New(s.store, scope)
+}
+
+// variables returns the installed store and gate together, since a caller that
+// has one always needs the other.
+func (s *Server) variables() (*flatValues, *envgate.Gate) {
+	s.varsMu.Lock()
+	defer s.varsMu.Unlock()
+	return s.store, s.gate
+}
+
+// DeclareEnv and ReportEnvProblems implement the declaration half of
+// resourcesv1connect.ResourceServiceHandler. With no store installed they are
+// the pre-variables dev server: no cells, no verdict, so a dev run is never
+// blocked by a value only a deploy needs.
+//
+// With a store installed the gate answers instead, exactly as it does for a
+// deploy. Only the store beneath it differs, and the store is re-read before
+// each answer because the folders a key is scoped to arrive with the
+// declaration itself — a flat file has none of its own.
+//
+// A live-class key is the one thing the gate cannot deliver, in dev as in a
+// deploy: it is answered as presence with no plaintext. Dev records it here and
+// resolves it at sync (see handleSync), eagerly and once, then hands it to the
+// child in the environment — the timing differs from a deploy's, the call site
+// does not.
+func (s *Server) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
 	s.liveMu.Lock()
-	defer s.liveMu.Unlock()
 	for _, d := range req.GetDefinitions() {
 		if d.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
 			s.liveKeys[d.GetKey()] = struct{}{}
 		}
 	}
-	return &resourcesv1.DeclareEnvResponse{}, nil
+	s.liveMu.Unlock()
+
+	// The SDK issues one of these per defineEnv call and they are concurrent,
+	// so the three steps are one step: a declaration that recorded its folders
+	// and then read a cell set another declaration installed in between would
+	// be answered without the cells it just asked for.
+	s.declareMu.Lock()
+	defer s.declareMu.Unlock()
+
+	store, gate := s.variables()
+	if gate == nil {
+		return &resourcesv1.DeclareEnvResponse{}, nil
+	}
+	store.Declare(req.GetDefinitions())
+	if err := gate.Prefetch(ctx); err != nil {
+		return nil, err
+	}
+	return gate.DeclareEnv(ctx, req)
+}
+
+// CheckEnv is the gate's verdict for the declarations this run made: nil when
+// every app can resolve every required cell, a *envgate.Refusal otherwise. A
+// server with no store installed gates nothing.
+//
+// It re-reads the store first. A key's folders are learned from the declaration
+// that names them, so the cells the store holds are only complete once every
+// declaration has landed — which is here, and not at any one of them.
+func (s *Server) CheckEnv(ctx context.Context) error {
+	_, gate := s.variables()
+	if gate == nil {
+		return nil
+	}
+	if err := gate.Prefetch(ctx); err != nil {
+		return err
+	}
+	return gate.Check()
+}
+
+// ScopedKeys is every key this run declared with a folder scope. It answers the
+// one question the gate cannot: the gate rules per app, over each app's own
+// binding, and dev states one binding for the whole project.
+func (s *Server) ScopedKeys() []string {
+	_, gate := s.variables()
+	if gate == nil {
+		return nil
+	}
+	seen := map[string]bool{}
+	var keys []string
+	for _, definition := range gate.Definitions() {
+		if len(definition.GetFolders()) == 0 || seen[definition.GetKey()] {
+			continue
+		}
+		seen[definition.GetKey()] = true
+		keys = append(keys, definition.GetKey())
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 // declaredLiveKeys is every live-class key declared since the last reset,
@@ -150,18 +247,30 @@ func (s *Server) declaredLiveKeys() []string {
 	return keys
 }
 
-func (s *Server) ReportEnvProblems(context.Context, *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
+func (s *Server) ReportEnvProblems(ctx context.Context, req *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
+	if _, gate := s.variables(); gate != nil {
+		return gate.ReportEnvProblems(ctx, req)
+	}
 	return &resourcesv1.ReportEnvProblemsResponse{}, nil
 }
 
 // ResetManifest clears every declared resource and variable, so the next full
 // re-discovery's declares fully replace (rather than accumulate onto) the
-// prior set before the following /sync provisions them.
+// prior set before the following /sync provisions them. The gate is rebuilt
+// with it: a verdict is about one discovery run, so a refusal the edit just
+// fixed must not outlive the run that earned it.
 func (s *Server) ResetManifest() {
 	s.manifest.Reset()
 	s.liveMu.Lock()
 	s.liveKeys = make(map[string]struct{})
 	s.liveMu.Unlock()
+
+	s.varsMu.Lock()
+	defer s.varsMu.Unlock()
+	if s.gate != nil {
+		s.store = newFlatValues(s.values)
+		s.gate = envgate.New(s.store, s.scope)
+	}
 }
 
 // Mux returns the HTTP handler serving the Connect ResourceService, the

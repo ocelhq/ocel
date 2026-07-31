@@ -1,0 +1,554 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"runtime"
+	"strings"
+	"testing"
+
+	"github.com/ocelhq/ocel/cli/internal/credentials"
+	"github.com/ocelhq/ocel/cli/internal/dotenv"
+	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/lockfile"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/provision"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+)
+
+// withCredentials points loadCredentials at apiURL for the duration of a test.
+func withCredentials(t *testing.T, apiURL string) {
+	t.Helper()
+	prev := loadCredentials
+	loadCredentials = func() (credentials.Credentials, error) {
+		return credentials.Credentials{APIURL: apiURL, AccessToken: "tok"}, nil
+	}
+	t.Cleanup(func() { loadCredentials = prev })
+}
+
+// declareEnvScript is a discovery-path fixture that declares the given
+// variable definitions (Connect JSON) via ResourceService.DeclareEnv, the way
+// the SDK's defineEnv does.
+func declareEnvScript(definitions ...string) string {
+	return fmt.Sprintf(`
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+globalThis.__ocelRegister ??= [];
+globalThis.__ocelRegister.push(
+  fetch(new URL("/resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ definitions: [%s] }),
+  }),
+);
+export {};
+`, strings.Join(definitions, ","))
+}
+
+// The dotfile is the file the developer edits, so it is the file that decides.
+// A control-plane value that quietly outranked it would mean editing the file
+// stopped working the day a teammate set one — the failure this feature exists
+// to avoid. Resources stay above everything: those names are Ocel's own and
+// can never collide with a declared variable.
+func TestResolvedEnv_TheDotfileOutranksEveryOtherSourceButAResource(t *testing.T) {
+	base := []string{"PATH=/bin", "CONTESTED=shell", "SHELL_ONLY=s"}
+	projectEnv := map[string]string{"CONTESTED": "project"}
+	live := map[string]string{"CONTESTED": "live"}
+	dotfile := map[string]string{"CONTESTED": "dotfile", "DOTFILE_ONLY": "d"}
+	resources := []provision.ProvisionedResource{
+		{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
+	}
+
+	got := toMap(mergeEnv(base, projectEnv, live, dotfile, resources, ""))
+
+	cases := map[string]string{
+		"PATH":                        "/bin",
+		"SHELL_ONLY":                  "s",
+		"CONTESTED":                   "dotfile",
+		"DOTFILE_ONLY":                "d",
+		"OCEL_RESOURCE_POSTGRES_main": "conn",
+	}
+	for k, want := range cases {
+		if got[k] != want {
+			t.Errorf("env[%q] = %q, want %q", k, got[k], want)
+		}
+	}
+}
+
+// ocelhq-xd5j.34: every layer that runs user code has to be told which folder
+// the app binds, or the SDK reports it binds the project root and refuses
+// scoped reads whose values are in that very environment. The name is written
+// unconditionally, so a binding left over in the developer's shell can never
+// answer for this run.
+func TestResolvedEnv_AlwaysStatesTheAppFolder(t *testing.T) {
+	bound := resolvedEnv(nil, nil, nil, nil, "/web")
+	if bound["OCEL_APP_FOLDER"] != "/web" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want %q", bound["OCEL_APP_FOLDER"], "/web")
+	}
+
+	unbound := resolvedEnv(nil, nil, nil, nil, "")
+	folder, ok := unbound["OCEL_APP_FOLDER"]
+	if !ok {
+		t.Fatalf("resolvedEnv = %v, want OCEL_APP_FOLDER written even for an unbound app", unbound)
+	}
+	if folder != "" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want the project root spelled as the empty string", folder)
+	}
+
+	stale := toMap(mergeEnv([]string{"OCEL_APP_FOLDER=/stale"}, nil, nil, nil, nil, ""))
+	if stale["OCEL_APP_FOLDER"] != "" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want the shell's stale binding overwritten", stale["OCEL_APP_FOLDER"])
+	}
+
+	// Last means last: no source dev merges may answer for the binding, or the
+	// name the SDK reads stops being the one dev decided.
+	contested := resolvedEnv(
+		map[string]string{"OCEL_APP_FOLDER": "/from-project-env"},
+		map[string]string{"OCEL_APP_FOLDER": "/from-live"},
+		map[string]string{"OCEL_APP_FOLDER": "/from-dotfile"},
+		[]provision.ProvisionedResource{{Name: "main", Env: map[string]string{"OCEL_APP_FOLDER": "/from-resource"}}},
+		"/web",
+	)
+	if contested["OCEL_APP_FOLDER"] != "/web" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want the binding dev states to outrank every source it merges", contested["OCEL_APP_FOLDER"])
+	}
+}
+
+// The remedy has to be one the developer can actually run. `ocel env set`
+// needs a cloud provider and a bootstrapped store, and this whole path exists
+// for the project that has neither — so dev's refusal names the file instead.
+func TestDevRefusal_NamesTheDotfileRatherThanAStoreCommand(t *testing.T) {
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{
+			{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+			{Key: "API_BASE", Folder: "/web", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a URL"},
+		},
+		Scope: envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}},
+	}
+
+	got := devRefusal(refusal, nil).Error()
+
+	for _, want := range []string{
+		"DATABASE_URL",
+		"API_BASE",
+		"/web",
+		"no value is set",
+		"expected a URL",
+		"DATABASE_URL=<VALUE>",
+		dotenv.FileName,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("refusal = %q, want it to mention %q", got, want)
+		}
+	}
+	if strings.Contains(got, "ocel env set") {
+		t.Errorf("refusal = %q, want no `ocel env set`: it needs a cloud provider this path deliberately has none of", got)
+	}
+	if strings.Contains(got, "--preview") {
+		t.Errorf("refusal = %q, want nothing about previews in a dev refusal", got)
+	}
+}
+
+// A value exported in the shell is not a value dev resolves: the gate reads the
+// file, so what it refuses on is versioned and the same for every developer.
+// Saying only "no value is set" to someone looking at that very name in their
+// own shell is the confusing half of that choice, so the refusal says which
+// place it looked.
+func TestDevRefusal_SaysSoWhenTheKeyIsOnlyInTheShell(t *testing.T) {
+	t.Setenv("DATABASE_URL", "postgres://from-the-shell")
+
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{
+			{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+		},
+	}
+
+	got := devRefusal(refusal, nil).Error()
+
+	if !strings.Contains(got, "shell") {
+		t.Errorf("refusal = %q, want it to say the key was seen in the environment", got)
+	}
+	if strings.Contains(got, "postgres://from-the-shell") {
+		t.Errorf("refusal = %q, want it to disclose no value", got)
+	}
+
+	// A key that is in the file and fails its schema is not a key dev looked in
+	// the wrong place for, so the hint stays out of its way.
+	inFile := devRefusal(refusal, dotfileKeySet(map[string]string{"DATABASE_URL": "postgres://from-the-file"})).Error()
+	if strings.Contains(inFile, "set in this shell") {
+		t.Errorf("refusal = %q, want no shell hint for a key the file does hold", inFile)
+	}
+}
+
+// The refusal is rendered from the one file whose contents nothing else may
+// see, and the obvious next edit to the schema branch is to show the offending
+// value. There is none to show: what crosses the boundary is a key set, so the
+// values are not in scope at the point the message is built.
+func TestDevRefusal_IsNeverGivenAValueItCouldPrint(t *testing.T) {
+	want := reflect.TypeOf(func(error, map[string]struct{}) error { return nil })
+	if got := reflect.TypeOf(devRefusal); got != want {
+		t.Fatalf("devRefusal is %s, want %s: any wider parameter puts a dotfile value in reach of the message", got, want)
+	}
+
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{
+			{Key: "DATABASE_URL", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+			{Key: "API_TOKEN", Kind: resourcesv1.VariableProblem_KIND_INVALID, Detail: "expected a token"},
+		},
+	}
+	dotfile := map[string]string{
+		"DATABASE_URL": "postgres://must-not-appear",
+		"API_TOKEN":    "sk-live-must-not-appear",
+	}
+
+	got := devRefusal(refusal, dotfileKeySet(dotfile)).Error()
+
+	for _, value := range dotfile {
+		if strings.Contains(got, value) {
+			t.Errorf("refusal = %q, want it to disclose no value from %s", got, dotenv.FileName)
+		}
+	}
+}
+
+// The notice is what makes the divergence stated rather than discovered. It
+// names keys only: this is the one file whose contents nothing else may see,
+// so the notice about it cannot be the thing that prints them.
+func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
+	var quiet bytes.Buffer
+	reportDotfile(&quiet, t.TempDir(), nil, nil)
+	if quiet.Len() != 0 {
+		t.Errorf("reportDotfile wrote %q for a run with no dotfile values, want nothing", quiet.String())
+	}
+
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+
+	var out bytes.Buffer
+	reportDotfile(&out, dir, map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}, nil)
+	got := out.String()
+
+	for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotenv.FileName} {
+		if !strings.Contains(got, want) {
+			t.Errorf("notice = %q, want it to mention %q", got, want)
+		}
+	}
+	for _, leaked := range []string{"sk-live", "postgres://secret"} {
+		if strings.Contains(got, leaked) {
+			t.Fatalf("notice = %q, want it to disclose no value", got)
+		}
+	}
+	// The two divergences a dotfile introduces, both currently stated nowhere.
+	if !strings.Contains(got, "teammate") && !strings.Contains(got, "yours alone") {
+		t.Errorf("notice = %q, want it to say the collaboration a shared store provides is gone", got)
+	}
+	if !strings.Contains(got, "plaintext") {
+		t.Errorf("notice = %q, want it to say values reach the child in plaintext, which a deploy does not do", got)
+	}
+	if strings.Contains(got, ".gitignore") {
+		t.Errorf("notice = %q, want no gitignore warning when the file is already ignored", got)
+	}
+}
+
+// `ocel init` scaffolds no .gitignore, and this feature's whole purpose is to
+// encourage putting values — including secrets — in that file. An unignored one
+// is how a secret reaches a public repository.
+func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
+	var out bytes.Buffer
+	reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, nil)
+
+	if got := out.String(); !strings.Contains(got, ".gitignore") {
+		t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
+	}
+
+	// A re-inclusion is the last word git gives it, so it is the last word here:
+	// staying quiet about a file git will happily commit is the one direction
+	// this check must not be wrong in.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".env*\n!.env\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
+	var reincluded bytes.Buffer
+	reportDotfile(&reincluded, dir, map[string]string{"API_TOKEN": "x"}, nil)
+	if got := reincluded.String(); !strings.Contains(got, ".gitignore") {
+		t.Errorf("notice = %q, want the warning when a later line re-includes the file", got)
+	}
+}
+
+// End to end: the file the developer edits reaches the process the developer
+// runs, under the key's own name, and the app is told the folder it binds so a
+// scoped read resolves instead of throwing.
+func TestRunDev_DeliversTheDotfileAndTheAppFolderIntoTheChild(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
+`)
+	// The lines around it are the ones a pre-existing Next project's .env
+	// already holds. None of them is Ocel's, and none of them may stop the run.
+	writeFile(t, filepath.Join(root, ".env"), "NEXT_PUBLIC_SITE_URL=https://example.com\nAWS_PROFILE=dev\napi_base=lower\nAPI_BASE=http://localhost:3000\nnot an assignment\n")
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+
+	envDumpPath := filepath.Join(root, "env.out")
+	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runDev err = %v, want exit 7; stderr=%s", err, stderr.String())
+	}
+
+	dumped, readErr := os.ReadFile(envDumpPath)
+	if readErr != nil {
+		t.Fatalf("read env dump: %v", readErr)
+	}
+	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+
+	if env["API_BASE"] != "http://localhost:3000" {
+		t.Errorf("API_BASE = %q, want the dotfile's value", env["API_BASE"])
+	}
+	if env["OCEL_APP_FOLDER"] != "/web" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want the folder the only app binds", env["OCEL_APP_FOLDER"])
+	}
+	if !strings.Contains(stdout.String(), "API_BASE") {
+		t.Errorf("stdout = %q, want the divergence notice to name the key", stdout.String())
+	}
+	if !strings.Contains(stdout.String(), "line 5") {
+		t.Errorf("stdout = %q, want the line that assigns nothing reported by number", stdout.String())
+	}
+	if strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
+		t.Errorf("stdout = %q, want a line Ocel does not own passed over in silence", stdout.String())
+	}
+}
+
+// The gate refuses before anything is spawned, so a missing value is a named
+// failure at startup rather than a crash inside the app.
+func TestRunDev_RefusesWhenTheDotfileDoesNotHoldARequiredValue(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+	startedPath := filepath.Join(root, "started")
+	appCmd := []string{"sh", "-c", "touch " + startedPath}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	if err == nil {
+		t.Fatal("runDev = nil, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), dotenv.FileName) {
+		t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), dotenv.FileName)
+	}
+	if _, statErr := os.Stat(startedPath); statErr == nil {
+		t.Error("the app was started despite the refusal")
+	}
+}
+
+// The gate rules per app, over each app's own binding; dev states one binding
+// for the whole project. Where those cannot be the same answer, a green gate
+// would be followed by an EnvScopeError at the first read — the crash the gate
+// exists to replace. It refuses instead, and never with a remedy that needs dev
+// to know which app it is running.
+func TestCheckStatableBinding_RefusesWhenTheAppsDoNotAgreeOnOne(t *testing.T) {
+	apps := []projectconfig.App{
+		{Name: "web", Path: "apps/web", Folder: "/web"},
+		{Name: "api", Path: "apps/api", Folder: "/api"},
+	}
+
+	if err := checkStatableBinding(apps, "", nil); err != nil {
+		t.Errorf("checkStatableBinding = %v, want nil with no scoped variable declared", err)
+	}
+
+	agreed := []projectconfig.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/web"}}
+	if err := checkStatableBinding(agreed, "/web", []string{"API_BASE"}); err != nil {
+		t.Errorf("checkStatableBinding = %v, want nil when every app binds the folder dev states", err)
+	}
+
+	err := checkStatableBinding(apps, "", []string{"API_BASE"})
+	if err == nil {
+		t.Fatal("checkStatableBinding = nil, want a refusal: no child of this run could read API_BASE")
+	}
+	got := err.Error()
+	for _, want := range []string{"API_BASE", "web binds /web", "api binds /api", "the project root", dotenv.FileName, "ocel.config.ts"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("refusal = %q, want it to mention %q", got, want)
+		}
+	}
+	if strings.Contains(got, "one `ocel dev` per app") || strings.Contains(got, "per app") {
+		t.Errorf("refusal = %q, want no per-app remedy: election keys on the project root, so a second run is a follower", got)
+	}
+}
+
+// The gate reporting ready for a read the child provably cannot make is the one
+// failure the gate was put in dev to prevent, so the refusal is end to end.
+func TestRunDev_RefusesAScopedVariableNoChildOfTheRunCouldRead(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
+`)
+	writeFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+
+	startedPath := filepath.Join(root, "started")
+	appCmd := []string{"sh", "-c", "touch " + startedPath}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	if err == nil {
+		t.Fatal("runDev = nil, want a refusal rather than a green gate and a throw at the first read")
+	}
+	if !strings.Contains(err.Error(), "API_BASE") {
+		t.Errorf("err = %q, want it to name the scoped key", err.Error())
+	}
+	if _, statErr := os.Stat(startedPath); statErr == nil {
+		t.Error("the app was started despite the refusal")
+	}
+}
+
+// `ocel run` runs the project's own code, so it resolves and gates the file the
+// same way `ocel dev` does. Answering differently meant a project set up to run
+// under dev failed under run, with the `ocel env set` remedy dev's refusal
+// exists to avoid.
+func TestRunRun_ResolvesTheDotfileAndGatesLikeDev(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
+`)
+	writeFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(
+		`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}`))
+
+	envDumpPath := filepath.Join(root, "env.out")
+	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+
+	var stdout, stderr bytes.Buffer
+	err := runRun(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runRun err = %v, want exit 7; stderr=%s", err, stderr.String())
+	}
+
+	dumped, readErr := os.ReadFile(envDumpPath)
+	if readErr != nil {
+		t.Fatalf("read env dump: %v", readErr)
+	}
+	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+	if env["API_BASE"] != "http://localhost:3000" {
+		t.Errorf("API_BASE = %q, want `ocel run` to resolve the dotfile the way `ocel dev` does", env["API_BASE"])
+	}
+	if env["OCEL_APP_FOLDER"] != "/web" {
+		t.Errorf("OCEL_APP_FOLDER = %q, want the folder the only app binds", env["OCEL_APP_FOLDER"])
+	}
+}
+
+// The gate has to answer the same way under `ocel run` as under `ocel dev`, or
+// the same project is refused by one and started by the other.
+func TestRunRun_RefusesWhenTheDotfileDoesNotHoldARequiredValue(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DATABASE_URL","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+	startedPath := filepath.Join(root, "started")
+	appCmd := []string{"sh", "-c", "touch " + startedPath}
+
+	var stdout, stderr bytes.Buffer
+	err := runRun(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	if err == nil {
+		t.Fatal("runRun = nil, want the same refusal `ocel dev` gives")
+	}
+	if !strings.Contains(err.Error(), "DATABASE_URL") || !strings.Contains(err.Error(), dotenv.FileName) {
+		t.Errorf("err = %q, want it to name DATABASE_URL and %s", err.Error(), dotenv.FileName)
+	}
+	if strings.Contains(err.Error(), "ocel env set") {
+		t.Errorf("err = %q, want no `ocel env set`: it needs the cloud account this path does without", err.Error())
+	}
+	if _, statErr := os.Stat(startedPath); statErr == nil {
+		t.Error("the command was started despite the refusal")
+	}
+}
+
+// A line the parser could not read is neither Ocel's nor the framework's, so it
+// is reported by number — and only by number, since a line that assigns nothing
+// is the shape a pasted token has.
+func TestReportDotfile_NamesTheUnreadableLinesByNumberOnly(t *testing.T) {
+	var out bytes.Buffer
+	reportDotfile(&out, t.TempDir(), nil, []int{2, 5})
+	got := out.String()
+
+	for _, want := range []string{dotenv.FileName, "2, 5"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("notice = %q, want it to mention %q", got, want)
+		}
+	}
+
+	var one bytes.Buffer
+	reportDotfile(&one, t.TempDir(), nil, []int{4})
+	if !strings.Contains(one.String(), "line 4 is") {
+		t.Errorf("notice = %q, want a singular line reported singularly", one.String())
+	}
+}

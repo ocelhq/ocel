@@ -32,7 +32,7 @@ func TestMergeEnv_Precedence(t *testing.T) {
 		{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
 	}
 
-	got := toMap(mergeEnv(base, projectEnv, nil, resources))
+	got := toMap(mergeEnv(base, projectEnv, nil, nil, resources, ""))
 
 	cases := map[string]string{
 		"PATH":                        "/bin",
@@ -208,7 +208,7 @@ func TestRunDev_SecondRunInSameRootFromSubdirectory_BecomesFollowerAndReceivesPu
 	t.Cleanup(func() { _ = lockfile.Remove(root) })
 
 	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
-export default { slug: "test-app" };
+export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }] };
 `)
 	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
@@ -272,6 +272,14 @@ export {};
 	}
 	if !strings.Contains(raw, "connectionString") {
 		t.Fatalf("OCEL_RESOURCE_POSTGRES_main = %q, want it to contain connectionString", raw)
+	}
+
+	// The binding rides the pushed map like everything else, so a follower's
+	// child is told it as fully as the leader's own is. Without this the SDK
+	// would refuse every scoped read in the one topology this project is most
+	// likely to be developed in — one `ocel dev` per app (ocelhq-xd5j.34 AC3).
+	if got, ok := env["OCEL_APP_FOLDER"]; !ok || got != "/web" {
+		t.Errorf("follower OCEL_APP_FOLDER = %q (present=%v), want the folder the app binds", got, ok)
 	}
 
 	cancelLeader()
@@ -658,7 +666,7 @@ func TestResolvedEnv_DeliversLiveValuesAtStartup(t *testing.T) {
 		{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
 	}
 
-	got := resolvedEnv(projectEnv, live, resources)
+	got := resolvedEnv(projectEnv, live, nil, resources, "")
 
 	cases := map[string]string{
 		"PROJECT_ONLY":                "p",
@@ -682,7 +690,7 @@ func TestResolvedEnv_DeliversLiveValuesAtStartup(t *testing.T) {
 func TestMergeEnv_DevNeverTellsTheRuntimeToWaitForAPush(t *testing.T) {
 	live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
 
-	got := mergeEnv([]string{"PATH=/usr/bin"}, map[string]string{"PROJECT_ONLY": "p"}, live, nil)
+	got := mergeEnv([]string{"PATH=/usr/bin"}, map[string]string{"PROJECT_ONLY": "p"}, live, nil, nil, "")
 
 	for _, kv := range got {
 		if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {

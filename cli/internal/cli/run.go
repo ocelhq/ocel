@@ -13,6 +13,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/election"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
@@ -100,6 +101,16 @@ func runOnceAsFollower(ctx context.Context, leaderAddr string, appArgs []string,
 // apiURL is the resolved Ocel API origin provisioning is authenticated
 // against (see effectiveAPIURL); projectID is the linked cloud project.
 func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
+	// `ocel run` runs the project's own code against the project's own values,
+	// so it resolves and gates exactly as `ocel dev` does. Answering the two
+	// differently would mean a project set up to run under one is refused under
+	// the other, with the remedy dev's refusal exists to avoid.
+	file, err := dotenv.Load(cfg.Dir)
+	if err != nil {
+		return err
+	}
+	reportDotfile(stdout, cfg.Dir, file.Values, file.Unreadable)
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("start dev server: %w", err)
@@ -108,11 +119,12 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, p
 	devServerAddr := "http://" + listener.Addr().String()
 
 	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
+	srv.UseValues(file.Values, envScope(cfg, false))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, stdout, stderr)
+	resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, file.Values, stdout, stderr)
 	if err != nil {
 		return err
 	}

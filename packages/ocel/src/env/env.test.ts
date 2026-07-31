@@ -981,3 +981,109 @@ describe("the app folder binding selects no value", () => {
     expect([...outcomes]).toEqual([`value:${RESOLVED}`]);
   });
 });
+
+// The other half of ocelhq-xd5j.34. The CLI half is pinned in Go — that
+// `resolvedEnv` states OCEL_APP_FOLDER and that the child is spawned with it
+// (cli/internal/cli/devenv_test.go). Neither side alone shows that the pairing
+// works: the CLI cannot see whether the SDK accepts what it sent, and every
+// scope test above stubs a binding no dev run ever produced. These replay the
+// environment `ocel dev` actually builds and read out of it.
+//
+// Three properties of that environment are load-bearing here and are modelled
+// rather than assumed. Every value arrives under its bare name, because dev has
+// no membrane and the environment is its only delivery channel — so no class
+// gets the OCEL_VAR_ namespacing a deploy would give it, and no live value
+// arrives by push. The binding is written unconditionally, empty included, so
+// an unbound project states the root rather than inheriting a stale one. And a
+// scoped key's value is the same string at every folder its scope names,
+// because dev's store broadcasts one flat root entry across them.
+describe("a scoped read under `ocel dev`", () => {
+  // devChildEnv is `resolvedEnv` (cli/internal/cli/dev.go) in the SDK's terms:
+  // the flat map under bare names, with the binding written last and always.
+  // Anything the deploy path would add is deliberately absent.
+  function devChildEnv(binding: string, values: Record<string, string>) {
+    for (const [key, value] of Object.entries(values)) vi.stubEnv(key, value);
+    vi.stubEnv("OCEL_APP_FOLDER", binding);
+  }
+
+  beforeEach(() => {
+    vi.stubEnv("OCEL_PHASE", "");
+  });
+
+  it("resolves a scoped plain value for the app dev bound", () => {
+    devChildEnv("/web", { DEV_SCOPED_PLAIN: "http://localhost:3000" });
+
+    const env = defineEnv({
+      DEV_SCOPED_PLAIN: { class: "plain", folders: ["/web"] },
+    });
+
+    expect(env.DEV_SCOPED_PLAIN).toBe("http://localhost:3000");
+  });
+
+  // A live key in dev has no push behind it, so it resolves through the bare
+  // environment fallback. That fallback and the scope check are the two things
+  // standing between this read and a throw, and this is the only test that puts
+  // both in the position a dev run puts them in.
+  it("resolves a scoped live value through dev's environment delivery", () => {
+    devChildEnv("/web", { DEV_SCOPED_LIVE: "sk_dev" });
+
+    const env = defineEnv({
+      DEV_SCOPED_LIVE: { class: "secret", folders: ["/web"] },
+    });
+
+    expect(env.DEV_SCOPED_LIVE).toBe("sk_dev");
+  });
+
+  // The broadcast, read from the SDK's side: one root line in the file becomes
+  // the value at every folder the declaration names, so an app bound to either
+  // reads it and gets the same string. That the two cannot diverge is the cost
+  // the CLI's notice states.
+  it("reads the one broadcast value from either folder the scope names", () => {
+    const read = (binding: string) => {
+      devChildEnv(binding, { DEV_BROADCAST: "one value everywhere" });
+      return defineEnv({
+        DEV_BROADCAST: { class: "plain", folders: ["/web", "/admin"] },
+      }).DEV_BROADCAST;
+    };
+
+    expect([read("/web"), read("/admin")]).toEqual([
+      "one value everywhere",
+      "one value everywhere",
+    ]);
+  });
+
+  // The stated limit of .34 under dev, pinned as behaviour rather than left as
+  // prose: dev spawns one child for the whole project, so two apps binding
+  // different folders make `appbuilder.AppFolder` state the project root. The
+  // value is delivered — the broadcast put it in the flat map under its bare
+  // name, and it is right there in this environment — and the read is still
+  // refused. That refusal is correct: handing it over would give one app the
+  // other's scoped value. This test is what makes the limit visible if anyone
+  // ever "fixes" it by loosening the scope check instead of by teaching dev
+  // which app the child is.
+  it("still refuses a scoped read when dev could only state the project root", () => {
+    devChildEnv("", { DEV_TWO_APPS: "delivered but not this app's" });
+
+    const env = defineEnv({
+      DEV_TWO_APPS: { class: "plain", folders: ["/web"] },
+    });
+
+    expect(() => env.DEV_TWO_APPS).toThrow(EnvScopeError);
+    expect(process.env.DEV_TWO_APPS).toBe("delivered but not this app's");
+  });
+
+  // Dev writes the binding unconditionally so a value left in the developer's
+  // own shell cannot answer for the run. From the SDK's side that shows up as
+  // the empty string dev wrote winning over the stale one, which is only
+  // observable because the two disagree.
+  it("honours the empty binding dev wrote over a stale one from the shell", () => {
+    vi.stubEnv("OCEL_APP_FOLDER", "/web");
+    devChildEnv("", { DEV_STALE_BINDING: "not this app's either" });
+
+    const env = defineEnv({
+      DEV_STALE_BINDING: { class: "plain", folders: ["/web"] },
+    });
+
+    expect(() => env.DEV_STALE_BINDING).toThrow(/project root/);
+  });
+});
