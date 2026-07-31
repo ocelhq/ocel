@@ -128,7 +128,7 @@ func (s *VarsServer) ListVersions(ctx context.Context, req *envv1.ListVersionsRe
 	if err != nil {
 		return nil, err
 	}
-	history, err := store.Versions(ctx, toCoordinate(req.GetCoordinate()), req.GetReveal())
+	history, err := store.Versions(ctx, toCoordinate(req.GetCoordinate()))
 	if err != nil {
 		return nil, varsError(err)
 	}
@@ -138,7 +138,6 @@ func (s *VarsServer) ListVersions(ctx context.Context, req *envv1.ListVersionsRe
 			Version:   v.Version,
 			CreatedAt: v.CreatedAt,
 			Size:      v.Size,
-			Value:     v.Plaintext,
 		})
 	}
 	return resp, nil

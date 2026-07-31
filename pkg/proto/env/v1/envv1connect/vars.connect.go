@@ -64,7 +64,11 @@ type EnvVarsServiceClient interface {
 	// and deleting the value does not unmake that.
 	DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error)
 	// ListVersions reads one cell's change history, newest first, bounded by
-	// the window each write prunes to.
+	// the window each write prunes to. It is metadata only, for the same
+	// reason ListValues is: history answers when a value changed, and a
+	// command that printed every retained version's plaintext would keep a
+	// rotated-away secret readable for the whole window. Reading one value
+	// back is GetValue's job, one named cell at a time.
 	ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error)
 }
 
@@ -182,7 +186,11 @@ type EnvVarsServiceHandler interface {
 	// and deleting the value does not unmake that.
 	DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error)
 	// ListVersions reads one cell's change history, newest first, bounded by
-	// the window each write prunes to.
+	// the window each write prunes to. It is metadata only, for the same
+	// reason ListValues is: history answers when a value changed, and a
+	// command that printed every retained version's plaintext would keep a
+	// rotated-away secret readable for the whole window. Reading one value
+	// back is GetValue's job, one named cell at a time.
 	ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error)
 }
 

@@ -67,12 +67,12 @@ type Value struct {
 	Plaintext string
 }
 
-// Version is one entry of a cell's change history.
+// Version is one entry of a cell's change history. It carries no plaintext:
+// history records that a value changed, not what it was.
 type Version struct {
 	Version   int64
 	CreatedAt int64
 	Size      int64
-	Plaintext string
 }
 
 // item is one stored row. Current values and history entries share a shape:
@@ -288,8 +288,11 @@ func (s *Store) Delete(ctx context.Context, c Coordinate, expected *int64) (bool
 }
 
 // Versions reads a cell's change history, newest first and no deeper than the
-// window each write prunes to.
-func (s *Store) Versions(ctx context.Context, c Coordinate, reveal bool) ([]Version, error) {
+// window each write prunes to. It never decrypts: the ciphertext of a version
+// nobody can name is not a thing this call can hand back, so a reveal here
+// could only ever be the whole window at once. Reading one value back is
+// Get's job, against the cell the caller named.
+func (s *Store) Versions(ctx context.Context, c Coordinate) ([]Version, error) {
 	if err := c.validate(); err != nil {
 		return nil, err
 	}
@@ -304,13 +307,7 @@ func (s *Store) Versions(ctx context.Context, c Coordinate, reveal bool) ([]Vers
 		if err != nil {
 			return nil, err
 		}
-		entry := Version{Version: version, CreatedAt: stored.Ts, Size: stored.Size}
-		if reveal {
-			if entry.Plaintext, err = s.decrypt(ctx, c, stored.Ciphertext); err != nil {
-				return nil, err
-			}
-		}
-		out = append(out, entry)
+		out = append(out, Version{Version: version, CreatedAt: stored.Ts, Size: stored.Size})
 	}
 	return out, nil
 }

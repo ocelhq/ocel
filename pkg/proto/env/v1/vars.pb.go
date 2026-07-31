@@ -179,15 +179,13 @@ func (x *ValueMetadata) GetSize() int64 {
 	return 0
 }
 
-// VersionEntry is one entry of a cell's change history.
+// VersionEntry is one entry of a cell's change history. It carries no
+// plaintext: history records that a value changed, not what it was.
 type VersionEntry struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Version   int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	CreatedAt int64                  `protobuf:"varint,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	Size      int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
-	// value is the plaintext this version held, populated only when the request
-	// asked to reveal.
-	Value         string `protobuf:"bytes,4,opt,name=value,proto3" json:"value,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	CreatedAt     int64                  `protobuf:"varint,2,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
+	Size          int64                  `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -241,13 +239,6 @@ func (x *VersionEntry) GetSize() int64 {
 		return x.Size
 	}
 	return 0
-}
-
-func (x *VersionEntry) GetValue() string {
-	if x != nil {
-		return x.Value
-	}
-	return ""
 }
 
 type SetValueRequest struct {
@@ -785,7 +776,6 @@ type ListVersionsRequest struct {
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
 	Coordinate      *Coordinate            `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
-	Reveal          bool                   `protobuf:"varint,5,opt,name=reveal,proto3" json:"reveal,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -846,13 +836,6 @@ func (x *ListVersionsRequest) GetCoordinate() *Coordinate {
 		return x.Coordinate
 	}
 	return nil
-}
-
-func (x *ListVersionsRequest) GetReveal() bool {
-	if x != nil {
-		return x.Reveal
-	}
-	return false
 }
 
 type ListVersionsResponse struct {
@@ -918,13 +901,12 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\x03 \x01(\x03R\tupdatedAt\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04size\"q\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\"h\n" +
 	"\fVersionEntry\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x1d\n" +
 	"\n" +
 	"created_at\x18\x02 \x01(\x03R\tcreatedAt\x12\x12\n" +
-	"\x04size\x18\x03 \x01(\x03R\x04size\x12\x14\n" +
-	"\x05value\x18\x04 \x01(\tR\x05value\"\x9e\x02\n" +
+	"\x04size\x18\x03 \x01(\x03R\x04sizeJ\x04\b\x04\x10\x05R\x05value\"\x9e\x02\n" +
 	"\x0fSetValueRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
@@ -966,15 +948,14 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"\x10expected_version\x18\x05 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01B\x13\n" +
 	"\x11_expected_version\"/\n" +
 	"\x13DeleteValueResponse\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xdf\x01\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xd5\x01\n" +
 	"\x13ListVersionsRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
 	"\x05class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x122\n" +
 	"\n" +
 	"coordinate\x18\x04 \x01(\v2\x12.env.v1.CoordinateR\n" +
-	"coordinate\x12\x16\n" +
-	"\x06reveal\x18\x05 \x01(\bR\x06reveal\"H\n" +
+	"coordinateJ\x04\b\x05\x10\x06R\x06reveal\"H\n" +
 	"\x14ListVersionsResponse\x120\n" +
 	"\bversions\x18\x01 \x03(\v2\x14.env.v1.VersionEntryR\bversions2\xe6\x02\n" +
 	"\x0eEnvVarsService\x12=\n" +

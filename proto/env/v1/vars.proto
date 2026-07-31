@@ -36,7 +36,11 @@ service EnvVarsService {
     rpc DeleteValue(DeleteValueRequest) returns (DeleteValueResponse);
 
     // ListVersions reads one cell's change history, newest first, bounded by
-    // the window each write prunes to.
+    // the window each write prunes to. It is metadata only, for the same
+    // reason ListValues is: history answers when a value changed, and a
+    // command that printed every retained version's plaintext would keep a
+    // rotated-away secret readable for the whole window. Reading one value
+    // back is GetValue's job, one named cell at a time.
     rpc ListVersions(ListVersionsRequest) returns (ListVersionsResponse);
 }
 
@@ -81,15 +85,18 @@ message ValueMetadata {
   int64 size = 4;
 }
 
-// VersionEntry is one entry of a cell's change history.
+// VersionEntry is one entry of a cell's change history. It carries no
+// plaintext: history records that a value changed, not what it was.
 message VersionEntry {
   int64 version = 1;
   int64 created_at = 2;
   int64 size = 3;
 
-  // value is the plaintext this version held, populated only when the request
-  // asked to reveal.
-  string value = 4;
+  // 4 held the revealed plaintext of this version. History no longer carries
+  // one, and the number stays retired so a future field can never be read as
+  // that value by a peer built against the old shape.
+  reserved 4;
+  reserved "value";
 }
 
 message SetValueRequest {
@@ -188,7 +195,14 @@ message ListVersionsRequest {
   string protocol_version = 2;
   deployments.v1.Environment.Class class = 3;
   Coordinate coordinate = 4;
-  bool reveal = 5;
+
+  // 5 asked history to reveal every retained version at once. There is
+  // deliberately no reveal flag here now, for the reason ListValues states:
+  // the bulk form must never print secrets to a shared terminal. The number
+  // stays retired so an old peer's `reveal = true` can never be read as
+  // whatever field 5 becomes.
+  reserved 5;
+  reserved "reveal";
 }
 
 message ListVersionsResponse {

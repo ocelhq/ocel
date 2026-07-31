@@ -205,7 +205,7 @@ func TestSetPrunesTheVersionOutsideTheWindow(t *testing.T) {
 		t.Fatalf("Set queried the table (%v); the pruned version must be computed", q.KeyConditionExpression)
 	}
 
-	versions, err := store.Versions(context.Background(), c, false)
+	versions, err := store.Versions(context.Background(), c)
 	if err != nil {
 		t.Fatalf("Versions err = %v", err)
 	}
@@ -218,13 +218,17 @@ func TestVersionsReadsNewestFirst(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
 
-	for _, v := range []string{"one", "two", "three"} {
+	// Each write is a different length, so every version's metadata identifies
+	// the write it came from. Equal-length writes would let a row carry its
+	// neighbour's metadata under its own version number unnoticed — which is
+	// the one question history exists to answer.
+	for _, v := range []string{"o", "tw", "three"} {
 		if _, err := store.Set(context.Background(), c, v, nil); err != nil {
 			t.Fatalf("Set %q err = %v", v, err)
 		}
 	}
 
-	versions, err := store.Versions(context.Background(), c, true)
+	versions, err := store.Versions(context.Background(), c)
 	if err != nil {
 		t.Fatalf("Versions err = %v", err)
 	}
@@ -232,37 +236,44 @@ func TestVersionsReadsNewestFirst(t *testing.T) {
 		t.Fatalf("got %d versions, want 3", len(versions))
 	}
 	wantNumbers := []int64{3, 2, 1}
-	wantValues := []string{"three", "two", "one"}
+	wantSizes := []int64{5, 2, 1}
 	for i, v := range versions {
 		if v.Version != wantNumbers[i] {
 			t.Errorf("versions[%d].Version = %d, want %d", i, v.Version, wantNumbers[i])
 		}
-		if v.Plaintext != wantValues[i] {
-			t.Errorf("versions[%d].Plaintext = %q, want %q", i, v.Plaintext, wantValues[i])
+		if v.Size != wantSizes[i] {
+			t.Errorf("versions[%d].Size = %d, want %d", i, v.Size, wantSizes[i])
+		}
+		if i > 0 && v.CreatedAt >= versions[i-1].CreatedAt {
+			t.Errorf("versions[%d].CreatedAt = %d, want older than versions[%d]'s %d", i, v.CreatedAt, i-1, versions[i-1].CreatedAt)
 		}
 	}
 }
 
-func TestVersionsWithoutRevealNeverDecrypts(t *testing.T) {
+// Reading history is not a way to read values. There is no reveal to ask for,
+// so a cell's whole retained window can never be decrypted in one call — which
+// is what keeps a rotation an actual remedy rather than a value moved one
+// version along.
+func TestVersionsNeverDecrypts(t *testing.T) {
 	store, _, crypto := newTestStore(t)
 	c := testCoordinate()
 
-	if _, err := store.Set(context.Background(), c, "sk_live_secret", nil); err != nil {
-		t.Fatalf("Set err = %v", err)
+	for _, v := range []string{"sk_leaked", "sk_rotated"} {
+		if _, err := store.Set(context.Background(), c, v, nil); err != nil {
+			t.Fatalf("Set %q err = %v", v, err)
+		}
 	}
 	crypto.decrypts = 0
 
-	versions, err := store.Versions(context.Background(), c, false)
+	versions, err := store.Versions(context.Background(), c)
 	if err != nil {
 		t.Fatalf("Versions err = %v", err)
 	}
-	if crypto.decrypts != 0 {
-		t.Errorf("decrypt calls = %d, want 0 without reveal", crypto.decrypts)
+	if len(versions) != 2 {
+		t.Fatalf("got %d versions, want 2", len(versions))
 	}
-	for i, v := range versions {
-		if v.Plaintext != "" {
-			t.Errorf("versions[%d].Plaintext = %q, want it withheld", i, v.Plaintext)
-		}
+	if crypto.decrypts != 0 {
+		t.Errorf("decrypt calls = %d, want 0: history never opens a ciphertext", crypto.decrypts)
 	}
 }
 
@@ -319,7 +330,7 @@ func TestDeleteUnsetsTheValueAndKeepsHistory(t *testing.T) {
 		t.Errorf("Get after Delete err = %v, want ErrNotFound", err)
 	}
 
-	versions, err := store.Versions(context.Background(), c, false)
+	versions, err := store.Versions(context.Background(), c)
 	if err != nil {
 		t.Fatalf("Versions err = %v", err)
 	}
@@ -454,7 +465,7 @@ func TestSetAfterDeleteContinuesTheVersionSequence(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	c := testCoordinate()
 
-	for _, v := range []string{"one", "two"} {
+	for _, v := range []string{"o", "tw"} {
 		if _, err := store.Set(context.Background(), c, v, nil); err != nil {
 			t.Fatalf("Set %q err = %v", v, err)
 		}
@@ -479,18 +490,21 @@ func TestSetAfterDeleteContinuesTheVersionSequence(t *testing.T) {
 		t.Errorf("Get after the rewrite = %q at version %d, want %q at 3", got.Plaintext, got.Version, "three")
 	}
 
-	versions, err := store.Versions(context.Background(), c, true)
+	versions, err := store.Versions(context.Background(), c)
 	if err != nil {
 		t.Fatalf("Versions err = %v", err)
 	}
+	// The three writes have three different lengths, so a version landing on
+	// top of an earlier one — or carrying a neighbour's metadata — still shows
+	// up even without reading the plaintext back.
 	wantNumbers := []int64{3, 2, 1}
-	wantValues := []string{"three", "two", "one"}
-	if len(versions) != len(wantValues) {
-		t.Fatalf("history depth = %d, want %d; the write after a delete overwrote an existing version", len(versions), len(wantValues))
+	wantSizes := []int64{5, 2, 1}
+	if len(versions) != len(wantNumbers) {
+		t.Fatalf("history depth = %d, want %d; the write after a delete overwrote an existing version", len(versions), len(wantNumbers))
 	}
 	for i, v := range versions {
-		if v.Version != wantNumbers[i] || v.Plaintext != wantValues[i] {
-			t.Errorf("versions[%d] = %d/%q, want %d/%q", i, v.Version, v.Plaintext, wantNumbers[i], wantValues[i])
+		if v.Version != wantNumbers[i] || v.Size != wantSizes[i] {
+			t.Errorf("versions[%d] = %d/%d bytes, want %d/%d", i, v.Version, v.Size, wantNumbers[i], wantSizes[i])
 		}
 	}
 }
@@ -514,7 +528,7 @@ func TestHistoryStaysCappedAcrossADelete(t *testing.T) {
 		t.Fatalf("Set after Delete err = %v", err)
 	}
 
-	versions, err := store.Versions(context.Background(), c, false)
+	versions, err := store.Versions(context.Background(), c)
 	if err != nil {
 		t.Fatalf("Versions err = %v", err)
 	}

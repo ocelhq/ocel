@@ -218,15 +218,11 @@ func (s *deployFakeProviderServer) ListVersions(ctx context.Context, req *envv1.
 	}
 	resp := &envv1.ListVersionsResponse{}
 	for i := len(cell.Versions) - 1; i >= 0; i-- {
-		entry := &envv1.VersionEntry{
+		resp.Versions = append(resp.Versions, &envv1.VersionEntry{
 			Version:   int64(i + 1),
 			CreatedAt: cell.Versions[i].Ts,
 			Size:      int64(len(cell.Versions[i].Value)),
-		}
-		if req.GetReveal() {
-			entry.Value = cell.Versions[i].Value
-		}
-		resp.Versions = append(resp.Versions, entry)
+		})
 	}
 	return resp, nil
 }

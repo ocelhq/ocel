@@ -55,8 +55,8 @@ type Store interface {
 }
 
 // Version is one entry of a cell's change history. It carries no plaintext:
-// history in the UI answers when a value changed, and revealing a past value
-// is a deliberate act reserved for `ocel env history --reveal`.
+// history answers when a value changed, not what it was. Reading a value back
+// is `ocel env get --reveal`, one named cell at a time.
 type Version struct {
 	Version   int64 `json:"version"`
 	CreatedAt int64 `json:"createdAt"`
