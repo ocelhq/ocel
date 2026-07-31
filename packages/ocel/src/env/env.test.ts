@@ -65,12 +65,26 @@ function echoingSchema() {
   });
 }
 
+// LIVE_VALUES is the well-known global the entrypoint publishes a pushed
+// generation of live values under. The tests write it directly because it is
+// the contract between the layer's entrypoint and this SDK, not a helper: the
+// two ship in different module graphs and share nothing else.
+const LIVE_VALUES = Symbol.for("ocel.env.liveValues");
+
+function push(generation: number, values: Record<string, string>) {
+  (globalThis as Record<symbol, unknown>)[LIVE_VALUES] = { generation, values };
+}
+
 beforeEach(() => {
   declareEnvMock.mockClear();
   reportEnvProblemsMock.mockClear();
   declareEnvMock.mockResolvedValue({ cells: [] });
   globalThis.__ocelRegister = [];
   source.override = undefined;
+  delete (globalThis as Record<symbol, unknown>)[LIVE_VALUES];
+  // A stubbed variable outlives the test that stubbed it, so the phase a test
+  // runs in would otherwise be whatever the test before it left behind.
+  vi.unstubAllEnvs();
 });
 
 describe("definition errors", () => {
@@ -429,6 +443,244 @@ describe("reading a variable", () => {
   });
 });
 
+// A live value is the one class that is not in the artifact and not in the
+// process environment: the membrane fetches it at runtime and pushes it into
+// this process, and the entrypoint publishes what arrived. What these pin is
+// that arriving that way changes nothing a call site can see, and that a value
+// replaced under a running process is actually observed.
+describe("reading a live value", () => {
+  beforeEach(() => {
+    vi.stubEnv("OCEL_PHASE", "");
+  });
+
+  it("reads a pushed value as the same plain synchronous property as any class", () => {
+    push(1, { LIVE_READ: "sk_live_pushed" });
+    const env = defineEnv({ LIVE_READ: { class: "secret" } });
+
+    expect(env.LIVE_READ).toBe("sk_live_pushed");
+    // The push is the only delivery: nothing put it in the environment under
+    // either the bare or the namespaced name.
+    expect(process.env.LIVE_READ).toBeUndefined();
+    expect(process.env.OCEL_VAR_LIVE_READ).toBeUndefined();
+  });
+
+  // Reclassifying is the claim the whole class scheme rests on, so it is read
+  // through one expression written once against three classes.
+  it("answers the same call site whatever the class delivering it", () => {
+    vi.stubEnv("RECLASSIFIED", "the value");
+    vi.stubEnv("OCEL_VAR_RECLASSIFIED", "the value");
+    push(1, { RECLASSIFIED: "the value" });
+
+    const read = (env: { RECLASSIFIED: string }) => env.RECLASSIFIED;
+
+    source.override = "/project/env.plain.ts";
+    expect(read(defineEnv({ RECLASSIFIED: { class: "plain" } }))).toBe("the value");
+    source.override = "/project/env.plain.ts";
+    expect(read(defineEnv({ RECLASSIFIED: { class: "sensitive" } }))).toBe("the value");
+    source.override = "/project/env.plain.ts";
+    expect(read(defineEnv({ RECLASSIFIED: { class: "secret" } }))).toBe("the value");
+  });
+
+  it("resolves a read written at module scope, which runs the moment the file is imported", () => {
+    push(1, { LIVE_AT_IMPORT: "8080" });
+    // Exactly what a module-scope `const port = env.LIVE_AT_IMPORT` does: the
+    // declaration and the read are one expression, with nothing between them.
+    const port = defineEnv({
+      LIVE_AT_IMPORT: { class: "secret", schema: z.coerce.number() },
+    }).LIVE_AT_IMPORT;
+
+    expect(port).toBe(8080);
+  });
+
+  it("serves a rotated value once a later generation arrives", () => {
+    push(1, { LIVE_ROTATED: "before" });
+    const env = defineEnv({ LIVE_ROTATED: { class: "secret" } });
+    expect(env.LIVE_ROTATED).toBe("before");
+
+    push(2, { LIVE_ROTATED: "after" });
+    expect(env.LIVE_ROTATED).toBe("after");
+  });
+
+  // The other half of the same memo: within one generation the value is
+  // resolved once and its schema run once, so a read stays a property access.
+  it("resolves once within a generation, so a read costs nothing after the first", () => {
+    let parses = 0;
+    const counting = z.string().transform((value) => {
+      parses += 1;
+      return value;
+    });
+    push(1, { LIVE_MEMOISED: "v1" });
+    const env = defineEnv({ LIVE_MEMOISED: { class: "secret", schema: counting } });
+
+    expect(env.LIVE_MEMOISED).toBe("v1");
+    expect(env.LIVE_MEMOISED).toBe("v1");
+    expect(parses).toBe(1);
+
+    push(2, { LIVE_MEMOISED: "v2" });
+    expect(env.LIVE_MEMOISED).toBe("v2");
+    expect(parses).toBe(2);
+  });
+
+  // Memoising a live value forever is what a class-blind memo does, and it is
+  // invisible unless something changes the values a generation holds without
+  // announcing a new one. Nothing does that in production; this stands in for
+  // it so the memo is pinned to the generation rather than to the first read.
+  it("does not re-read within a generation, so the generation is what invalidates it", () => {
+    push(1, { LIVE_PINNED: "first" });
+    const env = defineEnv({ LIVE_PINNED: { class: "secret" } });
+    expect(env.LIVE_PINNED).toBe("first");
+
+    push(1, { LIVE_PINNED: "swapped underneath" });
+    expect(env.LIVE_PINNED).toBe("first");
+  });
+
+  // The published map is a plain global anything in the process can reach, so
+  // what it holds is not automatically a value. Serving a non-string would put
+  // one in front of a schema that was promised a string.
+  it("does not take a published entry that is not a string as a value", () => {
+    push(1, { LIVE_NOT_A_STRING: 42 as unknown as string });
+
+    expect(() => defineEnv({ LIVE_NOT_A_STRING: { class: "secret" } })).toThrow(
+      EnvValueError,
+    );
+  });
+
+  it("fails init loudly when the push carried no value for a declared key", () => {
+    push(1, { SOMETHING_ELSE: "x" });
+
+    expect(() => defineEnv({ LIVE_ABSENT_FROM_PUSH: { class: "secret" } })).toThrow(
+      EnvValueError,
+    );
+    expect(() => defineEnv({ LIVE_ABSENT_FROM_PUSH: { class: "secret" } })).toThrow(
+      /ocel env set LIVE_ABSENT_FROM_PUSH/,
+    );
+  });
+});
+
+// A live value is fetched after this process started, so it is the only class
+// whose value can have drifted from its schema since the deploy that shipped
+// the code reading it. Checking it at the declaration is what turns that drift
+// into an init failure, before the app serves anything, rather than a throw in
+// the middle of a request that happened to read it first.
+describe("a live value is checked against its schema at init", () => {
+  beforeEach(() => {
+    vi.stubEnv("OCEL_PHASE", "");
+  });
+
+  it("throws where the variable is declared, not where it is read", () => {
+    push(1, { LIVE_DRIFTED: "not-a-url" });
+
+    expect(() => defineEnv({ LIVE_DRIFTED: { class: "secret", schema: z.url() } })).toThrow(
+      EnvValueError,
+    );
+  });
+
+  it("keeps the value out of the failure, as every confidential class does", () => {
+    const drifted = "sk_live_drifted_value";
+    push(1, { LIVE_DRIFT_REDACTED: drifted });
+
+    let thrown = "";
+    try {
+      defineEnv({ LIVE_DRIFT_REDACTED: { class: "secret", schema: echoingSchema() } });
+    } catch (error) {
+      thrown = String(error);
+    }
+    expect(thrown).toContain("LIVE_DRIFT_REDACTED");
+    expect(thrown).not.toContain(drifted);
+  });
+
+  it("checks only live keys, leaving every other class to its first read", () => {
+    push(1, {});
+
+    expect(() =>
+      defineEnv({ INIT_UNSET_PLAIN: { class: "plain", schema: z.url() } }),
+    ).not.toThrow();
+  });
+
+  it("leaves a key this app's binding puts out of scope alone", () => {
+    vi.stubEnv("OCEL_APP_FOLDER", "/admin");
+    push(1, {});
+
+    expect(() =>
+      defineEnv({ LIVE_OTHER_FOLDER: { class: "secret", folders: ["/web"] } }),
+    ).not.toThrow();
+  });
+
+  it("says nothing during discovery, when no value has been resolved yet", () => {
+    vi.stubEnv("OCEL_PHASE", "discovery");
+    push(1, { LIVE_IN_DISCOVERY: "not-a-url" });
+
+    expect(() =>
+      defineEnv({ LIVE_IN_DISCOVERY: { class: "secret", schema: z.url() } }),
+    ).not.toThrow();
+  });
+});
+
+// The live path is inert for a function that declares nothing live. That is
+// what makes a store outage its problem and no one else's: with no push there
+// is nothing to wait for, nothing to check and nothing to fail.
+describe("a function that declares no live value", () => {
+  beforeEach(() => {
+    vi.stubEnv("OCEL_PHASE", "");
+  });
+
+  it("resolves every other class with no live values published at all", () => {
+    vi.stubEnv("OUTAGE_PLAIN", "still here");
+    vi.stubEnv("OCEL_VAR_OUTAGE_SEALED", "still sealed");
+
+    const env = defineEnv({
+      OUTAGE_PLAIN: { class: "plain" },
+      OUTAGE_SEALED: { class: "sensitive" },
+    });
+
+    expect((globalThis as Record<symbol, unknown>)[LIVE_VALUES]).toBeUndefined();
+    expect(env.OUTAGE_PLAIN).toBe("still here");
+    expect(env.OUTAGE_SEALED).toBe("still sealed");
+  });
+
+  // With no push there is nothing that could have drifted, so there is nothing
+  // to check at init either. Checking anyway would turn every environment
+  // without a membrane — `ocel dev`, a test, a script — into a boot failure.
+  it("leaves a live key to its first read when nothing was pushed", () => {
+    expect(() => defineEnv({ LIVE_NO_PUSH: { class: "secret" } })).not.toThrow();
+  });
+
+  // `ocel dev` has no membrane and so no push; it delivers a live value the way
+  // it delivers every other class, through the environment. A read falls
+  // through to it whenever no push holds the key, which is what keeps dev and
+  // production the same call site.
+  it("falls through to the environment for a live key when nothing was pushed", () => {
+    vi.stubEnv("OCEL_VAR_LIVE_IN_DEV", "sk_dev_123");
+    const env = defineEnv({ LIVE_IN_DEV: { class: "secret" } });
+
+    expect(env.LIVE_IN_DEV).toBe("sk_dev_123");
+  });
+
+  // The bare name is the one `ocel dev` actually uses: it merges the values it
+  // resolved into the child's environment under the key the application
+  // declared, with no namespacing, because the namespaced spelling belongs to
+  // the encrypted-baked path a deploy builds and dev never builds one. A
+  // fall-through that only consulted the namespaced name would leave every dev
+  // run declaring a live key reading as unset.
+  it("falls through to the bare name dev delivers a live value under", () => {
+    vi.stubEnv("LIVE_IN_DEV_BARE", "sk_dev_bare");
+    const env = defineEnv({ LIVE_IN_DEV_BARE: { class: "secret" } });
+
+    expect(env.LIVE_IN_DEV_BARE).toBe("sk_dev_bare");
+  });
+
+  // The push still outranks the environment where both exist: a deploy never
+  // sets these names for a live key, so an environment entry under one in
+  // production is something else wearing the name.
+  it("prefers a pushed value to one standing under the same name in the environment", () => {
+    vi.stubEnv("LIVE_PUSH_WINS", "from_the_environment");
+    push(1, { LIVE_PUSH_WINS: "from_the_push" });
+    const env = defineEnv({ LIVE_PUSH_WINS: { class: "secret" } });
+
+    expect(env.LIVE_PUSH_WINS).toBe("from_the_push");
+  });
+});
+
 describe("folder scoping", () => {
   it.each([
     ["SCOPE_BAD_RELATIVE", "web", /must start with/],
@@ -575,7 +827,16 @@ describe("reading a key outside the app's scope", () => {
 // structured payload inside one variable would consult identical names at
 // every binding and is invisible here. No test at this layer can refute an
 // encoding it did not plant; the guarantee that closes that gap is that
-// delivery resolves values before the runtime sees them at all.
+// delivery resolves each value's *coordinate*, folder included, before the
+// runtime sees anything.
+//
+// For every class but one that also means the value itself is resolved first.
+// A live value is the exception: only its coordinate is pinned at deploy, and
+// the value is fetched while the process runs. It is no exception to the
+// guarantee, because what the membrane spends that coordinate on never crosses
+// back — it pushes a flat map under bare key names, and the runtime asks for a
+// live value by bare key exactly as it asks for any other. The folder is spent
+// at deploy either way; what differs is only when the value is fetched.
 describe("the app folder binding selects no value", () => {
   const RESOLVED = "the one resolved value";
 
@@ -674,6 +935,36 @@ describe("the app folder binding selects no value", () => {
       "/web/nested": "EnvScopeError",
       "/WEB": "EnvScopeError",
     });
+  });
+
+  // A live value is fetched while the process runs rather than resolved before
+  // it starts, so it is the one delivery this suite's charter has to be
+  // re-argued for. The push is planted with folder-shaped entries beside the
+  // bare one, exactly as plant does for the environment: a read that addressed
+  // the pushed map by folder would return one of those instead.
+  it("selects a live value by bare key alone, at every binding its scope permits", () => {
+    plant("SELECT_LIVE", ["/web", "/admin"]);
+    push(1, {
+      SELECT_LIVE: "the one pushed value",
+      "/web#SELECT_LIVE": "a value chosen for /web",
+      "/admin#SELECT_LIVE": "a value chosen for /admin",
+      "SELECT_LIVE#/web": "a value chosen for /web",
+      "SELECT_LIVE#/admin": "a value chosen for /admin",
+    });
+
+    const observations = ["/web", "/admin"].map((binding) => {
+      vi.stubEnv("OCEL_APP_FOLDER", binding);
+      const env = defineEnv({
+        SELECT_LIVE: { class: "secret", folders: ["/web", "/admin"] },
+      });
+      return observe(() => env.SELECT_LIVE);
+    });
+
+    for (const { outcome, consulted } of observations) {
+      expect(outcome).toBe("value:the one pushed value");
+      expect(consulted).toEqual(observations[0]!.consulted);
+      expect(consulted.filter((name) => /\/(web|admin)/.test(name))).toEqual([]);
+    }
   });
 
   it("changes nothing at all for a key no scope names", () => {

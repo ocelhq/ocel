@@ -47,14 +47,18 @@ function folderProblem(folder: string): string | undefined {
   return undefined;
 }
 
-// assertInScope refuses a read by an app the key was never scoped to. Nesting
-// plays no part: a binding is matched whole, exactly as resolution matched it.
+// inScope answers whether this app may read the key at all. Nesting plays no
+// part: a binding is matched whole, exactly as resolution matched it.
+export function inScope(folders: readonly string[]): boolean {
+  if (folders.length === 0) return true;
+  return folders.includes(process.env[APP_FOLDER_ENV_VAR] ?? "");
+}
+
+// assertInScope refuses a read by an app the key was never scoped to.
 export function assertInScope(key: string, folders: readonly string[]): void {
-  if (folders.length === 0) return;
+  if (inScope(folders)) return;
 
   const binding = process.env[APP_FOLDER_ENV_VAR] ?? "";
-  if (folders.includes(binding)) return;
-
   throw new EnvScopeError(
     `'${key}' is scoped to ${folders.join(", ")}, but this app is bound to ${
       binding === "" ? "the project root" : binding

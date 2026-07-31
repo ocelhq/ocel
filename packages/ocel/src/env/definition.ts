@@ -57,6 +57,14 @@ export class EnvDefinitionError extends Error {
 // fallback instead of failing.
 const LIVE_CLASSES: ReadonlySet<VariableClass> = new Set(["secret"]);
 
+// isLive is the one question the read path asks about a class. Everything else
+// about a class is settled at the declaration or at deploy; this is settled
+// only while the process runs, because a live value is the only one that can be
+// replaced under it.
+export function isLive(definition: VariableDefinition): boolean {
+  return LIVE_CLASSES.has(definition.class);
+}
+
 // bareKeyClasses reach the process environment under the key's own name (or,
 // for a client-accessible key, under the framework's public prefix), which is
 // the only situation where a platform-owned name could be overwritten.
