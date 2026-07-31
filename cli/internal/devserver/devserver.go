@@ -8,6 +8,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
+	"strings"
 	"sync"
 
 	connect "connectrpc.com/connect"
@@ -27,7 +29,17 @@ import (
 type SyncResult struct {
 	ProjectConfig provision.ProjectConfig
 	Resources     []provision.ProvisionedResource
-	Err           error
+	// LiveValues holds the plaintext of every live-class key this run
+	// declared, resolved once here because dev has nothing to resolve one
+	// later (see DeclareEnv).
+	LiveValues map[string]string
+	// LiveKeys names those keys. It is what the run declared rather than what
+	// the source gave back, so it is the honest subject of anything said about
+	// dev's live-value semantics: a source that resolved none of them is still
+	// a run whose live values were resolved once, at startup, and will not be
+	// resolved again.
+	LiveKeys []string
+	Err      error
 }
 
 // Server accumulates declared resources via the Connect ResourceService and,
@@ -46,6 +58,10 @@ type Server struct {
 
 	fetchProjectConfig func(ctx context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error)
 	provision          func(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.ProvisionedResource, error)
+	fetchLiveValues    func(ctx context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error)
+
+	liveMu   sync.Mutex
+	liveKeys map[string]struct{}
 
 	subMu       sync.Mutex
 	latestEnv   *devv1.EnvUpdate
@@ -69,6 +85,8 @@ func New(apiURL, token, projectID, devServerAddr string) *Server {
 		syncCh:             make(chan SyncResult, 1),
 		fetchProjectConfig: provision.FetchProjectConfig,
 		provision:          provision.Provision,
+		fetchLiveValues:    provision.FetchLiveValues,
+		liveKeys:           make(map[string]struct{}),
 		subscribers:        make(map[chan *devv1.EnvUpdate]struct{}),
 	}
 }
@@ -101,19 +119,49 @@ func (s *Server) Declare(_ context.Context, req *resourcesv1.DeclareRequest) (*r
 // gating, so a dev run is never blocked by a value only a deploy needs. That
 // divergence is deliberate and documented, and ends when dev gets its own
 // value source.
-func (s *Server) DeclareEnv(context.Context, *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+//
+// A live-class key is the one exception, and only because it has no other
+// route: every other class is delivered by the artifact a deploy builds, which
+// dev never builds, so dev already supplies them from the control plane's
+// project environment. A live key is recorded here and resolved at sync (see
+// handleSync), eagerly and once — the timing differs from a deploy's, the call
+// site does not.
+func (s *Server) DeclareEnv(_ context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	for _, d := range req.GetDefinitions() {
+		if d.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+			s.liveKeys[d.GetKey()] = struct{}{}
+		}
+	}
 	return &resourcesv1.DeclareEnvResponse{}, nil
+}
+
+// declaredLiveKeys is every live-class key declared since the last reset,
+// sorted so the same declarations always produce the same request.
+func (s *Server) declaredLiveKeys() []string {
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	keys := make([]string, 0, len(s.liveKeys))
+	for key := range s.liveKeys {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func (s *Server) ReportEnvProblems(context.Context, *resourcesv1.ReportEnvProblemsRequest) (*resourcesv1.ReportEnvProblemsResponse, error) {
 	return &resourcesv1.ReportEnvProblemsResponse{}, nil
 }
 
-// ResetManifest clears every declared resource, so the next full
+// ResetManifest clears every declared resource and variable, so the next full
 // re-discovery's declares fully replace (rather than accumulate onto) the
 // prior set before the following /sync provisions them.
 func (s *Server) ResetManifest() {
 	s.manifest.Reset()
+	s.liveMu.Lock()
+	s.liveKeys = make(map[string]struct{})
+	s.liveMu.Unlock()
 }
 
 // Mux returns the HTTP handler serving the Connect ResourceService, the
@@ -236,7 +284,22 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 	}
 	provisioned = append(provisioned, s.bucketResources(buckets)...)
 
-	s.deliverSync(SyncResult{ProjectConfig: cfg, Resources: provisioned})
+	// A run declaring no live key never asks: dev mirrors the deployed
+	// guarantee that only the functions declaring live values are exposed to
+	// their source being down.
+	var liveValues map[string]string
+	liveKeys := s.declaredLiveKeys()
+	if len(liveKeys) > 0 {
+		liveValues, err = s.fetchLiveValues(ctx, s.apiURL, s.token, s.projectID, liveKeys)
+		if err != nil {
+			err = fmt.Errorf("resolve live values (%s): %w", strings.Join(liveKeys, ", "), err)
+			s.deliverSync(SyncResult{Err: err})
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	s.deliverSync(SyncResult{ProjectConfig: cfg, Resources: provisioned, LiveValues: liveValues, LiveKeys: liveKeys})
 	w.WriteHeader(http.StatusOK)
 }
 

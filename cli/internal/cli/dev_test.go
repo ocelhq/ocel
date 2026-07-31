@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -31,7 +32,7 @@ func TestMergeEnv_Precedence(t *testing.T) {
 		{Name: "main", Env: map[string]string{"SHARED": "resource", "OCEL_RESOURCE_POSTGRES_main": "conn"}},
 	}
 
-	got := toMap(mergeEnv(base, projectEnv, resources))
+	got := toMap(mergeEnv(base, projectEnv, nil, resources))
 
 	cases := map[string]string{
 		"PATH":                        "/bin",
@@ -638,5 +639,76 @@ func writeFile(t *testing.T, path, contents string) {
 	}
 	if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
 		t.Fatalf("write %s: %v", path, err)
+	}
+}
+
+// TestResolvedEnv_DeliversLiveValuesAtStartup proves a live-class value
+// reaches the app the same way every other dev value does — in the environment
+// the child is spawned with, resolved before it starts. There is no second
+// channel in dev and no later opportunity: the value is either here or the
+// read fails.
+func TestResolvedEnv_DeliversLiveValuesAtStartup(t *testing.T) {
+	projectEnv := map[string]string{"PROJECT_ONLY": "p", "OVERRIDDEN": "from-project"}
+	live := map[string]string{"WEBHOOK_SECRET": "whsec_live", "OVERRIDDEN": "from-live"}
+	resources := []provision.ProvisionedResource{
+		{Name: "main", Env: map[string]string{"OCEL_RESOURCE_POSTGRES_main": "conn"}},
+	}
+
+	got := resolvedEnv(projectEnv, live, resources)
+
+	cases := map[string]string{
+		"PROJECT_ONLY":                "p",
+		"WEBHOOK_SECRET":              "whsec_live",
+		"OVERRIDDEN":                  "from-live",
+		"OCEL_RESOURCE_POSTGRES_main": "conn",
+	}
+	for k, want := range cases {
+		if got[k] != want {
+			t.Errorf("env[%q] = %q, want %q", k, got[k], want)
+		}
+	}
+}
+
+// TestMergeEnv_DevNeverTellsTheRuntimeToWaitForAPush pins the other half of how
+// dev delivers a live value. OCEL_LIVE_KEYS is the membrane's instruction to
+// the runtime to hold the application's import until values are pushed down the
+// control socket. Dev has no membrane and no control socket, so a dev child
+// that saw that name would wait for a push nobody can send and never boot at
+// all. Dev's whole delivery is the environment, and it must say nothing else.
+func TestMergeEnv_DevNeverTellsTheRuntimeToWaitForAPush(t *testing.T) {
+	live := map[string]string{"WEBHOOK_SECRET": "whsec_live"}
+
+	got := mergeEnv([]string{"PATH=/usr/bin"}, map[string]string{"PROJECT_ONLY": "p"}, live, nil)
+
+	for _, kv := range got {
+		if strings.HasPrefix(kv, "OCEL_LIVE_KEYS=") {
+			t.Errorf("dev set %q; there is no membrane here to send the push it promises", kv)
+		}
+	}
+	if !slices.Contains(got, "WEBHOOK_SECRET=whsec_live") {
+		t.Error("the live value did not reach the child's environment under its bare name, which is dev's only delivery")
+	}
+}
+
+// TestReportLiveValues_SaysDevResolvesThemOnce proves the one divergence dev
+// has from a deploy is stated where a developer meets it, rather than
+// discovered later as a rotated value that "won't update". A run with no live
+// value says nothing, and the notice is keyed on what the run declared: a
+// source that resolved none of them is the case with least to go on, and the
+// one a value-keyed notice would go silent for.
+func TestReportLiveValues_SaysDevResolvesThemOnce(t *testing.T) {
+	var quiet bytes.Buffer
+	reportLiveValues(&quiet, nil)
+	if quiet.Len() != 0 {
+		t.Errorf("reportLiveValues wrote %q for a run with no live values, want nothing", quiet.String())
+	}
+
+	var out bytes.Buffer
+	reportLiveValues(&out, []string{"WEBHOOK_SECRET", "API_TOKEN"})
+	got := out.String()
+	for _, want := range []string{"API_TOKEN", "WEBHOOK_SECRET", "once", "restart"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("reportLiveValues wrote %q, want it to mention %q", got, want)
+		}
 	}
 }

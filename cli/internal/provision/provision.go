@@ -73,6 +73,23 @@ func FetchProjectConfig(_ context.Context, apiURL, token, projectID string) (Pro
 	}, nil
 }
 
+// FetchLiveValues resolves the plaintext of every live-class key a dev run
+// declared, in one call. Dev has no membrane and no reach into the deployed
+// variable store, so the control plane is its value source, the same one every
+// other value a dev run receives comes from.
+//
+// This is the whole of dev's live-value semantics: one eager fetch at startup,
+// no staleness bound and no refresh. A deploy bounds how long a rotated value
+// takes to be picked up; dev picks one up when it is restarted. Call sites are
+// unaffected either way — the difference is in timing, never in shape.
+//
+// Stubbed until the real Ocel API exists, on the same terms as
+// FetchProjectConfig: the signature is final, so wiring the real call in later
+// changes no caller.
+func FetchLiveValues(_ context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error) {
+	return make(map[string]string, len(keys)), nil
+}
+
 // Provision resolves each declared resource to a live connection by calling
 // the resolve endpoint at cfg.APIURL, reusing a cached response when one is
 // available (see CachedResolve).

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -184,7 +186,30 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 		return nil, fmt.Errorf("sync failed: %w", syncResult.Err)
 	}
 
-	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.Resources), nil
+	reportLiveValues(stdout, syncResult.LiveKeys)
+	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, syncResult.Resources), nil
+}
+
+// reportLiveValues tells the developer what dev just did differently from a
+// deploy, at the moment it does it. A live-class value is the one kind a
+// deployed function keeps re-reading, so a rotation reaches production without
+// a redeploy — dev resolved it once, here, and will serve that same value
+// until this process is restarted. Said nowhere, that divergence is only
+// discovered as a value that "won't update".
+//
+// It is told from the keys the run declared, not from the values that came
+// back. What the source had is the source's business and changes release to
+// release; what dev did with them is the same either way, and a notice
+// conditioned on a resolved value is one that goes quiet exactly when the
+// developer has least to go on. Names only ever reach here, which is also why
+// no plaintext can.
+func reportLiveValues(stdout io.Writer, liveKeys []string) {
+	if len(liveKeys) == 0 {
+		return
+	}
+	keys := slices.Clone(liveKeys)
+	sort.Strings(keys)
+	fmt.Fprintf(stdout, "resolved %s once, at startup. Deployed, a rotated value is picked up within a bounded window; here, restart `ocel dev` to pick one up.\n", strings.Join(keys, ", "))
 }
 
 // watchAndReResolve watches cfg's resolved discovery.paths and, on a
@@ -324,19 +349,30 @@ func waitExitError(err error) error {
 }
 
 // mergeEnv merges, in increasing precedence: base (typically the CLI's
-// inherited environment) < projectEnv (project-level env vars) < each
-// resource's resolved Env entries.
-func mergeEnv(base []string, projectEnv map[string]string, resources []provision.ProvisionedResource) []string {
-	return applyEnv(base, resolvedEnv(projectEnv, resources))
+// inherited environment) < projectEnv (project-level env vars) < liveValues <
+// each resource's resolved Env entries.
+func mergeEnv(base []string, projectEnv, liveValues map[string]string, resources []provision.ProvisionedResource) []string {
+	return applyEnv(base, resolvedEnv(projectEnv, liveValues, resources))
 }
 
-// resolvedEnv flattens projectEnv and every resource's Env entries into a
-// single map, in the same precedence used by mergeEnv (project vars <
-// resource vars). This is the map both the leader's own child uses and
-// what's pushed to followers verbatim.
-func resolvedEnv(projectEnv map[string]string, resources []provision.ProvisionedResource) map[string]string {
-	merged := make(map[string]string, len(projectEnv))
+// resolvedEnv flattens projectEnv, the run's live-class values and every
+// resource's Env entries into a single map, in the same precedence used by
+// mergeEnv. This is the map both the leader's own child uses and what's
+// pushed to followers verbatim.
+//
+// Live values sit here rather than in a channel of their own because dev has
+// no membrane: the environment the child is spawned with is dev's only
+// delivery mechanism, so a live value is resolved eagerly at startup and then
+// held for the life of the process. That is the one way dev diverges from a
+// deploy — there, a rotated value is picked up within a bounded window with no
+// restart; here, rotating one takes effect on the next `ocel dev`. Timing is
+// the whole difference: nothing about the call site changes.
+func resolvedEnv(projectEnv, liveValues map[string]string, resources []provision.ProvisionedResource) map[string]string {
+	merged := make(map[string]string, len(projectEnv)+len(liveValues))
 	for k, v := range projectEnv {
+		merged[k] = v
+	}
+	for k, v := range liveValues {
 		merged[k] = v
 	}
 	for _, r := range resources {

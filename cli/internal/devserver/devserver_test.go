@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -325,5 +327,223 @@ func TestSubscribe_NewSubscriberImmediatelyGetsLatestEnv(t *testing.T) {
 	}
 	if got := stream.Msg().Env["FOO"]; got != "bar" {
 		t.Fatalf("pushed env FOO = %q, want %q", got, "bar")
+	}
+}
+
+// TestDeclareEnvThenSync_ResolvesOnlyLiveKeysEagerly proves dev's live-value
+// path: the classes a deploy delivers from the artifact need nothing here,
+// while a live-class key — which has no artifact to be delivered from — is
+// fetched once, at startup, before the app is spawned. Only live keys are
+// asked for, so a dev run never fetches a value it already has.
+func TestDeclareEnvThenSync_ResolvesOnlyLiveKeysEagerly(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+
+	var asked []string
+	s.fetchLiveValues = func(_ context.Context, _, _, _ string, keys []string) (map[string]string, error) {
+		asked = keys
+		return map[string]string{"WEBHOOK_SECRET": "whsec_live"}, nil
+	}
+
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, ts.URL)
+	if _, err := client.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+			{Key: "STRIPE_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE},
+			{Key: "WEBHOOK_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
+		},
+	}); err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+
+	result := <-s.Sync()
+	if result.Err != nil {
+		t.Fatalf("Sync result error: %v", result.Err)
+	}
+	if want := []string{"WEBHOOK_SECRET"}; !reflect.DeepEqual(asked, want) {
+		t.Errorf("fetched %v, want only the live-class keys %v", asked, want)
+	}
+	if got := result.LiveValues["WEBHOOK_SECRET"]; got != "whsec_live" {
+		t.Errorf("LiveValues[WEBHOOK_SECRET] = %q, want the value the control plane returned", got)
+	}
+	if _, ok := result.LiveValues["POSTHOG_ID"]; ok {
+		t.Errorf("LiveValues = %v, want no entry for a key delivered by the artifact", result.LiveValues)
+	}
+	if want := []string{"WEBHOOK_SECRET"}; !reflect.DeepEqual(result.LiveKeys, want) {
+		t.Errorf("LiveKeys = %v, want %v", result.LiveKeys, want)
+	}
+}
+
+// TestSync_ReportsTheDeclaredLiveKeysEvenWhenTheSourceResolvesNone is what
+// keeps dev's one divergence from a deploy sayable. The run declared a live
+// key, so it has dev's resolve-once semantics whatever came back; a result that
+// carried only resolved values would leave the caller nothing to say it with
+// exactly when the source is the thing behaving unexpectedly — and today's
+// source, which is stubbed, returns nothing at all.
+func TestSync_ReportsTheDeclaredLiveKeysEvenWhenTheSourceResolvesNone(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+	s.fetchLiveValues = func(_ context.Context, _, _, _ string, keys []string) (map[string]string, error) {
+		return map[string]string{}, nil
+	}
+
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, ts.URL)
+	if _, err := client.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "WEBHOOK_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
+		},
+	}); err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+
+	result := <-s.Sync()
+	if result.Err != nil {
+		t.Fatalf("Sync result error: %v", result.Err)
+	}
+	if len(result.LiveValues) != 0 {
+		t.Fatalf("LiveValues = %v, want the empty result the source gave", result.LiveValues)
+	}
+	if want := []string{"WEBHOOK_SECRET"}; !reflect.DeepEqual(result.LiveKeys, want) {
+		t.Errorf("LiveKeys = %v, want %v: what the run declared, not what resolved", result.LiveKeys, want)
+	}
+}
+
+// TestSync_DeclaringNoLiveKeysAsksTheControlPlaneForNothing mirrors the
+// deployed guarantee that a store outage reaches only the functions that
+// declare live values: a project with none makes no live call at all, so it
+// cannot fail on one.
+func TestSync_DeclaringNoLiveKeysAsksTheControlPlaneForNothing(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+
+	called := false
+	s.fetchLiveValues = func(context.Context, string, string, string, []string) (map[string]string, error) {
+		called = true
+		return nil, errors.New("the control plane is unreachable")
+	}
+
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, ts.URL)
+	if _, err := client.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+		},
+	}); err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if result := <-s.Sync(); result.Err != nil {
+		t.Fatalf("Sync result error: %v", result.Err)
+	}
+	if called {
+		t.Error("a project declaring no live-class key still asked the control plane for live values")
+	}
+}
+
+// TestSync_AnUnreachableLiveSourceFailsTheDevRun proves a live value dev
+// cannot resolve stops the run rather than spawning the app with the key
+// silently unset — the app would fail on the read anyway, far from the cause.
+func TestSync_AnUnreachableLiveSourceFailsTheDevRun(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+	s.fetchLiveValues = func(context.Context, string, string, string, []string) (map[string]string, error) {
+		return nil, errors.New("the control plane is unreachable")
+	}
+
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, ts.URL)
+	if _, err := client.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "WEBHOOK_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
+		},
+	}); err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusOK {
+		t.Errorf("POST /sync status = %d, want a failure the dev run stops on", resp.StatusCode)
+	}
+
+	result := <-s.Sync()
+	if result.Err == nil {
+		t.Fatal("Sync result error = nil, want the unreachable live source reported")
+	}
+	if !strings.Contains(result.Err.Error(), "WEBHOOK_SECRET") {
+		t.Errorf("Sync result error = %q, want it to name the key that could not be resolved", result.Err)
+	}
+}
+
+// TestResetManifestThenSync_ForgetsLiveKeysADeclarationNoLongerNames proves a
+// re-discovery replaces the declared set rather than accumulating onto it: a
+// key deleted from the code is not still fetched for the rest of the session.
+func TestResetManifestThenSync_ForgetsLiveKeysADeclarationNoLongerNames(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+
+	var asked []string
+	s.fetchLiveValues = func(_ context.Context, _, _, _ string, keys []string) (map[string]string, error) {
+		asked = keys
+		return map[string]string{}, nil
+	}
+
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	client := resourcesv1connect.NewResourceServiceClient(http.DefaultClient, ts.URL)
+	if _, err := client.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "GONE", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
+		},
+	}); err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+
+	s.ResetManifest()
+
+	if _, err := client.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{
+			{Key: "KEPT", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
+		},
+	}); err != nil {
+		t.Fatalf("DeclareEnv: %v", err)
+	}
+
+	resp, err := http.Post(ts.URL+"/sync", "application/octet-stream", nil)
+	if err != nil {
+		t.Fatalf("POST /sync: %v", err)
+	}
+	defer resp.Body.Close()
+	<-s.Sync()
+
+	if want := []string{"KEPT"}; !reflect.DeepEqual(asked, want) {
+		t.Errorf("fetched %v, want only %v — the reset dropped the prior declaration", asked, want)
 	}
 }
