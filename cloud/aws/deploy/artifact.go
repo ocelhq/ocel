@@ -310,7 +310,7 @@ type artifactRef struct {
 // baked is each app's sealed encrypted-baked values, keyed by app name; every
 // function of an app packages its app's bundle, which is what puts the
 // ciphertext inside the artifact rather than in the function's configuration.
-func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]bakedBundle, progress Progress) (map[string]artifactRef, error) {
+func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, baked map[string]appBundle, progress Progress) (map[string]artifactRef, error) {
 	functions := manifest.GetFunctions()
 	refs := make(map[string]artifactRef, len(functions))
 	if len(functions) == 0 {

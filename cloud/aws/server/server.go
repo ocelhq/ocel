@@ -161,18 +161,20 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// before edge credentials existed still reaches the deploy — but a worker
 	// without them cannot sign, so every Lambda route 403s until bootstrap mints
 	// the key. The warning has to name that, not just interception.
-	edgeClass := bootstrap.ClassProduction
+	// The substrate's class token, which the edge credentials and the variable
+	// store are both partitioned by.
+	substrateClass := bootstrap.ClassProduction
 	if preview {
-		edgeClass = bootstrap.ClassPreview
+		substrateClass = bootstrap.ClassPreview
 	}
-	edgeCreds, err := bootstrap.ReadEdgeCredentials(ctx, ssmClient, edgeClass)
+	edgeCreds, err := bootstrap.ReadEdgeCredentials(ctx, ssmClient, substrateClass)
 	if err != nil {
 		logf("edge reader credentials unavailable: " + err.Error() +
 			" — the worker cannot sign its Function-URL forwards, so every route will 403; re-run `" + bootstrapCmd + "` to mint the edge key")
 		edgeCreds = bootstrap.EdgeCredentials{}
 	}
 
-	edgeValues := readEdgeValues(ctx, ssmClient, edgeClass, bootstrapCmd, logf)
+	edgeValues := readEdgeValues(ctx, ssmClient, substrateClass, bootstrapCmd, logf)
 
 	pulumiCmd, err := pulumirt.Ensure(ctx, func(m string) {
 		progress(deploymentsv1.Phase_PHASE_UPLOADING, m, 0, 0)
@@ -199,7 +201,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// The cache-store parameter is named here, not in the Lambda: resolving the
 	// substrate class is already this side's job, and the same name has to appear
 	// in the function's read grant anyway.
-	cacheStoreParam, err := bootstrap.CacheStoreParamFor(edgeClass)
+	cacheStoreParam, err := bootstrap.CacheStoreParamFor(substrateClass)
 	if err != nil {
 		return deploy.Result{}, err
 	}
@@ -209,7 +211,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// handler reads, and the handler resolves that from this same parameter. A
 	// failed read is therefore fatal rather than best-effort: guessing wrong
 	// costs no error, only every prerendered route silently rendering cold.
-	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, edgeClass)
+	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, substrateClass)
 	if err != nil {
 		return deploy.Result{}, err
 	}
@@ -220,11 +222,11 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// and owner token), keyed by class. A bootstrap predating the store reads the
 	// zero value, and the deploy then fails fast asking for a re-bootstrap
 	// (realize, deploy/production.go).
-	priorRootStackState, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetSlug())
+	priorRootStackState, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug())
 	if err != nil {
 		return deploy.Result{}, err
 	}
-	deploymentsStore, err := bootstrap.ReadDeploymentsStoreFor(ctx, ssmClient, edgeClass)
+	deploymentsStore, err := bootstrap.ReadDeploymentsStoreFor(ctx, ssmClient, substrateClass)
 	if err != nil {
 		return deploy.Result{}, err
 	}
@@ -240,7 +242,10 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		StateTable:    deployed.StateTable,
 		StateTableARN: stateTableARN,
 
-		VarsKeyARN: deployed.VarsKeyARN,
+		VarsKeyARN:   deployed.VarsKeyARN,
+		VarsTable:    deployed.VarsTable,
+		VarsTableARN: fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.VarsTable),
+		VarsClass:    substrateClass,
 
 		CacheStoreParam:    cacheStoreParam,
 		CacheStoreParamARN: cacheStoreParamARN,
@@ -278,7 +283,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// this deploy's own substrate (production or preview), and nil when
 	// reconcile itself never ran (an error before it).
 	if res.RootStackState != nil {
-		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, edgeClass, manifest.GetSlug(), res.RootStackState); writeErr != nil {
+		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), res.RootStackState); writeErr != nil {
 			if err != nil {
 				return res, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
 			}

@@ -86,7 +86,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	// Sealed before the artifacts are packaged: the ciphertext rides inside
 	// each function's deployment package, so it has to exist before anything
 	// is hashed or uploaded.
-	baked, err := renderBakedBundles(manifest)
+	baked, err := renderAppBundles(cfg, manifest)
 	if err != nil {
 		return Result{}, err
 	}
@@ -839,7 +839,7 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 // resource outputs, reduced to plain strings) into each function's env as a
 // concrete value rather than a cross-stack Pulumi reference — the two stacks
 // never share a Pulumi program. Opt-in-e2e only.
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked bakedBundle, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
 	name := app.GetName()
 	functions := appFunctions(manifest, name)
 
@@ -862,7 +862,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	}
 
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, appExecutionRole(cfg, name, caches))
+		role, err := newFunctionRole(pctx, appExecutionRole(cfg, name, caches, baked))
 		if err != nil {
 			return err
 		}

@@ -25,9 +25,9 @@ const (
 // wildcard resource, or the other class's key, would hand preview compute
 // production ciphertext.
 func TestVarsDecryptPolicy_GrantsOneKeyAndOneAction(t *testing.T) {
-	raw, err := varsDecryptPolicy(productionVarsKeyARN)
+	raw, err := varsReadPolicy(productionVarsKeyARN, "", "", "")
 	if err != nil {
-		t.Fatalf("varsDecryptPolicy: %v", err)
+		t.Fatalf("varsReadPolicy: %v", err)
 	}
 
 	var doc struct {
@@ -65,7 +65,7 @@ func TestVarsDecryptPolicy_GrantsOneKeyAndOneAction(t *testing.T) {
 func TestAppExecutionRole_CarriesTheSubstratesVarsKey(t *testing.T) {
 	caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/WEB1"}}
 
-	role := appExecutionRole(Config{VarsKeyARN: productionVarsKeyARN}, "web", caches)
+	role := appExecutionRole(Config{VarsKeyARN: productionVarsKeyARN}, "web", caches, appBundle{})
 	if role.VarsKeyARN != productionVarsKeyARN {
 		t.Errorf("VarsKeyARN = %q, want the substrate's own key", role.VarsKeyARN)
 	}
@@ -73,7 +73,7 @@ func TestAppExecutionRole_CarriesTheSubstratesVarsKey(t *testing.T) {
 		t.Errorf("Cache = %+v, want the app's own cache", role.Cache)
 	}
 
-	preview := appExecutionRole(Config{VarsKeyARN: previewVarsKeyARN}, "api", caches)
+	preview := appExecutionRole(Config{VarsKeyARN: previewVarsKeyARN}, "api", caches, appBundle{})
 	if preview.VarsKeyARN != previewVarsKeyARN {
 		t.Errorf("VarsKeyARN = %q, want the preview substrate's key", preview.VarsKeyARN)
 	}
@@ -215,9 +215,9 @@ func TestRenderBakedBundle_EnvelopeIsTheDataKeyAndTheValuesAreOnlyCiphertext(t *
 		},
 	}
 
-	bundle, err := renderBakedBundle(app)
+	bundle, err := renderAppBundle(liveConfig(), "shop", app)
 	if err != nil {
-		t.Fatalf("renderBakedBundle: %v", err)
+		t.Fatalf("renderAppBundle: %v", err)
 	}
 	if bytes.Contains(bundle.Ciphertext, []byte("sk-live")) {
 		t.Error("the bundle carries a sensitive value in the clear")
@@ -261,13 +261,13 @@ func TestRenderBakedBundle_EveryRenderGetsAFreshDataKey(t *testing.T) {
 		Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
 	}
 
-	first, err := renderBakedBundle(app)
+	first, err := renderAppBundle(liveConfig(), "shop", app)
 	if err != nil {
-		t.Fatalf("renderBakedBundle: %v", err)
+		t.Fatalf("renderAppBundle: %v", err)
 	}
-	second, err := renderBakedBundle(app)
+	second, err := renderAppBundle(liveConfig(), "shop", app)
 	if err != nil {
-		t.Fatalf("renderBakedBundle: %v", err)
+		t.Fatalf("renderAppBundle: %v", err)
 	}
 
 	if first.Envelope == second.Envelope {
@@ -295,9 +295,9 @@ func TestRenderBakedBundle_AnAppWithNoBakedValuesCostsNothing(t *testing.T) {
 		Variables: []*deploymentsv1.ManifestVariable{variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN)},
 	}
 
-	bundle, err := renderBakedBundle(app)
+	bundle, err := renderAppBundle(liveConfig(), "shop", app)
 	if err != nil {
-		t.Fatalf("renderBakedBundle: %v", err)
+		t.Fatalf("renderAppBundle: %v", err)
 	}
 	if len(bundle.Ciphertext) != 0 || len(bundle.env()) != 0 || len(bundle.overlay()) != 0 {
 		t.Errorf("bundle = %+v, want nothing at all", bundle)
@@ -314,7 +314,6 @@ func TestRenderBakedBundle_AClassWithNoDeliveryFailsTheDeploy(t *testing.T) {
 		name  string
 		class resourcesv1.VariableClass
 	}{
-		{"secret", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
 		{"unspecified", resourcesv1.VariableClass_VARIABLE_CLASS_UNSPECIFIED},
 		{"from a newer client", resourcesv1.VariableClass(99)},
 	}
@@ -329,9 +328,9 @@ func TestRenderBakedBundle_AClassWithNoDeliveryFailsTheDeploy(t *testing.T) {
 				},
 			}
 
-			_, err := renderBakedBundle(app)
+			_, err := renderAppBundle(liveConfig(), "shop", app)
 			if err == nil {
-				t.Fatal("renderBakedBundle = nil, want a class it cannot deliver refused")
+				t.Fatal("renderAppBundle = nil, want a class it cannot deliver refused")
 			}
 			for _, want := range []string{"web", "WEBHOOK_SECRET"} {
 				if !strings.Contains(err.Error(), want) {
@@ -362,9 +361,9 @@ func TestRenderBakedBundles_SealsEachAppUnderItsOwnKey(t *testing.T) {
 		},
 	}}
 
-	bundles, err := renderBakedBundles(manifest)
+	bundles, err := renderAppBundles(liveConfig(), manifest)
 	if err != nil {
-		t.Fatalf("renderBakedBundles: %v", err)
+		t.Fatalf("renderAppBundles: %v", err)
 	}
 	if len(bundles) != 2 {
 		t.Fatalf("bundles = %v, want one for each app that bakes a value", bundles)
@@ -399,7 +398,7 @@ func TestRenderBakedBundles_SealsEachAppUnderItsOwnKey(t *testing.T) {
 // writes the file where the membrane reads it. The two sides are held together
 // by one constant, so a bundle can never ship values the runtime cannot find.
 func TestBakedBundle_OverlaysTheCiphertextAtTheAgreedPath(t *testing.T) {
-	bundle := bakedBundle{Envelope: "e", Ciphertext: []byte("sealed")}
+	bundle := appBundle{Envelope: "e", Ciphertext: []byte("sealed")}
 
 	overlay := bundle.overlay()
 	if len(overlay) != 1 {
@@ -439,9 +438,9 @@ func TestBakedDelivery_CiphertextRidesInTheBundleAndNeverTheConfiguration(t *tes
 	}
 	manifest.Functions[0].ArtifactPath = filepath.Base(dir)
 
-	bundles, err := renderBakedBundles(manifest)
+	bundles, err := renderAppBundles(liveConfig(), manifest)
 	if err != nil {
-		t.Fatalf("renderBakedBundles: %v", err)
+		t.Fatalf("renderAppBundles: %v", err)
 	}
 	if _, err := uploadFunctionArtifacts(context.Background(), cfg, manifest, bundles, nil); err != nil {
 		t.Fatalf("uploadFunctionArtifacts: %v", err)

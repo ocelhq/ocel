@@ -8,7 +8,9 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ocelhq/ocel/cloud/aws/vars"
 	"github.com/ocelhq/ocel/cloud/aws/vars/baked"
+	"github.com/ocelhq/ocel/cloud/aws/vars/live"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -20,24 +22,45 @@ import (
 // AWS, where the message names no key.
 const functionEnvBudgetBytes = 4096
 
-// varsDecryptPolicy grants a function execution role decrypt on exactly one
-// key: the one its own env class's variable store encrypts under, named by ARN
-// rather than a wildcard so the class boundary holds. Decrypt is the only
-// action — values are encrypted provider-side, never by a runtime.
-func varsDecryptPolicy(keyARN string) (string, error) {
-	doc := map[string]any{
-		"Version": "2012-10-17",
-		"Statement": []any{
-			map[string]any{
-				"Effect":   "Allow",
-				"Action":   []string{"kms:Decrypt"},
-				"Resource": keyARN,
-			},
+// varsReadPolicy grants a function execution role what it needs to read its
+// own live-class values and nothing more.
+//
+// Decrypt is on exactly one key: the one its own env class's variable store
+// encrypts under, named by ARN rather than a wildcard so the class boundary
+// holds. Encrypt is never granted — values are encrypted provider-side, never
+// by a runtime.
+//
+// The table grant is added only for an app that actually declares a live value,
+// and only over that project's own partition. The table is account-global and
+// shared by every project in the class, so an unconditioned Query would let one
+// function enumerate every project's ciphertext; the condition is built from
+// vars.PartitionKey, the same function that builds the key it constrains, so
+// the grant and the addressing cannot drift apart. Query is the only action:
+// the runtime's read is one prefix query, and a point read it never emits is
+// one more thing a compromised function could do.
+func varsReadPolicy(keyARN, tableARN, slug, class string) (string, error) {
+	statements := []any{
+		map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"kms:Decrypt"},
+			"Resource": keyARN,
 		},
 	}
-	out, err := json.Marshal(doc)
+	if tableARN != "" {
+		statements = append(statements, map[string]any{
+			"Effect":   "Allow",
+			"Action":   []string{"dynamodb:Query"},
+			"Resource": tableARN,
+			"Condition": map[string]any{
+				"ForAllValues:StringEquals": map[string]any{
+					"dynamodb:LeadingKeys": []string{vars.PartitionKey(slug, class)},
+				},
+			},
+		})
+	}
+	out, err := json.Marshal(map[string]any{"Version": "2012-10-17", "Statement": statements})
 	if err != nil {
-		return "", fmt.Errorf("render vars decrypt policy: %w", err)
+		return "", fmt.Errorf("render vars read policy: %w", err)
 	}
 	return string(out), nil
 }
@@ -55,7 +78,7 @@ const appFolderEnv = "OCEL_APP_FOLDER"
 // property that distinguishes that class. Every other class is delivered off
 // the function's configuration entirely, so a value meant to be encrypted is
 // never legible in a configuration listing. Any class this deploy cannot
-// deliver has already failed the deploy in renderBakedBundle, so the filter
+// deliver has already failed the deploy in renderAppBundle, so the filter
 // here can never be the thing that drops a value. The app's folder binding
 // rides along because it is what decided every one of those resolutions.
 func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
@@ -72,20 +95,29 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 	return env
 }
 
-// bakedBundle is one app's encrypted-baked values, split across the two places
-// they are delivered: the ciphertext rides inside every one of the app's
-// function packages, and the data key it was sealed under is the single entry
-// they contribute to function configuration. The zero bundle is an app that
-// declared none.
-type bakedBundle struct {
+// appBundle is what one app's variables add to its function packages and
+// configuration, across the places each class is delivered to.
+//
+// The encrypted-baked half is two of them: the ciphertext rides inside every
+// one of the app's function packages, and the data key it was sealed under is
+// the single entry they contribute to function configuration.
+//
+// Live is the third, and the one that carries no value at all: the addresses of
+// the app's live-class keys, which the membrane fetches through at runtime. It
+// rides in the package rather than the configuration so a handful of
+// coordinates does not compete for the environment budget.
+//
+// The zero bundle is an app that declared neither.
+type appBundle struct {
 	Envelope   string
 	Ciphertext []byte
+	Live       []byte
 }
 
 // env is the bundle's contribution to function configuration. It is accounted
 // against the environment budget like anything else, and it is one entry
 // however many values the app bakes.
-func (b bakedBundle) env() map[string]string {
+func (b appBundle) env() map[string]string {
 	if b.Envelope == "" {
 		return nil
 	}
@@ -95,31 +127,42 @@ func (b bakedBundle) env() map[string]string {
 // overlay is the file the bundle adds to each of the app's function packages.
 // It is folded into the package's content hash, so rotating a value lands as a
 // new artifact rather than silently reusing the one holding the old ciphertext.
-func (b bakedBundle) overlay() map[string][]byte {
-	if len(b.Ciphertext) == 0 {
+func (b appBundle) overlay() map[string][]byte {
+	files := map[string][]byte{}
+	if len(b.Ciphertext) > 0 {
+		files[baked.FilePath] = b.Ciphertext
+	}
+	if len(b.Live) > 0 {
+		files[live.FilePath] = b.Live
+	}
+	if len(files) == 0 {
 		return nil
 	}
-	return map[string][]byte{baked.FilePath: b.Ciphertext}
+	return files
 }
 
-// renderBakedBundles seals every app's encrypted-baked values, keyed by app
+// hasLive reports whether the app reads the variable store at runtime, which is
+// what decides whether its role is granted the table at all.
+func (b appBundle) hasLive() bool { return len(b.Live) > 0 }
+
+// renderAppBundles seals every app's encrypted-baked values, keyed by app
 // name, and is where a variable whose class this deploy path cannot deliver
 // stops the deploy — before anything is packaged or provisioned.
-func renderBakedBundles(manifest *deploymentsv1.Manifest) (map[string]bakedBundle, error) {
-	bundles := make(map[string]bakedBundle, len(manifest.GetApps()))
+func renderAppBundles(cfg Config, manifest *deploymentsv1.Manifest) (map[string]appBundle, error) {
+	bundles := make(map[string]appBundle, len(manifest.GetApps()))
 	for _, app := range manifest.GetApps() {
-		bundle, err := renderBakedBundle(app)
+		bundle, err := renderAppBundle(cfg, manifest.GetSlug(), app)
 		if err != nil {
 			return nil, err
 		}
-		if bundle.Envelope != "" {
+		if bundle.Envelope != "" || bundle.hasLive() {
 			bundles[app.GetName()] = bundle
 		}
 	}
 	return bundles, nil
 }
 
-// renderBakedBundle seals an app's encrypted-baked values under a data key
+// renderAppBundle seals an app's encrypted-baked values under a data key
 // drawn fresh for this render, which is what keeps one deployment's artifact
 // unopenable by another's configuration and makes every rotation a distinct
 // artifact. The key travels in the function's configuration rather than under
@@ -129,32 +172,48 @@ func renderBakedBundles(manifest *deploymentsv1.Manifest) (map[string]bakedBundl
 // A class this path has no delivery for fails here rather than being skipped,
 // because a skipped variable is a deploy that reports success and an
 // application whose value is simply absent.
-func renderBakedBundle(app *deploymentsv1.ManifestApp) (bakedBundle, error) {
+func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (appBundle, error) {
 	values := make(map[string]string)
+	var keys []live.Key
 	for _, v := range app.GetVariables() {
 		switch v.GetClass() {
 		case resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN:
 		case resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE:
 			values[v.GetKey()] = v.GetValue()
+		case resourcesv1.VariableClass_VARIABLE_CLASS_SECRET:
+			keys = append(keys, live.Key{Key: v.GetKey(), Folder: v.GetFolder()})
 		default:
-			return bakedBundle{}, fmt.Errorf("%s declares %s with class %s, which this deploy cannot deliver to a function yet; declare it as `plain` or `sensitive`", app.GetName(), v.GetKey(), v.GetClass())
+			return appBundle{}, fmt.Errorf("%s declares %s with class %s, which this deploy cannot deliver to a function yet; declare it as `plain` or `sensitive`", app.GetName(), v.GetKey(), v.GetClass())
 		}
 	}
+
+	manifest, err := live.Render(live.Manifest{
+		Slug:   slug,
+		Table:  cfg.VarsTable,
+		KeyARN: cfg.VarsKeyARN,
+		Class:  cfg.VarsClass,
+		Keys:   keys,
+	})
+	if err != nil {
+		return appBundle{}, fmt.Errorf("pin %s's live values: %w", app.GetName(), err)
+	}
+
 	if len(values) == 0 {
-		return bakedBundle{}, nil
+		return appBundle{Live: manifest}, nil
 	}
 
 	key := make([]byte, baked.KeyBytes)
 	if _, err := rand.Read(key); err != nil {
-		return bakedBundle{}, fmt.Errorf("generate a data key for %s's encrypted variables: %w", app.GetName(), err)
+		return appBundle{}, fmt.Errorf("generate a data key for %s's encrypted variables: %w", app.GetName(), err)
 	}
 	ciphertext, err := baked.Seal(key, values)
 	if err != nil {
-		return bakedBundle{}, fmt.Errorf("seal %s's encrypted variables: %w", app.GetName(), err)
+		return appBundle{}, fmt.Errorf("seal %s's encrypted variables: %w", app.GetName(), err)
 	}
-	return bakedBundle{
+	return appBundle{
 		Envelope:   base64.StdEncoding.EncodeToString(key),
 		Ciphertext: ciphertext,
+		Live:       manifest,
 	}, nil
 }
 

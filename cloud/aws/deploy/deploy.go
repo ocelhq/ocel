@@ -86,6 +86,18 @@ type Config struct {
 	// resolved from this substrate's bootstrap rather than derived, so a deploy
 	// can only ever grant its own class's key.
 	VarsKeyARN string
+	// VarsTable and VarsTableARN name the account-global table variable values
+	// live in, and its ARN. They reach a function two ways, for two readers: the
+	// name is pinned into the live-value manifest a function packages, because
+	// resolving it in the sandbox would mean linking a CloudFormation client
+	// into every cold start; the ARN scopes that function's read grant. Both
+	// come from this substrate's bootstrap, never derived.
+	VarsTable    string
+	VarsTableARN string
+	// VarsClass is the environment class the store partitions by. It is the
+	// store's own class token, not the deploy's environment segment: a preview
+	// deploy of any environment reads the preview class's partition.
+	VarsClass string
 
 	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
 	// deploys. Packaging it (building + zipping the handler binary) rides the

@@ -348,24 +348,41 @@ func collectFunctionOutput(logicalName, url string) *deploymentsv1.ResourceOutpu
 }
 
 // executionRole is one app's Lambda execution role: the app it belongs to, the
-// ISR cache it grants (nil when the app keeps none), and the class key its
-// functions decrypt variable values under.
+// ISR cache it grants (nil when the app keeps none), the class key its
+// functions decrypt variable values under, and — only for an app that declares
+// a live-class value — the variable table it may read, with the partition it is
+// confined to.
 type executionRole struct {
 	App        string
 	Cache      *isrConfig
 	VarsKeyARN string
+
+	// VarsTableARN is empty for an app that reads no live value, which is how
+	// the store's blast radius stays the set of functions that depend on it.
+	// Slug and VarsClass name the one partition the grant is conditioned on.
+	VarsTableARN string
+	Slug         string
+	VarsClass    string
 }
 
 // appExecutionRole is the role one app needs: its own cache and no other's,
-// plus the substrate's variable key off the deploy's config rather than
-// derived per app.
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig) executionRole {
-	return executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
+// plus the substrate's variable key off the deploy's config rather than derived
+// per app. The table is added only when the app's own bundle pins live
+// addresses, so a declaration is what earns the grant.
+func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bundle appBundle) executionRole {
+	role := executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
+	if bundle.hasLive() {
+		role.VarsTableARN = cfg.VarsTableARN
+		role.Slug = cfg.Slug
+		role.VarsClass = cfg.VarsClass
+	}
+	return role
 }
 
 // newFunctionRole creates the IAM role every Lambda belonging to one app
 // assumes: the CloudWatch Logs grant every function needs, decrypt on the
-// substrate's class key, and the app's own ISR cache grant when it has one.
+// substrate's class key, the app's own ISR cache grant when it has one, and the
+// variable table when the app declares a live-class value.
 func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 	name := "ocel-fn-" + safeName(r.App)
 	role, err := newServiceRole(ctx, name, "lambda.amazonaws.com", nil)
@@ -390,7 +407,7 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 			return nil, err
 		}
 	}
-	varsPolicy, err := varsDecryptPolicy(r.VarsKeyARN)
+	varsPolicy, err := varsReadPolicy(r.VarsKeyARN, r.VarsTableARN, r.Slug, r.VarsClass)
 	if err != nil {
 		return nil, err
 	}
