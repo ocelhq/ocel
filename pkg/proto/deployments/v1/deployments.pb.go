@@ -582,7 +582,15 @@ type ManifestVariable struct {
 	Class v1.VariableClass       `protobuf:"varint,2,opt,name=class,proto3,enum=resources.v1.VariableClass" json:"class,omitempty"`
 	// value is the resolved plaintext. A live-class variable never carries one:
 	// it is fetched at runtime, so its plaintext never reaches a build host.
-	Value         string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	Value string `protobuf:"bytes,3,opt,name=value,proto3" json:"value,omitempty"`
+	// folder is the folder this key resolved from, which is not the app's
+	// binding: a scoped key resolves at the binding, an unscoped one at the
+	// project root, so the two differ for the same app. It completes the store
+	// coordinate a live-class value is fetched by at runtime, and pinning it at
+	// deploy is what keeps the runtime from ever having to resolve a folder
+	// itself. Empty is the project root — the same single spelling used
+	// everywhere above the store.
+	Folder        string `protobuf:"bytes,4,opt,name=folder,proto3" json:"folder,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -634,6 +642,13 @@ func (x *ManifestVariable) GetClass() v1.VariableClass {
 func (x *ManifestVariable) GetValue() string {
 	if x != nil {
 		return x.Value
+	}
+	return ""
+}
+
+func (x *ManifestVariable) GetFolder() string {
+	if x != nil {
+		return x.Folder
 	}
 	return ""
 }
@@ -2975,11 +2990,12 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x06folder\x18\x05 \x01(\tR\x06folder\x1aV\n" +
 	"\fDomainsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.deployments.v1.DomainListR\x05value:\x028\x01\"m\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.deployments.v1.DomainListR\x05value:\x028\x01\"\x85\x01\n" +
 	"\x10ManifestVariable\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1b.resources.v1.VariableClassR\x05class\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value\"\xd9\x01\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\x12\x16\n" +
+	"\x06folder\x18\x04 \x01(\tR\x06folder\"\xd9\x01\n" +
 	"\x10ManifestFunction\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12\x18\n" +
 	"\aruntime\x18\x02 \x01(\tR\aruntime\x12\x18\n" +

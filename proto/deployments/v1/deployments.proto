@@ -248,6 +248,15 @@ message ManifestVariable {
   // value is the resolved plaintext. A live-class variable never carries one:
   // it is fetched at runtime, so its plaintext never reaches a build host.
   string value = 3;
+
+  // folder is the folder this key resolved from, which is not the app's
+  // binding: a scoped key resolves at the binding, an unscoped one at the
+  // project root, so the two differ for the same app. It completes the store
+  // coordinate a live-class value is fetched by at runtime, and pinning it at
+  // deploy is what keeps the runtime from ever having to resolve a folder
+  // itself. Empty is the project root — the same single spelling used
+  // everywhere above the store.
+  string folder = 4;
 }
 
 // ManifestFunction is a deployable function unit. Being listed in
