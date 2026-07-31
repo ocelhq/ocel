@@ -159,7 +159,9 @@ export {};
 	envDumpPath := filepath.Join(root, "env.out")
 	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
 
-	var stdout, stderr bytes.Buffer
+	// The leader's watcher re-resolves on its own goroutine, writing to these
+	// while the test reads them, so a plain bytes.Buffer won't do.
+	var stdout, stderr syncBuffer
 	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 	var exitErr *ExitError
@@ -231,7 +233,7 @@ export {};
 	defer cancelLeader()
 
 	leaderDone := make(chan error, 1)
-	var leaderStdout, leaderStderr bytes.Buffer
+	var leaderStdout, leaderStderr syncBuffer
 	go func() {
 		// A bare "sleep" (not "sh -c sleep 10") so ctx cancellation's
 		// Process.Kill() actually stops it directly, rather than killing a
@@ -326,7 +328,9 @@ func TestRunDev_SecondRootLinkedToSameProject_ElectsItsOwnLeader(t *testing.T) {
 	envDumpPath := filepath.Join(secondClone, "env.out")
 	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 9"}
 
-	var stdout, stderr bytes.Buffer
+	// The second clone is a leader too, so its watcher goroutine writes here
+	// concurrently with the test's own reads.
+	var stdout, stderr syncBuffer
 	err := runDev(context.Background(), nil, secondClone, appCmd, &stdout, &stderr, strings.NewReader(""))
 
 	var exitErr *ExitError
