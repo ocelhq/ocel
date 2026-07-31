@@ -144,12 +144,13 @@ func builderEnv(adapterPath, folder string, vars map[string]string) []string {
 	return append(env, adapterPathEnv+"="+adapterPath, appFolderEnv+"="+folder)
 }
 
-// appFolder is the binding the build runs under. One builder process serves
-// every app, so it can only state a folder every app agrees on; where two apps
-// bind different ones it states the project root, which leaves an out-of-scope
-// read the named error it already is rather than handing one app the other's
-// scoped values.
-func appFolder(apps []projectconfig.App) string {
+// AppFolder is the binding a single process serving every app runs under. It
+// can only state a folder every app agrees on; where two apps bind different
+// ones it states the project root, which leaves an out-of-scope read the named
+// error it already is rather than handing one app the other's scoped values.
+// `ocel dev` spawns one child for the whole project and answers the same way,
+// so the two paths report the binding identically.
+func AppFolder(apps []projectconfig.App) string {
 	if len(apps) == 0 {
 		return ""
 	}
@@ -204,7 +205,7 @@ func Build(ctx context.Context, cfg *projectconfig.Config, env map[string]string
 	if err != nil {
 		return fmt.Errorf("marshal build request: %w", err)
 	}
-	return builderExec(ctx, builderPath, builderEnv(platform.AdapterPath(cfg.Dir), appFolder(cfg.Apps), env), payload, stderr)
+	return builderExec(ctx, builderPath, builderEnv(platform.AdapterPath(cfg.Dir), AppFolder(cfg.Apps), env), payload, stderr)
 }
 
 // CollectFunctions returns the functions in a project's build output,
