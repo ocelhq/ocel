@@ -496,6 +496,11 @@ function stableStringify(value: unknown): string {
 // where it is not available" invariant on evaluation. renderLauncher hands the
 // Lambda the same global for the same reason.
 //
+// The running entry key travels the same way, and for the same reason: a
+// variable is read as a plain property, so `ocel/env`'s edge build has nowhere
+// to be handed the entry whose read it is about to refuse. It is set before the
+// chunks evaluate because a module-scope read is still a read.
+//
 // The cache binding travels the same way rather than through process.env, whose
 // edge reads are build-time string literals a binding could not survive. It is
 // read from the load-time env — the main worker's own ctx.exports loopback,
@@ -514,6 +519,7 @@ export default {
     Object.assign(globalThis.process.env, env)
     globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }
     const k = ctx.props.entryKey
+    globalThis.__OCEL_EDGE_ENTRY = k
     const e = ENTRIES[k]
     if (!e) return new Response(\`unknown edge entry \${k}\`, { status: 500 })
     for (const id of e.chunks) await import("./" + id)
@@ -527,6 +533,39 @@ export default {
   },
 }
 `;
+}
+
+// EDGE_ENV_MARKER is the name `ocel/env`'s edge build gives the error it throws
+// on a read. It is the load-bearing string of that module rather than a marker
+// planted for this scan, so it survives the bundler for the same reason the
+// error does — and if the module is tree-shaken out entirely, the read it would
+// have refused does not exist either.
+const EDGE_ENV_MARKER = "EnvEdgeError";
+
+// warnEdgeEnvRoutes reports the edge entries that carry `ocel/env`. No variable
+// class is deliverable to the edge tier, so a read from one of these throws at
+// request time; this is what says so at build time instead, naming the route.
+//
+// It is a warning and not a build failure on purpose: a chunk shows that the
+// module was *imported*, never that a variable was read. An edge route
+// importing a barrel that re-exports `env` without touching it is legitimate,
+// and failing it would be wrong.
+function warnEdgeEnvRoutes(
+  chunkKeysByPathname: Map<string, string[]>,
+  chunkIdByKey: Map<string, string>,
+  chunks: Record<string, string>,
+): void {
+  const pathnames = [...chunkKeysByPathname]
+    .filter(([, keys]) =>
+      keys.some((key) => chunks[chunkIdByKey.get(key)!]?.includes(EDGE_ENV_MARKER)),
+    )
+    .map(([pathname]) => pathname)
+    .sort();
+  if (pathnames.length === 0) return;
+
+  console.warn(
+    `ocel: ocel/env is imported by edge entr${pathnames.length === 1 ? "y" : "ies"} ${pathnames.join(", ")} — no variable class is deliverable to the edge runtime, so reading one there throws on the first request. Move the entry to the nodejs runtime.`,
+  );
 }
 
 // moduleIds reads every source file and gives each distinct content one opaque
@@ -575,6 +614,7 @@ async function emitEdgeBundle(
   const env: Record<string, string> = {};
   const entryAssets = new Map<string, Set<string>>();
   const handlerExports = new Map<string, string>();
+  const chunkKeysByPathname = new Map<string, string[]>();
 
   for (const source of sources) {
     const { entryKey, handlerExport } = edgeEntryOf(source);
@@ -582,11 +622,20 @@ async function emitEdgeBundle(
 
     const assets = entryAssets.get(entryKey) ?? new Set<string>();
     entryAssets.set(entryKey, assets);
+    const ownChunkKeys: string[] = [];
     for (const [key, abs] of Object.entries(source.assets)) {
       if (!isChunk(key)) continue;
       chunkPathByKey.set(key, abs);
       assets.add(key);
+      ownChunkKeys.push(key);
     }
+    // Two sources can share a pathname (a route and its middleware), and the
+    // scan is about the pathname, so their chunks accumulate rather than
+    // replace: whichever came first would otherwise stop being looked at.
+    chunkKeysByPathname.set(source.pathname, [
+      ...(chunkKeysByPathname.get(source.pathname) ?? []),
+      ...ownChunkKeys,
+    ]);
 
     // Wasm modules are declared globally in the bundle, not per entry: workerd
     // compiles a declared-but-unimported module lazily, so an entry that needs
@@ -616,6 +665,8 @@ async function emitEdgeBundle(
     (n) => `w/${n}.wasm`,
     (bytes) => bytes.toString("base64"),
   );
+
+  warnEdgeEnvRoutes(chunkKeysByPathname, chunkIdByKey, chunks);
 
   // Chunk order is load order, never sorted: a Turbopack chunk evaluates its
   // modules as it registers, so one that runs before the chunk defining a module

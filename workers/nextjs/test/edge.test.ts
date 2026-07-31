@@ -29,9 +29,15 @@ interface EdgeEntry {
   handlerExport: string;
 }
 
-// The shim the adapter emits into every bundle, verbatim: entry table inlined,
+// The shim the adapter emits into every bundle: entry table inlined,
 // process.env populated before the first chunk import, entry key read off
-// ctx.props.
+// ctx.props and published on __OCEL_EDGE_ENTRY before anything evaluates.
+//
+// It is a hand-kept copy of renderEdgeShim (packages/next-runtime's
+// next-adapter.mts), not a golden — workers/nextjs is a workerd-pool package
+// and does not depend on next-runtime, whose own tests pin the original. Keep
+// the two in step by hand; what this file buys that those cannot is running the
+// shim in a real isolate.
 function shimFor(entries: Record<string, EdgeEntry>): string {
   return `import { AsyncLocalStorage } from "node:async_hooks"
 
@@ -44,6 +50,7 @@ export default {
     Object.assign(globalThis.process.env, env)
     globalThis.__OCEL_EDGE_CACHE = { rpc: env.OCEL_CACHE_RPC, scope: env.OCEL_CACHE_SCOPE }
     const k = ctx.props.entryKey
+    globalThis.__OCEL_EDGE_ENTRY = k
     const e = ENTRIES[k]
     if (!e) return new Response(\`unknown edge entry \${k}\`, { status: 500 })
     for (const id of e.chunks) await import("./" + id)
@@ -638,6 +645,43 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("scoped");
+  });
+
+  // `ocel/env`'s edge build names the entry it refused a read from by reading
+  // this global, and it does so from module scope as readily as from a handler,
+  // so the shim has to publish it before the first chunk import rather than
+  // before the handler call. next-runtime pins that as a string; this pins it in
+  // a real isolate, which is the only place the ordering can actually be wrong.
+  it("publishes the entry key on a global before an entry's chunks evaluate", async () => {
+    const edge = invokerFor(
+      { "middleware_app/edge": "" },
+      (entryKey) => `const seenAtModuleScope = globalThis.__OCEL_EDGE_ENTRY
+globalThis._ENTRIES ??= {}
+globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
+  handler: async () => new Response(String(seenAtModuleScope)),
+}
+`,
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
+      new Request("https://app.example/edge"),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/edge"],
+          routes: emptyRoutes,
+          dispatch: {
+            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+          },
+        },
+        edge,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("middleware_app/edge");
   });
 
   it("returns 500 when the bundle cannot be read", async () => {

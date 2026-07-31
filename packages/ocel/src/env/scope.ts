@@ -74,7 +74,10 @@ export function callSite(): string {
     const file = /\(?((?:\/|file:|[A-Za-z]:\\)[^()]+?):\d+:\d+\)?$/.exec(
       line.trim(),
     )?.[1];
-    if (file && !/[/\\]env[/\\](index|scope|declare|definition)\./.test(file)) {
+    if (
+      file &&
+      !/[/\\]env[/\\](index|edge|scope|declare|definition|errors)\./.test(file)
+    ) {
       return file.replace(/^file:\/\//, "");
     }
   }

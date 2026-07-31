@@ -9,6 +9,7 @@ import {
   type Definitions,
   type VariableDefinition,
 } from "./definition.js";
+import { EnvValueError } from "./errors.js";
 import { liveGeneration, NO_GENERATION, readLive } from "./live.js";
 import { assertInScope, callSite, inScope } from "./scope.js";
 
@@ -18,14 +19,8 @@ export {
   type VariableClass,
   type VariableDefinition,
 } from "./definition.js";
+export { EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
-
-// EnvValueError is a variable that cannot be read: nothing set it, or what is
-// set does not satisfy its schema. It names the key and the command that
-// fixes it, because that is the whole remedy.
-export class EnvValueError extends Error {
-  override name = "EnvValueError";
-}
 
 export type Env<TDefinitions extends Definitions> = {
   readonly [K in keyof TDefinitions]: TDefinitions[K]["schema"] extends StandardSchemaV1

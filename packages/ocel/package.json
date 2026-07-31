@@ -18,6 +18,9 @@
     },
     "./env": {
       "types": "./dist/env/index.d.ts",
+      "edge-light": "./dist/env/edge.js",
+      "workerd": "./dist/env/edge.js",
+      "worker": "./dist/env/edge.js",
       "import": "./dist/env/index.js"
     },
     "./postgres": {

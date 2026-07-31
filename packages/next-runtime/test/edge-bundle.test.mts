@@ -599,3 +599,78 @@ test("prints the bundle size, chunk count and entry count", async () => {
     expect.stringMatching(/^ocel: edge bundle \d+\.\d MB, 5 chunks, 3 entries$/),
   );
 });
+
+// A variable read from an edge entry throws at request time, because no
+// variable class is deliverable to the edge tier. The build cannot see the
+// read — only the import — so it warns rather than failing: an edge route that
+// imports a barrel re-exporting `env` without ever reading one is legitimate.
+test("warns naming every edge route whose chunks carry ocel/env's edge build", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  await writeFile(
+    join(projectDir, ".next/server/edge/chunks/route.js"),
+    'class EnvEdgeError extends Error { name = "EnvEdgeError" }',
+  );
+
+  await adapter.onBuildComplete!(args as never);
+
+  const call = warn.mock.calls
+    .map(([message]) => String(message))
+    .find((message) => message.includes("ocel/env"));
+  expect(call).toBeDefined();
+  expect(call).toContain("/api/edge");
+  expect(call).not.toContain("/edge-page");
+  expect(call).toContain("nodejs");
+});
+
+test("stays silent when no edge chunk carries ocel/env", async () => {
+  const { args } = await synthEdgeProject();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+  await adapter.onBuildComplete!(args as never);
+
+  for (const [message] of warn.mock.calls) {
+    expect(String(message)).not.toContain("ocel/env");
+  }
+});
+
+// The SDK's edge build names the entry a failing read happened in, and a
+// variable is read as a plain property with nowhere to be handed one — so the
+// shim records it, before the entry's chunks evaluate.
+test("hands the running entry key to the chunks on a global, before they evaluate", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const { shim } = await readBundle(projectDir);
+  expect(shim).toContain("globalThis.__OCEL_EDGE_ENTRY = k");
+  expect(shim.indexOf("__OCEL_EDGE_ENTRY")).toBeLessThan(
+    shim.indexOf("await import"),
+  );
+});
+
+// Ocel writes no variable value into the bundle's env: every class is
+// delivered to a Lambda. What the bundle carries is exactly the union of the
+// edge outputs' own config.env, which is Next's. (A user who copies a value
+// into next.config.env themselves still lands one there — the build
+// environment carries the resolved plaintexts deliberately — so the claim is
+// about what Ocel writes, not about what the object can ever hold.)
+test("writes no value of its own into the edge bundle's env", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+  vi.stubEnv("OCEL_VAR_BAKED", "ciphertext-opened");
+  vi.stubEnv("STRIPE_KEY", "sk-live-plaintext");
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  const declared = new Set(
+    [
+      ...args.outputs.appPages,
+      ...args.outputs.appRoutes,
+      args.outputs.middleware,
+    ].flatMap((o: any) => Object.keys(o?.config?.env ?? {})),
+  );
+  expect(Object.keys(bundle.env).every((k) => declared.has(k))).toBe(true);
+  expect(JSON.stringify(bundle)).not.toContain("sk-live-plaintext");
+  expect(JSON.stringify(bundle)).not.toContain("ciphertext-opened");
+});
