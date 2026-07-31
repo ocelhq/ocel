@@ -560,3 +560,133 @@ describe("reading a key outside the app's scope", () => {
     expect(env.SCOPE_READ_ANY).toBe("fine");
   });
 });
+
+// The app's folder binding is the one folder-shaped thing the runtime is told,
+// and it is admitted on exactly one condition: it carries no value-selection
+// power. It may decide whether a scoped read fails, and it may decide nothing
+// else — which value a successful read returns, and which environment name
+// that value came from, are the same at every binding. These tests pin that
+// condition rather than the wording of the error, so a read that ever chose a
+// value by folder fails here even if every message still reads correctly.
+//
+// What they pin is observational, and bounded by what plant seeds: no
+// folder-derived lookup name, and no hit on a folder-keyed cell under the
+// spellings the store could use. A read that instead decoded a folder out of a
+// structured payload inside one variable would consult identical names at
+// every binding and is invisible here. No test at this layer can refute an
+// encoding it did not plant; the guarantee that closes that gap is that
+// delivery resolves values before the runtime sees them at all.
+describe("the app folder binding selects no value", () => {
+  const RESOLVED = "the one resolved value";
+
+  beforeEach(() => {
+    vi.stubEnv("OCEL_PHASE", "");
+  });
+
+  // plant puts the resolved value where delivery puts it, and puts a different
+  // value under every name a folder-aware read could address a cell by: the
+  // store spells a scoped cell '<folder>#<key>', so those are the names such a
+  // read would reach for. Without them a folder-selecting read would return
+  // the same string by accident and prove nothing.
+  function plant(key: string, folders: readonly string[]) {
+    vi.stubEnv(`OCEL_VAR_${key}`, RESOLVED);
+    vi.stubEnv(key, RESOLVED);
+    for (const folder of folders) {
+      const chosen = `a value chosen for ${folder}`;
+      vi.stubEnv(`OCEL_VAR_${folder}#${key}`, chosen);
+      vi.stubEnv(`${folder}#${key}`, chosen);
+      vi.stubEnv(`${key}#${folder}`, chosen);
+    }
+  }
+
+  // observe reports what a read returned or threw, and every environment name
+  // it consulted. The names matter on their own: a read that addressed a cell
+  // by folder consults a different name under a different binding even when
+  // the two cells happen to hold the same string.
+  function observe(read: () => unknown) {
+    const real = process.env;
+    const consulted: string[] = [];
+    const spy = new Proxy(real, {
+      get(target, property) {
+        if (typeof property === "string") consulted.push(property);
+        return Reflect.get(target, property);
+      },
+    });
+
+    const install = (value: NodeJS.ProcessEnv) =>
+      Object.defineProperty(process, "env", {
+        configurable: true,
+        writable: true,
+        value,
+      });
+
+    install(spy);
+    try {
+      return { outcome: `value:${String(read())}`, consulted };
+    } catch (error) {
+      return { outcome: (error as Error).name, consulted };
+    } finally {
+      install(real);
+    }
+  }
+
+  it("yields one value, from one environment name, at every binding its scope permits", () => {
+    plant("SELECT_IN_SCOPE", ["/web", "/admin"]);
+
+    const observations = ["/web", "/admin"].map((binding) => {
+      vi.stubEnv("OCEL_APP_FOLDER", binding);
+      const env = defineEnv({
+        SELECT_IN_SCOPE: { class: "plain", folders: ["/web", "/admin"] },
+      });
+      return observe(() => env.SELECT_IN_SCOPE);
+    });
+
+    for (const { outcome, consulted } of observations) {
+      expect(outcome).toBe(`value:${RESOLVED}`);
+      expect(consulted).toEqual(observations[0]!.consulted);
+      expect(consulted.filter((name) => /\/(web|admin)/.test(name))).toEqual([]);
+    }
+  });
+
+  it("can only turn a read into a scope error, never into a different value", () => {
+    plant("SELECT_PARTITION", ["/web", "/admin"]);
+
+    const outcomeAt = (binding: string) => {
+      vi.stubEnv("OCEL_APP_FOLDER", binding);
+      const env = defineEnv({
+        SELECT_PARTITION: { class: "plain", folders: ["/web", "/admin"] },
+      });
+      return observe(() => env.SELECT_PARTITION).outcome;
+    };
+
+    // Which binding lands on which side is the claim, so this pins the mapping
+    // rather than the set of outcomes a set would let any one binding flip
+    // silently. '/web/nested' carries the nesting invariant: a match that grew
+    // nesting-aware would hand it a value that deploy-time resolution, which
+    // matches a binding whole, never delivers — turning a build-time scope
+    // error into a runtime missing value.
+    const bindings = ["/web", "/admin", "", "/marketing", "/web/nested", "/WEB"];
+    expect(Object.fromEntries(bindings.map((b) => [b, outcomeAt(b)]))).toEqual({
+      "/web": `value:${RESOLVED}`,
+      "/admin": `value:${RESOLVED}`,
+      "": "EnvScopeError",
+      "/marketing": "EnvScopeError",
+      "/web/nested": "EnvScopeError",
+      "/WEB": "EnvScopeError",
+    });
+  });
+
+  it("changes nothing at all for a key no scope names", () => {
+    plant("SELECT_UNSCOPED", ["/web", "/admin"]);
+
+    const outcomes = new Set(
+      ["", "/web", "/admin", "/marketing"].map((binding) => {
+        vi.stubEnv("OCEL_APP_FOLDER", binding);
+        const env = defineEnv({ SELECT_UNSCOPED: { class: "plain" } });
+        return observe(() => env.SELECT_UNSCOPED).outcome;
+      }),
+    );
+
+    expect([...outcomes]).toEqual([`value:${RESOLVED}`]);
+  });
+});
