@@ -448,7 +448,7 @@ function renderInspector(current: State): HTMLElement {
       element(
         "p",
         "empty",
-        `${names(overrides)} ${overrides.length === 1 ? "holds its own value" : "hold their own values"} for ${row.key}. Save and Remove here address the class-wide value only; reach ${overrides.length === 1 ? "that one" : "those"} with ocel env set --environment.`,
+        `${names(overrides)} ${overrides.length === 1 ? "holds its own value" : "hold their own values"} for ${row.key}, written while overrides were still writable. Save and Remove here address the class-wide value only; no command reaches ${overrides.length === 1 ? "that one" : "those"} today.`,
       ),
     );
   }

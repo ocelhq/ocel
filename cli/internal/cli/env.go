@@ -20,14 +20,13 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// envOptions are the flags every `ocel env` subcommand shares. folder and
-// environment address the cell; preview selects the substrate; reveal is the
-// deliberate act that prints a value.
+// envOptions are the flags every `ocel env` subcommand shares. folder
+// addresses the cell; preview selects the substrate; reveal is the deliberate
+// act that prints a value.
 type envOptions struct {
-	preview     bool
-	folder      string
-	environment string
-	reveal      bool
+	preview bool
+	folder  string
+	reveal  bool
 }
 
 var envOpts envOptions
@@ -103,11 +102,11 @@ func init() {
 	}
 	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd} {
 		c.Flags().StringVar(&envOpts.folder, "folder", "", "Address the value in this folder (e.g. /checkout) instead of the project root")
-		c.Flags().StringVar(&envOpts.environment, "environment", "", "Address the override for one named preview environment instead of the class-wide value")
 	}
-	for _, c := range []*cobra.Command{envGetCmd, envHistoryCmd} {
-		c.Flags().BoolVar(&envOpts.reveal, "reveal", false, "Print the value itself; without it only metadata is shown")
-	}
+	// Reveal is `get`'s alone. History is metadata only: one keystroke that
+	// printed every retained version would keep a rotated-away secret readable
+	// for the whole window.
+	envGetCmd.Flags().BoolVar(&envOpts.reveal, "reveal", false, "Print the value itself; without it only metadata is shown")
 	rootCmd.AddCommand(envCmd)
 }
 
@@ -160,8 +159,12 @@ func envClass(opts envOptions) deploymentsv1.Environment_Class {
 	return deploymentsv1.Environment_CLASS_PRODUCTION
 }
 
+// envCoordinate addresses the class-wide cell, the only one an `ocel env`
+// command reaches. A named environment's override is readable — `ls` and the
+// variables UI show one that exists — but nothing writes one, because no
+// runtime path resolves it.
 func envCoordinate(slug, key string, opts envOptions) *envv1.Coordinate {
-	return &envv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
+	return &envv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key}
 }
 
 func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
@@ -278,12 +281,11 @@ func runEnvHistory(ctx context.Context, cwd, key string, opts envOptions, stdout
 			ProtocolVersion: manifestbuilder.SchemaVersion,
 			Class:           envClass(opts),
 			Coordinate:      envCoordinate(cfg.Slug, key, opts),
-			Reveal:          opts.reveal,
 		})
 		if err != nil {
 			return err
 		}
-		renderVersions(stdout, describeCell(key, opts), resp.GetVersions(), opts.reveal)
+		renderVersions(stdout, describeCell(key, opts), resp.GetVersions())
 		return nil
 	})
 }
@@ -294,9 +296,6 @@ func describeCell(key string, opts envOptions) string {
 	out := key
 	if opts.folder != "" {
 		out += " in " + opts.folder
-	}
-	if opts.environment != "" {
-		out += " for environment " + opts.environment
 	}
 	return out
 }
@@ -315,25 +314,28 @@ func renderValues(stdout io.Writer, values []*envv1.ValueMetadata) {
 			v.GetVersion(), v.GetSize(), epochOrDash(v.GetUpdatedAt()))
 	}
 	_ = tw.Flush()
+
+	// A named ENVIRONMENT is a read-only remnant: no command writes one today,
+	// so the column would otherwise name an axis an operator cannot act on.
+	for _, v := range values {
+		if v.GetCoordinate().GetEnvironment() != "" {
+			fmt.Fprintln(stdout, "\nA named ENVIRONMENT holds its own value, written while overrides were still writable. No command reaches those today; `ocel env set` and `ocel env rm` address the class-wide value only.")
+			return
+		}
+	}
 }
 
-func renderVersions(stdout io.Writer, cell string, versions []*envv1.VersionEntry, reveal bool) {
+// renderVersions shows when each version was written and how big it was.
+// There is no value column: history says a value changed, not what it was.
+func renderVersions(stdout io.Writer, cell string, versions []*envv1.VersionEntry) {
 	if len(versions) == 0 {
 		fmt.Fprintf(stdout, "No history for %s.\n", cell)
 		return
 	}
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	header := "VERSION\tCREATED\tBYTES"
-	if reveal {
-		header += "\tVALUE"
-	}
-	fmt.Fprintln(tw, header)
+	fmt.Fprintln(tw, "VERSION\tCREATED\tBYTES")
 	for _, v := range versions {
-		fmt.Fprintf(tw, "%d\t%s\t%d", v.GetVersion(), epochOrDash(v.GetCreatedAt()), v.GetSize())
-		if reveal {
-			fmt.Fprintf(tw, "\t%s", v.GetValue())
-		}
-		fmt.Fprintln(tw)
+		fmt.Fprintf(tw, "%d\t%s\t%d\n", v.GetVersion(), epochOrDash(v.GetCreatedAt()), v.GetSize())
 	}
 	_ = tw.Flush()
 }

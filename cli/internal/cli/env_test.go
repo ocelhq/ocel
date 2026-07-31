@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/cobra"
+
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
@@ -101,6 +103,31 @@ func TestRenderValues_RootFolderDoesNotPrintARejectedSlash(t *testing.T) {
 	}
 }
 
+// The ENVIRONMENT column is the surviving half of an axis nothing writes any
+// more. Printing a name an operator has no command for is only informative if
+// `ls` says so, and saying so on every listing would name an axis most stores
+// have nothing in.
+func TestRenderValues_ExplainsANamedEnvironmentOnlyWhenOneIsShown(t *testing.T) {
+	const note = "No command reaches those today"
+
+	var withOverride bytes.Buffer
+	renderValues(&withOverride, []*envv1.ValueMetadata{
+		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY"}},
+		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42-a1b2c3d4"}},
+	})
+	if out := withOverride.String(); !strings.Contains(out, note) {
+		t.Errorf("ls stdout = %q, want it to explain that %q is unreachable", out, "pr-42-a1b2c3d4")
+	}
+
+	var classWideOnly bytes.Buffer
+	renderValues(&classWideOnly, []*envv1.ValueMetadata{
+		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY"}},
+	})
+	if out := classWideOnly.String(); strings.Contains(out, note) {
+		t.Errorf("ls stdout = %q, want no environment footnote when no row has one", out)
+	}
+}
+
 func TestRunEnvLs_ReportsAnEmptyStore(t *testing.T) {
 	root := setUpEnvFixture(t)
 
@@ -146,31 +173,68 @@ func TestRunEnvRm_ReportsNothingToRemove(t *testing.T) {
 	}
 }
 
-func TestRunEnvHistory_ReadsNewestFirstAndGatesTheValues(t *testing.T) {
+// History answers when a value changed and who it was, never what it was.
+// Rotating a leaked key has to end the leak; a history that prints plaintext
+// would keep the rotated-away value one command from a shared terminal for the
+// next fifty writes.
+func TestRunEnvHistory_ShowsMetadataNewestFirstAndNeverAPlaintext(t *testing.T) {
 	root := setUpEnvFixture(t)
-	for _, v := range []string{"one", "two", "three"} {
+	secrets := []string{"sk_first", "sk_second", "sk_third"}
+	for _, v := range secrets {
 		envSet(t, root, "STRIPE_API_KEY", v, envOptions{})
 	}
 
-	var plain bytes.Buffer
-	if err := runEnvHistory(context.Background(), root, "STRIPE_API_KEY", envOptions{}, &plain, &plain); err != nil {
-		t.Fatalf("runEnvHistory err = %v; out=%s", err, plain.String())
-	}
-	if strings.Contains(plain.String(), "three") {
-		t.Errorf("history stdout = %q, want values withheld without --reveal", plain.String())
-	}
+	// reveal is `ocel env get`'s flag. History must ignore it rather than
+	// honour it, so the whole path is proven and not just the registration.
+	for _, opts := range []envOptions{{}, {reveal: true}} {
+		var stdout bytes.Buffer
+		if err := runEnvHistory(context.Background(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
+			t.Fatalf("runEnvHistory(reveal=%v) err = %v; out=%s", opts.reveal, err, stdout.String())
+		}
+		out := stdout.String()
 
-	var revealed bytes.Buffer
-	if err := runEnvHistory(context.Background(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &revealed, &revealed); err != nil {
-		t.Fatalf("runEnvHistory --reveal err = %v; out=%s", err, revealed.String())
+		for _, secret := range secrets {
+			if strings.Contains(out, secret) {
+				t.Errorf("history(reveal=%v) stdout = %q, want no plaintext (found %q)", opts.reveal, out, secret)
+			}
+		}
+		if strings.Contains(out, "VALUE") {
+			t.Errorf("history(reveal=%v) stdout = %q, want no VALUE column", opts.reveal, out)
+		}
+
+		rows := strings.Split(strings.TrimSpace(out), "\n")
+		if len(rows) != 4 {
+			t.Fatalf("history(reveal=%v) stdout = %q, want a header and three versions", opts.reveal, out)
+		}
+		for i, wantVersion := range []string{"3", "2", "1"} {
+			if got := strings.Fields(rows[i+1])[0]; got != wantVersion {
+				t.Errorf("history(reveal=%v) row %d = %q, want version %s: newest first", opts.reveal, i, rows[i+1], wantVersion)
+			}
+		}
 	}
-	out := revealed.String()
-	newest, oldest := strings.Index(out, "three"), strings.Index(out, "one")
-	if newest < 0 || oldest < 0 {
-		t.Fatalf("history --reveal stdout = %q, want every version's value", out)
+}
+
+// Reveal stays on `ocel env get`, which prints one value the operator asked
+// for by name. It never belonged on history, where one keystroke would print
+// every retained version at once.
+func TestEnvHistory_OffersNoRevealFlagWhereGetStillDoes(t *testing.T) {
+	if f := envHistoryCmd.Flags().Lookup("reveal"); f != nil {
+		t.Errorf("`ocel env history` registers --reveal (%q); history is metadata only", f.Usage)
 	}
-	if newest > oldest {
-		t.Errorf("history --reveal stdout = %q, want newest first", out)
+	if envGetCmd.Flags().Lookup("reveal") == nil {
+		t.Error("`ocel env get` lost --reveal; reading one named value back is the surface history's removal relies on")
+	}
+}
+
+// No runtime path resolves a named-environment override, and a preview's real
+// identity is `sanitize(ref)-<8 hex>` rather than anything an operator would
+// type, so a write flag naming an environment could only ever report success
+// for a cell no deploy will read.
+func TestEnvCommands_OfferNoEnvironmentWriteFlag(t *testing.T) {
+	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd} {
+		if f := c.Flags().Lookup("environment"); f != nil {
+			t.Errorf("`ocel env %s` registers --environment (%q); nothing resolves an override, so the write would report a success no deploy honours", c.Name(), f.Usage)
+		}
 	}
 }
 

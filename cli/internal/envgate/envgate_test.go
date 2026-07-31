@@ -32,7 +32,9 @@ func (v *fakeValues) setAt(key, folder, value string, version int64) {
 	v.versions[envgate.Cell{Key: key, Folder: folder}] = version
 }
 
-// override is what `ocel env set --environment` writes.
+// override is a row a named environment holds. No command writes one; the
+// gate has to keep reading them because the store still returns any that were
+// written before the write surface came out.
 func (v *fakeValues) override(key, folder, environment string) {
 	v.overrides = append(v.overrides, envgate.Stored{
 		Cell:        envgate.Cell{Key: key, Folder: folder},
