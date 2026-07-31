@@ -178,3 +178,31 @@ func TestToApps_CarriesTheFolderBindingIntoTheManifest(t *testing.T) {
 		t.Errorf("toApps() = %+v, want %+v", got, want)
 	}
 }
+
+// TestAppVariables_CarriesTheFolderEachKeyResolvedFrom proves the folder
+// resolution computed survives the join. A live-class value carries no
+// plaintext, so its folder is the only thing that makes it addressable at
+// runtime: dropped here, the manifest names a key the store cannot be asked
+// for. The two keys resolve from different folders for the same app, which is
+// why the app's own binding cannot stand in for either.
+func TestAppVariables_CarriesTheFolderEachKeyResolvedFrom(t *testing.T) {
+	definitions := []*resourcesv1.VariableDefinition{
+		definition("ROOT_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+		definition("SCOPED_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+	}
+	resolved := map[string]envgate.Resolved{
+		"ROOT_KEY":   {},
+		"SCOPED_KEY": {Folder: "/admin"},
+	}
+
+	got := appVariables(definitions, resolved)
+	if len(got) != 2 {
+		t.Fatalf("appVariables = %+v, want both declarations", got)
+	}
+	if got[0].Key != "ROOT_KEY" || got[0].Folder != "" {
+		t.Errorf("ROOT_KEY = %+v, want the empty root spelling, never the store's %q sentinel", got[0], "/")
+	}
+	if got[1].Key != "SCOPED_KEY" || got[1].Folder != "/admin" {
+		t.Errorf("SCOPED_KEY = %+v, want the folder it resolved from", got[1])
+	}
+}

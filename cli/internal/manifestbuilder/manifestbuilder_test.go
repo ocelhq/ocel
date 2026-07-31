@@ -548,3 +548,35 @@ func TestBuild_CarriesTheAppsFolderBinding(t *testing.T) {
 		t.Errorf("web folder = %q, want the empty root binding", got)
 	}
 }
+
+// TestBuild_CarriesEachVariablesResolvedFolder proves the folder a key
+// actually resolved from survives onto the variable, which is what completes
+// the store coordinate a live-class value is fetched by at runtime. It is not
+// the app's binding: an unscoped key resolves at the project root even for a
+// bound app, so the same app carries variables from two different folders and
+// substituting ManifestApp.folder would be wrong for one of them.
+func TestBuild_CarriesEachVariablesResolvedFolder(t *testing.T) {
+	variables := map[string][]Variable{
+		"admin": {
+			{Key: "SCOPED_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/admin"},
+			{Key: "ROOT_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET},
+		},
+	}
+	manifest, err := Build("proj-1", nil, []App{{Name: "admin", Framework: "express", Folder: "/admin"}}, nil, nil, variables)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+
+	byKey := map[string]string{}
+	for _, app := range manifest.GetApps() {
+		for _, v := range app.GetVariables() {
+			byKey[v.GetKey()] = v.GetFolder()
+		}
+	}
+	if got, want := byKey["SCOPED_KEY"], "/admin"; got != want {
+		t.Errorf("SCOPED_KEY folder = %q, want %q", got, want)
+	}
+	if got := byKey["ROOT_KEY"]; got != "" {
+		t.Errorf("ROOT_KEY folder = %q, want the empty root spelling — the store's %q sentinel is never written above the store", got, "/")
+	}
+}

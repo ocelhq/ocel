@@ -51,6 +51,12 @@ type Variable struct {
 	Key   string
 	Class resourcesv1.VariableClass
 	Value string
+	// Folder is the folder the key resolved from, which is not the app's
+	// binding: a scoped key resolves at the binding, an unscoped one at the
+	// project root, so the two differ for the same app. It completes the store
+	// coordinate a live-class value is fetched by at runtime. Empty is the
+	// project root, the one spelling used everywhere above the store.
+	Folder string
 }
 
 // Function is a single collected function unit: the pure input to Build for
@@ -293,7 +299,7 @@ func manifestVariables(variables []Variable) []*deploymentsv1.ManifestVariable {
 	}
 	out := make([]*deploymentsv1.ManifestVariable, 0, len(variables))
 	for _, v := range variables {
-		out = append(out, &deploymentsv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value})
+		out = append(out, &deploymentsv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out

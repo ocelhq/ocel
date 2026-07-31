@@ -291,6 +291,11 @@ func resolveVariables(ctx context.Context, gate *envgate.Gate, cfg *projectconfi
 // appVariables joins one app's resolution to the declarations. A key the app
 // resolves no cell for is absent rather than empty: the SDK's named error is
 // the whole remedy for reading one, and a blank value would defeat it.
+//
+// The folder travels alongside the value because resolution is the only place
+// that knows it. A live-class cell carries no plaintext at all, so its folder
+// is what makes it addressable later; dropping it would leave the manifest
+// naming a key nothing can be asked for.
 func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[string]envgate.Resolved) []manifestbuilder.Variable {
 	variables := make([]manifestbuilder.Variable, 0, len(definitions))
 	for _, definition := range definitions {
@@ -299,9 +304,10 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 			continue
 		}
 		variables = append(variables, manifestbuilder.Variable{
-			Key:   definition.GetKey(),
-			Class: definition.GetClass(),
-			Value: cell.Value,
+			Key:    definition.GetKey(),
+			Class:  definition.GetClass(),
+			Value:  cell.Value,
+			Folder: cell.Folder,
 		})
 	}
 	return variables
