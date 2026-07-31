@@ -24,6 +24,12 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error
 		return err
 	}
 
+	// The one moment the sandbox is provably thawed. A live value whose bound
+	// has elapsed is refreshed from here rather than from a timer, which a
+	// frozen sandbox would not fire; the fetch runs in the background and this
+	// invocation goes on being served the generation it already has.
+	m.live.refreshIfStale(ctx)
+
 	ctx = lambdacontext.NewContext(ctx, inv.lc)
 	if inv.deadlineMs > 0 {
 		var cancel context.CancelFunc

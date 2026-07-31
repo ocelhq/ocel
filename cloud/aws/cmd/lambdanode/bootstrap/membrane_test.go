@@ -40,7 +40,7 @@ func TestAwaitReady_ReturnsPortOnServerReady(t *testing.T) {
 		fmt.Fprintln(c, `{"type":"server-ready","payload":{"httpPort":41234}}`)
 	}()
 
-	ready, err := awaitReady(ln, make(chan error, 1), time.Second)
+	ready, err := awaitReady(ln, make(chan error, 1), time.Second, nil, nil)
 	if err != nil {
 		t.Fatalf("awaitReady() error = %v, want nil", err)
 	}
@@ -58,7 +58,7 @@ func TestAwaitReady_AbortsImmediatelyWhenNodeExitsBeforeConnecting(t *testing.T)
 	exited <- errors.New("exit status 1")
 
 	start := time.Now()
-	_, err := awaitReady(ln, exited, 30*time.Second)
+	_, err := awaitReady(ln, exited, 30*time.Second, nil, nil)
 	if err == nil {
 		t.Fatal("awaitReady() error = nil, want an error")
 	}
@@ -84,7 +84,7 @@ func TestAwaitReady_ReapsARealChildThatDiesWithoutConnecting(t *testing.T) {
 	go func() { exited <- cmd.Wait() }()
 
 	start := time.Now()
-	_, err := awaitReady(ln, exited, 30*time.Second)
+	_, err := awaitReady(ln, exited, 30*time.Second, nil, nil)
 	if err == nil {
 		t.Fatal("awaitReady() error = nil, want the child's exit reported")
 	}
@@ -104,7 +104,7 @@ func TestAwaitReady_FailsWhenNodeNeverSignalsReadyWithinBudget(t *testing.T) {
 		select {} // connected, alive, never ready
 	}()
 
-	_, err := awaitReady(ln, make(chan error, 1), 100*time.Millisecond)
+	_, err := awaitReady(ln, make(chan error, 1), 100*time.Millisecond, nil, nil)
 	if err == nil {
 		t.Fatal("awaitReady() error = nil, want a budget-expiry error")
 	}
@@ -125,7 +125,7 @@ func TestAwaitReady_CarriesTheLastLogIntoTheError(t *testing.T) {
 		exited <- errors.New("exit status 1")
 	}()
 
-	_, err := awaitReady(ln, exited, 5*time.Second)
+	_, err := awaitReady(ln, exited, 5*time.Second, nil, nil)
 	if err == nil {
 		t.Fatal("awaitReady() error = nil, want an error")
 	}

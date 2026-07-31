@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -32,6 +33,10 @@ type Membrane struct {
 	nodePort int
 	control  net.Conn
 	client   *http.Client
+
+	// live is this execution environment's live-class values, shared by every
+	// invocation it serves. Nil for a function that declares none.
+	live *liveValues
 
 	// pending maps an in-flight request id to the channel closed when the JS
 	// side reports the invocation complete (response finished and every
@@ -157,7 +162,12 @@ type nodeReady struct {
 // (alive but wedged). Any outcome but ready is returned as an error, which the
 // caller reports as an init failure. Without this the wait is unbounded and a
 // dead child hangs the sandbox until Lambda kills it, logging nothing.
-func awaitReady(ln net.Listener, exited <-chan error, budget time.Duration) (*nodeReady, error) {
+//
+// abandon is the fourth outcome: init work node itself is waiting on has
+// failed, so node is never going to announce anything and the rest of the
+// budget is dead time the caller needs to report a diagnosis in. Nil means
+// there is no such work, and the wait ends only on the other three.
+func awaitReady(ln net.Listener, exited <-chan error, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*nodeReady, error) {
 	type result struct {
 		ready *nodeReady
 		err   error
@@ -165,7 +175,7 @@ func awaitReady(ln net.Listener, exited <-chan error, budget time.Duration) (*no
 	var log lastLog
 	done := make(chan result, 1)
 	go func() {
-		ready, err := handshake(ln, &log)
+		ready, err := handshake(ln, &log, onControl)
 		done <- result{ready: ready, err: err}
 	}()
 
@@ -179,6 +189,9 @@ func awaitReady(ln net.Listener, exited <-chan error, budget time.Duration) (*no
 	case err := <-exited:
 		ln.Close()
 		return nil, fmt.Errorf("node exited before signalling ready: %w%s", err, log.suffix())
+	case <-abandon:
+		ln.Close()
+		return nil, fmt.Errorf("node was left waiting on init work that failed%s", log.suffix())
 	case <-time.After(budget):
 		ln.Close()
 		return nil, fmt.Errorf("node did not signal ready within %s%s", budget, log.suffix())
@@ -187,10 +200,18 @@ func awaitReady(ln net.Listener, exited <-chan error, budget time.Duration) (*no
 
 // handshake accepts node's control connection and reads until it announces its
 // HTTP port, recording any log it reports on the way.
-func handshake(ln net.Listener, log *lastLog) (*nodeReady, error) {
+//
+// onControl runs the moment the connection exists, not when node reports
+// ready: the socket is the only channel the membrane can push a value down, and
+// node connects it before importing the application, so anything the membrane
+// has resolved by then can reach module-scope code that asks for it.
+func handshake(ln net.Listener, log *lastLog, onControl func(io.Writer)) (*nodeReady, error) {
 	control, err := ln.Accept()
 	if err != nil {
 		return nil, err
+	}
+	if onControl != nil {
+		onControl(control)
 	}
 	reader := bufio.NewReader(control)
 	for {
@@ -234,10 +255,20 @@ func entrypointPath() string {
 }
 
 // startNode execs the node child and waits budget for it to announce itself.
-// extraEnv is the globally bootstrapped config resolved before this point; it
-// can only reach node through the environment the child is exec'd with, which is
-// why the fetch is not deferred past here.
-func startNode(extraEnv []string, budget time.Duration) (*Membrane, error) {
+//
+// extraEnv is what can only reach node through the environment the child is
+// exec'd with — a one-shot channel that closes at exec, which is why the config
+// and baked-bundle work it carries is not deferred past here.
+//
+// It is no longer the only channel. onControl hands out node's control
+// connection as soon as it exists, which is what a live-class value is pushed
+// down: a value fetched while this function was still exec'ing and waiting has
+// somewhere to go, so its fetch overlaps the spawn instead of preceding it.
+//
+// abandon ends that wait early when the fetch fails, because node holds its
+// import until the push arrives and would otherwise sit here until the budget
+// ran out.
+func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer), abandon <-chan struct{}) (*Membrane, error) {
 	// TODO: randomize
 	sockPath := "/tmp/ocel-control.sock"
 	_ = os.Remove(sockPath) // stale socket from a reused sandbox
@@ -267,7 +298,7 @@ func startNode(extraEnv []string, budget time.Duration) (*Membrane, error) {
 
 	// Node connects back to our control socket and announces its port. Only one
 	// connection is ever accepted, so the listener is spent either way.
-	ready, err := awaitReady(ln, exited, budget)
+	ready, err := awaitReady(ln, exited, budget, onControl, abandon)
 	ln.Close()
 	if err != nil {
 		return nil, err
