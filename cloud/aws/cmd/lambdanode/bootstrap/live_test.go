@@ -699,6 +699,68 @@ func TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClasses(t *testing.
 	}
 }
 
+// TestChildEnv_NeverCarriesALivePlaintext is the disclosure property the live
+// class exists to keep. A live value reaches node down the control socket
+// precisely so it is never in an environment: not the child's, where anything
+// that dumps its own environment — a crash reporter, a log line, a subprocess
+// it spawns — would carry it out, and not this process's either. The
+// declaration is the only thing about the class that may travel here, and it is
+// names.
+//
+// The cache is resolved before childEnv is called because that is the shape
+// init runs in: the prefetch is started before the spawn, so by the time the
+// environment is composed the plaintexts are usually already sitting in the
+// membrane. There being nothing in the composition to take them from is what
+// the test is about.
+func TestChildEnv_NeverCarriesALivePlaintext(t *testing.T) {
+	const dbPassword = "pg-plaintext-must-not-be-exported"
+	const sessionSecret = "session-plaintext-must-not-be-exported"
+	secrets := []string{dbPassword, sessionSecret}
+
+	l := newLiveValues(resolves(map[string]string{
+		"DB_PASSWORD":    dbPassword,
+		"SESSION_SECRET": sessionSecret,
+	}), []string{"DB_PASSWORD", "SESSION_SECRET"}, nil)
+	if err := l.join(l.start(context.Background())); err != nil {
+		t.Fatalf("prefetch: %v", err)
+	}
+
+	storeEnv := []string{"OCEL_CACHE_STORE=bucket"}
+	bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
+	before := os.Environ()
+
+	got := childEnv(storeEnv, bakedEnv, l)
+
+	for _, entry := range got {
+		for _, secret := range secrets {
+			if strings.Contains(entry, secret) {
+				t.Errorf("childEnv put %q in the child's environment, which discloses a live plaintext to anything that reads that environment", entry)
+			}
+		}
+	}
+
+	// Nothing beyond the two classes that do travel as values and the one
+	// declaration: an extra entry is a live value under some other spelling.
+	want := []string{"OCEL_CACHE_STORE=bucket", "OCEL_LIVE_KEYS=DB_PASSWORD,SESSION_SECRET", "OCEL_VAR_STRIPE_KEY=sk_baked"}
+	composed := slices.Sorted(slices.Values(got))
+	if !slices.Equal(composed, want) {
+		t.Errorf("childEnv = %q, want exactly %q", composed, want)
+	}
+
+	// And it exports nothing into this process either, which is the other place
+	// a live value would be readable from.
+	for _, entry := range os.Environ() {
+		for _, secret := range secrets {
+			if strings.Contains(entry, secret) {
+				t.Errorf("childEnv set %q on this process's own environment", entry)
+			}
+		}
+	}
+	if !slices.Equal(os.Environ(), before) {
+		t.Errorf("childEnv changed this process's environment; it may only compose a slice")
+	}
+}
+
 // TestLiveStalenessBound_IsSixtySeconds pins the documented bound. It is one
 // project-level number rather than a per-variable one, and it is stated in
 // exactly one place; a change to it is a change to what the docs promise.
