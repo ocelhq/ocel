@@ -23,6 +23,30 @@ Run `bd create ...`.
 
 Run `bd show <id>`.
 
+## Filing a child under an epic that carries a spec
+
+An epic whose description states user stories, Implementation Decisions or an Out of
+Scope list is the spec of record for everything filed beneath it. Review waves generate
+findings whether or not there is scope for them, so a new child must earn its place
+before it earns `ready-for-agent`:
+
+- **Cite the authority.** Name the user story, the Implementation Decision, or the
+  acceptance criterion the bead serves. A bead that cannot name one is proposing new
+  scope, not completing existing scope — say so in the description and let a human rule.
+- **Read the Out of Scope list first.** A bead that restates something already listed
+  there is closed, not built.
+- **A recorded decision is not a task.** "This is deliberate, X was preferred to Y"
+  belongs in an ADR or the epic's notes, not in an open bead.
+- **Style findings and invented refactors do not become beads.** Fix them in the change
+  that introduced them, or leave them.
+- **A test seam the epic's Testing Decisions did not charter is new scope.** So is a new
+  test environment or runner.
+- **Keep strays out.** A defect found while working an epic, but not about that epic's
+  subject, is filed with no parent or under its own.
+
+The same test applies when re-reviewing an epic: grade every open child against the spec
+and close what the spec never asked for, with the violated clause quoted in the reason.
+
 ## Wayfinding operations
 
 Used by `/wayfinder`. The **map** is a single bd issue (`--type=epic`) with **child** issues linked via `--parent`.

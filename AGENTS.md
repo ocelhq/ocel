@@ -185,6 +185,13 @@ Issue B is blocked by issue A if:
 Wire discovered dependencies with `bd dep add <B> <A>` so `bd ready`/`bd blocked` reflect
 them. An issue is unblocked if it has zero blocking dependencies on other open issues.
 
+### Filing a child under an epic that carries a spec
+
+The epic's description is the spec of record. A new child must cite the user story,
+decision or acceptance criterion it serves before it gets `ready-for-agent`, and must be
+checked against the epic's Out of Scope list first — review waves generate findings
+whether or not there is scope for them. See `docs/agents/issue-tracker.md`.
+
 ### Triage labels
 
 Default label strings (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`), applied via `bd label add`. See `docs/agents/triage-labels.md`.
