@@ -50,6 +50,7 @@ var discoverPRNumber = func() string {
 type previewUpOptions struct {
 	name     string
 	prebuilt bool
+	noUI     bool
 }
 
 // previewRmOptions holds the flags accepted by `ocel preview rm`.
@@ -128,7 +129,7 @@ func runPreviewUpCmd(cmd *cobra.Command, args []string) error {
 	}
 	ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	return runPreviewUp(ctx, cwd, previewUpOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+	return runPreviewUp(ctx, cwd, previewUpOpts, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 }
 
 var previewPruneCmd = &cobra.Command{
@@ -151,6 +152,8 @@ func init() {
 	previewCmd.Flags().StringVar(&previewUpOpts.name, "name", "", "Name a persistent (staging-like) preview instead of the branch's ephemeral one")
 	previewUpCmd.Flags().BoolVar(&previewUpOpts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
 	previewCmd.Flags().BoolVar(&previewUpOpts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
+	previewUpCmd.Flags().BoolVar(&previewUpOpts.noUI, "no-ui", false, noUIFlagUsage)
+	previewCmd.Flags().BoolVar(&previewUpOpts.noUI, "no-ui", false, noUIFlagUsage)
 
 	previewRmCmd.Flags().StringVar(&previewRmOpts.ref, "ref", "", "Tear down the ephemeral preview for an explicit git ref")
 	previewRmCmd.Flags().StringVar(&previewRmOpts.name, "name", "", "Tear down the named persistent preview")
@@ -170,7 +173,10 @@ func init() {
 // class), then drives the provider's Deploy RPC and prints the connection
 // outputs on success. `ocel preview` and `ocel deploy` share the Deploy RPC and
 // diverge only by the Environment sent.
-func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout, stderr io.Writer) error {
+// stdin is read for nothing but whether this is a terminal: a preview refused
+// by the variable gate recovers exactly as a deploy does, and that decision is
+// the one thing the command needs stdin to answer.
+func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout, stderr io.Writer, stdin io.Reader) error {
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -206,13 +212,24 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 		// gate runs between discovery and the build, and the store it reads
 		// is only reachable through the provider.
 		ui.Building()
-		gate := envgate.New(runnerValues{
-			runner:  runner,
-			options: []byte(provider.Options),
-			slug:    cfg.Slug,
-			class:   deploymentsv1.Environment_CLASS_PREVIEW,
-		}, envScope(cfg, true))
-		manifest, err := collectAndBuildManifest(ctx, cfg, gate, opts.prebuilt, ui.BuildWriter())
+		recovery := gateRecovery{
+			cfg:      cfg,
+			provider: provider,
+			runner:   runner,
+			preview:  true,
+			newGate: func() *envgate.Gate {
+				return envgate.New(runnerValues{
+					runner:  runner,
+					options: []byte(provider.Options),
+					slug:    cfg.Slug,
+					class:   deploymentsv1.Environment_CLASS_PREVIEW,
+				}, envScope(cfg, true))
+			},
+			ui:      ui,
+			stdout:  stdout,
+			enabled: canOpenVarsUI(stdin, opts.noUI),
+		}
+		manifest, err := recovery.buildManifest(ctx, opts.prebuilt, ui.BuildWriter())
 		if err != nil {
 			return err
 		}

@@ -50,7 +50,15 @@ globalThis.__ocelRegister.push(
     const out = process.env.OCEL_TEST_ENV_CELLS_OUT;
     if (out) await (await import("node:fs/promises")).writeFile(out, JSON.stringify(cells));
 
-    const problems = JSON.parse(process.env.OCEL_TEST_ENV_PROBLEMS!);
+    // A file rather than an env var when one is named: a recovery re-runs
+    // discovery, and the second pass has to be able to report something
+    // different from the first without the parent process re-spawning itself.
+    const file = process.env.OCEL_TEST_ENV_PROBLEMS_FILE;
+    const problems = JSON.parse(
+      file
+        ? await (await import("node:fs/promises")).readFile(file, "utf8")
+        : process.env.OCEL_TEST_ENV_PROBLEMS!,
+    );
     if (problems.length > 0) await call("ReportEnvProblems", { problems });
   })(),
 );

@@ -33,7 +33,7 @@ func TestRunPreviewUp_Ephemeral_SendsPreviewEphemeralEnvironment(t *testing.T) {
 	}
 
 	var stdout, stderr bytes.Buffer
-	if err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr); err != nil {
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -72,7 +72,7 @@ func TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	})
 
 	var stdout, stderr bytes.Buffer
-	if err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr); err != nil {
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -90,7 +90,7 @@ func TestRunPreviewUp_PersistentNamed_SendsPersistentDeclaredEnvironment(t *test
 	t.Setenv(fakeInfraPresentEnvVar, "1")
 
 	var stdout, stderr bytes.Buffer
-	if err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &stdout, &stderr); err != nil {
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 
@@ -109,7 +109,7 @@ func TestRunPreviewUp_RefusesOnClassMismatch_NoDeploy(t *testing.T) {
 	t.Setenv(fakeInfraPresentEnvVar, "1")
 
 	var stdout, stderr bytes.Buffer
-	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr)
+	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runPreviewUp err = nil, want a class-mismatch error")
 	}
@@ -128,7 +128,7 @@ func TestRunPreviewUp_RefusesWhenInfraAbsent_NoDeploy(t *testing.T) {
 	t.Setenv(fakeInfraPresentEnvVar, "0")
 
 	var stdout, stderr bytes.Buffer
-	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr)
+	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runPreviewUp err = nil, want a missing-infrastructure error")
 	}
@@ -309,7 +309,7 @@ export default {
 };
 `)
 
-	err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &bytes.Buffer{}, &bytes.Buffer{})
+	err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &bytes.Buffer{}, &bytes.Buffer{}, strings.NewReader(""))
 	if err == nil {
 		t.Fatal("runPreviewUp err = nil, want error")
 	}

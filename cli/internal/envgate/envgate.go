@@ -248,6 +248,17 @@ type Refusal struct {
 }
 
 func (r *Refusal) Error() string {
+	return r.Owed() + "\nSet the values above, then run this command again."
+}
+
+// Owed is the refusal without its closing advice: the headline and the cells
+// that stopped the run, and nothing about what to do next. A caller that is
+// about to offer its own way out in this same run — the recovery that opens the
+// variables UI and waits — prints this and supplies its own next step, because
+// "run this command again" is wrong advice for a command that has not given up.
+//
+// It carries key names and folders only. A value never appears in a refusal.
+func (r *Refusal) Owed() string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "%s not ready — nothing has been built.\n", plural(len(r.Problems)))
 	for _, problem := range r.Problems {
@@ -255,7 +266,6 @@ func (r *Refusal) Error() string {
 		fmt.Fprintf(&b, "\n  %s\n    %s\n    fix: %s\n",
 			describe(cell)+readBy(r.Scope.Apps, cell.Folder), why(problem), fixCommand(cell, r.Scope))
 	}
-	b.WriteString("\nSet the values above, then run this command again.")
 	return b.String()
 }
 

@@ -56,12 +56,13 @@ func runEnvUI(ctx context.Context, cwd string, opts envOptions, stdout, stderr i
 	})
 }
 
+// openBrowser is a seam over browser.OpenURL. Without it every test that
+// drives a command as far as the variables UI launches the developer's real
+// browser, which is not something a `go test` run may do.
+var openBrowser = browser.OpenURL
+
 // OpenVarsUI starts the bundled variables UI over a provider session the caller
 // already holds, prints and opens its URL, and returns the session to wait on.
-// The gate is passed in rather than built here because the caller that needs
-// this most is a deploy that already ran discovery and refused: it hands over
-// the same gate, so the matrix opens describing precisely the cells that
-// stopped it.
 func OpenVarsUI(
 	ctx context.Context,
 	cfg *projectconfig.Config,
@@ -70,6 +71,39 @@ func OpenVarsUI(
 	preview bool,
 	gate *envgate.Gate,
 	stdout io.Writer,
+) (*varsui.Session, error) {
+	session, err := serveVarsUI(ctx, cfg, provider, runner, preview, gate)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, session.URL)
+	if err := openBrowser(session.URL); err != nil {
+		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
+	}
+	return session, nil
+}
+
+// serveVarsUI is a seam over startVarsUI. A session that ends any way but the
+// developer marking the matrix done is an abandonment, and nothing inside this
+// process ends one that way — the browser closing is not a signal the page
+// sends today — so a test can reach that outcome only by holding the session
+// itself.
+var serveVarsUI = startVarsUI
+
+// startVarsUI serves the bundled variables UI over a provider session the
+// caller already holds and announces nothing. The gate is passed in rather than
+// built here because the caller that needs this most is a deploy that already
+// ran discovery and refused: it hands over the same gate, so the matrix opens
+// describing precisely the cells that stopped it. That caller also renders its
+// own terminal, so where the URL is printed is its decision, not this one's.
+func startVarsUI(
+	ctx context.Context,
+	cfg *projectconfig.Config,
+	provider *projectconfig.ProviderDescriptor,
+	runner *providerrunner.Runner,
+	preview bool,
+	gate *envgate.Gate,
 ) (*varsui.Session, error) {
 	assets, err := platform.VarsUI()
 	if err != nil {
@@ -82,22 +116,13 @@ func OpenVarsUI(
 		slug:    cfg.Slug,
 		class:   envClass(envOptions{preview: preview}),
 	}
-	session, err := varsui.Serve(ctx, varsui.Options{
+	return varsui.Serve(ctx, varsui.Options{
 		Assets:  assets,
 		Gate:    gate,
 		Store:   store,
 		Slug:    cfg.Slug,
 		Preview: preview,
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	fmt.Fprintf(stdout, "\nVariables for %s are at:\n\n  %s\n\n", cfg.Slug, session.URL)
-	if err := browser.OpenURL(session.URL); err != nil {
-		fmt.Fprintln(stdout, "Couldn't open your browser automatically — open the link above manually.")
-	}
-	return session, nil
 }
 
 // discoverVariables runs the project's discovery pass and returns the gate it

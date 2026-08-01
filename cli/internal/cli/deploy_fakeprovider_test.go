@@ -315,9 +315,15 @@ func describeFunction(f *deploymentsv1.ManifestFunction) string {
 }
 
 // describeApp renders a ManifestApp into a stable, assertable one-line string.
+// The variable keys are named, not their values: this line is echoed onto the
+// deploy's own stdout, where a value must never appear.
 func describeApp(a *deploymentsv1.ManifestApp) string {
-	return fmt.Sprintf("name=%s framework=%s production_domain=%s",
-		a.GetName(), a.GetFramework(), strings.Join(a.GetDomains()["production"].GetHostnames(), ","))
+	keys := make([]string, 0, len(a.GetVariables()))
+	for _, v := range a.GetVariables() {
+		keys = append(keys, v.GetKey())
+	}
+	return fmt.Sprintf("name=%s framework=%s production_domain=%s vars=%s",
+		a.GetName(), a.GetFramework(), strings.Join(a.GetDomains()["production"].GetHostnames(), ","), strings.Join(keys, ","))
 }
 
 // parseInfraClass maps the fakeInfraClassEnvVar value to an Environment_Class.

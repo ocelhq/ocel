@@ -87,7 +87,7 @@ func TestRunPreviewUp_Success_WritesDeployResult(t *testing.T) {
 	t.Setenv(fakeInfraClassEnvVar, "preview")
 
 	var stdout, stderr bytes.Buffer
-	if err := runPreviewUp(context.Background(), root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr); err != nil {
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{name: "e2e-42"}, &stdout, &stderr, strings.NewReader("")); err != nil {
 		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
 	}
 

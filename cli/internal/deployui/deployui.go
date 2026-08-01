@@ -53,6 +53,8 @@ type Session struct {
 
 	mu        sync.Mutex
 	active    bool // a step spinner is painting
+	paused    bool // a step Waiting stopped, for Resume to restart
+	waiting   bool // the run is blocked on something outside itself
 	frame     int
 	stepKey   string
 	stepTitle string
@@ -153,6 +155,43 @@ func (s *Session) BuildOK() {
 	s.finishStep(color.New(color.FgGreen), okMark, "")
 }
 
+// Waiting hands the terminal to something outside this run — a page the
+// developer has to fill in — and prints a block that stays on screen: what the
+// run is blocked on, where to go, and how to abort. The render loop repaints
+// one line in place, so anything printed under it is overwritten on a terminal;
+// the animation stops before the block goes out and stays stopped until Resume.
+//
+// reason is printed verbatim. It is a refusal, which names keys and folders and
+// never a value. url goes to the screen whole and to the log without its
+// fragment, which is where the session's bearer token rides.
+func (s *Session) Waiting(reason, url string) {
+	s.logf("[waiting] %s", withoutFragment(url))
+	s.mu.Lock()
+	if s.active {
+		fmt.Fprint(s.out, "\r\033[K")
+		s.active = false
+		s.paused = true
+	}
+	s.waiting = true
+	s.mu.Unlock()
+
+	fmt.Fprintf(s.out, "\n%s\n  Fill them in at:\n\n    %s\n\n  Waiting for the page — press Ctrl-C to abort. Nothing has been provisioned.\n\n",
+		reason, url)
+}
+
+// Resume restarts the phase Waiting paused, once whatever the run was blocked
+// on has answered.
+func (s *Session) Resume() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.waiting = false
+	if s.paused {
+		s.paused = false
+		s.active = true
+		s.paintLocked()
+	}
+}
+
 // Event renders a single provider DeployEvent. The terminal ResultEvent is the
 // caller's to handle (via Deployed/Fail); Event ignores it.
 func (s *Session) Event(ev *deploymentsv1.DeployEvent) {
@@ -232,14 +271,24 @@ func (s *Session) Fail(err error) {
 }
 
 // Cancel marks the active phase cancelled ("⚠ Provisioning cancelled") and warns
-// that infrastructure may be partially provisioned.
+// that infrastructure may be partially provisioned — unless the run was blocked
+// in Waiting, which stands before any provisioning, where that warning would
+// send the developer looking for resources that were never created.
 func (s *Session) Cancel() {
 	s.logf("[cancelled] interrupted")
+	s.mu.Lock()
+	waiting := s.waiting
+	s.mu.Unlock()
+
 	warn := color.New(color.FgYellow, color.Bold)
 	if !s.finishStep(warn, warnMark, "cancelled") {
 		warn.Fprintf(s.out, "%s Cancelled\n", warnMark)
 	}
-	fmt.Fprintln(s.out, "  Resources may be partially created.")
+	if waiting {
+		fmt.Fprintln(s.out, "  Nothing has been provisioned.")
+	} else {
+		fmt.Fprintln(s.out, "  Resources may be partially created.")
+	}
 	fmt.Fprintf(s.out, "  Re-run `%s` to reconcile.\n", s.command)
 	s.printLogPointer("Log")
 }
@@ -366,7 +415,20 @@ func (s *Session) relLog() string {
 	return s.logPath
 }
 
-func isTTY(w io.Writer) bool {
+// withoutFragment strips a URL's fragment. The variables UI carries its bearer
+// token there precisely so it reaches no request line, Referer or log — and
+// this package's log outlives the session and is the file a run invites the
+// developer to open and share.
+func withoutFragment(url string) string {
+	if i := strings.Index(url, "#"); i >= 0 {
+		return url[:i]
+	}
+	return url
+}
+
+// isTTY reports whether w is a real terminal. A var so a test can render the
+// phased view against an in-memory writer; nothing but a test reassigns it.
+var isTTY = func(w io.Writer) bool {
 	f, ok := w.(*os.File)
 	if !ok {
 		return false

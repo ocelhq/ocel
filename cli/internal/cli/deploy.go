@@ -51,11 +51,39 @@ var (
 	collectAppFunctions = appbuilder.CollectFunctions
 )
 
+// stdinIsTerminal is a seam over isReaderTTY for the one decision no test can
+// otherwise reach: whether a refused deploy may stop and hand the developer the
+// variables UI. Every test drives these commands with an in-memory reader, so
+// without the seam the waiting path is unreachable and the rule that a
+// non-interactive run hard-fails is unfalsifiable.
+var stdinIsTerminal = func(r io.Reader) bool { return isReaderTTY(r) }
+
+// noBrowserEnvVar opts a run out of the browser handoff without a flag: a
+// developer at a terminal over SSH is interactive by every signal the CLI has
+// and still has no browser to be handed.
+const noBrowserEnvVar = "OCEL_NO_BROWSER"
+
+// canOpenVarsUI reports whether a gate refusal may become a wait on the
+// variables UI rather than the end of the run. There is no CI detection here
+// on purpose: a terminal on stdin is the signal, and anything it gets wrong is
+// answered by --no-ui or OCEL_NO_BROWSER rather than by guessing at an
+// environment.
+func canOpenVarsUI(stdin io.Reader, noUI bool) bool {
+	if noUI || os.Getenv(noBrowserEnvVar) != "" {
+		return false
+	}
+	return stdinIsTerminal(stdin)
+}
+
+// noUIFlagUsage documents --no-ui everywhere it is registered.
+const noUIFlagUsage = "Never pause to open the variables UI; fail on a missing or invalid variable instead"
+
 // deployOptions holds the flags accepted by `ocel deploy`.
 type deployOptions struct {
 	yes      bool
 	tag      string
 	prebuilt bool
+	noUI     bool
 }
 
 var deployOpts deployOptions
@@ -82,6 +110,7 @@ func init() {
 	deployCmd.Flags().BoolVarP(&deployOpts.yes, "yes", "y", false, "Skip the confirmation prompt")
 	deployCmd.Flags().StringVar(&deployOpts.tag, "tag", "", "Stamp this deploy with an immutable label to roll back to later (`ocel rollback --tag <tag>`)")
 	deployCmd.Flags().BoolVar(&deployOpts.prebuilt, "prebuilt", false, prebuiltFlagUsage)
+	deployCmd.Flags().BoolVar(&deployOpts.noUI, "no-ui", false, noUIFlagUsage)
 }
 
 // prebuiltFlagUsage documents --prebuilt everywhere it is registered. The flag
@@ -147,13 +176,23 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		}
 
 		ui.Building()
-		gate := envgate.New(runnerValues{
-			runner:  runner,
-			options: []byte(provider.Options),
-			slug:    cfg.Slug,
-			class:   deploymentsv1.Environment_CLASS_PRODUCTION,
-		}, envScope(cfg, false))
-		manifest, err := collectAndBuildManifest(ctx, cfg, gate, opts.prebuilt, ui.BuildWriter())
+		recovery := gateRecovery{
+			cfg:      cfg,
+			provider: provider,
+			runner:   runner,
+			newGate: func() *envgate.Gate {
+				return envgate.New(runnerValues{
+					runner:  runner,
+					options: []byte(provider.Options),
+					slug:    cfg.Slug,
+					class:   deploymentsv1.Environment_CLASS_PRODUCTION,
+				}, envScope(cfg, false))
+			},
+			ui:      ui,
+			stdout:  stdout,
+			enabled: canOpenVarsUI(stdin, opts.noUI),
+		}
+		manifest, err := recovery.buildManifest(ctx, opts.prebuilt, ui.BuildWriter())
 		if err != nil {
 			return err
 		}

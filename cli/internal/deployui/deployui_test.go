@@ -3,10 +3,13 @@ package deployui
 import (
 	"bytes"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
@@ -145,5 +148,154 @@ func TestStepIdentity(t *testing.T) {
 	k3, title3 := stepIdentity(deploymentsv1.Phase_PHASE_UNSPECIFIED, "Ensuring passphrase")
 	if k3 == k1 || title3 != "Ensuring passphrase" {
 		t.Errorf("unspecified step identity = (%q,%q), want its own message-keyed step", k3, title3)
+	}
+}
+
+// TestWaiting_PrintsWhereToGoAndHowToAbort pins the block a blocked run leaves
+// on screen. It is the whole of what a developer handed off to a browser has to
+// work with.
+func TestWaiting_PrintsWhereToGoAndHowToAbort(t *testing.T) {
+	s, out, logPath := newTestSession(t, "ocel deploy")
+	s.Waiting("1 variable is not ready — nothing has been built.\n\n  STRIPE_API_KEY (project root)\n", "http://127.0.0.1:5555/#t=abc")
+
+	got := out.String()
+	for _, want := range []string{"STRIPE_API_KEY", "http://127.0.0.1:5555/#t=abc", "Ctrl-C"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stdout = %q, want it to contain %q", got, want)
+		}
+	}
+	if raw, err := os.ReadFile(logPath); err == nil && !strings.Contains(string(raw), "waiting") {
+		t.Errorf("log = %s, want the wait recorded", raw)
+	}
+}
+
+// TestCancel_WhileWaiting_DoesNotWarnAboutResourcesThatCannotExist: the wait
+// stands before any provisioning, so the standard cancel warning would send the
+// developer looking for infrastructure that was never created.
+func TestCancel_WhileWaiting_DoesNotWarnAboutResourcesThatCannotExist(t *testing.T) {
+	s, out, _ := newTestSession(t, "ocel deploy")
+	s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+	s.Cancel()
+
+	got := out.String()
+	if strings.Contains(got, "Resources may be partially created") {
+		t.Errorf("stdout = %q, want no partial-provisioning warning for a run cancelled before provisioning", got)
+	}
+	if !strings.Contains(got, "Nothing has been provisioned") {
+		t.Errorf("stdout = %q, want the cancel to say nothing was provisioned", got)
+	}
+}
+
+// TestWaiting_NeverPersistsTheSessionTokenToTheLog: the variables UI carries
+// its bearer token in the URL fragment so it reaches no log — and this log
+// outlives the wait, and is the file the run tells the developer to open.
+func TestWaiting_NeverPersistsTheSessionTokenToTheLog(t *testing.T) {
+	const token = "s3cr3t-session-token"
+	s, out, logPath := newTestSession(t, "ocel deploy")
+	s.Waiting("1 variable is not ready.", "http://127.0.0.1:41234/#t="+token)
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close() = %v", err)
+	}
+
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read log: %v", err)
+	}
+	log := string(raw)
+	if strings.Contains(log, token) {
+		t.Errorf("log = %q, want the session token never persisted", log)
+	}
+	if !strings.Contains(log, "[waiting] http://127.0.0.1:41234/") {
+		t.Errorf("log = %q, want the wait recorded with the address", log)
+	}
+	// The screen still gets the whole URL: it is what the developer clicks.
+	if !strings.Contains(out.String(), token) {
+		t.Errorf("stdout = %q, want the full URL on screen", out.String())
+	}
+}
+
+// lockedWriter serialises the render loop's writes against the test's reads.
+type lockedWriter struct {
+	mu sync.Mutex
+	b  bytes.Buffer
+}
+
+func (w *lockedWriter) Write(p []byte) (int, error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.Write(p)
+}
+
+func (w *lockedWriter) String() string {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.b.String()
+}
+
+// newCleanTestSession builds a Session in the phased view — spinner, render
+// loop and all — against an in-memory writer. Everything Waiting and Resume do
+// beyond printing exists only in that view, so the seam is the only way to
+// reach it without a pty.
+func newCleanTestSession(t *testing.T) (*Session, *lockedWriter) {
+	t.Helper()
+	prev := isTTY
+	isTTY = func(io.Writer) bool { return true }
+	t.Cleanup(func() { isTTY = prev })
+
+	out := &lockedWriter{}
+	s := New(out, t.TempDir(), "ocel deploy", false)
+	t.Cleanup(func() { _ = s.Close() })
+	if !s.clean {
+		t.Fatal("session is not in the phased view, so the render loop is not running")
+	}
+	return s, out
+}
+
+// TestWaiting_StopsTheRenderLoopSoTheBlockSurvives: the block is the whole of
+// what a developer handed off to a browser has to work with, and the render
+// loop repaints one line in place — so a wait that does not stop it scrolls
+// the URL away a frame later.
+func TestWaiting_StopsTheRenderLoopSoTheBlockSurvives(t *testing.T) {
+	s, out := newCleanTestSession(t)
+	s.Building()
+	time.Sleep(3 * frameRate) // the spinner is painting
+
+	s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+	settled := out.String()
+	time.Sleep(5 * frameRate)
+
+	if got := out.String(); got != settled {
+		t.Errorf("the render loop painted %q over the waiting block", strings.TrimPrefix(got, settled))
+	}
+}
+
+// TestResume_RestartsTheSpinnerTheWaitStopped: the wait stops the animation, so
+// a run that carries on must start it again or it looks hung for the rest of
+// the deploy.
+func TestResume_RestartsTheSpinnerTheWaitStopped(t *testing.T) {
+	s, out := newCleanTestSession(t)
+	s.Building()
+	s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+	quiet := out.String()
+
+	s.Resume()
+	time.Sleep(5 * frameRate)
+
+	if out.String() == quiet {
+		t.Error("nothing was painted after Resume, so the paused step never restarted")
+	}
+}
+
+// TestCancel_AfterResume_WarnsAboutResourcesAgain: once the run is moving
+// again it can provision, so the wait must not leave its reassurance behind.
+func TestCancel_AfterResume_WarnsAboutResourcesAgain(t *testing.T) {
+	s, out, _ := newTestSession(t, "ocel deploy")
+	s.Waiting("1 variable is not ready.", "http://127.0.0.1:5555/#t=abc")
+	s.Resume()
+	s.Cancel()
+
+	got := out.String()
+	if !strings.Contains(got, "Resources may be partially created") {
+		t.Errorf("stdout = %q, want a resumed run cancelled later to warn about partial provisioning", got)
 	}
 }

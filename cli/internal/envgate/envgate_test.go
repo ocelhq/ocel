@@ -385,3 +385,26 @@ func TestGate_RefusalCarriesTheProblemsSoARecoveryPathCanPrefillThem(t *testing.
 		t.Errorf("refusal carries %d problems, want both cells", len(refusal.Problems))
 	}
 }
+
+// TestRefusal_OwedNamesTheCellsWithoutTheAdviceToRerun: a caller that is about
+// to offer its own way out in this same run prints Owed, so Owed must carry
+// every cell and none of the advice.
+func TestRefusal_OwedNamesTheCellsWithoutTheAdviceToRerun(t *testing.T) {
+	refusal := &envgate.Refusal{
+		Problems: []*resourcesv1.VariableProblem{
+			{Key: "STRIPE_API_KEY", Kind: resourcesv1.VariableProblem_KIND_MISSING},
+		},
+		Scope: envgate.Scope{Apps: []envgate.App{{Name: "web"}}},
+	}
+
+	owed := refusal.Owed()
+	if !strings.Contains(owed, "STRIPE_API_KEY") {
+		t.Errorf("Owed() = %q, want it to name the cell that stopped the run", owed)
+	}
+	if strings.Contains(owed, "run this command again") {
+		t.Errorf("Owed() = %q, want no advice to re-run a command that has not given up", owed)
+	}
+	if !strings.Contains(refusal.Error(), "run this command again") {
+		t.Errorf("Error() = %q, want the hard refusal to still say what to do next", refusal.Error())
+	}
+}
