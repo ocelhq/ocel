@@ -207,7 +207,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	// binding for the whole project, so where those two cannot be the same
 	// answer the gate's verdict is not one a read can rely on.
 	appFolder := appbuilder.AppFolder(cfg.Apps)
-	if err := checkStatableBinding(cfg.Apps, appFolder, srv.ScopedKeys()); err != nil {
+	if err := checkStatableBinding(cfg.Apps, appFolder, srv.ScopedFolders()); err != nil {
 		return nil, err
 	}
 

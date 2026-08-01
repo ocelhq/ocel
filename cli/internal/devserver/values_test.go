@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -297,9 +298,11 @@ func TestDeclareEnv_KeepsEveryDeclarationsFoldersForOneKey(t *testing.T) {
 	}
 }
 
-// ScopedKeys is what dev rules its own binding against, so it reports a key once
-// however many declarations name it, and reports nothing for an unscoped one.
-func TestScopedKeys_NamesEveryKeyDeclaredWithAFolder(t *testing.T) {
+// ScopedFolders is what dev rules its own binding against, so it reports a key
+// once however many declarations name it — carrying the union of their folders,
+// because a key readable in either folder is scoped to both — and reports
+// nothing for an unscoped one.
+func TestScopedFolders_CarriesEveryFolderEveryDeclarationNames(t *testing.T) {
 	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
 	s.UseValues(map[string]string{}, envgate.Scope{})
 	ts := httptest.NewServer(s.Mux())
@@ -309,10 +312,14 @@ func TestScopedKeys_NamesEveryKeyDeclaredWithAFolder(t *testing.T) {
 		&resourcesv1.VariableDefinition{Key: "API_BASE", Folders: []string{"/web"}},
 		&resourcesv1.VariableDefinition{Key: "DATABASE_URL"},
 	)
+	declareEnv(t, ts.URL, &resourcesv1.VariableDefinition{Key: "API_BASE", Folders: []string{"/admin", "/web"}})
 	declareEnv(t, ts.URL, &resourcesv1.VariableDefinition{Key: "API_BASE", Folders: []string{"/admin"}})
 
-	got := s.ScopedKeys()
-	if len(got) != 1 || got[0] != "API_BASE" {
-		t.Fatalf("ScopedKeys = %v, want exactly [API_BASE]", got)
+	got := s.ScopedFolders()
+	if len(got) != 1 {
+		t.Fatalf("ScopedFolders = %v, want exactly one key: DATABASE_URL is unscoped", got)
+	}
+	if want := []string{"/admin", "/web"}; !slices.Equal(got["API_BASE"], want) {
+		t.Fatalf("ScopedFolders[API_BASE] = %v, want %v: both declarations' folders, once each", got["API_BASE"], want)
 	}
 }

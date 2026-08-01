@@ -390,11 +390,11 @@ func TestCheckStatableBinding_RefusesWhenTheAppsDoNotAgreeOnOne(t *testing.T) {
 	}
 
 	agreed := []projectconfig.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/web"}}
-	if err := checkStatableBinding(agreed, "/web", []string{"API_BASE"}); err != nil {
+	if err := checkStatableBinding(agreed, "/web", map[string][]string{"API_BASE": {"/web"}}); err != nil {
 		t.Errorf("checkStatableBinding = %v, want nil when every app binds the folder dev states", err)
 	}
 
-	err := checkStatableBinding(apps, "", []string{"API_BASE"})
+	err := checkStatableBinding(apps, "", map[string][]string{"API_BASE": {"/web", "/api"}})
 	if err == nil {
 		t.Fatal("checkStatableBinding = nil, want a refusal: no child of this run could read API_BASE")
 	}
@@ -406,6 +406,87 @@ func TestCheckStatableBinding_RefusesWhenTheAppsDoNotAgreeOnOne(t *testing.T) {
 	}
 	if strings.Contains(got, "one `ocel dev` per app") || strings.Contains(got, "per app") {
 		t.Errorf("refusal = %q, want no per-app remedy: election keys on the project root, so a second run is a follower", got)
+	}
+}
+
+// A key scoped to a folder no app binds is unreadable under every app's own
+// binding too, so a deploy of the same project is just as silent about it. Dev
+// costs that project nothing by starting, and refusing it would refuse a
+// project that deploys.
+func TestCheckStatableBinding_StartsWhenNoAppBindsTheKeysScope(t *testing.T) {
+	apps := []projectconfig.App{
+		{Name: "web", Path: "apps/web", Folder: "/web"},
+		{Name: "api", Path: "apps/api", Folder: "/api"},
+	}
+
+	if err := checkStatableBinding(apps, "", map[string][]string{"NOBODY": {"/nowhere"}}); err != nil {
+		t.Errorf("checkStatableBinding = %v, want nil: no app binds /nowhere, so no read is lost", err)
+	}
+
+	scoped := map[string][]string{"NOBODY": {"/nowhere"}, "API_BASE": {"/web"}}
+	err := checkStatableBinding(apps, "", scoped)
+	if err == nil {
+		t.Fatal("checkStatableBinding = nil, want a refusal for API_BASE, which web would read under its own binding")
+	}
+	if strings.Contains(err.Error(), "NOBODY") {
+		t.Errorf("refusal = %q, want it silent about NOBODY: naming a key no app binds sends the developer after nothing", err.Error())
+	}
+}
+
+// The refusal is a list of what this run cannot do, so it names only the apps
+// that lose a read: an app bound outside the key's scope was never going to
+// read it, and listing it makes the remedy read as if it were about them.
+func TestCheckStatableBinding_NamesOnlyTheAppsBindingTheKeysScope(t *testing.T) {
+	apps := []projectconfig.App{
+		{Name: "web", Path: "apps/web", Folder: "/web"},
+		{Name: "api", Path: "apps/api", Folder: "/api"},
+	}
+
+	err := checkStatableBinding(apps, "", map[string][]string{"API_BASE": {"/web"}})
+	if err == nil {
+		t.Fatal("checkStatableBinding = nil, want a refusal: web would read API_BASE under its own binding")
+	}
+	got := err.Error()
+	if !strings.Contains(got, "API_BASE") || !strings.Contains(got, "web binds /web") {
+		t.Errorf("refusal = %q, want it to name API_BASE and web's binding", got)
+	}
+	if strings.Contains(got, "api binds /api") {
+		t.Errorf("refusal = %q, want no mention of api: /api is not in API_BASE's scope", got)
+	}
+}
+
+// A project can lose more than one read at once, and the refusal is the whole
+// list: every losing key, in a fixed order, and every app that loses one. Go
+// randomises map iteration, so without the sort the same broken project would
+// print a different refusal on every run — the message is asserted whole, and
+// repeatedly, because a text that varies per run is not a text a developer can
+// compare against a teammate's.
+func TestCheckStatableBinding_ListsEveryLosingKeyAndAppInAFixedOrder(t *testing.T) {
+	apps := []projectconfig.App{
+		{Name: "web", Path: "apps/web", Folder: "/web"},
+		{Name: "api", Path: "apps/api", Folder: "/api"},
+	}
+	scoped := map[string][]string{
+		"D_KEY": {"/api"},
+		"B_KEY": {"/api"},
+		"C_KEY": {"/web"},
+		"A_KEY": {"/web"},
+	}
+
+	want := "A_KEY, B_KEY, C_KEY, D_KEY are scoped to a folder this run cannot state — the app has not been started.\n" +
+		"\n  web binds /web\n  api binds /api\n\n" +
+		"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, " +
+		"so the binding they state is the project root. A scoped read refuses under it, even with the value in " + dotenv.FileName + ".\n\n" +
+		"fix: bind every app to the same folder in ocel.config.ts, or drop `folders:` from those declarations."
+
+	for range 50 {
+		err := checkStatableBinding(apps, "", scoped)
+		if err == nil {
+			t.Fatal("checkStatableBinding = nil, want a refusal: both apps lose a read")
+		}
+		if got := err.Error(); got != want {
+			t.Fatalf("refusal =\n%q\nwant\n%q", got, want)
+		}
 	}
 }
 
@@ -444,6 +525,84 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	}
 	if _, statErr := os.Stat(startedPath); statErr == nil {
 		t.Error("the app was started despite the refusal")
+	}
+}
+
+// A deploy of this project succeeds and says nothing about NOBODY: every app's
+// own binding is outside its scope, so no app resolves it there either. Dev
+// must not be stricter than the deploy it stands in for, so the run starts.
+//
+// The value is in the file on purpose — a required scoped key with none is
+// refused by the gate itself, one step earlier, and this test would then pass
+// without ever reaching the binding check.
+func TestRunDev_StartsWhenAScopedVariableIsBoundByNoApp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
+`)
+	writeFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
+
+	startedPath := filepath.Join(root, "started")
+	appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runDev err = %v, want the app to have run and exited 7; stderr=%s", err, stderr.String())
+	}
+	if _, statErr := os.Stat(startedPath); statErr != nil {
+		t.Errorf("the app was not started: %v", statErr)
+	}
+}
+
+// `ocel run` gates the same project the same way `ocel dev` does, so the
+// narrowing has to reach it too — they share one discovery path and this is
+// what says so.
+func TestRunRun_StartsWhenAScopedVariableIsBoundByNoApp(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folder: "/web" }, { name: "api", path: "apps/api", folder: "/api" }] };
+`)
+	writeFile(t, filepath.Join(root, ".env"), "NOBODY=x\n")
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"NOBODY","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/nowhere"]}`))
+
+	startedPath := filepath.Join(root, "started")
+	appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
+
+	var stdout, stderr bytes.Buffer
+	err := runRun(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runRun err = %v, want the app to have run and exited 7; stderr=%s", err, stderr.String())
+	}
+	if _, statErr := os.Stat(startedPath); statErr != nil {
+		t.Errorf("the app was not started: %v", statErr)
 	}
 }
 

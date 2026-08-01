@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -213,25 +214,37 @@ func (s *Server) CheckEnv(ctx context.Context) error {
 	return gate.Check()
 }
 
-// ScopedKeys is every key this run declared with a folder scope. It answers the
-// one question the gate cannot: the gate rules per app, over each app's own
-// binding, and dev states one binding for the whole project.
-func (s *Server) ScopedKeys() []string {
+// ScopedFolders is every key this run declared with a folder scope, mapped to
+// the folders it is scoped to. It answers the one question the gate cannot: the
+// gate rules per app, over each app's own binding, and dev states one binding
+// for the whole project — so deciding whether that binding costs a read needs
+// the folders, not only the names.
+//
+// Two declarations of one key contribute the union of their folders, the way
+// the store accumulates their cells: a key readable in either folder is scoped
+// to both.
+func (s *Server) ScopedFolders() map[string][]string {
 	_, gate := s.variables()
 	if gate == nil {
 		return nil
 	}
-	seen := map[string]bool{}
-	var keys []string
+	scoped := map[string][]string{}
 	for _, definition := range gate.Definitions() {
-		if len(definition.GetFolders()) == 0 || seen[definition.GetKey()] {
+		folders := definition.GetFolders()
+		if len(folders) == 0 {
 			continue
 		}
-		seen[definition.GetKey()] = true
-		keys = append(keys, definition.GetKey())
+		key := definition.GetKey()
+		for _, folder := range folders {
+			if !slices.Contains(scoped[key], folder) {
+				scoped[key] = append(scoped[key], folder)
+			}
+		}
 	}
-	sort.Strings(keys)
-	return keys
+	for key := range scoped {
+		sort.Strings(scoped[key])
+	}
+	return scoped
 }
 
 // declaredLiveKeys is every live-class key declared since the last reset,

@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -106,34 +107,56 @@ func devReadBy(apps []envgate.App, folder string) string {
 	return ", read by " + strings.Join(names, ", ")
 }
 
-// checkStatableBinding refuses a run whose scoped variables no child of it
-// could read. Dev spawns one child for the whole project and nothing tells it
-// which app that child is, so it states the folder every app agrees on; where
-// two apps bind different ones it can only state the project root, and every
-// scoped read then refuses at runtime with its value sitting in that very
+// checkStatableBinding refuses a run that would cost an app a read it has. Dev
+// spawns one child for the whole project and nothing tells it which app that
+// child is, so it states the folder every app agrees on; where two apps bind
+// different ones it can only state the project root, and a read scoped
+// elsewhere then refuses at runtime with its value sitting in that very
 // environment. Letting the gate pass and the SDK throw would be precisely the
 // crash at the first read the gate exists to replace, so dev says here what it
 // cannot do.
-func checkStatableBinding(apps []projectconfig.App, stated string, scopedKeys []string) error {
-	if len(scopedKeys) == 0 {
+//
+// It refuses only for a key some app's own binding is in the scope of, and that
+// the stated binding is not — exactly the reads this run loses. A key scoped
+// where no app is bound is unreadable under every binding, including the ones a
+// deploy states, so dev is as silent about it as a deploy is rather than
+// refusing a project that deploys.
+func checkStatableBinding(apps []projectconfig.App, stated string, scoped map[string][]string) error {
+	var keys []string
+	losing := make([]bool, len(apps))
+	for key, folders := range scoped {
+		if slices.Contains(folders, stated) {
+			continue
+		}
+		lost := false
+		for i, app := range apps {
+			if slices.Contains(folders, app.Folder) {
+				losing[i] = true
+				lost = true
+			}
+		}
+		if lost {
+			keys = append(keys, key)
+		}
+	}
+	if len(keys) == 0 {
 		return nil
 	}
+	sort.Strings(keys)
+
 	var bindings []string
-	for _, app := range apps {
-		if app.Folder != stated {
+	for i, app := range apps {
+		if losing[i] {
 			bindings = append(bindings, app.Name+" binds "+folderLabel(app.Folder))
 		}
 	}
-	if len(bindings) == 0 {
-		return nil
-	}
 
-	return fmt.Errorf(`%s scoped to a folder, and this project's apps do not agree on one — the app has not been started.
+	return fmt.Errorf(`%s scoped to a folder this run cannot state — the app has not been started.
 
   %s
 
 `+"`ocel dev` and `ocel run` spawn one child for the whole project and nothing tells it which app that child is, so the binding they state is %s. A scoped read refuses under it, even with the value in %s.\n\nfix: bind every app to the same folder in ocel.config.ts, or drop `folders:` from those declarations.",
-		scopedPlural(scopedKeys), strings.Join(bindings, "\n  "), folderLabel(stated), dotenv.FileName)
+		scopedPlural(keys), strings.Join(bindings, "\n  "), folderLabel(stated), dotenv.FileName)
 }
 
 func scopedPlural(keys []string) string {
