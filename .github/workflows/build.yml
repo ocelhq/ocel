@@ -52,6 +52,14 @@ jobs:
       - name: pnpm --filter ocel build (tsc)
         run: pnpm --filter ocel build
 
+      - name: Go env-wire e2e (defineEnv -> DeclareEnv)
+        working-directory: cli
+        # The only test that runs the real ocel/env SDK against the real gate,
+        # so it needs the SDK build above. Named explicitly rather than `go
+        # test ./...` to keep this step narrow: it must not drag in unrelated
+        # red from the rest of the cli module.
+        run: go test ./internal/envwire/...
+
       - name: JS unit tests
         run: |
           pnpm --filter ocel test

@@ -18,7 +18,14 @@ import (
 // discovery: declare every variable in one call, then report back the cells the
 // answer shows it cannot run with. Writing it by hand rather than importing the
 // SDK keeps this test about the CLI's half of the exchange — and lets it record
-// exactly what plaintext the declaring process was handed.
+// exactly what plaintext the declaring process was handed, which the real SDK
+// exposes no hook for.
+//
+// It states the report it makes rather than deriving one: the required-cell
+// matrix has exactly two owners — packages/ocel/src/env/declare.ts and
+// cli/internal/envgate/matrix.go — and cli/internal/envwire is where the real
+// SDK's copy is held to the gate's. A third copy here would be a rule this
+// file could drift from with every suite green.
 const envDeclarationScript = `
 declare global {
   var __ocelRegister: Promise<unknown>[];
@@ -43,16 +50,7 @@ globalThis.__ocelRegister.push(
     const out = process.env.OCEL_TEST_ENV_CELLS_OUT;
     if (out) await (await import("node:fs/promises")).writeFile(out, JSON.stringify(cells));
 
-    // The required-cell matrix, as ocel/env computes it: a scoped variable
-    // owes a value to every folder it names and none to the root.
-    const problems = definitions.flatMap((d: any) =>
-      (d.folders?.length ? d.folders : [""])
-        .filter(
-          (folder: string) =>
-            !cells.some((c: any) => c.key === d.key && (c.folder ?? "") === folder),
-        )
-        .map((folder: string) => ({ key: d.key, folder, kind: "KIND_MISSING" })),
-    );
+    const problems = JSON.parse(process.env.OCEL_TEST_ENV_PROBLEMS!);
     if (problems.length > 0) await call("ReportEnvProblems", { problems });
   })(),
 );
@@ -95,6 +93,7 @@ func setUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(envFakeStoreEnvVar, filepath.Join(t.TempDir(), "vars.json"))
 	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", definitions)
+	t.Setenv("OCEL_TEST_ENV_PROBLEMS", "[]")
 	writeFile(t, filepath.Join(root, "ocel", "env.ts"), script)
 	return root
 }
@@ -113,6 +112,7 @@ func stubAppBuildRecorder(t *testing.T, built *bool) {
 
 func TestRunDeploy_MissingValue_RefusesBeforeAnythingIsBuilt(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	t.Setenv("OCEL_TEST_ENV_PROBLEMS", `[{"key":"STRIPE_API_KEY","folder":"","kind":"KIND_MISSING"}]`)
 	built := false
 	stubAppBuildRecorder(t, &built)
 
