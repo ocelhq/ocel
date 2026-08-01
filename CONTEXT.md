@@ -173,3 +173,81 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
   Distinct from a transient store outage: a cached deployment keeps serving when
   the store is briefly unreachable; only a cold isolate with an unreachable
   store yields a 503.
+
+## Variables & secrets
+
+See ADR 0005 for the class table's consequences, the threat model, and the
+staleness bound.
+
+- **Variable** — one named value application code declares through `defineEnv`
+  and reads as a plain synchronous property. Declaring it is the act that makes
+  it required: nothing outside the code that reads a variable decides it exists.
+  Reading never varies with class, so reclassifying a key never edits a call
+  site.
+
+- **Class** — the one axis a variable's delivery is allowed to differ along, and
+  it settles confidentiality and delivery together. Exactly three: **plain**
+  (a plaintext entry in the function's environment, under the key's own name),
+  **sensitive** (ciphertext carried inside the bundle, opened by the membrane),
+  and **secret** (never in an artifact at all — fetched from the store at
+  runtime). Prose calls **secret** the *live* class because it is the only one
+  that can be replaced under a running process; there is no separate `live`
+  class. Rotating a plain or sensitive value needs a redeploy; rotating a secret
+  does not. _Avoid_: tier, level, kind.
+
+- **Client-accessible** — an orthogonal flag, not a fourth class, marking a value
+  the browser may read. Only a plain variable may carry it: a value the browser
+  can read cannot also be one kept from it, and the combination is refused where
+  the definition is written.
+
+- **Cell** — the address of one stored value: a key plus a folder. It is the
+  unit the discovery gate rules on, the unit the store holds, and the unit a
+  refusal names. A cell either holds a value or does not; presence, not the
+  plaintext, is what travels above the store.
+
+- **Folder** — the app-divergence axis of a cell, spelled as a leading-slash
+  path and matched whole — nesting is organisational only, never a prefix
+  relationship. The empty string is the project root everywhere above the store;
+  `"/"` is not a second spelling of it, and only the store may render the
+  sentinel it files the root under. An unscoped variable lives at the root and a
+  bound app may override it there; a variable that names folders is mandatory in
+  each and has no root value at all, so the two modes never mix.
+
+- **Env class** — the deployment environment a value belongs to (production,
+  preview), and the boundary a value can never be read across: the store
+  partitions per project *and* per env class, and a function's grant is scoped
+  to its own partition. Distinct from a **named environment**, which is an
+  override *within* a class — a value, never a requirement, so filling one never
+  satisfies a required cell. The two override axes (root → folder, class-wide →
+  named environment) are orthogonal.
+
+- **Variable store** — the per-account, project-partitioned store of variable
+  values: ciphertext at rest, unwrapped through the env class's own key, and the
+  sole source of a secret-class plaintext at runtime. Values are versioned, and
+  a write quotes back the version it was made against so an edit over a value
+  someone else has since replaced is refused rather than applied.
+
+- **Required-cell matrix** — the grid the bundled variables UI presents: a row
+  per declared variable, a column per folder, each cell drawn required, optional
+  or forbidden by what the declaration permits. It is what the discovery gate's
+  verdict looks like when it is something to fill in rather than something to
+  read, and it is deliberately drawn unfillable where a declaration forbids a
+  cell rather than accepting a value and refusing it on save.
+
+- **Coordinate manifest** — the file a deploy pins into an app's package naming
+  *where* each of its secret-class values lives, and never what they are
+  (`live.Manifest`). Possession of the code therefore discloses an address and
+  not a value, which is exactly why rotating one needs no redeploy — re-scoping
+  a key does change the manifest, and lands as a new artifact.
+
+- **Discovery gate** — the pass that runs the app's own declarations before a
+  deploy or a dev run and refuses when a required cell is unset or a value fails
+  its schema. Only the declaring process can judge a value against its schema,
+  which is why the verdict comes from running the code rather than from reading
+  the store.
+
+- **Value fingerprint** — see **Deployment identity**: a Deployment's identity is
+  its build id plus an optional fingerprint of the values baked into it, so a
+  vars-only deploy reusing the same build output still mints a Deployment of its
+  own. This is why variables touch record keys and app-deploy stack naming at
+  all.
