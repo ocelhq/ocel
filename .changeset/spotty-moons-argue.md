@@ -4,8 +4,8 @@
 
 `ocel dev` now resolves variables from a `.env` file at the project root, so
 getting a project running takes no cloud account and no `ocel env set`. The file
-is `KEY=VALUE`, whole-line `#` comments, optional quotes, and nothing else — no
-layering, no `$VAR` interpolation.
+is `KEY=VALUE`, `#` comments, optional quotes — single, double or backtick — and
+nothing else: no layering, no `$VAR` interpolation.
 
 `.env` is the file your framework already reads, so Ocel adopted it rather than
 claimed it: a line whose key Ocel could never be asked for — anything under

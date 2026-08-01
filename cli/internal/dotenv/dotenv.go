@@ -11,11 +11,13 @@ package dotenv
 
 import (
 	"bufio"
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // FileName is the dotfile, at the project root and nowhere else. Dev elects one
@@ -53,6 +55,7 @@ func Load(dir string) (File, error) {
 
 	parsed := File{Values: map[string]string{}}
 	scanner := bufio.NewScanner(file)
+	scanner.Split(splitLines)
 	for line := 1; scanner.Scan(); line++ {
 		key, value, readable := parseLine(scanner.Text())
 		switch {
@@ -68,12 +71,55 @@ func Load(dir string) (File, error) {
 	return parsed, nil
 }
 
+// splitLines ends a line at "\n", "\r\n", or a lone "\r", because the parser
+// this file is shared with rewrites `\r\n?` to `\n` before it reads anything.
+// Splitting only on "\n" let one key's value swallow the next key's whole line
+// in a file written with classic-Mac endings — the second key silently absent
+// and the first silently wrong. Line numbers count the lines the file has under
+// its own endings, so what an unreadable line discloses stays a number a
+// developer can find.
+func splitLines(data []byte, atEOF bool) (int, []byte, error) {
+	if atEOF && len(data) == 0 {
+		return 0, nil, nil
+	}
+	end := bytes.IndexAny(data, "\r\n")
+	switch {
+	case end < 0 && atEOF:
+		return len(data), data, nil
+	case end < 0:
+		return 0, nil, nil
+	case data[end] == '\n':
+		return end + 1, data[:end], nil
+	case end == len(data)-1 && !atEOF:
+		// A trailing "\r" may yet be the first half of a "\r\n".
+		return 0, nil, nil
+	case end+1 < len(data) && data[end+1] == '\n':
+		return end + 2, data[:end], nil
+	default:
+		return end + 1, data[:end], nil
+	}
+}
+
+// space is JS's `\s`, which is what decides where a key starts in the regex
+// this parser mirrors. It differs from Go's own definition in exactly two
+// characters, and both cost a value when they are got wrong. U+FEFF is the byte
+// order mark a `.env` written by PowerShell redirection opens with: without it
+// the mark became part of the first key, which then failed as undeclarable and
+// took the file's first value with it, in silence. U+0085 goes the other way —
+// Go calls it space and JS does not, so treating it as one would let Ocel read
+// `export<U+0085>KEY=v` as an assignment the framework never sees.
+func space(r rune) bool { return (unicode.IsSpace(r) && r != '\u0085') || r == '\ufeff' }
+
+func trimSpace(s string) string { return strings.TrimFunc(s, space) }
+
 // parseLine reports false for a line that assigns nothing, and an empty key for
-// one that assigns something Ocel could not be asked for. A '#' outside the
-// first column is part of the value: a trailing comment cannot be told from one
-// inside a value without quoting rules deeper than this grammar has.
+// one that assigns something Ocel could not be asked for. The value half stops
+// at the first unquoted '#': a quoted token — single, double, or backtick —
+// keeps a value whole through one, but only while nothing follows the closing
+// quote but whitespace and an optional comment. There is no '#' escape,
+// matching the parser this file is shared with.
 func parseLine(raw string) (string, string, bool) {
-	line := strings.TrimSpace(raw)
+	line := trimSpace(raw)
 	if line == "" || strings.HasPrefix(line, "#") {
 		return "", "", true
 	}
@@ -83,14 +129,23 @@ func parseLine(raw string) (string, string, bool) {
 		return "", "", false
 	}
 
-	// `export KEY=VALUE` is read the same way: the file is shared with tools
-	// that source it, and dropping the line would leave a value visible in the
-	// file and missing from the run.
-	key := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(name), "export "))
+	key := trimSpace(unexport(trimSpace(name)))
 	if !declarable(key) {
 		return "", "", true
 	}
-	return key, unquote(strings.TrimSpace(rest)), true
+	return key, value(trimSpace(rest)), true
+}
+
+// unexport drops an `export` prefix, which the keyword's own separator ends:
+// any whitespace, not one space. The file is shared with tools that source it,
+// and dropping the line would leave a value visible in the file and missing
+// from the run — the outcome a tab used to produce.
+func unexport(name string) string {
+	rest, found := strings.CutPrefix(name, "export")
+	if !found || rest == strings.TrimLeftFunc(rest, space) {
+		return name
+	}
+	return rest
 }
 
 func declarable(key string) bool {
@@ -105,14 +160,62 @@ func declarable(key string) bool {
 	return true
 }
 
-// unquote strips one matching pair of surrounding quotes. Only a double-quoted
-// value has escapes, and only `\n`.
-func unquote(value string) string {
-	if len(value) >= 2 && value[0] == '\'' && value[len(value)-1] == '\'' {
-		return value[1 : len(value)-1]
+// value reproduces dotenv's LINE regex value alternation plus its post-match
+// trim, quote-strip, and escape expansion: a leading quoted token wins whole
+// when its close is followed by nothing but whitespace and an optional
+// comment; otherwise the value runs up to the first '#'. Only a double-quoted
+// value expands escapes, and only `\n` and `\r` — dotenv has no `#` escape.
+func value(rest string) string {
+	v := quotedToken(rest)
+	if v == "" {
+		v, _, _ = strings.Cut(rest, "#")
 	}
-	if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
-		return strings.ReplaceAll(value[1:len(value)-1], `\n`, "\n")
+	v = trimSpace(v)
+	if v == "" {
+		return v
 	}
-	return value
+	quote := v[0]
+	if len(v) >= 2 && (quote == '\'' || quote == '"' || quote == '`') && v[len(v)-1] == quote {
+		v = v[1 : len(v)-1]
+	}
+	if quote == '"' {
+		v = strings.ReplaceAll(v, `\n`, "\n")
+		v = strings.ReplaceAll(v, `\r`, "\r")
+	}
+	return v
+}
+
+// quotedToken returns rest's leading quoted token — starting with a single,
+// double, or backtick quote — iff a close for it exists whose tail is nothing
+// but whitespace and an optional comment. It returns "" for no leading quote
+// or no such close, so the caller falls back to the '#'-cut branch. The scan
+// mirrors dotenv's own alternation: a greedy match stops at the first
+// unescaped quote, then backtracks to an earlier one if the tail after it
+// fails the check.
+func quotedToken(rest string) string {
+	t := strings.TrimLeftFunc(rest, space)
+	if t == "" {
+		return ""
+	}
+	quote := t[0]
+	if quote != '\'' && quote != '"' && quote != '`' {
+		return ""
+	}
+	var closes []int
+	for i := 1; i < len(t); i++ {
+		if t[i] != quote {
+			continue
+		}
+		closes = append(closes, i)
+		if t[i-1] != '\\' {
+			break
+		}
+	}
+	for i := len(closes) - 1; i >= 0; i-- {
+		tail := strings.TrimLeftFunc(t[closes[i]+1:], space)
+		if tail == "" || tail[0] == '#' {
+			return t[:closes[i]+1]
+		}
+	}
+	return ""
 }

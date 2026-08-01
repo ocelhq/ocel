@@ -122,6 +122,263 @@ DATABASE_URL=postgres://localhost/app
 	}
 }
 
+// A '#' outside quotes ends the value the same way the real dotenv parser ends
+// it, and a quote character — including a backtick, the third dotenv accepts —
+// keeps a value whole through one it would otherwise cut. Verified against
+// dotenv@17.4.2 (54 curated + ~20000 fuzzed lines, see wave6/scout-40-41.md);
+// there is no '\#' escape, so a backslash before '#' is not special.
+func TestLoad_StopsAnUnquotedValueAtAHash(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "PORT=3000 # dev only\nQUOTED=\"3000 # kept\"\nTIGHT=3000#nospace\nTICK=`3000 # kept`\nESC=3000 \\# not-an-escape\nURL=http://x.com/#frag\nHASHONLY=#only\nMULTI=v # c # d\nESCQUOTE=\"a\\\"b#c\"\nESCTICK=`a\\`b#c`\n")
+
+	file, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := map[string]string{
+		"PORT":     "3000",
+		"QUOTED":   "3000 # kept",
+		"TIGHT":    "3000",
+		"TICK":     "3000 # kept",
+		"ESC":      `3000 \`,
+		"URL":      "http://x.com/",
+		"HASHONLY": "",
+		"MULTI":    "v",
+		// A backslash escapes a quote inside a quoted value, so the token runs
+		// past it to the real close and the '#' stays in the value.
+		"ESCQUOTE": `a\"b#c`,
+		"ESCTICK":  "a\\`b#c",
+	}
+	for key, w := range want {
+		if got := file.Values[key]; got != w {
+			t.Errorf("%s = %q, want %q", key, got, w)
+		}
+	}
+}
+
+// The tail after a quoted token decides whether the quote wins: dotenv only
+// leaves a value whole when nothing but whitespace and an optional comment
+// follows the closing quote. Otherwise it falls back to the '#'-cut branch.
+//
+// BACKTRACK pins the other half of that rule: when the tail after the last
+// candidate close fails, an earlier escaped quote is still a candidate, exactly
+// as dotenv's regex backtracks into its alternation.
+func TestLoad_AQuotedTokenOnlyWinsWhenNothingFollowsButAComment(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "TRAILING=\"a # b\" c\nBACKTRACK='#\\'# x'y\n")
+
+	file, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := file.Values["TRAILING"], `"a`; got != want {
+		t.Errorf("TRAILING = %q, want %q", got, want)
+	}
+	if got, want := file.Values["BACKTRACK"], `#\`; got != want {
+		t.Errorf("BACKTRACK = %q, want %q", got, want)
+	}
+}
+
+// dotenv unescapes '\r' the same way it does '\n', only inside a double-quoted
+// value. A single-quoted or backtick-quoted value has no escapes at all: the
+// literal two characters survive.
+func TestLoad_UnescapesCarriageReturnInADoubleQuotedValue(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "A=\"a\\rb\"\nB='a\\rb'\nC=`a\\rb`\n")
+
+	file, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := file.Values["A"], "a\rb"; got != want {
+		t.Errorf("A = %q, want %q", got, want)
+	}
+	if got, want := file.Values["B"], `a\rb`; got != want {
+		t.Errorf("B = %q, want %q (single quotes have no escapes)", got, want)
+	}
+	if got, want := file.Values["C"], `a\rb`; got != want {
+		t.Errorf("C = %q, want %q (backtick quotes have no escapes)", got, want)
+	}
+}
+
+// `export` is separated from the key by whitespace, not by one space: a file
+// written for a shell may use a tab. dotenv@17.4.2 reads `export\tB=2` as
+// {"B":"2"}; Ocel read the key as `export\tB`, failed it as undeclarable, and
+// dropped the line without even reporting it — a value visible in the file and
+// missing from the run, which is the outcome the `export` handling exists to
+// prevent.
+func TestLoad_ReadsAnExportSeparatedByAnyWhitespace(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "export\tTABBED=1\nexport   SPACED=2\nexport\t  MIXED=3\nEXPORTED_NAME=4\nexportABC=5\nexport=6\n")
+
+	file, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := map[string]string{"TABBED": "1", "SPACED": "2", "MIXED": "3", "EXPORTED_NAME": "4"}
+	for key, w := range want {
+		if got := file.Values[key]; got != w {
+			t.Errorf("%s = %q, want %q", key, got, w)
+		}
+	}
+	if len(file.Values) != len(want) {
+		t.Errorf("Values = %v, want exactly %v", file.Values, want)
+	}
+	// `export` ends at whitespace and nowhere else: dotenv reads `exportABC=5`
+	// as the key `exportABC`, which Ocel could never be asked for.
+	if _, taken := file.Values["ABC"]; taken {
+		t.Errorf("Values = %v, want exportABC left alone: the keyword needs a separator", file.Values)
+	}
+	if len(file.Unreadable) != 0 {
+		t.Errorf("Unreadable = %v, want nothing: every line here assigns", file.Unreadable)
+	}
+}
+
+// A `.env` written by PowerShell redirection starts with a UTF-8 BOM. JS treats
+// U+FEFF as whitespace, so dotenv@17.4.2 reads a BOM-prefixed `A=1` as {"A":"1"};
+// Go's TrimSpace does not, so the key carried the mark, failed as undeclarable,
+// and the file's first line — usually the first value a developer sets —
+// vanished in silence.
+func TestLoad_ReadsPastAByteOrderMark(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "\ufeffDATABASE_URL=postgres://localhost/app\nAPI_TOKEN=t\nQUOTED=\"a # b\"\ufeff # c\nexport\ufeffBOMSEP=1\n\ufeff# a comment\n\ufeff\n")
+
+	file, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if got, want := file.Values["DATABASE_URL"], "postgres://localhost/app"; got != want {
+		t.Errorf("DATABASE_URL = %q, want %q", got, want)
+	}
+	if got, want := file.Values["API_TOKEN"], "t"; got != want {
+		t.Errorf("API_TOKEN = %q, want %q", got, want)
+	}
+	// The mark is whitespace wherever it stands, including in the tail that
+	// decides whether a quoted token wins.
+	if got, want := file.Values["QUOTED"], "a # b"; got != want {
+		t.Errorf("QUOTED = %q, want %q", got, want)
+	}
+	// It is whitespace to `export` too: dotenv reads `export<BOM>BOMSEP=1` as
+	// {"BOMSEP":"1"}, so the keyword's separator ends there as well.
+	if got, want := file.Values["BOMSEP"], "1"; got != want {
+		t.Errorf("BOMSEP = %q, want %q", got, want)
+	}
+	// A line that is nothing but a mark, or a mark then a comment, assigns
+	// nothing and claims nothing: it is not an unreadable line.
+	if len(file.Unreadable) != 0 {
+		t.Errorf("Unreadable = %v, want nothing", file.Unreadable)
+	}
+}
+
+// dotenv normalises `\r\n?` to `\n` before it parses, so a lone CR ends a line
+// for it as surely as a newline does. Splitting only on '\n' made one key's
+// value swallow the next key's whole line — the second key silently absent and
+// the first silently wrong, with nothing reported.
+func TestLoad_SplitsLinesOnALoneCarriageReturn(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "A_KEY=1\rB_KEY=2\r")
+
+	file, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	want := map[string]string{"A_KEY": "1", "B_KEY": "2"}
+	for key, w := range want {
+		if got := file.Values[key]; got != w {
+			t.Errorf("%s = %q, want %q", key, got, w)
+		}
+	}
+	if len(file.Values) != len(want) {
+		t.Errorf("Values = %v, want exactly %v", file.Values, want)
+	}
+	if len(file.Unreadable) != 0 {
+		t.Errorf("Unreadable = %v, want nothing", file.Unreadable)
+	}
+}
+
+// An editor that does not end the file with a newline is ordinary, and the last
+// line of a `.env` is an assignment like any other. dotenv@17.4.2 reads
+// "A_KEY=1\nB_KEY=2" as {"A_KEY":"1","B_KEY":"2"}; dropping the unterminated
+// tail would lose the last value in silence.
+func TestLoad_ReadsALastLineWithNoTerminator(t *testing.T) {
+	for name, contents := range map[string]string{
+		"lf":  "A_KEY=1\nB_KEY=2",
+		"cr":  "A_KEY=1\rB_KEY=2",
+		"one": "B_KEY=2",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, contents)
+
+			file, err := Load(dir)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if got, want := file.Values["B_KEY"], "2"; got != want {
+				t.Errorf("B_KEY = %q, want %q: the last line needs no terminator", got, want)
+			}
+			if len(file.Unreadable) != 0 {
+				t.Errorf("Unreadable = %v, want nothing", file.Unreadable)
+			}
+		})
+	}
+}
+
+// U+0085 NEL is whitespace to Go and not to JS, so `space` must exclude it or
+// Ocel reads a line the framework does not: dotenv@17.4.2 reads
+// "export\u0085A_KEY=v" as {} — the keyword has no separator — and keeps a
+// trailing NEL inside the value. Both divergences are silent.
+func TestLoad_TreatsNextLineAsPartOfTheLineNotAsWhitespace(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "export\u0085EXPORTED=1\n\u0085LEADING=2\nTAIL=3\u0085\nQUOTED=\"a # b\"\u0085#c\n")
+
+	file, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	// Neither `export\u0085EXPORTED` nor `\u0085LEADING` is a key dotenv would
+	// hand back, so neither is a key Ocel may claim.
+	if _, taken := file.Values["EXPORTED"]; taken {
+		t.Errorf("Values = %v, want export\\u0085EXPORTED left alone: NEL is not a separator", file.Values)
+	}
+	if _, taken := file.Values["LEADING"]; taken {
+		t.Errorf("Values = %v, want \\u0085LEADING left alone: NEL does not start a key", file.Values)
+	}
+	if got, want := file.Values["TAIL"], "3\u0085"; got != want {
+		t.Errorf("TAIL = %q, want %q: a trailing NEL is part of the value", got, want)
+	}
+	if got, want := file.Values["QUOTED"], "\"a"; got != want {
+		t.Errorf("QUOTED = %q, want %q: NEL after a close fails the tail check", got, want)
+	}
+}
+
+// Line numbers are the whole of what an unreadable line discloses, so they must
+// count the lines the file actually has however it ends them — a CRLF file and a
+// lone-CR file with the same content report the same number.
+func TestLoad_NumbersUnreadableLinesTheSameUnderEveryLineEnding(t *testing.T) {
+	for name, contents := range map[string]string{
+		"lf":   "A_KEY=1\nsk-live-must-not-appear\nB_KEY=2\n",
+		"crlf": "A_KEY=1\r\nsk-live-must-not-appear\r\nB_KEY=2\r\n",
+		"cr":   "A_KEY=1\rsk-live-must-not-appear\rB_KEY=2\r",
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			write(t, dir, contents)
+
+			file, err := Load(dir)
+			if err != nil {
+				t.Fatalf("Load: %v", err)
+			}
+			if len(file.Unreadable) != 1 || file.Unreadable[0] != 2 {
+				t.Errorf("Unreadable = %v, want [2]", file.Unreadable)
+			}
+			if file.Values["A_KEY"] != "1" || file.Values["B_KEY"] != "2" {
+				t.Errorf("Values = %v, want both keys read around the unreadable line", file.Values)
+			}
+		})
+	}
+}
+
 // A key set twice is not ambiguous enough to stop a run over: the dotenv parser
 // the framework uses answers with the last one, so answering differently would
 // mean the app and Ocel read the same file two ways.
