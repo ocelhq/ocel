@@ -226,8 +226,8 @@ type Result struct {
 	Outputs []*deploymentsv1.ResourceOutput
 	AppURLs []string
 	// PromotionID identifies the promotion this deploy created (CONTEXT.md):
-	// the project-wide unit grouping every app's build id. Empty when the
-	// deploy failed before promoting.
+	// the project-wide unit grouping every app's Deployment identity. Empty
+	// when the deploy failed before promoting.
 	PromotionID    string
 	RootStackState edge.RootStackState
 }

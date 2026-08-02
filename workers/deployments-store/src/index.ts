@@ -32,7 +32,8 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
 //   authenticates against the addressed instance's own stored project secret.
 // - pointerRecord is the single RPC method the frozen generic worker calls
 //   through its service binding, carrying the project slug: it resolves the
-//   app's build id and record for a pointer (the reserved default, or a named
+//   app's deployment identity (the buildId field, whose name predates
+//   identities) and record for a pointer (the reserved default, or a named
 //   preview pointer) in one round trip, echoing the caller's knownBuildId back
 //   unchanged to skip re-sending an unchanged record. It stays secret-less — the
 //   trust boundary is the binding itself, only ever reachable from another

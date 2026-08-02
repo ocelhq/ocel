@@ -56,3 +56,24 @@ promotion history whose active pointer names the live promotion.
 - Rollback latency is governed by the record-cache TTL, not a redeploy.
 - The record schema reserves space for future deployment-owned edge workers
   (Next edge routes / middleware), so wiring that later needs no migration.
+
+## Amended: records are keyed by deployment identity, not build id (2026-08-02)
+
+The decision above stands unchanged; only the key it calls "build id" has grown
+a second half. A vars-only deploy rotates a baked value by re-rendering the
+ciphertext over the existing build output, so it has no new build id, yet it
+must still mint its own immutable record. **Deployment identity** is therefore
+the build id plus an optional fingerprint of the values baked into it, rendered
+as `<build id>~<fingerprint>` — or as the bare build id when nothing is baked,
+which is byte-for-byte what this ADR originally described. Read every "build
+id" above as a deployment identity where it names the record key
+(`(app, build id) → Deployment record`, the revalidation token the isolate
+echoes, and the store's own `record:<app>/<buildId>` keys and `buildId` wire
+field, whose names predate identities).
+
+The storage prefixes keep the **pure build id**:
+`assets/<project>/<app>/<build id>/…` and the ISR and edge-bundle prefixes are
+exactly what the build produced, and the several Deployments of one build
+legitimately share them — which is why a prune reclaims a build's objects only
+once no surviving record still names that build. See CONTEXT.md ("Deployment
+identity", "Value fingerprint") and ADR 0005.

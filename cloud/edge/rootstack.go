@@ -249,7 +249,9 @@ type Code struct {
 }
 
 // Promotion is the project-wide unit one production deploy produces: a
-// promotion id grouping the per-app build ids it makes active. Mirrors
+// promotion id grouping the per-app Deployment identities it makes active
+// (Builds carries each app's rendered identity, not its bare build id — the
+// field name predates identities, like DeploymentRecord.Identity's). Mirrors
 // Promotion in workers/deployments-store/src/store.ts.
 type Promotion struct {
 	PromotionID string            `json:"promotionId"`

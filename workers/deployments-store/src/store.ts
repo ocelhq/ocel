@@ -77,11 +77,11 @@ export interface PruneResult {
   // (cloud/aws/deploy/prune.go ReclaimTargets) parses it verbatim.
   removedRecordKeys: string[];
   // The "record:<app>/<buildId>" keys the store still holds afterwards. Two
-  // Deployments of one build (a rotation) are two records naming one build id,
-  // and the assets, ISR entries and edge bundle are keyed by that build id
-  // alone, so the host reclaims a build's storage only when none of these
-  // still names it. The store keeps a build id opaque; splitting one back into
-  // its parts is the host's business.
+  // Deployments of one build (a rotation) are two distinct records whose
+  // buildIds share a build, and the assets, ISR entries and edge bundle are
+  // keyed by that build alone, so the host reclaims a build's storage only
+  // when none of these still belongs to it. The store keeps a buildId opaque;
+  // splitting one back into build and value fingerprint is the host's business.
   survivingRecordKeys: string[];
 }
 
