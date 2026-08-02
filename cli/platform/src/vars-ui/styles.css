@@ -379,6 +379,66 @@ button {
   color: var(--owed);
 }
 
+/* The environment axis. Deliberately unlike the folder sockets: folders are a
+   grid of cells and environments are one row of alternatives for the cell
+   already chosen, so mistaking one axis for the other takes effort. */
+
+.environments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: calc(var(--step) * 0.75);
+}
+
+.environments:empty {
+  display: none;
+}
+
+.environment {
+  display: inline-flex;
+  align-items: baseline;
+  gap: calc(var(--step) * 0.5);
+  padding: calc(var(--step) * 0.5) var(--step);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--paper);
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.environment:hover {
+  border-color: var(--rule-strong);
+}
+
+.environment[data-set="true"] {
+  color: var(--held);
+  border-color: var(--held);
+}
+
+.environment[data-orphaned="true"] {
+  color: var(--owed);
+  border-color: var(--owed);
+}
+
+.environment[data-selected="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--sheet);
+}
+
+.environment:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+
+.environment .orphan {
+  font-size: 0.625rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
 .field {
   display: flex;
   flex-direction: column;

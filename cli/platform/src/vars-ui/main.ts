@@ -10,12 +10,25 @@ interface Cell {
   folder: string;
 }
 
+// Address is a cell plus which environment's value of it is on screen. The
+// empty environment is the class-wide value — the one every environment reads
+// where none has been given its own.
+interface Address extends Cell {
+  environment: string;
+}
+
+interface Override {
+  environment: string;
+  version: number;
+  orphaned?: boolean;
+}
+
 interface MatrixCell {
   folder: string;
   state: CellState;
   set: boolean;
   version: number;
-  overrides?: string[];
+  overrides?: Override[];
   problem?: string;
 }
 
@@ -35,6 +48,7 @@ interface AppResolution {
 interface State {
   slug: string;
   substrate: string;
+  environments: string[];
   matrix: {
     columns: string[];
     rows: MatrixRow[];
@@ -57,7 +71,7 @@ history.replaceState(null, "", location.pathname);
 const root = document.getElementById("root")!;
 
 let state: State | null = null;
-let selected: Cell | null = null;
+let selected: Address | null = null;
 let history_: Version[] = [];
 let draft = "";
 let error = "";
@@ -98,8 +112,44 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
   return text ? (JSON.parse(text) as T) : (undefined as T);
 }
 
-function query(cell: Cell): string {
-  return `key=${encodeURIComponent(cell.key)}&folder=${encodeURIComponent(cell.folder)}`;
+function query(at: Address): string {
+  return `key=${encodeURIComponent(at.key)}&folder=${encodeURIComponent(at.folder)}&environment=${encodeURIComponent(at.environment)}`;
+}
+
+function sameAddress(a: Address, b: Address): boolean {
+  return (
+    a.key === b.key && a.folder === b.folder && a.environment === b.environment
+  );
+}
+
+function overrideOf(cell: MatrixCell, environment: string): Override | undefined {
+  return cell.overrides?.find((held) => held.environment === environment);
+}
+
+// What is on screen for the environment the inspector is addressing: whether a
+// value is set there and the version a write against it must expect. The
+// class-wide value and each override are separate cells, so neither reads the
+// other's state.
+function held(
+  cell: MatrixCell,
+  environment: string,
+): { set: boolean; version: number } {
+  if (environment === "") return { set: cell.set, version: cell.version };
+  const override = overrideOf(cell, environment);
+  return { set: override !== undefined, version: override?.version ?? 0 };
+}
+
+// Every environment the inspector can address for this cell: the class-wide
+// value, every environment that exists, and any environment holding an override
+// that no longer does — the last so an orphan has somewhere to be removed from.
+function addressable(current: State, cell: MatrixCell): string[] {
+  const environments = [...current.environments];
+  for (const override of cell.overrides ?? []) {
+    if (!environments.includes(override.environment)) {
+      environments.push(override.environment);
+    }
+  }
+  return ["", ...environments];
 }
 
 function cellOf(row: MatrixRow, folder: string): MatrixCell | undefined {
@@ -133,6 +183,10 @@ function folderName(folder: string): string {
 // the rest are counted rather than listed.
 const namedLimit = 5;
 
+function environmentName(environment: string): string {
+  return environment === "" ? "class-wide" : environment;
+}
+
 function names(items: string[]): string {
   const shown = items.slice(0, namedLimit);
   const rest = items.length - shown.length;
@@ -144,9 +198,16 @@ function names(items: string[]): string {
 // What this cell reaches. The class-wide value is the one every environment
 // reads, but only where none has been given its own — saying so unconditionally
 // would describe a cell that is not the one on screen.
-function coordinateLine(row: MatrixRow, cell: MatrixCell): string {
+function coordinateLine(
+  row: MatrixRow,
+  cell: MatrixCell,
+  environment: string,
+): string {
   const where = `${folderName(cell.folder)} · ${row.class}`;
-  const overrides = cell.overrides ?? [];
+  if (environment !== "") {
+    return `${where} · read by ${environment} alone`;
+  }
+  const overrides = (cell.overrides ?? []).map((held) => held.environment);
   if (overrides.length === 0) {
     return `${where} · class-wide, every environment reads it`;
   }
@@ -177,7 +238,7 @@ async function refreshHistory(): Promise<void> {
     "GET",
     `/api/history?${query(cell)}`,
   );
-  if (selected && selected.key === cell.key && selected.folder === cell.folder) {
+  if (selected && sameAddress(selected, cell)) {
     history_ = versions;
     render();
   }
@@ -185,7 +246,15 @@ async function refreshHistory(): Promise<void> {
 
 function select(row: MatrixRow, cell: MatrixCell): void {
   if (cell.state === "forbidden") return;
-  selected = { key: row.key, folder: cell.folder };
+  address({ key: row.key, folder: cell.folder, environment: "" });
+}
+
+// address moves the inspector to one value: a different cell, or the same cell
+// as one named environment reads it. The draft and the history go with it —
+// they described the value that was on screen, and carrying either across would
+// offer one environment's history for another's value.
+function address(at: Address): void {
+  selected = at;
   draft = "";
   error = "";
   history_ = [];
@@ -385,19 +454,24 @@ function renderInspector(current: State): HTMLElement {
     return renderInspector(current);
   }
 
+  const environment = selected.environment;
+  const here = held(cell, environment);
+  const orphaned = overrideOf(cell, environment)?.orphaned === true;
+
   inspector.append(element("h2", undefined, row.key));
-  inspector.append(element("p", "coordinate", coordinateLine(row, cell)));
+  inspector.append(
+    element("p", "coordinate", coordinateLine(row, cell, environment)),
+  );
+  inspector.append(renderEnvironments(current, row, cell));
 
   const verdict = element(
     "p",
     "verdict-line",
-    cell.set
-      ? "A value is set here."
-      : cell.state === "required"
-        ? "No value is set, and this cell is required."
-        : "No value is set. This cell overrides the root when you set one.",
+    verdictLine(cell, environment, here.set, orphaned),
   );
-  if (!cell.set && cell.state === "required") verdict.dataset.tone = "owed";
+  if (!here.set && environment === "" && cell.state === "required") {
+    verdict.dataset.tone = "owed";
+  }
   inspector.append(verdict);
 
   if (cell.problem) {
@@ -407,7 +481,7 @@ function renderInspector(current: State): HTMLElement {
   }
 
   const field = element("div", "field");
-  const label = element("label", undefined, cell.set ? "New value" : "Value");
+  const label = element("label", undefined, here.set ? "New value" : "Value");
   label.htmlFor = "value";
   const input = element("input");
   input.id = "value";
@@ -415,10 +489,9 @@ function renderInspector(current: State): HTMLElement {
   input.value = draft;
   input.autocomplete = "off";
   input.spellcheck = false;
-  input.placeholder = cell.set ? "replace the value that is set" : "";
+  input.placeholder = here.set ? "replace the value that is set" : "";
   input.addEventListener("input", () => {
     draft = input.value;
-    save.disabled = saving || draft === "";
   });
   input.addEventListener("keydown", (event) => {
     if (event.key === "Enter" && draft !== "") void write();
@@ -427,13 +500,21 @@ function renderInspector(current: State): HTMLElement {
   inspector.append(field);
 
   const actions = element("div", "actions");
-  const save = element("button", "save", saving ? "Saving…" : "Save");
-  save.type = "button";
-  save.disabled = saving || draft === "";
-  save.addEventListener("click", () => void write());
-  actions.append(save);
+  // An orphan is offered no Save. Its environment is gone, so a value written
+  // there is one nothing will ever read — the store refuses it, and drawing a
+  // button that only ever fails is worse than drawing none.
+  if (!orphaned) {
+    const save = element("button", "save", saving ? "Saving…" : "Save");
+    save.type = "button";
+    save.disabled = saving || draft === "";
+    save.addEventListener("click", () => void write());
+    actions.append(save);
+    input.addEventListener("input", () => {
+      save.disabled = saving || draft === "";
+    });
+  }
 
-  if (cell.set) {
+  if (here.set) {
     const remove = element("button", "remove", "Remove");
     remove.type = "button";
     remove.disabled = saving;
@@ -441,17 +522,6 @@ function renderInspector(current: State): HTMLElement {
     actions.append(remove);
   }
   inspector.append(actions);
-
-  const overrides = cell.overrides ?? [];
-  if (overrides.length > 0) {
-    inspector.append(
-      element(
-        "p",
-        "empty",
-        `${names(overrides)} ${overrides.length === 1 ? "holds its own value" : "hold their own values"} for ${row.key}, written while overrides were still writable. Save and Remove here address the class-wide value only; no command reaches ${overrides.length === 1 ? "that one" : "those"} today.`,
-      ),
-    );
-  }
 
   if (error) inspector.append(element("p", "problem", error));
 
@@ -479,21 +549,91 @@ function renderInspector(current: State): HTMLElement {
   return inspector;
 
   async function write(): Promise<void> {
-    const cellNow = selected!;
+    const at = selected!;
     const value = draft;
-    const version = cell!.version;
+    const version = here.version;
     await mutate(() =>
-      api<State>("PUT", "/api/value", { ...cellNow, value, version }),
+      api<State>("PUT", "/api/value", { ...at, value, version }),
     );
   }
 
   async function erase(): Promise<void> {
-    const cellNow = selected!;
-    const version = cell!.version;
+    const at = selected!;
+    const version = here.version;
     await mutate(() =>
-      api<State>("DELETE", `/api/value?${query(cellNow)}&version=${version}`),
+      api<State>("DELETE", `/api/value?${query(at)}&version=${version}`),
     );
   }
+}
+
+// The environment axis, drawn as the thing it is: one row of the values this
+// cell can hold, class-wide first because it is the one every environment reads
+// where none has been given its own. It is a picker rather than a text field so
+// an override cannot be written against a name nothing will ever ask for.
+//
+// A cell with nowhere to diverge — production, or a preview substrate with no
+// environments and no surviving override — gets no row at all: an axis with one
+// point on it is a decision nobody has to make.
+function renderEnvironments(
+  current: State,
+  row: MatrixRow,
+  cell: MatrixCell,
+): HTMLElement {
+  const environments = addressable(current, cell);
+  const picker = element("div", "environments");
+  if (environments.length === 1) return picker;
+
+  for (const environment of environments) {
+    const override = overrideOf(cell, environment);
+    const chip = element("button", "environment", environmentName(environment));
+    chip.type = "button";
+    chip.dataset.selected = String(selected!.environment === environment);
+    chip.dataset.set = String(held(cell, environment).set);
+    if (override?.orphaned) {
+      chip.dataset.orphaned = "true";
+      chip.append(element("span", "orphan", "orphaned"));
+    }
+    chip.title = chipTitle(row, environment, override);
+    chip.addEventListener("click", () =>
+      address({ key: row.key, folder: cell.folder, environment }),
+    );
+    picker.append(chip);
+  }
+  return picker;
+}
+
+function chipTitle(
+  row: MatrixRow,
+  environment: string,
+  override: Override | undefined,
+): string {
+  if (environment === "") {
+    return `the ${row.key} every environment reads unless it has its own`;
+  }
+  if (override?.orphaned) {
+    return `${environment} no longer exists, so nothing reads the value it holds for ${row.key}`;
+  }
+  return `the ${row.key} ${environment} reads`;
+}
+
+function verdictLine(
+  cell: MatrixCell,
+  environment: string,
+  set: boolean,
+  orphaned: boolean,
+): string {
+  if (orphaned) {
+    return `${environment} no longer exists, so nothing will ever read this value. Remove it.`;
+  }
+  if (environment !== "") {
+    return set
+      ? `${environment} reads this value; every other environment reads the class-wide one.`
+      : `${environment} has no value of its own, so it reads the class-wide one. Set one here to make it differ.`;
+  }
+  if (set) return "A value is set here.";
+  return cell.state === "required"
+    ? "No value is set, and this cell is required."
+    : "No value is set. This cell overrides the root when you set one.";
 }
 
 function renderLegend(): HTMLElement {
