@@ -228,6 +228,27 @@ type DeploymentRecord struct {
 	// its one pointer-exact hostname; production carries none — its routes are
 	// project-lifetime and reconciled declaratively.
 	RouteHostnames []string `json:"routeHostnames,omitempty"`
+	// ValueFingerprint is the digest of the values baked into this Deployment,
+	// the half of Identity a rotation changes, carried on its own so an audit
+	// reads it without parsing an identity. Empty when nothing was baked.
+	ValueFingerprint string `json:"valueFingerprint,omitempty"`
+	// Variables is what this Deployment shipped with, one entry per key the app
+	// resolved. It is an audit record and nothing serving reads it: the values
+	// themselves ride the immutable artifact, so a rollback restores them
+	// without replaying anything here.
+	Variables []VariableRecord `json:"variables,omitempty"`
+}
+
+// VariableRecord names one variable a Deployment shipped with, at the store
+// coordinate it resolved from. Version is the store version the value was
+// taken at; Live marks a value that is fetched at runtime instead, which the
+// ledger records as latest-at-runtime and never as a version, because a
+// runtime fetch reads whatever the store holds then.
+type VariableRecord struct {
+	Key     string `json:"key"`
+	Folder  string `json:"folder,omitempty"`
+	Version int64  `json:"version,omitempty"`
+	Live    bool   `json:"live,omitempty"`
 }
 
 // Code is one build's dynamically-loaded edge code, as the frozen worker reads

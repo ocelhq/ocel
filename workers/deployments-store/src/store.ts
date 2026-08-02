@@ -35,6 +35,24 @@ export interface DeploymentRecord {
   // hostname; production carries none — its routes are project-lifetime and
   // reconciled declaratively.
   routeHostnames?: string[];
+  // The digest of the values baked into this Deployment — the half of its
+  // identity a rotation changes — carried on its own so an audit reads it
+  // without parsing buildId. Absent when nothing was baked.
+  valueFingerprint?: string;
+  // What this Deployment shipped with, one entry per key the app resolved.
+  // Audit only: the values themselves ride the immutable artifact, so nothing
+  // serving or rolling back reads these.
+  variables?: VariableRecord[];
+}
+
+// Mirrors VariableRecord in cloud/edge/rootstack.go. `live` marks a value
+// fetched from the store at runtime, recorded as latest-at-runtime and never
+// as a version.
+export interface VariableRecord {
+  key: string;
+  folder?: string;
+  version?: number;
+  live?: boolean;
 }
 
 // Mirrors EdgeWorkers in cloud/edge/rootstack.go (the host writes it) and in
