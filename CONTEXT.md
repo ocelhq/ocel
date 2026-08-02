@@ -200,8 +200,12 @@ staleness bound.
   can read cannot also be one kept from it, and the combination is refused where
   the definition is written. It is delivered to the app build under the
   framework's public prefix and read through the **client accessor** — a
-  generated module in the project (`.ocel/env-client.ts`) exporting `clientEnv`,
-  which application code imports as `ocel/env/client`. The accessor names each
+  module generated per app (`<app>/.ocel/env-client.ts`) exporting `clientEnv`,
+  which application code imports as `ocel/env/client`. That specifier resolves
+  through a `paths` entry in the app's own `tsconfig.json` or `jsconfig.json`,
+  so two apps resolving one key differently each inline their own value; an app
+  with neither config keeps the SDK's fallback, which refuses the read. The
+  accessor names each
   value as a literal `process.env.NEXT_PUBLIC_<KEY>` member expression so the
   framework's own static replacement does the inlining; nothing computed can
   stand in for that literal, which is why the module is generated rather than
