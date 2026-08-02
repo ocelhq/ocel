@@ -23,6 +23,10 @@
       "worker": "./dist/env/edge.js",
       "import": "./dist/env/index.js"
     },
+    "./env/client": {
+      "types": "./dist/env/client.d.ts",
+      "import": "./dist/env/client.js"
+    },
     "./postgres": {
       "types": "./dist/postgres/index.d.ts",
       "import": "./dist/postgres/index.js"
