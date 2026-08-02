@@ -16,6 +16,7 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -493,26 +494,15 @@ func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout
 	return discovery.Run(ctx, entry, s.devServerAddr, stdout, stderr)
 }
 
-// ClientKeys is every client-accessible key this run declared, sorted so the
-// same declarations always produce the same accessor. They are the browser's
-// half of dev's environment: the generated accessor names them, and the child
-// is spawned with each one exported a second time under the framework's public
-// prefix so the framework's static replacement has something to inline.
-//
-// The plaintext class is the only one that can carry client access — combining
-// it with an encrypted class is a definition error — so a key that somehow
-// arrived otherwise is not one a browser may be handed.
+// ClientKeys is every client-accessible key this run declared. They are the
+// browser's half of dev's environment: the generated accessor names them, and
+// the child is spawned with each one exported a second time under the
+// framework's public prefix so the framework's static replacement has
+// something to inline.
 func (s *Server) ClientKeys() []string {
 	_, gate := s.variables()
 	if gate == nil {
 		return nil
 	}
-	var keys []string
-	for _, definition := range gate.Definitions() {
-		if definition.GetClientAccessible() && definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
-			keys = append(keys, definition.GetKey())
-		}
-	}
-	sort.Strings(keys)
-	return keys
+	return clientenv.DeclaredKeys(gate.Definitions())
 }

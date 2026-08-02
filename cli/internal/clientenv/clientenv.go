@@ -306,6 +306,23 @@ func isClient(v manifestbuilder.Variable) bool {
 	return v.ClientAccessible && v.Class == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN
 }
 
+// DeclaredKeys is clientKeys read off a discovery run's declarations rather
+// than off resolved variables: the same rule, for a caller holding
+// declarations and no values behind them. Which keys an accessor names is a
+// property of the declarations alone — a value only ever decides what the
+// bundler inlines under a name — which is what lets the accessor be generated
+// where no value can be resolved at all.
+func DeclaredKeys(definitions []*resourcesv1.VariableDefinition) []string {
+	var keys []string
+	for _, definition := range definitions {
+		if definition.GetClientAccessible() && definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+			keys = append(keys, definition.GetKey())
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
 // digests is one app's client values, each reduced to a digest of what a build
 // would inline for it.
 func digests(app App) map[string]string {
