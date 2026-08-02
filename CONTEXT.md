@@ -255,6 +255,22 @@ staleness bound.
   a write quotes back the version it was made against so an edit over a value
   someone else has since replaced is refused rather than applied.
 
+- **Reference** — a cell whose content is the address of another cell instead of
+  a value, so a credential is set once and consumed in many places rather than
+  copied into each. It is resolved at read time, every read, which is what makes
+  an edit at the **source** — the cell holding the value — visible to every
+  consumer with nothing to re-run and no copy that can drift. A reference has no
+  value of its own: writing one is refused, deleting one is deleting an item and
+  needs no unlink step, and its version is the pointer's rather than the value's.
+  It always points at a class-wide value, never at an override — a named
+  environment belongs to the project holding the reference and names nothing in
+  the target's namespace — and it may only point at a value, never at another
+  reference, refused from both ends on the write so a chain can neither loop nor
+  deepen and a read is one follow. The **reverse lookup** answers what
+  references a value, so the blast radius of an edit is visible before the edit;
+  it is the one thing the store's single secondary index exists for, populated
+  on reference items alone. _Avoid_: alias, link, symlink, shared value.
+
 - **Required-cell matrix** — the grid the bundled variables UI presents: a row
   per declared variable, a column per folder, each cell drawn required, optional
   or forbidden by what the declaration permits. It is what the discovery gate's

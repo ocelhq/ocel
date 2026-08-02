@@ -19,8 +19,9 @@ particular invites a stronger reading than it deserves. This ADR records the
 table, states the threat model without overselling it, and pins the one number
 a live value's freshness rests on.
 
-Vocabulary (variable, class, cell, folder, env class, store, required-cell
-matrix, coordinate manifest) lives in `CONTEXT.md`; this file is the reasoning.
+Vocabulary (variable, class, cell, folder, env class, store, reference,
+required-cell matrix, coordinate manifest) lives in `CONTEXT.md`; this file is
+the reasoning.
 
 ## Decision
 
@@ -41,7 +42,7 @@ the read path asks about a class (`definition.ts:64-66`).
 | **Confidentiality** | None. Legible in a function-configuration listing. | Ciphertext at rest in the artifact; plaintext only inside the running process. | Never in an artifact or a function configuration at all. |
 | **Delivery** | A plaintext entry in the Lambda's environment under the bare key the user chose (`cloud/aws/deploy/vars.go:84-96`, `variableEnv`). | AES-256-GCM ciphertext at `.ocel/variables.enc` inside every one of the app's deployment packages (`cloud/aws/vars/baked/baked.go:20-23`); the per-deploy data key is the one plaintext configuration entry, `OCEL_VARS_ENVELOPE` (`baked.go:25-29`); the Go membrane opens the file and re-injects each value under `OCEL_VAR_<KEY>` (`baked.go:31-34`, read by the SDK at `packages/ocel/src/env/index.ts:145,169`). | The deploy pins **coordinates only** into `.ocel/variables.live.json` (`cloud/aws/vars/live/live.go:26-56`); the membrane reads them, fetches plaintext from DynamoDB+KMS through `vars.Store.Reveal` (`cloud/aws/cmd/lambdanode/bootstrap/live.go:58-74`) and pushes it to node over the one-way control socket as a `liveValues` message (`live.go:76-90`). |
 | **Rotation cost** | A redeploy. The value is function configuration, written at deploy. | A redeploy. A new value means a new seal — a fresh nonce and fresh ciphertext on every `Seal` (`baked.go:41-59`) — so it is a new artifact by construction. | **None.** Rotating changes nothing in the package, which is precisely why the package holds an address and not a value (`cloud/aws/vars/live/live.go:5-10`). Picked up within the staleness bound below. |
-| **Who can read the plaintext** | Anyone who can read the function's configuration: the console, `GetFunctionConfiguration`, or a log line that dumps `process.env`. | Anyone who can read the function's configuration **and** download its deployment package. On Lambda that is one API surface, not two — see the threat model. | Only the function's own execution role: `kms:Decrypt` on its class's key, plus a `dynamodb:Query` conditioned on that project's partition (`cloud/aws/deploy/vars.go:41-66`, `varsReadPolicy`). No artifact and no configuration ever carries it. |
+| **Who can read the plaintext** | Anyone who can read the function's configuration: the console, `GetFunctionConfiguration`, or a log line that dumps `process.env`. | Anyone who can read the function's configuration **and** download its deployment package. On Lambda that is one API surface, not two — see the threat model. | Only the function's own execution role: `kms:Decrypt` on its class's key, plus a `dynamodb:Query` conditioned on that project's partition and the partitions of the projects it references (`cloud/aws/deploy/vars.go`, `varsReadPolicy`). No artifact and no configuration ever carries it. |
 
 **`client` is not a fourth class.** It is an orthogonal boolean that only
 `plain` may carry (`definition.ts:31-43`, `proto/resources/v1/env.proto:36-38`).
@@ -86,11 +87,13 @@ What `sensitive` genuinely protects against is narrower and still worth having:
 **`secret` is the only class with a real trust boundary.** Its plaintext exists
 in exactly two places: the store, and the memory of a running function whose
 execution role was granted a `kms:Decrypt` and a partition-scoped
-`dynamodb:Query` (`cloud/aws/deploy/vars.go:41-66`). It never reaches a build
-host — the wire carries presence without plaintext for a live cell
-(`proto/resources/v1/env.proto:72-76`) — so a compromised CI job, an artifact
-store, and a function-configuration reader all learn nothing but the key's
-address.
+`dynamodb:Query` (`cloud/aws/deploy/vars.go`, `varsReadPolicy`). The scope is
+the project's own partition plus the partition of every project it references a
+value from, because a reference is followed where it is read — see the amendment
+below. It never reaches a build host — the wire carries presence without
+plaintext for a live cell (`proto/resources/v1/env.proto:72-76`) — so a
+compromised CI job, an artifact store, and a function-configuration reader all
+learn nothing but the key's address.
 
 **`plain` claims nothing.** It exists for interop with code that reads
 `process.env` itself, which is the property that distinguishes it
@@ -387,3 +390,36 @@ that read it (`ocel preview rm` removes compute, not values), so a rebuilt
 branch finds the value someone deliberately set; an override whose environment
 is gone is an **orphaned override** — surfaced as such by `ocel env ls` and the
 UI, and removable without the environment coming back.
+
+## Amended: what a reference does to the read grant (2026-08-02)
+
+A cell may now hold the address of another project's cell rather than a value
+(`vars.Store.SetReference`; **Reference** in `CONTEXT.md`). Nothing about the
+three classes changes — a reference is what a cell holds, not what class it is —
+but two sentences above are narrowed.
+
+**The partition-scoped grant covers more than one partition.** A reference is
+resolved where it is read, by one further query, so a function reading a
+live-class value through one reads the *owner's* rows. `varsReadPolicy` is
+therefore conditioned on this project's partition plus the partition of every
+project it references, read from the store by the provider before the deploy
+runs (`server.referencedProjects`). It stays a `dynamodb:Query` over an
+enumerated list of partitions: no wildcard, no `GetItem`, and no reach into a
+project this one does not read from. The isolation argument is intact; its
+statement is now "the partitions this project resolves values out of" rather
+than "its own".
+
+**The consequence is a deploy, not a rotation.** Rotating a referenced value
+still needs nothing — that is the whole point, and the staleness bound above
+governs when a running function picks it up. But *re-pointing* a reference at a
+project this one has never referenced before widens the set of partitions its
+functions read, and a running function's grant was written at its last deploy.
+Least privilege is what a value's blast radius is bounded by, and the
+alternative — granting every project in the class up front — would give away the
+isolation this table's third column claims.
+
+**The class key is shared across projects, and has to be.** The key is per class
+and never per project (`bootstrap.varsResources`), which is what lets a
+referenced value decrypt in the consumer's function at all. A per-project key
+would make cross-project references undeliverable rather than make anything
+safer: the boundary a `secret` value has is the env class, and it always was.
