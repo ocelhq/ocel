@@ -14,7 +14,7 @@ import (
 // for TestRunRollback_* / TestRunDeploymentsLs_* to exercise the default
 // ("previous promotion") and --to paths without a real deployments store.
 var fakePromotions = []*deploymentsv1.PromotionHistoryEntry{
-	{Promotion: &deploymentsv1.Promotion{PromotionId: "promo-2", Ts: 2000, Builds: map[string]string{"web": "build-2"}}, Active: true},
+	{Promotion: &deploymentsv1.Promotion{PromotionId: "promo-2", Ts: 2000, Builds: map[string]string{"web": "build-2~fp2", "admin": "build-2"}}, Active: true},
 	{Promotion: &deploymentsv1.Promotion{PromotionId: "promo-1", Ts: 1000, Tag: "v1.0.0", Builds: map[string]string{"web": "build-1"}}, Active: false},
 }
 

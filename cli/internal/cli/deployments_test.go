@@ -33,6 +33,49 @@ func TestRunDeploymentsLs_RendersPromotionsNewestFirstWithActiveMarker(t *testin
 	waitForNoStaleSocket(t, sockPath)
 }
 
+// An operator auditing a promotion starts from what each app actually shipped,
+// and a Deployment's identity is that: the build id plus the fingerprint of the
+// values baked into it. Two promotions of one build differ only there, so
+// rendering the bare build id would show them as identical.
+func TestRunDeploymentsLs_ShowsEachAppsShippedIdentity(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "production")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploymentsLs(context.Background(), root, &stdout, &stderr); err != nil {
+		t.Fatalf("runDeploymentsLs err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	for _, sub := range []string{"DEPLOYED", "admin=build-2", "web=build-2~fp2", "web=build-1"} {
+		if !strings.Contains(out, sub) {
+			t.Errorf("stdout = %q, want it to contain %q", out, sub)
+		}
+	}
+
+	// The colored active cell is last, so every column before it stays aligned.
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("stdout = %q, want a header and two rows", out)
+	}
+	if a, b := runeIndex(lines[0], "DEPLOYED"), runeIndex(lines[1], "admin="); a != b {
+		t.Errorf("DEPLOYED column starts at %d in the header and %d in the row:\n%s", a, b, out)
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
+// runeIndex is where substr starts in printed columns rather than in bytes:
+// the table's own em-dash placeholder is one column and three bytes.
+func runeIndex(line, substr string) int {
+	at := strings.Index(line, substr)
+	if at < 0 {
+		return at
+	}
+	return len([]rune(line[:at]))
+}
+
 func TestRunDeploymentsLs_RefusesOnPreviewInfrastructure(t *testing.T) {
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "preview")

@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"sort"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 	"time"
@@ -152,10 +154,15 @@ func runDeploymentsPrune(ctx context.Context, cwd string, keepN int, stdout, std
 }
 
 // renderPromotions prints the promotion history as an aligned ID/TAG/CREATED/
-// STATUS table, newest-first (the order the store returns), with the active
-// promotion's STATUS shown as a green "active". The colored cell is last so its
-// ANSI escapes — which tabwriter counts as width — never misalign a later
-// column, and color is emitted only to a terminal.
+// DEPLOYED/STATUS table, newest-first (the order the store returns), with the
+// active promotion's STATUS shown as a green "active". The colored cell is last
+// so its ANSI escapes — which tabwriter counts as width — never misalign a
+// later column, and color is emitted only to a terminal.
+//
+// DEPLOYED is what each app shipped: its Deployment identity, which is the
+// build id plus the fingerprint of the values baked into it. Two promotions of
+// one build differ only in that fingerprint, so the bare build id would show a
+// value rotation as a repeat of what it replaced.
 func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHistoryEntry) {
 	if len(promotions) == 0 {
 		fmt.Fprintln(stdout, "No promotions yet. Run `ocel deploy` first.")
@@ -168,7 +175,7 @@ func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHis
 	}
 
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tTAG\tCREATED\tSTATUS")
+	fmt.Fprintln(tw, "ID\tTAG\tCREATED\tDEPLOYED\tSTATUS")
 	for _, entry := range promotions {
 		p := entry.GetPromotion()
 		tag := p.GetTag()
@@ -179,9 +186,28 @@ func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHis
 		if entry.GetActive() {
 			status = activeStatus
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, epochTimestamp(p.GetTs()), status)
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\n", p.GetPromotionId(), tag, epochTimestamp(p.GetTs()), deployedIdentities(p.GetBuilds()), status)
 	}
 	_ = tw.Flush()
+}
+
+// deployedIdentities renders a promotion's per-app Deployment identities as
+// "app=identity", sorted by app so one promotion's row reads against another's.
+func deployedIdentities(builds map[string]string) string {
+	if len(builds) == 0 {
+		return "—"
+	}
+	apps := make([]string, 0, len(builds))
+	for app := range builds {
+		apps = append(apps, app)
+	}
+	sort.Strings(apps)
+
+	pairs := make([]string, 0, len(apps))
+	for _, app := range apps {
+		pairs = append(pairs, app+"="+builds[app])
+	}
+	return strings.Join(pairs, " ")
 }
 
 // isWriterTTY reports whether w is an interactive terminal, so table output
