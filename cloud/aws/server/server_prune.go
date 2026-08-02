@@ -102,7 +102,9 @@ func pruneSummaryLines(result edge.PruneResult) []string {
 // path does, narrowed to what Reclaim and DestroyProject touch — no edge
 // credentials/values, no per-app manifest state. The artifact bucket is
 // carried for DestroyProject's project-scoped artifact purge; a prune never
-// reaches it, since artifacts are content-addressed across builds.
+// reaches it, since artifacts are content-addressed across builds. The variable
+// store rides along for the same reason: only a whole-project destroy empties
+// it, and a prune leaves every value in place.
 func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 	awscfg, err := loadAWS(ctx, opts.Region)
 	if err != nil {
@@ -152,5 +154,6 @@ func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
 		Env:                deployEnv,
+		Values:             teardownValues(awscfg, deployed, bootstrap.ClassProduction),
 	}, nil
 }

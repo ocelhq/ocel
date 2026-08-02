@@ -10,6 +10,8 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
+
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/vars"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -294,5 +296,27 @@ func TestCoordinateRoundTripsThroughTheWire(t *testing.T) {
 	want := vars.Coordinate{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY", Environment: "staging"}
 	if got := toCoordinate(toCoordinateProto(want)); got != want {
 		t.Errorf("coordinate round trip = %+v, want %+v", got, want)
+	}
+}
+
+// A bootstrap predating the variable store must leave the teardown with no
+// store at all, not a store that fails every call: the Config field is an
+// interface, so handing back a typed nil would read as configured and turn "no
+// values to remove" into a teardown failure.
+func TestTeardownValues_IsAbsentUntilTheBootstrapHasAStore(t *testing.T) {
+	if store := teardownValues(aws.Config{}, bootstrap.Deployed{Present: true}, bootstrap.ClassProduction); store != nil {
+		t.Errorf("teardownValues = %v, want none for a bootstrap with no vars table", store)
+	}
+
+	deployed := bootstrap.Deployed{Present: true, VarsTable: "ocel-vars", VarsKeyARN: "arn:aws:kms:us-east-1:111122223333:key/abcd"}
+	store, ok := teardownValues(aws.Config{}, deployed, bootstrap.ClassPreview).(*vars.Store)
+	if !ok {
+		t.Fatal("teardownValues returned no store for a bootstrapped account")
+	}
+	if store.Table != deployed.VarsTable || store.KeyARN != deployed.VarsKeyARN {
+		t.Errorf("store = %+v, want the bootstrap's own table and key", store)
+	}
+	if store.Class != bootstrap.ClassPreview {
+		t.Errorf("store class = %q, want the substrate's own class", store.Class)
 	}
 }

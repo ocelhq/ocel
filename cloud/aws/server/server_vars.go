@@ -8,11 +8,13 @@ import (
 
 	connect "connectrpc.com/connect"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
+	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/vars"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
@@ -125,6 +127,23 @@ func (s *VarsServer) open(ctx context.Context, key storeKey) (*vars.Store, error
 		KeyARN: deployed.VarsKeyARN,
 		Class:  substrateClass,
 	}, nil
+}
+
+// teardownValues opens the substrate's variable store for a teardown to empty,
+// or reports none when the bootstrap predates the store: an account with no
+// vars table holds no values to remove, and failing the whole teardown over
+// that would strand everything else the project owns.
+func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.ValueStore {
+	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
+		return nil
+	}
+	return &vars.Store{
+		Dynamo: dynamodb.NewFromConfig(awscfg),
+		KMS:    kms.NewFromConfig(awscfg),
+		Table:  deployed.VarsTable,
+		KeyARN: deployed.VarsKeyARN,
+		Class:  class,
+	}
 }
 
 func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {

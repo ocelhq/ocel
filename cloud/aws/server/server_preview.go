@@ -272,6 +272,7 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
 		Env:                envSegment(env),
 		Slug:               env.GetIdentity(),
+		Values:             teardownValues(awscfg, deployed, bootstrap.ClassPreview),
 	}
 	return cfg, stack, state, nil
 }
