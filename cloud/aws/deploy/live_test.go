@@ -224,7 +224,7 @@ func TestAppBundle_ALiveOnlyAppStillPackagesItsManifest(t *testing.T) {
 // the condition is built from the same function that builds the key it
 // constrains, so the two cannot drift.
 func TestVarsReadPolicy_ScopesTheTableGrantToTheProjectsOwnPartition(t *testing.T) {
-	raw, err := varsReadPolicy(productionVarsKeyARN, varsTableARN, "shop", varsClass)
+	raw, err := varsReadPolicy(productionVarsKeyARN, varsTableARN, "shop", varsClass, nil)
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestAppExecutionRole_TakesTheTableOnlyForAnAppWithLiveValues(t *testing.T) 
 // TestVarsReadPolicy_WithoutATableIsTheDecryptGrantAlone proves an app with no
 // live values renders exactly the policy it rendered before this class existed.
 func TestVarsReadPolicy_WithoutATableIsTheDecryptGrantAlone(t *testing.T) {
-	raw, err := varsReadPolicy(productionVarsKeyARN, "", "", "")
+	raw, err := varsReadPolicy(productionVarsKeyARN, "", "", "", nil)
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}
@@ -371,4 +371,34 @@ func decodeEnvelope(t *testing.T, envelope string) []byte {
 		t.Fatalf("envelope is not base64: %v", err)
 	}
 	return key
+}
+
+// A reference is followed where it is read, so a function resolving one reads
+// the owner project's rows. The grant has to cover exactly those partitions and
+// no others: without them the store accepts a write the runtime is then denied,
+// and with a wildcard the class's isolation is gone.
+func TestVarsReadPolicy_ReachesThePartitionsOfTheProjectsThisOneReferences(t *testing.T) {
+	raw, err := varsReadPolicy(productionVarsKeyARN, varsTableARN, "shop", varsClass, []string{"platform", "shop", "billing"})
+	if err != nil {
+		t.Fatalf("varsReadPolicy: %v", err)
+	}
+
+	var doc struct {
+		Statement []struct {
+			Condition map[string]map[string][]string
+		}
+	}
+	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
+		t.Fatalf("policy is not valid JSON: %v", err)
+	}
+
+	leading := doc.Statement[1].Condition["ForAllValues:StringEquals"]["dynamodb:LeadingKeys"]
+	want := []string{
+		vars.PartitionKey("shop", varsClass),
+		vars.PartitionKey("platform", varsClass),
+		vars.PartitionKey("billing", varsClass),
+	}
+	if !slices.Equal(leading, want) {
+		t.Errorf("LeadingKeys = %v, want %v (its own partition once, plus each project it references)", leading, want)
+	}
 }

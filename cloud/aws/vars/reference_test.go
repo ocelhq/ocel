@@ -366,3 +366,33 @@ func TestAReferenceTakesTheNextVersionOfTheCellItReplaces(t *testing.T) {
 		t.Fatalf("Versions = %v, want both the value and the reference that replaced it", versions)
 	}
 }
+
+// What a deploy grants its functions is decided by this: the projects whose
+// rows a reference will make them read. Its own project is not one of them —
+// that partition is granted anyway — and a project referenced twice is named
+// once.
+func TestReferencedProjectsNamesEachOwnerOnce(t *testing.T) {
+	store, _, _ := newTestStore(t)
+	setReferenced(t, store, "sk_live_shared")
+
+	second := Coordinate{Slug: consumer().Slug, Key: "PAYMENTS_KEY"}
+	if _, err := store.SetReference(context.Background(), second, source(), nil); err != nil {
+		t.Fatalf("SetReference err = %v", err)
+	}
+	own := Coordinate{Slug: consumer().Slug, Key: "LOCAL_KEY"}
+	if _, err := store.Set(context.Background(), own, "a value of its own", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	within := Coordinate{Slug: consumer().Slug, Folder: "/admin", Key: "LOCAL_KEY"}
+	if _, err := store.SetReference(context.Background(), within, own, nil); err != nil {
+		t.Fatalf("SetReference err = %v", err)
+	}
+
+	owners, err := store.ReferencedProjects(context.Background(), consumer().Slug)
+	if err != nil {
+		t.Fatalf("ReferencedProjects err = %v", err)
+	}
+	if len(owners) != 1 || owners[0] != source().Slug {
+		t.Errorf("ReferencedProjects = %v, want just %q", owners, source().Slug)
+	}
+}

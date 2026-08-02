@@ -98,6 +98,12 @@ type Config struct {
 	// store's own class token, not the deploy's environment segment: a preview
 	// deploy of any environment reads the preview class's partition.
 	VarsClass string
+	// VarsReferenced is every other project this one references a value from,
+	// resolved from the store before the deploy runs. It widens a function's
+	// read grant to exactly the partitions its own values resolve out of, and
+	// nothing more: a reference is followed where it is read, so a grant over
+	// this project alone would deny at runtime what the store accepted.
+	VarsReferenced []string
 	// Values is the substrate's variable store, opened for the one thing a
 	// teardown does to it: emptying a destroyed project's partition. A deploy
 	// never reads through it — values reach a function through the manifest the

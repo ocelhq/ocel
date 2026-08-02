@@ -359,10 +359,13 @@ type executionRole struct {
 
 	// VarsTableARN is empty for an app that reads no live value, which is how
 	// the store's blast radius stays the set of functions that depend on it.
-	// Slug and VarsClass name the one partition the grant is conditioned on.
-	VarsTableARN string
-	Slug         string
-	VarsClass    string
+	// Slug and VarsClass name the project's own partition the grant is
+	// conditioned on, and VarsReferenced the partitions of the projects it
+	// resolves referenced values from.
+	VarsTableARN   string
+	Slug           string
+	VarsClass      string
+	VarsReferenced []string
 }
 
 // appExecutionRole is the role one app needs: its own cache and no other's,
@@ -373,6 +376,7 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bund
 	role := executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
+		role.VarsReferenced = cfg.VarsReferenced
 		role.Slug = cfg.Slug
 		role.VarsClass = cfg.VarsClass
 	}
@@ -407,7 +411,7 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 			return nil, err
 		}
 	}
-	varsPolicy, err := varsReadPolicy(r.VarsKeyARN, r.VarsTableARN, r.Slug, r.VarsClass)
+	varsPolicy, err := varsReadPolicy(r.VarsKeyARN, r.VarsTableARN, r.Slug, r.VarsClass, r.VarsReferenced)
 	if err != nil {
 		return nil, err
 	}

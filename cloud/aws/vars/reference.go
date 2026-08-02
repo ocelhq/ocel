@@ -144,6 +144,34 @@ func (s *Store) References(ctx context.Context, target Coordinate) ([]Coordinate
 	return out, nil
 }
 
+// ReferencedProjects is every other project this one reads a value from,
+// sorted. It is what a deploy grants its functions the partitions of: a
+// reference is followed where it is read, so a function reading one reads the
+// owner's rows, and a grant over this project alone would deny at runtime what
+// the store accepted at write.
+//
+// It costs the one query List already makes, because a reference's target rides
+// in the row rather than behind a second read.
+func (s *Store) ReferencedProjects(ctx context.Context, slug string) ([]string, error) {
+	held, err := s.List(ctx, slug)
+	if err != nil {
+		return nil, err
+	}
+	owners := map[string]bool{}
+	for _, m := range held {
+		if m.Target.Slug != "" && m.Target.Slug != slug {
+			owners[m.Target.Slug] = true
+		}
+	}
+
+	out := make([]string, 0, len(owners))
+	for owner := range owners {
+		out = append(out, owner)
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 // describeCoordinates names a set of cells in one phrase, sorted, so a refusal
 // naming several reads the same way twice.
 func describeCoordinates(cells []Coordinate) string {

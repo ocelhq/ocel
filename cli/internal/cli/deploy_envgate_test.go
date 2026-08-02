@@ -486,3 +486,29 @@ func TestRunDeploy_AHalfCompletedFolderRenameStopsTheDeployNamingBothFiles(t *te
 		t.Error("the app was built, want the lint to refuse before any build runs")
 	}
 }
+
+// A required value another project owns satisfies this project's gate, and the
+// build is handed what that project holds right now. It is the whole of what a
+// reference is for, at the read time a baked value has: the credential is set
+// once, and the deploy that consumes it copies nothing.
+func TestRunDeploy_AReferenceSatisfiesTheGateWithItsSourcesValue(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+	ownedElsewhere(t, "POSTHOG_ID", "ph_owned_by_platform")
+	envRef(t, root, "POSTHOG_ID", envOptions{}, envRefOptions{project: "platform"})
+
+	var got map[string]map[string]string
+	prev := buildApp
+	buildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
+		got = envByApp
+		return nil
+	}
+	t.Cleanup(func() { buildApp = prev })
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if got[""]["POSTHOG_ID"] != "ph_owned_by_platform" {
+		t.Errorf("build environment = %v, want the value the other project holds", got)
+	}
+}

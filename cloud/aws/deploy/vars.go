@@ -35,14 +35,23 @@ const functionEnvBudgetBytes = 4096
 // by a runtime.
 //
 // The table grant is added only for an app that actually declares a live value,
-// and only over that project's own partition. The table is account-global and
-// shared by every project in the class, so an unconditioned Query would let one
-// function enumerate every project's ciphertext; the condition is built from
-// vars.PartitionKey, the same function that builds the key it constrains, so
-// the grant and the addressing cannot drift apart. Query is the only action:
-// the runtime's read is one prefix query, and a point read it never emits is
-// one more thing a compromised function could do.
-func varsReadPolicy(keyARN, tableARN, slug, class string) (string, error) {
+// and only over the partitions that project resolves values from. The table is
+// account-global and shared by every project in the class, so an unconditioned
+// Query would let one function enumerate every project's ciphertext; the
+// condition is built from vars.PartitionKey, the same function that builds the
+// key it constrains, so the grant and the addressing cannot drift apart. Query
+// is the only action: the runtime's read is a query, including the one that
+// follows a reference, and a point read it never emits is one more thing a
+// compromised function could do.
+//
+// referenced is every other project this one references a value from. A
+// reference is resolved where it is read, so a function reading one reads the
+// owner's partition, and a grant covering only its own would deny at runtime
+// what the store accepted at write. The consequence is that pointing a value at
+// a project this one has never referenced needs a deploy before a live-class
+// read of it works — least privilege is what a value's blast radius is bounded
+// by, and the alternative is granting every project in the class up front.
+func varsReadPolicy(keyARN, tableARN, slug, class string, referenced []string) (string, error) {
 	statements := []any{
 		map[string]any{
 			"Effect":   "Allow",
@@ -51,13 +60,19 @@ func varsReadPolicy(keyARN, tableARN, slug, class string) (string, error) {
 		},
 	}
 	if tableARN != "" {
+		partitions := []string{vars.PartitionKey(slug, class)}
+		for _, owner := range referenced {
+			if owner != slug {
+				partitions = append(partitions, vars.PartitionKey(owner, class))
+			}
+		}
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"dynamodb:Query"},
 			"Resource": tableARN,
 			"Condition": map[string]any{
 				"ForAllValues:StringEquals": map[string]any{
-					"dynamodb:LeadingKeys": []string{vars.PartitionKey(slug, class)},
+					"dynamodb:LeadingKeys": partitions,
 				},
 			},
 		})

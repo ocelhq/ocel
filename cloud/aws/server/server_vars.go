@@ -143,6 +143,18 @@ func (s *VarsServer) open(ctx context.Context, key storeKey) (*vars.Store, error
 // vars table holds no values to remove, and failing the whole teardown over
 // that would strand everything else the project owns.
 func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string) deploy.ValueStore {
+	store := substrateStore(awscfg, deployed, class)
+	if store == nil {
+		return nil
+	}
+	return store
+}
+
+// substrateStore opens the class's variable store from an already-described
+// bootstrap, or reports none when that bootstrap predates the store. It is
+// separate from teardownValues because the Config field is an interface: a
+// typed nil handed to one would read as configured.
+func substrateStore(awscfg aws.Config, deployed bootstrap.Deployed, class string) *vars.Store {
 	if deployed.VarsTable == "" || deployed.VarsKeyARN == "" {
 		return nil
 	}
@@ -153,6 +165,17 @@ func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string
 		KeyARN: deployed.VarsKeyARN,
 		Class:  class,
 	}
+}
+
+// referencedProjects is every other project this one reads a value from, which
+// is what its functions' read grant has to cover. An account whose bootstrap
+// predates the store references nothing, because it holds nothing.
+func referencedProjects(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, class, slug string) ([]string, error) {
+	store := substrateStore(awscfg, deployed, class)
+	if store == nil {
+		return nil, nil
+	}
+	return store.ReferencedProjects(ctx, slug)
 }
 
 // addressable refuses an override written against an address no runtime will

@@ -231,6 +231,15 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, err
 	}
 
+	// Which other projects this one references decides what its functions may
+	// read: a reference is followed where it is read, so a grant over this
+	// project's partition alone would deny at runtime what the store accepted at
+	// write. It is read here because this is where the store's coordinates are.
+	varsReferenced, err := referencedProjects(ctx, awscfg, deployed, substrateClass, manifest.GetSlug())
+	if err != nil {
+		return deploy.Result{}, err
+	}
+
 	res, err := deploy.Run(ctx, deploy.Config{
 		Region:        awscfg.Region,
 		BackendURL:    "s3://" + deployed.StateBucket,
@@ -242,10 +251,11 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		StateTable:    deployed.StateTable,
 		StateTableARN: stateTableARN,
 
-		VarsKeyARN:   deployed.VarsKeyARN,
-		VarsTable:    deployed.VarsTable,
-		VarsTableARN: fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.VarsTable),
-		VarsClass:    substrateClass,
+		VarsKeyARN:     deployed.VarsKeyARN,
+		VarsTable:      deployed.VarsTable,
+		VarsTableARN:   fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.VarsTable),
+		VarsClass:      substrateClass,
+		VarsReferenced: varsReferenced,
 
 		CacheStoreParam:    cacheStoreParam,
 		CacheStoreParamARN: cacheStoreParamARN,
