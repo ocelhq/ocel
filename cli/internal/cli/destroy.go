@@ -172,6 +172,7 @@ func runDestroyPreviewProject(ctx context.Context, cwd string, stdout, stderr io
 		fmt.Fprintln(stdout, "  • every preview (persistent and ephemeral): app-deploy stacks, per-name infra stacks INCLUDING ALL DATA")
 		fmt.Fprintln(stdout, "  • the project's preview deployments-store instance and preview edge worker(s)")
 		fmt.Fprintln(stdout, "  • all stored preview assets belonging to this project")
+		fmt.Fprintln(stdout, "  • every preview variable value this project holds, including each preview's own overrides")
 		fmt.Fprintln(stdout, "The account-level preview bootstrap is left intact. This cannot be undone.")
 
 		confirmed, err := confirmDestroyProject(cfg.Slug, stdout, stdin)
@@ -222,6 +223,7 @@ func printDestroyPlan(out io.Writer, slug string, plan *deploymentsv1.PlanDestro
 		fmt.Fprintf(out, "  • app stack %s\n", s)
 	}
 	fmt.Fprintln(out, "  • all stored assets belonging to this project")
+	fmt.Fprintln(out, "  • every production variable value this project holds, and their history")
 	fmt.Fprintln(out, "This cannot be undone.")
 }
 

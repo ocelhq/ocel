@@ -71,6 +71,7 @@ func TestPrintDestroyPlan_ListsEveryTarget(t *testing.T) {
 		"INCLUDING ALL DATA",
 		"app stack shop--web--b1",
 		"app stack shop--api--b2",
+		"every production variable value",
 		"This cannot be undone.",
 	} {
 		if !strings.Contains(got, want) {
