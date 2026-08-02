@@ -1028,9 +1028,9 @@ type SetReferenceRequest struct {
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
 	// coordinate is the cell that will hold the reference; target is the cell it
 	// will read. target names its own slug, which is how a value owned by
-	// another project is consumed, and it addresses that project's class-wide
-	// value: a named environment belongs to the project holding it, and means
-	// nothing in the target's namespace.
+	// another project is consumed, and carries no environment component: a
+	// reference resolves against the target's class-wide value, and the store
+	// refuses any other address.
 	Coordinate *Coordinate `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
 	Target     *Coordinate `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
 	// expected_version is read exactly as SetValue reads it, against the cell
@@ -1229,9 +1229,8 @@ func (x *ListReferencesRequest) GetCoordinate() *Coordinate {
 
 type ListReferencesResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// references are the cells reading this value, sorted. It is the whole
-	// answer: a reference may only point at a value, so nothing sits behind one
-	// of these reading the same value at a second remove.
+	// references are the cells reading this value, sorted, as the store's reverse
+	// index has them.
 	References    []*Coordinate `protobuf:"bytes,1,rep,name=references,proto3" json:"references,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

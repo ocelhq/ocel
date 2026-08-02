@@ -275,6 +275,10 @@ func (s *VarsServer) SetReference(ctx context.Context, req *envv1.SetReferenceRe
 	return &envv1.SetReferenceResponse{Metadata: toMetadataProto(metadata)}, nil
 }
 
+// ListReferences answers what reads a value, so the blast radius of an edit is
+// visible before the edit. The coordinate it takes is the value being asked
+// about rather than a reference to it, and the answer crosses projects, because
+// that is where a consumer usually is.
 func (s *VarsServer) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
 	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {

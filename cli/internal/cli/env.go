@@ -57,10 +57,8 @@ var envOpts envOptions
 // omitted for the common case — the same project, its root, and the same name —
 // so pointing one project's key at another's is one flag.
 //
-// There is no environment component. A named environment is an axis of the
-// project holding the reference; the target project's own environments share
-// nothing with it but their names, so a reference resolves against the target's
-// class-wide value and there is no other address to offer.
+// There is no environment component: a reference resolves against the target's
+// class-wide value, and there is no other address to offer.
 type envRefOptions struct {
 	project string
 	folder  string
@@ -72,13 +70,14 @@ var envRefOpts envRefOptions
 // target is the coordinate a reference points at, with each component defaulted
 // to the consuming cell's own.
 func (o envRefOptions) target(slug, key string) *envv1.Coordinate {
-	if o.project == "" {
-		o.project = slug
+	project, name := o.project, o.key
+	if project == "" {
+		project = slug
 	}
-	if o.key == "" {
-		o.key = key
+	if name == "" {
+		name = key
 	}
-	return &envv1.Coordinate{Slug: o.project, Folder: o.folder, Key: o.key}
+	return &envv1.Coordinate{Slug: project, Folder: o.folder, Key: name}
 }
 
 var envCmd = &cobra.Command{
@@ -534,9 +533,7 @@ func describeCoordinate(c *envv1.Coordinate) string {
 	return out
 }
 
-// renderReferences lists what reads a value. It is the whole list: a reference
-// may only point at a value, so nothing sits behind one of these reading the
-// same value at a second remove.
+// renderReferences lists what reads a value, which is what editing it changes.
 func renderReferences(stdout io.Writer, cell string, references []*envv1.Coordinate) {
 	if len(references) == 0 {
 		fmt.Fprintf(stdout, "Nothing references %s.\n", cell)
@@ -564,7 +561,7 @@ func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments 
 	}
 	orphans := false
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "KEY\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED\tREADS")
+	fmt.Fprintln(tw, "KEY\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED\tSOURCE")
 	for _, v := range values {
 		c := v.GetCoordinate()
 		environment := environmentOrClassWide(c.GetEnvironment())
@@ -575,13 +572,13 @@ func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments 
 		// A reference has no size of its own, so the byte count is left blank
 		// rather than reported as zero, which would read as an empty value.
 		size := fmt.Sprint(v.GetSize())
-		reads := "—"
+		source := "—"
 		if target := v.GetTarget(); target != nil {
-			size, reads = "—", describeCoordinate(target)
+			size, source = "—", describeCoordinate(target)
 		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 			c.GetKey(), folderOrRoot(c.GetFolder()), environment,
-			v.GetVersion(), size, epochOrDash(v.GetUpdatedAt()), reads)
+			v.GetVersion(), size, epochOrDash(v.GetUpdatedAt()), source)
 	}
 	_ = tw.Flush()
 

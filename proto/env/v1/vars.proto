@@ -253,9 +253,9 @@ message SetReferenceRequest {
 
   // coordinate is the cell that will hold the reference; target is the cell it
   // will read. target names its own slug, which is how a value owned by
-  // another project is consumed, and it addresses that project's class-wide
-  // value: a named environment belongs to the project holding it, and means
-  // nothing in the target's namespace.
+  // another project is consumed, and carries no environment component: a
+  // reference resolves against the target's class-wide value, and the store
+  // refuses any other address.
   Coordinate coordinate = 4;
   Coordinate target = 5;
 
@@ -280,9 +280,8 @@ message ListReferencesRequest {
 }
 
 message ListReferencesResponse {
-  // references are the cells reading this value, sorted. It is the whole
-  // answer: a reference may only point at a value, so nothing sits behind one
-  // of these reading the same value at a second remove.
+  // references are the cells reading this value, sorted, as the store's reverse
+  // index has them.
   repeated Coordinate references = 1;
 }
 

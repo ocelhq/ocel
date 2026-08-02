@@ -224,7 +224,7 @@ func TestAppBundle_ALiveOnlyAppStillPackagesItsManifest(t *testing.T) {
 // the condition is built from the same function that builds the key it
 // constrains, so the two cannot drift.
 func TestVarsReadPolicy_ScopesTheTableGrantToTheProjectsOwnPartition(t *testing.T) {
-	raw, err := varsReadPolicy(productionVarsKeyARN, varsTableARN, "shop", varsClass, nil)
+	raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, VarsTableARN: varsTableARN, Slug: "shop", VarsClass: varsClass})
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}
@@ -289,7 +289,7 @@ func TestAppExecutionRole_TakesTheTableOnlyForAnAppWithLiveValues(t *testing.T) 
 // TestVarsReadPolicy_WithoutATableIsTheDecryptGrantAlone proves an app with no
 // live values renders exactly the policy it rendered before this class existed.
 func TestVarsReadPolicy_WithoutATableIsTheDecryptGrantAlone(t *testing.T) {
-	raw, err := varsReadPolicy(productionVarsKeyARN, "", "", "", nil)
+	raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN})
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}
@@ -418,7 +418,7 @@ func TestRenderAppBundle_ReferencesOnlyTheOwnersOfItsOwnLiveValues(t *testing.T)
 // no others: without them the store accepts a write the runtime is then denied,
 // and with a wildcard the class's isolation is gone.
 func TestVarsReadPolicy_ReachesThePartitionsOfTheProjectsThisOneReferences(t *testing.T) {
-	raw, err := varsReadPolicy(productionVarsKeyARN, varsTableARN, "shop", varsClass, []string{"platform", "shop", "billing"})
+	raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN, VarsTableARN: varsTableARN, Slug: "shop", VarsClass: varsClass, VarsReferenced: []string{"platform", "shop", "billing"}})
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}

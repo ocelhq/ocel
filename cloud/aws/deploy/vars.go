@@ -27,7 +27,9 @@ import (
 const functionEnvBudgetBytes = 4096
 
 // varsReadPolicy grants a function execution role what it needs to read its
-// own live-class values and nothing more.
+// own live-class values and nothing more. It takes the role rather than its
+// fields because they are one thing: what this app was decided to be allowed to
+// read, assembled once in appExecutionRole.
 //
 // Decrypt is on exactly one key: the one its own env class's variable store
 // encrypts under, named by ARN rather than a wildcard so the class boundary
@@ -35,8 +37,8 @@ const functionEnvBudgetBytes = 4096
 // by a runtime.
 //
 // The table grant is added only for an app that actually declares a live value,
-// and only over the partitions that app's own values resolve out of. The table is
-// account-global and shared by every project in the class, so an unconditioned
+// and only over the partitions that app's own values resolve out of. The table
+// is account-global and shared by every project in the class, so an unconditioned
 // Query would let one function enumerate every project's ciphertext; the
 // condition is built from vars.PartitionKey, the same function that builds the
 // key it constrains, so the grant and the addressing cannot drift apart. Query
@@ -44,32 +46,32 @@ const functionEnvBudgetBytes = 4096
 // follows a reference, and a point read it never emits is one more thing a
 // compromised function could do.
 //
-// referenced is the other projects this app's own live values resolve out of. A
-// reference is resolved where it is read, so a function reading one reads the
-// owner's partition, and a grant covering only its own would deny at runtime
+// VarsReferenced is the other projects this app's own live values resolve out
+// of. A reference is resolved where it is read, so a function reading one reads
+// the owner's partition, and a grant covering only its own would deny at runtime
 // what the store accepted at write. The consequence is that pointing one of
 // these values at a project it has never read before needs a deploy — least
 // privilege is what a value's blast radius is bounded by, and the alternative is
 // granting every project in the class up front.
-func varsReadPolicy(keyARN, tableARN, slug, class string, referenced []string) (string, error) {
+func varsReadPolicy(r executionRole) (string, error) {
 	statements := []any{
 		map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"kms:Decrypt"},
-			"Resource": keyARN,
+			"Resource": r.VarsKeyARN,
 		},
 	}
-	if tableARN != "" {
-		partitions := []string{vars.PartitionKey(slug, class)}
-		for _, owner := range referenced {
-			if owner != slug {
-				partitions = append(partitions, vars.PartitionKey(owner, class))
+	if r.VarsTableARN != "" {
+		partitions := []string{vars.PartitionKey(r.Slug, r.VarsClass)}
+		for _, owner := range r.VarsReferenced {
+			if owner != r.Slug {
+				partitions = append(partitions, vars.PartitionKey(owner, r.VarsClass))
 			}
 		}
 		statements = append(statements, map[string]any{
 			"Effect":   "Allow",
 			"Action":   []string{"dynamodb:Query"},
-			"Resource": tableARN,
+			"Resource": r.VarsTableARN,
 			"Condition": map[string]any{
 				"ForAllValues:StringEquals": map[string]any{
 					"dynamodb:LeadingKeys": partitions,

@@ -411,7 +411,7 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 			return nil, err
 		}
 	}
-	varsPolicy, err := varsReadPolicy(r.VarsKeyARN, r.VarsTableARN, r.Slug, r.VarsClass, r.VarsReferenced)
+	varsPolicy, err := varsReadPolicy(r)
 	if err != nil {
 		return nil, err
 	}

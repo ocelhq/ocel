@@ -25,7 +25,7 @@ const (
 // wildcard resource, or the other class's key, would hand preview compute
 // production ciphertext.
 func TestVarsDecryptPolicy_GrantsOneKeyAndOneAction(t *testing.T) {
-	raw, err := varsReadPolicy(productionVarsKeyARN, "", "", "", nil)
+	raw, err := varsReadPolicy(executionRole{VarsKeyARN: productionVarsKeyARN})
 	if err != nil {
 		t.Fatalf("varsReadPolicy: %v", err)
 	}
