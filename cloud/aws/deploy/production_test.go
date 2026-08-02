@@ -531,27 +531,38 @@ func TestBuildDeploymentRecord_LiveKeysAreRecordedAsLatestAtRuntime(t *testing.T
 
 // A preview keeps no audit ledger, so it records nothing — and recording
 // nothing is the normal outcome, not a failure the deploy has to survive.
+// Nothing else about the record moves with it: the same inputs built under
+// either class differ in the two audit fields and nowhere else.
 func TestBuildDeploymentRecord_PreviewRecordsNoVariablesAndIsNotAnError(t *testing.T) {
 	manifest := varsManifest(
 		&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
 	)
-	cfg := Config{
-		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
-		Slug:         "proj",
-		Class:        deploymentsv1.Environment_CLASS_PREVIEW,
-		Identity:     "pr-42",
-	}
 	id := fingerprinted("WEB1", "abc123")
+	build := func(class deploymentsv1.Environment_Class) edge.DeploymentRecord {
+		t.Helper()
+		cfg := varsConfig(t, class)
+		record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, nil)
+		if err != nil {
+			t.Fatalf("buildDeploymentRecord under %s: %v", class, err)
+		}
+		return record
+	}
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, nil)
-	if err != nil {
-		t.Fatalf("buildDeploymentRecord: %v", err)
+	preview := build(deploymentsv1.Environment_CLASS_PREVIEW)
+	if preview.Variables != nil || preview.ValueFingerprint != "" {
+		t.Errorf("preview record = %+v, want no audit fields at all", preview)
 	}
-	if record.Variables != nil || record.ValueFingerprint != "" {
-		t.Errorf("preview record = %+v, want no audit fields at all", record)
+
+	production := build(deploymentsv1.Environment_CLASS_PRODUCTION)
+	production.Variables, production.ValueFingerprint = nil, ""
+	// CreatedAt is stamped per call, so it is compared as "both stamped it"
+	// rather than for equality.
+	if preview.CreatedAt == 0 || production.CreatedAt == 0 {
+		t.Errorf("CreatedAt = %d (preview) and %d (production), want both stamped", preview.CreatedAt, production.CreatedAt)
 	}
-	if record.Identity != id.String() || record.AssetPrefix != appAssetR2Prefix("proj", "web", id.BuildID()) {
-		t.Errorf("preview record = %+v, want the rest of it unchanged", record)
+	production.CreatedAt = preview.CreatedAt
+	if !reflect.DeepEqual(preview, production) {
+		t.Errorf("preview record = %+v, want the production one with only its audit fields dropped: %+v", preview, production)
 	}
 }
 
