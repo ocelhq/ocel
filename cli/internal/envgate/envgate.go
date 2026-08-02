@@ -49,9 +49,11 @@ type Values interface {
 	// environment-scoped alike, as presence without plaintext.
 	List(ctx context.Context) ([]Stored, error)
 
-	// Reveal decrypts one cell. It is called only for classes whose values a
-	// build legitimately holds; a live-class value is never revealed.
-	Reveal(ctx context.Context, cell Cell) (string, bool, error)
+	// Reveal decrypts the named cells in one query and answers with the
+	// plaintext of those that hold a value; a cell that holds none is absent
+	// from the result. It is called only for classes whose values a build
+	// legitimately holds — a live-class cell is never named.
+	Reveal(ctx context.Context, cells []Cell) (map[Cell]string, error)
 }
 
 // App is one application and the variable folder it binds. An empty Folder is
@@ -83,6 +85,18 @@ type Gate struct {
 	overrides   map[Cell][]string
 	definitions []*resourcesv1.VariableDefinition
 	problems    []*resourcesv1.VariableProblem
+
+	// plaintext is what this run has already decrypted, so a cell a
+	// declaration and a resolution both reach for is fetched once. A cell that
+	// holds no value is recorded as found: false rather than left out, so
+	// asking again costs nothing either. Prefetch clears it: the cells it
+	// re-reads are the answer to a write that just landed.
+	plaintext map[Cell]revealed
+}
+
+type revealed struct {
+	value string
+	found bool
 }
 
 func New(values Values, scope Scope) *Gate {
@@ -115,7 +129,50 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 	defer g.mu.Unlock()
 	g.cells = cells
 	g.overrides = overrides
+	g.plaintext = nil
 	return nil
+}
+
+// reveal decrypts every named cell the run has not already read, in one call,
+// and answers from what it holds. It is the only path to plaintext in this
+// package: a caller names the cells its class permits, and how many round trips
+// that costs is decided here rather than at each call site.
+func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, error) {
+	g.mu.Lock()
+	var wanted []Cell
+	seen := map[Cell]bool{}
+	for _, cell := range cells {
+		if _, held := g.plaintext[cell]; held || seen[cell] {
+			continue
+		}
+		seen[cell] = true
+		wanted = append(wanted, cell)
+	}
+	g.mu.Unlock()
+
+	var found map[Cell]string
+	if len(wanted) > 0 {
+		var err error
+		if found, err = g.values.Reveal(ctx, wanted); err != nil {
+			return nil, err
+		}
+	}
+
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if g.plaintext == nil {
+		g.plaintext = map[Cell]revealed{}
+	}
+	for _, cell := range wanted {
+		value, ok := found[cell]
+		g.plaintext[cell] = revealed{value: value, found: ok}
+	}
+
+	out := make(map[Cell]revealed, len(cells))
+	for _, cell := range cells {
+		out[cell] = g.plaintext[cell]
+	}
+	return out, nil
 }
 
 // DeclareEnv records one defineEnv call's definitions and answers with the
@@ -128,6 +185,22 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	g.definitions = append(g.definitions, req.GetDefinitions()...)
 	g.mu.Unlock()
 
+	var wanted []Cell
+	for _, definition := range req.GetDefinitions() {
+		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+			continue
+		}
+		for _, row := range stored {
+			if row.Cell.Key == definition.GetKey() {
+				wanted = append(wanted, row.Cell)
+			}
+		}
+	}
+	plaintext, err := g.reveal(ctx, wanted)
+	if err != nil {
+		return nil, fmt.Errorf("read this declaration's values: %w", err)
+	}
+
 	var cells []*resourcesv1.VariableCell
 	for _, definition := range req.GetDefinitions() {
 		live := definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
@@ -138,14 +211,10 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 			}
 			var value string
 			if !live {
-				revealed, found, err := g.values.Reveal(ctx, cell)
-				if err != nil {
-					return nil, fmt.Errorf("read %s: %w", describe(cell), err)
-				}
-				if !found {
+				if !plaintext[cell].found {
 					continue
 				}
-				value = revealed
+				value = plaintext[cell].value
 			}
 			cells = append(cells, &resourcesv1.VariableCell{
 				Key:    cell.Key,

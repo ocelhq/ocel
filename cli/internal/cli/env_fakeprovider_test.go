@@ -180,6 +180,31 @@ func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envv1.GetV
 	return resp, nil
 }
 
+func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRequest) (*envv1.RevealValuesResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	store, err := loadFakeStore()
+	if err != nil {
+		return nil, err
+	}
+
+	resp := &envv1.RevealValuesResponse{}
+	for _, c := range req.GetCoordinates() {
+		c.Slug = req.GetSlug()
+		metadata := store.metadata(c)
+		if metadata == nil {
+			continue
+		}
+		versions := store[fakeCoordinateID(c)].Versions
+		resp.Values = append(resp.Values, &envv1.RevealedValue{
+			Metadata: metadata,
+			Value:    versions[len(versions)-1].Value,
+		})
+	}
+	return resp, nil
+}
+
 func (s *deployFakeProviderServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest) (*envv1.DeleteValueResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err

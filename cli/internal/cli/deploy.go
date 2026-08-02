@@ -472,18 +472,28 @@ func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
 	return stored, nil
 }
 
-func (v runnerValues) Reveal(ctx context.Context, cell envgate.Cell) (string, bool, error) {
-	resp, err := v.runner.GetValue(ctx, &envv1.GetValueRequest{
+func (v runnerValues) Reveal(ctx context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
+	coordinates := make([]*envv1.Coordinate, 0, len(cells))
+	for _, cell := range cells {
+		coordinates = append(coordinates, &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key})
+	}
+	resp, err := v.runner.RevealValues(ctx, &envv1.RevealValuesRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
-		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
-		Reveal:          true,
+		Slug:            v.slug,
+		Coordinates:     coordinates,
 	})
 	if err != nil {
-		return "", false, err
+		return nil, err
 	}
-	return resp.GetValue(), resp.GetFound(), nil
+
+	found := make(map[envgate.Cell]string, len(resp.GetValues()))
+	for _, value := range resp.GetValues() {
+		c := value.GetMetadata().GetCoordinate()
+		found[envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()}] = value.GetValue()
+	}
+	return found, nil
 }
 
 // toApps lowers the resolved config's apps into the manifest builder's input.

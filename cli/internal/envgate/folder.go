@@ -68,24 +68,38 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	g.mu.Unlock()
 
-	resolved := make(map[string]Resolved, len(definitions))
+	type hopped struct {
+		cell Cell
+		live bool
+	}
+	hops := make([]hopped, 0, len(definitions))
+	var wanted []Cell
 	for _, definition := range definitions {
 		cell, ok := hop(definition, binding, held)
 		if !ok {
 			continue
 		}
-		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
-			resolved[cell.Key] = Resolved{Folder: cell.Folder}
+		live := definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
+		hops = append(hops, hopped{cell: cell, live: live})
+		if !live {
+			wanted = append(wanted, cell)
+		}
+	}
+	plaintext, err := g.reveal(ctx, wanted)
+	if err != nil {
+		return nil, fmt.Errorf("read the values %s resolves: %w", app, err)
+	}
+
+	resolved := make(map[string]Resolved, len(hops))
+	for _, h := range hops {
+		if h.live {
+			resolved[h.cell.Key] = Resolved{Folder: h.cell.Folder}
 			continue
 		}
-		value, found, err := g.values.Reveal(ctx, cell)
-		if err != nil {
-			return nil, fmt.Errorf("read %s: %w", describe(cell), err)
-		}
-		if !found {
+		if !plaintext[h.cell].found {
 			continue
 		}
-		resolved[cell.Key] = Resolved{Folder: cell.Folder, Value: value}
+		resolved[h.cell.Key] = Resolved{Folder: h.cell.Folder, Value: plaintext[h.cell].value}
 	}
 	return resolved, nil
 }

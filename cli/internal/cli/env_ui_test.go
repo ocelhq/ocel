@@ -44,6 +44,17 @@ func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner
 	}
 }
 
+// revealOne reads back one cell through the batched reveal, for the assertions
+// that only care about a single value.
+func revealOne(ctx context.Context, values runnerValues, cell envgate.Cell) (string, bool, error) {
+	found, err := values.Reveal(ctx, []envgate.Cell{cell})
+	if err != nil {
+		return "", false, err
+	}
+	value, ok := found[cell]
+	return value, ok, nil
+}
+
 func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 	t.Helper()
 	for _, row := range rows {
@@ -100,7 +111,7 @@ func TestRunnerValues_SetAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T
 		if err := values.Set(ctx, cell, "https://mine.example", &unset); !errors.Is(err, varsui.ErrStaleValue) {
 			t.Fatalf("Set expecting an empty cell err = %v, want varsui.ErrStaleValue — the page drew a cell somebody has since filled", err)
 		}
-		if got, _, err := values.Reveal(ctx, cell); err != nil || got != "https://someone-elses.example" {
+		if got, _, err := revealOne(ctx, values, cell); err != nil || got != "https://someone-elses.example" {
 			t.Errorf("the cell holds %q (err %v), want the value already there — a refused write must not have landed", got, err)
 		}
 
@@ -108,7 +119,7 @@ func TestRunnerValues_SetAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T
 		if err := values.Set(ctx, cell, "https://mine.example", &current); err != nil {
 			t.Fatalf("Set expecting the current version err = %v, want the write to land", err)
 		}
-		if got, _, err := values.Reveal(ctx, cell); err != nil || got != "https://mine.example" {
+		if got, _, err := revealOne(ctx, values, cell); err != nil || got != "https://mine.example" {
 			t.Errorf("the cell holds %q (err %v), want the write that quoted the right version", got, err)
 		}
 		return nil
@@ -131,7 +142,7 @@ func TestRunnerValues_DeleteAgainstAStaleVersionIsRefusedAsAStaleValue(t *testin
 		if err := values.Delete(ctx, cell, &rendered); !errors.Is(err, varsui.ErrStaleValue) {
 			t.Fatalf("Delete expecting version 1 err = %v, want varsui.ErrStaleValue — the page drew a value somebody has since replaced", err)
 		}
-		if got, found, err := values.Reveal(ctx, cell); err != nil || !found || got != "https://someone-elses.example" {
+		if got, found, err := revealOne(ctx, values, cell); err != nil || !found || got != "https://someone-elses.example" {
 			t.Errorf("the cell holds %q (found %v, err %v), want the replacement — a refused delete must not have landed", got, found, err)
 		}
 
@@ -139,7 +150,7 @@ func TestRunnerValues_DeleteAgainstAStaleVersionIsRefusedAsAStaleValue(t *testin
 		if err := values.Delete(ctx, cell, &current); err != nil {
 			t.Fatalf("Delete expecting the current version err = %v, want the delete to land", err)
 		}
-		if _, found, err := values.Reveal(ctx, cell); err != nil || found {
+		if _, found, err := revealOne(ctx, values, cell); err != nil || found {
 			t.Errorf("the cell is still set (found %v, err %v), want the honoured delete to have unset it", found, err)
 		}
 		return nil

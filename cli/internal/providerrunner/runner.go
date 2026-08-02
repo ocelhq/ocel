@@ -287,9 +287,9 @@ func (r *Runner) dial(addr string) error {
 // provider was ready to serve it.
 var ErrVarsUnavailable = errors.New("providerrunner: the variable store was reached before a successful Ready")
 
-// SetValue, ListValues, GetValue, DeleteValue and ListVersions drive the
-// provider's variable store. The CLI has no cloud SDK dependency, so every
-// read and write of a value is one of these calls.
+// SetValue, ListValues, GetValue, RevealValues, DeleteValue and ListVersions
+// drive the provider's variable store. The CLI has no cloud SDK dependency, so
+// every read and write of a value is one of these calls.
 func (r *Runner) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
 	if r.vars == nil {
 		return nil, ErrVarsUnavailable
@@ -309,6 +309,13 @@ func (r *Runner) GetValue(ctx context.Context, req *envv1.GetValueRequest) (*env
 		return nil, ErrVarsUnavailable
 	}
 	return r.vars.GetValue(ctx, req)
+}
+
+func (r *Runner) RevealValues(ctx context.Context, req *envv1.RevealValuesRequest) (*envv1.RevealValuesResponse, error) {
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars.RevealValues(ctx, req)
 }
 
 func (r *Runner) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest) (*envv1.DeleteValueResponse, error) {

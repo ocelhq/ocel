@@ -51,10 +51,15 @@ func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
 	return append(out, v.overrides...), nil
 }
 
-func (v *fakeValues) Reveal(_ context.Context, cell envgate.Cell) (string, bool, error) {
-	v.revealed = append(v.revealed, cell)
-	value, ok := v.cells[cell]
-	return value, ok, nil
+func (v *fakeValues) Reveal(_ context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
+	v.revealed = append(v.revealed, cells...)
+	found := map[envgate.Cell]string{}
+	for _, cell := range cells {
+		if value, ok := v.cells[cell]; ok {
+			found[cell] = value
+		}
+	}
+	return found, nil
 }
 
 func declare(t *testing.T, g *envgate.Gate, definitions ...*resourcesv1.VariableDefinition) *resourcesv1.DeclareEnvResponse {

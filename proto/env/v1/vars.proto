@@ -30,6 +30,14 @@ service EnvVarsService {
     // GetValue reads one cell, revealing the plaintext only when asked.
     rpc GetValue(GetValueRequest) returns (GetValueResponse);
 
+    // RevealValues reads a named set of cells and answers with their
+    // plaintext, in one round trip to the store. It is the batch form of
+    // GetValue and nothing more: the caller names every cell, so this is not a
+    // reveal-everything listing. It cannot be one — which cells a caller may
+    // hold the plaintext of follows from the class each variable was declared
+    // under, and that is knowable only where the declaration is.
+    rpc RevealValues(RevealValuesRequest) returns (RevealValuesResponse);
+
     // DeleteValue removes a cell's current pointer. Its version history is
     // left in place: history is an audit record of what the value once was,
     // and deleting the value does not unmake that.
@@ -166,6 +174,28 @@ message GetValueResponse {
 
   // value is populated only when the request asked to reveal.
   string value = 3;
+}
+
+message RevealValuesRequest {
+  bytes options = 1;
+  string protocol_version = 2;
+  deployments.v1.Environment.Class class = 3;
+
+  // slug is the project the cells belong to. coordinates name them within it,
+  // so a coordinate's own slug field is redundant here and ignored.
+  string slug = 4;
+  repeated Coordinate coordinates = 5;
+}
+
+message RevealValuesResponse {
+  // values carries only the named cells that hold one. An unset cell is absent
+  // rather than empty, which is the distinction GetValue.found draws.
+  repeated RevealedValue values = 1;
+}
+
+message RevealedValue {
+  ValueMetadata metadata = 1;
+  string value = 2;
 }
 
 message DeleteValueRequest {

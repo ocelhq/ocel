@@ -48,9 +48,14 @@ func (s *fakeStore) List(context.Context) ([]envgate.Stored, error) {
 	return append(out, s.overrides...), nil
 }
 
-func (s *fakeStore) Reveal(_ context.Context, cell envgate.Cell) (string, bool, error) {
-	value, ok := s.cells[cell]
-	return value, ok, nil
+func (s *fakeStore) Reveal(_ context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
+	found := map[envgate.Cell]string{}
+	for _, cell := range cells {
+		if value, ok := s.cells[cell]; ok {
+			found[cell] = value
+		}
+	}
+	return found, nil
 }
 
 // stale is the store's whole concurrency rule: an expectation that no longer

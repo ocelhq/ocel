@@ -40,6 +40,9 @@ const (
 	EnvVarsServiceListValuesProcedure = "/env.v1.EnvVarsService/ListValues"
 	// EnvVarsServiceGetValueProcedure is the fully-qualified name of the EnvVarsService's GetValue RPC.
 	EnvVarsServiceGetValueProcedure = "/env.v1.EnvVarsService/GetValue"
+	// EnvVarsServiceRevealValuesProcedure is the fully-qualified name of the EnvVarsService's
+	// RevealValues RPC.
+	EnvVarsServiceRevealValuesProcedure = "/env.v1.EnvVarsService/RevealValues"
 	// EnvVarsServiceDeleteValueProcedure is the fully-qualified name of the EnvVarsService's
 	// DeleteValue RPC.
 	EnvVarsServiceDeleteValueProcedure = "/env.v1.EnvVarsService/DeleteValue"
@@ -59,6 +62,13 @@ type EnvVarsServiceClient interface {
 	ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error)
 	// GetValue reads one cell, revealing the plaintext only when asked.
 	GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error)
+	// RevealValues reads a named set of cells and answers with their
+	// plaintext, in one round trip to the store. It is the batch form of
+	// GetValue and nothing more: the caller names every cell, so this is not a
+	// reveal-everything listing. It cannot be one — which cells a caller may
+	// hold the plaintext of follows from the class each variable was declared
+	// under, and that is knowable only where the declaration is.
+	RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error)
 	// DeleteValue removes a cell's current pointer. Its version history is
 	// left in place: history is an audit record of what the value once was,
 	// and deleting the value does not unmake that.
@@ -101,6 +111,12 @@ func NewEnvVarsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(envVarsServiceMethods.ByName("GetValue")),
 			connect.WithClientOptions(opts...),
 		),
+		revealValues: connect.NewClient[v1.RevealValuesRequest, v1.RevealValuesResponse](
+			httpClient,
+			baseURL+EnvVarsServiceRevealValuesProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("RevealValues")),
+			connect.WithClientOptions(opts...),
+		),
 		deleteValue: connect.NewClient[v1.DeleteValueRequest, v1.DeleteValueResponse](
 			httpClient,
 			baseURL+EnvVarsServiceDeleteValueProcedure,
@@ -121,6 +137,7 @@ type envVarsServiceClient struct {
 	setValue     *connect.Client[v1.SetValueRequest, v1.SetValueResponse]
 	listValues   *connect.Client[v1.ListValuesRequest, v1.ListValuesResponse]
 	getValue     *connect.Client[v1.GetValueRequest, v1.GetValueResponse]
+	revealValues *connect.Client[v1.RevealValuesRequest, v1.RevealValuesResponse]
 	deleteValue  *connect.Client[v1.DeleteValueRequest, v1.DeleteValueResponse]
 	listVersions *connect.Client[v1.ListVersionsRequest, v1.ListVersionsResponse]
 }
@@ -146,6 +163,15 @@ func (c *envVarsServiceClient) ListValues(ctx context.Context, req *v1.ListValue
 // GetValue calls env.v1.EnvVarsService.GetValue.
 func (c *envVarsServiceClient) GetValue(ctx context.Context, req *v1.GetValueRequest) (*v1.GetValueResponse, error) {
 	response, err := c.getValue.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// RevealValues calls env.v1.EnvVarsService.RevealValues.
+func (c *envVarsServiceClient) RevealValues(ctx context.Context, req *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error) {
+	response, err := c.revealValues.CallUnary(ctx, connect.NewRequest(req))
 	if response != nil {
 		return response.Msg, err
 	}
@@ -181,6 +207,13 @@ type EnvVarsServiceHandler interface {
 	ListValues(context.Context, *v1.ListValuesRequest) (*v1.ListValuesResponse, error)
 	// GetValue reads one cell, revealing the plaintext only when asked.
 	GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error)
+	// RevealValues reads a named set of cells and answers with their
+	// plaintext, in one round trip to the store. It is the batch form of
+	// GetValue and nothing more: the caller names every cell, so this is not a
+	// reveal-everything listing. It cannot be one — which cells a caller may
+	// hold the plaintext of follows from the class each variable was declared
+	// under, and that is knowable only where the declaration is.
+	RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error)
 	// DeleteValue removes a cell's current pointer. Its version history is
 	// left in place: history is an audit record of what the value once was,
 	// and deleting the value does not unmake that.
@@ -219,6 +252,12 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 		connect.WithSchema(envVarsServiceMethods.ByName("GetValue")),
 		connect.WithHandlerOptions(opts...),
 	)
+	envVarsServiceRevealValuesHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceRevealValuesProcedure,
+		svc.RevealValues,
+		connect.WithSchema(envVarsServiceMethods.ByName("RevealValues")),
+		connect.WithHandlerOptions(opts...),
+	)
 	envVarsServiceDeleteValueHandler := connect.NewUnaryHandlerSimple(
 		EnvVarsServiceDeleteValueProcedure,
 		svc.DeleteValue,
@@ -239,6 +278,8 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 			envVarsServiceListValuesHandler.ServeHTTP(w, r)
 		case EnvVarsServiceGetValueProcedure:
 			envVarsServiceGetValueHandler.ServeHTTP(w, r)
+		case EnvVarsServiceRevealValuesProcedure:
+			envVarsServiceRevealValuesHandler.ServeHTTP(w, r)
 		case EnvVarsServiceDeleteValueProcedure:
 			envVarsServiceDeleteValueHandler.ServeHTTP(w, r)
 		case EnvVarsServiceListVersionsProcedure:
@@ -262,6 +303,10 @@ func (UnimplementedEnvVarsServiceHandler) ListValues(context.Context, *v1.ListVa
 
 func (UnimplementedEnvVarsServiceHandler) GetValue(context.Context, *v1.GetValueRequest) (*v1.GetValueResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.GetValue is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) RevealValues(context.Context, *v1.RevealValuesRequest) (*v1.RevealValuesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.RevealValues is not implemented"))
 }
 
 func (UnimplementedEnvVarsServiceHandler) DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error) {

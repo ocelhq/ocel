@@ -81,9 +81,14 @@ func (v *flatValues) List(context.Context) ([]envgate.Stored, error) {
 
 // Reveal answers every folder of a key with the same plaintext, which is the
 // broadcast itself.
-func (v *flatValues) Reveal(_ context.Context, cell envgate.Cell) (string, bool, error) {
+func (v *flatValues) Reveal(_ context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	value, found := v.values[cell.Key]
-	return value, found, nil
+	found := make(map[envgate.Cell]string, len(cells))
+	for _, cell := range cells {
+		if value, ok := v.values[cell.Key]; ok {
+			found[cell] = value
+		}
+	}
+	return found, nil
 }

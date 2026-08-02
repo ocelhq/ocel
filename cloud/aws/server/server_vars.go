@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	connect "connectrpc.com/connect"
 
@@ -17,29 +18,91 @@ import (
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
-// VarsServer implements envv1connect.EnvVarsServiceHandler. Every call opens
+// VarsServer implements envv1connect.EnvVarsServiceHandler. Every call reaches
 // the store for the class it names — the table and the key are per substrate,
 // so the class is which store is opened rather than a filter over one.
-type VarsServer struct{}
+type VarsServer struct {
+	// openAccount reaches the cloud a store is opened against. Nil is AWS
+	// itself.
+	openAccount func(ctx context.Context, region string) (account, error)
 
-// openStore resolves the substrate's variable store from its bootstrap stack,
-// applying the same version gate every other RPC applies: an account
-// bootstrapped before the store existed gets the re-run remedy rather than an
-// obscure failure against a table that is not there.
-func openStore(ctx context.Context, raw []byte, class deploymentsv1.Environment_Class) (*vars.Store, error) {
+	mu     sync.Mutex
+	stores map[storeKey]*vars.Store
+}
+
+// account is the cloud a variable store is opened against: the
+// CloudFormation client its coordinates are read from, and the clients the
+// store itself reads and decrypts with.
+type account struct {
+	CFN    bootstrap.CFNDescriber
+	Dynamo vars.DynamoAPI
+	KMS    vars.CryptoAPI
+}
+
+// storeKey is everything opening a store varies on: the options the account is
+// resolved from, and which substrate's bootstrap stack holds its coordinates.
+type storeKey struct {
+	options options
+	preview bool
+}
+
+func awsAccount(ctx context.Context, region string) (account, error) {
+	awscfg, err := loadAWS(ctx, region)
+	if err != nil {
+		return account{}, err
+	}
+	return account{
+		CFN:    cloudformation.NewFromConfig(awscfg),
+		Dynamo: dynamodb.NewFromConfig(awscfg),
+		KMS:    kms.NewFromConfig(awscfg),
+	}, nil
+}
+
+// store returns the substrate's variable store, opening it at most once per
+// session. A store's coordinates come from its bootstrap stack, which does not
+// change while the provider is running, so opening it per RPC would spend a
+// CloudFormation describe on every value a deploy reads. The lock is held
+// across the open so a burst of concurrent reads costs one describe rather
+// than one each.
+func (s *VarsServer) store(ctx context.Context, raw []byte, class deploymentsv1.Environment_Class) (*vars.Store, error) {
 	opts, err := parseOptions(raw)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	awscfg, err := loadAWS(ctx, opts.Region)
+	key := storeKey{options: opts, preview: class == deploymentsv1.Environment_CLASS_PREVIEW}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if store, ok := s.stores[key]; ok {
+		return store, nil
+	}
+	store, err := s.open(ctx, key)
+	if err != nil {
+		return nil, err
+	}
+	if s.stores == nil {
+		s.stores = map[storeKey]*vars.Store{}
+	}
+	s.stores[key] = store
+	return store, nil
+}
+
+// open resolves the substrate's variable store from its bootstrap stack,
+// applying the same version gate every other RPC applies: an account
+// bootstrapped before the store existed gets the re-run remedy rather than an
+// obscure failure against a table that is not there.
+func (s *VarsServer) open(ctx context.Context, key storeKey) (*vars.Store, error) {
+	reach := s.openAccount
+	if reach == nil {
+		reach = awsAccount
+	}
+	cloud, err := reach(ctx, key.options.Region)
 	if err != nil {
 		return nil, err
 	}
 
-	preview := class == deploymentsv1.Environment_CLASS_PREVIEW
-	bootstrapCmd := bootstrapCommand(preview)
-
-	deployed, err := checkBootstrap(ctx, cloudformation.NewFromConfig(awscfg), preview)
+	bootstrapCmd := bootstrapCommand(key.preview)
+	deployed, err := checkBootstrap(ctx, cloud.CFN, key.preview)
 	if err != nil {
 		return nil, err
 	}
@@ -52,12 +115,12 @@ func openStore(ctx context.Context, raw []byte, class deploymentsv1.Environment_
 	}
 
 	substrateClass := bootstrap.ClassProduction
-	if preview {
+	if key.preview {
 		substrateClass = bootstrap.ClassPreview
 	}
 	return &vars.Store{
-		Dynamo: dynamodb.NewFromConfig(awscfg),
-		KMS:    kms.NewFromConfig(awscfg),
+		Dynamo: cloud.Dynamo,
+		KMS:    cloud.KMS,
 		Table:  deployed.VarsTable,
 		KeyARN: deployed.VarsKeyARN,
 		Class:  substrateClass,
@@ -65,7 +128,7 @@ func openStore(ctx context.Context, raw []byte, class deploymentsv1.Environment_
 }
 
 func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
-	store, err := openStore(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +140,7 @@ func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (
 }
 
 func (s *VarsServer) ListValues(ctx context.Context, req *envv1.ListValuesRequest) (*envv1.ListValuesResponse, error) {
-	store, err := openStore(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -93,7 +156,7 @@ func (s *VarsServer) ListValues(ctx context.Context, req *envv1.ListValuesReques
 }
 
 func (s *VarsServer) GetValue(ctx context.Context, req *envv1.GetValueRequest) (*envv1.GetValueResponse, error) {
-	store, err := openStore(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -111,8 +174,35 @@ func (s *VarsServer) GetValue(ctx context.Context, req *envv1.GetValueRequest) (
 	}, nil
 }
 
+// RevealValues is the batch behind GetValue: one query over the project's
+// current values and one decrypt per named cell that holds one, so a caller
+// resolving a whole set pays a single round trip to the table rather than one
+// per variable.
+func (s *VarsServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRequest) (*envv1.RevealValuesResponse, error) {
+	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	if err != nil {
+		return nil, err
+	}
+	cells := make([]vars.Coordinate, 0, len(req.GetCoordinates()))
+	for _, c := range req.GetCoordinates() {
+		cells = append(cells, toCoordinate(c))
+	}
+	values, err := store.Reveal(ctx, req.GetSlug(), cells)
+	if err != nil {
+		return nil, varsError(err)
+	}
+	resp := &envv1.RevealValuesResponse{Values: make([]*envv1.RevealedValue, 0, len(values))}
+	for _, v := range values {
+		resp.Values = append(resp.Values, &envv1.RevealedValue{
+			Metadata: toMetadataProto(v.Metadata),
+			Value:    v.Plaintext,
+		})
+	}
+	return resp, nil
+}
+
 func (s *VarsServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest) (*envv1.DeleteValueResponse, error) {
-	store, err := openStore(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +214,7 @@ func (s *VarsServer) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequ
 }
 
 func (s *VarsServer) ListVersions(ctx context.Context, req *envv1.ListVersionsRequest) (*envv1.ListVersionsResponse, error) {
-	store, err := openStore(ctx, req.GetOptions(), req.GetClass())
+	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {
 		return nil, err
 	}
