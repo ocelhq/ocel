@@ -290,19 +290,48 @@ func TestCheckFresh_AllowsABundleBuiltWithTheSameValues(t *testing.T) {
 	}
 }
 
-// TestCheckFresh_RefusesAnOutputThatRecordedNothing proves the `ocel build`
-// case: that command holds no provider session and resolves no values, so its
-// output carries no client value at all. Proceeding would ship a browser
-// reading undefined.
-func TestCheckFresh_RefusesAnOutputThatRecordedNothing(t *testing.T) {
+// TestCheckFresh_RefusesAnOcelBuildOutputForWhatItIs proves the refusal states
+// the cause it actually has. `ocel build` holds no provider session and
+// resolves no values, so its output carries no client value at all — nothing
+// changed, it was never inlined, and telling the developer to rebuild because
+// a value moved sends them looking for a rotation that never happened.
+func TestCheckFresh_RefusesAnOcelBuildOutputForWhatItIs(t *testing.T) {
 	root := t.TempDir()
+	if err := RecordUnresolved(root); err != nil {
+		t.Fatalf("RecordUnresolved: %v", err)
+	}
 
 	err := CheckFresh(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
 	if err == nil {
 		t.Fatal("CheckFresh = nil for an output that inlined no client value, want a refusal")
 	}
-	if !strings.Contains(err.Error(), "PUBLIC_SITE_URL") {
-		t.Errorf("error = %q, want it to name the key", err)
+	for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "`ocel build` resolves no values"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to state %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "changed since") {
+		t.Errorf("error = %q, want it not to claim the value changed; it was never inlined", err)
+	}
+}
+
+// TestCheckFresh_RefusesAKeyABuildNeverKnewAbout proves the other way a value
+// can be absent from an output: the build resolved values, but this key was
+// not client-accessible then. That is not a rotation either.
+func TestCheckFresh_RefusesAKeyABuildNeverKnewAbout(t *testing.T) {
+	root := t.TempDir()
+	if err := Record(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{serverVar("STRIPE_API_KEY", "sk-live")}}}); err != nil {
+		t.Fatalf("Record: %v", err)
+	}
+
+	err := CheckFresh(root, []App{{Name: "storefront", Variables: []manifestbuilder.Variable{clientVar("PUBLIC_SITE_URL", "https://example.com")}}})
+	if err == nil {
+		t.Fatal("CheckFresh = nil for a key the build never inlined, want a refusal")
+	}
+	for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "not client-accessible when"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to state %q", err, want)
+		}
 	}
 }
 

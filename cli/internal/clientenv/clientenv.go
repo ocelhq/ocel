@@ -141,15 +141,36 @@ func mapSpecifier(dir string) error {
 	return nil
 }
 
+// buildRecord is what a build says about the client values its output carries.
+// Resolved is the distinction a refusal has to make: a build that had no
+// values to inline is a different situation, with a different remedy, from one
+// whose values have since changed.
+type buildRecord struct {
+	Resolved bool                         `json:"resolved"`
+	Inlined  map[string]map[string]string `json:"inlined,omitempty"`
+}
+
 // Record writes what the build that just ran inlined into its browser bundles,
 // so a later --prebuilt deploy can tell whether reusing that output is honest.
 // It holds a digest per key and never the value: the output travels.
 func Record(projectDir string, apps []App) error {
-	record := make(map[string]map[string]string, len(apps))
+	record := buildRecord{Resolved: true, Inlined: make(map[string]map[string]string, len(apps))}
 	for _, app := range apps {
-		record[app.Name] = digests(app)
+		record.Inlined[app.Name] = digests(app)
 	}
+	return writeRecord(projectDir, record)
+}
 
+// RecordUnresolved states that the build that just ran inlined nothing because
+// it had nothing to inline. `ocel build` holds no provider session and so
+// resolves no values at all — a supported flow, since a CI job can build in a
+// container holding no credentials. Saying so is what lets a later --prebuilt
+// deploy report the true cause rather than accusing a value of changing.
+func RecordUnresolved(projectDir string) error {
+	return writeRecord(projectDir, buildRecord{})
+}
+
+func writeRecord(projectDir string, record buildRecord) error {
 	data, err := json.Marshal(record)
 	if err != nil {
 		return err
@@ -161,48 +182,80 @@ func Record(projectDir string, apps []App) error {
 	return os.WriteFile(path, data, 0o644)
 }
 
-// CheckFresh refuses a --prebuilt deploy whose build output predates a change
-// to a client-accessible value. Such a value is a copy taken at build time, so
-// reusing the output would ship a Deployment whose server side holds the new
-// value and whose browser bundle holds the old one — one key disagreeing with
-// itself across the wire, silently. Output that recorded nothing (an `ocel
-// build`, which resolves no values) is stale by the same rule.
+// CheckFresh refuses a --prebuilt deploy whose build output does not carry the
+// client values this deploy resolved. A client value is a copy taken at build
+// time, so reusing such an output would ship a Deployment whose server side
+// and whose browser bundles disagree about one key, silently.
+//
+// It refuses either way and names which of the two it is: a value that changed
+// since the build, or one the build never inlined at all.
 func CheckFresh(projectDir string, apps []App) error {
-	data, err := os.ReadFile(filepath.Join(projectDir, recordPath))
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	record, err := readRecord(projectDir)
+	if err != nil {
 		return err
 	}
-	record := map[string]map[string]string{}
-	if len(data) > 0 {
-		if err := json.Unmarshal(data, &record); err != nil {
-			return fmt.Errorf("read %s: %w", recordPath, err)
-		}
-	}
 
-	changed := map[string]bool{}
+	var missing, changed []string
 	for _, app := range apps {
-		built := record[app.Name]
+		inlined := record.Inlined[app.Name]
 		for key, digest := range digests(app) {
-			if built[key] != digest {
-				changed[key] = true
+			built, ok := inlined[key]
+			switch {
+			case !record.Resolved || !ok:
+				missing = append(missing, key)
+			case built != digest:
+				changed = append(changed, key)
 			}
 		}
 	}
-	if len(changed) == 0 {
+	if len(missing) == 0 && len(changed) == 0 {
 		return nil
 	}
+	sort.Strings(missing)
+	sort.Strings(changed)
 
-	keys := make([]string, 0, len(changed))
-	for key := range changed {
-		keys = append(keys, key)
+	var causes []string
+	if len(missing) > 0 {
+		cause := "it was not client-accessible when .ocel/output was built"
+		if !record.Resolved {
+			cause = "`ocel build` resolves no values"
+		}
+		causes = append(causes, fmt.Sprintf("%s %s never inlined — %s", strings.Join(missing, ", "), were(missing), cause))
 	}
-	sort.Strings(keys)
+	if len(changed) > 0 {
+		causes = append(causes, fmt.Sprintf("the client-accessible value of %s changed since .ocel/output was built", strings.Join(changed, ", ")))
+	}
 	return fmt.Errorf(
-		"--prebuilt cannot deploy this build: the client-accessible value of %s changed since .ocel/output was built. "+
-			"A client value is inlined into the browser bundle at build time, so this deploy would serve browsers the old value beside a server holding the new one. "+
-			"Deploy without --prebuilt to rebuild",
-		strings.Join(keys, ", "),
+		"--prebuilt cannot deploy this build: %s. "+
+			"A client value is inlined into the browser bundle at build time, so this deploy would serve browsers something other than what its server holds. "+
+			"Deploy without --prebuilt to build with the values this deploy resolved",
+		strings.Join(causes, ", and "),
 	)
+}
+
+func were(keys []string) string {
+	if len(keys) == 1 {
+		return "was"
+	}
+	return "were"
+}
+
+// readRecord is what the output in .ocel/output says about itself. Nothing
+// there is a build that recorded nothing, which is read the same way as one
+// that resolved nothing: either way no client value was inlined.
+func readRecord(projectDir string) (buildRecord, error) {
+	data, err := os.ReadFile(filepath.Join(projectDir, recordPath))
+	if errors.Is(err, fs.ErrNotExist) {
+		return buildRecord{}, nil
+	}
+	if err != nil {
+		return buildRecord{}, err
+	}
+	var record buildRecord
+	if err := json.Unmarshal(data, &record); err != nil {
+		return buildRecord{}, fmt.Errorf("read %s: %w", recordPath, err)
+	}
+	return record, nil
 }
 
 // clientKeys are the keys of one app's client-accessible values, sorted so the

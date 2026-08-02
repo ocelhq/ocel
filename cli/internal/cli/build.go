@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/platform"
 )
@@ -50,7 +51,12 @@ func runBuild(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
 
 	// `ocel build` holds no provider session, so it resolves no values: the
 	// variables a build can inline arrive with the deploy that resolves them.
+	// The output says so, so a later `--prebuilt` deploy can tell a value that
+	// was never inlined from one that changed since.
 	if err := buildApp(ctx, cfg, nil, stderr); err != nil {
+		return err
+	}
+	if err := clientenv.RecordUnresolved(cfg.Dir); err != nil {
 		return err
 	}
 

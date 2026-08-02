@@ -178,6 +178,35 @@ func TestCollectAndBuildManifest_Prebuilt_RefusesAStaleClientValue(t *testing.T)
 	}
 }
 
+// TestCollectAndBuildManifest_Prebuilt_NamesAnOcelBuildOutputForWhatItIs
+// proves the flow `ocel build` documents — build in a container holding no
+// credentials, deploy from the same checkout later — is refused for its real
+// reason. That build inlined nothing because it had nothing to inline, and a
+// refusal saying the value changed sends the developer after a rotation that
+// never happened.
+func TestCollectAndBuildManifest_Prebuilt_NamesAnOcelBuildOutputForWhatItIs(t *testing.T) {
+	root := t.TempDir()
+	writePrebuiltFunction(t, root, "api", "index")
+	recordBuildApp(t)
+	cfg := prebuiltConfig(root)
+	if err := clientenv.RecordUnresolved(root); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := collectAndBuildManifest(context.Background(), cfg, clientValueGate(t, cfg, "https://example.com"), true, io.Discard)
+	if err == nil {
+		t.Fatal("collectAndBuildManifest = nil for an `ocel build` output, want a refusal")
+	}
+	for _, want := range []string{"PUBLIC_SITE_URL", "never inlined", "`ocel build` resolves no values"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to state %q", err, want)
+		}
+	}
+	if strings.Contains(err.Error(), "changed since") {
+		t.Errorf("error = %q, want it not to claim the value changed", err)
+	}
+}
+
 // TestCollectAndBuildManifest_Prebuilt_ProceedsWhenTheClientValueIsUnchanged
 // proves the refusal is about staleness alone: reusing output built with the
 // value the store still holds is exactly what --prebuilt is for.
