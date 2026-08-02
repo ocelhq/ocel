@@ -494,13 +494,3 @@ func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout
 
 	return discovery.Run(ctx, entry, s.devServerAddr, stdout, stderr)
 }
-
-// Definitions is every variable definition this run declared, as the gate
-// recorded it.
-func (s *Server) Definitions() []*resourcesv1.VariableDefinition {
-	_, gate := s.variables()
-	if gate == nil {
-		return nil
-	}
-	return gate.Definitions()
-}

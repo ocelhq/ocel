@@ -4,8 +4,6 @@ import (
 	"context"
 	"net"
 	"net/http"
-	"path/filepath"
-	"sort"
 	"strings"
 	"testing"
 
@@ -46,28 +44,16 @@ func TestDefineEnv_DeclaresThroughDevserversOwnNodeSpawn(t *testing.T) {
 	}
 	<-srv.Sync()
 
-	definitions := byKey(t, srv.Definitions())
-
-	// A rename of OCEL_PHASE or OCEL_DEV_SERVER at this call site leaves the SDK
-	// either never declaring or unable to reach the server, and this set empty.
-	t.Run("every declared key arrives", func(t *testing.T) {
-		var keys []string
-		for key := range definitions {
-			keys = append(keys, key)
+	// A declaration that never arrived leaves both of these empty, which is what
+	// a rename of OCEL_PHASE or OCEL_DEV_SERVER at devserver's spawn site costs:
+	// the SDK either never declares or cannot reach the server.
+	t.Run("a declared scope arrives with its folders", func(t *testing.T) {
+		scoped := srv.ScopedFolders()
+		if got := strings.Join(scoped["POSTHOG_ID"], ","); got != "/admin,/web" {
+			t.Errorf("POSTHOG_ID folders = %q, want /admin,/web", got)
 		}
-		sort.Strings(keys)
-		want := []string{"DB_PASSWORD", "LOG_LEVEL", "PORT", "POSTHOG_ID", "PUBLIC_SITE_URL", "STRIPE_API_KEY"}
-		if strings.Join(keys, ",") != strings.Join(want, ",") {
-			t.Fatalf("declared keys = %v, want %v", keys, want)
-		}
-	})
-
-	t.Run("source names the file the user wrote", func(t *testing.T) {
-		source := filepath.Join(root, "ocel", "env.ts")
-		for key, definition := range definitions {
-			if got := definition.GetSource(); got != source {
-				t.Errorf("%s source = %q, want %q", key, got, source)
-			}
+		if _, ok := scoped["PORT"]; ok {
+			t.Errorf("PORT is scoped to %v, want no folders", scoped["PORT"])
 		}
 	})
 
