@@ -356,6 +356,33 @@ describe("prune", () => {
     expect(result.survivingRecordKeys).toEqual(["record:web/build-1~fp2"]);
   });
 
+  // The ISR/prerender prefix carries the environment segment, so a Deployment
+  // on another pointer never serves out of it. The host needs the survivors of
+  // the pruned pointer alone to tell that prefix apart from the env-less ones.
+  it("reports the pruned pointer's own surviving record keys separately", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "build-1~fpP" }));
+    await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "build-1~fpP" } }));
+    await store.putStaged(makeRecord({ buildId: "build-2" }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "build-2" } }),
+    );
+    await store.putStaged(makeRecord({ buildId: "build-1~fpV" }));
+    await store.promote(
+      makePromotion({ promotionId: "prev-1", ts: 3_000, builds: { web: "build-1~fpV" } }),
+      "pr-7",
+    );
+
+    const result = await store.prune(1);
+
+    expect(result.removedRecordKeys).toEqual(["record:web/build-1~fpP"]);
+    expect(result.survivingRecordKeys).toEqual([
+      "record:web/build-1~fpV",
+      "record:web/build-2",
+    ]);
+    expect(result.survivingPointerRecordKeys).toEqual(["record:web/build-2"]);
+  });
+
   it("pins the active promotion even when it falls outside the keep window", async () => {
     const store = storeStub();
     await seedPromotions(store, 5);
@@ -468,6 +495,24 @@ describe("removePointer", () => {
     expect(await store.record("web", "prev-1")).toBeUndefined();
     expect((await store.history()).map((h) => h.promotionId)).toEqual(["prod-2", "prod-1"]);
     expect(await store.record("web", "prod-1")).toBeDefined();
+  });
+
+  // Nothing of the pointer survives a removal, so its env-scoped storage is
+  // reclaimable outright even where production shares the build.
+  it("leaves the removed pointer with no surviving record keys of its own", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "build-1~fpP" }));
+    await store.promote(makePromotion({ promotionId: "prod-1", builds: { web: "build-1~fpP" } }));
+    await store.putStaged(makeRecord({ buildId: "build-1~fpV" }));
+    await store.promote(
+      makePromotion({ promotionId: "prev-1", ts: 2_000, builds: { web: "build-1~fpV" } }),
+      "staging",
+    );
+
+    const result = await store.removePointer("staging");
+
+    expect(result.survivingRecordKeys).toEqual(["record:web/build-1~fpP"]);
+    expect(result.survivingPointerRecordKeys).toEqual([]);
   });
 
   it("removing an unknown pointer is a clean no-op", async () => {

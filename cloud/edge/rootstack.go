@@ -282,11 +282,17 @@ type PruneResult struct {
 	// exactly which underlying artifacts (stacks, R2 assets, ISR entries) it
 	// still needs to reclaim.
 	RemovedRecordKeys []string `json:"removedRecordKeys"`
-	// SurvivingRecordKeys are the record keys the store still holds afterwards.
-	// Two Deployments of one build (a rotation) share the assets, ISR entries
-	// and edge bundle keyed by that build id, so the caller reclaims a build's
-	// storage only when none of these still names it.
+	// SurvivingRecordKeys are the record keys the store still holds afterwards,
+	// across every pointer. Two Deployments of one build (a rotation) share the
+	// assets and edge bundle keyed by that build id, and those prefixes carry no
+	// environment, so the caller reclaims them only when none of these still
+	// names the build.
 	SurvivingRecordKeys []string `json:"survivingRecordKeys"`
+	// SurvivingPointerRecordKeys are the record keys the pruned pointer itself
+	// still promotes. The ISR/prerender prefix carries the environment segment,
+	// so it belongs to one pointer alone and survives only a Deployment of that
+	// pointer.
+	SurvivingPointerRecordKeys []string `json:"survivingPointerRecordKeys"`
 }
 
 // RemovedRoute is one worker route a removed pointer owned: the app it fronted

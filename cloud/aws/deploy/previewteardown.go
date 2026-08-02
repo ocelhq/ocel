@@ -56,7 +56,7 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 		}
 	}
 
-	targets, err := PreviewReclaimTargets(slug, pointer, cfg.Env, removal.RemovedRecordKeys, removal.SurvivingRecordKeys)
+	targets, err := PreviewReclaimTargets(slug, pointer, cfg.Env, removal.RemovedRecordKeys, removal.SurvivingRecordKeys, removal.SurvivingPointerRecordKeys)
 	if err != nil {
 		errs = append(errs, err)
 	} else if err := Reclaim(ctx, cfg, targets, progress, log); err != nil {

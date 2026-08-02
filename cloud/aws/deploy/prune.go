@@ -28,9 +28,11 @@ import (
 // surviving record still shares — Reclaim never needs to re-read the record
 // itself.
 //
-// The three storage prefixes are build-keyed, so they are empty together
-// whenever a surviving Deployment of the same build still serves from them:
-// there is nothing to reclaim, only a stack to destroy.
+// The three storage prefixes are build-keyed, so each is empty whenever a
+// surviving Deployment still serves from it: there is nothing to reclaim, only
+// a stack to destroy. AssetPrefix and EdgePrefix carry no environment and so
+// are shared with every pointer's Deployments of the build; CachePrefix carries
+// the environment segment and so is shared only with the pruned pointer's own.
 type PruneTarget struct {
 	App      string
 	Identity DeploymentIdentity
@@ -75,9 +77,11 @@ func splitRecordKey(key string) (app string, id DeploymentIdentity, ok bool) {
 // ReclaimTargets turns edge.PruneResult's removed and surviving record keys
 // (the store's own "record:<app>/<identity>" keys) into the concrete production
 // stack name each removed Deployment leaves to reclaim, and the storage prefixes
-// it leaves only where no surviving Deployment shares its build. Pure.
-func ReclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, func(app string, id DeploymentIdentity) string {
+// it leaves only where no surviving Deployment shares its build — project-wide
+// for the env-less prefixes, within the pruned pointer for the env-scoped one.
+// Pure.
+func ReclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string) ([]PruneTarget, error) {
+	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys, func(app string, id DeploymentIdentity) string {
 		return AppDeployStackName(slug, app, id)
 	})
 }
@@ -87,8 +91,8 @@ func ReclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys []s
 // the production one, so `preview rm`/`preview prune` reclaim exactly the
 // preview's stacks. The storage prefixes are keyed the same way (the asset
 // prefix carries no env; the cache prefix carries the preview env segment). Pure.
-func PreviewReclaimTargets(slug, pointer, env string, removedRecordKeys, survivingRecordKeys []string) ([]PruneTarget, error) {
-	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, func(app string, id DeploymentIdentity) string {
+func PreviewReclaimTargets(slug, pointer, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string) ([]PruneTarget, error) {
+	return reclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys, func(app string, id DeploymentIdentity) string {
 		return PreviewAppDeployStackName(slug, pointer, app, id)
 	})
 }
@@ -96,14 +100,15 @@ func PreviewReclaimTargets(slug, pointer, env string, removedRecordKeys, survivi
 // reclaimTargets is the shared core: it splits every removed record key into the
 // app and Deployment identity it names and the storage prefixes to delete —
 // those keyed by the identity's build id, since that is what the uploads were
-// keyed by, and so only for a build no surviving record still names — deferring
-// only the app-deploy stack name to stackFor so production and preview differ in
-// exactly that one axis. Pure.
-func reclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys []string, stackFor func(app string, id DeploymentIdentity) string) ([]PruneTarget, error) {
+// keyed by, and so only for a build no relevant surviving record still names —
+// deferring only the app-deploy stack name to stackFor so production and preview
+// differ in exactly that one axis. Pure.
+func reclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string, stackFor func(app string, id DeploymentIdentity) string) ([]PruneTarget, error) {
 	if len(removedRecordKeys) == 0 {
 		return nil, nil
 	}
-	stillServed := servedBuilds(survivingRecordKeys)
+	sharedElsewhere := servedBuilds(survivingRecordKeys)
+	servedHere := servedBuilds(survivingPointerRecordKeys)
 	targets := make([]PruneTarget, 0, len(removedRecordKeys))
 	for _, key := range removedRecordKeys {
 		app, id, ok := splitRecordKey(key)
@@ -111,10 +116,13 @@ func reclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys []s
 			return nil, fmt.Errorf("malformed removed record key %q, want %q", key, removedRecordKeyPrefix+"app/identity")
 		}
 		target := PruneTarget{App: app, Identity: id, Stack: stackFor(app, id)}
-		if !stillServed[appBuild{app, id.BuildID()}] {
+		build := appBuild{app, id.BuildID()}
+		if !sharedElsewhere[build] {
 			target.AssetPrefix = appAssetR2Prefix(slug, app, id.BuildID())
-			target.CachePrefix = appAssetPrefixFor(env, slug, app, id.BuildID())
 			target.EdgePrefix = appEdgeR2Prefix(slug, app, id.BuildID())
+		}
+		if !servedHere[build] {
+			target.CachePrefix = appAssetPrefixFor(env, slug, app, id.BuildID())
 		}
 		targets = append(targets, target)
 	}
@@ -247,7 +255,7 @@ func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState,
 		return edge.PruneResult{}, fmt.Errorf("delete promotion artifacts: %w", err)
 	}
 
-	targets, err := reclaimTargetsFor(slug, pointer, cfg.Env, result.RemovedRecordKeys, result.SurvivingRecordKeys)
+	targets, err := reclaimTargetsFor(slug, pointer, cfg.Env, result.RemovedRecordKeys, result.SurvivingRecordKeys, result.SurvivingPointerRecordKeys)
 	if err != nil {
 		return result, err
 	}
@@ -260,9 +268,9 @@ func Prune(ctx context.Context, stack edge.RootStack, state edge.RootStackState,
 // reclaimTargetsFor picks the substrate-correct reclaim targets: production
 // stacks for the empty (reserved default) pointer, pointer-scoped preview stacks
 // for any named pointer. Pure.
-func reclaimTargetsFor(slug, pointer, env string, removedRecordKeys, survivingRecordKeys []string) ([]PruneTarget, error) {
+func reclaimTargetsFor(slug, pointer, env string, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys []string) ([]PruneTarget, error) {
 	if pointer == "" {
-		return ReclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys)
+		return ReclaimTargets(slug, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys)
 	}
-	return PreviewReclaimTargets(slug, pointer, env, removedRecordKeys, survivingRecordKeys)
+	return PreviewReclaimTargets(slug, pointer, env, removedRecordKeys, survivingRecordKeys, survivingPointerRecordKeys)
 }

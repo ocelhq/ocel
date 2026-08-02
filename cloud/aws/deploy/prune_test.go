@@ -12,7 +12,7 @@ import (
 )
 
 func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1", "record:api/build-2"}, nil)
+	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1", "record:api/build-2"}, nil, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -45,14 +45,14 @@ func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
 // it, and the prefix belongs to exactly one build, so no live deployment can
 // lose the bundle it loads from.
 func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil)
+	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
 	if want := "edge/proj1/web/build-1"; got[0].EdgePrefix != want {
 		t.Errorf("EdgePrefix = %q, want %q", got[0].EdgePrefix, want)
 	}
-	other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"}, nil)
+	other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"}, nil, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
 // off it.
 func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testing.T) {
 	id := fingerprinted("build-1", "fp1")
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()}, nil)
+	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()}, nil, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testi
 	if !reflect.DeepEqual(got, []PruneTarget{want}) {
 		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
 	}
-	plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil)
+	plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -98,6 +98,7 @@ func TestReclaimTargets_BuildASurvivingDeploymentSharesKeepsItsStorage(t *testin
 	rotated := fingerprinted("build-1", "fp2")
 	got, err := ReclaimTargets("proj1", "prod",
 		[]string{"record:web/build-1"},
+		[]string{"record:web/" + rotated.String()},
 		[]string{"record:web/" + rotated.String()})
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
@@ -118,6 +119,7 @@ func TestReclaimTargets_BuildASurvivingDeploymentSharesKeepsItsStorage(t *testin
 func TestReclaimTargets_LastDeploymentOfABuildStillReclaimsItsStorage(t *testing.T) {
 	got, err := ReclaimTargets("proj1", "prod",
 		[]string{"record:web/build-1"},
+		[]string{"record:web/build-2", "record:api/build-1"},
 		[]string{"record:web/build-2", "record:api/build-1"})
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
@@ -135,8 +137,57 @@ func TestReclaimTargets_LastDeploymentOfABuildStillReclaimsItsStorage(t *testing
 	}
 }
 
+// A preview Deployment of the same build survives project-wide, so the env-less
+// asset and edge prefixes it shares stay put — but it can never serve out of
+// production's env-scoped ISR prefix, so pruning production's last Deployment of
+// that build still reclaims it.
+func TestReclaimTargets_ASurvivorOnAnotherPointerKeepsOnlyTheEnvlessPrefixes(t *testing.T) {
+	pruned := fingerprinted("B1", "fpP")
+	preview := fingerprinted("B1", "fpV")
+	got, err := ReclaimTargets("proj1", "prod",
+		[]string{"record:web/" + pruned.String()},
+		[]string{"record:web/" + preview.String()},
+		nil)
+	if err != nil {
+		t.Fatalf("ReclaimTargets: %v", err)
+	}
+	want := []PruneTarget{{
+		App:         "web",
+		Identity:    pruned,
+		Stack:       AppDeployStackName("proj1", "web", pruned),
+		CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "B1"),
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+	}
+}
+
+// The mirror image on teardown: `preview rm` retires the whole pointer, so no
+// Deployment of it survives and its env-scoped ISR prefix goes, while a
+// production Deployment of the same build keeps the shared asset and edge
+// prefixes alive.
+func TestPreviewReclaimTargets_RemovingAPointerReclaimsItsCacheButNotTheSharedPrefixes(t *testing.T) {
+	pruned := fingerprinted("B1", "fpV")
+	got, err := PreviewReclaimTargets("proj1", "pr-7", "preview-pr-7",
+		[]string{"record:web/" + pruned.String()},
+		[]string{"record:web/" + fingerprinted("B1", "fpP").String()},
+		nil)
+	if err != nil {
+		t.Fatalf("PreviewReclaimTargets: %v", err)
+	}
+	want := []PruneTarget{{
+		App:         "web",
+		Identity:    pruned,
+		Stack:       PreviewAppDeployStackName("proj1", "pr-7", "web", pruned),
+		CachePrefix: appAssetPrefixFor("preview-pr-7", "proj1", "web", "B1"),
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("PreviewReclaimTargets = %+v, want %+v", got, want)
+	}
+}
+
 func TestReclaimTargets_EmptyInputYieldsNil(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", nil, nil)
+	got, err := ReclaimTargets("proj1", "prod", nil, nil, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -147,7 +198,7 @@ func TestReclaimTargets_EmptyInputYieldsNil(t *testing.T) {
 
 func TestReclaimTargets_MalformedKeyErrors(t *testing.T) {
 	for _, key := range []string{"no-slash", "record:/build-1", "record:web/"} {
-		if _, err := ReclaimTargets("proj1", "prod", []string{key}, nil); err == nil {
+		if _, err := ReclaimTargets("proj1", "prod", []string{key}, nil, nil); err == nil {
 			t.Errorf("ReclaimTargets(%q) err = nil, want an error for a malformed key", key)
 		}
 	}

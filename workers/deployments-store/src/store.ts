@@ -76,13 +76,19 @@ export interface PruneResult {
   // it still needs to reclaim. Kept in this prefixed form because the Go host
   // (cloud/aws/deploy/prune.go ReclaimTargets) parses it verbatim.
   removedRecordKeys: string[];
-  // The "record:<app>/<buildId>" keys the store still holds afterwards. Two
-  // Deployments of one build (a rotation) are two distinct records whose
-  // buildIds share a build, and the assets, ISR entries and edge bundle are
-  // keyed by that build alone, so the host reclaims a build's storage only
-  // when none of these still belongs to it. The store keeps a buildId opaque;
-  // splitting one back into build and value fingerprint is the host's business.
+  // The "record:<app>/<buildId>" keys the store still holds afterwards, across
+  // every pointer. Two Deployments of one build (a rotation) are two distinct
+  // records whose buildIds share a build, and the assets and edge bundle are
+  // keyed by that build alone with no environment segment, so the host reclaims
+  // them only when none of these still belongs to it. The store keeps a buildId
+  // opaque; splitting one back into build and value fingerprint is the host's
+  // business.
   survivingRecordKeys: string[];
+  // The record keys the pruned pointer itself still promotes. The ISR entries
+  // are keyed by the build under an environment segment that belongs to one
+  // pointer, so a Deployment on another pointer never serves out of them and
+  // cannot keep them alive.
+  survivingPointerRecordKeys: string[];
 }
 
 // One worker route a removed pointer owned: the app it fronted and the hostname
@@ -392,12 +398,15 @@ export function prune(
     // active one is pinned even if it falls outside that window, so pruning can
     // never take the live site (or a live preview) down. Scoping by pointer
     // means a preview prune never reclaims production's builds and vice versa.
-    const kept: string[] = [];
+    const kept: { promotionId: string; builds: Record<string, string> }[] = [];
     const removed: { promotionId: string; builds: Record<string, string> }[] =
       [];
     rows.forEach((r, i) => {
       if (i < keepN || r.promotion_id === activeId) {
-        kept.push(r.promotion_id);
+        kept.push({
+          promotionId: r.promotion_id,
+          builds: JSON.parse(r.builds) as Record<string, string>,
+        });
       } else {
         removed.push({
           promotionId: r.promotion_id,
@@ -425,12 +434,28 @@ export function prune(
     }
 
     return {
-      keptPromotionIds: kept,
+      keptPromotionIds: kept.map((p) => p.promotionId),
       removedPromotionIds: removed.map((p) => p.promotionId),
       removedRecordKeys,
       survivingRecordKeys: remainingRecordKeys(store),
+      survivingPointerRecordKeys: promotedRecordKeys(kept),
     };
   });
+}
+
+// The distinct record keys a set of promotions names, sorted so a caller sees a
+// stable order. Read off the promotions rather than the records table, which
+// carries no pointer of its own.
+function promotedRecordKeys(
+  promotions: { builds: Record<string, string> }[],
+): string[] {
+  const keys = new Set<string>();
+  for (const p of promotions) {
+    for (const [app, buildId] of Object.entries(p.builds)) {
+      keys.add(recordKey(app, buildId));
+    }
+  }
+  return [...keys].sort();
 }
 
 // Removes a pointer outright: every promotion scoped to it, the records those
@@ -479,6 +504,9 @@ export function removePointer(
       removedPromotionIds: removed.map((p) => p.promotionId),
       removedRecordKeys,
       survivingRecordKeys: remainingRecordKeys(store),
+      // The pointer is gone outright, so nothing of it survives to keep its
+      // environment-scoped storage alive.
+      survivingPointerRecordKeys: [],
       remainingPointers: previewPointerCount(store),
       removedRoutes,
     };

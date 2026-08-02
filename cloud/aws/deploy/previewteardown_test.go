@@ -23,7 +23,7 @@ func TestPreviewInfraStackFor_PersistentGetsAStackEphemeralGetsNone(t *testing.T
 }
 
 func TestPreviewReclaimTargets_UsePointerScopedStackNames(t *testing.T) {
-	targets, err := PreviewReclaimTargets("shop", "pr-1", "preview-pr-1", []string{"record:web/b1", "record:api/b2"}, nil)
+	targets, err := PreviewReclaimTargets("shop", "pr-1", "preview-pr-1", []string{"record:web/b1", "record:api/b2"}, nil, nil)
 	if err != nil {
 		t.Fatalf("PreviewReclaimTargets: %v", err)
 	}
@@ -39,21 +39,21 @@ func TestPreviewReclaimTargets_UsePointerScopedStackNames(t *testing.T) {
 	}
 	// The production reclaim of the same record must resolve a different stack —
 	// proving preview and production never collide on stack names.
-	prod, _ := ReclaimTargets("shop", "prod", []string{"record:web/b1"}, nil)
+	prod, _ := ReclaimTargets("shop", "prod", []string{"record:web/b1"}, nil, nil)
 	if prod[0].Stack == byApp["web"].Stack {
 		t.Error("preview and production reclaim resolved the same stack name")
 	}
 }
 
 func TestReclaimTargetsFor_BranchesOnPointer(t *testing.T) {
-	prod, err := reclaimTargetsFor("shop", "", "prod", []string{"record:web/b1"}, nil)
+	prod, err := reclaimTargetsFor("shop", "", "prod", []string{"record:web/b1"}, nil, nil)
 	if err != nil {
 		t.Fatalf("reclaimTargetsFor(production): %v", err)
 	}
 	if prod[0].Stack != AppDeployStackName("shop", "web", buildOnly("b1")) {
 		t.Errorf("empty pointer must resolve production stacks, got %q", prod[0].Stack)
 	}
-	preview, err := reclaimTargetsFor("shop", "pr-1", "preview-pr-1", []string{"record:web/b1"}, nil)
+	preview, err := reclaimTargetsFor("shop", "pr-1", "preview-pr-1", []string{"record:web/b1"}, nil, nil)
 	if err != nil {
 		t.Fatalf("reclaimTargetsFor(preview): %v", err)
 	}
