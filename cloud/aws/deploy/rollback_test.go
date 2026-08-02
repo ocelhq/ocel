@@ -130,6 +130,40 @@ func TestRollback_PromotesTheTargetUnderAFreshTimestamp(t *testing.T) {
 	}
 }
 
+// Rolling back to a Deployment that a rotation produced must re-point at its
+// full identity, not at the build id it shares with the Deployment it replaced:
+// the values ride the immutable artifact that identity names, so anything
+// coarser silently restores a different set of values than the one that
+// Deployment shipped with.
+func TestRollback_AcrossARotationRePointsAtTheRotatedIdentity(t *testing.T) {
+	fake := &recordingRootStack{
+		history: []edge.HistoryEntry{
+			{Promotion: edge.Promotion{PromotionID: "p3", Ts: 300, Builds: map[string]string{"web": "B2"}}, Active: true},
+			{Promotion: edge.Promotion{PromotionID: "p2", Ts: 200, Builds: map[string]string{"web": "B1~fp2"}}, Active: false},
+			{Promotion: edge.Promotion{PromotionID: "p1", Ts: 100, Builds: map[string]string{"web": "B1"}}, Active: false},
+		},
+	}
+	ctx := context.Background()
+	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1"}, nil)
+	if err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	promoted, err := Rollback(ctx, fake, state, "", "", 999)
+	if err != nil {
+		t.Fatalf("Rollback: %v", err)
+	}
+	if got := promoted.Builds["web"]; got != "B1~fp2" {
+		t.Errorf("promoted.Builds[web] = %q, want %q — the rotated Deployment, values and all", got, "B1~fp2")
+	}
+	if len(fake.promotions) != 1 {
+		t.Fatalf("promotions = %v, want a single re-promotion", fake.promotions)
+	}
+	if got := fake.promotions[0].Builds["web"]; got != "B1~fp2" {
+		t.Errorf("re-promotion Builds[web] = %q, want %q", got, "B1~fp2")
+	}
+}
+
 func TestRollback_ToASpecificPromotion(t *testing.T) {
 	fake := &recordingRootStack{
 		history: []edge.HistoryEntry{
