@@ -155,10 +155,8 @@ func (s *Server) UseValues(values map[string]string, scope envgate.Scope) {
 }
 
 // UseProjectConfig installs the project config the caller already resolved, so
-// /sync provisions against the same one the gate ruled from. The gate rules
-// before discovery and the shared values are among the sources it rules from,
-// so the fetch has to happen there; fetching again here would let the run be
-// provisioned against a config the verdict never saw.
+// /sync provisions against the same one the gate ruled from rather than one the
+// verdict never saw.
 func (s *Server) UseProjectConfig(cfg provision.ProjectConfig) {
 	s.cfgMu.Lock()
 	defer s.cfgMu.Unlock()

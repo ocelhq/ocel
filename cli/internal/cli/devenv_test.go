@@ -222,7 +222,7 @@ func TestDevRefusal_IsNeverGivenAValueItCouldPrint(t *testing.T) {
 // so the notice about it cannot be the thing that prints them.
 func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	var quiet bytes.Buffer
-	reportDotfile(&quiet, t.TempDir(), nil, true)
+	reportDotfile(&quiet, t.TempDir(), nil, dotfileWatchedAdvice)
 	if quiet.Len() != 0 {
 		t.Errorf("reportDotfile wrote %q for a run with no dotfile values, want nothing", quiet.String())
 	}
@@ -233,7 +233,7 @@ func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	reportDotfile(&out, dir, map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}, true)
+	reportDotfile(&out, dir, map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}, dotfileWatchedAdvice)
 	got := out.String()
 
 	for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotenv.FileName} {
@@ -258,35 +258,12 @@ func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	}
 }
 
-// A notice that describes the run it is printed for. `ocel dev` watches the
-// file, so telling its user to restart is false and would be read as "editing
-// does nothing" — the surprise this notice exists to prevent. `ocel run` has
-// no watcher, and the old sentence is simply true of it.
-func TestReportDotfile_SaysWhetherThisRunWatchesTheFile(t *testing.T) {
-	values := map[string]string{"API_TOKEN": "x"}
-
-	var watched bytes.Buffer
-	reportDotfile(&watched, t.TempDir(), values, true)
-	if got := watched.String(); !strings.Contains(got, "re-resolves this run") {
-		t.Errorf("notice = %q, want it to say an edit re-resolves the running `ocel dev`", got)
-	}
-	if got := watched.String(); strings.Contains(got, "read once, at startup") {
-		t.Errorf("notice = %q, want no claim that the file is held for the process", got)
-	}
-
-	var once bytes.Buffer
-	reportDotfile(&once, t.TempDir(), values, false)
-	if got := once.String(); !strings.Contains(got, "read once, at startup") {
-		t.Errorf("notice = %q, want a run with no watcher to still say the file is read once", got)
-	}
-}
-
 // `ocel init` scaffolds no .gitignore, and this feature's whole purpose is to
 // encourage putting values — including secrets — in that file. An unignored one
 // is how a secret reaches a public repository.
 func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 	var out bytes.Buffer
-	reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, true)
+	reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, dotfileWatchedAdvice)
 
 	if got := out.String(); !strings.Contains(got, ".gitignore") {
 		t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
@@ -300,7 +277,7 @@ func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 		t.Fatalf("write .gitignore: %v", err)
 	}
 	var reincluded bytes.Buffer
-	reportDotfile(&reincluded, dir, map[string]string{"API_TOKEN": "x"}, true)
+	reportDotfile(&reincluded, dir, map[string]string{"API_TOKEN": "x"}, dotfileWatchedAdvice)
 	if got := reincluded.String(); !strings.Contains(got, ".gitignore") {
 		t.Errorf("notice = %q, want the warning when a later line re-includes the file", got)
 	}
@@ -361,6 +338,10 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	}
 	if strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
 		t.Errorf("stdout = %q, want a line Ocel does not own passed over in silence", stdout.String())
+	}
+	// Telling a watched run to restart would be read as "editing does nothing".
+	if !strings.Contains(stdout.String(), dotfileWatchedAdvice) {
+		t.Errorf("stdout = %q, want the advice for a run that re-resolves on save", stdout.String())
 	}
 }
 
@@ -675,6 +656,10 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	}
 	if env["OCEL_APP_FOLDER"] != "/web" {
 		t.Errorf("OCEL_APP_FOLDER = %q, want the folder the only app binds", env["OCEL_APP_FOLDER"])
+	}
+	// `ocel run` has no watcher, so the file really is read once.
+	if !strings.Contains(stdout.String(), dotfileReadOnceAdvice) {
+		t.Errorf("stdout = %q, want the advice for a run that reads the file once", stdout.String())
 	}
 }
 

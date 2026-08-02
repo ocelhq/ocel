@@ -126,7 +126,7 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 	if err != nil {
 		return err
 	}
-	reportDotfile(stdout, cfg.Dir, file.Values, true)
+	reportDotfile(stdout, cfg.Dir, file.Values, dotfileWatchedAdvice)
 
 	// Fetched once and held for the process: dev's semantic is "resolved at
 	// startup", and the same config answers the run's /sync.
@@ -253,11 +253,9 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 // re-discovery: declares from the new run replace the prior manifest), then
 // pushes the freshly resolved env to every connected follower. It returns
 // once the watch is established; re-resolution happens in the background
-// until ctx is done.
-//
-// The dotfile sits at the project root among every other file a project keeps
-// there, so the root is watched for that one path: a write to package.json or
-// an editor's scratch file is no reason to re-discover.
+// until ctx is done. The dotfile is watched as one path rather than as its
+// directory: it sits at the project root, and a write to package.json is no
+// reason to re-discover.
 func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) error {
 	dirs, err := discovery.Dirs(cfg.Dir, cfg.Discovery.Paths)
 	if err != nil {

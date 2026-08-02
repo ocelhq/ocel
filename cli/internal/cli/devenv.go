@@ -25,11 +25,6 @@ import (
 // gate's half of the precedence resolvedEnv states for the child, and it holds
 // only variables — a resource's env and the app folder are the child's
 // environment, not values anything declares.
-//
-// The gate rules before the child exists, so a value that reaches the store
-// after discovery cannot clear a refusal already reported. Both sources have to
-// be here, or a project whose values live in the shared store is refused and
-// told to duplicate them into a file that is one machine's.
 func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 	values := make(map[string]string, len(projectEnv)+len(dotfile))
 	for k, v := range projectEnv {
@@ -45,9 +40,8 @@ func storeValues(projectEnv, dotfile map[string]string) map[string]string {
 // before discovery, so the gate can rule from them.
 //
 // An unreachable control plane costs the run those shared values and nothing
-// else. Getting started needs no cloud account, so a project whose values are
-// all in the dotfile keeps running offline — it is told what it lost, and the
-// identity is kept so provisioning still has its coordinates.
+// else: the identity is kept so provisioning still has its coordinates, and a
+// project whose values are all in the dotfile keeps running offline.
 func resolveProjectConfig(ctx context.Context, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
 	cfg, err := fetchProjectConfig(ctx, apiURL, token, projectID)
 	if err == nil {
@@ -231,6 +225,15 @@ func reportUnreadableLines(stdout io.Writer, unreadable []int) {
 	fmt.Fprintf(stdout, "%s lines %s are not KEY=VALUE and were ignored.\n", dotenv.FileName, strings.Join(numbers, ", "))
 }
 
+// Advice on when an edit takes effect, which the run's own command decides: a
+// run that re-reads the file on every save and one that holds it for its
+// lifetime owe their user opposite advice, and either sentence under the wrong
+// command is read as "editing does nothing".
+var (
+	dotfileWatchedAdvice  = fmt.Sprintf("editing %s re-resolves this run; saving it is enough.", dotenv.FileName)
+	dotfileReadOnceAdvice = fmt.Sprintf("%s is read once, at startup; editing it takes effect on the next `ocel run`.", dotenv.FileName)
+)
+
 // reportDotfile states what resolving from a file costs, at the moment it is
 // done, because none of it is visible from the code that reads the values.
 // Collaboration disappears — a shared store is one project's answer, a file is
@@ -239,16 +242,9 @@ func reportUnreadableLines(stdout io.Writer, unreadable []int) {
 // under its own name where a deploy would keep a sensitive value out of the
 // function environment and a live one out of the artifact.
 //
-// It runs where the file is read rather than where the values are resolved, so
-// a run the gate goes on to refuse still says where it looked, and a watcher's
-// re-resolve does not reprint the whole notice on every save. watched tells it
-// which of those two runs this is: a run that re-reads the file on every save
-// and one that holds it for its lifetime owe their user opposite advice.
-//
-// It is told from key names and line numbers, never values: this is the one
-// file whose contents nothing else may see, so the notice about it cannot be
-// what prints them.
-func reportDotfile(stdout io.Writer, dir string, values map[string]string, watched bool) {
+// It is told key names, never values: this is the one file whose contents
+// nothing else may see, so the notice about it cannot be what prints them.
+func reportDotfile(stdout io.Writer, dir string, values map[string]string, advice string) {
 	if len(values) == 0 {
 		return
 	}
@@ -262,11 +258,7 @@ func reportDotfile(stdout io.Writer, dir string, values map[string]string, watch
 	fmt.Fprintf(stdout, "resolved %s from %s. That file is yours alone — a teammate's checkout has its own, so nothing set here reaches anyone else and a deploy resolves none of it.\n",
 		strings.Join(keys, ", "), dotenv.FileName)
 	fmt.Fprintf(stdout, "dev delivers every value to the app in plaintext under its own name; a deploy keeps a sensitive value out of the function environment and a live one out of the artifact.\n")
-	if watched {
-		fmt.Fprintf(stdout, "editing %s re-resolves this run; saving it is enough.\n", dotenv.FileName)
-	} else {
-		fmt.Fprintf(stdout, "%s is read once, at startup; editing it takes effect on the next `ocel run`.\n", dotenv.FileName)
-	}
+	fmt.Fprintln(stdout, advice)
 	if !gitIgnoresDotfile(dir) {
 		fmt.Fprintf(stdout, "%s is not matched by this project's .gitignore. Add it before committing — it holds values nothing else may see.\n", dotenv.FileName)
 	}

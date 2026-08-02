@@ -110,7 +110,7 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, p
 		return err
 	}
 	reportUnreadableLines(stdout, file.Unreadable)
-	reportDotfile(stdout, cfg.Dir, file.Values, false)
+	reportDotfile(stdout, cfg.Dir, file.Values, dotfileReadOnceAdvice)
 
 	projectCfg := resolveProjectConfig(ctx, apiURL, creds.AccessToken, projectID, stderr)
 
