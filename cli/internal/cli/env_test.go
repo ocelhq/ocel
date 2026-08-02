@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -323,4 +325,100 @@ func TestRunEnvSet_LeavesAnUnscopedKeyWritableAtRootAndInAFolder(t *testing.T) {
 
 	envSet(t, root, "LOG_LEVEL", "info", envOptions{})
 	envSet(t, root, "LOG_LEVEL", "debug", envOptions{folder: "/web"})
+}
+
+// envDeclaringScript is a declaring process whose definitions are written into
+// the code, the way a real defineEnv call's are, rather than read from the
+// environment the way envDeclarationScript's are. A key's folder scope is a
+// property of the project's source, so changing it here means editing the file
+// — which is what makes "the declarations changed" observable from outside.
+//
+// It also appends a line to OCEL_TEST_DISCOVERY_LOG per run, so how many times
+// the pass actually ran is a fact about the project's own files rather than
+// anything about the CLI's internals.
+func envDeclaringScript(definitions string) string {
+	return fmt.Sprintf(`
+declare global {
+  var __ocelRegister: Promise<unknown>[];
+}
+globalThis.__ocelRegister ??= [];
+
+globalThis.__ocelRegister.push(
+  (async () => {
+    const log = process.env.OCEL_TEST_DISCOVERY_LOG;
+    if (log) await (await import("node:fs/promises")).appendFile(log, "ran\n");
+
+    const res = await fetch(new URL("/resources.v1.ResourceService/DeclareEnv", process.env.OCEL_DEV_SERVER), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ definitions: %s }),
+    });
+    if (!res.ok) throw new Error("DeclareEnv failed: " + res.status + " " + (await res.text()));
+  })(),
+);
+export {};
+`, definitions)
+}
+
+func setUpDeclaringFixture(t *testing.T, definitions string) (root, log string) {
+	t.Helper()
+	root = setUpEnvGateFixtureWith(t, "[]", envDeclaringScript(definitions))
+	log = filepath.Join(t.TempDir(), "discovery.log")
+	t.Setenv("OCEL_TEST_DISCOVERY_LOG", log)
+	return root, log
+}
+
+func discoveryRuns(t *testing.T, log string) int {
+	t.Helper()
+	data, err := os.ReadFile(log)
+	if err != nil {
+		return 0
+	}
+	return strings.Count(string(data), "ran\n")
+}
+
+// A write has to know a key's folder scope, which only the project's code
+// knows, but a scripted run of writes should pay for learning it once. The
+// declarations cannot have changed while the code they are written in has not.
+func TestRunEnvSet_SecondWriteReusesTheDeclarationsTheFirstOneLearned(t *testing.T) {
+	root, log := setUpDeclaringFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+
+	envSet(t, root, "POSTHOG_ID", "ph_one", envOptions{folder: "/web"})
+	envSet(t, root, "POSTHOG_ID", "ph_two", envOptions{folder: "/web"})
+
+	if got := discoveryRuns(t, log); got != 1 {
+		t.Errorf("discovery ran %d times over two writes, want 1: nothing the declarations come from changed between them", got)
+	}
+
+	var out bytes.Buffer
+	if err := runEnvGet(context.Background(), root, "POSTHOG_ID", envOptions{folder: "/web", reveal: true}, &out, &out); err != nil {
+		t.Fatalf("runEnvGet err = %v; out=%s", err, out.String())
+	}
+	if strings.TrimSpace(out.String()) != "ph_two" {
+		t.Errorf("value in /web = %q, want %q: the second write must land like the first", out.String(), "ph_two")
+	}
+}
+
+// The other half: a cache that outlives the code it was read from would put a
+// value in a cell nothing resolves, silently. Scoping a key that was unscoped
+// is exactly that change, and the next write must be judged by the new scope.
+func TestRunEnvSet_PicksUpAScopeTheCodeGainedSinceTheLastWrite(t *testing.T) {
+	root, log := setUpDeclaringFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+
+	envSet(t, root, "POSTHOG_ID", "ph_root", envOptions{})
+
+	writeFile(t, filepath.Join(root, "ocel", "env.ts"),
+		envDeclaringScript(`[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`))
+
+	var stdout, stderr bytes.Buffer
+	err := runEnvSet(context.Background(), root, "POSTHOG_ID", "ph_root_again", envOptions{}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runEnvSet err = nil, want the scope the code now declares to refuse a root write")
+	}
+	if !strings.Contains(err.Error(), "/web") {
+		t.Errorf("err = %v, want it to name the folder the key is now scoped to", err)
+	}
+	if got := discoveryRuns(t, log); got != 2 {
+		t.Errorf("discovery ran %d times, want 2: the declaring code changed between the writes", got)
+	}
 }

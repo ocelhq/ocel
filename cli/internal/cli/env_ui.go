@@ -129,16 +129,22 @@ func startVarsUI(
 // filled: what the code declares, what the store holds for it, and what the
 // declaring process refused to run with.
 func discoverVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, opts envOptions, stderr io.Writer) (*envgate.Gate, error) {
-	gate := envgate.New(runnerValues{
+	gate := envGate(cfg, runner, provider, opts)
+	if _, err := deploycollector.Collect(ctx, cfg, gate, io.Discard, stderr); err != nil {
+		return nil, err
+	}
+	return gate, nil
+}
+
+// envGate is the gate an `ocel env` command fills: the store reached through
+// this session's provider, and the apps the flags' substrate is scoped to.
+func envGate(cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, opts envOptions) *envgate.Gate {
+	return envgate.New(runnerValues{
 		runner:  runner,
 		options: []byte(provider.Options),
 		slug:    cfg.Slug,
 		class:   envClass(opts),
 	}, envScope(cfg, opts.preview))
-	if _, err := deploycollector.Collect(ctx, cfg, gate, io.Discard, stderr); err != nil {
-		return nil, err
-	}
-	return gate, nil
 }
 
 // The write half of the store, alongside the reads runnerValues already

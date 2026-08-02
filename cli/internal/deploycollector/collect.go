@@ -23,6 +23,32 @@ import (
 // checks before it builds anything. It never starts or talks to the dev
 // server (cli/internal/devserver) and never provisions anything.
 func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, stdout, stderr io.Writer) ([]declare.Resource, error) {
+	entry, err := Bundle(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return CollectBundled(ctx, cfg, gate, entry, stdout, stderr)
+}
+
+// Bundle builds the entrypoint a discovery run executes, without running it.
+// Everything a declaration can come from is inlined into it, so a caller that
+// only needs to know whether the declarations could have changed can read this
+// instead of running the pass.
+func Bundle(cfg *projectconfig.Config) (string, error) {
+	files, err := discovery.Discover(cfg.Dir, cfg.Discovery.Paths)
+	if err != nil {
+		return "", fmt.Errorf("discover resources: %w", err)
+	}
+
+	entry, err := discovery.Bundle(cfg.Dir, files)
+	if err != nil {
+		return "", fmt.Errorf("bundle discovery entrypoint: %w", err)
+	}
+	return entry, nil
+}
+
+// CollectBundled is Collect over an entrypoint the caller already built.
+func CollectBundled(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate, entry string, stdout, stderr io.Writer) ([]declare.Resource, error) {
 	c := New(gate)
 
 	// Before discovery, not during it: a store that cannot be read is a
@@ -40,16 +66,6 @@ func Collect(ctx context.Context, cfg *projectconfig.Config, gate *envgate.Gate,
 	defer httpSrv.Close()
 
 	collectorAddr := "http://" + listener.Addr().String()
-
-	files, err := discovery.Discover(cfg.Dir, cfg.Discovery.Paths)
-	if err != nil {
-		return nil, fmt.Errorf("discover resources: %w", err)
-	}
-
-	entry, err := discovery.Bundle(cfg.Dir, files)
-	if err != nil {
-		return nil, fmt.Errorf("bundle discovery entrypoint: %w", err)
-	}
 
 	nodeCmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
 	nodeCmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+collectorAddr)

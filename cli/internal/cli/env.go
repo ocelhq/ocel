@@ -11,6 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/ocelhq/ocel/cli/internal/declcache"
+	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -197,16 +199,44 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 	})
 }
 
-// declaredVariables runs the project's discovery pass to learn what its code
-// declares. A write has to know a key's folder scope to reject a cell nothing
-// could read, and code is the only authority on scope — the store holds values
-// and nothing else, so it cannot answer this from its own side.
+// declaredVariables answers what the project's code declares. A write has to
+// know a key's folder scope to reject a cell nothing could read, and code is
+// the only authority on scope — the store holds values and nothing else, so it
+// cannot answer this from its own side.
+//
+// Learning it means running the discovery pass, which costs a bundle and a node
+// process, so the answer is cached per project against a fingerprint of the
+// bundled program: a scripted run of writes pays for it once, and the first
+// write after the declaring code changes pays for it again. Caching is
+// best-effort — a cache that cannot be opened or written just means running
+// discovery, which is what this did before it had one.
 func declaredVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
-	gate, err := discoverVariables(ctx, cfg, runner, provider, opts, stderr)
+	entry, err := deploycollector.Bundle(cfg)
 	if err != nil {
 		return nil, err
 	}
-	return gate.Definitions(), nil
+	fingerprint, err := declcache.Fingerprint(entry, envClass(opts).String())
+	if err != nil {
+		return nil, err
+	}
+
+	cache, cacheErr := declcache.Open()
+	if cacheErr == nil {
+		if definitions, ok := cache.Load(cfg.Dir, fingerprint); ok {
+			return definitions, nil
+		}
+	}
+
+	gate := envGate(cfg, runner, provider, opts)
+	if _, err := deploycollector.CollectBundled(ctx, cfg, gate, entry, io.Discard, stderr); err != nil {
+		return nil, err
+	}
+
+	definitions := gate.Definitions()
+	if cacheErr == nil {
+		_ = cache.Save(cfg.Dir, fingerprint, definitions)
+	}
+	return definitions, nil
 }
 
 func runEnvLs(ctx context.Context, cwd string, opts envOptions, stdout, stderr io.Writer) error {
