@@ -145,6 +145,38 @@ func TestUploadStaticAssets_NoStaticOutputUploadsNothing(t *testing.T) {
 	}
 }
 
+// TestUploadStaticAssets_ARotationReusesTheBuildsObjects proves a vars-only
+// deploy re-publishing an unchanged build re-uploads nothing: the keys are
+// build-scoped and already present, so a rotation costs presence checks alone
+// rather than the whole static tree again.
+func TestUploadStaticAssets_ARotationReusesTheBuildsObjects(t *testing.T) {
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: staticAppTree(t), AssetBucket: "assets", Env: "prod",
+		Uploader:         &fakeUploader{exists: map[string]bool{}},
+		CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+
+	if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("first uploadStaticAssets: %v", err)
+	}
+	first := append([]string(nil), store.puts...)
+	if len(first) == 0 {
+		t.Fatal("first deploy uploaded nothing; there is no reuse to prove")
+	}
+	for _, key := range first {
+		store.exists[key] = true
+	}
+	store.puts = nil
+
+	if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("rotation uploadStaticAssets: %v", err)
+	}
+	if len(store.puts) != 0 {
+		t.Errorf("rotation uploaded %v, want nothing: the build's assets are already published", store.puts)
+	}
+}
+
 // TestBuildDeploymentRecord_AssetPrefixIsTheFullR2KeyRoot proves the record
 // carries the same prefix uploadStaticAssets published under, so the frozen
 // worker needs no project/app identity of its own to read an asset back.

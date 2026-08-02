@@ -128,6 +128,42 @@ func TestUploadEdgeBundles_ReplacesTheObjectAlreadyUnderTheKey(t *testing.T) {
 	}
 }
 
+// TestUploadEdgeBundles_ARotationTargetsTheSameBuildKey proves a vars-only
+// deploy of an unchanged build adds no edge-bundle object: the key is scoped by
+// the build id, not the Deployment identity, so the rotation rewrites the one
+// object already there with the same bytes. Reuse here is one object, not a
+// skipped write — the write stays unconditional for the reason
+// TestUploadEdgeBundles_ReplacesTheObjectAlreadyUnderTheKey pins.
+func TestUploadEdgeBundles_ARotationTargetsTheSameBuildKey(t *testing.T) {
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: edgeAppTree(t), AssetBucket: "assets", Env: "prod",
+		Uploader:         &fakeUploader{exists: map[string]bool{}},
+		CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+
+	if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("first uploadEdgeBundles: %v", err)
+	}
+	for _, key := range store.puts {
+		store.exists[key] = true
+	}
+	if err := uploadEdgeBundles(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("rotation uploadEdgeBundles: %v", err)
+	}
+
+	distinct := map[string]bool{}
+	for _, key := range store.puts {
+		distinct[key] = true
+	}
+	if len(store.puts) != 2 || len(distinct) != 1 || !distinct["edge/proj/web/WEB1/bundle.json"] {
+		t.Fatalf("uploaded keys = %v, want the same %q twice", store.puts, "edge/proj/web/WEB1/bundle.json")
+	}
+	if body := store.putBodies["edge/proj/web/WEB1/bundle.json"]; body != `{"version":1,"mainModule":"main.js"}` {
+		t.Errorf("object after the rotation = %q, want the build's bundle unchanged", body)
+	}
+}
+
 // TestUploadEdgeBundles_UnadoptedStoreUploadsNothing proves a substrate whose
 // edge offered no cache store uploads nothing: the frozen worker would have
 // nowhere to load a bundle back from.
