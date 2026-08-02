@@ -11,8 +11,11 @@ import (
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
+	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 // writePrebuiltFunction stages one `.func` in a project's build output exactly
@@ -107,6 +110,132 @@ func TestCollectAndBuildManifest_Prebuilt_NoOutput_Errors(t *testing.T) {
 	if !strings.Contains(err.Error(), "ocel build") {
 		t.Errorf("error = %q, want it to point at `ocel build`", err)
 	}
+}
+
+// TestCollectAndBuildManifest_GeneratesTheClientAccessorBeforeTheBuild proves
+// the accessor exists by the time the framework build could read it, and that
+// the build it belongs to is recorded — which is what lets the next --prebuilt
+// deploy tell whether reusing this output is honest.
+func TestCollectAndBuildManifest_GeneratesTheClientAccessorBeforeTheBuild(t *testing.T) {
+	root := t.TempDir()
+	writePrebuiltFunction(t, root, "api", "index")
+	generated := ""
+	prev := buildApp
+	buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
+		data, err := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+		if err != nil {
+			return err
+		}
+		generated = string(data)
+		return nil
+	}
+	t.Cleanup(func() { buildApp = prev })
+
+	cfg := prebuiltConfig(root)
+	if _, err := collectAndBuildManifest(context.Background(), cfg, clientValueGate(t, cfg, "https://example.com"), false, io.Discard); err != nil {
+		t.Fatalf("collectAndBuildManifest: %v", err)
+	}
+
+	if !strings.Contains(generated, "PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_PUBLIC_SITE_URL") {
+		t.Errorf("accessor the build saw = %q, want it to name the prefixed entry", generated)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".ocel", "output", "client-values.json")); err != nil {
+		t.Errorf("the build recorded no client values: %v", err)
+	}
+}
+
+// TestCollectAndBuildManifest_Prebuilt_RefusesAStaleClientValue proves the
+// rule ADR 0005 records: a --prebuilt deploy reuses build output, and a
+// client-accessible value was inlined into that output's browser bundles when
+// it was built. Proceeding would ship a Deployment whose server holds the new
+// value and whose browser holds the old one, so the deploy is refused by name
+// before any provider is driven.
+func TestCollectAndBuildManifest_Prebuilt_RefusesAStaleClientValue(t *testing.T) {
+	root := t.TempDir()
+	writePrebuiltFunction(t, root, "api", "index")
+	recordBuildApp(t)
+	cfg := prebuiltConfig(root)
+
+	if err := clientenv.Record(root, []clientenv.App{{Name: "api", Variables: []manifestbuilder.Variable{{
+		Key:              "PUBLIC_SITE_URL",
+		Class:            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+		Value:            "https://example.com",
+		ClientAccessible: true,
+	}}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	gate := clientValueGate(t, cfg, "https://rotated.example.com")
+	_, err := collectAndBuildManifest(context.Background(), cfg, gate, true, io.Discard)
+	if err == nil {
+		t.Fatal("collectAndBuildManifest = nil for a build predating the client value, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "PUBLIC_SITE_URL") {
+		t.Errorf("error = %q, want it to name the changed key", err)
+	}
+	if !strings.Contains(err.Error(), "--prebuilt") {
+		t.Errorf("error = %q, want it to name the flag being refused", err)
+	}
+}
+
+// TestCollectAndBuildManifest_Prebuilt_ProceedsWhenTheClientValueIsUnchanged
+// proves the refusal is about staleness alone: reusing output built with the
+// value the store still holds is exactly what --prebuilt is for.
+func TestCollectAndBuildManifest_Prebuilt_ProceedsWhenTheClientValueIsUnchanged(t *testing.T) {
+	root := t.TempDir()
+	writePrebuiltFunction(t, root, "api", "index")
+	recordBuildApp(t)
+	cfg := prebuiltConfig(root)
+
+	if err := clientenv.Record(root, []clientenv.App{{Name: "api", Variables: []manifestbuilder.Variable{{
+		Key:              "PUBLIC_SITE_URL",
+		Class:            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+		Value:            "https://example.com",
+		ClientAccessible: true,
+	}}}}); err != nil {
+		t.Fatal(err)
+	}
+
+	gate := clientValueGate(t, cfg, "https://example.com")
+	if _, err := collectAndBuildManifest(context.Background(), cfg, gate, true, io.Discard); err != nil {
+		t.Fatalf("collectAndBuildManifest: %v", err)
+	}
+}
+
+// clientValueGate is a gate that has already been told this project declares
+// one client-accessible variable, holding the given value.
+func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *envgate.Gate {
+	t.Helper()
+	cell := envgate.Cell{Key: "PUBLIC_SITE_URL"}
+	gate := envgate.New(oneValue{cell: cell, value: value}, envScope(cfg, false))
+	if err := gate.Prefetch(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	_, err := gate.DeclareEnv(context.Background(), &resourcesv1.DeclareEnvRequest{
+		Definitions: []*resourcesv1.VariableDefinition{{
+			Key:              cell.Key,
+			Class:            resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN,
+			ClientAccessible: true,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return gate
+}
+
+// oneValue is a store holding a single cell.
+type oneValue struct {
+	cell  envgate.Cell
+	value string
+}
+
+func (v oneValue) List(context.Context) ([]envgate.Stored, error) {
+	return []envgate.Stored{{Cell: v.cell}}, nil
+}
+
+func (v oneValue) Reveal(context.Context, []envgate.Cell) (map[envgate.Cell]string, error) {
+	return map[envgate.Cell]string{v.cell: v.value}, nil
 }
 
 func TestPrebuiltFlag_RegisteredOnDeployAndPreview(t *testing.T) {

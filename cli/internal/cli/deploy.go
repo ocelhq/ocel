@@ -277,10 +277,22 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 		return nil, err
 	}
 
+	clients := clientApps(cfg, variables)
 	if prebuilt {
+		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
+			return nil, err
+		}
 		fmt.Fprintln(buildOut, "using prebuilt output in .ocel/output")
 	} else {
+		if err := clientenv.Generate(clients); err != nil {
+			return nil, err
+		}
 		if err := buildApp(ctx, cfg, buildEnv(variables), buildOut); err != nil {
+			return nil, err
+		}
+		// Recorded after the build, because what it records is what the output
+		// carries: a build that failed inlined nothing.
+		if err := clientenv.Record(cfg.Dir, clients); err != nil {
 			return nil, err
 		}
 	}
@@ -393,6 +405,25 @@ func buildEnv(variables map[string][]manifestbuilder.Variable) map[string]map[st
 		byApp[app] = env
 	}
 	return byApp
+}
+
+// clientApps pairs each app's resolution with the directory its generated
+// accessor and config live in — the app's own, so two apps never share one
+// accessor. The root stand-in is keyed by no app, matching buildEnv, and its
+// directory is the project itself.
+func clientApps(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []clientenv.App {
+	if len(cfg.Apps) == 0 {
+		return []clientenv.App{{Dir: cfg.Dir, Variables: variables[rootApp]}}
+	}
+	apps := make([]clientenv.App, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		apps = append(apps, clientenv.App{
+			Name:      a.Name,
+			Dir:       filepath.Join(cfg.Dir, a.Path),
+			Variables: variables[a.Name],
+		})
+	}
+	return apps
 }
 
 // envScope is what a gate refusal has to name to be actionable: the apps that
