@@ -66,15 +66,27 @@ func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.
 	return found, nil
 }
 
+// version is what the row at one address is currently held at, zero when it
+// holds nothing. An override is versioned like any other row: it is a value,
+// and two people can edit it as easily as they can edit the class-wide one.
+func (s *fakeStore) version(at envgate.Read) int64 {
+	if at.Environment == "" {
+		return s.versions[at.Cell]
+	}
+	for _, row := range s.overrides {
+		if row.Cell == at.Cell && row.Environment == at.Environment {
+			return row.Version
+		}
+	}
+	return 0
+}
+
 // stale is the store's whole concurrency rule: an expectation that no longer
-// describes the cell refuses the operation. Both mutations run it, so a session
+// describes the row refuses the operation. Both mutations run it, so a session
 // that dropped a version on its way through is a test failure rather than a
 // fixture that was going to refuse regardless.
 func (s *fakeStore) stale(at envgate.Read, expected *int64) bool {
-	if at.Environment != "" {
-		return false
-	}
-	return expected != nil && *expected != s.versions[at.Cell]
+	return expected != nil && *expected != s.version(at)
 }
 
 func (s *fakeStore) Set(_ context.Context, at envgate.Read, value string, expected *int64) error {
@@ -536,6 +548,47 @@ func TestSession_RefusesAnOverrideAgainstAnEnvironmentThatDoesNotExist(t *testin
 	}
 	if len(store.held) != 0 {
 		t.Errorf("store holds %v, want the refused write to have landed nowhere", store.held)
+	}
+}
+
+// An override is a value like any other, so two people editing one race exactly
+// as they do over the class-wide value. The write carries the version the page
+// rendered for that environment's own row — not the class-wide one beside it —
+// and is refused when it no longer holds.
+func TestSession_AnOverrideWriteExpectsTheVersionRenderedForItsOwnEnvironment(t *testing.T) {
+	at := envgate.Read{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
+
+	for name, tc := range map[string]struct {
+		version    int64
+		wantStatus int
+	}{
+		"the version the page rendered writes": {version: 1, wantStatus: http.StatusOK},
+		"a version somebody has moved past is a conflict": {version: 0, wantStatus: http.StatusConflict},
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := newFakeStore()
+			store.environments = []string{"staging"}
+			store.cells[envgate.Cell{Key: "API_URL"}] = "https://shared.example"
+			store.versions[envgate.Cell{Key: "API_URL"}] = 9
+			store.override(at.Cell, at.Environment)
+			s := session(t, store, def("API_URL"))
+
+			resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
+				"key": "API_URL", "folder": "", "environment": "staging",
+				"value": "https://mine.example", "version": tc.version,
+			})
+
+			if resp.StatusCode != tc.wantStatus {
+				t.Fatalf("PUT = %d, want %d: %s", resp.StatusCode, tc.wantStatus, bodyOf(t, resp))
+			}
+			held := store.held[at]
+			if tc.wantStatus == http.StatusOK && held != "https://mine.example" {
+				t.Errorf("staging holds %q, want the write that quoted the current version", held)
+			}
+			if tc.wantStatus == http.StatusConflict && held != "override" {
+				t.Errorf("staging holds %q, want the value already there — a stale write must not be applied", held)
+			}
+		})
 	}
 }
 
