@@ -273,6 +273,41 @@ func TestRunEnvGet_FolderAndRootAreSeparateCells(t *testing.T) {
 	}
 }
 
+// Neither substrate's values may be reachable from the other — a production
+// secret answering a preview read is the leak the two substrates exist to
+// prevent.
+func TestRunEnv_ProductionAndPreviewAreSeparateStores(t *testing.T) {
+	root := setUpEnvFixture(t)
+	envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+
+	var get bytes.Buffer
+	if err := runEnvGet(context.Background(), root, "STRIPE_API_KEY", envOptions{preview: true, reveal: true}, &get, &get); err == nil {
+		t.Errorf("preview get err = nil (out=%q), want the production value unreadable from preview", get.String())
+	}
+
+	var ls bytes.Buffer
+	if err := runEnvLs(context.Background(), root, envOptions{preview: true}, &ls, &ls); err != nil {
+		t.Fatalf("runEnvLs --preview err = %v; out=%s", err, ls.String())
+	}
+	if strings.Contains(ls.String(), "STRIPE_API_KEY") {
+		t.Errorf("preview ls = %q, want no production value listed", ls.String())
+	}
+
+	envSet(t, root, "STRIPE_API_KEY", "sk_test_preview", envOptions{preview: true})
+
+	t.Setenv(fakeInfraClassEnvVar, "production")
+
+	var production bytes.Buffer
+	if err := runEnvGet(context.Background(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &production, &production); err != nil {
+		t.Fatalf("runEnvGet err = %v; out=%s", err, production.String())
+	}
+	if got := strings.TrimSpace(production.String()); got != "sk_live_secret" {
+		t.Errorf("production value = %q, want %q: a preview write must not reach production", got, "sk_live_secret")
+	}
+}
+
 func TestRunEnvSet_RefusesOnPreviewInfrastructure(t *testing.T) {
 	root := setUpEnvFixture(t)
 	t.Setenv(fakeInfraClassEnvVar, "preview")

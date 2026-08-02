@@ -555,9 +555,6 @@ func TestRunPreviewUp_AGateRefusalInATerminalOpensTheUIAndResumes(t *testing.T) 
 	}()
 
 	address, token := awaitVarsUI(t, &out, 1)
-	// The page a preview opens must address the preview substrate. The fake
-	// store keys a cell by coordinate and not by class, so this is the only
-	// place the distinction is observable from here.
 	if got := varsUISubstrate(t, address, token); got != "preview" {
 		t.Errorf("substrate = %q, want the preview's own", got)
 	}

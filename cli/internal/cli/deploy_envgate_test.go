@@ -188,6 +188,34 @@ func TestRunDeploy_ValueSet_PassesTheGateAndDeploys(t *testing.T) {
 	}
 }
 
+// A value set on production is not a value the preview substrate holds, so the
+// preview gate has to refuse as if nothing were set — and name the cell rather
+// than silently deploying with a production secret.
+func TestRunPreviewUp_AProductionValueDoesNotSatisfyThePreviewGate(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	envSet(t, root, "STRIPE_API_KEY", "sk_live_secret", envOptions{})
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	built := false
+	stubAppBuildRecorder(t, &built)
+
+	var stdout, stderr bytes.Buffer
+	err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runPreviewUp err = nil, want the preview gate to refuse: the production store is not the preview one")
+	}
+
+	out := stdout.String() + stderr.String() + err.Error()
+	if !strings.Contains(out, "STRIPE_API_KEY") {
+		t.Errorf("output = %q, want it to name the cell the preview substrate is missing", out)
+	}
+	if strings.Contains(out, "sk_live_secret") {
+		t.Errorf("output = %q, want no production value reachable from a preview", out)
+	}
+	if built {
+		t.Error("the app was built, want the gate to refuse before any build runs")
+	}
+}
+
 // A store that answers a listing but not a reveal has to say which cell it
 // could not read. The read is batched over a whole declaration, so a failure
 // naming nothing tells an operator only that something, somewhere, is unset.
