@@ -42,6 +42,10 @@ var ErrStaleValue = errors.New("this value changed since the page read it; the p
 // Store is the value store as the UI writes to it. Reads come through the
 // gate, which already holds the project's cells; these are the operations that
 // change them.
+//
+// Every operation is addressed by a row rather than a cell: the page edits the
+// class-wide value and each named environment's override through one surface,
+// and which of them a write lands on is the address it carries.
 type Store interface {
 	// Set writes a value and Delete unsets one. expected is the version the page
 	// rendered: zero for a cell it drew empty, which the store honours as "no
@@ -49,9 +53,9 @@ type Store interface {
 	// delete is expectation-bound for the same reason a write is — a page that
 	// renders a value somebody has since replaced must not be able to destroy
 	// the replacement.
-	Set(ctx context.Context, cell envgate.Cell, value string, expected *int64) error
-	Delete(ctx context.Context, cell envgate.Cell, expected *int64) error
-	History(ctx context.Context, cell envgate.Cell) ([]Version, error)
+	Set(ctx context.Context, at envgate.Read, value string, expected *int64) error
+	Delete(ctx context.Context, at envgate.Read, expected *int64) error
+	History(ctx context.Context, at envgate.Read) ([]Version, error)
 }
 
 // Version is one entry of a cell's change history. It carries no plaintext:
@@ -64,11 +68,13 @@ type Version struct {
 }
 
 // State is everything the page renders: which project and substrate it is
-// looking at, and the matrix itself.
+// looking at, the named environments an override may be written against, and
+// the matrix itself.
 type State struct {
-	Slug      string         `json:"slug"`
-	Substrate string         `json:"substrate"`
-	Matrix    envgate.Matrix `json:"matrix"`
+	Slug         string         `json:"slug"`
+	Substrate    string         `json:"substrate"`
+	Environments []string       `json:"environments"`
+	Matrix       envgate.Matrix `json:"matrix"`
 }
 
 type Options struct {
@@ -83,6 +89,12 @@ type Options struct {
 	Store   Store
 	Slug    string
 	Preview bool
+
+	// Environments is every named environment the provider enumerates. It is
+	// what the page offers to write an override against and what an existing one
+	// is judged orphaned by, so the picker can only ever name an environment the
+	// runtime will ask for. Empty on production, which has one environment.
+	Environments []string
 }
 
 // Session is a running UI. A caller opens URL, then blocks in Wait until the
@@ -233,10 +245,11 @@ func (s *Session) handleState(w http.ResponseWriter, r *http.Request) {
 }
 
 type valueRequest struct {
-	Key     string `json:"key"`
-	Folder  string `json:"folder"`
-	Value   string `json:"value"`
-	Version *int64 `json:"version"`
+	Key         string `json:"key"`
+	Folder      string `json:"folder"`
+	Environment string `json:"environment"`
+	Value       string `json:"value"`
+	Version     *int64 `json:"version"`
 }
 
 func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
@@ -245,20 +258,24 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
 		return
 	}
-	cell := envgate.Cell{Key: req.Key, Folder: req.Folder}
+	at := envgate.Read{Cell: envgate.Cell{Key: req.Key, Folder: req.Folder}, Environment: req.Environment}
 
 	// The same checks the CLI's own write path makes. The matrix draws only
 	// cells that exist and draws a forbidden one unfillable, so reaching here
 	// means something bypassed the page — and the rules hold anyway.
-	if err := addressable(cell.Folder); err != nil {
+	if err := addressable(at.Cell.Folder); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := envgate.CheckWritable(s.opts.Gate.Definitions(), cell.Key, cell.Folder); err != nil {
+	if err := envgate.CheckWritable(s.opts.Gate.Definitions(), at.Cell.Key, at.Cell.Folder); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.opts.Store.Set(r.Context(), cell, req.Value, req.Version); err != nil {
+	if err := s.writable(at.Environment); err != nil {
+		fail(w, http.StatusBadRequest, err)
+		return
+	}
+	if err := s.opts.Store.Set(r.Context(), at, req.Value, req.Version); err != nil {
 		if errors.Is(err, ErrStaleValue) {
 			fail(w, http.StatusConflict, err)
 			return
@@ -267,15 +284,13 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Discovery's complaint was about the value that was there. Whatever is
-	// wrong with the new one is the next discovery run's to find.
-	s.opts.Gate.Forget(cell)
+	s.forget(at)
 	s.writeState(r.Context(), w)
 }
 
 func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
-	cell := queryCell(r)
-	if err := addressable(cell.Folder); err != nil {
+	at := queryAddress(r)
+	if err := addressable(at.Cell.Folder); err != nil {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
@@ -284,7 +299,7 @@ func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, err)
 		return
 	}
-	if err := s.opts.Store.Delete(r.Context(), cell, expected); err != nil {
+	if err := s.opts.Store.Delete(r.Context(), at, expected); err != nil {
 		if errors.Is(err, ErrStaleValue) {
 			fail(w, http.StatusConflict, err)
 			return
@@ -292,12 +307,34 @@ func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
-	s.opts.Gate.Forget(cell)
+	s.forget(at)
 	s.writeState(r.Context(), w)
 }
 
+// writable refuses an override written against an environment the provider does
+// not enumerate: an override is identified by exactly the key the runtime
+// derives from its ref, so a name nothing enumerates is a value nothing will
+// ever read. Removing one is not a write and is never refused — an environment
+// that has gone is precisely when its override has to be reachable.
+func (s *Session) writable(environment string) error {
+	if environment == "" || !envgate.Orphaned(s.opts.Environments, environment) {
+		return nil
+	}
+	return fmt.Errorf("no environment named %q exists, so nothing would ever read that value", environment)
+}
+
+// forget drops discovery's complaint about a cell whose value has just been
+// replaced. Only a class-wide write does: the complaint described the value
+// this run resolved, and this run resolves no override — the session manages
+// every environment's values at once rather than standing in any one of them.
+func (s *Session) forget(at envgate.Read) {
+	if at.Environment == "" {
+		s.opts.Gate.Forget(at.Cell)
+	}
+}
+
 func (s *Session) handleHistory(w http.ResponseWriter, r *http.Request) {
-	versions, err := s.opts.Store.History(r.Context(), queryCell(r))
+	versions, err := s.opts.Store.History(r.Context(), queryAddress(r))
 	if err != nil {
 		fail(w, http.StatusBadGateway, err)
 		return
@@ -329,8 +366,11 @@ func addressable(folder string) error {
 	return envgate.ValidateFolder(folder)
 }
 
-func queryCell(r *http.Request) envgate.Cell {
-	return envgate.Cell{Key: r.URL.Query().Get("key"), Folder: r.URL.Query().Get("folder")}
+func queryAddress(r *http.Request) envgate.Read {
+	return envgate.Read{
+		Cell:        envgate.Cell{Key: r.URL.Query().Get("key"), Folder: r.URL.Query().Get("folder")},
+		Environment: r.URL.Query().Get("environment"),
+	}
 }
 
 // queryVersion reads the expectation a delete carries. An absent one is the
@@ -356,7 +396,12 @@ func (s *Session) writeState(ctx context.Context, w http.ResponseWriter) {
 		fail(w, http.StatusBadGateway, err)
 		return
 	}
-	writeJSON(w, State{Slug: s.opts.Slug, Substrate: s.substrate(), Matrix: s.opts.Gate.Matrix()})
+	writeJSON(w, State{
+		Slug:         s.opts.Slug,
+		Substrate:    s.substrate(),
+		Environments: s.opts.Environments,
+		Matrix:       s.opts.Gate.Matrix(s.opts.Environments),
+	})
 }
 
 func (s *Session) substrate() string {

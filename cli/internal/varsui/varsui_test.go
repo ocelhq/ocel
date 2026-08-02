@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -27,17 +28,24 @@ import (
 type fakeStore struct {
 	cells     map[envgate.Cell]string
 	versions  map[envgate.Cell]int64
+	held      map[envgate.Read]string
 	overrides []envgate.Stored
-	expected  []*int64
-	deletes   int
+
+	// environments is what the provider enumerates for this session: what an
+	// override may be written against, and what a surviving one is judged
+	// orphaned by.
+	environments []string
+	expected     []*int64
+	deletes      int
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}}
+	return &fakeStore{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}, held: map[envgate.Read]string{}}
 }
 
 func (s *fakeStore) override(cell envgate.Cell, environment string) {
 	s.overrides = append(s.overrides, envgate.Stored{Cell: cell, Environment: environment, Version: 1})
+	s.held[envgate.Read{Cell: cell, Environment: environment}] = "override"
 }
 
 func (s *fakeStore) List(context.Context) ([]envgate.Stored, error) {
@@ -62,32 +70,48 @@ func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.
 // describes the cell refuses the operation. Both mutations run it, so a session
 // that dropped a version on its way through is a test failure rather than a
 // fixture that was going to refuse regardless.
-func (s *fakeStore) stale(cell envgate.Cell, expected *int64) bool {
-	return expected != nil && *expected != s.versions[cell]
+func (s *fakeStore) stale(at envgate.Read, expected *int64) bool {
+	if at.Environment != "" {
+		return false
+	}
+	return expected != nil && *expected != s.versions[at.Cell]
 }
 
-func (s *fakeStore) Set(_ context.Context, cell envgate.Cell, value string, expected *int64) error {
+func (s *fakeStore) Set(_ context.Context, at envgate.Read, value string, expected *int64) error {
 	s.expected = append(s.expected, expected)
-	if s.stale(cell, expected) {
+	if s.stale(at, expected) {
 		return varsui.ErrStaleValue
 	}
-	s.cells[cell] = value
+	s.held[at] = value
+	if at.Environment != "" {
+		s.overrides = append(s.overrides, envgate.Stored{Cell: at.Cell, Environment: at.Environment, Version: 1})
+		return nil
+	}
+	s.cells[at.Cell] = value
 	return nil
 }
 
-func (s *fakeStore) Delete(_ context.Context, cell envgate.Cell, expected *int64) error {
+func (s *fakeStore) Delete(_ context.Context, at envgate.Read, expected *int64) error {
 	s.expected = append(s.expected, expected)
-	if s.stale(cell, expected) {
+	if s.stale(at, expected) {
 		return varsui.ErrStaleValue
 	}
 	s.deletes++
-	delete(s.cells, cell)
-	delete(s.versions, cell)
+	delete(s.held, at)
+	if at.Environment != "" {
+		s.overrides = slices.DeleteFunc(s.overrides, func(row envgate.Stored) bool {
+			return row.Cell == at.Cell && row.Environment == at.Environment
+		})
+		return nil
+	}
+	delete(s.cells, at.Cell)
+	delete(s.versions, at.Cell)
 	return nil
 }
 
-func (s *fakeStore) History(_ context.Context, cell envgate.Cell) ([]varsui.Version, error) {
-	if _, ok := s.cells[cell]; !ok {
+func (s *fakeStore) History(_ context.Context, at envgate.Read) ([]varsui.Version, error) {
+	_, held := s.held[at]
+	if _, classWide := s.cells[at.Cell]; !held && !(classWide && at.Environment == "") {
 		return nil, nil
 	}
 	return []varsui.Version{{Version: 2, CreatedAt: 200}, {Version: 1, CreatedAt: 100}}, nil
@@ -133,10 +157,11 @@ func serve(t *testing.T, store *fakeStore, gate *envgate.Gate) *varsui.Session {
 func serveUnder(t *testing.T, ctx context.Context, store *fakeStore, gate *envgate.Gate) *varsui.Session {
 	t.Helper()
 	s, err := varsui.Serve(ctx, varsui.Options{
-		Assets: fstest.MapFS{"index.html": {Data: []byte("<title>vars</title>")}},
-		Gate:   gate,
-		Store:  store,
-		Slug:   "shop",
+		Assets:       fstest.MapFS{"index.html": {Data: []byte("<title>vars</title>")}},
+		Gate:         gate,
+		Store:        store,
+		Slug:         "shop",
+		Environments: store.environments,
 	})
 	if err != nil {
 		t.Fatalf("Serve: %v", err)
@@ -443,15 +468,96 @@ func TestSession_DeletingACellEmptiesItInTheStoreAndTheMatrix(t *testing.T) {
 
 func TestSession_TheMatrixNamesTheEnvironmentsThatStillOverrideACell(t *testing.T) {
 	store := newFakeStore()
+	store.environments = []string{"pr-42"}
 	store.override(envgate.Cell{Key: "API_URL"}, "pr-42")
 	s := session(t, store, def("API_URL"))
 
 	c := cellState(t, state(t, s), "API_URL", "")
 	if c.Set {
-		t.Error("the matrix reports API_URL filled, want it empty — pr-42's value is not the one a deploy reads")
+		t.Error("the matrix reports API_URL filled, want it empty — pr-42's value is what pr-42 reads, not what the cell holds")
 	}
-	if !reflect.DeepEqual(c.Overrides, []string{"pr-42"}) {
-		t.Errorf("overrides = %q, want [pr-42] — a surviving override the page cannot see is one it lies about", c.Overrides)
+	want := []envgate.Override{{Environment: "pr-42", Version: 1}}
+	if !reflect.DeepEqual(c.Overrides, want) {
+		t.Errorf("overrides = %+v, want %+v — a surviving override the page cannot see is one it lies about", c.Overrides, want)
+	}
+}
+
+// The page offers a picker rather than a text field, so the environments it may
+// offer have to reach it. Nothing else in the state says which names exist.
+func TestSession_TheStateNamesTheEnvironmentsAnOverrideCanBeWrittenAgainst(t *testing.T) {
+	store := newFakeStore()
+	store.environments = []string{"pr-42", "staging"}
+	s := session(t, store, def("API_URL"))
+
+	if got := state(t, s).Environments; !reflect.DeepEqual(got, store.environments) {
+		t.Errorf("environments = %q, want %q", got, store.environments)
+	}
+}
+
+// A write against a named environment lands on that environment's own cell.
+// The class-wide value it sits beside is untouched, which is the whole of "one
+// branch differs and every other goes on sharing".
+func TestSession_AnOverrideIsWrittenBesideTheClassWideValueRatherThanOverIt(t *testing.T) {
+	store := newFakeStore()
+	store.environments = []string{"staging"}
+	store.cells[envgate.Cell{Key: "API_URL"}] = "https://shared.example"
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
+		"key": "API_URL", "folder": "", "environment": "staging", "value": "https://staging.example",
+	})
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT = %d: %s", resp.StatusCode, bodyOf(t, resp))
+	}
+
+	at := envgate.Read{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
+	if got := store.held[at]; got != "https://staging.example" {
+		t.Errorf("staging holds %q, want the override that was written", got)
+	}
+	if got := store.cells[envgate.Cell{Key: "API_URL"}]; got != "https://shared.example" {
+		t.Errorf("the class-wide value is %q, want it untouched", got)
+	}
+}
+
+// An override can only be written against an environment identity the runtime
+// will ask for. The page offers a picker, so reaching here means something
+// bypassed it — and the rule holds anyway, because a value nothing reads is
+// worse than a refusal.
+func TestSession_RefusesAnOverrideAgainstAnEnvironmentThatDoesNotExist(t *testing.T) {
+	store := newFakeStore()
+	store.environments = []string{"staging"}
+	s := session(t, store, def("API_URL"))
+
+	resp := request(t, s, http.MethodPut, "/api/value", map[string]any{
+		"key": "API_URL", "folder": "", "environment": "stagng", "value": "https://typo.example",
+	})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("PUT = %d: %s, want it refused", resp.StatusCode, bodyOf(t, resp))
+	}
+	if len(store.held) != 0 {
+		t.Errorf("store holds %v, want the refused write to have landed nowhere", store.held)
+	}
+}
+
+// The orphan's remedy. Its environment is gone by definition, so requiring one
+// would make the row permanently unreachable — which is exactly the silent
+// accumulation the marking exists to end.
+func TestSession_AnOrphanedOverrideIsMarkedAndStillRemovable(t *testing.T) {
+	store := newFakeStore()
+	store.override(envgate.Cell{Key: "API_URL"}, "pr-42")
+	s := session(t, store, def("API_URL"))
+
+	c := cellState(t, state(t, s), "API_URL", "")
+	if len(c.Overrides) != 1 || !c.Overrides[0].Orphaned {
+		t.Fatalf("overrides = %+v, want pr-42 marked orphaned: no environment by that name exists", c.Overrides)
+	}
+
+	resp := request(t, s, http.MethodDelete, "/api/value?key=API_URL&folder=&environment=pr-42", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("DELETE = %d: %s", resp.StatusCode, bodyOf(t, resp))
+	}
+	if got := cellState(t, state(t, s), "API_URL", "").Overrides; len(got) != 0 {
+		t.Errorf("overrides = %+v, want the orphan gone", got)
 	}
 }
 

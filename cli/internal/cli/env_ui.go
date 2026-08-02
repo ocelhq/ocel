@@ -116,12 +116,26 @@ func startVarsUI(
 		slug:    cfg.Slug,
 		class:   envClass(envOptions{preview: preview}),
 	}
+
+	// Only the preview substrate has named environments, and the enumeration is
+	// read once per session: the picker names what exists when the page opened,
+	// and a write against a name that has gone since is refused by the store's
+	// own side rather than by a listing this held onto.
+	var environments []string
+	if preview {
+		var err error
+		if environments, err = namedEnvironments(ctx, runner, provider, cfg.Slug); err != nil {
+			return nil, err
+		}
+	}
+
 	return varsui.Serve(ctx, varsui.Options{
-		Assets:  assets,
-		Gate:    gate,
-		Store:   store,
-		Slug:    cfg.Slug,
-		Preview: preview,
+		Assets:       assets,
+		Gate:         gate,
+		Store:        store,
+		Slug:         cfg.Slug,
+		Preview:      preview,
+		Environments: environments,
 	})
 }
 
@@ -151,24 +165,30 @@ func envGate(cfg *projectconfig.Config, runner *providerrunner.Runner, provider 
 // answers for the gate. Both go through the provider binary: the CLI has no
 // cloud SDK dependency and must not gain one.
 
-func (v runnerValues) Set(ctx context.Context, cell envgate.Cell, value string, expected *int64) error {
+// coordinate is one address on the wire: the cell, and the named environment
+// whose override the page addressed, empty for the class-wide value.
+func (v runnerValues) coordinate(at envgate.Read) *envv1.Coordinate {
+	return &envv1.Coordinate{Slug: v.slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
+}
+
+func (v runnerValues) Set(ctx context.Context, at envgate.Read, value string, expected *int64) error {
 	_, err := v.runner.SetValue(ctx, &envv1.SetValueRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
-		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
+		Coordinate:      v.coordinate(at),
 		Value:           value,
 		ExpectedVersion: expected,
 	})
 	return staleOrBroken(err)
 }
 
-func (v runnerValues) Delete(ctx context.Context, cell envgate.Cell, expected *int64) error {
+func (v runnerValues) Delete(ctx context.Context, at envgate.Read, expected *int64) error {
 	_, err := v.runner.DeleteValue(ctx, &envv1.DeleteValueRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
-		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
+		Coordinate:      v.coordinate(at),
 		ExpectedVersion: expected,
 	})
 	return staleOrBroken(err)
@@ -185,12 +205,12 @@ func staleOrBroken(err error) error {
 	return err
 }
 
-func (v runnerValues) History(ctx context.Context, cell envgate.Cell) ([]varsui.Version, error) {
+func (v runnerValues) History(ctx context.Context, at envgate.Read) ([]varsui.Version, error) {
 	resp, err := v.runner.ListVersions(ctx, &envv1.ListVersionsRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
-		Coordinate:      &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key},
+		Coordinate:      v.coordinate(at),
 	})
 	if err != nil {
 		return nil, err

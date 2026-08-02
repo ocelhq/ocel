@@ -56,7 +56,7 @@ func TestMatrix_ColumnsAreTheRootPlusEveryFolderDeclaredOrBound(t *testing.T) {
 	declare(t, g, scoped("POSTHOG_ID", "/admin", "/web"))
 
 	want := []string{"", "/admin", "/web"}
-	if got := g.Matrix().Columns; !reflect.DeepEqual(got, want) {
+	if got := g.Matrix(nil).Columns; !reflect.DeepEqual(got, want) {
 		t.Errorf("columns = %q, want %q — the root first, then every folder either side declares", got, want)
 	}
 }
@@ -65,7 +65,7 @@ func TestMatrix_AnUnscopedKeyIsRequiredAtTheRootAndAnOverrideInEveryFolder(t *te
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
 	declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
-	r := row(t, g.Matrix(), "API_URL")
+	r := row(t, g.Matrix(nil), "API_URL")
 	if got := cell(t, r, "").State; got != envgate.CellRequired {
 		t.Errorf("API_URL at the root is %q, want %q", got, envgate.CellRequired)
 	}
@@ -78,7 +78,7 @@ func TestMatrix_AKeyWithADefaultIsNeverRequired(t *testing.T) {
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
 	declare(t, g, optional("LOG_LEVEL"))
 
-	if got := cell(t, row(t, g.Matrix(), "LOG_LEVEL"), "").State; got != envgate.CellOptional {
+	if got := cell(t, row(t, g.Matrix(nil), "LOG_LEVEL"), "").State; got != envgate.CellOptional {
 		t.Errorf("LOG_LEVEL at the root is %q, want %q — its schema supplies the value", got, envgate.CellOptional)
 	}
 }
@@ -91,7 +91,7 @@ func TestMatrix_AScopedKeyIsRequiredInEveryFolderItNamesAndForbiddenEverywhereEl
 	}})
 	declare(t, g, scoped("POSTHOG_ID", "/web", "/admin"))
 
-	r := row(t, g.Matrix(), "POSTHOG_ID")
+	r := row(t, g.Matrix(nil), "POSTHOG_ID")
 	for _, folder := range []string{"/web", "/admin"} {
 		if got := cell(t, r, folder).State; got != envgate.CellRequired {
 			t.Errorf("POSTHOG_ID in %s is %q, want %q", folder, got, envgate.CellRequired)
@@ -120,7 +120,7 @@ func TestMatrix_AForbiddenCellIsExactlyOneTheWritePathRefuses(t *testing.T) {
 		optional("LOG_LEVEL"),
 	)
 
-	m := g.Matrix()
+	m := g.Matrix(nil)
 	checked := 0
 	for _, r := range m.Rows {
 		for _, c := range r.Cells {
@@ -143,7 +143,7 @@ func TestMatrix_AStoredValueMarksItsCellFilled(t *testing.T) {
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
 	declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
-	r := row(t, g.Matrix(), "API_URL")
+	r := row(t, g.Matrix(nil), "API_URL")
 	if !cell(t, r, "").Set {
 		t.Error("the root cell is unset, want it filled — the store holds a value for it")
 	}
@@ -164,7 +164,7 @@ func TestMatrix_AMalformedValueKeepsItsCellFilledAndCarriesTheSchemasComplaint(t
 		Detail: "must be a URL",
 	})
 
-	c := cell(t, row(t, g.Matrix(), "API_URL"), "")
+	c := cell(t, row(t, g.Matrix(nil), "API_URL"), "")
 	if !c.Set {
 		t.Error("the cell is unset, want it filled — a malformed value is still a value")
 	}
@@ -184,13 +184,38 @@ func TestMatrix_AnOverrideIsNamedBesideACellItDoesNotFill(t *testing.T) {
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
-	c := cell(t, row(t, g.Matrix(), "STRIPE_API_KEY"), "")
+	c := cell(t, row(t, g.Matrix([]string{"pr-7", "pr-42"}), "STRIPE_API_KEY"), "")
 	if c.Set {
-		t.Error("the cell reports filled, want it empty — no deploy resolves a named environment's value")
+		t.Error("the cell reports filled, want it empty — an override is not the value every environment reads")
 	}
-	want := []string{"pr-42", "pr-7"}
+	want := []envgate.Override{
+		{Environment: "pr-42", Version: 1},
+		{Environment: "pr-7", Version: 1},
+	}
 	if !reflect.DeepEqual(c.Overrides, want) {
-		t.Errorf("overrides = %q, want %q — a surviving override must be visible, not silent", c.Overrides, want)
+		t.Errorf("overrides = %+v, want %+v — a surviving override must be visible, not silent", c.Overrides, want)
+	}
+}
+
+// An override outlives the environment that held it, so the matrix says which
+// ones no longer have somewhere to be read. Judging it against the enumeration
+// rather than against the store is the point: the store cannot know an
+// environment is gone, and an override nobody marks is one that accumulates.
+func TestMatrix_MarksAnOverrideWhoseEnvironmentIsGone(t *testing.T) {
+	values := newFakeValues()
+	values.override("STRIPE_API_KEY", "", "pr-7", "override")
+	values.override("STRIPE_API_KEY", "", "staging", "override")
+
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+	c := cell(t, row(t, g.Matrix([]string{"staging"}), "STRIPE_API_KEY"), "")
+	want := []envgate.Override{
+		{Environment: "pr-7", Version: 1, Orphaned: true},
+		{Environment: "staging", Version: 1},
+	}
+	if !reflect.DeepEqual(c.Overrides, want) {
+		t.Errorf("overrides = %+v, want %+v", c.Overrides, want)
 	}
 }
 
@@ -205,11 +230,15 @@ func TestMatrix_TheEnvironmentsACellNamesAreTheCallersToKeep(t *testing.T) {
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
-	cell(t, row(t, g.Matrix(), "STRIPE_API_KEY"), "").Overrides[0] = "clobbered"
+	environments := []string{"pr-7", "pr-42"}
+	cell(t, row(t, g.Matrix(environments), "STRIPE_API_KEY"), "").Overrides[0].Environment = "clobbered"
 
-	want := []string{"pr-42", "pr-7"}
-	if got := cell(t, row(t, g.Matrix(), "STRIPE_API_KEY"), "").Overrides; !reflect.DeepEqual(got, want) {
-		t.Errorf("overrides = %q, want %q — one caller's edit reached the gate's own record", got, want)
+	want := []envgate.Override{
+		{Environment: "pr-42", Version: 1},
+		{Environment: "pr-7", Version: 1},
+	}
+	if got := cell(t, row(t, g.Matrix(environments), "STRIPE_API_KEY"), "").Overrides; !reflect.DeepEqual(got, want) {
+		t.Errorf("overrides = %+v, want %+v — one caller's edit reached the gate's own record", got, want)
 	}
 }
 
@@ -224,7 +253,7 @@ func TestMatrix_AnOverrideEarnsItsFolderAColumnThatSatisfiesNothing(t *testing.T
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
-	m := g.Matrix()
+	m := g.Matrix([]string{"pr-42"})
 	if want := []string{"", "/worker"}; !reflect.DeepEqual(m.Columns, want) {
 		t.Fatalf("columns = %q, want %q — an override in a folder nothing else names is still a value to show", m.Columns, want)
 	}
@@ -236,8 +265,8 @@ func TestMatrix_AnOverrideEarnsItsFolderAColumnThatSatisfiesNothing(t *testing.T
 	if c.State != envgate.CellOptional {
 		t.Errorf("the /worker cell is %q, want %q — a column drawn for an override owes nobody anything", c.State, envgate.CellOptional)
 	}
-	if !reflect.DeepEqual(c.Overrides, []string{"pr-42"}) {
-		t.Errorf("overrides = %q, want [pr-42] — the column exists to carry exactly this", c.Overrides)
+	if want := []envgate.Override{{Environment: "pr-42", Version: 1}}; !reflect.DeepEqual(c.Overrides, want) {
+		t.Errorf("overrides = %+v, want %+v — the column exists to carry exactly this", c.Overrides, want)
 	}
 
 	var refusal *envgate.Refusal
@@ -260,7 +289,7 @@ func TestMatrix_ACellCarriesTheVersionAWriteAgainstItMustExpect(t *testing.T) {
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
 	declare(t, g, def("API_URL", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
 
-	r := row(t, g.Matrix(), "API_URL")
+	r := row(t, g.Matrix(nil), "API_URL")
 	if got := cell(t, r, "").Version; got != 4 {
 		t.Errorf("root cell version = %d, want 4 — the page quotes it back so a stale edit is refused", got)
 	}
@@ -283,7 +312,7 @@ func TestMatrix_AnAppResolvesOnlyWhenBothItsHopsFindEveryRequiredKey(t *testing.
 		scoped("POSTHOG_ID", "/web", "/admin"),
 	)
 
-	m := g.Matrix()
+	m := g.Matrix(nil)
 	if got := app(t, m, "web").Missing; len(got) != 0 {
 		t.Errorf("web is missing %+v, want it to resolve — the root backs API_URL and /web holds POSTHOG_ID", got)
 	}
@@ -297,7 +326,7 @@ func TestMatrix_AnAppResolvesWithoutAKeyWhoseSchemaSuppliesTheValue(t *testing.T
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
 	declare(t, g, optional("LOG_LEVEL"))
 
-	if got := app(t, g.Matrix(), "web").Missing; len(got) != 0 {
+	if got := app(t, g.Matrix(nil), "web").Missing; len(got) != 0 {
 		t.Errorf("web is missing %+v, want nothing — the schema's default is the value", got)
 	}
 }
@@ -309,7 +338,7 @@ func TestMatrix_AnAppIsNotBlamedForAKeyScopedAwayFromItsFolder(t *testing.T) {
 	}})
 	declare(t, g, scoped("POSTHOG_ID", "/web"))
 
-	if got := app(t, g.Matrix(), "jobs").Missing; len(got) != 0 {
+	if got := app(t, g.Matrix(nil), "jobs").Missing; len(got) != 0 {
 		t.Errorf("jobs is missing %+v, want nothing — POSTHOG_ID is out of its scope, not absent from it", got)
 	}
 }
@@ -319,7 +348,7 @@ func TestMatrix_AnUnboundAppOwesTheRootCellItCouldNotRead(t *testing.T) {
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
 
 	want := []envgate.Cell{{Key: "STRIPE_API_KEY"}}
-	if got := app(t, g.Matrix(), "api").Missing; !reflect.DeepEqual(got, want) {
+	if got := app(t, g.Matrix(nil), "api").Missing; !reflect.DeepEqual(got, want) {
 		t.Errorf("api is missing %+v, want %+v", got, want)
 	}
 }
@@ -328,7 +357,7 @@ func TestMatrix_RowsCarryTheClassAndScopeThatDecideTheirCells(t *testing.T) {
 	g := prefetched(t, newFakeValues(), envgate.Scope{Apps: []envgate.App{{Name: "web", Folder: "/web"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET), scoped("POSTHOG_ID", "/web"))
 
-	m := g.Matrix()
+	m := g.Matrix(nil)
 	if got := row(t, m, "STRIPE_API_KEY").Class; got != "secret" {
 		t.Errorf("STRIPE_API_KEY class = %q, want %q", got, "secret")
 	}
@@ -351,7 +380,7 @@ func TestMatrix_ForgettingACellDropsWhatDiscoverySaidAboutTheValueItHeld(t *test
 
 	g.Forget(envgate.Cell{Key: "API_URL"})
 
-	if got := cell(t, row(t, g.Matrix(), "API_URL"), "").Problem; got != "" {
+	if got := cell(t, row(t, g.Matrix(nil), "API_URL"), "").Problem; got != "" {
 		t.Errorf("cell still complains %q, want it cleared — the value it described has been replaced", got)
 	}
 	if err := g.Check(); err != nil {

@@ -28,11 +28,13 @@ type MatrixCell struct {
 	// someone else has since replaced is refused rather than applied.
 	Version int64 `json:"version"`
 
-	// Overrides names the environments holding a value for this cell, which is
-	// never the value a deploy resolves. It is shown because a cell that reads
-	// empty while an override survives is a lie, not because anything here
-	// reads or writes one.
-	Overrides []string `json:"overrides,omitempty"`
+	// Overrides is every named environment holding its own value for this cell,
+	// each at the version a write against it must expect, and each marked when
+	// the environment it belongs to no longer exists. They are shown beside the
+	// class-wide value rather than folded into it: a cell that reads empty while
+	// an override survives is a lie, and an override that read as the value
+	// every environment gets would be a worse one.
+	Overrides []Override `json:"overrides,omitempty"`
 
 	// Problem is the schema's own complaint about the value that is there,
 	// empty when there is none. A missing cell needs no message: required and
@@ -75,14 +77,22 @@ var className = map[resourcesv1.VariableClass]string{
 // holds and what the declaring process complained about. It is the same
 // authority the gate refuses on, presented rather than enforced, so the UI and
 // the deploy can never disagree about which cell is owed.
-func (g *Gate) Matrix() Matrix {
+//
+// environments is what the provider enumerates, which is what an override is
+// judged against: one addressed at a name no longer among them is orphaned. A
+// caller with no enumeration to offer passes none, and every override reads as
+// orphaned — which is the honest answer when nothing is known to exist.
+func (g *Gate) Matrix(environments []string) Matrix {
 	g.mu.Lock()
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	apps := append([]App(nil), g.scope.Apps...)
 	held := g.heldCells()
-	overrides := make(map[Cell][]string, len(g.overrides))
-	for cell, environments := range g.overrides {
-		overrides[cell] = append([]string(nil), environments...)
+	overrides := make(map[Cell][]Override, len(g.overrides))
+	for cell, held := range g.overrides {
+		for _, override := range held {
+			override.Orphaned = Orphaned(environments, override.Environment)
+			overrides[cell] = append(overrides[cell], override)
+		}
 	}
 	complaints := map[Cell]string{}
 	for _, problem := range g.problems {
@@ -172,7 +182,7 @@ func missing(definitions []*resourcesv1.VariableDefinition, binding string, held
 // override's folder earns one on the same terms: the column carries nothing
 // required and nothing filled, but without it a surviving value has nowhere to
 // be named.
-func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held heldCells, overrides map[Cell][]string) []string {
+func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held heldCells, overrides map[Cell][]Override) []string {
 	seen := map[string]bool{}
 	for _, definition := range definitions {
 		for _, folder := range definition.GetFolders() {

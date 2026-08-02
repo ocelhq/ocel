@@ -32,15 +32,22 @@ type Cell struct {
 
 // Stored is one row the store holds: which cell it addresses, which named
 // environment it belongs to if any, and the version a write against it must
-// expect. Only a class-wide row's version is kept — nothing here writes to a
-// named environment, so an override is reduced to the name of the environment
-// holding it. Environment stays here rather than on Cell because a cell is a
-// map key throughout the verdict, and a key that varied by environment would
-// let an override stand in for the class-wide value nothing else can supply.
+// expect. Environment stays here rather than on Cell because a cell is a map
+// key throughout the verdict, and a key that varied by environment would let an
+// override stand in for the class-wide value nothing else can supply.
 type Stored struct {
 	Cell        Cell
 	Environment string
 	Version     int64
+}
+
+// Override is one named environment's own value for a cell: the environment
+// holding it, the version a write against it must expect, and whether that
+// environment still exists.
+type Override struct {
+	Environment string `json:"environment"`
+	Version     int64  `json:"version"`
+	Orphaned    bool   `json:"orphaned,omitempty"`
 }
 
 // Orphaned reports an override the provider no longer enumerates an
@@ -131,11 +138,12 @@ type Gate struct {
 
 	mu sync.Mutex
 	// cells is the class-wide set and nothing else: it is what the gate's
-	// verdict, the matrix and every answer to a declaration are read from.
-	// overrides is the rest, held apart so a named-environment value can be
-	// shown without ever counting as the value a deploy resolves.
+	// verdict and the matrix's own state are read from. overrides is the rest,
+	// held apart so a named-environment value can answer for the one
+	// environment holding it without ever counting as the value every other
+	// environment resolves.
 	cells       []Stored
-	overrides   map[Cell][]string
+	overrides   map[Cell][]Override
 	definitions []*resourcesv1.VariableDefinition
 	problems    []*resourcesv1.VariableProblem
 
@@ -166,16 +174,16 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 	}
 
 	var cells []Stored
-	overrides := map[Cell][]string{}
+	overrides := map[Cell][]Override{}
 	for _, row := range stored {
 		if row.Environment == "" {
 			cells = append(cells, row)
 			continue
 		}
-		overrides[row.Cell] = append(overrides[row.Cell], row.Environment)
+		overrides[row.Cell] = append(overrides[row.Cell], Override{Environment: row.Environment, Version: row.Version})
 	}
-	for _, environments := range overrides {
-		sort.Strings(environments)
+	for _, held := range overrides {
+		sort.Slice(held, func(i, j int) bool { return held[i].Environment < held[j].Environment })
 	}
 
 	g.mu.Lock()
@@ -242,10 +250,15 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 //
 // Callers hold g.mu.
 func (g *Gate) resolvedEnvironment(cell Cell) string {
-	if g.scope.Environment == "" || !slices.Contains(g.overrides[cell], g.scope.Environment) {
+	if g.scope.Environment == "" {
 		return ""
 	}
-	return g.scope.Environment
+	for _, held := range g.overrides[cell] {
+		if held.Environment == g.scope.Environment {
+			return g.scope.Environment
+		}
+	}
+	return ""
 }
 
 // DeclareEnv records one defineEnv call's definitions and answers with the
