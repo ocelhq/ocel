@@ -139,6 +139,45 @@ func TestGate_ALiveValueIsResolvedAsAnAddressWithoutItsPlaintext(t *testing.T) {
 	}
 }
 
+// A resolution is a cell, and a cell has a version; carrying it is what lets
+// the ledger say which value a deploy shipped. It is the resolved cell's
+// version, not the key's, so two apps reading one key from different folders
+// record different versions.
+func TestResolve_CarriesTheVersionOfTheCellEachKeyResolvedFrom(t *testing.T) {
+	values := newFakeValues()
+	values.setAt("KEY", "", "root", 3)
+	values.setAt("KEY", "/api", "api", 7)
+
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{
+		{Name: "api", Folder: "/api"},
+		{Name: "web"},
+	}})
+	declare(t, g, def("KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+
+	if got := resolve(t, g, "api")["KEY"]; got.Version != 7 {
+		t.Errorf("api resolves KEY = %+v, want the /api cell's version 7", got)
+	}
+	if got := resolve(t, g, "web")["KEY"]; got.Version != 3 {
+		t.Errorf("web resolves KEY = %+v, want the root cell's version 3", got)
+	}
+}
+
+// A live-class key carries no plaintext, but it does resolve from a cell, and
+// that cell has a version. Whether a version a runtime fetch cannot honour is
+// worth recording is the ledger's decision, not resolution's.
+func TestResolve_ALiveKeyCarriesItsCellsVersionEvenWithNoValue(t *testing.T) {
+	values := newFakeValues()
+	values.setAt("SESSION_SECRET", "", "sk_live_do_not_leak", 5)
+
+	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
+	declare(t, g, def("SESSION_SECRET", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
+
+	got := resolve(t, g, "api")["SESSION_SECRET"]
+	if got.Value != "" || got.Version != 5 {
+		t.Errorf("SESSION_SECRET = %+v, want no plaintext but the cell's version 5", got)
+	}
+}
+
 func TestGate_ARefusalNamesOnlyTheAppsThatReadTheFailingCell(t *testing.T) {
 	values := newFakeValues()
 	// Only /web is short: every other folder the key names is filled, so the

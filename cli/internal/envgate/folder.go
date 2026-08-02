@@ -38,10 +38,14 @@ func ValidateFolder(folder string) error {
 
 // Resolved is the cell one app reads a key from, once. Value is empty for a
 // live-class key: those are addresses only, fetched from the store at runtime,
-// which is what keeps their plaintext off a build host.
+// which is what keeps their plaintext off a build host. Version is the store
+// version of the cell it came from, carried for every class alike — what a
+// ledger does with a version a runtime fetch cannot honour is the ledger's
+// decision, not resolution's.
 type Resolved struct {
-	Folder string
-	Value  string
+	Folder  string
+	Value   string
+	Version int64
 }
 
 // Resolve decides where every declared key's value comes from for one app.
@@ -62,8 +66,10 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 
 	g.mu.Lock()
 	held := make(map[Cell]bool, len(g.cells))
+	versions := make(map[Cell]int64, len(g.cells))
 	for _, row := range g.cells {
 		held[row.Cell] = true
+		versions[row.Cell] = row.Version
 	}
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	g.mu.Unlock()
@@ -93,13 +99,13 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	resolved := make(map[string]Resolved, len(hops))
 	for _, h := range hops {
 		if h.live {
-			resolved[h.cell.Key] = Resolved{Folder: h.cell.Folder}
+			resolved[h.cell.Key] = Resolved{Folder: h.cell.Folder, Version: versions[h.cell]}
 			continue
 		}
 		if !plaintext[h.cell].found {
 			continue
 		}
-		resolved[h.cell.Key] = Resolved{Folder: h.cell.Folder, Value: plaintext[h.cell].value}
+		resolved[h.cell.Key] = Resolved{Folder: h.cell.Folder, Value: plaintext[h.cell].value, Version: versions[h.cell]}
 	}
 	return resolved, nil
 }
