@@ -691,13 +691,13 @@ func nextBuildID(cfg Config, app string) (string, error) {
 func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *deploymentsv1.ManifestApp, id DeploymentIdentity, outs []*deploymentsv1.ResourceOutput) (edge.DeploymentRecord, error) {
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
-	variables := recordedVariables(cfg, app)
+	fingerprint, variables := recordedAudit(cfg, app)
 	record := edge.DeploymentRecord{
 		App:              name,
 		Identity:         id.String(),
 		FunctionURLs:     appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
 		CreatedAt:        time.Now().Unix(),
-		ValueFingerprint: recordedFingerprint(variables),
+		ValueFingerprint: fingerprint,
 		Variables:        variables,
 	}
 	if app.GetFramework() != frameworkNext {

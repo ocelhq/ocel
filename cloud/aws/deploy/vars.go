@@ -228,9 +228,10 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 	}, nil
 }
 
-// recordedVariables is what one app's Deployment record says it shipped with:
-// every variable it resolved, at the store coordinate and version it resolved
-// at, sorted by key so one deploy's record is comparable to another's.
+// recordedAudit is what one app's Deployment record says it shipped with: a
+// fingerprint of the whole variable set, and every variable it resolved at the
+// store coordinate and version it resolved at, sorted so one deploy's record
+// is comparable to another's.
 //
 // A live-class value is recorded as latest-at-runtime rather than at the
 // version this deploy saw: it is fetched from the store when it is read, so a
@@ -242,9 +243,9 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 // audited; keeping them out means one class of record to reason about rather
 // than two. Nothing is lost by it: baked values ride the immutable artifact,
 // so no rollback or delivery path reads this.
-func recordedVariables(cfg Config, app *deploymentsv1.ManifestApp) []edge.VariableRecord {
+func recordedAudit(cfg Config, app *deploymentsv1.ManifestApp) (string, []edge.VariableRecord) {
 	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION {
-		return nil
+		return "", nil
 	}
 	var records []edge.VariableRecord
 	for _, v := range app.GetVariables() {
@@ -262,12 +263,11 @@ func recordedVariables(cfg Config, app *deploymentsv1.ManifestApp) []edge.Variab
 		}
 		return records[i].Folder < records[j].Folder
 	})
-	return records
+	return fingerprintRecords(records), records
 }
 
-// recordedFingerprint is the other half of the same audit record: a digest of
-// every variable the Deployment shipped with, so any two promotions that
-// shipped different values read differently in the ledger.
+// fingerprintRecords digests a recorded variable set, so any two promotions
+// that shipped different values read differently in the ledger.
 //
 // It is deliberately not the identity's fingerprint. That one covers baked
 // values alone — which is what keeps rotating a live value out of a redeploy —
@@ -276,7 +276,7 @@ func recordedVariables(cfg Config, app *deploymentsv1.ManifestApp) []edge.Variab
 // rather than by a version the ledger must never claim for them.
 //
 // Empty when there is nothing to record, which is also what a preview records.
-func recordedFingerprint(records []edge.VariableRecord) string {
+func fingerprintRecords(records []edge.VariableRecord) string {
 	if len(records) == 0 {
 		return ""
 	}
