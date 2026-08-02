@@ -35,9 +35,10 @@ export interface DeploymentRecord {
   // hostname; production carries none — its routes are project-lifetime and
   // reconciled declaratively.
   routeHostnames?: string[];
-  // The digest of the values baked into this Deployment — the half of its
-  // identity a rotation changes — carried on its own so an audit reads it
-  // without parsing buildId. Absent when nothing was baked.
+  // The digest of every entry in `variables`, so two Deployments that shipped
+  // different values never read alike. Wider than the fingerprint inside the
+  // identity, which covers baked values alone. Absent when nothing is
+  // recorded.
   valueFingerprint?: string;
   // What this Deployment shipped with, one entry per key the app resolved.
   // Audit only: the values themselves ride the immutable artifact, so nothing

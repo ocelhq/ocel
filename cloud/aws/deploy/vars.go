@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ocelhq/ocel/cloud/aws/vars"
@@ -255,19 +256,46 @@ func recordedVariables(cfg Config, app *deploymentsv1.ManifestApp) []edge.Variab
 		}
 		records = append(records, record)
 	}
-	sort.Slice(records, func(i, j int) bool { return records[i].Key < records[j].Key })
+	sort.Slice(records, func(i, j int) bool {
+		if records[i].Key != records[j].Key {
+			return records[i].Key < records[j].Key
+		}
+		return records[i].Folder < records[j].Folder
+	})
 	return records
 }
 
-// recordedFingerprint is the other half of the same audit record — the digest
-// of the values this Deployment baked — gated the same way, because a preview
-// records no audit at all.
-func recordedFingerprint(cfg Config, id DeploymentIdentity) string {
-	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION {
+// recordedFingerprint is the other half of the same audit record: a digest of
+// every variable the Deployment shipped with, so any two promotions that
+// shipped different values read differently in the ledger.
+//
+// It is deliberately not the identity's fingerprint. That one covers baked
+// values alone — which is what keeps rotating a live value out of a redeploy —
+// so an app whose every variable is live would fingerprint as nothing at all.
+// This digest covers the live keys too, by their latest-at-runtime marker
+// rather than by a version the ledger must never claim for them.
+//
+// Empty when there is nothing to record, which is also what a preview records.
+func recordedFingerprint(records []edge.VariableRecord) string {
+	if len(records) == 0 {
 		return ""
 	}
-	return id.Fingerprint()
+	h := sha256.New()
+	for _, record := range records {
+		writeLenPrefixed(h, []byte(record.Key))
+		writeLenPrefixed(h, []byte(record.Folder))
+		if record.Live {
+			writeLenPrefixed(h, []byte(liveVersionMarker))
+			continue
+		}
+		writeLenPrefixed(h, []byte(strconv.FormatInt(record.Version, 10)))
+	}
+	return hex.EncodeToString(h.Sum(nil))[:fingerprintValuesHexLen]
 }
+
+// liveVersionMarker stands where a version would be for a live key. It is not
+// a number, so it can never collide with one.
+const liveVersionMarker = "live"
 
 // fingerprintValuesHexLen is how much of the digest an identity carries. 48
 // bits, which only ever has to tell apart the handful of Deployments sharing

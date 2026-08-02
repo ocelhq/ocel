@@ -228,9 +228,12 @@ type DeploymentRecord struct {
 	// its one pointer-exact hostname; production carries none — its routes are
 	// project-lifetime and reconciled declaratively.
 	RouteHostnames []string `json:"routeHostnames,omitempty"`
-	// ValueFingerprint is the digest of the values baked into this Deployment,
-	// the half of Identity a rotation changes, carried on its own so an audit
-	// reads it without parsing an identity. Empty when nothing was baked.
+	// ValueFingerprint is the digest of every variable in Variables, so two
+	// Deployments that shipped different values never read alike. It is wider
+	// than the fingerprint inside Identity, which covers baked values alone:
+	// an app whose variables are all live rotates without a redeploy and would
+	// have nothing to distinguish its Deployments by here. Empty when there is
+	// nothing recorded.
 	ValueFingerprint string `json:"valueFingerprint,omitempty"`
 	// Variables is what this Deployment shipped with, one entry per key the app
 	// resolved. It is an audit record and nothing serving reads it: the values

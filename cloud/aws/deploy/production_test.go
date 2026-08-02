@@ -428,27 +428,40 @@ func varsManifest(variables ...*deploymentsv1.ManifestVariable) *deploymentsv1.M
 	}
 }
 
+// varsConfig is the deploy configuration those variables are recorded under,
+// which is nothing but the environment class the audit rule turns on.
+func varsConfig(t *testing.T, class deploymentsv1.Environment_Class) Config {
+	t.Helper()
+	return Config{
+		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
+		Slug:         "proj",
+		Class:        class,
+	}
+}
+
+// recordVariables is the audit half of a production record for one variable
+// set, which is what every fingerprint claim below is read from.
+func recordVariables(t *testing.T, variables ...*deploymentsv1.ManifestVariable) edge.DeploymentRecord {
+	t.Helper()
+	manifest := varsManifest(variables...)
+	record, err := buildDeploymentRecord(varsConfig(t, deploymentsv1.Environment_CLASS_PRODUCTION), manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	return record
+}
+
 // An operator auditing a promotion needs the record to say which values it
 // shipped: the fingerprint that distinguishes it from another Deployment of
 // the same build, and the store coordinate and version of every key behind it.
 func TestBuildDeploymentRecord_ProductionCarriesTheFingerprintAndPerKeyVersions(t *testing.T) {
-	manifest := varsManifest(
+	record := recordVariables(t,
 		&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
 		&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Folder: "/admin", Version: 5},
 	)
-	cfg := Config{
-		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
-		Slug:         "proj",
-		Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
-	}
-	id := fingerprinted("WEB1", "abc123")
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, nil)
-	if err != nil {
-		t.Fatalf("buildDeploymentRecord: %v", err)
-	}
-	if record.ValueFingerprint != id.Fingerprint() {
-		t.Errorf("ValueFingerprint = %q, want %q", record.ValueFingerprint, id.Fingerprint())
+	if record.ValueFingerprint == "" {
+		t.Errorf("record = %+v, want a fingerprint of what it shipped", record)
 	}
 	want := []edge.VariableRecord{
 		{Key: "API_KEY", Folder: "/admin", Version: 5},
@@ -459,23 +472,57 @@ func TestBuildDeploymentRecord_ProductionCarriesTheFingerprintAndPerKeyVersions(
 	}
 }
 
+// The record's fingerprint is a digest of everything it recorded, not the
+// identity's — that one covers baked values alone, so an app whose every
+// variable is live would otherwise fingerprint as empty and two of its
+// promotions would be indistinguishable in the ledger.
+func TestBuildDeploymentRecord_AnAllLiveAppStillFingerprintsWhatItShipped(t *testing.T) {
+	record := recordVariables(t,
+		&deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Version: 7},
+	)
+
+	if record.ValueFingerprint == "" {
+		t.Errorf("record = %+v, want a fingerprint even though nothing was baked", record)
+	}
+}
+
+// Rotating one key is exactly what an audit has to be able to see, so two
+// records over the same keys at different versions must not read alike.
+func TestBuildDeploymentRecord_AVersionChangeChangesTheFingerprint(t *testing.T) {
+	before := recordVariables(t,
+		&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Version: 5},
+	)
+	after := recordVariables(t,
+		&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Version: 6},
+	)
+
+	if before.ValueFingerprint == after.ValueFingerprint {
+		t.Errorf("both fingerprint as %q, want a rotation to move it", before.ValueFingerprint)
+	}
+}
+
+// The same variable set has to fingerprint the same however the manifest
+// happened to order it, or an audit could not compare two deploys at all.
+func TestBuildDeploymentRecord_TheFingerprintIsIndependentOfManifestOrder(t *testing.T) {
+	plain := &deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2}
+	live := &deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7}
+
+	first := recordVariables(t, plain, live)
+	second := recordVariables(t, live, plain)
+
+	if first.ValueFingerprint != second.ValueFingerprint {
+		t.Errorf("fingerprints = %q and %q, want one digest for one variable set", first.ValueFingerprint, second.ValueFingerprint)
+	}
+}
+
 // A live value is whatever the store holds when the runtime fetches it, so
 // recording the version the deploy happened to see would be the ledger
 // claiming a reproducibility it cannot deliver.
 func TestBuildDeploymentRecord_LiveKeysAreRecordedAsLatestAtRuntime(t *testing.T) {
-	manifest := varsManifest(
+	record := recordVariables(t,
 		&deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7},
 	)
-	cfg := Config{
-		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
-		Slug:         "proj",
-		Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
-	}
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
-	if err != nil {
-		t.Fatalf("buildDeploymentRecord: %v", err)
-	}
 	want := []edge.VariableRecord{{Key: "SESSION_SECRET", Folder: "/api", Live: true}}
 	if !reflect.DeepEqual(record.Variables, want) {
 		t.Errorf("Variables = %+v, want %+v — latest-at-runtime, never a version", record.Variables, want)
@@ -509,19 +556,10 @@ func TestBuildDeploymentRecord_PreviewRecordsNoVariablesAndIsNotAnError(t *testi
 }
 
 func TestBuildDeploymentRecord_AnAppWithNoVariablesRecordsNothing(t *testing.T) {
-	manifest := varsManifest()
-	cfg := Config{
-		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
-		Slug:         "proj",
-		Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
-	}
+	record := recordVariables(t)
 
-	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
-	if err != nil {
-		t.Fatalf("buildDeploymentRecord: %v", err)
-	}
-	if record.Variables != nil {
-		t.Errorf("Variables = %+v, want nil rather than an empty list on the wire", record.Variables)
+	if record.Variables != nil || record.ValueFingerprint != "" {
+		t.Errorf("record = %+v, want nothing recorded rather than an empty list and a digest of nothing", record)
 	}
 }
 
