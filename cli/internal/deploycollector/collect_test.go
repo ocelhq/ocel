@@ -94,6 +94,6 @@ type emptyValues struct{}
 
 func (emptyValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
 
-func (emptyValues) Reveal(context.Context, []envgate.Cell) (map[envgate.Cell]string, error) {
+func (emptyValues) Reveal(context.Context, []envgate.Read) (map[envgate.Cell]string, error) {
 	return nil, nil
 }

@@ -144,7 +144,7 @@ func envGate(cfg *projectconfig.Config, runner *providerrunner.Runner, provider 
 		options: []byte(provider.Options),
 		slug:    cfg.Slug,
 		class:   envClass(opts),
-	}, envScope(cfg, opts.preview))
+	}, envScope(cfg, opts.preview, ""))
 }
 
 // The write half of the store, alongside the reads runnerValues already

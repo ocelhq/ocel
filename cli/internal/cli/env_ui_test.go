@@ -47,7 +47,7 @@ func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner
 // revealOne reads back one cell through the batched reveal, for the assertions
 // that only care about a single value.
 func revealOne(ctx context.Context, values runnerValues, cell envgate.Cell) (string, bool, error) {
-	found, err := values.Reveal(ctx, []envgate.Cell{cell})
+	found, err := values.Reveal(ctx, []envgate.Read{{Cell: cell}})
 	if err != nil {
 		return "", false, err
 	}

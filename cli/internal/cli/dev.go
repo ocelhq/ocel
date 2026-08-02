@@ -189,7 +189,7 @@ func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.
 		return nil, err
 	}
 	reportUnreadableLines(stdout, file.Unreadable)
-	srv.UseValues(storeValues(projectEnv, file.Values), envScope(cfg, false))
+	srv.UseValues(storeValues(projectEnv, file.Values), envScope(cfg, false, ""))
 	return discoverAndSync(ctx, srv, cfg, file.Values, stdout, stderr)
 }
 

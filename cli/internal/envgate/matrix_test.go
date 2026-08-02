@@ -178,8 +178,8 @@ func TestMatrix_AMalformedValueKeepsItsCellFilledAndCarriesTheSchemasComplaint(t
 // environments still holding a value are visible rather than silent.
 func TestMatrix_AnOverrideIsNamedBesideACellItDoesNotFill(t *testing.T) {
 	values := newFakeValues()
-	values.override("STRIPE_API_KEY", "", "pr-7")
-	values.override("STRIPE_API_KEY", "", "pr-42")
+	values.override("STRIPE_API_KEY", "", "pr-7", "override")
+	values.override("STRIPE_API_KEY", "", "pr-42", "override")
 
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
@@ -199,8 +199,8 @@ func TestMatrix_AnOverrideIsNamedBesideACellItDoesNotFill(t *testing.T) {
 // gate's own record of them.
 func TestMatrix_TheEnvironmentsACellNamesAreTheCallersToKeep(t *testing.T) {
 	values := newFakeValues()
-	values.override("STRIPE_API_KEY", "", "pr-7")
-	values.override("STRIPE_API_KEY", "", "pr-42")
+	values.override("STRIPE_API_KEY", "", "pr-7", "override")
+	values.override("STRIPE_API_KEY", "", "pr-42", "override")
 
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
@@ -219,7 +219,7 @@ func TestMatrix_TheEnvironmentsACellNamesAreTheCallersToKeep(t *testing.T) {
 // can be owed, nobody can be credited with, and no deploy is refused over.
 func TestMatrix_AnOverrideEarnsItsFolderAColumnThatSatisfiesNothing(t *testing.T) {
 	values := newFakeValues()
-	values.override("STRIPE_API_KEY", "/worker", "pr-42")
+	values.override("STRIPE_API_KEY", "/worker", "pr-42", "override")
 
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))

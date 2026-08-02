@@ -349,7 +349,7 @@ func TestCheckEnv_StatesPresenceForALiveKeyItHoldsNoValueFor(t *testing.T) {
 	}
 
 	store, _ := s.variables()
-	found, err := store.Reveal(ctx, []envgate.Cell{{Key: "DB_PASSWORD"}})
+	found, err := store.Reveal(ctx, []envgate.Read{{Cell: envgate.Cell{Key: "DB_PASSWORD"}}})
 	if err != nil {
 		t.Fatalf("Reveal: %v", err)
 	}

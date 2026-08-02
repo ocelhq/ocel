@@ -48,11 +48,11 @@ func (s *fakeStore) List(context.Context) ([]envgate.Stored, error) {
 	return append(out, s.overrides...), nil
 }
 
-func (s *fakeStore) Reveal(_ context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
+func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
 	found := map[envgate.Cell]string{}
-	for _, cell := range cells {
-		if value, ok := s.cells[cell]; ok {
-			found[cell] = value
+	for _, row := range rows {
+		if value, ok := s.cells[row.Cell]; ok {
+			found[row.Cell] = value
 		}
 	}
 	return found, nil

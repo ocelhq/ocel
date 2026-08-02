@@ -82,11 +82,25 @@ type Values interface {
 	// environment-scoped alike, as presence without plaintext.
 	List(ctx context.Context) ([]Stored, error)
 
-	// Reveal decrypts the named cells in one query and answers with the
-	// plaintext of those that hold a value; a cell that holds none is absent
+	// Reveal decrypts the named rows in one query and answers with the
+	// plaintext of those that hold a value; a row that holds none is absent
 	// from the result. It is called only for classes whose values a build
 	// legitimately holds — a live-class cell is never named.
-	Reveal(ctx context.Context, cells []Cell) (map[Cell]string, error)
+	//
+	// The answer is keyed by cell rather than by row because a run resolves
+	// one environment: each cell is asked for at exactly one address, and
+	// which address that was is this call's business rather than its caller's.
+	Reveal(ctx context.Context, rows []Read) (map[Cell]string, error)
+}
+
+// Read is one row to decrypt: a cell, and the named environment whose override
+// answers for it when this run resolves one. The environment lives here rather
+// than on Cell because a cell is a map key throughout the verdict, and a key
+// that varied by environment would let an override stand in for the class-wide
+// value nothing else can supply.
+type Read struct {
+	Cell        Cell
+	Environment string
 }
 
 // App is one application and the variable folder it binds. An empty Folder is
@@ -97,11 +111,17 @@ type App struct {
 	Folder string
 }
 
-// Scope is what a refusal has to name to be actionable: which apps read the
-// cell, and which substrate the fixing command has to address.
+// Scope is the run the gate rules for: which apps read a cell and which
+// substrate a fixing command has to address — what a refusal has to name to be
+// actionable — and which named environment the run is deploying.
+//
+// Environment is empty for production, which has a single environment, and for
+// any run not bound to one: an override answers only where the run is the
+// environment holding it.
 type Scope struct {
-	Apps    []App
-	Preview bool
+	Apps        []App
+	Preview     bool
+	Environment string
 }
 
 // Gate accumulates a discovery run's declarations and its verdict.
@@ -171,6 +191,11 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 // package: a caller names the cells its class permits, and how many round trips
 // that costs is decided here rather than at each call site.
 //
+// Each cell is read at the address this run resolves it from: the override the
+// run's own environment holds, where there is one, and the class-wide value
+// everywhere else. That is the same rule the runtime applies to a live value,
+// applied here because a baked value's read time is the deploy.
+//
 // The lock is held across the read. Declarations arrive concurrently — a
 // discovery run starts every defineEnv's call before it awaits any of them — so
 // releasing it would let two of them fetch the same cell at once, which is the
@@ -179,14 +204,14 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	var wanted []Cell
+	var wanted []Read
 	seen := map[Cell]bool{}
 	for _, cell := range cells {
 		if _, held := g.plaintext[cell]; held || seen[cell] {
 			continue
 		}
 		seen[cell] = true
-		wanted = append(wanted, cell)
+		wanted = append(wanted, Read{Cell: cell, Environment: g.resolvedEnvironment(cell)})
 	}
 
 	if len(wanted) > 0 {
@@ -197,9 +222,9 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 		if g.plaintext == nil {
 			g.plaintext = map[Cell]revealed{}
 		}
-		for _, cell := range wanted {
-			value, ok := found[cell]
-			g.plaintext[cell] = revealed{value: value, found: ok}
+		for _, read := range wanted {
+			value, ok := found[read.Cell]
+			g.plaintext[read.Cell] = revealed{value: value, found: ok}
 		}
 	}
 
@@ -208,6 +233,19 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 		out[cell] = g.plaintext[cell]
 	}
 	return out, nil
+}
+
+// resolvedEnvironment is where one cell's value comes from for this run: the
+// run's own environment when that environment holds an override, and class-wide
+// otherwise. A run bound to no environment always resolves class-wide, which is
+// every production deploy.
+//
+// Callers hold g.mu.
+func (g *Gate) resolvedEnvironment(cell Cell) string {
+	if g.scope.Environment == "" || !slices.Contains(g.overrides[cell], g.scope.Environment) {
+		return ""
+	}
+	return g.scope.Environment
 }
 
 // DeclareEnv records one defineEnv call's definitions and answers with the
@@ -388,10 +426,10 @@ func why(problem *resourcesv1.VariableProblem) string {
 // reads the same way twice. A batched read fails whole, so what a user is short
 // of is every cell it asked for — a message naming none of them leaves nothing
 // to act on.
-func describeAll(cells []Cell) string {
-	names := make([]string, 0, len(cells))
-	for _, cell := range cells {
-		names = append(names, describe(cell))
+func describeAll(rows []Read) string {
+	names := make([]string, 0, len(rows))
+	for _, row := range rows {
+		names = append(names, describe(row.Cell))
 	}
 	sort.Strings(names)
 	return strings.Join(names, ", ")

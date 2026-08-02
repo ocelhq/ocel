@@ -187,7 +187,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 					options: []byte(provider.Options),
 					slug:    cfg.Slug,
 					class:   deploymentsv1.Environment_CLASS_PRODUCTION,
-				}, envScope(cfg, false))
+				}, envScope(cfg, false, ""))
 			},
 			ui:      ui,
 			stdout:  stdout,
@@ -444,11 +444,12 @@ func clientApps(plans []appPlan) []clientenv.App {
 	return apps
 }
 
-// envScope is what a gate refusal has to name to be actionable: the apps that
-// read a cell, with the folders they bind, and the substrate the fixing
-// command must address.
-func envScope(cfg *projectconfig.Config, preview bool) envgate.Scope {
-	return envgate.Scope{Apps: envApps(cfg), Preview: preview}
+// envScope is the run a gate rules for: the apps that read a cell, with the
+// folders they bind, the substrate a fixing command must address, and the named
+// environment this run deploys — which is what decides whose overrides answer.
+// A command that is not deploying one environment names none.
+func envScope(cfg *projectconfig.Config, preview bool, environment string) envgate.Scope {
+	return envgate.Scope{Apps: envApps(cfg), Preview: preview, Environment: environment}
 }
 
 func envApps(cfg *projectconfig.Config) []envgate.App {
@@ -494,10 +495,10 @@ func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
 	return stored, nil
 }
 
-func (v runnerValues) Reveal(ctx context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
-	named := make([]*envv1.Cell, 0, len(cells))
-	for _, cell := range cells {
-		named = append(named, &envv1.Cell{Folder: cell.Folder, Key: cell.Key})
+func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
+	named := make([]*envv1.Cell, 0, len(rows))
+	for _, row := range rows {
+		named = append(named, &envv1.Cell{Folder: row.Cell.Folder, Key: row.Cell.Key, Environment: row.Environment})
 	}
 	resp, err := v.runner.RevealValues(ctx, &envv1.RevealValuesRequest{
 		Options:         v.options,

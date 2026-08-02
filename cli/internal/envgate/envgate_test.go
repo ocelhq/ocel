@@ -16,15 +16,17 @@ type fakeValues struct {
 	cells     map[envgate.Cell]string
 	versions  map[envgate.Cell]int64
 	overrides []envgate.Stored
-	revealed  []envgate.Cell
+	held      map[envgate.Read]string
+	revealed  []envgate.Read
 }
 
 func newFakeValues() *fakeValues {
-	return &fakeValues{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}}
+	return &fakeValues{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}, held: map[envgate.Read]string{}}
 }
 
 func (v *fakeValues) set(key, folder, value string) {
 	v.cells[envgate.Cell{Key: key, Folder: folder}] = value
+	v.held[envgate.Read{Cell: envgate.Cell{Key: key, Folder: folder}}] = value
 }
 
 func (v *fakeValues) setAt(key, folder, value string, version int64) {
@@ -32,15 +34,12 @@ func (v *fakeValues) setAt(key, folder, value string, version int64) {
 	v.versions[envgate.Cell{Key: key, Folder: folder}] = version
 }
 
-// override is a row a named environment holds. No command writes one; the
-// gate has to keep reading them because the store still returns any that were
-// written before the write surface came out.
-func (v *fakeValues) override(key, folder, environment string) {
-	v.overrides = append(v.overrides, envgate.Stored{
-		Cell:        envgate.Cell{Key: key, Folder: folder},
-		Environment: environment,
-		Version:     1,
-	})
+// override is the value one named environment holds for a cell, beside whatever
+// the class-wide row holds.
+func (v *fakeValues) override(key, folder, environment, value string) {
+	cell := envgate.Cell{Key: key, Folder: folder}
+	v.overrides = append(v.overrides, envgate.Stored{Cell: cell, Environment: environment, Version: 1})
+	v.held[envgate.Read{Cell: cell, Environment: environment}] = value
 }
 
 func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
@@ -51,12 +50,12 @@ func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
 	return append(out, v.overrides...), nil
 }
 
-func (v *fakeValues) Reveal(_ context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
-	v.revealed = append(v.revealed, cells...)
+func (v *fakeValues) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
+	v.revealed = append(v.revealed, rows...)
 	found := map[envgate.Cell]string{}
-	for _, cell := range cells {
-		if value, ok := v.cells[cell]; ok {
-			found[cell] = value
+	for _, row := range rows {
+		if value, ok := v.held[row]; ok {
+			found[row.Cell] = value
 		}
 	}
 	return found, nil
@@ -178,8 +177,8 @@ func TestGate_LiveClassCellIsNeverRevealedButIsStillReportedPresent(t *testing.T
 		def("ANALYTICS_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
 	)
 
-	for _, cell := range values.revealed {
-		if cell.Key == "STRIPE_API_KEY" {
+	for _, row := range values.revealed {
+		if row.Cell.Key == "STRIPE_API_KEY" {
 			t.Fatalf("revealed = %+v, want a live-class value never decrypted for the build host", values.revealed)
 		}
 	}
@@ -328,7 +327,7 @@ func TestGate_SchemaInvalidCellIsStillTheDeclaringProcessesToReport(t *testing.T
 
 func TestGate_AnOverrideOnlyKeyDoesNotSatisfyTheDeployGate(t *testing.T) {
 	values := newFakeValues()
-	values.override("STRIPE_API_KEY", "", "pr-42")
+	values.override("STRIPE_API_KEY", "", "pr-42", "override")
 
 	g := prefetched(t, values, envgate.Scope{Apps: []envgate.App{{Name: "api"}}})
 	declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
@@ -344,14 +343,15 @@ func TestGate_AnOverrideOnlyKeyDoesNotSatisfyTheDeployGate(t *testing.T) {
 	}
 }
 
-// Each class leaks differently, so each is asked the question it can answer: a
-// live class answers presence without reading, so a leaked override surfaces
-// as a cell; a readable class reads before answering, so it surfaces as a
-// decrypt onto the build host.
-func TestGate_AnOverrideIsNeverAnsweredToTheDeclaringProcess(t *testing.T) {
+// An override answers for the environment holding it and for nothing else, so a
+// run bound to no environment must never see one. Each class leaks differently,
+// so each is asked the question it can answer: a live class answers presence
+// without reading, so a leaked override surfaces as a cell; a readable class
+// reads before answering, so it surfaces as a decrypt onto the build host.
+func TestGate_AnOverrideIsNeverAnsweredToARunThatIsNotThatEnvironment(t *testing.T) {
 	t.Run("a live class names no cell for it", func(t *testing.T) {
 		values := newFakeValues()
-		values.override("STRIPE_API_KEY", "", "pr-42")
+		values.override("STRIPE_API_KEY", "", "pr-42", "override")
 
 		g := prefetched(t, values)
 		resp := declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET))
@@ -363,7 +363,7 @@ func TestGate_AnOverrideIsNeverAnsweredToTheDeclaringProcess(t *testing.T) {
 
 	t.Run("a readable class never decrypts it", func(t *testing.T) {
 		values := newFakeValues()
-		values.override("ANALYTICS_ID", "", "pr-42")
+		values.override("ANALYTICS_ID", "", "pr-42", "override")
 
 		g := prefetched(t, values)
 		declare(t, g, def("ANALYTICS_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
@@ -372,6 +372,37 @@ func TestGate_AnOverrideIsNeverAnsweredToTheDeclaringProcess(t *testing.T) {
 			t.Errorf("revealed = %+v, want nothing decrypted for a cell the class-wide set does not hold", values.revealed)
 		}
 	})
+}
+
+// The binding rule at the other read time. A live value resolves its override
+// in the sandbox; a baked one is read here, at the deploy, so the same rule has
+// to hold here or an override would only ever work for one class.
+func TestGate_TheRunsOwnEnvironmentResolvesItsOverrideAndEveryOtherResolvesClassWide(t *testing.T) {
+	for name, tc := range map[string]struct {
+		environment string
+		want        string
+	}{
+		"the environment holding the override": {environment: "pr-42", want: "override"},
+		"another environment":                  {environment: "pr-7", want: "class-wide"},
+		"a run bound to no environment":        {want: "class-wide"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			values := newFakeValues()
+			values.set("ANALYTICS_ID", "", "class-wide")
+			values.override("ANALYTICS_ID", "", "pr-42", "override")
+
+			g := prefetched(t, values, envgate.Scope{Preview: true, Environment: tc.environment})
+			resp := declare(t, g, def("ANALYTICS_ID", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+
+			cells := resp.GetCells()
+			if len(cells) != 1 || cells[0].GetValue() != tc.want {
+				t.Fatalf("cells = %+v, want the one ANALYTICS_ID cell holding %q", cells, tc.want)
+			}
+			if len(values.revealed) != 1 {
+				t.Errorf("revealed = %+v, want one read: a cell is resolved from one address, not probed at two", values.revealed)
+			}
+		})
+	}
 }
 
 func TestGate_RefusalCarriesTheProblemsSoARecoveryPathCanPrefillThem(t *testing.T) {

@@ -236,7 +236,7 @@ func TestCollectAndBuildManifest_Prebuilt_ProceedsWhenTheClientValueIsUnchanged(
 func clientValueGate(t *testing.T, cfg *projectconfig.Config, value string) *envgate.Gate {
 	t.Helper()
 	cell := envgate.Cell{Key: "PUBLIC_SITE_URL"}
-	gate := envgate.New(oneValue{cell: cell, value: value}, envScope(cfg, false))
+	gate := envgate.New(oneValue{cell: cell, value: value}, envScope(cfg, false, ""))
 	if err := gate.Prefetch(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func (v oneValue) List(context.Context) ([]envgate.Stored, error) {
 	return []envgate.Stored{{Cell: v.cell}}, nil
 }
 
-func (v oneValue) Reveal(context.Context, []envgate.Cell) (map[envgate.Cell]string, error) {
+func (v oneValue) Reveal(context.Context, []envgate.Read) (map[envgate.Cell]string, error) {
 	return map[envgate.Cell]string{v.cell: v.value}, nil
 }
 
@@ -331,13 +331,13 @@ func TestRunDeploy_Prebuilt_NoOutput_AbortsBeforeSpawn(t *testing.T) {
 // own, because that is what the deploy path builds it from: an app the scope
 // does not name has no folder to resolve from.
 func noGate(cfg *projectconfig.Config) *envgate.Gate {
-	return envgate.New(emptyValues{}, envScope(cfg, false))
+	return envgate.New(emptyValues{}, envScope(cfg, false, ""))
 }
 
 type emptyValues struct{}
 
 func (emptyValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
 
-func (emptyValues) Reveal(context.Context, []envgate.Cell) (map[envgate.Cell]string, error) {
+func (emptyValues) Reveal(context.Context, []envgate.Read) (map[envgate.Cell]string, error) {
 	return nil, nil
 }

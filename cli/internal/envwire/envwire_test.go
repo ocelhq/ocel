@@ -345,13 +345,16 @@ func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
 	return stored, nil
 }
 
-func (v *fakeValues) Reveal(_ context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
+func (v *fakeValues) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
 	v.mu.Lock()
-	v.reads = append(v.reads, cells...)
+	for _, row := range rows {
+		v.reads = append(v.reads, row.Cell)
+	}
 	v.mu.Unlock()
 
 	found := map[envgate.Cell]string{}
-	for _, cell := range cells {
+	for _, row := range rows {
+		cell := row.Cell
 		if value, ok := v.plaintext[cell]; ok {
 			found[cell] = value
 		}

@@ -99,14 +99,16 @@ func (v *flatValues) List(context.Context) ([]envgate.Stored, error) {
 }
 
 // Reveal answers every folder of a key with the same plaintext, which is the
-// broadcast itself.
-func (v *flatValues) Reveal(_ context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
+// broadcast itself. A row's environment is ignored because dev has no named
+// environments: the gate never resolves one here, and a flat file has nowhere
+// to hold an override anyway.
+func (v *flatValues) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	found := make(map[envgate.Cell]string, len(cells))
-	for _, cell := range cells {
-		if value, ok := v.values[cell.Key]; ok {
-			found[cell] = value
+	found := make(map[envgate.Cell]string, len(rows))
+	for _, row := range rows {
+		if value, ok := v.values[row.Cell.Key]; ok {
+			found[row.Cell] = value
 		}
 	}
 	return found, nil

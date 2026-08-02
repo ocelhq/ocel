@@ -223,7 +223,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 					options: []byte(provider.Options),
 					slug:    cfg.Slug,
 					class:   deploymentsv1.Environment_CLASS_PREVIEW,
-				}, envScope(cfg, true))
+				}, envScope(cfg, true, env.GetIdentity()))
 			},
 			ui:      ui,
 			stdout:  stdout,

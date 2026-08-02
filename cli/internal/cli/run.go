@@ -123,7 +123,7 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, p
 
 	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
 	srv.UseProjectConfig(projectCfg)
-	srv.UseValues(storeValues(projectCfg.EnvVars, file.Values), envScope(cfg, false))
+	srv.UseValues(storeValues(projectCfg.EnvVars, file.Values), envScope(cfg, false, ""))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
