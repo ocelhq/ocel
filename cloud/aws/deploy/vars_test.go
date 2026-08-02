@@ -138,6 +138,51 @@ func TestFunctionEnv_AccountsResourcesVariablesAndTheMembraneTogether(t *testing
 	}
 }
 
+// TestCheckRuntimeOwnedNames_RefusesWhatLambdaWouldInject proves the provider
+// rules on its own runtime's names. The SDK cannot: a declaration is written
+// before a deploy target is known, and these names mean nothing on another
+// provider. Here the target is settled, so the collision is a named refusal
+// instead of an opaque InvalidParameterValue from the Lambda API.
+func TestCheckRuntimeOwnedNames_RefusesWhatLambdaWouldInject(t *testing.T) {
+	app := &deploymentsv1.ManifestApp{
+		Name: "web",
+		Variables: []*deploymentsv1.ManifestVariable{
+			variable("AWS_REGION", "us-west-2", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+		},
+	}
+
+	err := checkRuntimeOwnedNames(app)
+	if err == nil {
+		t.Fatal("AWS_REGION was accepted; the Lambda runtime would overwrite it")
+	}
+	for _, want := range []string{"AWS_REGION", "web"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("error = %q, want it to name %s", err, want)
+		}
+	}
+}
+
+// TestCheckRuntimeOwnedNames_LeavesEveryOtherNameAlone proves the check is
+// about this runtime's namespace and nothing else. A bundler's public prefix in
+// particular is a name the developer chose on purpose, and no concern of the
+// provider's.
+func TestCheckRuntimeOwnedNames_LeavesEveryOtherNameAlone(t *testing.T) {
+	app := &deploymentsv1.ManifestApp{
+		Name: "web",
+		Variables: []*deploymentsv1.ManifestVariable{
+			variable("NEXT_PUBLIC_APP_ID", "app_1", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			variable("VITE_APP_ID", "app_2", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			// Never in the function environment, so nothing there to overwrite.
+			variable("AWS_ROTATION_TOKEN", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE),
+		},
+	}
+
+	if err := checkRuntimeOwnedNames(app); err != nil {
+		t.Errorf("checkRuntimeOwnedNames = %v, want every one of these accepted", err)
+	}
+}
+
 // TestCheckFunctionEnvBudget_UnderAtAndOverTheLimit proves the boundary is the
 // platform's own: a set that fits is deployed, and one byte past it fails
 // rather than being silently truncated by AWS.

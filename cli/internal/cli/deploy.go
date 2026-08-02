@@ -412,6 +412,10 @@ func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.
 // buildEnv is what each app's build runs with: its own plaintext values, keyed
 // by the app the builder will run them for. Only the plaintext class belongs
 // in a build process's environment at all — nothing else is a build's to read.
+//
+// A client-accessible value is delivered here under its own name, which is the
+// name its accessor reads and the name the developer chose to satisfy their
+// bundler's inlining rule.
 func buildEnv(plans []appPlan) map[string]map[string]string {
 	byApp := make(map[string]map[string]string, len(plans))
 	for _, plan := range plans {
@@ -421,12 +425,6 @@ func buildEnv(plans []appPlan) map[string]map[string]string {
 				continue
 			}
 			env[v.Key] = v.Value
-			// A client-accessible value is exported a second time, under the
-			// framework's public prefix: that name, and only that name, is what
-			// the framework's static replacement inlines into a browser bundle.
-			if v.ClientAccessible {
-				env[clientenv.PublicName(v.Key)] = v.Value
-			}
 		}
 		byApp[plan.name] = env
 	}

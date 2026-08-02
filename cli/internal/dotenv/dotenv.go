@@ -27,10 +27,12 @@ const FileName = ".env"
 
 // keyPattern and reservedPrefixes are the SDK's own rule for a key defineEnv
 // could name (packages/ocel/src/env/definition.ts). A line outside it belongs
-// to whatever else reads this file.
+// to whatever else reads this file. Ocel's own namespace is the whole of it: a
+// name a bundler inlines or a provider injects is one a project may declare,
+// and this file is where dev resolves its value from.
 var keyPattern = regexp.MustCompile(`^[A-Z_][A-Z0-9_]*$`)
 
-var reservedPrefixes = []string{"OCEL_", "AWS_", "LAMBDA_", "NEXT_PUBLIC_"}
+var reservedPrefixes = []string{"OCEL_"}
 
 // File is one parsed dotfile: every assignment whose key Ocel could be asked
 // for, last one wins as the framework's own parser answers, and the 1-based

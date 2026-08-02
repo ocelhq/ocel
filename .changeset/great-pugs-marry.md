@@ -9,6 +9,20 @@ generated a read throws `EnvClientError` rather than yielding `undefined`.
 `EnvClientError` is also re-exported from `ocel/env` on both the node and edge
 builds.
 
+A variable is delivered under the name you declared it with, and the accessor
+reads it under that name. Which names reach a browser bundle is your bundler's
+rule, not Ocel's, so you satisfy it by naming the variable — declare
+`NEXT_PUBLIC_APP_ID` under Next, `VITE_APP_ID` under Vite, and read it as
+`clientEnv.NEXT_PUBLIC_APP_ID`. Ocel adds no prefix and strips none, which is
+what keeps a second bundler from being a change to Ocel.
+
+The cost of holding no opinion is that Ocel cannot know in advance which names
+your bundler will pass over, so the accessor refuses to load when a value it
+names never arrived, saying which key and why. The value is exported to your
+build under its own name, so a server render still finds it; a name your bundler
+does not inline fails in the browser instead, as a loud error naming the key at
+module load rather than a value that quietly reads as `undefined` later on.
+
 Each app is now built under its own environment. One build process served every
 app, so a plaintext key two apps resolved differently could not be expressed
 there at all: it was left out of the build entirely and read as unset in

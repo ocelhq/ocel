@@ -233,8 +233,7 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 	}
 
 	reportLiveValues(stdout, syncResult.LiveKeys)
-	env := resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, appFolder)
-	return withPublicNames(env, clientKeys), nil
+	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, appFolder), nil
 }
 
 // generateClientAccessors writes the client accessor into every app of the
@@ -248,19 +247,6 @@ func generateClientAccessors(cfg *projectconfig.Config, keys []string) error {
 		}
 	}
 	return nil
-}
-
-// withPublicNames exports each client-accessible value a second time under the
-// framework's public prefix. That name, and only that name, is what the
-// framework's static replacement inlines into a browser bundle, so without it
-// the generated accessor reads undefined in dev.
-func withPublicNames(env map[string]string, keys []string) map[string]string {
-	for _, key := range keys {
-		if value, ok := env[key]; ok {
-			env[clientenv.PublicName(key)] = value
-		}
-	}
-	return env
 }
 
 // reportLiveValues tells the developer what dev just did differently from a

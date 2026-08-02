@@ -112,9 +112,17 @@ DATABASE_URL=postgres://localhost/app
 	if file.Values["DATABASE_URL"] != "postgres://localhost/app" {
 		t.Fatalf("DATABASE_URL = %q, want the line Ocel does own still read", file.Values["DATABASE_URL"])
 	}
-	for _, ignored := range []string{"NEXT_PUBLIC_SITE_URL", "AWS_PROFILE", "LAMBDA_TASK_ROOT", "OCEL_DEV_SERVER", "database_url"} {
+	for _, ignored := range []string{"OCEL_DEV_SERVER", "database_url"} {
 		if _, taken := file.Values[ignored]; taken {
 			t.Errorf("%s was taken from the file; want it left to whatever else reads it", ignored)
+		}
+	}
+	// A bundler's or a provider's name is one defineEnv may declare, so this
+	// file is where its value comes from in dev. Only Ocel's own namespace is
+	// not a key Ocel could be asked for.
+	for _, taken := range []string{"NEXT_PUBLIC_SITE_URL", "AWS_PROFILE", "LAMBDA_TASK_ROOT"} {
+		if _, ok := file.Values[taken]; !ok {
+			t.Errorf("%s was left in the file; want a declarable key read from it", taken)
 		}
 	}
 	if len(file.Unreadable) != 0 {

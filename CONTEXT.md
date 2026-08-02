@@ -198,8 +198,10 @@ staleness bound.
 - **Client-accessible** — an orthogonal flag, not a fourth class, marking a value
   the browser may read. Only a plain variable may carry it: a value the browser
   can read cannot also be one kept from it, and the combination is refused where
-  the definition is written. It is delivered to the app build under the
-  framework's public prefix and read through the **client accessor** — a
+  the definition is written, as is a schema default: a client value is inlined
+  at build time, and a default could not be told apart from a value the bundler
+  never inlined. It is delivered to the app build under its declared name and
+  read through the **client accessor** — a
   module generated per app (`<app>/.ocel/env-client.ts`) exporting `clientEnv`,
   which application code imports as `ocel/env/client`. That specifier resolves
   through a `paths` entry in the app's own `tsconfig.json` or `jsconfig.json`,
@@ -209,10 +211,18 @@ staleness bound.
   extending a base it cannot follow or whose own `paths` a child's would
   replace — generation refuses, naming the file and the entry to add by hand,
   rather than leaving a mapping that resolves nowhere. The accessor names each
-  value as a literal `process.env.NEXT_PUBLIC_<KEY>` member expression so the
-  framework's own static replacement does the inlining; nothing computed can
-  stand in for that literal, which is why the module is generated rather than
-  shipped. Server-only values have no accessor to reach them from. A
+  value as a literal `process.env.<KEY>` member expression so the bundler's own
+  static replacement does the inlining; nothing computed can stand in for that
+  literal, which is why the module is generated rather than shipped. Which names
+  a bundler inlines is the bundler's rule and Ocel holds no opinion on it: a key
+  is delivered under the name it was declared with, so a developer satisfies
+  that rule by naming the variable (`NEXT_PUBLIC_APP_ID` under Next,
+  `VITE_APP_ID` under Vite). The accessor refuses to load when a value it names
+  never arrived, which is the only sign that a bundler passed the name over —
+  the value is exported to the build under its own name, so this lands in the
+  browser, where it turns a silent `undefined` into a loud, named error at
+  module load rather than a value that reads as undefined somewhere later.
+  Server-only values have no accessor to reach them from. A
   client-accessible value is consequently frozen into the bundle at build time
   regardless of class — see ADR 0005. _Avoid_: public, exposed.
 

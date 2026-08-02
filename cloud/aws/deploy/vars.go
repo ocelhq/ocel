@@ -406,6 +406,46 @@ func fingerprintValues(values map[string]string) string {
 	return hex.EncodeToString(h.Sum(nil))[:fingerprintValuesHexLen]
 }
 
+// runtimeOwnedPrefixes are the names the Lambda runtime injects into every
+// function environment. A variable declared under one is overwritten before the
+// handler ever reads it, and the Lambda API refuses several outright.
+//
+// The list lives here, and not with the SDK's own reserved names, because it is
+// this provider's fact: a declaration is written before a deploy target exists,
+// and these names carry no meaning on another one. A second provider states its
+// own beside its own realization rather than editing a shared constant.
+var runtimeOwnedPrefixes = []string{"AWS_", "LAMBDA_"}
+
+// checkRuntimeOwnedNames refuses a variable this runtime would overwrite. It
+// rules only on the plaintext class, which is the only one delivered into the
+// function environment under its own name — an encrypted class travels in the
+// package and collides with nothing.
+func checkRuntimeOwnedNames(app *deploymentsv1.ManifestApp) error {
+	var taken []string
+	for _, v := range app.GetVariables() {
+		if v.GetClass() != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
+			continue
+		}
+		for _, prefix := range runtimeOwnedPrefixes {
+			if strings.HasPrefix(v.GetKey(), prefix) {
+				taken = append(taken, v.GetKey())
+				break
+			}
+		}
+	}
+	if len(taken) == 0 {
+		return nil
+	}
+	sort.Strings(taken)
+
+	return fmt.Errorf(
+		"app %s declares %s, which the AWS Lambda runtime injects into every function environment (%s). "+
+			"A plaintext variable is delivered under its own name, so the runtime would overwrite it. "+
+			"Rename it, or reclassify it as `sensitive` to deliver it inside the bundle instead",
+		app.GetName(), strings.Join(taken, ", "), strings.Join(runtimeOwnedPrefixes, ", "),
+	)
+}
+
 // checkFunctionEnvBudget refuses a function environment that does not fit the
 // platform's limit, naming what each key costs and the remedy: moving a value
 // to an encrypted class takes it out of the function environment altogether.

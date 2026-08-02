@@ -136,8 +136,8 @@ func TestCollectAndBuildManifest_GeneratesTheClientAccessorBeforeTheBuild(t *tes
 		t.Fatalf("collectAndBuildManifest: %v", err)
 	}
 
-	if !strings.Contains(generated, "PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_PUBLIC_SITE_URL") {
-		t.Errorf("accessor the build saw = %q, want it to name the prefixed entry", generated)
+	if !strings.Contains(generated, `PUBLIC_SITE_URL: inlined("PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
+		t.Errorf("accessor the build saw = %q, want it to read the key under its declared name", generated)
 	}
 	if _, err := os.Stat(filepath.Join(root, ".ocel", "output", "client-values.json")); err != nil {
 		t.Errorf("the build recorded no client values: %v", err)

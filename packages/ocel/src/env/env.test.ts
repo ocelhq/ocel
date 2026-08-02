@@ -114,20 +114,24 @@ describe("definition errors", () => {
     expect(() => defineEnv({ RELOADED_KEY: { class: "sensitive" } })).not.toThrow();
   });
 
-  it("rejects a platform-owned name for a bare-key class", () => {
-    expect(() => defineEnv({ AWS_REGION: { class: "plain" } })).toThrow(
-      /reserved/i,
-    );
+  it("rejects an Ocel-owned name for a bare-key class", () => {
     expect(() => defineEnv({ OCEL_THING: { class: "plain" } })).toThrow(
       /reserved/i,
     );
-    expect(() =>
-      defineEnv({ NEXT_PUBLIC_ID: { class: "plain", client: true } }),
-    ).toThrow(/reserved/i);
   });
 
-  it("allows a platform-owned name for a class that is never delivered bare", () => {
-    expect(() => defineEnv({ AWS_ROTATION_TOKEN: { class: "secret" } })).not.toThrow();
+  it("allows an Ocel-owned name for a class that is never delivered bare", () => {
+    expect(() => defineEnv({ OCEL_ROTATION_TOKEN: { class: "secret" } })).not.toThrow();
+  });
+
+  it("allows a name a provider or a bundler gives its own meaning", () => {
+    expect(() => defineEnv({ AWS_REGION: { class: "plain" } })).not.toThrow();
+    expect(() =>
+      defineEnv({ NEXT_PUBLIC_ID: { class: "plain", client: true } }),
+    ).not.toThrow();
+    expect(() =>
+      defineEnv({ VITE_ID: { class: "plain", client: true } }),
+    ).not.toThrow();
   });
 
   it("rejects a name that is not a usable environment variable name", () => {
@@ -164,6 +168,27 @@ describe("definition errors", () => {
         BAKED_DEFAULTED: { class: "plain", schema: z.string().default("x") },
       }),
     ).not.toThrow();
+  });
+
+  it("rejects a schema that accepts a missing value on a client-accessible key", () => {
+    expect(() =>
+      defineEnv({
+        CLIENT_DEFAULTED: {
+          class: "plain",
+          client: true,
+          schema: z.string().default("x"),
+        },
+      }),
+    ).toThrow(/accepts a missing value/i);
+    expect(() =>
+      defineEnv({
+        CLIENT_OPTIONAL: {
+          class: "plain",
+          client: true,
+          schema: z.string().optional(),
+        },
+      }),
+    ).toThrow(/accepts a missing value/i);
   });
 
 });

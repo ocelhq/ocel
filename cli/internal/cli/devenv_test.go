@@ -336,8 +336,13 @@ export default { slug: "test-app", apps: [{ name: "web", path: "apps/web", folde
 	if !strings.Contains(stdout.String(), "line 5") {
 		t.Errorf("stdout = %q, want the line that assigns nothing reported by number", stdout.String())
 	}
-	if strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
-		t.Errorf("stdout = %q, want a line Ocel does not own passed over in silence", stdout.String())
+	if strings.Contains(stdout.String(), "api_base") {
+		t.Errorf("stdout = %q, want a line Ocel could never be asked for passed over in silence", stdout.String())
+	}
+	// A bundler's name is one defineEnv may declare, so it is Ocel's to resolve
+	// from this file and Ocel's to account for when it does.
+	if !strings.Contains(stdout.String(), "NEXT_PUBLIC_SITE_URL") {
+		t.Errorf("stdout = %q, want a declarable key accounted for", stdout.String())
 	}
 	// Telling a watched run to restart would be read as "editing does nothing".
 	if !strings.Contains(stdout.String(), dotfileWatchedAdvice) {
@@ -949,9 +954,9 @@ func TestRunDev_ALiveClassKeyIsNotRefusedForHavingNoLocalValue(t *testing.T) {
 // dev generated one the import landed on the SDK's throwing fallback: the same
 // code that works in a deploy threw under `ocel dev`, which is where a
 // developer writes it. Dev now generates the same accessor a deploy does, and
-// exports the value under the framework's public prefix so the accessor's
-// literal member expression has something behind it.
-func TestRunDev_GeneratesTheClientAccessorAndExportsThePrefixedValue(t *testing.T) {
+// exports the value under the name it was declared with — the name the
+// accessor's literal member expression reads.
+func TestRunDev_GeneratesTheClientAccessorAndExportsTheValueUnderItsDeclaredName(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
 	}
@@ -986,8 +991,8 @@ func TestRunDev_GeneratesTheClientAccessorAndExportsThePrefixedValue(t *testing.
 	if readErr != nil {
 		t.Fatalf("dev generated no client accessor: %v", readErr)
 	}
-	if !strings.Contains(string(accessor), "PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_PUBLIC_SITE_URL") {
-		t.Errorf("accessor = %s, want it to name the prefixed entry", accessor)
+	if !strings.Contains(string(accessor), `PUBLIC_SITE_URL: inlined("PUBLIC_SITE_URL", process.env.PUBLIC_SITE_URL)`) {
+		t.Errorf("accessor = %s, want it to read the key under its declared name", accessor)
 	}
 	if strings.Contains(string(accessor), "STRIPE_API_KEY") {
 		t.Errorf("accessor names a server-only value:\n%s", accessor)
@@ -1001,11 +1006,11 @@ func TestRunDev_GeneratesTheClientAccessorAndExportsThePrefixedValue(t *testing.
 		t.Fatalf("read env dump: %v", readErr)
 	}
 	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
-	if got, want := env["NEXT_PUBLIC_PUBLIC_SITE_URL"], "https://local.example.com"; got != want {
-		t.Errorf("NEXT_PUBLIC_PUBLIC_SITE_URL = %q, want %q — without it the accessor reads undefined", got, want)
+	if got, want := env["PUBLIC_SITE_URL"], "https://local.example.com"; got != want {
+		t.Errorf("PUBLIC_SITE_URL = %q, want %q — without it the accessor refuses to load", got, want)
 	}
-	if _, ok := env["NEXT_PUBLIC_STRIPE_API_KEY"]; ok {
-		t.Error("a server-only value was exported under the public prefix")
+	if _, ok := env["NEXT_PUBLIC_PUBLIC_SITE_URL"]; ok {
+		t.Error("a value was exported under a prefixed name; a key is delivered as it was declared")
 	}
 }
 

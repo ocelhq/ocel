@@ -9,8 +9,10 @@ nothing else: no layering, no `$VAR` interpolation.
 
 `.env` is the file your framework already reads, so Ocel adopted it rather than
 claimed it: a line whose key Ocel could never be asked for — anything under
-`OCEL_`, `AWS_`, `LAMBDA_` or `NEXT_PUBLIC_`, or a name outside
-`^[A-Z_][A-Z0-9_]*$` — is left to whatever else reads the file, in silence. A
+`OCEL_`, or a name outside `^[A-Z_][A-Z0-9_]*$` — is left to whatever else reads
+the file, in silence. Every other name is one `defineEnv` may declare, your
+bundler's `NEXT_PUBLIC_`/`VITE_` names included, so this file is where dev
+resolves its value from. A
 key set twice takes its last value, the same answer the parser your framework
 uses gives. The only thing the run says anything about is a line that assigns
 nothing at all, and it says so by line number and never by content, because that

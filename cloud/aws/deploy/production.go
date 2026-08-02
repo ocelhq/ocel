@@ -855,6 +855,10 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 		return nil, err
 	}
 
+	if err := checkRuntimeOwnedNames(app); err != nil {
+		return nil, err
+	}
+
 	env := make(map[string]string, len(resourceEnv))
 	maps.Copy(env, resourceEnv)
 	maps.Copy(env, variableEnv(app))

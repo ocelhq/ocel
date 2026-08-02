@@ -65,12 +65,17 @@ export function isLive(definition: VariableDefinition): boolean {
   return LIVE_CLASSES.has(definition.class);
 }
 
-// bareKeyClasses reach the process environment under the key's own name (or,
-// for a client-accessible key, under the framework's public prefix), which is
-// the only situation where a platform-owned name could be overwritten.
+// bareKeyClasses reach the process environment under the key's own name, which
+// is the only situation where an Ocel-owned name could be overwritten.
 const BARE_KEY_CLASSES: ReadonlySet<VariableClass> = new Set(["plain"]);
 
-const RESERVED_PREFIXES = ["OCEL_", "AWS_", "LAMBDA_", "NEXT_PUBLIC_"];
+// RESERVED_PREFIXES is Ocel's own namespace and nothing else. A name a
+// provider's runtime injects, or one a bundler inlines into a browser bundle,
+// is that provider's or that bundler's to rule on: the provider refuses it at
+// deploy, where the target is known, and a bundler's convention is the reason a
+// developer chose the name in the first place. A key is delivered under the
+// name it was declared with, everywhere, so this file has no framework in it.
+const RESERVED_PREFIXES = ["OCEL_"];
 
 const KEY_PATTERN = /^[A-Z_][A-Z0-9_]*$/;
 
@@ -118,11 +123,21 @@ function validateDefinition(
     );
   }
   if (
-    (BARE_KEY_CLASSES.has(variableClass) || definition.client) &&
+    BARE_KEY_CLASSES.has(variableClass) &&
     RESERVED_PREFIXES.some((prefix) => key.startsWith(prefix))
   ) {
     throw new EnvDefinitionError(
-      `'${key}' starts with a reserved prefix (${RESERVED_PREFIXES.join(", ")}). A '${variableClass}' variable is delivered under its own name, so the platform would overwrite it.`,
+      `'${key}' starts with a reserved prefix (${RESERVED_PREFIXES.join(", ")}). A '${variableClass}' variable is delivered under its own name, so Ocel would overwrite it.`,
+    );
+  }
+  // A client-accessible value is a copy taken at build time, and the only sign
+  // that a bundler never inlined it is that nothing arrives under its name. A
+  // schema that accepts a missing value would be indistinguishable from that,
+  // so the accessor could no longer tell a working variable from one the
+  // bundler passed over.
+  if (definition.client && !isRequired(definition)) {
+    throw new EnvDefinitionError(
+      `'${key}' is client-accessible and its schema accepts a missing value. A client value is inlined into the browser bundle at build time, so a default or an optional could not be told apart from a value the bundler never inlined.`,
     );
   }
   if (definition.folders) {

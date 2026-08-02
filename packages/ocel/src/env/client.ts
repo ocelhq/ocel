@@ -3,14 +3,18 @@
 // accessor generated for that app at `<app>/.ocel/env-client.ts`, not to this
 // file.
 //
-// It is generated, and generated into the app, because of what the
-// framework's static replacement can see. Replacement rewrites a literal
-// `process.env.NEXT_PUBLIC_KEY` member expression and nothing else, so the
-// accessor has to name each value literally — a proxy, a lookup by variable, or
-// any indirection a package could ship is opaque to it and would survive into
-// the browser as a read of an environment that is not there. Keeping the
-// mechanism the framework's own is the point: no custom build-step transform to
-// track across framework versions.
+// It is generated, and generated into the app, because of what a bundler's
+// static replacement can see. Replacement rewrites a literal `process.env.KEY`
+// member expression and nothing else, so the accessor has to name each value
+// literally — a proxy, a lookup by variable, or any indirection a package could
+// ship is opaque to it and would survive into the browser as a read of an
+// environment that is not there. Keeping the mechanism the bundler's own is the
+// point: no custom build-step transform to track across bundler versions.
+//
+// Which names a bundler will inline is the bundler's rule, not Ocel's. A key is
+// read under the name it was declared with, so a developer satisfies that rule
+// by naming the variable — `NEXT_PUBLIC_APP_ID` under Next, `VITE_APP_ID` under
+// Vite — and nothing here has to know which bundler is running.
 //
 // This module is what a build that never generated the accessor lands on.
 
