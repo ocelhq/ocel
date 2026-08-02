@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
@@ -180,19 +181,5 @@ func describeCoordinates(cells []Coordinate) string {
 		names = append(names, c.String())
 	}
 	sort.Strings(names)
-	return join(names)
-}
-
-func join(names []string) string {
-	switch len(names) {
-	case 0:
-		return ""
-	case 1:
-		return names[0]
-	}
-	out := names[0]
-	for _, name := range names[1 : len(names)-1] {
-		out += ", " + name
-	}
-	return out + " and " + names[len(names)-1]
+	return strings.Join(names, ", ")
 }
