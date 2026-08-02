@@ -295,10 +295,6 @@ func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envv1.
 	if pointedAt.target() != nil {
 		return nil, deepens(describeCoordinate(target) + " is itself a reference")
 	}
-	if pointedAt.liveVersion() == 0 {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf(
-			"%s holds no value to reference: no value is set there", describeCoordinate(target)))
-	}
 	if consumers := store.referencesTo(req.GetClass(), at); len(consumers) > 0 {
 		return nil, deepens(describeCoordinate(at) + " is referenced by " + describeCoordinate(consumers[0]))
 	}

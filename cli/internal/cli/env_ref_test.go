@@ -121,16 +121,29 @@ func TestRunEnvRef_RefusesToPointAtAnotherReference(t *testing.T) {
 	}
 }
 
-func TestRunEnvRef_RefusesATargetHoldingNoValue(t *testing.T) {
+// The value and the reference to it are as often two people's work as one's,
+// so which lands first is not something the CLI has an opinion about. Until the
+// value is there, reading through the reference names what is missing.
+func TestRunEnvRef_PointsAtAValueNotSetYet(t *testing.T) {
 	root := setUpEnvFixture(t)
 
 	var stdout, stderr bytes.Buffer
-	err := runEnvRef(context.Background(), root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr)
+	if err := runEnvRef(context.Background(), root, "STRIPE_API_KEY", envOptions{}, envRefOptions{project: "platform"}, &stdout, &stderr); err != nil {
+		t.Fatalf("runEnvRef at a cell not set yet err = %v; stderr=%s", err, stderr.String())
+	}
+
+	var out, errs bytes.Buffer
+	err := runEnvGet(context.Background(), root, "STRIPE_API_KEY", envOptions{reveal: true}, &out, &errs)
 	if err == nil {
-		t.Fatal("runEnvRef at an unset cell err = nil, want a refusal")
+		t.Fatal("runEnvGet through a reference to nothing err = nil, want a failure")
 	}
 	if !strings.Contains(err.Error(), "platform/STRIPE_API_KEY") {
-		t.Errorf("refusal = %q, want it to name the cell that holds nothing", err)
+		t.Errorf("failure = %q, want it to name the cell that holds nothing", err)
+	}
+
+	ownedElsewhere(t, "STRIPE_API_KEY", "sk_live_secret")
+	if got := strings.TrimSpace(envGet(t, root, "STRIPE_API_KEY", envOptions{reveal: true})); got != "sk_live_secret" {
+		t.Errorf("value once the source was set = %q, want it read through with no second write", got)
 	}
 }
 

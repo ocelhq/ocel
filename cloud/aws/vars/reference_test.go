@@ -194,15 +194,33 @@ func TestSetReferenceRejectsAnEnvironmentSpecificTarget(t *testing.T) {
 	}
 }
 
-func TestSetReferenceRejectsATargetHoldingNoValue(t *testing.T) {
+// Pointing at a value and setting it are as often two people's work as one's,
+// in either order. The reference is written against an address, so the value
+// need not be there yet; until it is, a read of the reference says what is
+// missing rather than reading as unset.
+func TestAReferenceMayBeWrittenBeforeTheValueItReadsIsSet(t *testing.T) {
 	store, _, _ := newTestStore(t)
 
-	_, err := store.SetReference(context.Background(), consumer(), source(), nil)
+	if _, err := store.SetReference(context.Background(), consumer(), source(), nil); err != nil {
+		t.Fatalf("SetReference at a cell not set yet err = %v, want it accepted", err)
+	}
+	_, err := store.Get(context.Background(), consumer(), true)
 	if !errors.Is(err, ErrNotFound) {
-		t.Fatalf("SetReference at an unset cell err = %v, want ErrNotFound", err)
+		t.Fatalf("Get before the value was set err = %v, want ErrNotFound", err)
 	}
 	if !strings.Contains(err.Error(), source().String()) {
-		t.Errorf("refusal = %q, want it to name the target that holds nothing", err)
+		t.Errorf("failure = %q, want it to name the cell that holds nothing", err)
+	}
+
+	if _, err := store.Set(context.Background(), source(), "sk_live_shared", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	got, err := store.Get(context.Background(), consumer(), true)
+	if err != nil {
+		t.Fatalf("Get err = %v", err)
+	}
+	if got.Plaintext != "sk_live_shared" {
+		t.Errorf("plaintext = %q, want the value that landed at the source with no second write to the reference", got.Plaintext)
 	}
 }
 

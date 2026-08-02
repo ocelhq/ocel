@@ -43,9 +43,13 @@ var ErrWouldDeepen = errors.New("a reference may only point at a value, never at
 // not, so two writes moments apart can leave a chain this one meant to refuse —
 // which is why the read path refuses a second hop rather than assuming one.
 //
-// A target holding no value is refused too. A reference is written against
-// something, and accepting a dangling one would trade a refusal at the moment
-// the address is typed for a failure at the moment an application reads.
+// The target need not hold a value yet. Whether it does is not an invariant
+// this refusal could hold anyway — deleting a value out from under its
+// consumers is deliberately allowed — so all a write-time existence check buys
+// is an ordering constraint between the team that sets a credential and the
+// team that consumes it, and a placeholder value typed in to get around it,
+// which the discovery gate would then accept as the real one. A reference to
+// nothing fails the read, loudly, naming the cell that holds nothing.
 func (s *Store) SetReference(ctx context.Context, c, target Coordinate, expected *int64) (Metadata, error) {
 	if err := c.validate(); err != nil {
 		return Metadata{}, err
@@ -68,9 +72,6 @@ func (s *Store) SetReference(ctx context.Context, c, target Coordinate, expected
 	}
 	if pointedAt.references() {
 		return Metadata{}, fmt.Errorf("%s is itself a reference: %w", target, ErrWouldDeepen)
-	}
-	if pointedAt.liveVersion() == 0 {
-		return Metadata{}, fmt.Errorf("%s holds no value to reference: %w", target, ErrNotFound)
 	}
 
 	consumers, err := s.References(ctx, c)
