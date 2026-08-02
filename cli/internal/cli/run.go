@@ -109,7 +109,7 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, p
 	if err != nil {
 		return err
 	}
-	reportDotfile(stdout, cfg.Dir, file.Values, file.Unreadable)
+	reportDotfile(stdout, cfg.Dir, file.Values, file.Unreadable, false)
 
 	projectCfg := resolveProjectConfig(ctx, apiURL, creds.AccessToken, projectID, stderr)
 

@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -118,17 +119,14 @@ var errLostElection = errors.New("another process became leader first")
 // against (see effectiveAPIURL); projectID is the linked cloud project the
 // dev sandbox is provisioned under.
 func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, projectID string, cfg *projectconfig.Config, appArgs []string, stdout, stderr io.Writer, stdin io.Reader) error {
-	// The dotfile is read once, here, and is the same map the gate answers
-	// declarations from and the child is spawned with. Reading it twice would
-	// let the file the run refused on differ from the file the app got. It is
-	// read before anything is opened so a file that cannot be read costs
-	// nothing to abandon.
+	// Read before anything is opened, so a file that cannot be read costs
+	// nothing to abandon. The notice is printed once, from this read; every
+	// resolve after it reads the file again for itself.
 	file, err := dotenv.Load(cfg.Dir)
 	if err != nil {
 		return err
 	}
-	dotfile := file.Values
-	reportDotfile(stdout, cfg.Dir, dotfile, file.Unreadable)
+	reportDotfile(stdout, cfg.Dir, file.Values, file.Unreadable, true)
 
 	// Fetched once and held for the process: dev's semantic is "resolved at
 	// startup", and the same config answers the run's /sync.
@@ -144,7 +142,6 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 
 	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
 	srv.UseProjectConfig(projectCfg)
-	srv.UseValues(storeValues(projectCfg.EnvVars, dotfile), envScope(cfg, false))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
@@ -163,13 +160,13 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 	}
 	defer lockfile.Remove(cfg.Dir)
 
-	resolved, err := discoverAndSync(ctx, srv, cfg, dotfile, stdout, stderr)
+	resolved, err := resolveOnce(ctx, srv, cfg, projectCfg.EnvVars, stdout, stderr)
 	if err != nil {
 		return err
 	}
 	srv.PushEnv(resolved)
 
-	if err := watchAndReResolve(ctx, srv, cfg, dotfile, stdout, stderr); err != nil {
+	if err := watchAndReResolve(ctx, srv, cfg, projectCfg.EnvVars, stdout, stderr); err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
 
@@ -179,6 +176,19 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 	appCmd.Stdout = stdout
 	appCmd.Stderr = stderr
 	return waitExitError(appCmd.Run())
+}
+
+// resolveOnce reads the dotfile, installs the store the gate rules from, and
+// runs one full discovery and sync. It is the unit a run repeats: the file is
+// re-read here and nowhere else, so the values a re-resolve rules on are the
+// ones on disk at that moment rather than the ones the process started with.
+func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) (map[string]string, error) {
+	file, err := dotenv.Load(cfg.Dir)
+	if err != nil {
+		return nil, err
+	}
+	srv.UseValues(storeValues(projectEnv, file.Values), envScope(cfg, false))
+	return discoverAndSync(ctx, srv, cfg, file.Values, stdout, stderr)
 }
 
 // discoverAndSync runs discovery over cfg's resolved discovery.paths,
@@ -243,15 +253,28 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 // pushes the freshly resolved env to every connected follower. It returns
 // once the watch is established; re-resolution happens in the background
 // until ctx is done.
-func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, dotfile map[string]string, stdout, stderr io.Writer) error {
+//
+// The dotfile sits at the project root among every other file a project keeps
+// there, so the root is watched for that one path: a write to package.json or
+// an editor's scratch file is no reason to re-discover.
+func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, projectEnv map[string]string, stdout, stderr io.Writer) error {
 	dirs, err := discovery.Dirs(cfg.Dir, cfg.Discovery.Paths)
 	if err != nil {
 		return fmt.Errorf("resolve watch directories: %w", err)
 	}
 
-	return watcher.Watch(ctx, dirs, nil, watchDebounce, func() {
+	dotfilePath := filepath.Join(cfg.Dir, dotenv.FileName)
+	watched := dirs
+	if !slices.Contains(watched, cfg.Dir) {
+		watched = append(slices.Clone(dirs), cfg.Dir)
+	}
+	accept := func(path string) bool {
+		return path == dotfilePath || underAnyDir(dirs, path)
+	}
+
+	return watcher.Watch(ctx, watched, accept, watchDebounce, func() {
 		srv.ResetManifest()
-		resolved, err := discoverAndSync(ctx, srv, cfg, dotfile, stdout, stderr)
+		resolved, err := resolveOnce(ctx, srv, cfg, projectEnv, stdout, stderr)
 		if err != nil {
 			if ctx.Err() == nil {
 				fmt.Fprintln(stderr, "re-resolve failed:", err)
@@ -262,6 +285,18 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 	}, func(err error) {
 		fmt.Fprintln(stderr, "watch error:", err)
 	})
+}
+
+// underAnyDir reports whether path sits under one of dirs, at any depth — a
+// sub-directory created after the watch started is watched too, and its files
+// belong to the same discovery pass as the ones already there.
+func underAnyDir(dirs []string, path string) bool {
+	for _, dir := range dirs {
+		if strings.HasPrefix(path, dir+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // runFollower connects to the leader at leaderAddr, waits for its initial

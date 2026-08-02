@@ -222,7 +222,7 @@ func TestDevRefusal_IsNeverGivenAValueItCouldPrint(t *testing.T) {
 // so the notice about it cannot be the thing that prints them.
 func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	var quiet bytes.Buffer
-	reportDotfile(&quiet, t.TempDir(), nil, nil)
+	reportDotfile(&quiet, t.TempDir(), nil, nil, true)
 	if quiet.Len() != 0 {
 		t.Errorf("reportDotfile wrote %q for a run with no dotfile values, want nothing", quiet.String())
 	}
@@ -233,7 +233,7 @@ func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	reportDotfile(&out, dir, map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}, nil)
+	reportDotfile(&out, dir, map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}, nil, true)
 	got := out.String()
 
 	for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotenv.FileName} {
@@ -258,12 +258,35 @@ func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	}
 }
 
+// A notice that describes the run it is printed for. `ocel dev` watches the
+// file, so telling its user to restart is false and would be read as "editing
+// does nothing" — the surprise this notice exists to prevent. `ocel run` has
+// no watcher, and the old sentence is simply true of it.
+func TestReportDotfile_SaysWhetherThisRunWatchesTheFile(t *testing.T) {
+	values := map[string]string{"API_TOKEN": "x"}
+
+	var watched bytes.Buffer
+	reportDotfile(&watched, t.TempDir(), values, nil, true)
+	if got := watched.String(); !strings.Contains(got, "re-resolves this run") {
+		t.Errorf("notice = %q, want it to say an edit re-resolves the running `ocel dev`", got)
+	}
+	if got := watched.String(); strings.Contains(got, "read once, at startup") {
+		t.Errorf("notice = %q, want no claim that the file is held for the process", got)
+	}
+
+	var once bytes.Buffer
+	reportDotfile(&once, t.TempDir(), values, nil, false)
+	if got := once.String(); !strings.Contains(got, "read once, at startup") {
+		t.Errorf("notice = %q, want a run with no watcher to still say the file is read once", got)
+	}
+}
+
 // `ocel init` scaffolds no .gitignore, and this feature's whole purpose is to
 // encourage putting values — including secrets — in that file. An unignored one
 // is how a secret reaches a public repository.
 func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 	var out bytes.Buffer
-	reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, nil)
+	reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, nil, true)
 
 	if got := out.String(); !strings.Contains(got, ".gitignore") {
 		t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
@@ -277,7 +300,7 @@ func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 		t.Fatalf("write .gitignore: %v", err)
 	}
 	var reincluded bytes.Buffer
-	reportDotfile(&reincluded, dir, map[string]string{"API_TOKEN": "x"}, nil)
+	reportDotfile(&reincluded, dir, map[string]string{"API_TOKEN": "x"}, nil, true)
 	if got := reincluded.String(); !strings.Contains(got, ".gitignore") {
 		t.Errorf("notice = %q, want the warning when a later line re-includes the file", got)
 	}
@@ -697,7 +720,7 @@ func TestRunRun_RefusesWhenTheDotfileDoesNotHoldARequiredValue(t *testing.T) {
 // is the shape a pasted token has.
 func TestReportDotfile_NamesTheUnreadableLinesByNumberOnly(t *testing.T) {
 	var out bytes.Buffer
-	reportDotfile(&out, t.TempDir(), nil, []int{2, 5})
+	reportDotfile(&out, t.TempDir(), nil, []int{2, 5}, true)
 	got := out.String()
 
 	for _, want := range []string{dotenv.FileName, "2, 5"} {
@@ -707,7 +730,7 @@ func TestReportDotfile_NamesTheUnreadableLinesByNumberOnly(t *testing.T) {
 	}
 
 	var one bytes.Buffer
-	reportDotfile(&one, t.TempDir(), nil, []int{4})
+	reportDotfile(&one, t.TempDir(), nil, []int{4}, true)
 	if !strings.Contains(one.String(), "line 4 is") {
 		t.Errorf("notice = %q, want a singular line reported singularly", one.String())
 	}

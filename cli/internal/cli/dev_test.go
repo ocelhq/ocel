@@ -21,6 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/cloudlink"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
+	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/lockfile"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 )
@@ -446,6 +447,149 @@ export default { slug: "test-app" };
 	}
 }
 
+// The premise of the dotfile is that the file you edit decides the value. A
+// run that held the file for its lifetime contradicted that silently: the
+// edit landed and nothing happened until the next `ocel dev`.
+func TestRunDev_Leader_EditingTheDotfileReResolvesAndPushesTheNewValue(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	prevDebounce := watchDebounce
+	watchDebounce = 20 * time.Millisecond
+	defer func() { watchDebounce = prevDebounce }()
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+	writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	defer cancelLeader()
+
+	var leaderStdout, leaderStderr syncBuffer
+	leaderDone := make(chan error, 1)
+	go func() {
+		leaderDone <- runDev(leaderCtx, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+	}()
+
+	waitForLockfile(t, root)
+
+	envDumpPath := filepath.Join(root, "follower-env.out")
+	followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
+
+	followerCtx, cancelFollower := context.WithCancel(context.Background())
+	defer cancelFollower()
+	followerDone := make(chan error, 1)
+	var followerStdout, followerStderr bytes.Buffer
+	go func() {
+		followerDone <- runDev(followerCtx, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+	}()
+
+	waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
+
+	writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=second\n")
+
+	waitForEnvValue(t, envDumpPath, "API_TOKEN", "second")
+
+	cancelFollower()
+	select {
+	case <-followerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("follower runDev did not exit after cancellation")
+	}
+
+	cancelLeader()
+	select {
+	case <-leaderDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("leader runDev did not exit after cancellation")
+	}
+}
+
+// A watched file means a run can start refusing mid-session — the gate's
+// verdict is only as current as the values it ruled on. What matters is that
+// the refusal is not terminal: the edit that caused it, undone, is enough.
+func TestRunDev_Leader_ARefusalTheEditFixesStopsRefusing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	prevDebounce := watchDebounce
+	watchDebounce = 20 * time.Millisecond
+	defer func() { watchDebounce = prevDebounce }()
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+	writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	defer cancelLeader()
+
+	var leaderStdout, leaderStderr syncBuffer
+	leaderDone := make(chan error, 1)
+	go func() {
+		leaderDone <- runDev(leaderCtx, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+	}()
+
+	waitForLockfile(t, root)
+
+	envDumpPath := filepath.Join(root, "follower-env.out")
+	followerAppArgs := []string{"sh", "-c", "while true; do env > " + envDumpPath + "; sleep 0.02; done"}
+
+	followerCtx, cancelFollower := context.WithCancel(context.Background())
+	defer cancelFollower()
+	followerDone := make(chan error, 1)
+	var followerStdout, followerStderr bytes.Buffer
+	go func() {
+		followerDone <- runDev(followerCtx, nil, root, followerAppArgs, &followerStdout, &followerStderr, strings.NewReader(""))
+	}()
+
+	waitForEnvValue(t, envDumpPath, "API_TOKEN", "first")
+
+	writeFile(t, filepath.Join(root, dotenv.FileName), "# the value the run needs, deleted\n")
+	waitForOutput(t, &leaderStderr, "API_TOKEN")
+	if got := leaderStderr.String(); !strings.Contains(got, dotenv.FileName) {
+		t.Errorf("stderr = %q, want the mid-session refusal to name %s", got, dotenv.FileName)
+	}
+
+	writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=restored\n")
+	waitForEnvValue(t, envDumpPath, "API_TOKEN", "restored")
+
+	cancelFollower()
+	select {
+	case <-followerDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("follower runDev did not exit after cancellation")
+	}
+
+	cancelLeader()
+	select {
+	case <-leaderDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("leader runDev did not exit after cancellation")
+	}
+}
+
 func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZero(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -619,6 +763,38 @@ func waitForEnvVar(t *testing.T, path, key string) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	t.Fatalf("%q never contained env key %q", path, key)
+}
+
+// waitForEnvValue polls until path is a dumped `env` file where key holds
+// want.
+func waitForEnvValue(t *testing.T, path, key, want string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	var last string
+	for time.Now().Before(deadline) {
+		if dumped, err := os.ReadFile(path); err == nil {
+			env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+			if env[key] == want {
+				return
+			}
+			last = env[key]
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("%s in %q = %q, never became %q", key, path, last, want)
+}
+
+// waitForOutput polls until buf holds want.
+func waitForOutput(t *testing.T, buf *syncBuffer, want string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if strings.Contains(buf.String(), want) {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("output = %q, never contained %q", buf.String(), want)
 }
 
 // waitForFile polls until path exists.

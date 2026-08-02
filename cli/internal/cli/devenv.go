@@ -222,12 +222,14 @@ func folderLabel(folder string) string {
 //
 // It runs where the file is read rather than where the values are resolved, so
 // a run the gate goes on to refuse still says where it looked, and a watcher's
-// re-resolve does not reprint the whole notice on every save.
+// re-resolve does not reprint the whole notice on every save. watched tells it
+// which of those two runs this is: a run that re-reads the file on every save
+// and one that holds it for its lifetime owe their user opposite advice.
 //
 // It is told from key names and line numbers, never values: this is the one
 // file whose contents nothing else may see, so the notice about it cannot be
 // what prints them.
-func reportDotfile(stdout io.Writer, dir string, values map[string]string, unreadable []int) {
+func reportDotfile(stdout io.Writer, dir string, values map[string]string, unreadable []int, watched bool) {
 	if len(unreadable) > 0 {
 		numbers := make([]string, 0, len(unreadable))
 		for _, line := range unreadable {
@@ -252,7 +254,11 @@ func reportDotfile(stdout io.Writer, dir string, values map[string]string, unrea
 	fmt.Fprintf(stdout, "resolved %s from %s. That file is yours alone — a teammate's checkout has its own, so nothing set here reaches anyone else and a deploy resolves none of it.\n",
 		strings.Join(keys, ", "), dotenv.FileName)
 	fmt.Fprintf(stdout, "dev delivers every value to the app in plaintext under its own name; a deploy keeps a sensitive value out of the function environment and a live one out of the artifact.\n")
-	fmt.Fprintf(stdout, "%s is read once, at startup; editing it takes effect on the next `ocel dev`.\n", dotenv.FileName)
+	if watched {
+		fmt.Fprintf(stdout, "editing %s re-resolves this run; saving it is enough.\n", dotenv.FileName)
+	} else {
+		fmt.Fprintf(stdout, "%s is read once, at startup; editing it takes effect on the next `ocel run`.\n", dotenv.FileName)
+	}
 	if !gitIgnoresDotfile(dir) {
 		fmt.Fprintf(stdout, "%s is not matched by this project's .gitignore. Add it before committing — it holds values nothing else may see.\n", dotenv.FileName)
 	}
