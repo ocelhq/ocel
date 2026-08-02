@@ -62,6 +62,8 @@ func TestVarsError_ClassifiesStoreFailures(t *testing.T) {
 	}{
 		{vars.ErrStaleVersion, connect.CodeFailedPrecondition},
 		{vars.ErrNotFound, connect.CodeNotFound},
+		{vars.ErrWouldDeepen, connect.CodeInvalidArgument},
+		{vars.ErrIsReference, connect.CodeInvalidArgument},
 	} {
 		var connectErr *connect.Error
 		if !errors.As(varsError(tc.err), &connectErr) || connectErr.Code() != tc.want {
@@ -365,6 +367,72 @@ func TestSetValue_RefusesAnOverrideNoRuntimeWouldEverAskFor(t *testing.T) {
 				t.Errorf("the refused write landed anyway: %q", got.GetValue())
 			}
 		})
+	}
+}
+
+// The whole point of a reference is that the value it reads belongs to another
+// project, so the coordinate the wire carries has to name a slug of its own —
+// a target read out of the request's own project would make the feature a
+// same-project alias and nothing more.
+func TestSetReference_ReadsAValueOwnedByAnotherProject(t *testing.T) {
+	s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
+	ctx := context.Background()
+
+	if _, err := s.SetValue(ctx, &envv1.SetValueRequest{
+		Coordinate: &envv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
+		Value:      "sk-shared",
+	}); err != nil {
+		t.Fatalf("SetValue: %v", err)
+	}
+
+	at := &envv1.Coordinate{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY"}
+	target := &envv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"}
+	written, err := s.SetReference(ctx, &envv1.SetReferenceRequest{Coordinate: at, Target: target})
+	if err != nil {
+		t.Fatalf("SetReference: %v", err)
+	}
+	if got := written.GetMetadata().GetTarget(); got.GetSlug() != "platform" || got.GetKey() != "STRIPE_API_KEY" {
+		t.Errorf("written target = %v, want the cell the reference points at", got)
+	}
+
+	got, err := s.GetValue(ctx, &envv1.GetValueRequest{Coordinate: at, Reveal: true})
+	if err != nil {
+		t.Fatalf("GetValue: %v", err)
+	}
+	if got.GetValue() != "sk-shared" {
+		t.Errorf("resolved value = %q, want the other project's", got.GetValue())
+	}
+	if got.GetMetadata().GetTarget().GetSlug() != "platform" {
+		t.Errorf("read target = %v, want the wire to say the cell is a reference", got.GetMetadata().GetTarget())
+	}
+
+	found, err := s.ListReferences(ctx, &envv1.ListReferencesRequest{Coordinate: target})
+	if err != nil {
+		t.Fatalf("ListReferences: %v", err)
+	}
+	if len(found.GetReferences()) != 1 || found.GetReferences()[0].GetSlug() != "shop" {
+		t.Errorf("ListReferences = %v, want the one cell in another project reading this value", found.GetReferences())
+	}
+}
+
+// A reference is a write to the cell that holds it, so it passes the same guard
+// every other write to that cell does: what varies is what the cell holds, not
+// where the cell is.
+func TestSetReference_RefusesAnAddressNoRuntimeWouldEverAskFor(t *testing.T) {
+	s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
+
+	_, err := s.SetReference(context.Background(), &envv1.SetReferenceRequest{
+		Class:      deploymentsv1.Environment_CLASS_PRODUCTION,
+		Coordinate: &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: "staging"},
+		Target:     &envv1.Coordinate{Slug: "platform", Key: "STRIPE_API_KEY"},
+	})
+
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeInvalidArgument {
+		t.Fatalf("SetReference at a production override err = %v, want CodeInvalidArgument", err)
+	}
+	if !strings.Contains(err.Error(), "single environment") {
+		t.Errorf("err = %v, want the same refusal a value written there gets", err)
 	}
 }
 

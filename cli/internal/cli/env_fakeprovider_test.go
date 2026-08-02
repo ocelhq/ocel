@@ -47,9 +47,13 @@ func (c fakeCoordinate) proto() *envv1.Coordinate {
 	return &envv1.Coordinate{Slug: c.Slug, Folder: c.Folder, Key: c.Key, Environment: c.Environment}
 }
 
+// fakeCellData is one version of a cell: what it held, and when. Target stands
+// where Value would be for a reference, which holds an address rather than a
+// value of its own.
 type fakeCellData struct {
-	Value string `json:"value"`
-	Ts    int64  `json:"ts"`
+	Value  string          `json:"value"`
+	Target *fakeCoordinate `json:"target,omitempty"`
+	Ts     int64           `json:"ts"`
 }
 
 // fakeStore mirrors the real store's observable contract — versions, a
@@ -93,12 +97,65 @@ func (cell *fakeCell) metadata() *envv1.ValueMetadata {
 		return nil
 	}
 	latest := cell.Versions[len(cell.Versions)-1]
-	return &envv1.ValueMetadata{
+	m := &envv1.ValueMetadata{
 		Coordinate: cell.Coordinate.proto(),
 		Version:    int64(len(cell.Versions)),
 		UpdatedAt:  latest.Ts,
 		Size:       int64(len(latest.Value)),
 	}
+	if latest.Target != nil {
+		m.Target = latest.Target.proto()
+	}
+	return m
+}
+
+// target is the cell this one references, and nil for a cell holding a value of
+// its own.
+func (cell *fakeCell) target() *fakeCoordinate {
+	if cell == nil || cell.Deleted || len(cell.Versions) == 0 {
+		return nil
+	}
+	return cell.Versions[len(cell.Versions)-1].Target
+}
+
+// resolve is read-time resolution: the plaintext behind a cell, following a
+// reference exactly once. A reference whose target no longer holds a value is a
+// failed read rather than an absent one, the way the real store's is.
+func (s fakeStore) resolve(class deploymentsv1.Environment_Class, cell *fakeCell) (string, error) {
+	if target := cell.target(); target != nil {
+		held := s[fakeCoordinateID(class, target.proto())]
+		if held.liveVersion() == 0 {
+			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf(
+				"%s/%s holds no value: no value is set there", target.Slug, target.Key))
+		}
+		cell = held
+	}
+	return cell.Versions[len(cell.Versions)-1].Value, nil
+}
+
+// referencesTo is what points at a cell — the reverse lookup, which the real
+// store serves from its one secondary index and the fake serves by looking,
+// because what matters to a command test is the answer and not the access
+// pattern behind it.
+func (s fakeStore) referencesTo(class deploymentsv1.Environment_Class, at *envv1.Coordinate) []*envv1.Coordinate {
+	want := coordinateOf(at)
+	var found []*envv1.Coordinate
+	for _, id := range sortedIDs(s) {
+		cell := s[id]
+		if target := cell.target(); cell.Class == class && target != nil && *target == want {
+			found = append(found, cell.Coordinate.proto())
+		}
+	}
+	return found
+}
+
+func sortedIDs(s fakeStore) []string {
+	ids := make([]string, 0, len(s))
+	for id := range s {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
 }
 
 // liveVersion is the version a reader can observe, zero when the cell holds no
@@ -126,16 +183,16 @@ func checkExpectation(cell *fakeCell, expected *int64) error {
 // written against an environment identity the runtime will ask for. It is the
 // store's own rule rather than the CLI's, so the fake has to hold it for a
 // command test to be exercising the refusal a real provider makes.
-func (s *deployFakeProviderServer) addressable(ctx context.Context, req *envv1.SetValueRequest) error {
-	environment := req.GetCoordinate().GetEnvironment()
+func (s *deployFakeProviderServer) addressable(ctx context.Context, at *envv1.Coordinate, class deploymentsv1.Environment_Class) error {
+	environment := at.GetEnvironment()
 	if environment == "" {
 		return nil
 	}
-	if req.GetClass() != deploymentsv1.Environment_CLASS_PREVIEW {
+	if class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"production has a single environment, so %q addresses no value a production function could read", environment))
 	}
-	resp, err := s.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{Slug: req.GetCoordinate().GetSlug()})
+	resp, err := s.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{Slug: at.GetSlug()})
 	if err != nil {
 		return err
 	}
@@ -160,7 +217,7 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetV
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.addressable(ctx, req); err != nil {
+	if err := s.addressable(ctx, req.GetCoordinate(), req.GetClass()); err != nil {
 		return nil, err
 	}
 	store, err := loadFakeStore()
@@ -168,29 +225,104 @@ func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetV
 		return nil, err
 	}
 
-	id := fakeCoordinateID(req.GetClass(), req.GetCoordinate())
-	cell := store[id]
+	cell := store[fakeCoordinateID(req.GetClass(), req.GetCoordinate())]
 	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
 		return nil, err
 	}
-	if cell == nil {
-		c := req.GetCoordinate()
-		cell = &fakeCell{
-			Class:      req.GetClass(),
-			Coordinate: fakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()},
-		}
-		store[id] = cell
+	if target := cell.target(); target != nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"%s/%s is a reference to %s/%s, which is where that value is edited: that cell is a reference, and a reference has no value of its own",
+			cell.Coordinate.Slug, cell.Coordinate.Key, target.Slug, target.Key))
 	}
-
-	cell.Deleted = false
-	cell.Versions = append(cell.Versions, fakeCellData{Value: req.GetValue(), Ts: 1_700_000_000 + int64(len(cell.Versions))})
-	if len(cell.Versions) > fakeHistoryWindow {
-		cell.Versions = cell.Versions[len(cell.Versions)-fakeHistoryWindow:]
-	}
-	if err := saveFakeStore(store); err != nil {
+	if err := store.write(req.GetClass(), req.GetCoordinate(), fakeCellData{Value: req.GetValue()}); err != nil {
 		return nil, err
 	}
 	return &envv1.SetValueResponse{Metadata: store.metadata(req.GetClass(), req.GetCoordinate())}, nil
+}
+
+// write records one new version of a cell, whatever the cell now holds, and
+// saves the store. It is the fake's whole write path so a value and a reference
+// share one version sequence, as they do in the real store.
+func (s fakeStore) write(class deploymentsv1.Environment_Class, at *envv1.Coordinate, data fakeCellData) error {
+	id := fakeCoordinateID(class, at)
+	cell := s[id]
+	if cell == nil {
+		cell = &fakeCell{Class: class, Coordinate: coordinateOf(at)}
+		s[id] = cell
+	}
+	data.Ts = 1_700_000_000 + int64(len(cell.Versions))
+	cell.Deleted = false
+	cell.Versions = append(cell.Versions, data)
+	if len(cell.Versions) > fakeHistoryWindow {
+		cell.Versions = cell.Versions[len(cell.Versions)-fakeHistoryWindow:]
+	}
+	return saveFakeStore(s)
+}
+
+func coordinateOf(c *envv1.Coordinate) fakeCoordinate {
+	return fakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()}
+}
+
+// SetReference mirrors the real store's write-path enforcement: a reference
+// points at a value, never at another reference and never at a cell others
+// already read, so a chain can neither loop nor deepen.
+func (s *deployFakeProviderServer) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	if err := s.addressable(ctx, req.GetCoordinate(), req.GetClass()); err != nil {
+		return nil, err
+	}
+	store, err := loadFakeStore()
+	if err != nil {
+		return nil, err
+	}
+
+	at, target := req.GetCoordinate(), req.GetTarget()
+	deepens := func(reason string) error {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"%s: a reference may only point at a value, never at another reference", reason))
+	}
+	if target.GetEnvironment() != "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"a reference resolves against %s's class-wide value; %q is an environment of the project holding the reference", target.GetKey(), target.GetEnvironment()))
+	}
+	if coordinateOf(at) == coordinateOf(target) {
+		return nil, deepens(describeCoordinate(at) + " would reference itself")
+	}
+
+	pointedAt := store[fakeCoordinateID(req.GetClass(), target)]
+	if pointedAt.target() != nil {
+		return nil, deepens(describeCoordinate(target) + " is itself a reference")
+	}
+	if pointedAt.liveVersion() == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf(
+			"%s holds no value to reference: no value is set there", describeCoordinate(target)))
+	}
+	if consumers := store.referencesTo(req.GetClass(), at); len(consumers) > 0 {
+		return nil, deepens(describeCoordinate(at) + " is referenced by " + describeCoordinate(consumers[0]))
+	}
+
+	cell := store[fakeCoordinateID(req.GetClass(), at)]
+	if err := checkExpectation(cell, req.ExpectedVersion); err != nil {
+		return nil, err
+	}
+	pointer := coordinateOf(target)
+	if err := store.write(req.GetClass(), at, fakeCellData{Target: &pointer}); err != nil {
+		return nil, err
+	}
+	return &envv1.SetReferenceResponse{Metadata: store.metadata(req.GetClass(), at)}, nil
+}
+
+func (s *deployFakeProviderServer) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
+	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	store, err := loadFakeStore()
+	if err != nil {
+		return nil, err
+	}
+	return &envv1.ListReferencesResponse{References: store.referencesTo(req.GetClass(), req.GetCoordinate())}, nil
 }
 
 func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envv1.ListValuesRequest) (*envv1.ListValuesResponse, error) {
@@ -202,14 +334,8 @@ func (s *deployFakeProviderServer) ListValues(ctx context.Context, req *envv1.Li
 		return nil, err
 	}
 
-	ids := make([]string, 0, len(store))
-	for id := range store {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-
 	resp := &envv1.ListValuesResponse{}
-	for _, id := range ids {
+	for _, id := range sortedIDs(store) {
 		cell := store[id]
 		if cell.Class != req.GetClass() || cell.Coordinate.Slug != req.GetSlug() {
 			continue
@@ -236,8 +362,9 @@ func (s *deployFakeProviderServer) GetValue(ctx context.Context, req *envv1.GetV
 	}
 	resp := &envv1.GetValueResponse{Found: true, Metadata: metadata}
 	if req.GetReveal() {
-		versions := store[fakeCoordinateID(req.GetClass(), req.GetCoordinate())].Versions
-		resp.Value = versions[len(versions)-1].Value
+		if resp.Value, err = store.resolve(req.GetClass(), store[fakeCoordinateID(req.GetClass(), req.GetCoordinate())]); err != nil {
+			return nil, err
+		}
 	}
 	return resp, nil
 }
@@ -261,11 +388,11 @@ func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envv1.
 		if metadata == nil {
 			continue
 		}
-		versions := store[fakeCoordinateID(req.GetClass(), c)].Versions
-		resp.Values = append(resp.Values, &envv1.RevealedValue{
-			Metadata: metadata,
-			Value:    versions[len(versions)-1].Value,
-		})
+		value, err := store.resolve(req.GetClass(), store[fakeCoordinateID(req.GetClass(), c)])
+		if err != nil {
+			return nil, err
+		}
+		resp.Values = append(resp.Values, &envv1.RevealedValue{Metadata: metadata, Value: value})
 	}
 	return resp, nil
 }

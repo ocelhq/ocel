@@ -325,6 +325,20 @@ func (r *Runner) DeleteValue(ctx context.Context, req *envv1.DeleteValueRequest)
 	return r.vars.DeleteValue(ctx, req)
 }
 
+func (r *Runner) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars.SetReference(ctx, req)
+}
+
+func (r *Runner) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
+	if r.vars == nil {
+		return nil, ErrVarsUnavailable
+	}
+	return r.vars.ListReferences(ctx, req)
+}
+
 func (r *Runner) ListVersions(ctx context.Context, req *envv1.ListVersionsRequest) (*envv1.ListVersionsResponse, error) {
 	if r.vars == nil {
 		return nil, ErrVarsUnavailable

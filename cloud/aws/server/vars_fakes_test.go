@@ -93,6 +93,9 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 
 	pk, _ := in.ExpressionAttributeValues[":pk"].(*ddbtypes.AttributeValueMemberS)
 	prefix, _ := in.ExpressionAttributeValues[":prefix"].(*ddbtypes.AttributeValueMemberS)
+	if in.IndexName != nil {
+		return f.queryIndex(in), nil
+	}
 
 	var sks []string
 	for sk := range f.items[pk.Value] {
@@ -107,6 +110,24 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 		out.Items = append(out.Items, f.items[pk.Value][sk])
 	}
 	return out, nil
+}
+
+// queryIndex answers a read of the reverse-lookup index, sparse the way the
+// real one is: a row carrying neither index attribute is not in it at all.
+// Callers hold f.mu.
+func (f *fakeDynamo) queryIndex(in *dynamodb.QueryInput) *dynamodb.QueryOutput {
+	gsi1pk, _ := in.ExpressionAttributeValues[":pk"].(*ddbtypes.AttributeValueMemberS)
+	gsi1sk, _ := in.ExpressionAttributeValues[":sk"].(*ddbtypes.AttributeValueMemberS)
+
+	out := &dynamodb.QueryOutput{}
+	for _, sks := range f.items {
+		for _, item := range sks {
+			if keyOf(item, "gsi1pk") == gsi1pk.Value && keyOf(item, "gsi1sk") == gsi1sk.Value {
+				out.Items = append(out.Items, item)
+			}
+		}
+	}
+	return out
 }
 
 func (f *fakeDynamo) TransactWriteItems(_ context.Context, in *dynamodb.TransactWriteItemsInput, _ ...func(*dynamodb.Options)) (*dynamodb.TransactWriteItemsOutput, error) {

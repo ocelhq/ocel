@@ -46,6 +46,12 @@ const (
 	// EnvVarsServiceDeleteValueProcedure is the fully-qualified name of the EnvVarsService's
 	// DeleteValue RPC.
 	EnvVarsServiceDeleteValueProcedure = "/env.v1.EnvVarsService/DeleteValue"
+	// EnvVarsServiceSetReferenceProcedure is the fully-qualified name of the EnvVarsService's
+	// SetReference RPC.
+	EnvVarsServiceSetReferenceProcedure = "/env.v1.EnvVarsService/SetReference"
+	// EnvVarsServiceListReferencesProcedure is the fully-qualified name of the EnvVarsService's
+	// ListReferences RPC.
+	EnvVarsServiceListReferencesProcedure = "/env.v1.EnvVarsService/ListReferences"
 	// EnvVarsServiceListVersionsProcedure is the fully-qualified name of the EnvVarsService's
 	// ListVersions RPC.
 	EnvVarsServiceListVersionsProcedure = "/env.v1.EnvVarsService/ListVersions"
@@ -73,6 +79,15 @@ type EnvVarsServiceClient interface {
 	// left in place: history is an audit record of what the value once was,
 	// and deleting the value does not unmake that.
 	DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error)
+	// SetReference points a cell at a value owned elsewhere, so a credential
+	// is set once and consumed in many places rather than copied into each.
+	// The cell then holds an address: resolution is a read-time follow, never
+	// background synchronisation, so a consumer cannot hold a stale copy.
+	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
+	// ListReferences answers what points at a cell, so the blast radius of an
+	// edit is visible before the edit. It is served by the store's one
+	// secondary index, populated on reference items alone.
+	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
 	// ListVersions reads one cell's change history, newest first, bounded by
 	// the window each write prunes to. It is metadata only, for the same
 	// reason ListValues is: history answers when a value changed, and a
@@ -123,6 +138,18 @@ func NewEnvVarsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(envVarsServiceMethods.ByName("DeleteValue")),
 			connect.WithClientOptions(opts...),
 		),
+		setReference: connect.NewClient[v1.SetReferenceRequest, v1.SetReferenceResponse](
+			httpClient,
+			baseURL+EnvVarsServiceSetReferenceProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("SetReference")),
+			connect.WithClientOptions(opts...),
+		),
+		listReferences: connect.NewClient[v1.ListReferencesRequest, v1.ListReferencesResponse](
+			httpClient,
+			baseURL+EnvVarsServiceListReferencesProcedure,
+			connect.WithSchema(envVarsServiceMethods.ByName("ListReferences")),
+			connect.WithClientOptions(opts...),
+		),
 		listVersions: connect.NewClient[v1.ListVersionsRequest, v1.ListVersionsResponse](
 			httpClient,
 			baseURL+EnvVarsServiceListVersionsProcedure,
@@ -134,12 +161,14 @@ func NewEnvVarsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // envVarsServiceClient implements EnvVarsServiceClient.
 type envVarsServiceClient struct {
-	setValue     *connect.Client[v1.SetValueRequest, v1.SetValueResponse]
-	listValues   *connect.Client[v1.ListValuesRequest, v1.ListValuesResponse]
-	getValue     *connect.Client[v1.GetValueRequest, v1.GetValueResponse]
-	revealValues *connect.Client[v1.RevealValuesRequest, v1.RevealValuesResponse]
-	deleteValue  *connect.Client[v1.DeleteValueRequest, v1.DeleteValueResponse]
-	listVersions *connect.Client[v1.ListVersionsRequest, v1.ListVersionsResponse]
+	setValue       *connect.Client[v1.SetValueRequest, v1.SetValueResponse]
+	listValues     *connect.Client[v1.ListValuesRequest, v1.ListValuesResponse]
+	getValue       *connect.Client[v1.GetValueRequest, v1.GetValueResponse]
+	revealValues   *connect.Client[v1.RevealValuesRequest, v1.RevealValuesResponse]
+	deleteValue    *connect.Client[v1.DeleteValueRequest, v1.DeleteValueResponse]
+	setReference   *connect.Client[v1.SetReferenceRequest, v1.SetReferenceResponse]
+	listReferences *connect.Client[v1.ListReferencesRequest, v1.ListReferencesResponse]
+	listVersions   *connect.Client[v1.ListVersionsRequest, v1.ListVersionsResponse]
 }
 
 // SetValue calls env.v1.EnvVarsService.SetValue.
@@ -187,6 +216,24 @@ func (c *envVarsServiceClient) DeleteValue(ctx context.Context, req *v1.DeleteVa
 	return nil, err
 }
 
+// SetReference calls env.v1.EnvVarsService.SetReference.
+func (c *envVarsServiceClient) SetReference(ctx context.Context, req *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error) {
+	response, err := c.setReference.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
+// ListReferences calls env.v1.EnvVarsService.ListReferences.
+func (c *envVarsServiceClient) ListReferences(ctx context.Context, req *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error) {
+	response, err := c.listReferences.CallUnary(ctx, connect.NewRequest(req))
+	if response != nil {
+		return response.Msg, err
+	}
+	return nil, err
+}
+
 // ListVersions calls env.v1.EnvVarsService.ListVersions.
 func (c *envVarsServiceClient) ListVersions(ctx context.Context, req *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error) {
 	response, err := c.listVersions.CallUnary(ctx, connect.NewRequest(req))
@@ -218,6 +265,15 @@ type EnvVarsServiceHandler interface {
 	// left in place: history is an audit record of what the value once was,
 	// and deleting the value does not unmake that.
 	DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error)
+	// SetReference points a cell at a value owned elsewhere, so a credential
+	// is set once and consumed in many places rather than copied into each.
+	// The cell then holds an address: resolution is a read-time follow, never
+	// background synchronisation, so a consumer cannot hold a stale copy.
+	SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error)
+	// ListReferences answers what points at a cell, so the blast radius of an
+	// edit is visible before the edit. It is served by the store's one
+	// secondary index, populated on reference items alone.
+	ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error)
 	// ListVersions reads one cell's change history, newest first, bounded by
 	// the window each write prunes to. It is metadata only, for the same
 	// reason ListValues is: history answers when a value changed, and a
@@ -264,6 +320,18 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 		connect.WithSchema(envVarsServiceMethods.ByName("DeleteValue")),
 		connect.WithHandlerOptions(opts...),
 	)
+	envVarsServiceSetReferenceHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceSetReferenceProcedure,
+		svc.SetReference,
+		connect.WithSchema(envVarsServiceMethods.ByName("SetReference")),
+		connect.WithHandlerOptions(opts...),
+	)
+	envVarsServiceListReferencesHandler := connect.NewUnaryHandlerSimple(
+		EnvVarsServiceListReferencesProcedure,
+		svc.ListReferences,
+		connect.WithSchema(envVarsServiceMethods.ByName("ListReferences")),
+		connect.WithHandlerOptions(opts...),
+	)
 	envVarsServiceListVersionsHandler := connect.NewUnaryHandlerSimple(
 		EnvVarsServiceListVersionsProcedure,
 		svc.ListVersions,
@@ -282,6 +350,10 @@ func NewEnvVarsServiceHandler(svc EnvVarsServiceHandler, opts ...connect.Handler
 			envVarsServiceRevealValuesHandler.ServeHTTP(w, r)
 		case EnvVarsServiceDeleteValueProcedure:
 			envVarsServiceDeleteValueHandler.ServeHTTP(w, r)
+		case EnvVarsServiceSetReferenceProcedure:
+			envVarsServiceSetReferenceHandler.ServeHTTP(w, r)
+		case EnvVarsServiceListReferencesProcedure:
+			envVarsServiceListReferencesHandler.ServeHTTP(w, r)
 		case EnvVarsServiceListVersionsProcedure:
 			envVarsServiceListVersionsHandler.ServeHTTP(w, r)
 		default:
@@ -311,6 +383,14 @@ func (UnimplementedEnvVarsServiceHandler) RevealValues(context.Context, *v1.Reve
 
 func (UnimplementedEnvVarsServiceHandler) DeleteValue(context.Context, *v1.DeleteValueRequest) (*v1.DeleteValueResponse, error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.DeleteValue is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) SetReference(context.Context, *v1.SetReferenceRequest) (*v1.SetReferenceResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.SetReference is not implemented"))
+}
+
+func (UnimplementedEnvVarsServiceHandler) ListReferences(context.Context, *v1.ListReferencesRequest) (*v1.ListReferencesResponse, error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("env.v1.EnvVarsService.ListReferences is not implemented"))
 }
 
 func (UnimplementedEnvVarsServiceHandler) ListVersions(context.Context, *v1.ListVersionsRequest) (*v1.ListVersionsResponse, error) {

@@ -116,7 +116,12 @@ type ValueMetadata struct {
 	UpdatedAt int64 `protobuf:"varint,3,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// size is the plaintext's length in bytes, so a listing can show that a
 	// value is present and roughly how big without disclosing it.
-	Size          int64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	Size int64 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	// target is the cell this one references, and is absent for a cell holding
+	// a value of its own. The other fields stay this row's own either way: what
+	// a reference borrows is the plaintext, not the row, so its version is the
+	// one a write against the pointer must expect and its size is zero.
+	Target        *Coordinate `protobuf:"bytes,5,opt,name=target,proto3,oneof" json:"target,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -177,6 +182,13 @@ func (x *ValueMetadata) GetSize() int64 {
 		return x.Size
 	}
 	return 0
+}
+
+func (x *ValueMetadata) GetTarget() *Coordinate {
+	if x != nil {
+		return x.Target
+	}
+	return nil
 }
 
 // VersionEntry is one entry of a cell's change history. It carries no
@@ -1009,6 +1021,259 @@ func (x *DeleteValueResponse) GetDeleted() bool {
 	return false
 }
 
+type SetReferenceRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
+	// coordinate is the cell that will hold the reference; target is the cell it
+	// will read. target names its own slug, which is how a value owned by
+	// another project is consumed, and it addresses that project's class-wide
+	// value: a named environment belongs to the project holding it, and means
+	// nothing in the target's namespace.
+	Coordinate *Coordinate `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	Target     *Coordinate `protobuf:"bytes,5,opt,name=target,proto3" json:"target,omitempty"`
+	// expected_version is read exactly as SetValue reads it, against the cell
+	// that will hold the reference — the pointer's own version, never the
+	// target's.
+	ExpectedVersion *int64 `protobuf:"varint,6,opt,name=expected_version,json=expectedVersion,proto3,oneof" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
+}
+
+func (x *SetReferenceRequest) Reset() {
+	*x = SetReferenceRequest{}
+	mi := &file_env_v1_vars_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetReferenceRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetReferenceRequest) ProtoMessage() {}
+
+func (x *SetReferenceRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_env_v1_vars_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetReferenceRequest.ProtoReflect.Descriptor instead.
+func (*SetReferenceRequest) Descriptor() ([]byte, []int) {
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *SetReferenceRequest) GetOptions() []byte {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *SetReferenceRequest) GetProtocolVersion() string {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return ""
+}
+
+func (x *SetReferenceRequest) GetClass() v1.Environment_Class {
+	if x != nil {
+		return x.Class
+	}
+	return v1.Environment_Class(0)
+}
+
+func (x *SetReferenceRequest) GetCoordinate() *Coordinate {
+	if x != nil {
+		return x.Coordinate
+	}
+	return nil
+}
+
+func (x *SetReferenceRequest) GetTarget() *Coordinate {
+	if x != nil {
+		return x.Target
+	}
+	return nil
+}
+
+func (x *SetReferenceRequest) GetExpectedVersion() int64 {
+	if x != nil && x.ExpectedVersion != nil {
+		return *x.ExpectedVersion
+	}
+	return 0
+}
+
+type SetReferenceResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Metadata      *ValueMetadata         `protobuf:"bytes,1,opt,name=metadata,proto3" json:"metadata,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SetReferenceResponse) Reset() {
+	*x = SetReferenceResponse{}
+	mi := &file_env_v1_vars_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SetReferenceResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SetReferenceResponse) ProtoMessage() {}
+
+func (x *SetReferenceResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_env_v1_vars_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SetReferenceResponse.ProtoReflect.Descriptor instead.
+func (*SetReferenceResponse) Descriptor() ([]byte, []int) {
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *SetReferenceResponse) GetMetadata() *ValueMetadata {
+	if x != nil {
+		return x.Metadata
+	}
+	return nil
+}
+
+type ListReferencesRequest struct {
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
+	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
+	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
+	// coordinate is the value being asked about, not the reference: the answer
+	// is what points here.
+	Coordinate    *Coordinate `protobuf:"bytes,4,opt,name=coordinate,proto3" json:"coordinate,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListReferencesRequest) Reset() {
+	*x = ListReferencesRequest{}
+	mi := &file_env_v1_vars_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListReferencesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListReferencesRequest) ProtoMessage() {}
+
+func (x *ListReferencesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_env_v1_vars_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListReferencesRequest.ProtoReflect.Descriptor instead.
+func (*ListReferencesRequest) Descriptor() ([]byte, []int) {
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *ListReferencesRequest) GetOptions() []byte {
+	if x != nil {
+		return x.Options
+	}
+	return nil
+}
+
+func (x *ListReferencesRequest) GetProtocolVersion() string {
+	if x != nil {
+		return x.ProtocolVersion
+	}
+	return ""
+}
+
+func (x *ListReferencesRequest) GetClass() v1.Environment_Class {
+	if x != nil {
+		return x.Class
+	}
+	return v1.Environment_Class(0)
+}
+
+func (x *ListReferencesRequest) GetCoordinate() *Coordinate {
+	if x != nil {
+		return x.Coordinate
+	}
+	return nil
+}
+
+type ListReferencesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// references are the cells reading this value, sorted. It is the whole
+	// answer: a reference may only point at a value, so nothing sits behind one
+	// of these reading the same value at a second remove.
+	References    []*Coordinate `protobuf:"bytes,1,rep,name=references,proto3" json:"references,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ListReferencesResponse) Reset() {
+	*x = ListReferencesResponse{}
+	mi := &file_env_v1_vars_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ListReferencesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ListReferencesResponse) ProtoMessage() {}
+
+func (x *ListReferencesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_env_v1_vars_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ListReferencesResponse.ProtoReflect.Descriptor instead.
+func (*ListReferencesResponse) Descriptor() ([]byte, []int) {
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *ListReferencesResponse) GetReferences() []*Coordinate {
+	if x != nil {
+		return x.References
+	}
+	return nil
+}
+
 type ListVersionsRequest struct {
 	state           protoimpl.MessageState `protogen:"open.v1"`
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
@@ -1021,7 +1286,7 @@ type ListVersionsRequest struct {
 
 func (x *ListVersionsRequest) Reset() {
 	*x = ListVersionsRequest{}
-	mi := &file_env_v1_vars_proto_msgTypes[15]
+	mi := &file_env_v1_vars_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1033,7 +1298,7 @@ func (x *ListVersionsRequest) String() string {
 func (*ListVersionsRequest) ProtoMessage() {}
 
 func (x *ListVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_env_v1_vars_proto_msgTypes[15]
+	mi := &file_env_v1_vars_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1046,7 +1311,7 @@ func (x *ListVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVersionsRequest.ProtoReflect.Descriptor instead.
 func (*ListVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_env_v1_vars_proto_rawDescGZIP(), []int{15}
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *ListVersionsRequest) GetOptions() []byte {
@@ -1087,7 +1352,7 @@ type ListVersionsResponse struct {
 
 func (x *ListVersionsResponse) Reset() {
 	*x = ListVersionsResponse{}
-	mi := &file_env_v1_vars_proto_msgTypes[16]
+	mi := &file_env_v1_vars_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1099,7 +1364,7 @@ func (x *ListVersionsResponse) String() string {
 func (*ListVersionsResponse) ProtoMessage() {}
 
 func (x *ListVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_env_v1_vars_proto_msgTypes[16]
+	mi := &file_env_v1_vars_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1112,7 +1377,7 @@ func (x *ListVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVersionsResponse.ProtoReflect.Descriptor instead.
 func (*ListVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_env_v1_vars_proto_rawDescGZIP(), []int{16}
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *ListVersionsResponse) GetVersions() []*VersionEntry {
@@ -1132,7 +1397,7 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\x12\x16\n" +
 	"\x06folder\x18\x02 \x01(\tR\x06folder\x12\x10\n" +
 	"\x03key\x18\x03 \x01(\tR\x03key\x12 \n" +
-	"\venvironment\x18\x04 \x01(\tR\venvironment\"\x90\x01\n" +
+	"\venvironment\x18\x04 \x01(\tR\venvironment\"\xcc\x01\n" +
 	"\rValueMetadata\x122\n" +
 	"\n" +
 	"coordinate\x18\x01 \x01(\v2\x12.env.v1.CoordinateR\n" +
@@ -1140,7 +1405,9 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\x03R\aversion\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\x03 \x01(\x03R\tupdatedAt\x12\x12\n" +
-	"\x04size\x18\x04 \x01(\x03R\x04size\"h\n" +
+	"\x04size\x18\x04 \x01(\x03R\x04size\x12/\n" +
+	"\x06target\x18\x05 \x01(\v2\x12.env.v1.CoordinateH\x00R\x06target\x88\x01\x01B\t\n" +
+	"\a_target\"h\n" +
 	"\fVersionEntry\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x1d\n" +
 	"\n" +
@@ -1202,7 +1469,30 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"\x10expected_version\x18\x05 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01B\x13\n" +
 	"\x11_expected_version\"/\n" +
 	"\x13DeleteValueResponse\x12\x18\n" +
-	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xd5\x01\n" +
+	"\adeleted\x18\x01 \x01(\bR\adeleted\"\xb8\x02\n" +
+	"\x13SetReferenceRequest\x12\x18\n" +
+	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
+	"\x05class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x122\n" +
+	"\n" +
+	"coordinate\x18\x04 \x01(\v2\x12.env.v1.CoordinateR\n" +
+	"coordinate\x12*\n" +
+	"\x06target\x18\x05 \x01(\v2\x12.env.v1.CoordinateR\x06target\x12.\n" +
+	"\x10expected_version\x18\x06 \x01(\x03H\x00R\x0fexpectedVersion\x88\x01\x01B\x13\n" +
+	"\x11_expected_version\"I\n" +
+	"\x14SetReferenceResponse\x121\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x15.env.v1.ValueMetadataR\bmetadata\"\xc9\x01\n" +
+	"\x15ListReferencesRequest\x12\x18\n" +
+	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
+	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
+	"\x05class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x122\n" +
+	"\n" +
+	"coordinate\x18\x04 \x01(\v2\x12.env.v1.CoordinateR\n" +
+	"coordinate\"L\n" +
+	"\x16ListReferencesResponse\x122\n" +
+	"\n" +
+	"references\x18\x01 \x03(\v2\x12.env.v1.CoordinateR\n" +
+	"references\"\xd5\x01\n" +
 	"\x13ListVersionsRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
@@ -1211,7 +1501,7 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"coordinate\x18\x04 \x01(\v2\x12.env.v1.CoordinateR\n" +
 	"coordinateJ\x04\b\x05\x10\x06R\x06reveal\"H\n" +
 	"\x14ListVersionsResponse\x120\n" +
-	"\bversions\x18\x01 \x03(\v2\x14.env.v1.VersionEntryR\bversions2\xb1\x03\n" +
+	"\bversions\x18\x01 \x03(\v2\x14.env.v1.VersionEntryR\bversions2\xcd\x04\n" +
 	"\x0eEnvVarsService\x12=\n" +
 	"\bSetValue\x12\x17.env.v1.SetValueRequest\x1a\x18.env.v1.SetValueResponse\x12C\n" +
 	"\n" +
@@ -1219,6 +1509,8 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"\bGetValue\x12\x17.env.v1.GetValueRequest\x1a\x18.env.v1.GetValueResponse\x12I\n" +
 	"\fRevealValues\x12\x1b.env.v1.RevealValuesRequest\x1a\x1c.env.v1.RevealValuesResponse\x12F\n" +
 	"\vDeleteValue\x12\x1a.env.v1.DeleteValueRequest\x1a\x1b.env.v1.DeleteValueResponse\x12I\n" +
+	"\fSetReference\x12\x1b.env.v1.SetReferenceRequest\x1a\x1c.env.v1.SetReferenceResponse\x12O\n" +
+	"\x0eListReferences\x12\x1d.env.v1.ListReferencesRequest\x1a\x1e.env.v1.ListReferencesResponse\x12I\n" +
 	"\fListVersions\x12\x1b.env.v1.ListVersionsRequest\x1a\x1c.env.v1.ListVersionsResponseB/Z-github.com/ocelhq/ocel/pkg/proto/env/v1;envv1b\x06proto3"
 
 var (
@@ -1233,63 +1525,79 @@ func file_env_v1_vars_proto_rawDescGZIP() []byte {
 	return file_env_v1_vars_proto_rawDescData
 }
 
-var file_env_v1_vars_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
+var file_env_v1_vars_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
 var file_env_v1_vars_proto_goTypes = []any{
-	(*Coordinate)(nil),           // 0: env.v1.Coordinate
-	(*ValueMetadata)(nil),        // 1: env.v1.ValueMetadata
-	(*VersionEntry)(nil),         // 2: env.v1.VersionEntry
-	(*SetValueRequest)(nil),      // 3: env.v1.SetValueRequest
-	(*SetValueResponse)(nil),     // 4: env.v1.SetValueResponse
-	(*ListValuesRequest)(nil),    // 5: env.v1.ListValuesRequest
-	(*ListValuesResponse)(nil),   // 6: env.v1.ListValuesResponse
-	(*GetValueRequest)(nil),      // 7: env.v1.GetValueRequest
-	(*GetValueResponse)(nil),     // 8: env.v1.GetValueResponse
-	(*RevealValuesRequest)(nil),  // 9: env.v1.RevealValuesRequest
-	(*Cell)(nil),                 // 10: env.v1.Cell
-	(*RevealValuesResponse)(nil), // 11: env.v1.RevealValuesResponse
-	(*RevealedValue)(nil),        // 12: env.v1.RevealedValue
-	(*DeleteValueRequest)(nil),   // 13: env.v1.DeleteValueRequest
-	(*DeleteValueResponse)(nil),  // 14: env.v1.DeleteValueResponse
-	(*ListVersionsRequest)(nil),  // 15: env.v1.ListVersionsRequest
-	(*ListVersionsResponse)(nil), // 16: env.v1.ListVersionsResponse
-	(v1.Environment_Class)(0),    // 17: deployments.v1.Environment.Class
+	(*Coordinate)(nil),             // 0: env.v1.Coordinate
+	(*ValueMetadata)(nil),          // 1: env.v1.ValueMetadata
+	(*VersionEntry)(nil),           // 2: env.v1.VersionEntry
+	(*SetValueRequest)(nil),        // 3: env.v1.SetValueRequest
+	(*SetValueResponse)(nil),       // 4: env.v1.SetValueResponse
+	(*ListValuesRequest)(nil),      // 5: env.v1.ListValuesRequest
+	(*ListValuesResponse)(nil),     // 6: env.v1.ListValuesResponse
+	(*GetValueRequest)(nil),        // 7: env.v1.GetValueRequest
+	(*GetValueResponse)(nil),       // 8: env.v1.GetValueResponse
+	(*RevealValuesRequest)(nil),    // 9: env.v1.RevealValuesRequest
+	(*Cell)(nil),                   // 10: env.v1.Cell
+	(*RevealValuesResponse)(nil),   // 11: env.v1.RevealValuesResponse
+	(*RevealedValue)(nil),          // 12: env.v1.RevealedValue
+	(*DeleteValueRequest)(nil),     // 13: env.v1.DeleteValueRequest
+	(*DeleteValueResponse)(nil),    // 14: env.v1.DeleteValueResponse
+	(*SetReferenceRequest)(nil),    // 15: env.v1.SetReferenceRequest
+	(*SetReferenceResponse)(nil),   // 16: env.v1.SetReferenceResponse
+	(*ListReferencesRequest)(nil),  // 17: env.v1.ListReferencesRequest
+	(*ListReferencesResponse)(nil), // 18: env.v1.ListReferencesResponse
+	(*ListVersionsRequest)(nil),    // 19: env.v1.ListVersionsRequest
+	(*ListVersionsResponse)(nil),   // 20: env.v1.ListVersionsResponse
+	(v1.Environment_Class)(0),      // 21: deployments.v1.Environment.Class
 }
 var file_env_v1_vars_proto_depIdxs = []int32{
 	0,  // 0: env.v1.ValueMetadata.coordinate:type_name -> env.v1.Coordinate
-	17, // 1: env.v1.SetValueRequest.class:type_name -> deployments.v1.Environment.Class
-	0,  // 2: env.v1.SetValueRequest.coordinate:type_name -> env.v1.Coordinate
-	1,  // 3: env.v1.SetValueResponse.metadata:type_name -> env.v1.ValueMetadata
-	17, // 4: env.v1.ListValuesRequest.class:type_name -> deployments.v1.Environment.Class
-	1,  // 5: env.v1.ListValuesResponse.values:type_name -> env.v1.ValueMetadata
-	17, // 6: env.v1.GetValueRequest.class:type_name -> deployments.v1.Environment.Class
-	0,  // 7: env.v1.GetValueRequest.coordinate:type_name -> env.v1.Coordinate
-	1,  // 8: env.v1.GetValueResponse.metadata:type_name -> env.v1.ValueMetadata
-	17, // 9: env.v1.RevealValuesRequest.class:type_name -> deployments.v1.Environment.Class
-	10, // 10: env.v1.RevealValuesRequest.cells:type_name -> env.v1.Cell
-	12, // 11: env.v1.RevealValuesResponse.values:type_name -> env.v1.RevealedValue
-	1,  // 12: env.v1.RevealedValue.metadata:type_name -> env.v1.ValueMetadata
-	17, // 13: env.v1.DeleteValueRequest.class:type_name -> deployments.v1.Environment.Class
-	0,  // 14: env.v1.DeleteValueRequest.coordinate:type_name -> env.v1.Coordinate
-	17, // 15: env.v1.ListVersionsRequest.class:type_name -> deployments.v1.Environment.Class
-	0,  // 16: env.v1.ListVersionsRequest.coordinate:type_name -> env.v1.Coordinate
-	2,  // 17: env.v1.ListVersionsResponse.versions:type_name -> env.v1.VersionEntry
-	3,  // 18: env.v1.EnvVarsService.SetValue:input_type -> env.v1.SetValueRequest
-	5,  // 19: env.v1.EnvVarsService.ListValues:input_type -> env.v1.ListValuesRequest
-	7,  // 20: env.v1.EnvVarsService.GetValue:input_type -> env.v1.GetValueRequest
-	9,  // 21: env.v1.EnvVarsService.RevealValues:input_type -> env.v1.RevealValuesRequest
-	13, // 22: env.v1.EnvVarsService.DeleteValue:input_type -> env.v1.DeleteValueRequest
-	15, // 23: env.v1.EnvVarsService.ListVersions:input_type -> env.v1.ListVersionsRequest
-	4,  // 24: env.v1.EnvVarsService.SetValue:output_type -> env.v1.SetValueResponse
-	6,  // 25: env.v1.EnvVarsService.ListValues:output_type -> env.v1.ListValuesResponse
-	8,  // 26: env.v1.EnvVarsService.GetValue:output_type -> env.v1.GetValueResponse
-	11, // 27: env.v1.EnvVarsService.RevealValues:output_type -> env.v1.RevealValuesResponse
-	14, // 28: env.v1.EnvVarsService.DeleteValue:output_type -> env.v1.DeleteValueResponse
-	16, // 29: env.v1.EnvVarsService.ListVersions:output_type -> env.v1.ListVersionsResponse
-	24, // [24:30] is the sub-list for method output_type
-	18, // [18:24] is the sub-list for method input_type
-	18, // [18:18] is the sub-list for extension type_name
-	18, // [18:18] is the sub-list for extension extendee
-	0,  // [0:18] is the sub-list for field type_name
+	0,  // 1: env.v1.ValueMetadata.target:type_name -> env.v1.Coordinate
+	21, // 2: env.v1.SetValueRequest.class:type_name -> deployments.v1.Environment.Class
+	0,  // 3: env.v1.SetValueRequest.coordinate:type_name -> env.v1.Coordinate
+	1,  // 4: env.v1.SetValueResponse.metadata:type_name -> env.v1.ValueMetadata
+	21, // 5: env.v1.ListValuesRequest.class:type_name -> deployments.v1.Environment.Class
+	1,  // 6: env.v1.ListValuesResponse.values:type_name -> env.v1.ValueMetadata
+	21, // 7: env.v1.GetValueRequest.class:type_name -> deployments.v1.Environment.Class
+	0,  // 8: env.v1.GetValueRequest.coordinate:type_name -> env.v1.Coordinate
+	1,  // 9: env.v1.GetValueResponse.metadata:type_name -> env.v1.ValueMetadata
+	21, // 10: env.v1.RevealValuesRequest.class:type_name -> deployments.v1.Environment.Class
+	10, // 11: env.v1.RevealValuesRequest.cells:type_name -> env.v1.Cell
+	12, // 12: env.v1.RevealValuesResponse.values:type_name -> env.v1.RevealedValue
+	1,  // 13: env.v1.RevealedValue.metadata:type_name -> env.v1.ValueMetadata
+	21, // 14: env.v1.DeleteValueRequest.class:type_name -> deployments.v1.Environment.Class
+	0,  // 15: env.v1.DeleteValueRequest.coordinate:type_name -> env.v1.Coordinate
+	21, // 16: env.v1.SetReferenceRequest.class:type_name -> deployments.v1.Environment.Class
+	0,  // 17: env.v1.SetReferenceRequest.coordinate:type_name -> env.v1.Coordinate
+	0,  // 18: env.v1.SetReferenceRequest.target:type_name -> env.v1.Coordinate
+	1,  // 19: env.v1.SetReferenceResponse.metadata:type_name -> env.v1.ValueMetadata
+	21, // 20: env.v1.ListReferencesRequest.class:type_name -> deployments.v1.Environment.Class
+	0,  // 21: env.v1.ListReferencesRequest.coordinate:type_name -> env.v1.Coordinate
+	0,  // 22: env.v1.ListReferencesResponse.references:type_name -> env.v1.Coordinate
+	21, // 23: env.v1.ListVersionsRequest.class:type_name -> deployments.v1.Environment.Class
+	0,  // 24: env.v1.ListVersionsRequest.coordinate:type_name -> env.v1.Coordinate
+	2,  // 25: env.v1.ListVersionsResponse.versions:type_name -> env.v1.VersionEntry
+	3,  // 26: env.v1.EnvVarsService.SetValue:input_type -> env.v1.SetValueRequest
+	5,  // 27: env.v1.EnvVarsService.ListValues:input_type -> env.v1.ListValuesRequest
+	7,  // 28: env.v1.EnvVarsService.GetValue:input_type -> env.v1.GetValueRequest
+	9,  // 29: env.v1.EnvVarsService.RevealValues:input_type -> env.v1.RevealValuesRequest
+	13, // 30: env.v1.EnvVarsService.DeleteValue:input_type -> env.v1.DeleteValueRequest
+	15, // 31: env.v1.EnvVarsService.SetReference:input_type -> env.v1.SetReferenceRequest
+	17, // 32: env.v1.EnvVarsService.ListReferences:input_type -> env.v1.ListReferencesRequest
+	19, // 33: env.v1.EnvVarsService.ListVersions:input_type -> env.v1.ListVersionsRequest
+	4,  // 34: env.v1.EnvVarsService.SetValue:output_type -> env.v1.SetValueResponse
+	6,  // 35: env.v1.EnvVarsService.ListValues:output_type -> env.v1.ListValuesResponse
+	8,  // 36: env.v1.EnvVarsService.GetValue:output_type -> env.v1.GetValueResponse
+	11, // 37: env.v1.EnvVarsService.RevealValues:output_type -> env.v1.RevealValuesResponse
+	14, // 38: env.v1.EnvVarsService.DeleteValue:output_type -> env.v1.DeleteValueResponse
+	16, // 39: env.v1.EnvVarsService.SetReference:output_type -> env.v1.SetReferenceResponse
+	18, // 40: env.v1.EnvVarsService.ListReferences:output_type -> env.v1.ListReferencesResponse
+	20, // 41: env.v1.EnvVarsService.ListVersions:output_type -> env.v1.ListVersionsResponse
+	34, // [34:42] is the sub-list for method output_type
+	26, // [26:34] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_env_v1_vars_proto_init() }
@@ -1297,15 +1605,17 @@ func file_env_v1_vars_proto_init() {
 	if File_env_v1_vars_proto != nil {
 		return
 	}
+	file_env_v1_vars_proto_msgTypes[1].OneofWrappers = []any{}
 	file_env_v1_vars_proto_msgTypes[3].OneofWrappers = []any{}
 	file_env_v1_vars_proto_msgTypes[13].OneofWrappers = []any{}
+	file_env_v1_vars_proto_msgTypes[15].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_env_v1_vars_proto_rawDesc), len(file_env_v1_vars_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   17,
+			NumMessages:   21,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

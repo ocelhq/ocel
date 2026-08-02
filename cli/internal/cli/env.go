@@ -52,6 +52,35 @@ func (o envOptions) checkEnvironment() error {
 
 var envOpts envOptions
 
+// envRefOptions addresses the cell a reference reads: the project owning the
+// value, the folder within it, and the name it is set under there. Each is
+// omitted for the common case — the same project, its root, and the same name —
+// so pointing one project's key at another's is one flag.
+//
+// There is no environment component. A named environment is an axis of the
+// project holding the reference; the target project's own environments share
+// nothing with it but their names, so a reference resolves against the target's
+// class-wide value and there is no other address to offer.
+type envRefOptions struct {
+	project string
+	folder  string
+	key     string
+}
+
+var envRefOpts envRefOptions
+
+// target is the coordinate a reference points at, with each component defaulted
+// to the consuming cell's own.
+func (o envRefOptions) target(slug, key string) *envv1.Coordinate {
+	if o.project == "" {
+		o.project = slug
+	}
+	if o.key == "" {
+		o.key = key
+	}
+	return &envv1.Coordinate{Slug: o.project, Folder: o.folder, Key: o.key}
+}
+
 var envCmd = &cobra.Command{
 	Use:   "env",
 	Short: "Manage this project's variable values",
@@ -105,6 +134,33 @@ var envRmCmd = &cobra.Command{
 	},
 }
 
+var envRefCmd = &cobra.Command{
+	Use:   "ref <KEY>",
+	Short: "Point a value at one owned elsewhere instead of copying it",
+	Long: "Point a value at one owned elsewhere instead of copying it.\n\n" +
+		"The cell then holds an address. It is read through to the value behind it every " +
+		"time, so an edit at the source reaches every consumer with nothing to re-run, and " +
+		"the value itself is only ever edited where it is set. Without --target-project the " +
+		"target is this project, which is how one folder reads another's value.",
+	Args: cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
+			return runEnvRef(ctx, cwd, args[0], envOpts, envRefOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		})
+	},
+}
+
+var envRefsCmd = &cobra.Command{
+	Use:   "refs <KEY>",
+	Short: "List what references a value, before an edit changes it",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		return withEnvCommand(cmd, func(ctx context.Context, cwd string) error {
+			return runEnvRefs(ctx, cwd, args[0], envOpts, cmd.OutOrStdout(), cmd.ErrOrStderr())
+		})
+	},
+}
+
 var envHistoryCmd = &cobra.Command{
 	Use:   "history <KEY>",
 	Short: "Show a value's change history, newest first",
@@ -117,14 +173,24 @@ var envHistoryCmd = &cobra.Command{
 }
 
 func init() {
-	for _, c := range []*cobra.Command{envLsCmd, envSetCmd, envGetCmd, envRmCmd, envHistoryCmd} {
+	for _, c := range []*cobra.Command{envLsCmd, envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd, envRefsCmd} {
 		c.Flags().BoolVar(&envOpts.preview, "preview", false, "Act on the preview substrate instead of production")
 		envCmd.AddCommand(c)
 	}
-	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd} {
+	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd, envRefsCmd} {
 		c.Flags().StringVar(&envOpts.folder, "folder", "", "Address the value in this folder (e.g. /checkout) instead of the project root")
+	}
+	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd, envRefCmd} {
 		c.Flags().StringVar(&envOpts.environment, "environment", "", "Address the override this named preview environment holds instead of the class-wide value")
 	}
+	// The target is class-wide, always: a named environment belongs to the
+	// project holding the reference and means nothing in the target's namespace,
+	// so there is no flag to address one. Which cell is being asked about in
+	// `refs` is class-wide for the same reason — nothing can point at an
+	// override, so nothing points at one.
+	envRefCmd.Flags().StringVar(&envRefOpts.project, "target-project", "", "Read the value owned by this project instead of this one")
+	envRefCmd.Flags().StringVar(&envRefOpts.folder, "target-folder", "", "Read the value in this folder of the target project instead of its root")
+	envRefCmd.Flags().StringVar(&envRefOpts.key, "target-key", "", "Read the target's value under this name; without it, the same name")
 	// Reveal is `get`'s alone. History is metadata only: one keystroke that
 	// printed every retained version would keep a rotated-away secret readable
 	// for the whole window.
@@ -339,6 +405,11 @@ func runEnvGet(ctx context.Context, cwd, key string, opts envOptions, stdout, st
 			return nil
 		}
 		m := resp.GetMetadata()
+		if target := m.GetTarget(); target != nil {
+			fmt.Fprintf(stdout, "%s references %s — version %d, pointed %s\n", describeCell(key, opts), describeCoordinate(target), m.GetVersion(), epochOrDash(m.GetUpdatedAt()))
+			fmt.Fprintln(stdout, "Pass --reveal to print the value it reads. Edit that value where it is set.")
+			return nil
+		}
 		fmt.Fprintf(stdout, "%s — version %d, %d bytes, updated %s\n", describeCell(key, opts), m.GetVersion(), m.GetSize(), epochOrDash(m.GetUpdatedAt()))
 		fmt.Fprintln(stdout, "Pass --reveal to print the value.")
 		return nil
@@ -361,6 +432,62 @@ func runEnvRm(ctx context.Context, cwd, key string, opts envOptions, stdout, std
 			return nil
 		}
 		fmt.Fprintf(stdout, "Removed %s.\n", describeCell(key, opts))
+		return nil
+	})
+}
+
+// runEnvRef points a cell at a value owned elsewhere. The cell is checked
+// against what the code declares exactly as a written value is: what a
+// reference changes is where the value comes from, not whether the project has
+// anywhere to put one.
+func runEnvRef(ctx context.Context, cwd, key string, opts envOptions, ref envRefOptions, stdout, stderr io.Writer) error {
+	for _, folder := range []string{opts.folder, ref.folder} {
+		if folder == "" {
+			continue
+		}
+		if err := envgate.ValidateFolder(folder); err != nil {
+			return err
+		}
+	}
+	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+		definitions, err := declaredVariables(ctx, cfg, runner, provider, key, opts, stderr)
+		if err != nil {
+			return err
+		}
+		if err := envgate.CheckWritable(definitions, key, opts.folder); err != nil {
+			return err
+		}
+		target := ref.target(cfg.Slug, key)
+		resp, err := runner.SetReference(ctx, &envv1.SetReferenceRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Class:           envClass(opts),
+			Coordinate:      envCoordinate(cfg.Slug, key, opts),
+			Target:          target,
+		})
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(stdout, "%s now reads %s (version %d).\n", describeCell(key, opts), describeCoordinate(target), resp.GetMetadata().GetVersion())
+		return nil
+	})
+}
+
+// runEnvRefs answers what reads a value, which is the blast radius of editing
+// it. Nothing is inferred from an empty answer: a value nothing references is
+// the ordinary case, not a mistake.
+func runEnvRefs(ctx context.Context, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+		resp, err := runner.ListReferences(ctx, &envv1.ListReferencesRequest{
+			Options:         []byte(provider.Options),
+			ProtocolVersion: manifestbuilder.SchemaVersion,
+			Class:           envClass(opts),
+			Coordinate:      envCoordinate(cfg.Slug, key, opts),
+		})
+		if err != nil {
+			return err
+		}
+		renderReferences(stdout, describeCell(key, opts), resp.GetReferences())
 		return nil
 	})
 }
@@ -394,6 +521,38 @@ func describeCell(key string, opts envOptions) string {
 	return out
 }
 
+// describeCoordinate names a cell that may belong to another project, which is
+// what a reference's two ends have to be told apart by.
+func describeCoordinate(c *envv1.Coordinate) string {
+	out := c.GetSlug() + "/" + c.GetKey()
+	if c.GetFolder() != "" {
+		out += " in " + c.GetFolder()
+	}
+	if c.GetEnvironment() != "" {
+		out += " for " + c.GetEnvironment()
+	}
+	return out
+}
+
+// renderReferences lists what reads a value. It is the whole list: a reference
+// may only point at a value, so nothing sits behind one of these reading the
+// same value at a second remove.
+func renderReferences(stdout io.Writer, cell string, references []*envv1.Coordinate) {
+	if len(references) == 0 {
+		fmt.Fprintf(stdout, "Nothing references %s.\n", cell)
+		return
+	}
+	fmt.Fprintf(stdout, "%d referencing %s:\n", len(references), cell)
+	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, "PROJECT\tKEY\tFOLDER\tENVIRONMENT")
+	for _, c := range references {
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n",
+			c.GetSlug(), c.GetKey(), folderOrRoot(c.GetFolder()), environmentOrClassWide(c.GetEnvironment()))
+	}
+	_ = tw.Flush()
+	fmt.Fprintln(stdout, "\nEditing this value changes what every one of them reads.")
+}
+
 // renderValues lists the cells a project holds. environments is what the
 // provider enumerates, which is what makes an override addressed at a name no
 // longer among them an orphan: the value survives, nothing will ever ask for
@@ -405,7 +564,7 @@ func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments 
 	}
 	orphans := false
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "KEY\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED")
+	fmt.Fprintln(tw, "KEY\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED\tREADS")
 	for _, v := range values {
 		c := v.GetCoordinate()
 		environment := environmentOrClassWide(c.GetEnvironment())
@@ -413,9 +572,16 @@ func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments 
 			environment += " (orphaned)"
 			orphans = true
 		}
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\n",
+		// A reference has no size of its own, so the byte count is left blank
+		// rather than reported as zero, which would read as an empty value.
+		size := fmt.Sprint(v.GetSize())
+		reads := "—"
+		if target := v.GetTarget(); target != nil {
+			size, reads = "—", describeCoordinate(target)
+		}
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
 			c.GetKey(), folderOrRoot(c.GetFolder()), environment,
-			v.GetVersion(), v.GetSize(), epochOrDash(v.GetUpdatedAt()))
+			v.GetVersion(), size, epochOrDash(v.GetUpdatedAt()), reads)
 	}
 	_ = tw.Flush()
 

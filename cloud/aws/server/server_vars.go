@@ -167,17 +167,17 @@ func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string
 //
 // Only a write is guarded. Reading and removing an override whose environment
 // is gone is the whole remedy for one, so neither is ever refused.
-func (s *VarsServer) addressable(ctx context.Context, req *envv1.SetValueRequest) error {
-	environment := req.GetCoordinate().GetEnvironment()
+func (s *VarsServer) addressable(ctx context.Context, options []byte, class deploymentsv1.Environment_Class, at *envv1.Coordinate) error {
+	environment := at.GetEnvironment()
 	if environment == "" {
 		return nil
 	}
-	if req.GetClass() != deploymentsv1.Environment_CLASS_PREVIEW {
+	if class != deploymentsv1.Environment_CLASS_PREVIEW {
 		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
 			"production has a single environment, so %q addresses no value a production function could read", environment))
 	}
 
-	names, err := s.namedEnvironments(ctx, req.GetOptions(), req.GetCoordinate().GetSlug())
+	names, err := s.namedEnvironments(ctx, options, at.GetSlug())
 	if err != nil {
 		return err
 	}
@@ -218,7 +218,7 @@ func previewEnvironments(ctx context.Context, options []byte, slug string) ([]st
 }
 
 func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
-	if err := s.addressable(ctx, req); err != nil {
+	if err := s.addressable(ctx, req.GetOptions(), req.GetClass(), req.GetCoordinate()); err != nil {
 		return nil, err
 	}
 	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
@@ -230,6 +230,41 @@ func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (
 		return nil, varsError(err)
 	}
 	return &envv1.SetValueResponse{Metadata: toMetadataProto(metadata)}, nil
+}
+
+// SetReference points a cell at a value owned elsewhere. It is guarded like
+// any other write to that cell — an override is still only addressable at an
+// environment the provider enumerates — because what varies here is what the
+// cell holds, not where it is.
+func (s *VarsServer) SetReference(ctx context.Context, req *envv1.SetReferenceRequest) (*envv1.SetReferenceResponse, error) {
+	if err := s.addressable(ctx, req.GetOptions(), req.GetClass(), req.GetCoordinate()); err != nil {
+		return nil, err
+	}
+	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	if err != nil {
+		return nil, err
+	}
+	metadata, err := store.SetReference(ctx, toCoordinate(req.GetCoordinate()), toCoordinate(req.GetTarget()), req.ExpectedVersion)
+	if err != nil {
+		return nil, varsError(err)
+	}
+	return &envv1.SetReferenceResponse{Metadata: toMetadataProto(metadata)}, nil
+}
+
+func (s *VarsServer) ListReferences(ctx context.Context, req *envv1.ListReferencesRequest) (*envv1.ListReferencesResponse, error) {
+	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
+	if err != nil {
+		return nil, err
+	}
+	found, err := store.References(ctx, toCoordinate(req.GetCoordinate()))
+	if err != nil {
+		return nil, varsError(err)
+	}
+	resp := &envv1.ListReferencesResponse{References: make([]*envv1.Coordinate, 0, len(found))}
+	for _, c := range found {
+		resp.References = append(resp.References, toCoordinateProto(c))
+	}
+	return resp, nil
 }
 
 func (s *VarsServer) ListValues(ctx context.Context, req *envv1.ListValuesRequest) (*envv1.ListValuesResponse, error) {
@@ -350,20 +385,31 @@ func toCoordinateProto(c vars.Coordinate) *envv1.Coordinate {
 }
 
 func toMetadataProto(m vars.Metadata) *envv1.ValueMetadata {
-	return &envv1.ValueMetadata{
+	out := &envv1.ValueMetadata{
 		Coordinate: toCoordinateProto(m.Coordinate),
 		Version:    m.Version,
 		UpdatedAt:  m.UpdatedAt,
 		Size:       m.Size,
 	}
+	if m.Target.Slug != "" {
+		out.Target = toCoordinateProto(m.Target)
+	}
+	return out
 }
 
 // varsError classifies a store failure so the CLI can tell a lost race from a
 // broken request without matching on message text.
+//
+// A reference refusal is an invalid argument rather than a failed precondition:
+// FAILED_PRECONDITION is how a caller recognises a lost race, and spending it
+// on an address the store's shape forbids would tell a user their value changed
+// under them when nothing of the sort happened.
 func varsError(err error) error {
 	switch {
 	case errors.Is(err, vars.ErrStaleVersion):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
+	case errors.Is(err, vars.ErrWouldDeepen), errors.Is(err, vars.ErrIsReference):
+		return connect.NewError(connect.CodeInvalidArgument, err)
 	case errors.Is(err, vars.ErrNotFound):
 		return connect.NewError(connect.CodeNotFound, err)
 	default:
