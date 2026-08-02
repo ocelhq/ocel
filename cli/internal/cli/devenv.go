@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -15,8 +16,46 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/dotenv"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
+	"github.com/ocelhq/ocel/cli/internal/provision"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
+
+// storeValues builds the map dev's variable store answers declarations from:
+// the control plane's project-level values, overlaid by the dotfile. It is the
+// gate's half of the precedence resolvedEnv states for the child, and it holds
+// only variables — a resource's env and the app folder are the child's
+// environment, not values anything declares.
+//
+// The gate rules before the child exists, so a value that reaches the store
+// after discovery cannot clear a refusal already reported. Both sources have to
+// be here, or a project whose values live in the shared store is refused and
+// told to duplicate them into a file that is one machine's.
+func storeValues(projectEnv, dotfile map[string]string) map[string]string {
+	values := make(map[string]string, len(projectEnv)+len(dotfile))
+	for k, v := range projectEnv {
+		values[k] = v
+	}
+	for k, v := range dotfile {
+		values[k] = v
+	}
+	return values
+}
+
+// resolveProjectConfig fetches the project's identity and shared values once,
+// before discovery, so the gate can rule from them.
+//
+// An unreachable control plane costs the run those shared values and nothing
+// else. Getting started needs no cloud account, so a project whose values are
+// all in the dotfile keeps running offline — it is told what it lost, and the
+// identity is kept so provisioning still has its coordinates.
+func resolveProjectConfig(ctx context.Context, apiURL, token, projectID string, stderr io.Writer) provision.ProjectConfig {
+	cfg, err := fetchProjectConfig(ctx, apiURL, token, projectID)
+	if err == nil {
+		return cfg
+	}
+	fmt.Fprintf(stderr, "could not reach the control plane (%v). This run resolves values from %s alone; anything set with `ocel env set` is not in play.\n", err, dotenv.FileName)
+	return provision.ProjectConfig{ProjectID: projectID, APIURL: apiURL, Token: token}
+}
 
 // devRefusal restates a gate refusal in the terms a dev run can act on. The
 // verdict is the deploy's verdict — same gate, same two-hop rule, same schema

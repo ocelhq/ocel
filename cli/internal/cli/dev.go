@@ -34,6 +34,10 @@ import (
 // unauthenticated CLI without touching the real keyring/credentials file.
 var loadCredentials = credentials.Load
 
+// fetchProjectConfig is a seam over provision.FetchProjectConfig so tests can
+// state what the control plane holds without standing one up.
+var fetchProjectConfig = provision.FetchProjectConfig
+
 // watchDebounce is the quiet period the leader's file watcher waits for
 // after the last change under discovery.paths before re-resolving. It's a
 // var so tests can shorten it.
@@ -126,6 +130,10 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 	dotfile := file.Values
 	reportDotfile(stdout, cfg.Dir, dotfile, file.Unreadable)
 
+	// Fetched once and held for the process: dev's semantic is "resolved at
+	// startup", and the same config answers the run's /sync.
+	projectCfg := resolveProjectConfig(ctx, apiURL, creds.AccessToken, projectID, stderr)
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("start dev server: %w", err)
@@ -135,7 +143,8 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 	devServerAddr := "http://" + addr
 
 	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
-	srv.UseValues(dotfile, envScope(cfg, false))
+	srv.UseProjectConfig(projectCfg)
+	srv.UseValues(storeValues(projectCfg.EnvVars, dotfile), envScope(cfg, false))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()

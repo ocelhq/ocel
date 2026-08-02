@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"runtime"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/credentials"
@@ -709,5 +710,192 @@ func TestReportDotfile_NamesTheUnreadableLinesByNumberOnly(t *testing.T) {
 	reportDotfile(&one, t.TempDir(), nil, []int{4})
 	if !strings.Contains(one.String(), "line 4 is") {
 		t.Errorf("notice = %q, want a singular line reported singularly", one.String())
+	}
+}
+
+// withProjectEnv points the control-plane fetch at envVars for the duration of
+// a test and reports how many times the run asked for it.
+func withProjectEnv(t *testing.T, envVars map[string]string) *atomic.Int32 {
+	t.Helper()
+	var calls atomic.Int32
+	prev := fetchProjectConfig
+	fetchProjectConfig = func(_ context.Context, apiURL, token, projectID string) (provision.ProjectConfig, error) {
+		calls.Add(1)
+		return provision.ProjectConfig{ProjectID: projectID, EnvVars: envVars, APIURL: apiURL, Token: token}, nil
+	}
+	t.Cleanup(func() { fetchProjectConfig = prev })
+	return &calls
+}
+
+// The control plane is one of the three sources a run delivers, so it is one of
+// the three the gate rules from. A team keeping its values in the shared store
+// must not be told to duplicate them into a file that is one machine's.
+func TestRunDev_AControlPlaneValueSatisfiesTheGateWithoutADotfile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	calls := withProjectEnv(t, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+	envDumpPath := filepath.Join(root, "env.out")
+	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
+	}
+
+	dumped, readErr := os.ReadFile(envDumpPath)
+	if readErr != nil {
+		t.Fatalf("read env dump: %v", readErr)
+	}
+	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+	if env["STRIPE_API_KEY"] != "sk_from_store" {
+		t.Errorf("STRIPE_API_KEY = %q, want the control plane's value", env["STRIPE_API_KEY"])
+	}
+
+	if got := calls.Load(); got != 1 {
+		t.Errorf("project config fetched %d times, want exactly 1 for the run", got)
+	}
+}
+
+// The gate now sees both sources, so the precedence between them has to hold at
+// the gate too: the file the developer edits still decides.
+func TestRunDev_TheDotfileStillOutranksTheControlPlaneAtTheGate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	withProjectEnv(t, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, ".env"), "STRIPE_API_KEY=sk_from_file\n")
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+	envDumpPath := filepath.Join(root, "env.out")
+	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runDev err = %v, want exit 7; stderr=%s", err, stderr.String())
+	}
+
+	dumped, readErr := os.ReadFile(envDumpPath)
+	if readErr != nil {
+		t.Fatalf("read env dump: %v", readErr)
+	}
+	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+	if env["STRIPE_API_KEY"] != "sk_from_file" {
+		t.Errorf("STRIPE_API_KEY = %q, want the dotfile's value", env["STRIPE_API_KEY"])
+	}
+}
+
+// Getting started needs no cloud account, so an unreachable control plane costs
+// the run its shared values and nothing else: it says what it lost and gates
+// from the file alone.
+func TestRunDev_FallsBackToTheDotfileWhenTheControlPlaneIsUnreachable(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	prev := fetchProjectConfig
+	fetchProjectConfig = func(context.Context, string, string, string) (provision.ProjectConfig, error) {
+		return provision.ProjectConfig{}, errors.New("dial tcp: connection refused")
+	}
+	t.Cleanup(func() { fetchProjectConfig = prev })
+
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, ".env"), "API_BASE=http://localhost:3000\n")
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_BASE","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+	envDumpPath := filepath.Join(root, "env.out")
+	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runDev err = %v, want exit 7 (offline is not a failure); stderr=%s", err, stderr.String())
+	}
+
+	dumped, readErr := os.ReadFile(envDumpPath)
+	if readErr != nil {
+		t.Fatalf("read env dump: %v", readErr)
+	}
+	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+	if env["API_BASE"] != "http://localhost:3000" {
+		t.Errorf("API_BASE = %q, want the dotfile's value", env["API_BASE"])
+	}
+
+	notice := stdout.String() + stderr.String()
+	if !strings.Contains(notice, dotenv.FileName) || !strings.Contains(notice, "connection refused") {
+		t.Errorf("output = %q, want a warning naming what was unreachable and that only %s is in play", notice, dotenv.FileName)
+	}
+}
+
+// `ocel run` shares the gate, so it shares the sources the gate rules from.
+func TestRunRun_AControlPlaneValueSatisfiesTheGateWithoutADotfile(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	withProjectEnv(t, map[string]string{"STRIPE_API_KEY": "sk_from_store"})
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+
+	envDumpPath := filepath.Join(root, "env.out")
+	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+
+	var stdout, stderr syncBuffer
+	err := runRun(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runRun err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
+	}
+
+	dumped, readErr := os.ReadFile(envDumpPath)
+	if readErr != nil {
+		t.Fatalf("read env dump: %v", readErr)
+	}
+	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+	if env["STRIPE_API_KEY"] != "sk_from_store" {
+		t.Errorf("STRIPE_API_KEY = %q, want the control plane's value", env["STRIPE_API_KEY"])
 	}
 }

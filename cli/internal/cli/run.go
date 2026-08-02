@@ -111,6 +111,8 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, p
 	}
 	reportDotfile(stdout, cfg.Dir, file.Values, file.Unreadable)
 
+	projectCfg := resolveProjectConfig(ctx, apiURL, creds.AccessToken, projectID, stderr)
+
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		return fmt.Errorf("start dev server: %w", err)
@@ -119,7 +121,8 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, p
 	devServerAddr := "http://" + listener.Addr().String()
 
 	srv := devserver.New(apiURL, creds.AccessToken, projectID, devServerAddr)
-	srv.UseValues(file.Values, envScope(cfg, false))
+	srv.UseProjectConfig(projectCfg)
+	srv.UseValues(storeValues(projectCfg.EnvVars, file.Values), envScope(cfg, false))
 	httpSrv := &http.Server{Handler: srv.Mux()}
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()

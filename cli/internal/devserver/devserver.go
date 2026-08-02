@@ -65,6 +65,11 @@ type Server struct {
 	provision          func(ctx context.Context, cfg provision.ProjectConfig, resources []manifest.Entry) ([]provision.ProvisionedResource, error)
 	fetchLiveValues    func(ctx context.Context, apiURL, token, projectID string, keys []string) (map[string]string, error)
 
+	// cfgMu guards the project config the run resolved before discovery, when
+	// one was installed. Nil for the blob rig, which resolves none.
+	cfgMu      sync.Mutex
+	projectCfg *provision.ProjectConfig
+
 	liveMu   sync.Mutex
 	liveKeys map[string]struct{}
 
@@ -147,6 +152,29 @@ func (s *Server) UseValues(values map[string]string, scope envgate.Scope) {
 	s.scope = scope
 	s.store = newFlatValues(values)
 	s.gate = envgate.New(s.store, scope)
+}
+
+// UseProjectConfig installs the project config the caller already resolved, so
+// /sync provisions against the same one the gate ruled from. The gate rules
+// before discovery and the shared values are among the sources it rules from,
+// so the fetch has to happen there; fetching again here would let the run be
+// provisioned against a config the verdict never saw.
+func (s *Server) UseProjectConfig(cfg provision.ProjectConfig) {
+	s.cfgMu.Lock()
+	defer s.cfgMu.Unlock()
+	s.projectCfg = &cfg
+}
+
+// projectConfig is the installed config, or the server's own fetch when no
+// caller installed one.
+func (s *Server) projectConfig(ctx context.Context) (provision.ProjectConfig, error) {
+	s.cfgMu.Lock()
+	cfg := s.projectCfg
+	s.cfgMu.Unlock()
+	if cfg != nil {
+		return *cfg, nil
+	}
+	return s.fetchProjectConfig(ctx, s.apiURL, s.token, s.projectID)
 }
 
 // variables returns the installed store and gate together, since a caller that
@@ -392,7 +420,7 @@ func (s *Server) handleSync(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	cfg, err := s.fetchProjectConfig(ctx, s.apiURL, s.token, s.projectID)
+	cfg, err := s.projectConfig(ctx)
 	if err != nil {
 		err = fmt.Errorf("fetch project config: %w", err)
 		s.deliverSync(SyncResult{Err: err})
