@@ -2,6 +2,7 @@ package deploy
 
 import (
 	"context"
+	"reflect"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -135,6 +136,11 @@ func TestRollback_PromotesTheTargetUnderAFreshTimestamp(t *testing.T) {
 // the values ride the immutable artifact that identity names, so anything
 // coarser silently restores a different set of values than the one that
 // Deployment shipped with.
+//
+// And re-pointing is the whole of it: the values come back with the artifact,
+// so a rollback reads the promotion history and promotes, consulting no
+// variable store and no record of what versions that Deployment shipped. That
+// is what keeps a finite version history safe to prune.
 func TestRollback_AcrossARotationRePointsAtTheRotatedIdentity(t *testing.T) {
 	fake := &recordingRootStack{
 		history: []edge.HistoryEntry{
@@ -161,6 +167,10 @@ func TestRollback_AcrossARotationRePointsAtTheRotatedIdentity(t *testing.T) {
 	}
 	if got := fake.promotions[0].Builds["web"]; got != "B1~fp2" {
 		t.Errorf("re-promotion Builds[web] = %q, want %q", got, "B1~fp2")
+	}
+	want := []string{"ReconcileRootStack", "History", "Promote"}
+	if !reflect.DeepEqual(fake.calls, want) {
+		t.Errorf("store calls = %v, want %v — a rollback restores baked values from the artifact, so it looks nothing else up", fake.calls, want)
 	}
 }
 
