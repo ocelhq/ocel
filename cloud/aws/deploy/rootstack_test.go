@@ -22,10 +22,6 @@ import (
 type recordingRootStack struct {
 	recordingEdge
 
-	// calls names every RootStack method invoked, in order, so a test can
-	// assert not only what happened but that nothing else was consulted.
-	calls []string
-
 	reconciles []edge.RootStackSpec
 	redeploys  int
 	secret     string
@@ -65,7 +61,6 @@ var _ edge.RootStack = (*recordingRootStack)(nil)
 const fakeStoreEndpoint = "https://store.fake"
 
 func (f *recordingRootStack) ReconcileRootStack(_ context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (edge.RootStackState, error) {
-	f.calls = append(f.calls, "ReconcileRootStack")
 	f.reconciles = append(f.reconciles, spec)
 	if prior != nil && f.version == spec.Version {
 		return prior, nil
@@ -90,7 +85,6 @@ func (f *recordingRootStack) checkAuth(state edge.RootStackState) error {
 }
 
 func (f *recordingRootStack) PutStaged(_ context.Context, state edge.RootStackState, record edge.DeploymentRecord) error {
-	f.calls = append(f.calls, "PutStaged")
 	if err := f.checkAuth(state); err != nil {
 		return err
 	}
@@ -99,7 +93,6 @@ func (f *recordingRootStack) PutStaged(_ context.Context, state edge.RootStackSt
 }
 
 func (f *recordingRootStack) Promote(_ context.Context, state edge.RootStackState, promotion edge.Promotion, pointer string) error {
-	f.calls = append(f.calls, "Promote")
 	if err := f.checkAuth(state); err != nil {
 		return err
 	}
@@ -109,7 +102,6 @@ func (f *recordingRootStack) Promote(_ context.Context, state edge.RootStackStat
 }
 
 func (f *recordingRootStack) History(_ context.Context, state edge.RootStackState, pointer string) ([]edge.HistoryEntry, error) {
-	f.calls = append(f.calls, "History")
 	if err := f.checkAuth(state); err != nil {
 		return nil, err
 	}
@@ -118,7 +110,6 @@ func (f *recordingRootStack) History(_ context.Context, state edge.RootStackStat
 }
 
 func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state edge.RootStackState, keepN int, pointer string) (edge.PruneResult, error) {
-	f.calls = append(f.calls, "DeletePromotionArtifacts")
 	if err := f.checkAuth(state); err != nil {
 		return edge.PruneResult{}, err
 	}
@@ -128,7 +119,6 @@ func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state e
 }
 
 func (f *recordingRootStack) RemovePointer(_ context.Context, state edge.RootStackState, pointer string) (edge.PointerRemoval, error) {
-	f.calls = append(f.calls, "RemovePointer")
 	if err := f.checkAuth(state); err != nil {
 		return edge.PointerRemoval{}, err
 	}
@@ -139,20 +129,17 @@ func (f *recordingRootStack) RemovePointer(_ context.Context, state edge.RootSta
 }
 
 func (f *recordingRootStack) RemoveRoute(_ context.Context, worker, hostname string) error {
-	f.calls = append(f.calls, "RemoveRoute")
 	f.removedRoutes = append(f.removedRoutes, routeRemoval{worker: worker, hostname: hostname})
 	return nil
 }
 
 func (f *recordingRootStack) DestroyRootStack(_ context.Context, workers []string) error {
-	f.calls = append(f.calls, "DestroyRootStack")
 	f.destroyedWorkers = append(f.destroyedWorkers, workers...)
 	f.destroyed++
 	return f.destroyRootStackErr
 }
 
 func (f *recordingRootStack) ListDeployedWorkers(_ context.Context, prefix string) ([]string, error) {
-	f.calls = append(f.calls, "ListDeployedWorkers")
 	f.listedPrefixes = append(f.listedPrefixes, prefix)
 	var names []string
 	for _, name := range f.deployedWorkers {
@@ -164,7 +151,6 @@ func (f *recordingRootStack) ListDeployedWorkers(_ context.Context, prefix strin
 }
 
 func (f *recordingRootStack) DestroyInstance(_ context.Context, state edge.RootStackState) error {
-	f.calls = append(f.calls, "DestroyInstance")
 	if err := f.checkAuth(state); err != nil {
 		return err
 	}

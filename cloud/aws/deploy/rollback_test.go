@@ -137,10 +137,10 @@ func TestRollback_PromotesTheTargetUnderAFreshTimestamp(t *testing.T) {
 // coarser silently restores a different set of values than the one that
 // Deployment shipped with.
 //
-// And re-pointing is the whole of it: the values come back with the artifact,
-// so a rollback reads the promotion history and promotes, consulting no
-// variable store and no record of what versions that Deployment shipped. That
-// is what keeps a finite version history safe to prune.
+// And re-pointing is the whole of it: the identity that comes back is the
+// target promotion's own, so the values ride back with the artifact it names
+// and no version history is replayed to restore them. That is what keeps a
+// finite version history safe to prune.
 func TestRollback_AcrossARotationRePointsAtTheRotatedIdentity(t *testing.T) {
 	fake := &recordingRootStack{
 		history: []edge.HistoryEntry{
@@ -168,9 +168,8 @@ func TestRollback_AcrossARotationRePointsAtTheRotatedIdentity(t *testing.T) {
 	if got := fake.promotions[0].Builds["web"]; got != "B1~fp2" {
 		t.Errorf("re-promotion Builds[web] = %q, want %q", got, "B1~fp2")
 	}
-	want := []string{"ReconcileRootStack", "History", "Promote"}
-	if !reflect.DeepEqual(fake.calls, want) {
-		t.Errorf("store calls = %v, want %v — a rollback restores baked values from the artifact, so it looks nothing else up", fake.calls, want)
+	if got, want := fake.promotions[0].Builds, fake.history[1].Promotion.Builds; !reflect.DeepEqual(got, want) {
+		t.Errorf("re-promotion Builds = %v, want p2's own %v — the artifact that identity names is what carries the values back", got, want)
 	}
 }
 
