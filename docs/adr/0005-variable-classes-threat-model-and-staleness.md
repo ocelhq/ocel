@@ -198,15 +198,13 @@ interact.
   else.
 - **Class-wide → named environment.** A named-environment row is a value, not a
   requirement: the gate holds class-wide cells and named-environment overrides
-  apart, and only the class-wide set produces a verdict
-  (`cli/internal/envgate/envgate.go:25-43,78-86,101-118`). The matrix shows which
-  environments hold an override purely so a cell that reads empty while an
-  override survives is not a lie (`cli/internal/envgate/matrix.go:31-35`). The
-  partition key separates projects *and* env classes, so a value can never be
-  read across the class boundary (`cloud/aws/vars/keys.go:112-120`).
+  apart, and the class-wide set is the only one every run sees. **The amendment
+  below narrows this**: the run that *is* an environment resolves that
+  environment's own overrides too. The partition key separates projects *and* env
+  classes, so a value can never be read across the class boundary
+  (`cloud/aws/vars/keys.go:112-120`).
 
-Consequence: filling a named-environment override never satisfies a required
-cell, and moving a value from the root to a folder never changes which
+Consequence: moving a value from the root to a folder never changes which
 environment it belongs to.
 
 ### What `ocel dev` does differently, and where it is knowingly limited
@@ -257,9 +255,10 @@ environment it belongs to.
 - **Making the staleness bound per-variable.** Rotation latency is an
   operational property of the project, and a per-variable bound multiplies the
   fetches without changing what anyone can reason about (`live.go:21-24`).
-- **Named-environment overrides counting toward the gate.** They would let an
-  override stand in for a class-wide value that nothing else can supply
-  (`cli/internal/envgate/envgate.go:32-38`).
+- **Named-environment overrides counting toward the gate for every run.** They
+  would let one environment's value stand in for the class-wide value every
+  other environment reads. Narrowed by the amendment below: an override counts
+  for the run that is the environment holding it, and for no other.
 
 ## Consequences
 
@@ -334,3 +333,57 @@ the moment it is cheapest to fix. The reason it is not here is consistency —
 dev and deploy currently agree to say nothing, and a notice in only one of them
 is a new divergence. Whoever revisits this should change both surfaces or
 neither. No bead has been filed; this paragraph is the record.
+
+## Amended: an override resolves for the environment holding it, at both read times (2026-08-02)
+
+The orthogonality above stands; what has changed is that the class-wide → named
+environment axis is now *resolved* rather than merely *recorded*. When this ADR
+was written, an override was a row the store held and the matrix displayed, and
+nothing read one — the text said the matrix showed them "purely so a cell that
+reads empty while an override survives is not a lie." That is no longer the
+whole story. Read the two passages it affects — the second bullet of "The two
+override axes are orthogonal", and the Rejected entry on overrides and the gate
+— as narrowed by this section.
+
+**The rule.** A cell resolves from the override the reading environment holds,
+and from the class-wide value where it holds none. Which environment is reading
+is decided once per read time:
+
+- **At deploy**, by the run's own scope. `ocel preview up --name staging` states
+  `staging` (`envgate.Scope.Environment`, set at the `envScope` call site), and
+  the gate reads the class-wide set overlaid with that environment's overrides.
+  Every baked value the build inlines comes from that overlay.
+- **At runtime**, by the coordinate manifest. A preview deploy pins its own
+  identity into `live.Manifest.Environment`; the membrane fetches both addresses
+  in the one query it already makes and prefers the override
+  (`bootstrap.resolved`). Production pins none and reads a single cell per key.
+
+Both read times therefore agree, which is the point: a value is not resolvable
+by one class's delivery mechanism and invisible to another's.
+
+**Two consequences the original text got the wrong way round.**
+
+1. **An override does satisfy the gate — for the run that is that environment.**
+   A required key only `staging` holds a value for is not a gap for `staging`;
+   it is `staging`'s value. Refusing there would refuse the deploy of a branch
+   whose configuration is complete, and would disagree with the live path, which
+   serves that same row. For every *other* run, including every production
+   deploy and any run bound to no environment, an override still counts for
+   nothing — which is the original rejection, intact and narrower.
+2. **The matrix stays class-wide, and its app readout does not.** A cell's `Set`
+   and `Version` are the class-wide value's, because the UI manages every
+   environment's values at once rather than standing in any one of them; the
+   overrides sit beside it. `AppResolution.Missing` is the run's own view and is
+   read from the resolved overlay, so what the UI calls owed and what the deploy
+   refuses on stay one answer.
+
+**What has not changed.** Production has a single environment, so it holds no
+overrides at all: `SetValue` refuses one addressed at a production coordinate,
+and the deploy pins no environment there. An override may only be written
+against an environment identity the provider enumerates, because that identity
+is exactly the key the runtime derives — and the provider holds that rule, not
+the CLI, which can be skipped. An override outlives the removal of the preview
+that read it (`ocel preview rm` removes compute, not values), so a rebuilt
+branch finds the value someone deliberately set; an override whose environment
+is gone is an **orphaned override** — surfaced as such by `ocel env ls` and the
+UI, and removable without the environment coming back.

@@ -233,9 +233,21 @@ staleness bound.
   preview), and the boundary a value can never be read across: the store
   partitions per project *and* per env class, and a function's grant is scoped
   to its own partition. Distinct from a **named environment**, which is an
-  override *within* a class — a value, never a requirement, so filling one never
-  satisfies a required cell. The two override axes (root → folder, class-wide →
-  named environment) are orthogonal.
+  override *within* a class — a value, never a requirement, so it is never what
+  makes a cell required, and it satisfies a run only where that run *is* the
+  environment holding it. Every other run, and every production deploy, resolves
+  the class-wide value as though it were not there. Production has a single
+  environment and therefore holds no overrides at all. The two override axes
+  (root → folder, class-wide → named environment) are orthogonal. See ADR 0005.
+
+- **Orphaned override** — an override whose named environment no longer exists.
+  Values outlive the preview that read them, deliberately: removing a preview
+  removes compute, so a rebuilt branch still finds what someone set for it. What
+  is left when the environment does not come back is a row nothing will ever
+  read, and every surface that lists overrides says so from one rule rather than
+  its own (`envgate.Orphaned`). It is listed and deletable rather than hidden or
+  swept: silently accumulating dead rows is the outcome naming it prevents, and
+  removing one must never require the environment back. _Avoid_: stale, dangling.
 
 - **Variable store** — the per-account, project-partitioned store of variable
   values: ciphertext at rest, unwrapped through the env class's own key, and the
