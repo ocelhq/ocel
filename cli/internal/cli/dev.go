@@ -126,7 +126,7 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 	if err != nil {
 		return err
 	}
-	reportDotfile(stdout, cfg.Dir, file.Values, file.Unreadable, true)
+	reportDotfile(stdout, cfg.Dir, file.Values, true)
 
 	// Fetched once and held for the process: dev's semantic is "resolved at
 	// startup", and the same config answers the run's /sync.
@@ -187,6 +187,7 @@ func resolveOnce(ctx context.Context, srv *devserver.Server, cfg *projectconfig.
 	if err != nil {
 		return nil, err
 	}
+	reportUnreadableLines(stdout, file.Unreadable)
 	srv.UseValues(storeValues(projectEnv, file.Values), envScope(cfg, false))
 	return discoverAndSync(ctx, srv, cfg, file.Values, stdout, stderr)
 }

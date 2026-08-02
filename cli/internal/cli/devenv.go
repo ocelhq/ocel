@@ -212,6 +212,25 @@ func folderLabel(folder string) string {
 	return folder
 }
 
+// reportUnreadableLines names the lines the parser could not read, by number.
+// It runs on every read of the file rather than once per run: a key that stops
+// arriving because an edit broke the line it was on is the moment this is worth
+// saying, and by then the startup notice has scrolled away.
+func reportUnreadableLines(stdout io.Writer, unreadable []int) {
+	if len(unreadable) == 0 {
+		return
+	}
+	numbers := make([]string, 0, len(unreadable))
+	for _, line := range unreadable {
+		numbers = append(numbers, strconv.Itoa(line))
+	}
+	if len(unreadable) == 1 {
+		fmt.Fprintf(stdout, "%s line %s is not KEY=VALUE and was ignored.\n", dotenv.FileName, numbers[0])
+		return
+	}
+	fmt.Fprintf(stdout, "%s lines %s are not KEY=VALUE and were ignored.\n", dotenv.FileName, strings.Join(numbers, ", "))
+}
+
 // reportDotfile states what resolving from a file costs, at the moment it is
 // done, because none of it is visible from the code that reads the values.
 // Collaboration disappears — a shared store is one project's answer, a file is
@@ -229,18 +248,7 @@ func folderLabel(folder string) string {
 // It is told from key names and line numbers, never values: this is the one
 // file whose contents nothing else may see, so the notice about it cannot be
 // what prints them.
-func reportDotfile(stdout io.Writer, dir string, values map[string]string, unreadable []int, watched bool) {
-	if len(unreadable) > 0 {
-		numbers := make([]string, 0, len(unreadable))
-		for _, line := range unreadable {
-			numbers = append(numbers, strconv.Itoa(line))
-		}
-		if len(unreadable) == 1 {
-			fmt.Fprintf(stdout, "%s line %s is not KEY=VALUE and was ignored.\n", dotenv.FileName, numbers[0])
-		} else {
-			fmt.Fprintf(stdout, "%s lines %s are not KEY=VALUE and were ignored.\n", dotenv.FileName, strings.Join(numbers, ", "))
-		}
-	}
+func reportDotfile(stdout io.Writer, dir string, values map[string]string, watched bool) {
 	if len(values) == 0 {
 		return
 	}

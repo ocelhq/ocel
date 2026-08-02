@@ -590,6 +590,57 @@ export default { slug: "test-app" };
 	}
 }
 
+// A line the parser cannot read costs the run that key. Reported only at
+// startup, an edit that introduces one re-resolves silently and the developer
+// is left with a value that stopped arriving for no stated reason.
+func TestRunDev_Leader_AnEditThatIntroducesAnUnreadableLineSaysSo(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	prevDebounce := watchDebounce
+	watchDebounce = 20 * time.Millisecond
+	defer func() { watchDebounce = prevDebounce }()
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default { slug: "test-app" };
+`)
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"API_TOKEN","class":"VARIABLE_CLASS_PLAIN","required":true}`))
+	writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\n")
+
+	leaderCtx, cancelLeader := context.WithCancel(context.Background())
+	defer cancelLeader()
+
+	var leaderStdout, leaderStderr syncBuffer
+	leaderDone := make(chan error, 1)
+	go func() {
+		leaderDone <- runDev(leaderCtx, nil, root, []string{"sleep", "10"}, &leaderStdout, &leaderStderr, strings.NewReader(""))
+	}()
+
+	waitForLockfile(t, root)
+
+	// The watch is established after the startup resolve, so the edit is
+	// re-applied until it lands rather than raced against it.
+	waitForOutputAfter(t, &leaderStdout, "line 2", func() {
+		writeFile(t, filepath.Join(root, dotenv.FileName), "API_TOKEN=first\nnot a pair\n")
+	})
+
+	cancelLeader()
+	select {
+	case <-leaderDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("leader runDev did not exit after cancellation")
+	}
+}
+
 func TestRunDev_Follower_LeaderDisconnects_StopsChildPrintsMessageAndExitsNonZero(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("uses a POSIX shell fixture command")
@@ -785,6 +836,22 @@ func waitForEnvValue(t *testing.T, path, key, want string) {
 }
 
 // waitForOutput polls until buf holds want.
+// waitForOutputAfter runs edit until want appears, for an effect a watch has
+// to be established to see: the watch comes up while the run is still
+// resolving, so a single edit can land before anything is watching for it.
+func waitForOutputAfter(t *testing.T, buf *syncBuffer, want string, edit func()) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		edit()
+		if strings.Contains(buf.String(), want) {
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("output = %q, never contained %q", buf.String(), want)
+}
+
 func waitForOutput(t *testing.T, buf *syncBuffer, want string) {
 	t.Helper()
 	deadline := time.Now().Add(10 * time.Second)

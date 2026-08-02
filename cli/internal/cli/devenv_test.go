@@ -222,7 +222,7 @@ func TestDevRefusal_IsNeverGivenAValueItCouldPrint(t *testing.T) {
 // so the notice about it cannot be the thing that prints them.
 func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	var quiet bytes.Buffer
-	reportDotfile(&quiet, t.TempDir(), nil, nil, true)
+	reportDotfile(&quiet, t.TempDir(), nil, true)
 	if quiet.Len() != 0 {
 		t.Errorf("reportDotfile wrote %q for a run with no dotfile values, want nothing", quiet.String())
 	}
@@ -233,7 +233,7 @@ func TestReportDotfile_StatesWhatTheFileCostsAndPrintsNoValue(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	reportDotfile(&out, dir, map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}, nil, true)
+	reportDotfile(&out, dir, map[string]string{"API_TOKEN": "sk-live-must-not-appear", "DATABASE_URL": "postgres://secret"}, true)
 	got := out.String()
 
 	for _, want := range []string{"API_TOKEN", "DATABASE_URL", dotenv.FileName} {
@@ -266,7 +266,7 @@ func TestReportDotfile_SaysWhetherThisRunWatchesTheFile(t *testing.T) {
 	values := map[string]string{"API_TOKEN": "x"}
 
 	var watched bytes.Buffer
-	reportDotfile(&watched, t.TempDir(), values, nil, true)
+	reportDotfile(&watched, t.TempDir(), values, true)
 	if got := watched.String(); !strings.Contains(got, "re-resolves this run") {
 		t.Errorf("notice = %q, want it to say an edit re-resolves the running `ocel dev`", got)
 	}
@@ -275,7 +275,7 @@ func TestReportDotfile_SaysWhetherThisRunWatchesTheFile(t *testing.T) {
 	}
 
 	var once bytes.Buffer
-	reportDotfile(&once, t.TempDir(), values, nil, false)
+	reportDotfile(&once, t.TempDir(), values, false)
 	if got := once.String(); !strings.Contains(got, "read once, at startup") {
 		t.Errorf("notice = %q, want a run with no watcher to still say the file is read once", got)
 	}
@@ -286,7 +286,7 @@ func TestReportDotfile_SaysWhetherThisRunWatchesTheFile(t *testing.T) {
 // is how a secret reaches a public repository.
 func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 	var out bytes.Buffer
-	reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, nil, true)
+	reportDotfile(&out, t.TempDir(), map[string]string{"API_TOKEN": "x"}, true)
 
 	if got := out.String(); !strings.Contains(got, ".gitignore") {
 		t.Errorf("notice = %q, want it to say the file is not ignored by git", got)
@@ -300,7 +300,7 @@ func TestReportDotfile_WarnsWhenTheFileIsNotIgnored(t *testing.T) {
 		t.Fatalf("write .gitignore: %v", err)
 	}
 	var reincluded bytes.Buffer
-	reportDotfile(&reincluded, dir, map[string]string{"API_TOKEN": "x"}, nil, true)
+	reportDotfile(&reincluded, dir, map[string]string{"API_TOKEN": "x"}, true)
 	if got := reincluded.String(); !strings.Contains(got, ".gitignore") {
 		t.Errorf("notice = %q, want the warning when a later line re-includes the file", got)
 	}
@@ -718,9 +718,9 @@ func TestRunRun_RefusesWhenTheDotfileDoesNotHoldARequiredValue(t *testing.T) {
 // A line the parser could not read is neither Ocel's nor the framework's, so it
 // is reported by number — and only by number, since a line that assigns nothing
 // is the shape a pasted token has.
-func TestReportDotfile_NamesTheUnreadableLinesByNumberOnly(t *testing.T) {
+func TestReportUnreadableLines_NamesThemByNumberOnly(t *testing.T) {
 	var out bytes.Buffer
-	reportDotfile(&out, t.TempDir(), nil, []int{2, 5}, true)
+	reportUnreadableLines(&out, []int{2, 5})
 	got := out.String()
 
 	for _, want := range []string{dotenv.FileName, "2, 5"} {
@@ -730,7 +730,7 @@ func TestReportDotfile_NamesTheUnreadableLinesByNumberOnly(t *testing.T) {
 	}
 
 	var one bytes.Buffer
-	reportDotfile(&one, t.TempDir(), nil, []int{4}, true)
+	reportUnreadableLines(&one, []int{4})
 	if !strings.Contains(one.String(), "line 4 is") {
 		t.Errorf("notice = %q, want a singular line reported singularly", one.String())
 	}
