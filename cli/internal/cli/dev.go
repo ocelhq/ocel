@@ -18,7 +18,6 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
-	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -234,19 +233,6 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 
 	reportLiveValues(stdout, syncResult.LiveKeys)
 	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, appFolder), nil
-}
-
-// generateClientAccessors writes the client accessor into every app of the
-// project. Dev resolves one flat set of values for the whole project, so every
-// app's accessor names the same keys — the per-app divergence a deploy can
-// express is not something dev's dotfile has.
-func generateClientAccessors(cfg *projectconfig.Config, keys []string) error {
-	for _, plan := range appPlans(cfg, nil) {
-		if err := clientenv.GenerateKeys(plan.dir, keys); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // reportLiveValues tells the developer what dev just did differently from a
