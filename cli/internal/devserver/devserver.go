@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"slices"
 	"sort"
@@ -16,8 +17,10 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
+	"github.com/ocelhq/ocel/cli/internal/discovery"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/manifest"
+	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/provision"
 	"github.com/ocelhq/ocel/pkg/proto/buckets/v1/bucketsv1connect"
 	devv1 "github.com/ocelhq/ocel/pkg/proto/dev/v1"
@@ -443,4 +446,33 @@ func (s *Server) bucketResources(buckets []manifest.Entry) []provision.Provision
 		})
 	}
 	return out
+}
+
+// Discover bundles cfg's declaration files and runs them in a node process
+// pointed at this server, which is the only address they can be pointed at:
+// the server holds it, so the run and the handler answering it cannot drift
+// apart. It is the dev half of the discovery pass a deploy makes through
+// deploycollector, and both go through discovery.Run.
+func (s *Server) Discover(ctx context.Context, cfg *projectconfig.Config, stdout, stderr io.Writer) error {
+	files, err := discovery.Discover(cfg.Dir, cfg.Discovery.Paths)
+	if err != nil {
+		return fmt.Errorf("discover resources: %w", err)
+	}
+
+	entry, err := discovery.Bundle(cfg.Dir, files)
+	if err != nil {
+		return fmt.Errorf("bundle discovery entrypoint: %w", err)
+	}
+
+	return discovery.Run(ctx, entry, s.devServerAddr, stdout, stderr)
+}
+
+// Definitions is every variable definition this run declared, as the gate
+// recorded it.
+func (s *Server) Definitions() []*resourcesv1.VariableDefinition {
+	_, gate := s.variables()
+	if gate == nil {
+		return nil
+	}
+	return gate.Definitions()
 }

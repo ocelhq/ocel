@@ -154,13 +154,13 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 	}
 	defer lockfile.Remove(cfg.Dir)
 
-	resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, dotfile, stdout, stderr)
+	resolved, err := discoverAndSync(ctx, srv, cfg, dotfile, stdout, stderr)
 	if err != nil {
 		return err
 	}
 	srv.PushEnv(resolved)
 
-	if err := watchAndReResolve(ctx, srv, cfg, devServerAddr, dotfile, stdout, stderr); err != nil {
+	if err := watchAndReResolve(ctx, srv, cfg, dotfile, stdout, stderr); err != nil {
 		return fmt.Errorf("watch discovery paths: %w", err)
 	}
 
@@ -177,23 +177,9 @@ func runLeader(ctx context.Context, creds credentials.Credentials, apiURL, proje
 // Declare calls into its manifest), waits for the resulting /sync
 // provisioning, and returns the full resolved env — ready to push to
 // followers or apply to the leader's own child.
-func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, devServerAddr string, dotfile map[string]string, stdout, stderr io.Writer) (map[string]string, error) {
-	files, err := discovery.Discover(cfg.Dir, cfg.Discovery.Paths)
-	if err != nil {
-		return nil, fmt.Errorf("discover resources: %w", err)
-	}
-
-	entry, err := discovery.Bundle(cfg.Dir, files)
-	if err != nil {
-		return nil, fmt.Errorf("bundle discovery entrypoint: %w", err)
-	}
-
-	nodeCmd := exec.CommandContext(ctx, "node", entry)
-	nodeCmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+devServerAddr)
-	nodeCmd.Stdout = stdout
-	nodeCmd.Stderr = stderr
-	if err := nodeCmd.Run(); err != nil {
-		return nil, fmt.Errorf("discovery failed: %w", err)
+func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, dotfile map[string]string, stdout, stderr io.Writer) (map[string]string, error) {
+	if err := srv.Discover(ctx, cfg, stdout, stderr); err != nil {
+		return nil, err
 	}
 
 	// The gate is the same one a deploy runs, over dev's own store. It answers
@@ -248,7 +234,7 @@ func reportLiveValues(stdout io.Writer, liveKeys []string) {
 // pushes the freshly resolved env to every connected follower. It returns
 // once the watch is established; re-resolution happens in the background
 // until ctx is done.
-func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, devServerAddr string, dotfile map[string]string, stdout, stderr io.Writer) error {
+func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectconfig.Config, dotfile map[string]string, stdout, stderr io.Writer) error {
 	dirs, err := discovery.Dirs(cfg.Dir, cfg.Discovery.Paths)
 	if err != nil {
 		return fmt.Errorf("resolve watch directories: %w", err)
@@ -256,7 +242,7 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 
 	return watcher.Watch(ctx, dirs, watchDebounce, func() {
 		srv.ResetManifest()
-		resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, dotfile, stdout, stderr)
+		resolved, err := discoverAndSync(ctx, srv, cfg, dotfile, stdout, stderr)
 		if err != nil {
 			if ctx.Err() == nil {
 				fmt.Fprintln(stderr, "re-resolve failed:", err)

@@ -124,7 +124,7 @@ func runStandalone(ctx context.Context, creds credentials.Credentials, apiURL, p
 	go httpSrv.Serve(listener)
 	defer httpSrv.Close()
 
-	resolved, err := discoverAndSync(ctx, srv, cfg, devServerAddr, file.Values, stdout, stderr)
+	resolved, err := discoverAndSync(ctx, srv, cfg, file.Values, stdout, stderr)
 	if err != nil {
 		return err
 	}

@@ -6,8 +6,6 @@ import (
 	"io"
 	"net"
 	"net/http"
-	"os"
-	"os/exec"
 
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -67,12 +65,8 @@ func CollectBundled(ctx context.Context, cfg *projectconfig.Config, gate *envgat
 
 	collectorAddr := "http://" + listener.Addr().String()
 
-	nodeCmd := exec.CommandContext(ctx, "node", "--enable-source-maps", entry)
-	nodeCmd.Env = append(os.Environ(), "OCEL_PHASE=discovery", "OCEL_DEV_SERVER="+collectorAddr)
-	nodeCmd.Stdout = stdout
-	nodeCmd.Stderr = stderr
-	if err := nodeCmd.Run(); err != nil {
-		return nil, fmt.Errorf("discovery failed: %w", err)
+	if err := discovery.Run(ctx, entry, collectorAddr, stdout, stderr); err != nil {
+		return nil, err
 	}
 
 	return c.Snapshot(), nil
