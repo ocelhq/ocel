@@ -23,18 +23,25 @@ import (
 // from ever rendering as some other Deployment's bare build id.
 const identitySeparator = "~"
 
-// DeploymentIdentity identifies one Deployment of one app. Build the value
-// through NewDeploymentIdentity or ParseDeploymentIdentity so its parts are
-// checked once, in one place.
+// DeploymentIdentity identifies one Deployment of one app. Its parts are
+// unexported so NewDeploymentIdentity and ParseDeploymentIdentity are the only
+// ways to obtain one: an identity assembled field-by-field could carry the
+// reserved separator and render as some other Deployment's identity.
 type DeploymentIdentity struct {
-	// BuildID is the framework build's own id — a Next app's routing-manifest
-	// buildId, or a host-minted id for a framework with none.
-	BuildID string
-	// Fingerprint distinguishes Deployments sharing a build: a digest of the
-	// resolved values baked into this one. Empty when nothing is baked, which
-	// renders the identity as the bare build id.
-	Fingerprint string
+	buildID     string
+	fingerprint string
 }
+
+// BuildID is the framework build's own id — a Next app's routing-manifest
+// buildId, or a host-minted id for a framework with none. It keys the
+// static-asset, ISR and edge-bundle prefixes, which Deployments of one build
+// share.
+func (id DeploymentIdentity) BuildID() string { return id.buildID }
+
+// Fingerprint distinguishes Deployments sharing a build: a digest of the
+// resolved values baked into this one. Empty when nothing is baked, which
+// renders the identity as the bare build id.
+func (id DeploymentIdentity) Fingerprint() string { return id.fingerprint }
 
 // DeploymentIdentities maps each app name (ManifestApp.name) to the identity of
 // the Deployment this deploy produces for it. The deploy host assigns these
@@ -53,17 +60,17 @@ func NewDeploymentIdentity(buildID, fingerprint string) (DeploymentIdentity, err
 			return DeploymentIdentity{}, fmt.Errorf("%s %q contains the reserved character %q", label, part, identitySeparator)
 		}
 	}
-	return DeploymentIdentity{BuildID: buildID, Fingerprint: fingerprint}, nil
+	return DeploymentIdentity{buildID: buildID, fingerprint: fingerprint}, nil
 }
 
 // String renders the identity as the single token that keys a Deployment
 // record: the bare build id when nothing is baked, so an identity without a
 // fingerprint is byte-for-byte the build id it came from.
 func (id DeploymentIdentity) String() string {
-	if id.Fingerprint == "" {
-		return id.BuildID
+	if id.fingerprint == "" {
+		return id.buildID
 	}
-	return id.BuildID + identitySeparator + id.Fingerprint
+	return id.buildID + identitySeparator + id.fingerprint
 }
 
 // ParseDeploymentIdentity recovers an identity from its rendered form — how the

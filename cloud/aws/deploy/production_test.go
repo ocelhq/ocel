@@ -849,11 +849,11 @@ func TestAssignIdentities_FrameworkWithNoBuildIDGetsAMintedOne(t *testing.T) {
 	if err != nil {
 		t.Fatalf("assignIdentities: %v", err)
 	}
-	if ids["api"].BuildID == "" {
+	if ids["api"].BuildID() == "" {
 		t.Error("identities[api] carries no build id")
 	}
-	if ids["api"].Fingerprint != "" {
-		t.Errorf("Fingerprint = %q, want empty: nothing is baked yet", ids["api"].Fingerprint)
+	if ids["api"].Fingerprint() != "" {
+		t.Errorf("Fingerprint = %q, want empty: nothing is baked yet", ids["api"].Fingerprint())
 	}
 }
 
@@ -863,7 +863,7 @@ func TestBuildDeploymentRecord_IdentityKeysTheRecordAndTheBuildKeysTheBytes(t *t
 	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 	manifest := nextManifest()
 	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
-	id := DeploymentIdentity{BuildID: "WEB1", Fingerprint: "fp1"}
+	id := fingerprinted("WEB1", "fp1")
 
 	record, err := buildDeploymentRecord(cfg, manifest, app, id, nil)
 	if err != nil {
@@ -888,7 +888,7 @@ func TestBuildDeploymentRecord_IdentityKeysTheRecordAndTheBuildKeysTheBytes(t *t
 func TestBuildDeploymentRecord_IdentityIsWiredAsBuildId(t *testing.T) {
 	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
 	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
-	id := DeploymentIdentity{BuildID: "WEB1", Fingerprint: "fp1"}
+	id := fingerprinted("WEB1", "fp1")
 
 	record, err := buildDeploymentRecord(cfg, nextManifest(), app, id, nil)
 	if err != nil {
@@ -911,7 +911,7 @@ func TestBuildDeploymentRecord_IdentityIsWiredAsBuildId(t *testing.T) {
 // must be the identity, not the build both Deployments of a rotation share.
 func TestFinalizeDeploy_PromotionCarriesRenderedIdentities(t *testing.T) {
 	fake := &recordingRootStack{}
-	id := DeploymentIdentity{BuildID: "b1", Fingerprint: "fp1"}
+	id := fingerprinted("b1", "fp1")
 	results := []appDeployResult{
 		{App: "web", Identity: id, Record: edge.DeploymentRecord{App: "web", Identity: id.String()}},
 	}

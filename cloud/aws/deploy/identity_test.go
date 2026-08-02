@@ -1,6 +1,21 @@
 package deploy
 
-import "testing"
+import (
+	"reflect"
+	"testing"
+)
+
+// An identity assembled field-by-field skips the constructor's checks, so it can
+// render a token that parses back as some other Deployment. Callers outside this
+// package must have no way to assemble one.
+func TestDeploymentIdentity_CannotBeForgedFromOutsideThePackage(t *testing.T) {
+	typ := reflect.TypeOf(DeploymentIdentity{})
+	for i := range typ.NumField() {
+		if f := typ.Field(i); f.IsExported() {
+			t.Errorf("field %s is exported: an identity can be forged by struct literal", f.Name)
+		}
+	}
+}
 
 func TestNewDeploymentIdentity_NoFingerprintIsTheBuildIDVerbatim(t *testing.T) {
 	id, err := NewDeploymentIdentity("WEB1", "")
@@ -17,7 +32,7 @@ func TestNewDeploymentIdentity_FingerprintIsCarriedAlongsideTheBuildID(t *testin
 	if err != nil {
 		t.Fatalf("NewDeploymentIdentity: %v", err)
 	}
-	if id.BuildID != "WEB1" || id.Fingerprint != "abc123" {
+	if id.BuildID() != "WEB1" || id.Fingerprint() != "abc123" {
 		t.Fatalf("identity = %+v, want build id WEB1 and fingerprint abc123", id)
 	}
 	if id.String() == "WEB1" {
@@ -40,8 +55,8 @@ func TestDeploymentIdentity_SameBuildDifferentFingerprintsNeverCollide(t *testin
 
 func TestParseDeploymentIdentity_RoundTripsBothShapes(t *testing.T) {
 	for _, want := range []DeploymentIdentity{
-		{BuildID: "WEB1"},
-		{BuildID: "WEB1", Fingerprint: "abc123"},
+		buildOnly("WEB1"),
+		fingerprinted("WEB1", "abc123"),
 	} {
 		got, err := ParseDeploymentIdentity(want.String())
 		if err != nil {

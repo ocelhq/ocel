@@ -69,9 +69,9 @@ func AppDeployStackName(slug, app string, id DeploymentIdentity) string {
 // id alone named, and a fingerprint can never blur into a build id that carries
 // the delimiter itself. Pure.
 func identityNameSegments(id DeploymentIdentity) string {
-	name := "--" + safeName(id.BuildID)
-	if id.Fingerprint != "" {
-		name += "--" + safeName(id.Fingerprint)
+	name := "--" + safeName(id.BuildID())
+	if id.Fingerprint() != "" {
+		name += "--" + safeName(id.Fingerprint())
 	}
 	return name
 }

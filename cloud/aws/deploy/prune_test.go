@@ -66,7 +66,7 @@ func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
 // a reclaim splits the record key back into its identity and reads the build id
 // off it.
 func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testing.T) {
-	id := DeploymentIdentity{BuildID: "build-1", Fingerprint: "fp1"}
+	id := fingerprinted("build-1", "fp1")
 	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()})
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)

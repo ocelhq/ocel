@@ -105,9 +105,9 @@ func reclaimTargets(slug, env string, removedRecordKeys []string, stackFor func(
 			App:         app,
 			Identity:    id,
 			Stack:       stackFor(app, id),
-			AssetPrefix: appAssetR2Prefix(slug, app, id.BuildID),
-			CachePrefix: appAssetPrefixFor(env, slug, app, id.BuildID),
-			EdgePrefix:  appEdgeR2Prefix(slug, app, id.BuildID),
+			AssetPrefix: appAssetR2Prefix(slug, app, id.BuildID()),
+			CachePrefix: appAssetPrefixFor(env, slug, app, id.BuildID()),
+			EdgePrefix:  appEdgeR2Prefix(slug, app, id.BuildID()),
 		})
 	}
 	return targets, nil

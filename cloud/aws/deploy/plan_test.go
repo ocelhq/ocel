@@ -12,8 +12,14 @@ func prodEnv() *deploymentsv1.Environment {
 
 // buildOnly is a Deployment identity carrying no value fingerprint — what every
 // deploy mints today.
-func buildOnly(buildID string) DeploymentIdentity {
-	return DeploymentIdentity{BuildID: buildID}
+func buildOnly(buildID string) DeploymentIdentity { return fingerprinted(buildID, "") }
+
+func fingerprinted(buildID, fingerprint string) DeploymentIdentity {
+	id, err := NewDeploymentIdentity(buildID, fingerprint)
+	if err != nil {
+		panic(err)
+	}
+	return id
 }
 
 func TestAppDeployStackName_UniquePerDeploy(t *testing.T) {
@@ -61,8 +67,8 @@ func TestAppDeployStackName_BuildOnlyIdentityNamesTheBuildIDsStack(t *testing.T)
 // the one it replaces and must still get a stack of its own.
 func TestAppDeployStackName_FingerprintSeparatesDeploymentsOfOneBuild(t *testing.T) {
 	plain := AppDeployStackName("proj", "web", buildOnly("build1"))
-	a := AppDeployStackName("proj", "web", DeploymentIdentity{BuildID: "build1", Fingerprint: "aaa"})
-	b := AppDeployStackName("proj", "web", DeploymentIdentity{BuildID: "build1", Fingerprint: "bbb"})
+	a := AppDeployStackName("proj", "web", fingerprinted("build1", "aaa"))
+	b := AppDeployStackName("proj", "web", fingerprinted("build1", "bbb"))
 	for _, pair := range [][2]string{{plain, a}, {plain, b}, {a, b}} {
 		if pair[0] == pair[1] {
 			t.Errorf("stack names for distinct identities of one build collided: %q", pair[0])
@@ -73,7 +79,7 @@ func TestAppDeployStackName_FingerprintSeparatesDeploymentsOfOneBuild(t *testing
 // The fingerprint is its own name segment, so it can never blur into a build id
 // that happens to contain the joining hyphen.
 func TestAppDeployStackName_NoCollisionBetweenFingerprintAndHyphenatedBuildID(t *testing.T) {
-	a := AppDeployStackName("proj", "web", DeploymentIdentity{BuildID: "b", Fingerprint: "f"})
+	a := AppDeployStackName("proj", "web", fingerprinted("b", "f"))
 	b := AppDeployStackName("proj", "web", buildOnly("b-f"))
 	if a == b {
 		t.Fatalf("a fingerprinted identity collided with a hyphenated build id: %q", a)
@@ -142,7 +148,7 @@ func TestBuildPlan_PromotionCarriesTheRenderedIdentity(t *testing.T) {
 		Slug: "proj",
 		Apps: []*deploymentsv1.ManifestApp{{Name: "web"}},
 	}
-	id := DeploymentIdentity{BuildID: "buildW", Fingerprint: "fp1"}
+	id := fingerprinted("buildW", "fp1")
 
 	plan, err := BuildPlan(manifest, prodEnv(), "promo1", DeploymentIdentities{"web": id})
 	if err != nil {

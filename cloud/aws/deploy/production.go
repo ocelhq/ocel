@@ -699,7 +699,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	// Only a Next app ever has static output for uploadStaticAssets to have
 	// published; leaving AssetPrefix set for any other app would point at a
 	// prefix nothing was ever uploaded to.
-	record.AssetPrefix = appAssetR2Prefix(manifest.GetSlug(), name, id.BuildID)
+	record.AssetPrefix = appAssetR2Prefix(manifest.GetSlug(), name, id.BuildID())
 
 	routeHostnames, err := recordedRouteHostnames(cfg, manifest, name)
 	if err != nil {
@@ -725,7 +725,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 		record.IsrPrefix = isr.Prefix
 	}
 
-	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetSlug(), name, id.BuildID)
+	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetSlug(), name, id.BuildID())
 	if err != nil {
 		return edge.DeploymentRecord{}, err
 	}
