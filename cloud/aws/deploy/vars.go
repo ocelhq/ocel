@@ -35,7 +35,7 @@ const functionEnvBudgetBytes = 4096
 // by a runtime.
 //
 // The table grant is added only for an app that actually declares a live value,
-// and only over the partitions that project resolves values from. The table is
+// and only over the partitions that app's own values resolve out of. The table is
 // account-global and shared by every project in the class, so an unconditioned
 // Query would let one function enumerate every project's ciphertext; the
 // condition is built from vars.PartitionKey, the same function that builds the
@@ -44,13 +44,13 @@ const functionEnvBudgetBytes = 4096
 // follows a reference, and a point read it never emits is one more thing a
 // compromised function could do.
 //
-// referenced is every other project this one references a value from. A
+// referenced is the other projects this app's own live values resolve out of. A
 // reference is resolved where it is read, so a function reading one reads the
 // owner's partition, and a grant covering only its own would deny at runtime
-// what the store accepted at write. The consequence is that pointing a value at
-// a project this one has never referenced needs a deploy before a live-class
-// read of it works — least privilege is what a value's blast radius is bounded
-// by, and the alternative is granting every project in the class up front.
+// what the store accepted at write. The consequence is that pointing one of
+// these values at a project it has never read before needs a deploy — least
+// privilege is what a value's blast radius is bounded by, and the alternative is
+// granting every project in the class up front.
 func varsReadPolicy(keyARN, tableARN, slug, class string, referenced []string) (string, error) {
 	statements := []any{
 		map[string]any{
@@ -126,6 +126,10 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 // rides in the package rather than the configuration so a handful of
 // coordinates does not compete for the environment budget.
 //
+// Referenced is what those live addresses turn out to resolve through: the
+// other projects owning the values behind them, which is what this app's role
+// has to be granted the partitions of.
+//
 // Fingerprint is the second half of the app's Deployment identity: a digest of
 // the values sealed here, taken over the plaintext rather than the ciphertext
 // the fresh data key makes different on every render. Empty when nothing is
@@ -136,6 +140,7 @@ type appBundle struct {
 	Envelope    string
 	Ciphertext  []byte
 	Live        []byte
+	Referenced  []string
 	Fingerprint string
 }
 
@@ -224,8 +229,9 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 		return appBundle{}, fmt.Errorf("pin %s's live values: %w", app.GetName(), err)
 	}
 
+	referenced := referencedOwners(cfg, slug, keys)
 	if len(values) == 0 {
-		return appBundle{Live: manifest}, nil
+		return appBundle{Live: manifest, Referenced: referenced}, nil
 	}
 
 	key := make([]byte, baked.KeyBytes)
@@ -240,8 +246,43 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 		Envelope:    base64.StdEncoding.EncodeToString(key),
 		Ciphertext:  ciphertext,
 		Live:        manifest,
+		Referenced:  referenced,
 		Fingerprint: fingerprintValues(values),
 	}, nil
+}
+
+// referencedOwners is the other projects one app's live values resolve out of,
+// sorted. It is derived from that app's own manifest rather than from the
+// project's references as a whole, because the grant it feeds is per function
+// role: another app's reference, and a cell no runtime ever reads, are
+// partitions this function has no use for.
+//
+// Both addresses a live key resolves at are looked up — the override this
+// deploy's environment holds, where it has one, and the class-wide value —
+// because either of them may be the cell holding an address rather than a
+// value.
+func referencedOwners(cfg Config, slug string, keys []live.Key) []string {
+	environments := []string{""}
+	if environment := overrideEnvironment(cfg); environment != "" {
+		environments = append(environments, environment)
+	}
+
+	owners := map[string]bool{}
+	for _, key := range keys {
+		for _, environment := range environments {
+			cell := vars.Coordinate{Slug: slug, Folder: key.Folder, Key: key.Key, Environment: environment}
+			if owner := cfg.VarsReferenced[cell]; owner != "" {
+				owners[owner] = true
+			}
+		}
+	}
+
+	out := make([]string, 0, len(owners))
+	for owner := range owners {
+		out = append(out, owner)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // overrideEnvironment is the named environment this deploy's functions resolve

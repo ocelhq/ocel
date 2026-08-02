@@ -231,11 +231,13 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, err
 	}
 
-	// Which other projects this one references decides what its functions may
-	// read: a reference is followed where it is read, so a grant over this
-	// project's partition alone would deny at runtime what the store accepted at
-	// write. It is read here because this is where the store's coordinates are.
-	varsReferenced, err := referencedProjects(ctx, awscfg, deployed, substrateClass, manifest.GetSlug())
+	// Which of this project's cells read another project's value decides what
+	// each app's functions may read: a reference is followed where it is read, so
+	// a grant over this project's partition alone would deny at runtime what the
+	// store accepted at write. It is read here because this is where the store's
+	// coordinates are; which of these cells an app actually reads is the deploy's
+	// to decide, from the manifest it pins.
+	varsReferenced, err := referenceOwners(ctx, awscfg, deployed, substrateClass, manifest.GetSlug())
 	if err != nil {
 		return deploy.Result{}, err
 	}

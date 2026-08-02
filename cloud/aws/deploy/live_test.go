@@ -373,6 +373,46 @@ func decodeEnvelope(t *testing.T, envelope string) []byte {
 	return key
 }
 
+// A grant is per function role, so which partitions it reaches is decided by
+// the cells that app's own manifest names. A reference another app holds, and
+// one held by a cell no runtime reads at all, are partitions this function has
+// no business reaching — the project referencing something somewhere is not the
+// question.
+func TestRenderAppBundle_ReferencesOnlyTheOwnersOfItsOwnLiveValues(t *testing.T) {
+	cfg := previewOf(liveConfig(), "pr-42")
+	cfg.VarsReferenced = map[vars.Coordinate]string{
+		{Slug: "shop", Key: "DB_PASSWORD"}:                                          "platform",
+		{Slug: "shop", Folder: "/web", Key: "SESSION_SECRET", Environment: "pr-42"}: "identity",
+		{Slug: "shop", Key: "ADMIN_TOKEN"}:                                          "ops",
+		{Slug: "shop", Key: "POSTHOG_ID"}:                                           "analytics",
+	}
+
+	app := &deploymentsv1.ManifestApp{
+		Name: "web",
+		Variables: []*deploymentsv1.ManifestVariable{
+			variable("POSTHOG_ID", "ph-123", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			scopedVariable("SESSION_SECRET", "/web", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+			scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+		},
+	}
+	bundle, err := renderAppBundle(cfg, "shop", app)
+	if err != nil {
+		t.Fatalf("renderAppBundle: %v", err)
+	}
+	if want := []string{"identity", "platform"}; !slices.Equal(bundle.Referenced, want) {
+		t.Errorf("Referenced = %v, want %v: the owners behind this app's live cells, at its own environment and class-wide", bundle.Referenced, want)
+	}
+
+	role := appExecutionRole(cfg, "web", nil, bundle)
+	if !slices.Equal(role.VarsReferenced, bundle.Referenced) {
+		t.Errorf("role VarsReferenced = %v, want the app's own owners %v", role.VarsReferenced, bundle.Referenced)
+	}
+	other := appExecutionRole(cfg, "admin", nil, appBundle{Live: []byte(`{"slug":"shop"}`)})
+	if len(other.VarsReferenced) != 0 {
+		t.Errorf("an app reading no reference took %v, want no partition but its own", other.VarsReferenced)
+	}
+}
+
 // A reference is followed where it is read, so a function resolving one reads
 // the owner project's rows. The grant has to cover exactly those partitions and
 // no others: without them the store accepts a write the runtime is then denied,

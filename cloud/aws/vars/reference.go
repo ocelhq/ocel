@@ -148,32 +148,34 @@ func (s *Store) References(ctx context.Context, target Coordinate) ([]Coordinate
 	return out, nil
 }
 
-// ReferencedProjects is every other project this one reads a value from,
-// sorted. It is what a deploy grants its functions the partitions of: a
-// reference is followed where it is read, so a function reading one reads the
-// owner's rows, and a grant over this project alone would deny at runtime what
-// the store accepted at write.
+// ReferenceOwners maps each of a project's cells that reads another project's
+// value to the project owning it. It is what a deploy scopes its functions'
+// read grant by: a reference is followed where it is read, so a function
+// reading one reads the owner's rows, and a grant over this project alone would
+// deny at runtime what the store accepted at write.
+//
+// It answers per cell rather than per project because the grant is per function
+// role. Which partitions one function needs is decided by the cells that
+// function reads, and a project-wide answer would hand every app the partitions
+// another app's values — or a value no runtime reads at all — resolve out of.
+//
+// Cells reading this project's own values are absent: that partition is granted
+// anyway.
 //
 // It costs the one query List already makes, because a reference's target rides
 // in the row rather than behind a second read.
-func (s *Store) ReferencedProjects(ctx context.Context, slug string) ([]string, error) {
+func (s *Store) ReferenceOwners(ctx context.Context, slug string) (map[Coordinate]string, error) {
 	held, err := s.List(ctx, slug)
 	if err != nil {
 		return nil, err
 	}
-	owners := map[string]bool{}
+	owners := map[Coordinate]string{}
 	for _, m := range held {
 		if m.Target.Slug != "" && m.Target.Slug != slug {
-			owners[m.Target.Slug] = true
+			owners[m.Coordinate] = m.Target.Slug
 		}
 	}
-
-	out := make([]string, 0, len(owners))
-	for owner := range owners {
-		out = append(out, owner)
-	}
-	sort.Strings(out)
-	return out, nil
+	return owners, nil
 }
 
 // describeCoordinates names a set of cells in one phrase, sorted, so a refusal

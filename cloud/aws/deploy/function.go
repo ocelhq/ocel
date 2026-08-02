@@ -360,8 +360,8 @@ type executionRole struct {
 	// VarsTableARN is empty for an app that reads no live value, which is how
 	// the store's blast radius stays the set of functions that depend on it.
 	// Slug and VarsClass name the project's own partition the grant is
-	// conditioned on, and VarsReferenced the partitions of the projects it
-	// resolves referenced values from.
+	// conditioned on, and VarsReferenced the partitions of the projects this
+	// app's own live values resolve out of.
 	VarsTableARN   string
 	Slug           string
 	VarsClass      string
@@ -376,7 +376,7 @@ func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bund
 	role := executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
-		role.VarsReferenced = cfg.VarsReferenced
+		role.VarsReferenced = bundle.Referenced
 		role.Slug = cfg.Slug
 		role.VarsClass = cfg.VarsClass
 	}

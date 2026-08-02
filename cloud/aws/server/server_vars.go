@@ -167,15 +167,16 @@ func substrateStore(awscfg aws.Config, deployed bootstrap.Deployed, class string
 	}
 }
 
-// referencedProjects is every other project this one reads a value from, which
-// is what its functions' read grant has to cover. An account whose bootstrap
-// predates the store references nothing, because it holds nothing.
-func referencedProjects(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, class, slug string) ([]string, error) {
+// referenceOwners maps each of a project's cells that reads another project's
+// value to the project owning it, which is what the deploy scopes each app's
+// read grant by. An account whose bootstrap predates the store references
+// nothing, because it holds nothing.
+func referenceOwners(ctx context.Context, awscfg aws.Config, deployed bootstrap.Deployed, class, slug string) (map[vars.Coordinate]string, error) {
 	store := substrateStore(awscfg, deployed, class)
 	if store == nil {
 		return nil, nil
 	}
-	return store.ReferencedProjects(ctx, slug)
+	return store.ReferenceOwners(ctx, slug)
 }
 
 // addressable refuses an override written against an address no runtime will

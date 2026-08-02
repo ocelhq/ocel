@@ -417,11 +417,12 @@ func TestAReferenceTakesTheNextVersionOfTheCellItReplaces(t *testing.T) {
 	}
 }
 
-// What a deploy grants its functions is decided by this: the projects whose
-// rows a reference will make them read. Its own project is not one of them —
-// that partition is granted anyway — and a project referenced twice is named
-// once.
-func TestReferencedProjectsNamesEachOwnerOnce(t *testing.T) {
+// What a deploy grants its functions is decided by this: which cell reads
+// whose rows. It is per cell because the grant is per function, so the answer
+// has to say which of a project's values a partition is needed for. A cell
+// reading this project's own value is not in it — that partition is granted
+// anyway.
+func TestReferenceOwnersNamesTheOwnerOfEachCellThatReadsElsewhere(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	setReferenced(t, store, "sk_live_shared")
 
@@ -438,11 +439,17 @@ func TestReferencedProjectsNamesEachOwnerOnce(t *testing.T) {
 		t.Fatalf("SetReference err = %v", err)
 	}
 
-	owners, err := store.ReferencedProjects(context.Background(), consumer().Slug)
+	owners, err := store.ReferenceOwners(context.Background(), consumer().Slug)
 	if err != nil {
-		t.Fatalf("ReferencedProjects err = %v", err)
+		t.Fatalf("ReferenceOwners err = %v", err)
 	}
-	if len(owners) != 1 || owners[0] != source().Slug {
-		t.Errorf("ReferencedProjects = %v, want just %q", owners, source().Slug)
+	want := map[Coordinate]string{consumer(): source().Slug, second: source().Slug}
+	if len(owners) != len(want) {
+		t.Fatalf("ReferenceOwners = %v, want %v", owners, want)
+	}
+	for cell, owner := range want {
+		if owners[cell] != owner {
+			t.Errorf("ReferenceOwners[%v] = %q, want %q", cell, owners[cell], owner)
+		}
 	}
 }
