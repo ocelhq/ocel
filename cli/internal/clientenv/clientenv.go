@@ -43,11 +43,10 @@ func PublicName(key string) string { return PublicPrefix + key }
 // throwing fallback until an app's tsconfig maps it at the generated file.
 const specifier = "ocel/env/client"
 
-// accessorPath is where the generated accessor lives, relative to the app.
-// The tsconfig entry spells the same path, so the two move together.
+// accessorPath is where the generated accessor lives, relative to the app. The
+// paths entry pointing at it is derived from this (see accessorTarget), so
+// there is one spelling of the path and not two.
 var accessorPath = filepath.Join(".ocel", "env-client.ts")
-
-const accessorTarget = "./.ocel/env-client.ts"
 
 // configFiles are the files a framework reads a paths mapping from, in the
 // order an app is asked for one.
@@ -127,8 +126,11 @@ func mapSpecifier(dir string) error {
 			return err
 		}
 
-		updated, changed := withPathsEntry(string(source), specifier, accessorTarget)
-		if !changed {
+		updated, err := withMapping(path, string(source))
+		if err != nil {
+			return err
+		}
+		if updated == string(source) {
 			return nil
 		}
 		if err := os.WriteFile(path, []byte(updated), 0o644); err != nil {

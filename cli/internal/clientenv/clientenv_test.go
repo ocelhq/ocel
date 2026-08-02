@@ -167,8 +167,12 @@ func TestGenerate_LeavesEveryStartingShapeParseable(t *testing.T) {
 			if err := json.Unmarshal([]byte(updated), &parsed); err != nil {
 				t.Fatalf("tsconfig is no longer parseable (%v):\n%s", err, updated)
 			}
-			if got := parsed.CompilerOptions.Paths[specifier]; len(got) != 1 || got[0] != accessorTarget {
-				t.Errorf("paths[%q] = %v, want [%q]\n%s", specifier, got, accessorTarget, updated)
+			want, err := accessorTarget("")
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := parsed.CompilerOptions.Paths[specifier]; len(got) != 1 || got[0] != want {
+				t.Errorf("paths[%q] = %v, want [%q]\n%s", specifier, got, want, updated)
 			}
 		})
 	}
