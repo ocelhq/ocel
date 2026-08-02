@@ -42,7 +42,7 @@ func recordBuildApp(t *testing.T) *bool {
 	t.Helper()
 	ran := false
 	prev := buildApp
-	buildApp = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) error {
+	buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		ran = true
 		return nil
 	}

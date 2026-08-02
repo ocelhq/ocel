@@ -25,10 +25,16 @@ export async function buildNext(input: AppInput, options: BuildOptions): Promise
   const cmd = resolveCommand(detected?.agent ?? "npm", "run", ["build"]);
   if (!cmd) throw new Error(`ocel: could not resolve a build command for app "${input.name}"`);
 
-  // The Next adapter runs with the app dir as its cwd and can infer neither.
+  // This app's own values go first: the three entries below are the build's,
+  // and no resolved value may take one of their names. The folder is always
+  // written, so a binding inherited from the CLI never answers for this app.
+  // The Next adapter runs with the app dir as its cwd and can infer neither of
+  // the other two.
   await nextRunner.run(cmd.command, cmd.args, input.cwd, {
+    ...input.env,
     OCEL_APP_NAME: input.name,
     OCEL_OUTPUT_DIR: appOutDir(options.outDir, input.name),
+    OCEL_APP_FOLDER: input.folder ?? "",
   });
   process.stderr.write(`ocel: Next app "${input.name}" built\n`);
   return [];

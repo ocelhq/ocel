@@ -58,4 +58,37 @@ describe("buildNext", () => {
 
     expect(env?.OCEL_OUTPUT_DIR).toBe(path.join("/out", "apps", "marketing"));
   });
+
+  // Two apps resolving one key to different values is what folders exist for.
+  // Each build runs under its own environment, so both can inline their own
+  // value and neither is told the other's binding.
+  it("builds each app with its own values and its own folder binding", async () => {
+    const envs: Record<string, Record<string, string> | undefined> = {};
+    nextRunner.run = async (_command, _args, _cwd, e) => void (envs[e?.OCEL_APP_NAME ?? ""] = e);
+
+    for (const [name, folder, value] of [
+      ["storefront", "/storefront", "ph-store"],
+      ["admin", "/admin", "ph-admin"],
+    ]) {
+      const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
+      await buildNext({ name, cwd: dir, folder, env: { POSTHOG_ID: value } }, { outDir: "/out" });
+    }
+
+    expect(envs.storefront?.POSTHOG_ID).toBe("ph-store");
+    expect(envs.storefront?.OCEL_APP_FOLDER).toBe("/storefront");
+    expect(envs.admin?.POSTHOG_ID).toBe("ph-admin");
+    expect(envs.admin?.OCEL_APP_FOLDER).toBe("/admin");
+  });
+
+  // The app the builder detected binds no folder, and a binding inherited from
+  // the CLI's own environment must not answer for the build.
+  it("binds an app that declares no folder to the project root", async () => {
+    const dir = nextApp({ scripts: { build: "next build" }, dependencies: { next: "16" } });
+    let env: Record<string, string> | undefined;
+    nextRunner.run = async (_command, _args, _cwd, e) => void (env = e);
+
+    await buildNext({ name: "web", cwd: dir }, { outDir: "/out" });
+
+    expect(env?.OCEL_APP_FOLDER).toBe("");
+  });
 });

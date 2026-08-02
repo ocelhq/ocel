@@ -2,7 +2,6 @@ package cli
 
 import (
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/envgate"
@@ -57,11 +56,10 @@ func TestAppVariables_OmitsAKeyThisAppCannotRead(t *testing.T) {
 	}
 }
 
-// TestBuildEnv_ExportsOnlyPlaintextValuesEveryAppAgreesOn proves what the app
-// build runs with. One build process serves every app, so a value two apps
-// resolve differently cannot be expressed there at all; and an encrypted-class
-// value has no business in a build process's environment.
-func TestBuildEnv_ExportsOnlyPlaintextValuesEveryAppAgreesOn(t *testing.T) {
+// TestBuildEnv_ExportsOnlyPlaintextValues proves what each app's build runs
+// with: an encrypted-class value has no business in a build process's
+// environment, whatever app it belongs to.
+func TestBuildEnv_ExportsOnlyPlaintextValues(t *testing.T) {
 	variables := map[string][]manifestbuilder.Variable{
 		"admin": {
 			{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"},
@@ -75,49 +73,52 @@ func TestBuildEnv_ExportsOnlyPlaintextValuesEveryAppAgreesOn(t *testing.T) {
 		},
 	}
 
-	env, _ := buildEnv(variables)
-	if got, want := env["SHARED_ID"], "same"; got != want {
-		t.Errorf("SHARED_ID = %q, want %q", got, want)
+	env := buildEnv(variables)
+	if got, want := env["admin"]["SHARED_ID"], "same"; got != want {
+		t.Errorf("admin SHARED_ID = %q, want %q", got, want)
 	}
-	if _, ok := env["POSTHOG_ID"]; ok {
-		t.Errorf("env = %v, must not give one app's value to a build that serves both", env)
+	if _, ok := env["admin"]["STRIPE_API_KEY"]; ok {
+		t.Errorf("admin env = %v, must not carry an encrypted-class value", env["admin"])
 	}
-	if _, ok := env["STRIPE_API_KEY"]; ok {
-		t.Errorf("env = %v, must not carry an encrypted-class value", env)
+	if _, ok := env["storefront"]["STRIPE_API_KEY"]; ok {
+		t.Errorf("storefront env = %v, must not carry an encrypted-class value", env["storefront"])
 	}
 }
 
-// TestBuildEnv_ADivergedKeyIsWarnedAboutRatherThanQuietlyDropped proves the
-// key a shared build cannot express is reported. Dropping it silently moves the
-// failure into the built artifact — a framework that inlines the key emits an
-// unset one — and nothing else on this path fails that far downstream.
-func TestBuildEnv_ADivergedKeyIsWarnedAboutRatherThanQuietlyDropped(t *testing.T) {
+// TestBuildEnv_GivesEachAppItsOwnValueForADivergedKey proves the case folders
+// exist for reaches the build. Each app is built under its own environment, so
+// a key two apps resolve differently is inlinable by both — it is not the
+// build's job to pick one value or to leave the key unset.
+func TestBuildEnv_GivesEachAppItsOwnValueForADivergedKey(t *testing.T) {
 	variables := map[string][]manifestbuilder.Variable{
 		"storefront": {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}},
 		"admin":      {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}},
 	}
 
-	_, warnings := buildEnv(variables)
-	if len(warnings) != 1 {
-		t.Fatalf("warnings = %q, want exactly one, naming the key a shared build cannot export", warnings)
+	env := buildEnv(variables)
+	if got, want := env["storefront"]["POSTHOG_ID"], "ph-store"; got != want {
+		t.Errorf("storefront POSTHOG_ID = %q, want %q", got, want)
 	}
-	for _, want := range []string{"POSTHOG_ID", "admin", "storefront"} {
-		if !strings.Contains(warnings[0], want) {
-			t.Errorf("warning = %q, want it to name %q", warnings[0], want)
-		}
+	if got, want := env["admin"]["POSTHOG_ID"], "ph-admin"; got != want {
+		t.Errorf("admin POSTHOG_ID = %q, want %q", got, want)
 	}
 }
 
-// TestBuildEnv_AKeyEveryAppAgreesOnIsNotWarnedAbout is the counterweight: the
-// warning must describe divergence, not merely the presence of two apps.
-func TestBuildEnv_AKeyEveryAppAgreesOnIsNotWarnedAbout(t *testing.T) {
+// TestBuildEnv_TheRootStandInIsKeyedByNoAppAtAll proves the project that
+// configures no apps still hands its values to the build. Nothing yet knows
+// the name of the app the builder will detect, so its environment travels
+// under no name and the build exports it for whatever it finds.
+func TestBuildEnv_TheRootStandInIsKeyedByNoAppAtAll(t *testing.T) {
 	variables := map[string][]manifestbuilder.Variable{
-		"storefront": {{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"}},
-		"admin":      {{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"}},
+		rootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
 	}
 
-	if _, warnings := buildEnv(variables); len(warnings) != 0 {
-		t.Errorf("warnings = %q, want none for a value every app resolves the same", warnings)
+	env := buildEnv(variables)
+	if _, ok := env[rootApp]; ok {
+		t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
+	}
+	if got, want := env[""]["POSTHOG_ID"], "ph-123"; got != want {
+		t.Errorf("root env POSTHOG_ID = %q, want %q", got, want)
 	}
 }
 

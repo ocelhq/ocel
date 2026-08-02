@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -280,11 +279,7 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 	if prebuilt {
 		fmt.Fprintln(buildOut, "using prebuilt output in .ocel/output")
 	} else {
-		env, warnings := buildEnv(variables)
-		for _, warning := range warnings {
-			fmt.Fprintln(buildOut, "warning: "+warning)
-		}
-		if err := buildApp(ctx, cfg, env, buildOut); err != nil {
+		if err := buildApp(ctx, cfg, buildEnv(variables), buildOut); err != nil {
 			return nil, err
 		}
 	}
@@ -368,59 +363,28 @@ func variablesByApp(variables map[string][]manifestbuilder.Variable, functions [
 	return byApp
 }
 
-// buildEnv is what the app build runs with, and what could not be put there.
-// Only the plaintext class belongs in a build process's environment at all;
-// and one build process serves every app, so a key two apps resolve
-// differently cannot be expressed there and is left out rather than given one
-// app's value.
+// buildEnv is what each app's build runs with: its own plaintext values, keyed
+// by the app the builder will run them for. Only the plaintext class belongs
+// in a build process's environment at all — nothing else is a build's to read.
 //
-// Leaving it out is reported rather than done quietly. The deploy still hands
-// each app its own value, so only a build-time reader is short — and a
-// framework that inlines the key emits an unset one, a failure that would
-// otherwise surface in the artifact instead of at the deploy that caused it.
-func buildEnv(variables map[string][]manifestbuilder.Variable) (map[string]string, []string) {
-	apps := make([]string, 0, len(variables))
-	for app := range variables {
-		apps = append(apps, app)
-	}
-	sort.Strings(apps)
-
-	env := make(map[string]string)
-	setBy := make(map[string]string)
-	diverged := make(map[string][]string)
-	for _, app := range apps {
-		for _, v := range variables[app] {
+// The root stand-in is keyed by no app, because nothing yet knows the name of
+// the app the builder will detect for a project that configures none.
+func buildEnv(variables map[string][]manifestbuilder.Variable) map[string]map[string]string {
+	byApp := make(map[string]map[string]string, len(variables))
+	for app, vars := range variables {
+		env := make(map[string]string)
+		for _, v := range vars {
 			if v.Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
 				continue
 			}
-			prior, seen := env[v.Key]
-			if !seen {
-				env[v.Key], setBy[v.Key] = v.Value, app
-				continue
-			}
-			if prior != v.Value {
-				if len(diverged[v.Key]) == 0 {
-					diverged[v.Key] = []string{setBy[v.Key]}
-				}
-				diverged[v.Key] = append(diverged[v.Key], app)
-			}
+			env[v.Key] = v.Value
 		}
+		if app == rootApp {
+			app = ""
+		}
+		byApp[app] = env
 	}
-
-	keys := make([]string, 0, len(diverged))
-	for key := range diverged {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-
-	warnings := make([]string, 0, len(keys))
-	for _, key := range keys {
-		delete(env, key)
-		warnings = append(warnings, fmt.Sprintf(
-			"%s resolves to a different value for %s. One build process serves them all, so it is left out of the build environment and reads as unset in anything the build inlines. Each app is still deployed with its own value.",
-			key, strings.Join(diverged[key], " and ")))
-	}
-	return env, warnings
+	return byApp
 }
 
 // envScope is what a gate refusal has to name to be actionable: the apps that

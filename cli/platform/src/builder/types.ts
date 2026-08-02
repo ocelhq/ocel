@@ -7,6 +7,17 @@ export interface AppInput {
   entrypoint?: string;
   /** Framework key; when absent it is auto-detected from `cwd`. */
   framework?: string;
+  /**
+   * This app's resolved plaintext values, exported into its own framework
+   * build. Per app rather than per project, so a key two apps resolve
+   * differently is inlinable by both.
+   */
+  env?: Record<string, string>;
+  /**
+   * The variable folder this app binds. The SDK checks it before yielding a
+   * scoped key, so a build that does not state it reads as the project root.
+   */
+  folder?: string;
 }
 
 export interface BuildOptions {

@@ -65,11 +65,17 @@ type builderRequest struct {
 	Apps        []appInput `json:"apps"`
 }
 
+// appInput is one app's build. Env and Folder are what make it this app's
+// build rather than the project's: the builder applies them to that app's
+// framework build alone, so two apps resolving one key differently are each
+// built with their own value under their own binding.
 type appInput struct {
-	Name       string `json:"name"`
-	Cwd        string `json:"cwd"`
-	Entrypoint string `json:"entrypoint,omitempty"`
-	Framework  string `json:"framework,omitempty"`
+	Name       string            `json:"name"`
+	Cwd        string            `json:"cwd"`
+	Entrypoint string            `json:"entrypoint,omitempty"`
+	Framework  string            `json:"framework,omitempty"`
+	Env        map[string]string `json:"env,omitempty"`
+	Folder     string            `json:"folder,omitempty"`
 }
 
 // functionConfig is the config.json the builder writes at the root of each
@@ -124,13 +130,16 @@ func checkVariableNames(vars map[string]string) error {
 }
 
 // builderEnv is the environment the node builder runs under: the CLI's own,
-// then the project's resolved plaintext values — exported before the build
+// then the values of the app nothing configured — exported before the build
 // because that is the only moment a framework can inline one into what it
 // emits — then the entries the build owns. Those go last because exec is
 // last-wins, so no resolved value can repoint the builder even if one reaches
-// here. The folder is always written, so a binding inherited from whatever
-// spawned the CLI never answers for this build.
-func builderEnv(adapterPath, folder string, vars map[string]string) []string {
+// here. A configured app's values travel in the request instead, per app.
+//
+// The builder process binds the project root, always written so a binding
+// inherited from whatever spawned the CLI never answers for this build; only
+// an app's own request entry narrows it.
+func builderEnv(adapterPath string, vars map[string]string) []string {
 	keys := make([]string, 0, len(vars))
 	for key := range vars {
 		keys = append(keys, key)
@@ -141,15 +150,16 @@ func builderEnv(adapterPath, folder string, vars map[string]string) []string {
 	for _, key := range keys {
 		env = append(env, key+"="+vars[key])
 	}
-	return append(env, adapterPathEnv+"="+adapterPath, appFolderEnv+"="+folder)
+	return append(env, adapterPathEnv+"="+adapterPath, appFolderEnv+"=")
 }
 
 // AppFolder is the binding a single process serving every app runs under. It
 // can only state a folder every app agrees on; where two apps bind different
 // ones it states the project root, which leaves an out-of-scope read the named
 // error it already is rather than handing one app the other's scoped values.
-// `ocel dev` spawns one child for the whole project and answers the same way,
-// so the two paths report the binding identically.
+// `ocel dev` spawns one child for the whole project, so this is what it can
+// tell that child; a build spawns one process per app and states each app's
+// own binding instead.
 func AppFolder(apps []projectconfig.App) string {
 	if len(apps) == 0 {
 		return ""
@@ -169,9 +179,11 @@ func AppFolder(apps []projectconfig.App) string {
 // decided by CollectFunctions walking the output afterward, not up front. Builder
 // progress and failure output are forwarded to stderr; a non-zero exit is
 // surfaced as an error so callers can abort before spawning a provider.
-func Build(ctx context.Context, cfg *projectconfig.Config, env map[string]string, stderr io.Writer) error {
-	if err := checkVariableNames(env); err != nil {
-		return err
+func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]map[string]string, stderr io.Writer) error {
+	for _, env := range envByApp {
+		if err := checkVariableNames(env); err != nil {
+			return err
+		}
 	}
 
 	outputDir := filepath.Join(cfg.Dir, scratchDirName, outputDirName)
@@ -198,6 +210,8 @@ func Build(ctx context.Context, cfg *projectconfig.Config, env map[string]string
 			Cwd:        filepath.Join(cfg.Dir, a.Path),
 			Entrypoint: a.Entrypoint,
 			Framework:  a.Framework,
+			Env:        envByApp[a.Name],
+			Folder:     a.Folder,
 		})
 	}
 
@@ -205,7 +219,7 @@ func Build(ctx context.Context, cfg *projectconfig.Config, env map[string]string
 	if err != nil {
 		return fmt.Errorf("marshal build request: %w", err)
 	}
-	return builderExec(ctx, builderPath, builderEnv(platform.AdapterPath(cfg.Dir), AppFolder(cfg.Apps), env), payload, stderr)
+	return builderExec(ctx, builderPath, builderEnv(platform.AdapterPath(cfg.Dir), envByApp[""]), payload, stderr)
 }
 
 // CollectFunctions returns the functions in a project's build output,

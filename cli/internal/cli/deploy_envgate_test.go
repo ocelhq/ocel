@@ -111,7 +111,7 @@ func setUpEnvGateFixtureWith(t *testing.T, definitions, script string) string {
 func stubAppBuildRecorder(t *testing.T, built *bool) {
 	t.Helper()
 	prev := buildApp
-	buildApp = func(context.Context, *projectconfig.Config, map[string]string, io.Writer) error {
+	buildApp = func(context.Context, *projectconfig.Config, map[string]map[string]string, io.Writer) error {
 		*built = true
 		return nil
 	}
@@ -304,11 +304,11 @@ func TestRunDeploy_AFolderNoAppBindsIsAWarningNotARefusal(t *testing.T) {
 	}
 }
 
-// TestRunDeploy_ADivergedBuildValueIsWarnedAboutOnTheBuildOutput proves the one
-// resolved value the shared build cannot carry is named where the deploy's
-// other diagnostics are. Without it the key's absence surfaces only inside the
-// built artifact, which is the wrong layer to discover it in.
-func TestRunDeploy_ADivergedBuildValueIsWarnedAboutOnTheBuildOutput(t *testing.T) {
+// TestRunDeploy_EachAppIsBuiltWithItsOwnDivergedValue proves a key two apps
+// resolve differently reaches both builds. That is what folders exist for, and
+// a build given one app's value — or neither — inlines the wrong thing into
+// the artifact, which is the wrong layer to discover it in.
+func TestRunDeploy_EachAppIsBuiltWithItsOwnDivergedValue(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"]}]`)
 	writeAppsConfig(t, root, `
     { name: "web", path: "apps/web", framework: "express", folder: "/web" },
@@ -316,19 +316,20 @@ func TestRunDeploy_ADivergedBuildValueIsWarnedAboutOnTheBuildOutput(t *testing.T
 	envSet(t, root, "POSTHOG_ID", "ph_web", envOptions{folder: "/web"})
 	envSet(t, root, "POSTHOG_ID", "ph_admin", envOptions{folder: "/admin"})
 
-	built := false
-	stubAppBuildRecorder(t, &built)
+	var got map[string]map[string]string
+	prev := buildApp
+	buildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
+		got = envByApp
+		return nil
+	}
+	t.Cleanup(func() { buildApp = prev })
 
 	var stdout, stderr bytes.Buffer
 	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
-		t.Fatalf("runDeploy err = %v, want divergence to warn, not stop the deploy; stdout=%s", err, stdout.String())
+		t.Fatalf("runDeploy err = %v; stdout=%s", err, stdout.String())
 	}
-	if !built {
-		t.Fatal("the app was never built, so nothing proves what the build was warned about")
-	}
-	out := stdout.String() + stderr.String()
-	if !strings.Contains(out, "POSTHOG_ID") || !strings.Contains(out, "warning") {
-		t.Errorf("output = %q, want a warning naming the key the shared build cannot export", out)
+	if got["web"]["POSTHOG_ID"] != "ph_web" || got["admin"]["POSTHOG_ID"] != "ph_admin" {
+		t.Errorf("build environments = %v, want each app the value it resolved", got)
 	}
 }
 
