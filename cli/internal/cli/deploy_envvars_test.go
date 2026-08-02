@@ -56,6 +56,60 @@ func TestAppVariables_OmitsAKeyThisAppCannotRead(t *testing.T) {
 	}
 }
 
+// TestAppVariables_CarriesClientAccessibilityFromTheDeclaration proves the
+// flag that decides whether a value is inlined into a browser bundle survives
+// the join. Nothing else knows it: resolution answers what a value is, only
+// the declaration answers who may read it.
+func TestAppVariables_CarriesClientAccessibilityFromTheDeclaration(t *testing.T) {
+	definitions := []*resourcesv1.VariableDefinition{
+		{Key: "PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, ClientAccessible: true},
+		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN},
+	}
+	resolved := map[string]envgate.Resolved{
+		"PUBLIC_SITE_URL": {Value: "https://example.com"},
+		"INTERNAL_URL":    {Value: "http://internal"},
+	}
+
+	got := appVariables(definitions, resolved)
+	if len(got) != 2 {
+		t.Fatalf("appVariables = %+v, want both declarations", got)
+	}
+	if !got[0].ClientAccessible {
+		t.Errorf("PUBLIC_SITE_URL = %+v, want it marked client-accessible", got[0])
+	}
+	if got[1].ClientAccessible {
+		t.Errorf("INTERNAL_URL = %+v, want it left server-only", got[1])
+	}
+}
+
+// TestBuildEnv_ExportsAClientValueUnderThePublicPrefixAndNoServerOnlyOne
+// proves the one thing the framework's static replacement needs: a
+// client-accessible value present under the framework's public prefix before
+// the build runs, and nothing else there. A server-only value under that
+// prefix would be inlined into the browser bundle by the framework itself.
+func TestBuildEnv_ExportsAClientValueUnderThePublicPrefixAndNoServerOnlyOne(t *testing.T) {
+	variables := map[string][]manifestbuilder.Variable{
+		"storefront": {
+			{Key: "PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
+			{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
+			{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
+		},
+	}
+
+	env := buildEnv(variables)["storefront"]
+	if got, want := env["NEXT_PUBLIC_PUBLIC_SITE_URL"], "https://example.com"; got != want {
+		t.Errorf("NEXT_PUBLIC_PUBLIC_SITE_URL = %q, want %q", got, want)
+	}
+	if got, want := env["PUBLIC_SITE_URL"], "https://example.com"; got != want {
+		t.Errorf("PUBLIC_SITE_URL = %q, want %q: the server half of a client value is still delivered", got, want)
+	}
+	for _, name := range []string{"NEXT_PUBLIC_INTERNAL_URL", "NEXT_PUBLIC_STRIPE_API_KEY"} {
+		if _, ok := env[name]; ok {
+			t.Errorf("env carries %s; a server-only value under the public prefix is inlined into the browser bundle", name)
+		}
+	}
+}
+
 // TestBuildEnv_ExportsOnlyPlaintextValues proves what each app's build runs
 // with: an encrypted-class value has no business in a build process's
 // environment, whatever app it belongs to.

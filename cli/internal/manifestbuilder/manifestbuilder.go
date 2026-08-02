@@ -57,6 +57,12 @@ type Variable struct {
 	// coordinate a live-class value is fetched by at runtime. Empty is the
 	// project root, the one spelling used everywhere above the store.
 	Folder string
+	// ClientAccessible marks a value the browser may read. It travels with the
+	// resolution because the build is where it matters — the value is handed to
+	// the app build under the framework's public prefix and inlined there — and
+	// never reaches the manifest, which describes what a deployed function is
+	// delivered rather than what a bundle already carries.
+	ClientAccessible bool
 }
 
 // Function is a single collected function unit: the pure input to Build for

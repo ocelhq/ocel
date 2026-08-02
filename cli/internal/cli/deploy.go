@@ -17,6 +17,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/declare"
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/deployresult"
@@ -339,10 +340,11 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 			continue
 		}
 		variables = append(variables, manifestbuilder.Variable{
-			Key:    definition.GetKey(),
-			Class:  definition.GetClass(),
-			Value:  cell.Value,
-			Folder: cell.Folder,
+			Key:              definition.GetKey(),
+			Class:            definition.GetClass(),
+			Value:            cell.Value,
+			Folder:           cell.Folder,
+			ClientAccessible: definition.GetClientAccessible(),
 		})
 	}
 	return variables
@@ -378,6 +380,12 @@ func buildEnv(variables map[string][]manifestbuilder.Variable) map[string]map[st
 				continue
 			}
 			env[v.Key] = v.Value
+			// A client-accessible value is exported a second time, under the
+			// framework's public prefix: that name, and only that name, is what
+			// the framework's static replacement inlines into a browser bundle.
+			if v.ClientAccessible {
+				env[clientenv.PublicName(v.Key)] = v.Value
+			}
 		}
 		if app == rootApp {
 			app = ""
