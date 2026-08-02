@@ -323,3 +323,89 @@ func TestScopedFolders_CarriesEveryFolderEveryDeclarationNames(t *testing.T) {
 		t.Fatalf("ScopedFolders[API_BASE] = %v, want %v: both declarations' folders, once each", got["API_BASE"], want)
 	}
 }
+
+// A live-class value's source is only reachable once the declared keys are
+// known, which is after the gate has ruled — so dev cannot hold one at gate
+// time and refusing for its absence would refuse every project that has one.
+// The store states presence for it instead, and states it without inventing a
+// plaintext: the value is resolved at sync and delivered through the
+// environment.
+func TestCheckEnv_StatesPresenceForALiveKeyItHoldsNoValueFor(t *testing.T) {
+	ctx := context.Background()
+	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+	s.UseValues(map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	msg := declareEnv(t, ts.URL, &resourcesv1.VariableDefinition{
+		Key: "DB_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true,
+	})
+	if len(msg.GetCells()) != 1 || msg.GetCells()[0].GetValue() != "" {
+		t.Fatalf("cells = %v, want one presence cell with no plaintext", msg.GetCells())
+	}
+
+	if err := s.CheckEnv(ctx); err != nil {
+		t.Fatalf("CheckEnv = %v, want nil — a live key is resolved at sync, not from the file", err)
+	}
+
+	store, _ := s.variables()
+	found, err := store.Reveal(ctx, []envgate.Cell{{Key: "DB_PASSWORD"}})
+	if err != nil {
+		t.Fatalf("Reveal: %v", err)
+	}
+	if len(found) != 0 {
+		t.Errorf("Reveal = %v, want nothing: presence is not a value", found)
+	}
+}
+
+// The exemption is the live class's alone. A plain-class key the file does not
+// hold still refuses, or the gate would stop ruling on the one thing it can.
+func TestCheckEnv_StillRefusesAPlainKeyBesideAnExemptLiveOne(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+	s.UseValues(map[string]string{}, envgate.Scope{Apps: []envgate.App{{Name: "web"}}})
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	declareEnv(t, ts.URL,
+		&resourcesv1.VariableDefinition{Key: "DB_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true},
+		&resourcesv1.VariableDefinition{Key: "DATABASE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Required: true},
+	)
+
+	err := s.CheckEnv(context.Background())
+	refusal, ok := err.(*envgate.Refusal)
+	if !ok {
+		t.Fatalf("CheckEnv = %v (%T), want *envgate.Refusal", err, err)
+	}
+	if len(refusal.Problems) != 1 || refusal.Problems[0].GetKey() != "DATABASE_URL" {
+		t.Fatalf("problems = %v, want exactly the plain key named", refusal.Problems)
+	}
+}
+
+// A live key scoped to folders needs a cell per folder, the way a value-backed
+// key does: the gate rules per app over each app's own binding, so a single
+// root cell would leave every scoped app's read unchecked.
+func TestCheckEnv_StatesPresenceForEveryFolderALiveKeyIsScopedTo(t *testing.T) {
+	s := New("https://api.example.com", "tok", "proj_1", "http://127.0.0.1:0")
+	s.UseValues(map[string]string{}, envgate.Scope{
+		Apps: []envgate.App{{Name: "web", Folder: "/web"}, {Name: "admin", Folder: "/admin"}},
+	})
+	ts := httptest.NewServer(s.Mux())
+	defer ts.Close()
+
+	msg := declareEnv(t, ts.URL, &resourcesv1.VariableDefinition{
+		Key: "DB_PASSWORD", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Required: true,
+		Folders: []string{"/web", "/admin"},
+	})
+
+	var folders []string
+	for _, cell := range msg.GetCells() {
+		folders = append(folders, cell.GetFolder())
+	}
+	sort.Strings(folders)
+	if len(folders) != 2 || folders[0] != "/admin" || folders[1] != "/web" {
+		t.Fatalf("folders = %v, want one presence cell per folder in the scope", folders)
+	}
+	if err := s.CheckEnv(context.Background()); err != nil {
+		t.Fatalf("CheckEnv = %v, want nil", err)
+	}
+}

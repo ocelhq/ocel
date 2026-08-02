@@ -899,3 +899,40 @@ func TestRunRun_AControlPlaneValueSatisfiesTheGateWithoutADotfile(t *testing.T) 
 		t.Errorf("STRIPE_API_KEY = %q, want the control plane's value", env["STRIPE_API_KEY"])
 	}
 }
+
+// A live-class key's source is keyed on the keys the run declared, so it can
+// only be read after discovery — after the gate has ruled. Refusing for its
+// absence would refuse every project that has one, so dev exempts it and says
+// what it did instead: the value is resolved once, at sync.
+func TestRunDev_ALiveClassKeyIsNotRefusedForHavingNoLocalValue(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(`{"key":"DB_PASSWORD","class":"VARIABLE_CLASS_SECRET","required":true}`))
+
+	startedPath := filepath.Join(root, "started")
+	appCmd := []string{"sh", "-c", "touch " + startedPath + "; exit 7"}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
+	}
+	if _, statErr := os.Stat(startedPath); statErr != nil {
+		t.Fatalf("the app was not started: %v", statErr)
+	}
+	if !strings.Contains(stdout.String(), "DB_PASSWORD") {
+		t.Errorf("stdout = %q, want the live-value notice to name DB_PASSWORD", stdout.String())
+	}
+}
