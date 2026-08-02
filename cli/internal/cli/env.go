@@ -7,8 +7,6 @@ import (
 	"os"
 	"os/signal"
 	"slices"
-	"sort"
-	"strings"
 	"syscall"
 	"text/tabwriter"
 
@@ -204,24 +202,6 @@ func namedEnvironments(ctx context.Context, runner *providerrunner.Runner, provi
 	return names, nil
 }
 
-// requireNamedEnvironment refuses a write against an environment that does not
-// exist. Only a write: an override whose environment is gone is orphaned, and
-// reading or removing one is the whole remedy for it.
-func requireNamedEnvironment(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, slug, environment string) error {
-	names, err := namedEnvironments(ctx, runner, provider, slug)
-	if err != nil {
-		return err
-	}
-	if slices.Contains(names, environment) {
-		return nil
-	}
-	if len(names) == 0 {
-		return fmt.Errorf("no preview environment named %q exists, and this project has none at all; deploy one with `ocel preview` before setting a value only it would read", environment)
-	}
-	sort.Strings(names)
-	return fmt.Errorf("no preview environment named %q exists, so nothing would ever read that value. This project's environments are: %s", environment, strings.Join(names, ", "))
-}
-
 func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
 	if opts.folder != "" {
 		if err := envgate.ValidateFolder(opts.folder); err != nil {
@@ -239,12 +219,6 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 		if err := envgate.CheckWritable(definitions, key, opts.folder); err != nil {
 			return err
 		}
-		if opts.environment != "" {
-			if err := requireNamedEnvironment(ctx, runner, provider, cfg.Slug, opts.environment); err != nil {
-				return err
-			}
-		}
-
 		resp, err := runner.SetValue(ctx, &envv1.SetValueRequest{
 			Options:         []byte(provider.Options),
 			ProtocolVersion: manifestbuilder.SchemaVersion,

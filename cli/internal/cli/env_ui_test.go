@@ -11,20 +11,21 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
 // withRunnerValues drives the store the way the variables UI does: over a live
 // provider session, through the same runnerValues the gate and the UI share.
-func withRunnerValues(t *testing.T, root string, drive func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error) {
+func withRunnerValues(t *testing.T, root string, opts envOptions, drive func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error) {
 	t.Helper()
 	ctx := context.Background()
-	err := envSession(ctx, root, envOptions{}, io.Discard, io.Discard, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
+	err := envSession(ctx, root, opts, io.Discard, io.Discard, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		return drive(ctx, cfg.Slug, runner, runnerValues{
 			runner:  runner,
 			options: []byte(provider.Options),
 			slug:    cfg.Slug,
-			class:   envClass(envOptions{}),
+			class:   envClass(opts),
 		})
 	})
 	if err != nil {
@@ -32,11 +33,11 @@ func withRunnerValues(t *testing.T, root string, drive func(ctx context.Context,
 	}
 }
 
-func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner, coordinate *envv1.Coordinate, value string) {
+func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner, class deploymentsv1.Environment_Class, coordinate *envv1.Coordinate, value string) {
 	t.Helper()
 	if _, err := runner.SetValue(ctx, &envv1.SetValueRequest{
 		ProtocolVersion: manifestbuilder.SchemaVersion,
-		Class:           envClass(envOptions{}),
+		Class:           class,
 		Coordinate:      coordinate,
 		Value:           value,
 	}); err != nil {
@@ -72,10 +73,14 @@ func stored(t *testing.T, rows []envgate.Stored, key string) envgate.Stored {
 // could see.
 func TestRunnerValues_ListCarriesANamedEnvironmentsValueAsAnOverride(t *testing.T) {
 	root := setUpEnvFixture(t)
+	// Overrides live on the preview substrate: production has a single
+	// environment, and the store refuses a row addressed at any other.
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	preview := envOptions{preview: true}
 
-	withRunnerValues(t, root, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
-		storeValue(t, ctx, runner, &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
-		storeValue(t, ctx, runner, &envv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "pr-42"}, "sk_pr")
+	withRunnerValues(t, root, preview, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
+		storeValue(t, ctx, runner, envClass(preview), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://root.example")
+		storeValue(t, ctx, runner, envClass(preview), &envv1.Coordinate{Slug: slug, Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_pr")
 
 		rows, err := values.List(ctx)
 		if err != nil {
@@ -90,7 +95,7 @@ func TestRunnerValues_ListCarriesANamedEnvironmentsValueAsAnOverride(t *testing.
 			t.Errorf("API_URL = %+v, want no environment and version 1", classWide)
 		}
 		override := stored(t, rows, "STRIPE_API_KEY")
-		if override.Environment != "pr-42" {
+		if override.Environment != "staging" {
 			t.Errorf("STRIPE_API_KEY = %+v, want it to name the environment that holds it", override)
 		}
 		return nil
@@ -103,8 +108,8 @@ func TestRunnerValues_ListCarriesANamedEnvironmentsValueAsAnOverride(t *testing.
 func TestRunnerValues_SetAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T) {
 	root := setUpEnvFixture(t)
 
-	withRunnerValues(t, root, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
-		storeValue(t, ctx, runner, &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
+	withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
+		storeValue(t, ctx, runner, envClass(envOptions{}), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
 		at := envgate.Read{Cell: envgate.Cell{Key: "API_URL"}}
 
 		unset := int64(0)
@@ -132,10 +137,10 @@ func TestRunnerValues_SetAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T
 func TestRunnerValues_DeleteAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T) {
 	root := setUpEnvFixture(t)
 
-	withRunnerValues(t, root, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
+	withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
 		coordinate := &envv1.Coordinate{Slug: slug, Key: "API_URL"}
-		storeValue(t, ctx, runner, coordinate, "https://first.example")
-		storeValue(t, ctx, runner, coordinate, "https://someone-elses.example")
+		storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://first.example")
+		storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://someone-elses.example")
 		at := envgate.Read{Cell: envgate.Cell{Key: "API_URL"}}
 
 		rendered := int64(1)

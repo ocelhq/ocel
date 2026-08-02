@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
+	"sort"
+	"strings"
 	"sync"
 
 	connect "connectrpc.com/connect"
@@ -27,6 +30,12 @@ type VarsServer struct {
 	// openAccount reaches the cloud a store is opened against. Nil is AWS
 	// itself.
 	openAccount func(ctx context.Context, region string) (account, error)
+
+	// listEnvironments enumerates the preview environments a project has. Nil is
+	// this provider's own DeploymentService, which is the only authority on
+	// which names exist. It is a seam so the write guard can be driven without a
+	// Pulumi backend behind it.
+	listEnvironments func(ctx context.Context, options []byte, slug string) ([]string, error)
 
 	mu     sync.Mutex
 	stores map[storeKey]*vars.Store
@@ -146,7 +155,72 @@ func teardownValues(awscfg aws.Config, deployed bootstrap.Deployed, class string
 	}
 }
 
+// addressable refuses an override written against an address no runtime will
+// ever ask for. An override is identified by exactly the key a preview's
+// functions derive from their own identity, so a name nothing enumerates names
+// a value that is invisible from the moment it lands — and production has a
+// single environment, so it has no such name at all.
+//
+// It lives here because this is the last thing before the store: the CLI and
+// the bundled UI both state the rule where they can offer a picker instead of a
+// refusal, but neither of them is what the store is protected by.
+//
+// Only a write is guarded. Reading and removing an override whose environment
+// is gone is the whole remedy for one, so neither is ever refused.
+func (s *VarsServer) addressable(ctx context.Context, req *envv1.SetValueRequest) error {
+	environment := req.GetCoordinate().GetEnvironment()
+	if environment == "" {
+		return nil
+	}
+	if req.GetClass() != deploymentsv1.Environment_CLASS_PREVIEW {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"production has a single environment, so %q addresses no value a production function could read", environment))
+	}
+
+	names, err := s.namedEnvironments(ctx, req.GetOptions(), req.GetCoordinate().GetSlug())
+	if err != nil {
+		return err
+	}
+	if slices.Contains(names, environment) {
+		return nil
+	}
+	if len(names) == 0 {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"no preview environment named %q exists, and this project has none at all; deploy one with `ocel preview` before setting a value only it would read", environment))
+	}
+	sort.Strings(names)
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		"no preview environment named %q exists, so nothing would ever read that value. This project's environments are: %s",
+		environment, strings.Join(names, ", ")))
+}
+
+func (s *VarsServer) namedEnvironments(ctx context.Context, options []byte, slug string) ([]string, error) {
+	list := s.listEnvironments
+	if list == nil {
+		list = previewEnvironments
+	}
+	return list(ctx, options, slug)
+}
+
+// previewEnvironments is the provider's own enumeration, reached through the
+// same handler the CLI calls, so the names a write is judged against and the
+// names a picker offers can never be two different answers.
+func previewEnvironments(ctx context.Context, options []byte, slug string) ([]string, error) {
+	resp, err := (&Server{}).ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{Options: options, Slug: slug})
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(resp.GetEnvironments()))
+	for _, environment := range resp.GetEnvironments() {
+		names = append(names, environment.GetIdentity())
+	}
+	return names, nil
+}
+
 func (s *VarsServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
+	if err := s.addressable(ctx, req); err != nil {
+		return nil, err
+	}
 	store, err := s.store(ctx, req.GetOptions(), req.GetClass())
 	if err != nil {
 		return nil, err

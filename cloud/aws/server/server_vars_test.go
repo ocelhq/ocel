@@ -6,6 +6,7 @@ import (
 	"maps"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 
 	connect "connectrpc.com/connect"
@@ -287,6 +288,81 @@ func TestDeleteValue_ForwardsTheCallersExpectedVersion(t *testing.T) {
 			}
 			if resp.GetDeleted() != tc.wantDeleted {
 				t.Errorf("deleted = %v, want %v", resp.GetDeleted(), tc.wantDeleted)
+			}
+		})
+	}
+}
+
+// An override is identified by exactly the key a preview's functions derive
+// from their own identity, so the store must not accept one at any other name.
+// The CLI and the bundled UI both state the rule where they can offer a picker
+// instead of a refusal, but the store is what has to hold it: a value written
+// at a name nothing enumerates is invisible from the moment it lands.
+func TestSetValue_RefusesAnOverrideNoRuntimeWouldEverAskFor(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		class       deploymentsv1.Environment_Class
+		environment string
+		exists      []string
+		wantCode    connect.Code
+		wantIn      string
+	}{
+		{
+			name: "an environment that exists", class: deploymentsv1.Environment_CLASS_PREVIEW,
+			environment: "staging", exists: []string{"pr-7", "staging"},
+		},
+		{
+			name: "a misspelt environment", class: deploymentsv1.Environment_CLASS_PREVIEW,
+			environment: "stagng", exists: []string{"pr-7", "staging"},
+			wantCode: connect.CodeFailedPrecondition, wantIn: "staging",
+		},
+		{
+			name: "a project with no environments at all", class: deploymentsv1.Environment_CLASS_PREVIEW,
+			environment: "staging",
+			wantCode:    connect.CodeFailedPrecondition, wantIn: "ocel preview",
+		},
+		{
+			name: "any environment on production", class: deploymentsv1.Environment_CLASS_PRODUCTION,
+			environment: "staging", exists: []string{"staging"},
+			wantCode: connect.CodeInvalidArgument, wantIn: "single environment",
+		},
+		{
+			name: "the class-wide value, which names no environment", class: deploymentsv1.Environment_CLASS_PRODUCTION,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
+			s.listEnvironments = func(context.Context, []byte, string) ([]string, error) { return tc.exists, nil }
+
+			_, err := s.SetValue(context.Background(), &envv1.SetValueRequest{
+				Class:      tc.class,
+				Coordinate: &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: tc.environment},
+				Value:      "sk-live",
+			})
+
+			if tc.wantCode == 0 {
+				if err != nil {
+					t.Fatalf("SetValue: %v", err)
+				}
+				return
+			}
+			var connectErr *connect.Error
+			if !errors.As(err, &connectErr) || connectErr.Code() != tc.wantCode {
+				t.Fatalf("SetValue err = %v, want %v", err, tc.wantCode)
+			}
+			if !strings.Contains(err.Error(), tc.wantIn) {
+				t.Errorf("err = %v, want it to name %q", err, tc.wantIn)
+			}
+			got, getErr := s.GetValue(context.Background(), &envv1.GetValueRequest{
+				Class:      tc.class,
+				Coordinate: &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY", Environment: tc.environment},
+				Reveal:     true,
+			})
+			if getErr != nil {
+				t.Fatalf("GetValue after a refused write: %v", getErr)
+			}
+			if got.GetFound() {
+				t.Errorf("the refused write landed anyway: %q", got.GetValue())
 			}
 		})
 	}

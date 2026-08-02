@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"strings"
 
 	connect "connectrpc.com/connect"
 
@@ -121,8 +122,45 @@ func checkExpectation(cell *fakeCell, expected *int64) error {
 		errors.New("the value changed since it was read; re-read it and try again"))
 }
 
+// addressable mirrors the real provider's write guard: an override may only be
+// written against an environment identity the runtime will ask for. It is the
+// store's own rule rather than the CLI's, so the fake has to hold it for a
+// command test to be exercising the refusal a real provider makes.
+func (s *deployFakeProviderServer) addressable(ctx context.Context, req *envv1.SetValueRequest) error {
+	environment := req.GetCoordinate().GetEnvironment()
+	if environment == "" {
+		return nil
+	}
+	if req.GetClass() != deploymentsv1.Environment_CLASS_PREVIEW {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"production has a single environment, so %q addresses no value a production function could read", environment))
+	}
+	resp, err := s.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{Slug: req.GetCoordinate().GetSlug()})
+	if err != nil {
+		return err
+	}
+	var names []string
+	for _, e := range resp.GetEnvironments() {
+		if e.GetIdentity() == environment {
+			return nil
+		}
+		names = append(names, e.GetIdentity())
+	}
+	if len(names) == 0 {
+		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"no preview environment named %q exists, and this project has none at all; deploy one with `ocel preview` before setting a value only it would read", environment))
+	}
+	sort.Strings(names)
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		"no preview environment named %q exists, so nothing would ever read that value. This project's environments are: %s",
+		environment, strings.Join(names, ", ")))
+}
+
 func (s *deployFakeProviderServer) SetValue(ctx context.Context, req *envv1.SetValueRequest) (*envv1.SetValueResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
+		return nil, err
+	}
+	if err := s.addressable(ctx, req); err != nil {
 		return nil, err
 	}
 	store, err := loadFakeStore()

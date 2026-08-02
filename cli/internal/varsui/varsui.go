@@ -22,6 +22,7 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -311,13 +312,18 @@ func (s *Session) handleDelete(w http.ResponseWriter, r *http.Request) {
 	s.writeState(r.Context(), w)
 }
 
-// writable refuses an override written against an environment the provider does
-// not enumerate: an override is identified by exactly the key the runtime
-// derives from its ref, so a name nothing enumerates is a value nothing will
-// ever read. Removing one is not a write and is never refused — an environment
-// that has gone is precisely when its override has to be reachable.
+// writable refuses an override written against an environment this session was
+// not given: an override is identified by exactly the key the runtime derives
+// from its ref, so a name nothing enumerates is a value nothing will ever read.
+// Removing one is not a write and is never refused — an environment that has
+// gone is precisely when its override has to be reachable.
+//
+// The store holds the same rule and is what actually protects it. This one is
+// here because the page offers a picker over exactly this list, so the answer is
+// already on hand: a bad address comes back as the bad request it is, without a
+// round trip that can only agree.
 func (s *Session) writable(environment string) error {
-	if environment == "" || !envgate.Orphaned(s.opts.Environments, environment) {
+	if environment == "" || slices.Contains(s.opts.Environments, environment) {
 		return nil
 	}
 	return fmt.Errorf("no environment named %q exists, so nothing would ever read that value", environment)
