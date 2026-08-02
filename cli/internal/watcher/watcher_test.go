@@ -16,7 +16,7 @@ func TestWatch_BurstOfChangesTriggersOnChangeOnce(t *testing.T) {
 	defer cancel()
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, 50*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
+	if err := Watch(ctx, []string{dir}, nil, 50*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 
@@ -39,7 +39,7 @@ func TestWatch_NewSubdirectoryIsWatchedForFutureChanges(t *testing.T) {
 	defer cancel()
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, 20*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
+	if err := Watch(ctx, []string{dir}, nil, 20*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 
@@ -53,13 +53,41 @@ func TestWatch_NewSubdirectoryIsWatchedForFutureChanges(t *testing.T) {
 	waitForCalls(t, &calls, 2)
 }
 
+// A watched directory holds files that have nothing to do with what the
+// watcher is for: watching a project root for its dotfile would otherwise
+// re-run everything on every write to package.json or an editor's scratch
+// file. The predicate decides, and a rejected path must not even reset the
+// debounce.
+func TestWatch_IgnoresAnEventThePredicateRejects(t *testing.T) {
+	dir := t.TempDir()
+	dotfile := filepath.Join(dir, ".env")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var calls atomic.Int32
+	accept := func(path string) bool { return path == dotfile }
+	if err := Watch(ctx, []string{dir}, accept, 20*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
+		t.Fatalf("Watch: %v", err)
+	}
+
+	writeFile(t, filepath.Join(dir, "package.json"), "{}")
+	time.Sleep(200 * time.Millisecond)
+	if got := calls.Load(); got != 0 {
+		t.Fatalf("calls = %d after a rejected path changed, want 0", got)
+	}
+
+	writeFile(t, dotfile, "API_TOKEN=first")
+	waitForCalls(t, &calls, 1)
+}
+
 func TestWatch_StopsReactingAfterContextCancelled(t *testing.T) {
 	dir := t.TempDir()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, 10*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
+	if err := Watch(ctx, []string{dir}, nil, 10*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 	cancel()

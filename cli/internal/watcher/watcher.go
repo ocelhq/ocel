@@ -12,13 +12,14 @@ import (
 
 // Watch adds a filesystem watch on each of dirs and, until ctx is done,
 // invokes onChange once after every quiet period of debounce following one
-// or more change events. A directory created under an already-watched
-// directory is itself watched, so files later added under it are picked up
-// too. Errors the underlying watcher reports while running (e.g. the
+// or more change events to a path accept returns true for (a nil accept
+// takes every path). A directory created under an already-watched
+// directory is itself watched whatever accept says, so files later added
+// under it are picked up too. Errors the underlying watcher reports while running (e.g. the
 // inotify limit is hit) are passed to onError, which may be nil to ignore
 // them. Watch returns as soon as the watch is established (or fails); the
 // event loop runs in the background.
-func Watch(ctx context.Context, dirs []string, debounce time.Duration, onChange func(), onError func(error)) error {
+func Watch(ctx context.Context, dirs []string, accept func(path string) bool, debounce time.Duration, onChange func(), onError func(error)) error {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return err
@@ -31,11 +32,11 @@ func Watch(ctx context.Context, dirs []string, debounce time.Duration, onChange 
 		}
 	}
 
-	go run(ctx, fsw, debounce, onChange, onError)
+	go run(ctx, fsw, accept, debounce, onChange, onError)
 	return nil
 }
 
-func run(ctx context.Context, fsw *fsnotify.Watcher, debounce time.Duration, onChange func(), onError func(error)) {
+func run(ctx context.Context, fsw *fsnotify.Watcher, accept func(string) bool, debounce time.Duration, onChange func(), onError func(error)) {
 	defer fsw.Close()
 
 	timer := time.NewTimer(debounce)
@@ -56,6 +57,9 @@ func run(ctx context.Context, fsw *fsnotify.Watcher, debounce time.Duration, onC
 				if info, err := os.Stat(event.Name); err == nil && info.IsDir() {
 					_ = fsw.Add(event.Name)
 				}
+			}
+			if accept != nil && !accept(event.Name) {
+				continue
 			}
 			if armed && !timer.Stop() {
 				<-timer.C

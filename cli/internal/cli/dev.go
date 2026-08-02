@@ -249,7 +249,7 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 		return fmt.Errorf("resolve watch directories: %w", err)
 	}
 
-	return watcher.Watch(ctx, dirs, watchDebounce, func() {
+	return watcher.Watch(ctx, dirs, nil, watchDebounce, func() {
 		srv.ResetManifest()
 		resolved, err := discoverAndSync(ctx, srv, cfg, dotfile, stdout, stderr)
 		if err != nil {
