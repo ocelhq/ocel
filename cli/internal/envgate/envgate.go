@@ -15,6 +15,7 @@ package envgate
 import (
 	"context"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +41,18 @@ type Stored struct {
 	Cell        Cell
 	Environment string
 	Version     int64
+}
+
+// Orphaned reports an override the provider no longer enumerates an
+// environment for. The value survives a preview's removal — losing it would
+// destroy a long-lived branch's configuration the moment its environment was
+// rebuilt — so what is left is a row nothing will ever read, and every surface
+// that lists overrides says so from this one rule rather than its own.
+//
+// environments is what exists. The class-wide value is never orphaned: it is
+// the value an environment falls back to, not one bound to any.
+func Orphaned(environments []string, environment string) bool {
+	return environment != "" && !slices.Contains(environments, environment)
 }
 
 // heldCells is every cell the store holds, at the version it holds it at. One

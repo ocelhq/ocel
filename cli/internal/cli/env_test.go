@@ -89,7 +89,7 @@ func TestRenderValues_RootFolderDoesNotPrintARejectedSlash(t *testing.T) {
 	var stdout bytes.Buffer
 	renderValues(&stdout, []*envv1.ValueMetadata{
 		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Folder: ""}},
-	})
+	}, nil)
 
 	out := stdout.String()
 	if !strings.Contains(out, "(project root)") {
@@ -105,28 +105,39 @@ func TestRenderValues_RootFolderDoesNotPrintARejectedSlash(t *testing.T) {
 	}
 }
 
-// The ENVIRONMENT column is the surviving half of an axis nothing writes any
-// more. Printing a name an operator has no command for is only informative if
-// `ls` says so, and saying so on every listing would name an axis most stores
-// have nothing in.
-func TestRenderValues_ExplainsANamedEnvironmentOnlyWhenOneIsShown(t *testing.T) {
-	const note = "No command reaches those today"
+// An override whose environment is gone is a row nothing will ever read. `ls`
+// is where a store's dead rows become visible, so it says which they are and
+// what removes them; a listing where every override still has its environment
+// says nothing, because there is nothing to act on.
+func TestRenderValues_MarksAnOverrideWhoseEnvironmentIsGone(t *testing.T) {
+	const note = "orphaned"
 
-	var withOverride bytes.Buffer
-	renderValues(&withOverride, []*envv1.ValueMetadata{
+	var withOrphan bytes.Buffer
+	renderValues(&withOrphan, []*envv1.ValueMetadata{
 		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY"}},
-		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42-a1b2c3d4"}},
-	})
-	if out := withOverride.String(); !strings.Contains(out, note) {
-		t.Errorf("ls stdout = %q, want it to explain that %q is unreachable", out, "pr-42-a1b2c3d4")
+		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "pr-42"}},
+		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
+	}, []string{"staging"})
+
+	out := withOrphan.String()
+	if !strings.Contains(out, note) {
+		t.Errorf("ls stdout = %q, want the override for pr-42 marked orphaned", out)
+	}
+	if !strings.Contains(out, "ocel env rm") {
+		t.Errorf("ls stdout = %q, want it to name the command that removes an orphan", out)
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.Contains(line, "staging") && strings.Contains(line, note) {
+			t.Errorf("ls line = %q, want an environment that still exists left unmarked", line)
+		}
 	}
 
-	var classWideOnly bytes.Buffer
-	renderValues(&classWideOnly, []*envv1.ValueMetadata{
-		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY"}},
-	})
-	if out := classWideOnly.String(); strings.Contains(out, note) {
-		t.Errorf("ls stdout = %q, want no environment footnote when no row has one", out)
+	var live bytes.Buffer
+	renderValues(&live, []*envv1.ValueMetadata{
+		{Coordinate: &envv1.Coordinate{Key: "STRIPE_API_KEY", Environment: "staging"}},
+	}, []string{"staging"})
+	if out := live.String(); strings.Contains(out, note) {
+		t.Errorf("ls stdout = %q, want no orphan note when every override has its environment", out)
 	}
 }
 
@@ -228,15 +239,123 @@ func TestEnvHistory_OffersNoRevealFlagWhereGetStillDoes(t *testing.T) {
 	}
 }
 
-// No runtime path resolves a named-environment override, and a preview's real
-// identity is `sanitize(ref)-<8 hex>` rather than anything an operator would
-// type, so a write flag naming an environment could only ever report success
-// for a cell no deploy will read.
-func TestEnvCommands_OfferNoEnvironmentWriteFlag(t *testing.T) {
+// A named environment is the second override axis, so every command that
+// addresses a cell has to be able to name one — including the reads, because an
+// override nothing can inspect or remove is one that accumulates silently.
+func TestEnvCommands_AddressANamedEnvironment(t *testing.T) {
 	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd} {
-		if f := c.Flags().Lookup("environment"); f != nil {
-			t.Errorf("`ocel env %s` registers --environment (%q); nothing resolves an override, so the write would report a success no deploy honours", c.Name(), f.Usage)
+		if c.Flags().Lookup("environment") == nil {
+			t.Errorf("`ocel env %s` cannot address a named environment's override", c.Name())
 		}
+	}
+}
+
+// An override binds to one environment and nothing else: the environment that
+// holds it reads it, and the class-wide cell it sits beside is untouched. The
+// two are separate cells, not one another's fallback, which is what lets every
+// other preview go on sharing the class-wide value.
+func TestRunEnvSet_AnOverrideIsItsOwnCellBesideTheClassWideValue(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+
+	preview := envOptions{preview: true}
+	staging := envOptions{preview: true, environment: "staging"}
+	envSet(t, root, "STRIPE_API_KEY", "sk_shared", preview)
+	envSet(t, root, "STRIPE_API_KEY", "sk_staging", staging)
+
+	for name, tc := range map[string]struct {
+		opts envOptions
+		want string
+	}{
+		"the environment holding the override": {opts: staging, want: "sk_staging"},
+		"every other environment":              {opts: preview, want: "sk_shared"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			opts := tc.opts
+			opts.reveal = true
+			var stdout bytes.Buffer
+			if err := runEnvGet(context.Background(), root, "STRIPE_API_KEY", opts, &stdout, &stdout); err != nil {
+				t.Fatalf("runEnvGet err = %v; out=%s", err, stdout.String())
+			}
+			if got := strings.TrimSpace(stdout.String()); got != tc.want {
+				t.Errorf("value = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// An override can only be written against an environment identity the runtime
+// will ask for. The identity is derived from a ref rather than typed, so a name
+// that does not exist is a value nothing will ever read — and the refusal names
+// the ones that do, because guessing the spelling is the whole difficulty.
+func TestRunEnvSet_RefusesAnEnvironmentThatDoesNotExist(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+
+	var stdout, stderr bytes.Buffer
+	err := runEnvSet(context.Background(), root, "STRIPE_API_KEY", "sk_typo", envOptions{preview: true, environment: "stagng"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runEnvSet against an environment that does not exist err = nil, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "stagng") || !strings.Contains(err.Error(), "staging") {
+		t.Errorf("err = %v, want it to name what was asked for and what exists", err)
+	}
+
+	var get bytes.Buffer
+	if err := runEnvGet(context.Background(), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "stagng", reveal: true}, &get, &get); err == nil {
+		t.Errorf("the refused write landed anyway: get = %q", get.String())
+	}
+}
+
+// Production has a single environment, so an override there is a row no
+// production function could read. The refusal happens before a session is
+// opened: there is nothing to ask the store about.
+func TestRunEnvSet_RefusesAnEnvironmentOnProduction(t *testing.T) {
+	root := setUpEnvFixture(t)
+
+	var stdout, stderr bytes.Buffer
+	err := runEnvSet(context.Background(), root, "STRIPE_API_KEY", "sk_live", envOptions{environment: "staging"}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runEnvSet --environment against production err = nil, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "--preview") {
+		t.Errorf("err = %v, want it to name the flag that selects the substrate overrides live on", err)
+	}
+}
+
+// An environment can be torn down while the override it held survives — which
+// is deliberate, so rebuilding a long-lived branch does not destroy its
+// configuration. What is left is a row nothing will ever read, so `ls` says so
+// and `rm` reaches it: removal must not require the environment back.
+func TestRunEnvRm_AnOrphanedOverrideIsListedAndRemovable(t *testing.T) {
+	root := setUpEnvFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	envSet(t, root, "STRIPE_API_KEY", "sk_staging", envOptions{preview: true, environment: "staging"})
+
+	t.Setenv(fakeEnvironmentsEnvVar, "none")
+
+	var ls bytes.Buffer
+	if err := runEnvLs(context.Background(), root, envOptions{preview: true}, &ls, &ls); err != nil {
+		t.Fatalf("runEnvLs err = %v; out=%s", err, ls.String())
+	}
+	if !strings.Contains(ls.String(), "orphaned") {
+		t.Errorf("ls = %q, want the override marked orphaned once its environment is gone", ls.String())
+	}
+
+	var rm bytes.Buffer
+	if err := runEnvRm(context.Background(), root, "STRIPE_API_KEY", envOptions{preview: true, environment: "staging"}, &rm, &rm); err != nil {
+		t.Fatalf("runEnvRm err = %v; out=%s", err, rm.String())
+	}
+	if !strings.Contains(rm.String(), "Removed") {
+		t.Errorf("rm = %q, want the orphan removed rather than reported unset", rm.String())
+	}
+
+	var after bytes.Buffer
+	if err := runEnvLs(context.Background(), root, envOptions{preview: true}, &after, &after); err != nil {
+		t.Fatalf("runEnvLs err = %v; out=%s", err, after.String())
+	}
+	if strings.Contains(after.String(), "STRIPE_API_KEY") {
+		t.Errorf("ls = %q, want the removed orphan gone from the listing", after.String())
 	}
 }
 

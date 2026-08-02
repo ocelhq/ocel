@@ -261,12 +261,31 @@ func (s *deployFakeProviderServer) DestroyPreview(ctx context.Context, req *depl
 	})
 }
 
+// fakeEnvironmentsEnvVar replaces the canned environment set with a
+// comma-separated list of identities, so a test can drive what happens when an
+// environment an override was written against stops existing. Empty means the
+// canned set; the string "none" means a project with no environments at all.
+const fakeEnvironmentsEnvVar = "OCEL_TEST_FAKE_ENVIRONMENTS"
+
 // ListEnvironments echoes the slug it was scoped to as a synthetic first
 // entry (so tests can assert the CLI sent it), then returns a canned set of
 // preview environments for `ocel preview ls` to render.
 func (s *deployFakeProviderServer) ListEnvironments(ctx context.Context, req *deploymentsv1.ListEnvironmentsRequest) (*deploymentsv1.ListEnvironmentsResponse, error) {
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
+	}
+	if scripted := os.Getenv(fakeEnvironmentsEnvVar); scripted != "" {
+		resp := &deploymentsv1.ListEnvironmentsResponse{}
+		if scripted == "none" {
+			return resp, nil
+		}
+		for _, identity := range strings.Split(scripted, ",") {
+			resp.Environments = append(resp.Environments, &deploymentsv1.PreviewEnvironment{
+				Identity:  identity,
+				Lifecycle: deploymentsv1.Environment_LIFECYCLE_PERSISTENT,
+			})
+		}
+		return resp, nil
 	}
 	return &deploymentsv1.ListEnvironmentsResponse{
 		Environments: []*deploymentsv1.PreviewEnvironment{

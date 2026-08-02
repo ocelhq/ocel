@@ -6,6 +6,9 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
+	"sort"
+	"strings"
 	"syscall"
 	"text/tabwriter"
 
@@ -22,13 +25,26 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// envOptions are the flags every `ocel env` subcommand shares. folder
-// addresses the cell; preview selects the substrate; reveal is the deliberate
-// act that prints a value.
+// envOptions are the flags every `ocel env` subcommand shares. folder and
+// environment address the cell — the two override axes, one deploy-pinned and
+// one live; preview selects the substrate; reveal is the deliberate act that
+// prints a value.
 type envOptions struct {
-	preview bool
-	folder  string
-	reveal  bool
+	preview     bool
+	folder      string
+	environment string
+	reveal      bool
+}
+
+// checkEnvironment refuses an override addressed on a substrate that cannot
+// hold one. Production is a single environment, so a value there binds
+// class-wide and nothing else: accepting the flag would write a row no
+// production function will ever read.
+func (o envOptions) checkEnvironment() error {
+	if o.environment == "" || o.preview {
+		return nil
+	}
+	return fmt.Errorf("--environment addresses one preview environment's override, and production has a single environment; pass --preview, or leave --environment off to address the production value")
 }
 
 var envOpts envOptions
@@ -104,6 +120,7 @@ func init() {
 	}
 	for _, c := range []*cobra.Command{envSetCmd, envGetCmd, envRmCmd, envHistoryCmd} {
 		c.Flags().StringVar(&envOpts.folder, "folder", "", "Address the value in this folder (e.g. /checkout) instead of the project root")
+		c.Flags().StringVar(&envOpts.environment, "environment", "", "Address the override this named preview environment holds instead of the class-wide value")
 	}
 	// Reveal is `get`'s alone. History is metadata only: one keystroke that
 	// printed every retained version would keep a rotated-away secret readable
@@ -161,12 +178,48 @@ func envClass(opts envOptions) deploymentsv1.Environment_Class {
 	return deploymentsv1.Environment_CLASS_PRODUCTION
 }
 
-// envCoordinate addresses the class-wide cell, the only one an `ocel env`
-// command reaches. A named environment's override is readable — `ls` and the
-// variables UI show one that exists — but nothing writes one, because no
-// runtime path resolves it.
+// envCoordinate addresses the cell the flags named: the class-wide value, or
+// the override one named preview environment holds.
 func envCoordinate(slug, key string, opts envOptions) *envv1.Coordinate {
-	return &envv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key}
+	return &envv1.Coordinate{Slug: slug, Folder: opts.folder, Key: key, Environment: opts.environment}
+}
+
+// namedEnvironments is every preview environment the provider knows about. It
+// is the only authority on which names exist: an override is identified by
+// exactly the key the runtime derives from its ref, so a name nothing
+// enumerates is a name nothing will ever ask for.
+func namedEnvironments(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, slug string) ([]string, error) {
+	resp, err := runner.ListEnvironments(ctx, &deploymentsv1.ListEnvironmentsRequest{
+		Options:         []byte(provider.Options),
+		ProtocolVersion: manifestbuilder.SchemaVersion,
+		Slug:            slug,
+	})
+	if err != nil {
+		return nil, err
+	}
+	names := make([]string, 0, len(resp.GetEnvironments()))
+	for _, environment := range resp.GetEnvironments() {
+		names = append(names, environment.GetIdentity())
+	}
+	return names, nil
+}
+
+// requireNamedEnvironment refuses a write against an environment that does not
+// exist. Only a write: an override whose environment is gone is orphaned, and
+// reading or removing one is the whole remedy for it.
+func requireNamedEnvironment(ctx context.Context, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, slug, environment string) error {
+	names, err := namedEnvironments(ctx, runner, provider, slug)
+	if err != nil {
+		return err
+	}
+	if slices.Contains(names, environment) {
+		return nil
+	}
+	if len(names) == 0 {
+		return fmt.Errorf("no preview environment named %q exists, and this project has none at all; deploy one with `ocel preview` before setting a value only it would read", environment)
+	}
+	sort.Strings(names)
+	return fmt.Errorf("no preview environment named %q exists, so nothing would ever read that value. This project's environments are: %s", environment, strings.Join(names, ", "))
 }
 
 func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, stdout, stderr io.Writer) error {
@@ -175,6 +228,9 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 			return err
 		}
 	}
+	if err := opts.checkEnvironment(); err != nil {
+		return err
+	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		definitions, err := declaredVariables(ctx, cfg, runner, provider, key, opts, stderr)
 		if err != nil {
@@ -182,6 +238,11 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 		}
 		if err := envgate.CheckWritable(definitions, key, opts.folder); err != nil {
 			return err
+		}
+		if opts.environment != "" {
+			if err := requireNamedEnvironment(ctx, runner, provider, cfg.Slug, opts.environment); err != nil {
+				return err
+			}
 		}
 
 		resp, err := runner.SetValue(ctx, &envv1.SetValueRequest{
@@ -253,12 +314,31 @@ func runEnvLs(ctx context.Context, cwd string, opts envOptions, stdout, stderr i
 		if err != nil {
 			return err
 		}
-		renderValues(stdout, resp.GetValues())
+		// The enumeration is only asked for when something in the listing has to
+		// be judged against it, so a project with no overrides pays nothing and
+		// a production listing — where an override cannot exist — never calls
+		// it at all.
+		var environments []string
+		if overridden(resp.GetValues()) {
+			if environments, err = namedEnvironments(ctx, runner, provider, cfg.Slug); err != nil {
+				return err
+			}
+		}
+		renderValues(stdout, resp.GetValues(), environments)
 		return nil
 	})
 }
 
+func overridden(values []*envv1.ValueMetadata) bool {
+	return slices.ContainsFunc(values, func(v *envv1.ValueMetadata) bool {
+		return v.GetCoordinate().GetEnvironment() != ""
+	})
+}
+
 func runEnvGet(ctx context.Context, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	if err := opts.checkEnvironment(); err != nil {
+		return err
+	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		resp, err := runner.GetValue(ctx, &envv1.GetValueRequest{
 			Options:         []byte(provider.Options),
@@ -288,6 +368,9 @@ func runEnvGet(ctx context.Context, cwd, key string, opts envOptions, stdout, st
 }
 
 func runEnvRm(ctx context.Context, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	if err := opts.checkEnvironment(); err != nil {
+		return err
+	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		resp, err := runner.DeleteValue(ctx, &envv1.DeleteValueRequest{
 			Options:         []byte(provider.Options),
@@ -308,6 +391,9 @@ func runEnvRm(ctx context.Context, cwd, key string, opts envOptions, stdout, std
 }
 
 func runEnvHistory(ctx context.Context, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
+	if err := opts.checkEnvironment(); err != nil {
+		return err
+	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		resp, err := runner.ListVersions(ctx, &envv1.ListVersionsRequest{
 			Options:         []byte(provider.Options),
@@ -330,31 +416,39 @@ func describeCell(key string, opts envOptions) string {
 	if opts.folder != "" {
 		out += " in " + opts.folder
 	}
+	if opts.environment != "" {
+		out += " for " + opts.environment
+	}
 	return out
 }
 
-func renderValues(stdout io.Writer, values []*envv1.ValueMetadata) {
+// renderValues lists the cells a project holds. environments is what the
+// provider enumerates, which is what makes an override addressed at a name no
+// longer among them an orphan: the value survives, nothing will ever ask for
+// it, and saying so is what stops the store quietly accumulating dead rows.
+func renderValues(stdout io.Writer, values []*envv1.ValueMetadata, environments []string) {
 	if len(values) == 0 {
 		fmt.Fprintln(stdout, "No values set. Set one with `ocel env set <KEY> <VALUE>`.")
 		return
 	}
+	orphans := false
 	tw := tabwriter.NewWriter(stdout, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "KEY\tFOLDER\tENVIRONMENT\tVERSION\tBYTES\tUPDATED")
 	for _, v := range values {
 		c := v.GetCoordinate()
+		environment := environmentOrClassWide(c.GetEnvironment())
+		if envgate.Orphaned(environments, c.GetEnvironment()) {
+			environment += " (orphaned)"
+			orphans = true
+		}
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%d\t%s\n",
-			c.GetKey(), folderOrRoot(c.GetFolder()), environmentOrClassWide(c.GetEnvironment()),
+			c.GetKey(), folderOrRoot(c.GetFolder()), environment,
 			v.GetVersion(), v.GetSize(), epochOrDash(v.GetUpdatedAt()))
 	}
 	_ = tw.Flush()
 
-	// A named ENVIRONMENT is a read-only remnant: no command writes one today,
-	// so the column would otherwise name an axis an operator cannot act on.
-	for _, v := range values {
-		if v.GetCoordinate().GetEnvironment() != "" {
-			fmt.Fprintln(stdout, "\nA named ENVIRONMENT holds its own value, written while overrides were still writable. No command reaches those today; `ocel env set` and `ocel env rm` address the class-wide value only.")
-			return
-		}
+	if orphans {
+		fmt.Fprintln(stdout, "\nAn orphaned override belongs to an environment that no longer exists, so nothing will ever read it. Remove one with `ocel env rm <KEY> --preview --environment <ENVIRONMENT>`.")
 	}
 }
 
