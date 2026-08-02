@@ -60,11 +60,17 @@ type Store struct {
 }
 
 // Metadata is everything about a value except the value.
+//
+// Target is the cell a reference points at, and the zero Coordinate for a cell
+// holding a value of its own. Version, UpdatedAt and Size stay the row's own
+// either way: a reference has no value of its own, so it has no size of its
+// own, and the version a write against it must expect is the pointer's.
 type Metadata struct {
 	Coordinate Coordinate
 	Version    int64
 	UpdatedAt  int64
 	Size       int64
+	Target     Coordinate
 }
 
 // Value is a cell's metadata, with its plaintext when the read revealed it.
@@ -89,6 +95,13 @@ type Version struct {
 // at a cell's current pointer. It carries the version the cell had reached and
 // nothing of what the value was, which is what keeps the next write's version
 // number ahead of every history row instead of back on top of one.
+//
+// TargetPK and TargetSK are the other row that is not a value: a reference,
+// whose content is the address of the cell holding the value. They are the
+// reverse index's own key attributes rather than a pair beside them, so what a
+// reference points at and what the index answers by are one thing that cannot
+// disagree — and so the index stays sparse, since every other row leaves them
+// off entirely.
 type item struct {
 	PK         string `dynamodbav:"pk"`
 	SK         string `dynamodbav:"sk"`
@@ -97,6 +110,24 @@ type item struct {
 	Size       int64  `dynamodbav:"size"`
 	Ts         int64  `dynamodbav:"ts"`
 	Deleted    bool   `dynamodbav:"deleted"`
+	TargetPK   string `dynamodbav:"gsi1pk"`
+	TargetSK   string `dynamodbav:"gsi1sk"`
+}
+
+// references reports whether the row is a reference rather than a value.
+func (i item) references() bool { return i.TargetPK != "" && i.TargetSK != "" }
+
+// target is the cell this row points at, or the zero Coordinate when it holds a
+// value of its own.
+func (i item) target() (Coordinate, error) {
+	if !i.references() {
+		return Coordinate{}, nil
+	}
+	slug, err := parsePartitionKey(i.TargetPK)
+	if err != nil {
+		return Coordinate{}, err
+	}
+	return parseCurrentSortKey(slug, i.TargetSK)
 }
 
 // liveVersion is the version a reader can observe: zero when the cell holds no
@@ -115,10 +146,12 @@ func (s *Store) now() int64 {
 	return s.Now().Unix()
 }
 
-// Set writes a value as one transaction: it records a new version, updates the
-// cell's current pointer under a condition on the version it read, and deletes
-// the version that falls out of the retention window. The pruned version is
-// computed from the new one, never queried for.
+// Set writes a value, as one version, through commit.
+//
+// A cell holding a reference is refused rather than overwritten: a reference
+// has no value of its own, so there is exactly one place the value behind it
+// can be changed. Pointing the cell somewhere else is SetReference's business,
+// and keeping the value it holds is a delete away.
 //
 // expected is the version the caller believes is current: nil for a blind
 // write, which still loses to a writer that commits between this read and this
@@ -132,32 +165,56 @@ func (s *Store) Set(ctx context.Context, c Coordinate, plaintext string, expecte
 	}
 
 	key := c.canonical()
-	pk := PartitionKey(c.Slug, s.Class)
-
-	current, err := s.read(ctx, pk, currentSortKey(key))
+	current, err := s.read(ctx, PartitionKey(c.Slug, s.Class), currentSortKey(key))
 	if err != nil {
 		return Metadata{}, err
 	}
-	if expected != nil && *expected != current.liveVersion() {
-		return Metadata{}, ErrStaleVersion
+	if current.references() {
+		target, err := current.target()
+		if err != nil {
+			return Metadata{}, err
+		}
+		return Metadata{}, fmt.Errorf("%s is a reference to %s, which is where that value is edited: %w", c, target, ErrIsReference)
 	}
 
 	ciphertext, err := s.encrypt(ctx, key, plaintext)
 	if err != nil {
 		return Metadata{}, err
 	}
+	return s.commit(ctx, c, current, expected, item{Ciphertext: ciphertext, Size: int64(len(plaintext))})
+}
 
-	next := current.Version + 1
-	written := item{
-		PK:         pk,
-		Version:    next,
-		Ciphertext: ciphertext,
-		Size:       int64(len(plaintext)),
-		Ts:         s.now(),
+// commit writes one version of a cell as a transaction: it records the new
+// version, updates the cell's current pointer under a condition on the version
+// it read, and deletes the version that falls out of the retention window. The
+// pruned version is computed from the new one, never queried for.
+//
+// content is what the row holds — ciphertext and its size for a value, the
+// target's address for a reference — and everything else about the row is the
+// same either way, which is what keeps one version sequence per cell however
+// its content changes shape.
+//
+// The history row is content minus the index keys. A version records that a
+// cell changed, and an indexed history row would answer the reverse lookup with
+// every version that ever pointed somewhere rather than with what points there
+// now.
+func (s *Store) commit(ctx context.Context, c Coordinate, current item, expected *int64, content item) (Metadata, error) {
+	if expected != nil && *expected != current.liveVersion() {
+		return Metadata{}, ErrStaleVersion
 	}
+
+	key := c.canonical()
+	pk := PartitionKey(c.Slug, s.Class)
+	next := current.Version + 1
+
+	written := content
+	written.PK = pk
+	written.Version = next
+	written.Ts = s.now()
 
 	historyItem := written
 	historyItem.SK = historySortKey(key, next)
+	historyItem.TargetPK, historyItem.TargetSK = "", ""
 	currentItem := written
 	currentItem.SK = currentSortKey(key)
 
@@ -188,11 +245,20 @@ func (s *Store) Set(ctx context.Context, c Coordinate, plaintext string, expecte
 		return Metadata{}, fmt.Errorf("write %s: %w", c.Key, err)
 	}
 
-	return Metadata{Coordinate: c, Version: next, UpdatedAt: currentItem.Ts, Size: currentItem.Size}, nil
+	target, err := currentItem.target()
+	if err != nil {
+		return Metadata{}, err
+	}
+	return Metadata{Coordinate: c, Version: next, UpdatedAt: currentItem.Ts, Size: currentItem.Size, Target: target}, nil
 }
 
 // Get reads one cell. It decrypts only when reveal asks it to, so a routine
 // read discloses nothing and leaves no decrypt in the key's audit trail.
+//
+// A cell holding a reference reads as the value it points at, resolved now
+// rather than copied earlier, so an edit at the source is visible to every
+// consumer the moment it lands. Its metadata stays its own: what a reference
+// borrows is the plaintext, not the row.
 func (s *Store) Get(ctx context.Context, c Coordinate, reveal bool) (Value, error) {
 	if err := c.validate(); err != nil {
 		return Value{}, err
@@ -204,14 +270,68 @@ func (s *Store) Get(ctx context.Context, c Coordinate, reveal bool) (Value, erro
 	if stored.liveVersion() == 0 {
 		return Value{}, ErrNotFound
 	}
+	target, err := stored.target()
+	if err != nil {
+		return Value{}, err
+	}
 
-	value := Value{Metadata: Metadata{Coordinate: c, Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size}}
-	if reveal {
-		if value.Plaintext, err = s.decrypt(ctx, c, stored.Ciphertext); err != nil {
-			return Value{}, err
-		}
+	value := Value{Metadata: Metadata{Coordinate: c, Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size, Target: target}}
+	if !reveal {
+		return value, nil
+	}
+	holder, at, err := s.dereference(ctx, c, stored)
+	if err != nil {
+		return Value{}, err
+	}
+	if value.Plaintext, err = s.decrypt(ctx, at, holder.Ciphertext); err != nil {
+		return Value{}, err
 	}
 	return value, nil
+}
+
+// dereference is read-time resolution: the row actually holding the plaintext,
+// and the coordinate its ciphertext is bound to. A row that holds a value is
+// its own answer, and a reference is followed exactly once — depth is one by
+// construction, because SetReference reads its target first and refuses to
+// point at another pointer.
+//
+// The follow is a query rather than a point read because a function's grant on
+// the table is Query alone, and resolution must be the same operation wherever
+// it runs: a read path the runtime cannot emit is one that works for the CLI
+// and fails in production.
+func (s *Store) dereference(ctx context.Context, at Coordinate, stored item) (item, Coordinate, error) {
+	target, err := stored.target()
+	if err != nil {
+		return item{}, Coordinate{}, err
+	}
+	if target.Slug == "" {
+		return stored, at, nil
+	}
+	holder, err := s.follow(ctx, stored.TargetPK, stored.TargetSK)
+	if err != nil {
+		return item{}, Coordinate{}, err
+	}
+	if holder.liveVersion() == 0 {
+		return item{}, Coordinate{}, fmt.Errorf("%s references %s, which holds no value: %w", at, target, ErrNotFound)
+	}
+	return holder, target, nil
+}
+
+// follow reads the one row a reference points at. The sort key is exact, but a
+// query matches a prefix, so the row is picked out by equality rather than
+// trusted from the result: an environment named "*x" would otherwise be read as
+// the class-wide value it merely begins with.
+func (s *Store) follow(ctx context.Context, pk, sk string) (item, error) {
+	items, err := s.query(ctx, pk, sk, true)
+	if err != nil {
+		return item{}, err
+	}
+	for _, stored := range items {
+		if stored.SK == sk {
+			return stored, nil
+		}
+	}
+	return item{}, nil
 }
 
 // List enumerates a project's current values as metadata. It never reveals and
@@ -235,7 +355,11 @@ func (s *Store) List(ctx context.Context, slug string) ([]Metadata, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, Metadata{Coordinate: c, Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size})
+		target, err := stored.target()
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, Metadata{Coordinate: c, Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size, Target: target})
 	}
 	return out, nil
 }
@@ -250,10 +374,11 @@ func (s *Store) List(ctx context.Context, slug string) ([]Metadata, error) {
 //
 // A named cell that holds no value is absent from the result rather than an
 // error: what a missing value means is the declaring schema's business, and it
-// is decided where the schema is. A cell that is present but fails to decrypt
-// is an error for the whole batch — half a set of variables is an application
-// with one silently unset, which at the point of use reads as one that was
-// never required.
+// is decided where the schema is. A cell that is present but fails to resolve —
+// a reference whose target has since been deleted, or a value that fails to
+// decrypt — is an error for the whole batch: half a set of variables is an
+// application with one silently unset, which at the point of use reads as one
+// that was never required.
 func (s *Store) Reveal(ctx context.Context, slug string, cells []Coordinate) ([]Value, error) {
 	if slug == "" {
 		return nil, fmt.Errorf("a project slug is required")
@@ -292,12 +417,20 @@ func (s *Store) Reveal(ctx context.Context, slug string, cells []Coordinate) ([]
 	group.SetLimit(revealConcurrency)
 	for i, stored := range found {
 		group.Go(func() error {
-			plaintext, err := s.decrypt(ctx, at[i], stored.Ciphertext)
+			holder, from, err := s.dereference(ctx, at[i], stored)
+			if err != nil {
+				return err
+			}
+			plaintext, err := s.decrypt(ctx, from, holder.Ciphertext)
+			if err != nil {
+				return err
+			}
+			target, err := stored.target()
 			if err != nil {
 				return err
 			}
 			values[i] = Value{
-				Metadata:  Metadata{Coordinate: at[i], Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size},
+				Metadata:  Metadata{Coordinate: at[i], Version: stored.Version, UpdatedAt: stored.Ts, Size: stored.Size, Target: target},
 				Plaintext: plaintext,
 			}
 			return nil
@@ -509,16 +642,22 @@ func marshal(i item) map[string]ddbtypes.AttributeValue {
 	if len(i.Ciphertext) > 0 {
 		m["ciphertext"] = &ddbtypes.AttributeValueMemberB{Value: i.Ciphertext}
 	}
+	// The index attributes are written only by a reference, which is the whole
+	// of what keeps the reverse index sparse: every other row is absent from it
+	// rather than indexed under an empty address.
+	if i.references() {
+		m["gsi1pk"] = &ddbtypes.AttributeValueMemberS{Value: i.TargetPK}
+		m["gsi1sk"] = &ddbtypes.AttributeValueMemberS{Value: i.TargetSK}
+	}
 	return m
 }
 
 func unmarshal(raw map[string]ddbtypes.AttributeValue) (item, error) {
 	i := item{}
-	if v, ok := raw["pk"].(*ddbtypes.AttributeValueMemberS); ok {
-		i.PK = v.Value
-	}
-	if v, ok := raw["sk"].(*ddbtypes.AttributeValueMemberS); ok {
-		i.SK = v.Value
+	for name, field := range map[string]*string{"pk": &i.PK, "sk": &i.SK, "gsi1pk": &i.TargetPK, "gsi1sk": &i.TargetSK} {
+		if v, ok := raw[name].(*ddbtypes.AttributeValueMemberS); ok {
+			*field = v.Value
+		}
 	}
 	if v, ok := raw["ciphertext"].(*ddbtypes.AttributeValueMemberB); ok {
 		i.Ciphertext = v.Value

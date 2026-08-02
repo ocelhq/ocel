@@ -162,6 +162,9 @@ func fire(hook *func()) {
 
 func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
 	f.queries = append(f.queries, in)
+	if in.IndexName != nil {
+		return f.queryIndex(in)
+	}
 
 	pk := stringAttr(in.ExpressionAttributeValues, ":pk")
 	prefix := stringAttr(in.ExpressionAttributeValues, ":prefix")
@@ -180,6 +183,41 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 	out := &dynamodb.QueryOutput{}
 	for _, sk := range sks {
 		out.Items = append(out.Items, f.items[pk][sk])
+	}
+	return out, nil
+}
+
+// queryIndex answers a read of the reverse-lookup index. It is sparse the way
+// the real one is — a row that carries neither index attribute is not in it at
+// all — so a test that finds a history row or a tombstone among the consumers
+// of a value is finding a genuine indexing mistake. KEYS_ONLY is honoured too:
+// what comes back is the four key attributes and nothing else, so nothing can
+// read an attribute the real index would not project.
+func (f *fakeDynamo) queryIndex(in *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
+	if aws.ToString(in.IndexName) != IndexName {
+		return nil, fmt.Errorf("fakeDynamo: no index named %q", aws.ToString(in.IndexName))
+	}
+	gsi1pk := stringAttr(in.ExpressionAttributeValues, ":pk")
+	gsi1sk := stringAttr(in.ExpressionAttributeValues, ":sk")
+
+	var keys []string
+	projected := map[string]map[string]ddbtypes.AttributeValue{}
+	for pk, sks := range f.items {
+		for sk, item := range sks {
+			if stringAttr(item, "gsi1pk") != gsi1pk || stringAttr(item, "gsi1sk") != gsi1sk {
+				continue
+			}
+			keys = append(keys, pk+"\x00"+sk)
+			projected[pk+"\x00"+sk] = map[string]ddbtypes.AttributeValue{
+				"pk": item["pk"], "sk": item["sk"], "gsi1pk": item["gsi1pk"], "gsi1sk": item["gsi1sk"],
+			}
+		}
+	}
+	sort.Strings(keys)
+
+	out := &dynamodb.QueryOutput{}
+	for _, key := range keys {
+		out.Items = append(out.Items, projected[key])
 	}
 	return out, nil
 }

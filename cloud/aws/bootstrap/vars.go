@@ -1,12 +1,18 @@
 package bootstrap
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ocelhq/ocel/cloud/aws/vars"
+)
 
 const (
 	// VarsTableIndexName is the variables table's secondary index: the reverse
 	// lookup answering "what references this value" before an edit changes it.
-	// It is sparse, so only reference items are indexed at all.
-	VarsTableIndexName = "gsi1"
+	// It is sparse, so only reference items are indexed at all. The store names
+	// it too, and provisioning it under one name while querying another is a
+	// failure nothing would catch until the first lookup.
+	VarsTableIndexName = vars.IndexName
 
 	outputVarsTable  = "VarsTableName"
 	outputVarsKeyARN = "VarsKeyArn"

@@ -47,6 +47,14 @@ const (
 	// versionDigits zero-pads a version number so history sorts numerically
 	// under DynamoDB's lexicographic sort key.
 	versionDigits = 10
+
+	// IndexName is the table's reverse-lookup index: the one access path
+	// answering what references a value, so the blast radius of an edit is a
+	// query rather than a scan. It is sparse — only a reference item carries the
+	// attributes it is keyed on — and it is exported for the same reason
+	// PartitionKey is: the template that provisions it and the query that reads
+	// it must name one index or they drift apart silently.
+	IndexName = "gsi1"
 )
 
 // Coordinate addresses exactly one cell. The zero values of Folder and
@@ -57,6 +65,19 @@ type Coordinate struct {
 	Folder      string
 	Key         string
 	Environment string
+}
+
+// String names a coordinate the way a message about one should read: the
+// project it belongs to, and the axes it varies along only where it varies.
+func (c Coordinate) String() string {
+	out := c.Slug + "/" + c.Key
+	if c.Folder != "" {
+		out += " in " + c.Folder
+	}
+	if c.Environment != "" {
+		out += " for " + c.Environment
+	}
+	return out
 }
 
 func (c Coordinate) canonical() Coordinate {
@@ -117,6 +138,17 @@ func (c Coordinate) validate() error {
 // same function or they drift apart silently.
 func PartitionKey(slug, class string) string {
 	return "P" + delimiter + slug + delimiter + "C" + delimiter + class
+}
+
+// parsePartitionKey recovers the project a partition belongs to. A reference
+// carries its target's partition key, so reading one back is how the reverse
+// index answers with a coordinate rather than with an opaque address.
+func parsePartitionKey(pk string) (string, error) {
+	parts := strings.Split(pk, delimiter)
+	if len(parts) != 4 || parts[0] != "P" || parts[2] != "C" {
+		return "", fmt.Errorf("unrecognized partition key %q", pk)
+	}
+	return parts[1], nil
 }
 
 // folderPrefix opens the components of one folder, terminated by the
