@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -255,6 +257,76 @@ func TestRun_ProvisionsTheVariableStoreIdempotently(t *testing.T) {
 		if _, ok := tmpl.Resources[name]; !ok {
 			t.Errorf("the account's stack no longer declares %s after a re-run", name)
 		}
+	}
+}
+
+// preStoreTemplate derives the stack body as it stood before the variable store
+// by removing the store from the current template. Deriving it rather than
+// pinning a copy keeps the seed honest: if the store ever stops being a separable
+// block, this fails loudly instead of upgrading from a fiction.
+func preStoreTemplate(t *testing.T) string {
+	t.Helper()
+	tmpl := stackTemplate(edge.TrustExternal)
+	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
+		if block == "" || !strings.Contains(tmpl, block) {
+			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)
+		}
+		tmpl = strings.Replace(tmpl, block, "", 1)
+	}
+	return tmpl
+}
+
+// TestRun_UpgradesAPreStoreAccountToTheVariableStore proves the version bump is
+// something an existing account can actually converge on: a stack raised before
+// the store re-runs bootstrap and gains the table, key and alias plus their
+// outputs — updated in place, never replaced.
+func TestRun_UpgradesAPreStoreAccountToTheVariableStore(t *testing.T) {
+	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	seed := preStoreTemplate(t)
+	cfn.templates[StackName] = seed
+	cfn.statuses[StackName] = cfntypes.StackStatusCreateComplete
+
+	before := parseVarsTemplate(t, seed)
+	for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
+		if _, ok := before.Resources[name]; ok {
+			t.Fatalf("the seeded account already declares %s; it is not a pre-store account", name)
+		}
+	}
+	for _, name := range []string{outputVarsTable, outputVarsKeyARN} {
+		if _, ok := before.Outputs[name]; ok {
+			t.Fatalf("the seeded account already outputs %s; it is not a pre-store account", name)
+		}
+	}
+
+	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+	if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+
+	if cfn.creates != 0 {
+		t.Errorf("the upgrade created %d stacks; a live account must be updated, not replaced", cfn.creates)
+	}
+	if cfn.updates != 1 {
+		t.Errorf("the account's stack was updated %d times, want 1", cfn.updates)
+	}
+
+	after := parseVarsTemplate(t, cfn.templates[StackName])
+	for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
+		if _, ok := after.Resources[name]; !ok {
+			t.Errorf("the upgrade did not add %s", name)
+		}
+	}
+	for _, name := range []string{outputVarsTable, outputVarsKeyARN} {
+		if _, ok := after.Outputs[name]; !ok {
+			t.Errorf("the upgrade did not add the %s output", name)
+		}
+	}
+	if got, want := after.Outputs[outputVersion].Value, strconv.Itoa(RequiredBootstrapVersion); got != want {
+		t.Errorf("upgraded stack reports version %q, want %q", got, want)
+	}
+
+	if _, ok := after.Resources["StateBucket"]; !ok {
+		t.Error("the upgrade dropped the state bucket")
 	}
 }
 

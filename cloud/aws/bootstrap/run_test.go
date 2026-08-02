@@ -19,13 +19,16 @@ import (
 // fakeCFN is a CloudFormation account holding one stack per name, recording the
 // template body each upsert submitted so a test can assert what the account was
 // actually asked to provision. It reports a missing stack the way CloudFormation
-// does — a ValidationError whose message says it does not exist — and settles
-// every create/update immediately so the waiters return on their first describe.
+// does — a ValidationError whose message says it does not exist — answers an
+// update that would change nothing with the ValidationError CloudFormation
+// answers it with, and settles every real create/update immediately so the
+// waiters return on their first describe.
 type fakeCFN struct {
 	templates map[string]string
 	statuses  map[string]cfntypes.StackStatus
 	creates   int
 	updates   int
+	noops     int
 }
 
 func newFakeCFN() *fakeCFN {
@@ -61,8 +64,13 @@ func (f *fakeCFN) CreateStack(_ context.Context, in *cloudformation.CreateStackI
 
 func (f *fakeCFN) UpdateStack(_ context.Context, in *cloudformation.UpdateStackInput, _ ...func(*cloudformation.Options)) (*cloudformation.UpdateStackOutput, error) {
 	f.updates++
-	f.templates[aws.ToString(in.StackName)] = aws.ToString(in.TemplateBody)
-	f.statuses[aws.ToString(in.StackName)] = cfntypes.StackStatusUpdateComplete
+	name, body := aws.ToString(in.StackName), aws.ToString(in.TemplateBody)
+	if f.templates[name] == body {
+		f.noops++
+		return nil, validationError{msg: "No updates are to be performed."}
+	}
+	f.templates[name] = body
+	f.statuses[name] = cfntypes.StackStatusUpdateComplete
 	return &cloudformation.UpdateStackOutput{}, nil
 }
 
@@ -395,8 +403,74 @@ func TestRun_Idempotent(t *testing.T) {
 	if creds.AccessKeyID != "AKIAEDGE" {
 		t.Errorf("stored key = %q, want the first minted key", creds.AccessKeyID)
 	}
-	if cfn.creates != 1 || cfn.updates != 1 {
-		t.Errorf("stack was created %d and updated %d times, want 1 and 1", cfn.creates, cfn.updates)
+	if cfn.creates != 1 {
+		t.Errorf("stack was created %d times across two bootstraps, want 1", cfn.creates)
+	}
+	if cfn.noops != 1 {
+		t.Errorf("the second bootstrap submitted %d unchanged templates, want 1: a re-run must converge, not re-provision", cfn.noops)
+	}
+}
+
+// TestRunPreview_Idempotent proves the preview substrate converges on a re-run
+// the way production does: the second bootstrap asks CloudFormation for a change
+// it has no change to make, mints no second key, regenerates no passphrase, and
+// leaves the preview stack still holding everything the first run put there —
+// the variable store included.
+func TestRunPreview_Idempotent(t *testing.T) {
+	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	values := map[string]string{"namespaceId": "ns-42"}
+	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal, Values: values}}
+
+	var passphrase string
+	for i := range 2 {
+		if err := RunPreview(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+			t.Fatalf("RunPreview %d: %v", i+1, err)
+		}
+		if i == 0 {
+			passphrase = ssmc.params[PassphraseParamName]
+		}
+	}
+
+	if cfn.creates != 1 {
+		t.Errorf("preview stack was created %d times across two bootstraps, want 1", cfn.creates)
+	}
+	if cfn.noops != 1 {
+		t.Errorf("the second bootstrap submitted %d unchanged templates, want 1: a re-run must converge, not re-provision", cfn.noops)
+	}
+	if len(cfn.templates) != 1 {
+		t.Errorf("preview bootstrap touched %d stacks, want only %s", len(cfn.templates), PreviewStackName)
+	}
+
+	if len(iamc.created) != 1 {
+		t.Errorf("minted %d keys across two preview bootstraps, want 1: %v", len(iamc.created), iamc.created)
+	}
+	var creds EdgeCredentials
+	if err := json.Unmarshal([]byte(ssmc.params[EdgeCredentialsPreviewParamName]), &creds); err != nil {
+		t.Fatalf("stored preview credentials are not readable after a re-run: %v", err)
+	}
+	if creds.AccessKeyID != "AKIAEDGE" {
+		t.Errorf("stored key = %q, want the first minted key", creds.AccessKeyID)
+	}
+	if got := ssmc.params[PassphraseParamName]; got != passphrase {
+		t.Error("the second bootstrap regenerated the Pulumi passphrase, orphaning every preview stack encrypted under the first")
+	}
+
+	got, err := ReadEdgeValues(context.Background(), ssmc, ClassPreview)
+	if err != nil {
+		t.Fatalf("ReadEdgeValues: %v", err)
+	}
+	if got["namespaceId"] != values["namespaceId"] {
+		t.Errorf("edge values after a re-run = %v, want %v", got, values)
+	}
+
+	tmpl := parseVarsTemplate(t, cfn.templates[PreviewStackName])
+	for _, name := range []string{"VarsTable", "VarsKey", "VarsKeyAlias"} {
+		if _, ok := tmpl.Resources[name]; !ok {
+			t.Errorf("the preview stack no longer declares %s after a re-run", name)
+		}
+	}
+	if got, want := tmpl.Resources["VarsKeyAlias"].Properties.AliasName, varsKeyAliasFor(ClassPreview); got != want {
+		t.Errorf("preview key alias = %q, want %q", got, want)
 	}
 }
 
