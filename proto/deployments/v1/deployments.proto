@@ -257,6 +257,12 @@ message ManifestVariable {
   // itself. Empty is the project root — the same single spelling used
   // everywhere above the store.
   string folder = 4;
+
+  // version is the store version the class-wide cell was at when this deploy
+  // resolved it — zero for a live-class key, which is fetched at runtime and
+  // pinned to no version, or for a cell that never had one. It exists for the
+  // ledger's audit record and nothing else: delivery never reads it.
+  int64 version = 5;
 }
 
 // ManifestFunction is a deployable function unit. Being listed in

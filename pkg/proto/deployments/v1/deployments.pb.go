@@ -590,7 +590,12 @@ type ManifestVariable struct {
 	// deploy is what keeps the runtime from ever having to resolve a folder
 	// itself. Empty is the project root — the same single spelling used
 	// everywhere above the store.
-	Folder        string `protobuf:"bytes,4,opt,name=folder,proto3" json:"folder,omitempty"`
+	Folder string `protobuf:"bytes,4,opt,name=folder,proto3" json:"folder,omitempty"`
+	// version is the store version the class-wide cell was at when this deploy
+	// resolved it — zero for a live-class key, which is fetched at runtime and
+	// pinned to no version, or for a cell that never had one. It exists for the
+	// ledger's audit record and nothing else: delivery never reads it.
+	Version       int64 `protobuf:"varint,5,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -651,6 +656,13 @@ func (x *ManifestVariable) GetFolder() string {
 		return x.Folder
 	}
 	return ""
+}
+
+func (x *ManifestVariable) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
 }
 
 // ManifestFunction is a deployable function unit. Being listed in
@@ -2990,12 +3002,13 @@ const file_deployments_v1_deployments_proto_rawDesc = "" +
 	"\x06folder\x18\x05 \x01(\tR\x06folder\x1aV\n" +
 	"\fDomainsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.deployments.v1.DomainListR\x05value:\x028\x01\"\x85\x01\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.deployments.v1.DomainListR\x05value:\x028\x01\"\x9f\x01\n" +
 	"\x10ManifestVariable\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
 	"\x05class\x18\x02 \x01(\x0e2\x1b.resources.v1.VariableClassR\x05class\x12\x14\n" +
 	"\x05value\x18\x03 \x01(\tR\x05value\x12\x16\n" +
-	"\x06folder\x18\x04 \x01(\tR\x06folder\"\xd9\x01\n" +
+	"\x06folder\x18\x04 \x01(\tR\x06folder\x12\x18\n" +
+	"\aversion\x18\x05 \x01(\x03R\aversion\"\xd9\x01\n" +
 	"\x10ManifestFunction\x12!\n" +
 	"\flogical_name\x18\x01 \x01(\tR\vlogicalName\x12\x18\n" +
 	"\aruntime\x18\x02 \x01(\tR\aruntime\x12\x18\n" +
