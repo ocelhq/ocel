@@ -102,6 +102,12 @@ type fakeDynamo struct {
 	// needs its own hook.
 	beforeTransact func()
 	beforePut      func()
+
+	// indexBehind holds the reverse index back the way DynamoDB may hold a real
+	// one back: the row is in the table and the index does not show it yet. No
+	// GSI is ever read consistently, so a guard built on one is what a test
+	// stages rather than what it can assume.
+	indexBehind bool
 }
 
 func newFakeDynamo() *fakeDynamo {
@@ -196,6 +202,9 @@ func (f *fakeDynamo) Query(_ context.Context, in *dynamodb.QueryInput, _ ...func
 func (f *fakeDynamo) queryIndex(in *dynamodb.QueryInput) (*dynamodb.QueryOutput, error) {
 	if aws.ToString(in.IndexName) != IndexName {
 		return nil, fmt.Errorf("fakeDynamo: no index named %q", aws.ToString(in.IndexName))
+	}
+	if f.indexBehind {
+		return &dynamodb.QueryOutput{}, nil
 	}
 	gsi1pk := stringAttr(in.ExpressionAttributeValues, ":pk")
 	gsi1sk := stringAttr(in.ExpressionAttributeValues, ":sk")

@@ -265,8 +265,10 @@ staleness bound.
   It always points at a class-wide value, never at an override — a named
   environment belongs to the project holding the reference and names nothing in
   the target's namespace — and it may only point at a value, never at another
-  reference, refused from both ends on the write so a chain can neither loop nor
-  deepen and a read is one follow. The **reverse lookup** answers what
+  reference. That is refused from both ends on the write, which is what makes a
+  loop impossible, and refused again on the read, because one of those two ends
+  is the eventually-consistent reverse lookup and a chain can slip past it. The
+  **reverse lookup** answers what
   references a value, so the blast radius of an edit is visible before the edit;
   it is the one thing the store's single secondary index exists for, populated
   on reference items alone. _Avoid_: alias, link, symlink, shared value.

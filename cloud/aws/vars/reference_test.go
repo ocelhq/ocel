@@ -131,6 +131,38 @@ func TestSetReferenceRejectsACellOthersAlreadyReference(t *testing.T) {
 	}
 }
 
+// That half of the guard reads the reverse index, and no GSI is served
+// consistently, so a second reference written moments after the first can be
+// accepted against an index that does not yet show it. A loop still cannot
+// happen — the other half is a consistent read of the target — but a two-hop
+// chain can, so the read refuses one instead of decrypting a row that holds an
+// address rather than ciphertext.
+func TestAChainTheIndexWasTooLateToRefuseFailsTheRead(t *testing.T) {
+	store, ddb, _ := newTestStore(t)
+	setReferenced(t, store, "sk_live_shared")
+
+	elsewhere := Coordinate{Slug: "platform", Key: "SHARED_SECRET"}
+	if _, err := store.Set(context.Background(), elsewhere, "another value", nil); err != nil {
+		t.Fatalf("Set err = %v", err)
+	}
+	ddb.indexBehind = true
+	if _, err := store.SetReference(context.Background(), source(), elsewhere, nil); err != nil {
+		t.Fatalf("SetReference against a lagging index err = %v, want it accepted: that is the case this read has to catch", err)
+	}
+	ddb.indexBehind = false
+
+	_, err := store.Get(context.Background(), consumer(), true)
+	if !errors.Is(err, ErrWouldDeepen) {
+		t.Fatalf("Get through a two-hop chain err = %v, want ErrWouldDeepen", err)
+	}
+	if !strings.Contains(err.Error(), source().String()) {
+		t.Errorf("failure = %q, want it to name the hop that turned out to be a reference", err)
+	}
+	if _, err := store.Reveal(context.Background(), consumer().Slug, []Coordinate{{Folder: consumer().Folder, Key: consumer().Key}}); !errors.Is(err, ErrWouldDeepen) {
+		t.Errorf("Reveal through a two-hop chain err = %v, want the batch to fail the same way", err)
+	}
+}
+
 func TestSetReferenceRejectsACellPointedAtItself(t *testing.T) {
 	store, _, _ := newTestStore(t)
 	if _, err := store.Set(context.Background(), source(), "a value", nil); err != nil {

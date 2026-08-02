@@ -291,9 +291,13 @@ func (s *Store) Get(ctx context.Context, c Coordinate, reveal bool) (Value, erro
 
 // dereference is read-time resolution: the row actually holding the plaintext,
 // and the coordinate its ciphertext is bound to. A row that holds a value is
-// its own answer, and a reference is followed exactly once — depth is one by
-// construction, because SetReference reads its target first and refuses to
-// point at another pointer.
+// its own answer, and a reference is followed exactly once.
+//
+// A follow that lands on another reference is refused rather than followed
+// again. The write path refuses to deepen a chain, but half of that guard reads
+// the reverse index and no index is read consistently, so a chain is improbable
+// rather than impossible; a second follow would be a read path with no bound on
+// it, over partitions a function's grant does not name.
 //
 // The follow is a query rather than a point read because a function's grant on
 // the table is Query alone, and resolution must be the same operation wherever
@@ -313,6 +317,9 @@ func (s *Store) dereference(ctx context.Context, at Coordinate, stored item) (it
 	}
 	if holder.liveVersion() == 0 {
 		return item{}, Coordinate{}, fmt.Errorf("%s references %s, which holds no value: %w", at, target, ErrNotFound)
+	}
+	if holder.references() {
+		return item{}, Coordinate{}, fmt.Errorf("%s references %s, which is itself a reference: %w", at, target, ErrWouldDeepen)
 	}
 	return holder, target, nil
 }

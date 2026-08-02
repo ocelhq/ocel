@@ -18,12 +18,12 @@ import (
 // several.
 var ErrIsReference = errors.New("that cell is a reference, and a reference has no value of its own")
 
-// ErrWouldDeepen reports a write that would make a chain of references longer
-// than one hop, whichever end it was attempted from: pointing at a cell that is
-// already a pointer, pointing a cell that others already point at, or pointing
-// a cell at itself. Depth one is what makes resolution a single follow that
-// cannot loop, so it is enforced on the write rather than defended against on
-// every read.
+// ErrWouldDeepen reports a chain of references longer than one hop: on a write,
+// whichever end it was attempted from — pointing at a cell that is already a
+// pointer, pointing a cell that others already point at, or pointing a cell at
+// itself — and on a read, the chain a lagging index let through anyway. Depth
+// one is what makes resolution a single follow, so a read that finds it does
+// not hold refuses rather than following again.
 var ErrWouldDeepen = errors.New("a reference may only point at a value, never at another reference")
 
 // SetReference points a cell at a value owned elsewhere, so a credential is set
@@ -38,9 +38,10 @@ var ErrWouldDeepen = errors.New("a reference may only point at a value, never at
 // reading a value whose name it cannot know is the same name.
 //
 // Depth is refused on the write, from both ends, by reading the target and
-// asking the reverse index what already points here. Between them a chain can
-// neither deepen nor close into a loop, which is why every read is one follow
-// and needs no cycle guard.
+// asking the reverse index what already points here. The target read is
+// consistent, so a loop cannot be closed at all. The index read is a GSI and is
+// not, so two writes moments apart can leave a chain this one meant to refuse —
+// which is why the read path refuses a second hop rather than assuming one.
 //
 // A target holding no value is refused too. A reference is written against
 // something, and accepting a dangling one would trade a refusal at the moment
@@ -92,8 +93,9 @@ func (s *Store) SetReference(ctx context.Context, c, target Coordinate, expected
 // reason the index exists: without one the question is a scan of every
 // project's values in the class.
 //
-// The answer is the consumers' coordinates, sorted, and it is the whole answer
-// — depth is one, so nothing behind a consumer is reading this value too.
+// The answer is the consumers' coordinates, sorted. It is the index's own
+// answer, so it is as current as the index is: a reference written moments ago
+// may not be in it yet, which is the same lag the write guard is bounded by.
 func (s *Store) References(ctx context.Context, target Coordinate) ([]Coordinate, error) {
 	if err := target.validate(); err != nil {
 		return nil, err
