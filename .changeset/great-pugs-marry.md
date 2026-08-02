@@ -1,6 +1,13 @@
 ---
-"ocel": patch
+"ocel": minor
 ---
+
+New subpath export `ocel/env/client`, the browser half of `ocel/env`. It exports
+`clientEnv` and `EnvClientError`; inside an app build the specifier resolves to
+the accessor generated at `<app>/.ocel/env-client.ts`, and until one is
+generated a read throws `EnvClientError` rather than yielding `undefined`.
+`EnvClientError` is also re-exported from `ocel/env` on both the node and edge
+builds.
 
 Each app is now built under its own environment. One build process served every
 app, so a plaintext key two apps resolved differently could not be expressed
