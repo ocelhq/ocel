@@ -243,6 +243,32 @@ func TestPurgeProjectValues_ReportsAFailedRemoval(t *testing.T) {
 	}
 }
 
+// Value removal joins the best-effort teardown sequence like every other step,
+// which means its failure is reported and then stepped over. A teardown that
+// gave up there would strand the project's assets behind a table it could not
+// reach — and leave a re-run resuming from further back than it needs to.
+func TestDestroyProject_AFailedValueRemovalDoesNotStopTheStepsAfterIt(t *testing.T) {
+	values := &valueRecorder{err: errors.New("table is on fire")}
+	awsSide, cacheSide := &sweepRecorder{}, &sweepRecorder{}
+	cfg := purgeConfig("prod", awsSide, cacheSide)
+	cfg.Values = values
+
+	_, err := DestroyProject(context.Background(), nil, nil, cfg, "shop", nil, nil)
+
+	if err == nil || !strings.Contains(err.Error(), "table is on fire") {
+		t.Fatalf("DestroyProject err = %v, want the failed value removal reported", err)
+	}
+	if values.purged == nil {
+		t.Fatal("the teardown never reached the value store, so nothing was stepped over")
+	}
+	if want := []string{"asset-bucket|prod/shop/", "artifact-bucket|shop/"}; !reflect.DeepEqual(awsSide.swept, want) {
+		t.Errorf("account-side sweeps = %v, want %v — the steps after a failed value removal must still run", awsSide.swept, want)
+	}
+	if cacheSide.swept == nil {
+		t.Error("the cache store was never swept, want the asset purge to have run anyway")
+	}
+}
+
 // Removing one preview removes compute, not values: the override someone set
 // for that environment is what a redeploy of the same branch resolves, and
 // overrides are tiny.
