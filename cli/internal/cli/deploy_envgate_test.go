@@ -333,6 +333,51 @@ func TestRunDeploy_EachAppIsBuiltWithItsOwnDivergedValue(t *testing.T) {
 	}
 }
 
+// TestRunPreviewUp_TheEnvironmentBeingDeployedResolvesItsOwnOverride is the
+// binding rule end to end, at the read time a baked value has: the environment
+// holding an override is built with it, and every other preview is built with
+// the class-wide value they all share.
+func TestRunPreviewUp_TheEnvironmentBeingDeployedResolvesItsOwnOverride(t *testing.T) {
+	for name, tc := range map[string]struct {
+		deploying string
+		want      string
+	}{
+		"the environment holding the override": {deploying: "staging", want: "ph_staging"},
+		"another preview":                      {deploying: "canary", want: "ph_shared"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+			stubGit(t, "feature/login", "")
+			t.Setenv(fakeInfraClassEnvVar, "preview")
+			t.Setenv(fakeInfraPresentEnvVar, "1")
+
+			envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
+			envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
+
+			var got map[string]map[string]string
+			prev := buildApp
+			buildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
+				got = envByApp
+				return nil
+			}
+			t.Cleanup(func() { buildApp = prev })
+
+			var stdout, stderr bytes.Buffer
+			if err := runPreviewUp(context.Background(), root, previewUpOptions{name: tc.deploying}, &stdout, &stderr, strings.NewReader("")); err != nil {
+				t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+			}
+			for app, env := range got {
+				if env["POSTHOG_ID"] != tc.want {
+					t.Errorf("%s built with POSTHOG_ID=%q, want %q", app, env["POSTHOG_ID"], tc.want)
+				}
+			}
+			if len(got) == 0 {
+				t.Fatal("no app was built, so nothing resolved a value")
+			}
+		})
+	}
+}
+
 func TestRunDeploy_AHalfCompletedFolderRenameStopsTheDeployNamingBothFiles(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
 	writeAppsConfig(t, root, `
