@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -473,19 +474,23 @@ func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
 }
 
 func (v runnerValues) Reveal(ctx context.Context, cells []envgate.Cell) (map[envgate.Cell]string, error) {
-	coordinates := make([]*envv1.Coordinate, 0, len(cells))
+	named := make([]*envv1.Cell, 0, len(cells))
 	for _, cell := range cells {
-		coordinates = append(coordinates, &envv1.Coordinate{Slug: v.slug, Folder: cell.Folder, Key: cell.Key})
+		named = append(named, &envv1.Cell{Folder: cell.Folder, Key: cell.Key})
 	}
 	resp, err := v.runner.RevealValues(ctx, &envv1.RevealValuesRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
 		Class:           v.class,
 		Slug:            v.slug,
-		Coordinates:     coordinates,
+		Cells:           named,
 	})
 	if err != nil {
-		return nil, err
+		// Flattened to its message: this error travels back out through the
+		// gate's own handler, which adopts a connect error it can see whole and
+		// would answer with the transport's word in place of the cells the gate
+		// named.
+		return nil, errors.New(err.Error())
 	}
 
 	found := make(map[envgate.Cell]string, len(resp.GetValues()))

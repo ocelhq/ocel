@@ -21,6 +21,11 @@ import (
 // untestable at the command level.
 const envFakeStoreEnvVar = "OCEL_TEST_FAKE_VARS_STORE"
 
+// fakeRevealFailureEnvVar, when set, makes every RevealValues fail with the
+// reason it names, so a test can drive what the CLI says when the store is
+// there but its plaintext cannot be read.
+const fakeRevealFailureEnvVar = "OCEL_TEST_FAKE_REVEAL_FAILURE"
+
 // fakeCell is one coordinate's stored state in the fake store: its version
 // history, newest last.
 type fakeCell struct {
@@ -184,14 +189,17 @@ func (s *deployFakeProviderServer) RevealValues(ctx context.Context, req *envv1.
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
+	if reason := os.Getenv(fakeRevealFailureEnvVar); reason != "" {
+		return nil, connect.NewError(connect.CodeUnavailable, errors.New(reason))
+	}
 	store, err := loadFakeStore()
 	if err != nil {
 		return nil, err
 	}
 
 	resp := &envv1.RevealValuesResponse{}
-	for _, c := range req.GetCoordinates() {
-		c.Slug = req.GetSlug()
+	for _, cell := range req.GetCells() {
+		c := &envv1.Coordinate{Slug: req.GetSlug(), Folder: cell.GetFolder(), Key: cell.GetKey(), Environment: cell.GetEnvironment()}
 		metadata := store.metadata(c)
 		if metadata == nil {
 			continue

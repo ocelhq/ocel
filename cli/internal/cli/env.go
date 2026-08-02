@@ -176,7 +176,7 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 		}
 	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
-		definitions, err := declaredVariables(ctx, cfg, runner, provider, opts, stderr)
+		definitions, err := declaredVariables(ctx, cfg, runner, provider, key, opts, stderr)
 		if err != nil {
 			return err
 		}
@@ -199,30 +199,33 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 	})
 }
 
-// declaredVariables answers what the project's code declares. A write has to
-// know a key's folder scope to reject a cell nothing could read, and code is
-// the only authority on scope — the store holds values and nothing else, so it
-// cannot answer this from its own side.
+// declaredVariables answers what the project's code declares about key. A
+// write has to know a key's folder scope to reject a cell nothing could read,
+// and code is the only authority on scope — the store holds values and nothing
+// else, so it cannot answer this from its own side.
 //
 // Learning it means running the discovery pass, which costs a bundle and a node
 // process, so the answer is cached per project against a fingerprint of the
 // bundled program: a scripted run of writes pays for it once, and the first
-// write after the declaring code changes pays for it again. Caching is
+// write after the declaring code changes pays for it again. The cache answers
+// only for a key it holds a declaration for — a key it is silent about is a
+// key the last run's ambient state may have suppressed, and taking that silence
+// for "unscoped" is how a root cell for a scoped key gets written. Caching is
 // best-effort — a cache that cannot be opened or written just means running
 // discovery, which is what this did before it had one.
-func declaredVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
+func declaredVariables(ctx context.Context, cfg *projectconfig.Config, runner *providerrunner.Runner, provider *projectconfig.ProviderDescriptor, key string, opts envOptions, stderr io.Writer) ([]*resourcesv1.VariableDefinition, error) {
 	entry, err := deploycollector.Bundle(cfg)
 	if err != nil {
 		return nil, err
 	}
-	fingerprint, err := declcache.Fingerprint(entry, envClass(opts).String())
+	fingerprint, err := declcache.Fingerprint(entry)
 	if err != nil {
 		return nil, err
 	}
 
 	cache, cacheErr := declcache.Open()
 	if cacheErr == nil {
-		if definitions, ok := cache.Load(cfg.Dir, fingerprint); ok {
+		if definitions, ok := cache.Load(cfg.Dir, fingerprint, key); ok {
 			return definitions, nil
 		}
 	}

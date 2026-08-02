@@ -86,8 +86,8 @@ type Gate struct {
 	definitions []*resourcesv1.VariableDefinition
 	problems    []*resourcesv1.VariableProblem
 
-	// plaintext is what this run has already decrypted, so a cell a
-	// declaration and a resolution both reach for is fetched once. A cell that
+	// plaintext is what this run has already decrypted, so a cell any two of
+	// its declarations and resolutions reach for is fetched once. A cell that
 	// holds no value is recorded as found: false rather than left out, so
 	// asking again costs nothing either. Prefetch clears it: the cells it
 	// re-reads are the answer to a write that just landed.
@@ -137,8 +137,15 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 // and answers from what it holds. It is the only path to plaintext in this
 // package: a caller names the cells its class permits, and how many round trips
 // that costs is decided here rather than at each call site.
+//
+// The lock is held across the read. Declarations arrive concurrently — a
+// discovery run starts every defineEnv's call before it awaits any of them — so
+// releasing it would let two of them fetch the same cell at once, which is the
+// per-cell round trip this exists to remove.
 func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, error) {
 	g.mu.Lock()
+	defer g.mu.Unlock()
+
 	var wanted []Cell
 	seen := map[Cell]bool{}
 	for _, cell := range cells {
@@ -148,24 +155,19 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 		seen[cell] = true
 		wanted = append(wanted, cell)
 	}
-	g.mu.Unlock()
 
-	var found map[Cell]string
 	if len(wanted) > 0 {
-		var err error
-		if found, err = g.values.Reveal(ctx, wanted); err != nil {
-			return nil, err
+		found, err := g.values.Reveal(ctx, wanted)
+		if err != nil {
+			return nil, fmt.Errorf("read %s: %w", describeAll(wanted), err)
 		}
-	}
-
-	g.mu.Lock()
-	defer g.mu.Unlock()
-	if g.plaintext == nil {
-		g.plaintext = map[Cell]revealed{}
-	}
-	for _, cell := range wanted {
-		value, ok := found[cell]
-		g.plaintext[cell] = revealed{value: value, found: ok}
+		if g.plaintext == nil {
+			g.plaintext = map[Cell]revealed{}
+		}
+		for _, cell := range wanted {
+			value, ok := found[cell]
+			g.plaintext[cell] = revealed{value: value, found: ok}
+		}
 	}
 
 	out := make(map[Cell]revealed, len(cells))
@@ -198,7 +200,7 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	}
 	plaintext, err := g.reveal(ctx, wanted)
 	if err != nil {
-		return nil, fmt.Errorf("read this declaration's values: %w", err)
+		return nil, err
 	}
 
 	var cells []*resourcesv1.VariableCell
@@ -350,6 +352,19 @@ func why(problem *resourcesv1.VariableProblem) string {
 		return "set, but it does not satisfy its schema: " + problem.GetDetail()
 	}
 	return "no value is set"
+}
+
+// describeAll names every cell one read covered, sorted so the same failure
+// reads the same way twice. A batched read fails whole, so what a user is short
+// of is every cell it asked for — a message naming none of them leaves nothing
+// to act on.
+func describeAll(cells []Cell) string {
+	names := make([]string, 0, len(cells))
+	for _, cell := range cells {
+		names = append(names, describe(cell))
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 func describe(cell Cell) string {

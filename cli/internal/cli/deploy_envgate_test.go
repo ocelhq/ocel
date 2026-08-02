@@ -188,6 +188,26 @@ func TestRunDeploy_ValueSet_PassesTheGateAndDeploys(t *testing.T) {
 	}
 }
 
+// A store that answers a listing but not a reveal has to say which cell it
+// could not read. The read is batched over a whole declaration, so a failure
+// naming nothing tells an operator only that something, somewhere, is unset.
+func TestRunDeploy_AValueThatCannotBeReadNamesTheCell(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_SENSITIVE","required":true}]`)
+	envSet(t, root, "STRIPE_API_KEY", "sk_live_value", envOptions{})
+	t.Setenv(fakeRevealFailureEnvVar, "the store is unreachable")
+
+	var stdout, stderr bytes.Buffer
+	err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDeploy err = nil, want a store it cannot read to stop the deploy")
+	}
+
+	out := stdout.String() + stderr.String() + err.Error()
+	if !strings.Contains(out, "STRIPE_API_KEY (project root)") {
+		t.Errorf("output = %q, want it to name the cell that could not be read", out)
+	}
+}
+
 func TestRunDeploy_LiveValueIsNeverHandedToTheDeclaringProcess(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"LIVE_KEY","class":"VARIABLE_CLASS_SECRET","required":true},{"key":"BAKED_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
 	envSet(t, root, "LIVE_KEY", "sk_live_do_not_leak", envOptions{})

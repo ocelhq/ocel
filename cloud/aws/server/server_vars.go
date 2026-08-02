@@ -183,9 +183,14 @@ func (s *VarsServer) RevealValues(ctx context.Context, req *envv1.RevealValuesRe
 	if err != nil {
 		return nil, err
 	}
-	cells := make([]vars.Coordinate, 0, len(req.GetCoordinates()))
-	for _, c := range req.GetCoordinates() {
-		cells = append(cells, toCoordinate(c))
+	cells := make([]vars.Coordinate, 0, len(req.GetCells()))
+	for _, c := range req.GetCells() {
+		cells = append(cells, vars.Coordinate{
+			Slug:        req.GetSlug(),
+			Folder:      c.GetFolder(),
+			Key:         c.GetKey(),
+			Environment: c.GetEnvironment(),
+		})
 	}
 	values, err := store.Reveal(ctx, req.GetSlug(), cells)
 	if err != nil {

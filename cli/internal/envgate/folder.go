@@ -87,7 +87,7 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	}
 	plaintext, err := g.reveal(ctx, wanted)
 	if err != nil {
-		return nil, fmt.Errorf("read the values %s resolves: %w", app, err)
+		return nil, err
 	}
 
 	resolved := make(map[string]Resolved, len(hops))

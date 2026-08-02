@@ -151,7 +151,7 @@ func TestRevealValues_ReadsEveryNamedCellInOneQuery(t *testing.T) {
 
 	resp, err := s.RevealValues(ctx, &envv1.RevealValuesRequest{
 		Slug: "shop",
-		Coordinates: []*envv1.Coordinate{
+		Cells: []*envv1.Cell{
 			{Key: "STRIPE_API_KEY"},
 			{Key: "WEBHOOK_URL"},
 			{Key: "SESSION_KEY"},

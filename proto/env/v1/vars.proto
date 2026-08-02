@@ -181,10 +181,19 @@ message RevealValuesRequest {
   string protocol_version = 2;
   deployments.v1.Environment.Class class = 3;
 
-  // slug is the project the cells belong to. coordinates name them within it,
-  // so a coordinate's own slug field is redundant here and ignored.
+  // slug is the project the cells belong to. cells name them within it.
   string slug = 4;
-  repeated Coordinate coordinates = 5;
+  repeated Cell cells = 5;
+}
+
+// Cell addresses one value inside a project already named. It is Coordinate
+// without the slug: a batched read carries the project once for the whole
+// request, so there is no second place for it to be stated and no way for two
+// cells of one request to disagree about which project they belong to.
+message Cell {
+  string folder = 1;
+  string key = 2;
+  string environment = 3;
 }
 
 message RevealValuesResponse {

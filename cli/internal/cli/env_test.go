@@ -422,3 +422,32 @@ func TestRunEnvSet_PicksUpAScopeTheCodeGainedSinceTheLastWrite(t *testing.T) {
 		t.Errorf("discovery ran %d times, want 2: the declaring code changed between the writes", got)
 	}
 }
+
+// A declaration made conditional on ambient run-time state is missing from a
+// set the last run produced, and no fingerprint over the code can see that it
+// is missing. So a cached set may answer for a key it holds and never for one
+// it does not: the alternative is writing a root cell for a scoped key,
+// silently, which is the one thing the write guard exists to prevent.
+func TestRunEnvSet_DoesNotTrustACachedAbsenceForAConditionallyScopedKey(t *testing.T) {
+	root := setUpEnvGateFixtureWith(t, "[]", envDeclareOnlyScript)
+
+	envSet(t, root, "LOG_LEVEL", "info", envOptions{})
+
+	// Same bytes on disk, different ambient state: the declaring process now
+	// scopes a key the cached set never mentioned.
+	t.Setenv("OCEL_TEST_ENV_DEFINITIONS", `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web"]}]`)
+
+	var stdout, stderr bytes.Buffer
+	err := runEnvSet(context.Background(), root, "POSTHOG_ID", "ph_root", envOptions{}, &stdout, &stderr)
+	if err == nil {
+		t.Fatal("runEnvSet err = nil, want a root value for a scoped key refused: a cached set that never mentioned the key cannot say it is unscoped")
+	}
+	if !strings.Contains(err.Error(), "/web") {
+		t.Errorf("err = %v, want it to name the folder the key is scoped to", err)
+	}
+
+	var out bytes.Buffer
+	if err := runEnvGet(context.Background(), root, "POSTHOG_ID", envOptions{reveal: true}, &out, &out); err == nil {
+		t.Errorf("runEnvGet at root err = nil (out=%q), want no root cell written", out.String())
+	}
+}

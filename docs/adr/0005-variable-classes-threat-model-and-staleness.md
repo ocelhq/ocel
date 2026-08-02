@@ -157,6 +157,30 @@ server-provided `ExpiresAt` (`cli/internal/resolvecache/resolvecache.go:20-33`,
 `107-126`). It governs whether `ocel dev` calls the resolve API at all. It has
 nothing to do with how stale a live-class value is once resolved.
 
+**Nor with the declaration cache.** `cli/internal/declcache` holds the
+`VariableDefinition` set a discovery run produced — key, class, required, folder
+scope — so `ocel env set` need not re-run the pass per write. It holds **scope
+metadata and never a plaintext value**; values are the store's half and never
+reach it. It is invalidated by one thing: a change to `sha256` of the bundled
+discovery program, which esbuild inlines every source file and transitive
+dependency into, so any edit to the declaring code moves it. There is **no time
+bound** — a fingerprint that covers every input a declaration can come from is
+not made truer by expiring. The env class is deliberately not in the
+fingerprint: a declaration is what the code states, so preview and production
+writes share one entry.
+
+What the fingerprint cannot see is the ambient state the discovery program reads
+while it runs — `if (process.env.X) defineEnv(...)` is missing from a cached set
+with the code byte-identical. **The write guard therefore never trusts the
+cache's absences.** `Cache.Load` takes the key it is being asked about and
+reports a hit only for a set that declares it (`declcache.go:66-95`), so a key
+the cached set is silent about forces a real discovery run before
+`envgate.CheckWritable` decides. Silence is not an answer: reading it as
+"unscoped" is exactly how a root cell for a scoped key — an Out of Scope
+construct for this epic — would get written, silently. The cost falls only on
+writing a key nothing declares, which is either a typo or the stale case being
+guarded.
+
 ### The two override axes are orthogonal
 
 A value is addressed by a **cell** (key + folder) and, separately, by an **env

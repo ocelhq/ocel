@@ -646,10 +646,9 @@ type RevealValuesRequest struct {
 	Options         []byte                 `protobuf:"bytes,1,opt,name=options,proto3" json:"options,omitempty"`
 	ProtocolVersion string                 `protobuf:"bytes,2,opt,name=protocol_version,json=protocolVersion,proto3" json:"protocol_version,omitempty"`
 	Class           v1.Environment_Class   `protobuf:"varint,3,opt,name=class,proto3,enum=deployments.v1.Environment_Class" json:"class,omitempty"`
-	// slug is the project the cells belong to. coordinates name them within it,
-	// so a coordinate's own slug field is redundant here and ignored.
-	Slug          string        `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
-	Coordinates   []*Coordinate `protobuf:"bytes,5,rep,name=coordinates,proto3" json:"coordinates,omitempty"`
+	// slug is the project the cells belong to. cells name them within it.
+	Slug          string  `protobuf:"bytes,4,opt,name=slug,proto3" json:"slug,omitempty"`
+	Cells         []*Cell `protobuf:"bytes,5,rep,name=cells,proto3" json:"cells,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -712,11 +711,75 @@ func (x *RevealValuesRequest) GetSlug() string {
 	return ""
 }
 
-func (x *RevealValuesRequest) GetCoordinates() []*Coordinate {
+func (x *RevealValuesRequest) GetCells() []*Cell {
 	if x != nil {
-		return x.Coordinates
+		return x.Cells
 	}
 	return nil
+}
+
+// Cell addresses one value inside a project already named. It is Coordinate
+// without the slug: a batched read carries the project once for the whole
+// request, so there is no second place for it to be stated and no way for two
+// cells of one request to disagree about which project they belong to.
+type Cell struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Folder        string                 `protobuf:"bytes,1,opt,name=folder,proto3" json:"folder,omitempty"`
+	Key           string                 `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	Environment   string                 `protobuf:"bytes,3,opt,name=environment,proto3" json:"environment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Cell) Reset() {
+	*x = Cell{}
+	mi := &file_env_v1_vars_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Cell) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Cell) ProtoMessage() {}
+
+func (x *Cell) ProtoReflect() protoreflect.Message {
+	mi := &file_env_v1_vars_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Cell.ProtoReflect.Descriptor instead.
+func (*Cell) Descriptor() ([]byte, []int) {
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *Cell) GetFolder() string {
+	if x != nil {
+		return x.Folder
+	}
+	return ""
+}
+
+func (x *Cell) GetKey() string {
+	if x != nil {
+		return x.Key
+	}
+	return ""
+}
+
+func (x *Cell) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
 }
 
 type RevealValuesResponse struct {
@@ -730,7 +793,7 @@ type RevealValuesResponse struct {
 
 func (x *RevealValuesResponse) Reset() {
 	*x = RevealValuesResponse{}
-	mi := &file_env_v1_vars_proto_msgTypes[10]
+	mi := &file_env_v1_vars_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -742,7 +805,7 @@ func (x *RevealValuesResponse) String() string {
 func (*RevealValuesResponse) ProtoMessage() {}
 
 func (x *RevealValuesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_env_v1_vars_proto_msgTypes[10]
+	mi := &file_env_v1_vars_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -755,7 +818,7 @@ func (x *RevealValuesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevealValuesResponse.ProtoReflect.Descriptor instead.
 func (*RevealValuesResponse) Descriptor() ([]byte, []int) {
-	return file_env_v1_vars_proto_rawDescGZIP(), []int{10}
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *RevealValuesResponse) GetValues() []*RevealedValue {
@@ -775,7 +838,7 @@ type RevealedValue struct {
 
 func (x *RevealedValue) Reset() {
 	*x = RevealedValue{}
-	mi := &file_env_v1_vars_proto_msgTypes[11]
+	mi := &file_env_v1_vars_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -787,7 +850,7 @@ func (x *RevealedValue) String() string {
 func (*RevealedValue) ProtoMessage() {}
 
 func (x *RevealedValue) ProtoReflect() protoreflect.Message {
-	mi := &file_env_v1_vars_proto_msgTypes[11]
+	mi := &file_env_v1_vars_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -800,7 +863,7 @@ func (x *RevealedValue) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RevealedValue.ProtoReflect.Descriptor instead.
 func (*RevealedValue) Descriptor() ([]byte, []int) {
-	return file_env_v1_vars_proto_rawDescGZIP(), []int{11}
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RevealedValue) GetMetadata() *ValueMetadata {
@@ -837,7 +900,7 @@ type DeleteValueRequest struct {
 
 func (x *DeleteValueRequest) Reset() {
 	*x = DeleteValueRequest{}
-	mi := &file_env_v1_vars_proto_msgTypes[12]
+	mi := &file_env_v1_vars_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -849,7 +912,7 @@ func (x *DeleteValueRequest) String() string {
 func (*DeleteValueRequest) ProtoMessage() {}
 
 func (x *DeleteValueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_env_v1_vars_proto_msgTypes[12]
+	mi := &file_env_v1_vars_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -862,7 +925,7 @@ func (x *DeleteValueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteValueRequest.ProtoReflect.Descriptor instead.
 func (*DeleteValueRequest) Descriptor() ([]byte, []int) {
-	return file_env_v1_vars_proto_rawDescGZIP(), []int{12}
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteValueRequest) GetOptions() []byte {
@@ -911,7 +974,7 @@ type DeleteValueResponse struct {
 
 func (x *DeleteValueResponse) Reset() {
 	*x = DeleteValueResponse{}
-	mi := &file_env_v1_vars_proto_msgTypes[13]
+	mi := &file_env_v1_vars_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -923,7 +986,7 @@ func (x *DeleteValueResponse) String() string {
 func (*DeleteValueResponse) ProtoMessage() {}
 
 func (x *DeleteValueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_env_v1_vars_proto_msgTypes[13]
+	mi := &file_env_v1_vars_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -936,7 +999,7 @@ func (x *DeleteValueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteValueResponse.ProtoReflect.Descriptor instead.
 func (*DeleteValueResponse) Descriptor() ([]byte, []int) {
-	return file_env_v1_vars_proto_rawDescGZIP(), []int{13}
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DeleteValueResponse) GetDeleted() bool {
@@ -958,7 +1021,7 @@ type ListVersionsRequest struct {
 
 func (x *ListVersionsRequest) Reset() {
 	*x = ListVersionsRequest{}
-	mi := &file_env_v1_vars_proto_msgTypes[14]
+	mi := &file_env_v1_vars_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -970,7 +1033,7 @@ func (x *ListVersionsRequest) String() string {
 func (*ListVersionsRequest) ProtoMessage() {}
 
 func (x *ListVersionsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_env_v1_vars_proto_msgTypes[14]
+	mi := &file_env_v1_vars_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -983,7 +1046,7 @@ func (x *ListVersionsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVersionsRequest.ProtoReflect.Descriptor instead.
 func (*ListVersionsRequest) Descriptor() ([]byte, []int) {
-	return file_env_v1_vars_proto_rawDescGZIP(), []int{14}
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *ListVersionsRequest) GetOptions() []byte {
@@ -1024,7 +1087,7 @@ type ListVersionsResponse struct {
 
 func (x *ListVersionsResponse) Reset() {
 	*x = ListVersionsResponse{}
-	mi := &file_env_v1_vars_proto_msgTypes[15]
+	mi := &file_env_v1_vars_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1036,7 +1099,7 @@ func (x *ListVersionsResponse) String() string {
 func (*ListVersionsResponse) ProtoMessage() {}
 
 func (x *ListVersionsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_env_v1_vars_proto_msgTypes[15]
+	mi := &file_env_v1_vars_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1049,7 +1112,7 @@ func (x *ListVersionsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListVersionsResponse.ProtoReflect.Descriptor instead.
 func (*ListVersionsResponse) Descriptor() ([]byte, []int) {
-	return file_env_v1_vars_proto_rawDescGZIP(), []int{15}
+	return file_env_v1_vars_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *ListVersionsResponse) GetVersions() []*VersionEntry {
@@ -1113,13 +1176,17 @@ const file_env_v1_vars_proto_rawDesc = "" +
 	"\x10GetValueResponse\x12\x14\n" +
 	"\x05found\x18\x01 \x01(\bR\x05found\x121\n" +
 	"\bmetadata\x18\x02 \x01(\v2\x15.env.v1.ValueMetadataR\bmetadata\x12\x14\n" +
-	"\x05value\x18\x03 \x01(\tR\x05value\"\xdd\x01\n" +
+	"\x05value\x18\x03 \x01(\tR\x05value\"\xcb\x01\n" +
 	"\x13RevealValuesRequest\x12\x18\n" +
 	"\aoptions\x18\x01 \x01(\fR\aoptions\x12)\n" +
 	"\x10protocol_version\x18\x02 \x01(\tR\x0fprotocolVersion\x127\n" +
 	"\x05class\x18\x03 \x01(\x0e2!.deployments.v1.Environment.ClassR\x05class\x12\x12\n" +
-	"\x04slug\x18\x04 \x01(\tR\x04slug\x124\n" +
-	"\vcoordinates\x18\x05 \x03(\v2\x12.env.v1.CoordinateR\vcoordinates\"E\n" +
+	"\x04slug\x18\x04 \x01(\tR\x04slug\x12\"\n" +
+	"\x05cells\x18\x05 \x03(\v2\f.env.v1.CellR\x05cells\"R\n" +
+	"\x04Cell\x12\x16\n" +
+	"\x06folder\x18\x01 \x01(\tR\x06folder\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12 \n" +
+	"\venvironment\x18\x03 \x01(\tR\venvironment\"E\n" +
 	"\x14RevealValuesResponse\x12-\n" +
 	"\x06values\x18\x01 \x03(\v2\x15.env.v1.RevealedValueR\x06values\"X\n" +
 	"\rRevealedValue\x121\n" +
@@ -1166,7 +1233,7 @@ func file_env_v1_vars_proto_rawDescGZIP() []byte {
 	return file_env_v1_vars_proto_rawDescData
 }
 
-var file_env_v1_vars_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_env_v1_vars_proto_msgTypes = make([]protoimpl.MessageInfo, 17)
 var file_env_v1_vars_proto_goTypes = []any{
 	(*Coordinate)(nil),           // 0: env.v1.Coordinate
 	(*ValueMetadata)(nil),        // 1: env.v1.ValueMetadata
@@ -1178,45 +1245,46 @@ var file_env_v1_vars_proto_goTypes = []any{
 	(*GetValueRequest)(nil),      // 7: env.v1.GetValueRequest
 	(*GetValueResponse)(nil),     // 8: env.v1.GetValueResponse
 	(*RevealValuesRequest)(nil),  // 9: env.v1.RevealValuesRequest
-	(*RevealValuesResponse)(nil), // 10: env.v1.RevealValuesResponse
-	(*RevealedValue)(nil),        // 11: env.v1.RevealedValue
-	(*DeleteValueRequest)(nil),   // 12: env.v1.DeleteValueRequest
-	(*DeleteValueResponse)(nil),  // 13: env.v1.DeleteValueResponse
-	(*ListVersionsRequest)(nil),  // 14: env.v1.ListVersionsRequest
-	(*ListVersionsResponse)(nil), // 15: env.v1.ListVersionsResponse
-	(v1.Environment_Class)(0),    // 16: deployments.v1.Environment.Class
+	(*Cell)(nil),                 // 10: env.v1.Cell
+	(*RevealValuesResponse)(nil), // 11: env.v1.RevealValuesResponse
+	(*RevealedValue)(nil),        // 12: env.v1.RevealedValue
+	(*DeleteValueRequest)(nil),   // 13: env.v1.DeleteValueRequest
+	(*DeleteValueResponse)(nil),  // 14: env.v1.DeleteValueResponse
+	(*ListVersionsRequest)(nil),  // 15: env.v1.ListVersionsRequest
+	(*ListVersionsResponse)(nil), // 16: env.v1.ListVersionsResponse
+	(v1.Environment_Class)(0),    // 17: deployments.v1.Environment.Class
 }
 var file_env_v1_vars_proto_depIdxs = []int32{
 	0,  // 0: env.v1.ValueMetadata.coordinate:type_name -> env.v1.Coordinate
-	16, // 1: env.v1.SetValueRequest.class:type_name -> deployments.v1.Environment.Class
+	17, // 1: env.v1.SetValueRequest.class:type_name -> deployments.v1.Environment.Class
 	0,  // 2: env.v1.SetValueRequest.coordinate:type_name -> env.v1.Coordinate
 	1,  // 3: env.v1.SetValueResponse.metadata:type_name -> env.v1.ValueMetadata
-	16, // 4: env.v1.ListValuesRequest.class:type_name -> deployments.v1.Environment.Class
+	17, // 4: env.v1.ListValuesRequest.class:type_name -> deployments.v1.Environment.Class
 	1,  // 5: env.v1.ListValuesResponse.values:type_name -> env.v1.ValueMetadata
-	16, // 6: env.v1.GetValueRequest.class:type_name -> deployments.v1.Environment.Class
+	17, // 6: env.v1.GetValueRequest.class:type_name -> deployments.v1.Environment.Class
 	0,  // 7: env.v1.GetValueRequest.coordinate:type_name -> env.v1.Coordinate
 	1,  // 8: env.v1.GetValueResponse.metadata:type_name -> env.v1.ValueMetadata
-	16, // 9: env.v1.RevealValuesRequest.class:type_name -> deployments.v1.Environment.Class
-	0,  // 10: env.v1.RevealValuesRequest.coordinates:type_name -> env.v1.Coordinate
-	11, // 11: env.v1.RevealValuesResponse.values:type_name -> env.v1.RevealedValue
+	17, // 9: env.v1.RevealValuesRequest.class:type_name -> deployments.v1.Environment.Class
+	10, // 10: env.v1.RevealValuesRequest.cells:type_name -> env.v1.Cell
+	12, // 11: env.v1.RevealValuesResponse.values:type_name -> env.v1.RevealedValue
 	1,  // 12: env.v1.RevealedValue.metadata:type_name -> env.v1.ValueMetadata
-	16, // 13: env.v1.DeleteValueRequest.class:type_name -> deployments.v1.Environment.Class
+	17, // 13: env.v1.DeleteValueRequest.class:type_name -> deployments.v1.Environment.Class
 	0,  // 14: env.v1.DeleteValueRequest.coordinate:type_name -> env.v1.Coordinate
-	16, // 15: env.v1.ListVersionsRequest.class:type_name -> deployments.v1.Environment.Class
+	17, // 15: env.v1.ListVersionsRequest.class:type_name -> deployments.v1.Environment.Class
 	0,  // 16: env.v1.ListVersionsRequest.coordinate:type_name -> env.v1.Coordinate
 	2,  // 17: env.v1.ListVersionsResponse.versions:type_name -> env.v1.VersionEntry
 	3,  // 18: env.v1.EnvVarsService.SetValue:input_type -> env.v1.SetValueRequest
 	5,  // 19: env.v1.EnvVarsService.ListValues:input_type -> env.v1.ListValuesRequest
 	7,  // 20: env.v1.EnvVarsService.GetValue:input_type -> env.v1.GetValueRequest
 	9,  // 21: env.v1.EnvVarsService.RevealValues:input_type -> env.v1.RevealValuesRequest
-	12, // 22: env.v1.EnvVarsService.DeleteValue:input_type -> env.v1.DeleteValueRequest
-	14, // 23: env.v1.EnvVarsService.ListVersions:input_type -> env.v1.ListVersionsRequest
+	13, // 22: env.v1.EnvVarsService.DeleteValue:input_type -> env.v1.DeleteValueRequest
+	15, // 23: env.v1.EnvVarsService.ListVersions:input_type -> env.v1.ListVersionsRequest
 	4,  // 24: env.v1.EnvVarsService.SetValue:output_type -> env.v1.SetValueResponse
 	6,  // 25: env.v1.EnvVarsService.ListValues:output_type -> env.v1.ListValuesResponse
 	8,  // 26: env.v1.EnvVarsService.GetValue:output_type -> env.v1.GetValueResponse
-	10, // 27: env.v1.EnvVarsService.RevealValues:output_type -> env.v1.RevealValuesResponse
-	13, // 28: env.v1.EnvVarsService.DeleteValue:output_type -> env.v1.DeleteValueResponse
-	15, // 29: env.v1.EnvVarsService.ListVersions:output_type -> env.v1.ListVersionsResponse
+	11, // 27: env.v1.EnvVarsService.RevealValues:output_type -> env.v1.RevealValuesResponse
+	14, // 28: env.v1.EnvVarsService.DeleteValue:output_type -> env.v1.DeleteValueResponse
+	16, // 29: env.v1.EnvVarsService.ListVersions:output_type -> env.v1.ListVersionsResponse
 	24, // [24:30] is the sub-list for method output_type
 	18, // [18:24] is the sub-list for method input_type
 	18, // [18:18] is the sub-list for extension type_name
@@ -1230,14 +1298,14 @@ func file_env_v1_vars_proto_init() {
 		return
 	}
 	file_env_v1_vars_proto_msgTypes[3].OneofWrappers = []any{}
-	file_env_v1_vars_proto_msgTypes[12].OneofWrappers = []any{}
+	file_env_v1_vars_proto_msgTypes[13].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_env_v1_vars_proto_rawDesc), len(file_env_v1_vars_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   16,
+			NumMessages:   17,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
