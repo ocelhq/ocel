@@ -404,20 +404,25 @@ func (s *Store) read(ctx context.Context, pk, sk string) (item, error) {
 }
 
 // query reads every item under a sort-key prefix, following pagination so a
-// listing is never silently truncated.
+// listing is never silently truncated. An empty prefix reads the whole
+// partition, which is what a project's teardown removes.
 func (s *Store) query(ctx context.Context, pk, prefix string, ascending bool) ([]item, error) {
+	condition := "pk = :pk"
+	values := map[string]ddbtypes.AttributeValue{":pk": &ddbtypes.AttributeValueMemberS{Value: pk}}
+	if prefix != "" {
+		condition += " AND begins_with(sk, :prefix)"
+		values[":prefix"] = &ddbtypes.AttributeValueMemberS{Value: prefix}
+	}
+
 	var out []item
 	var start map[string]ddbtypes.AttributeValue
 	for {
 		page, err := s.Dynamo.Query(ctx, &dynamodb.QueryInput{
-			TableName:              aws.String(s.Table),
-			KeyConditionExpression: aws.String("pk = :pk AND begins_with(sk, :prefix)"),
-			ExpressionAttributeValues: map[string]ddbtypes.AttributeValue{
-				":pk":     &ddbtypes.AttributeValueMemberS{Value: pk},
-				":prefix": &ddbtypes.AttributeValueMemberS{Value: prefix},
-			},
-			ScanIndexForward:  aws.Bool(ascending),
-			ExclusiveStartKey: start,
+			TableName:                 aws.String(s.Table),
+			KeyConditionExpression:    aws.String(condition),
+			ExpressionAttributeValues: values,
+			ScanIndexForward:          aws.Bool(ascending),
+			ExclusiveStartKey:         start,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("query %s: %w", prefix, err)
