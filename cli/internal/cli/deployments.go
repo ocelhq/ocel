@@ -193,19 +193,19 @@ func renderPromotions(stdout io.Writer, promotions []*deploymentsv1.PromotionHis
 
 // deployedIdentities renders a promotion's per-app Deployment identities as
 // "app=identity", sorted by app so one promotion's row reads against another's.
-func deployedIdentities(builds map[string]string) string {
-	if len(builds) == 0 {
+func deployedIdentities(identityByApp map[string]string) string {
+	if len(identityByApp) == 0 {
 		return "—"
 	}
-	apps := make([]string, 0, len(builds))
-	for app := range builds {
+	apps := make([]string, 0, len(identityByApp))
+	for app := range identityByApp {
 		apps = append(apps, app)
 	}
 	sort.Strings(apps)
 
 	pairs := make([]string, 0, len(apps))
 	for _, app := range apps {
-		pairs = append(pairs, app+"="+builds[app])
+		pairs = append(pairs, app+"="+identityByApp[app])
 	}
 	return strings.Join(pairs, " ")
 }
