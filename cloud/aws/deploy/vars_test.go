@@ -304,6 +304,40 @@ func TestRenderBakedBundle_AnAppWithNoBakedValuesCostsNothing(t *testing.T) {
 	}
 }
 
+// TestFingerprintValues_SameValuesSameDigestDifferentValuesDifferent proves
+// what the identity rests on: the fingerprint is a function of the values
+// themselves, so an unchanged set re-renders to the same Deployment identity
+// and a rotated one to a different Deployment. The key/value boundary is part
+// of what is digested, so no re-splitting of one key's characters into another
+// can collide.
+func TestFingerprintValues_SameValuesSameDigestDifferentValuesDifferent(t *testing.T) {
+	values := map[string]string{"STRIPE_API_KEY": "sk-live", "SENTRY_DSN": "https://sentry"}
+
+	first := fingerprintValues(values)
+	if second := fingerprintValues(map[string]string{"SENTRY_DSN": "https://sentry", "STRIPE_API_KEY": "sk-live"}); first != second {
+		t.Errorf("fingerprint = %q then %q, want the same values to fingerprint the same", first, second)
+	}
+	if rotated := fingerprintValues(map[string]string{"STRIPE_API_KEY": "sk-live-2", "SENTRY_DSN": "https://sentry"}); rotated == first {
+		t.Error("a rotated value fingerprints the same; the rotation would reuse the prior Deployment identity")
+	}
+	if added := fingerprintValues(map[string]string{"STRIPE_API_KEY": "sk-live", "SENTRY_DSN": "https://sentry", "EXTRA": ""}); added == first {
+		t.Error("an added key fingerprints the same")
+	}
+	if a, b := fingerprintValues(map[string]string{"AB": "C"}), fingerprintValues(map[string]string{"A": "BC"}); a == b {
+		t.Errorf("{AB:C} and {A:BC} both fingerprint %q; the key boundary is not digested", a)
+	}
+
+	for name, empty := range map[string]map[string]string{"nil": nil, "empty": {}} {
+		if got := fingerprintValues(empty); got != "" {
+			t.Errorf("fingerprintValues(%s) = %q, want empty so the identity stays the bare build id", name, got)
+		}
+	}
+
+	if strings.ContainsAny(first, "~ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+		t.Errorf("fingerprint %q is not lowercase hex; it must survive NewDeploymentIdentity and a stack name", first)
+	}
+}
+
 // TestRenderBakedBundle_AClassWithNoDeliveryFailsTheDeploy proves the gap fails
 // closed. A class this deploy path cannot deliver — `secret`, or an
 // unrecognised one from a newer client — must stop the deploy naming the

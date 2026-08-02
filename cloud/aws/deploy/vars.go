@@ -2,7 +2,9 @@ package deploy
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sort"
@@ -215,6 +217,40 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 		Ciphertext: ciphertext,
 		Live:       manifest,
 	}, nil
+}
+
+// fingerprintValuesHexLen is how much of the digest an identity carries. 48
+// bits, which only ever has to tell apart the handful of Deployments sharing
+// one build id, and short enough that safeName's 40-character hard truncation
+// cannot clip it out of a stack name.
+const fingerprintValuesHexLen = 12
+
+// fingerprintValues digests the resolved values a Deployment bakes, which is
+// the half of its identity that a rotation changes. It is taken over the
+// plaintext rather than the ciphertext: the data key is drawn fresh per render,
+// so a ciphertext digest would differ on every deploy and no two deploys could
+// ever be recognised as shipping the same values.
+//
+// Keys are sorted and each key and value written length-prefixed, so map order
+// cannot move the digest and no re-splitting of one pair's characters into
+// another can collide. Nothing baked fingerprints as empty, which renders the
+// identity as the bare build id.
+func fingerprintValues(values map[string]string) string {
+	if len(values) == 0 {
+		return ""
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	h := sha256.New()
+	for _, key := range keys {
+		writeLenPrefixed(h, []byte(key))
+		writeLenPrefixed(h, []byte(values[key]))
+	}
+	return hex.EncodeToString(h.Sum(nil))[:fingerprintValuesHexLen]
 }
 
 // checkFunctionEnvBudget refuses a function environment that does not fit the
