@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -798,6 +799,62 @@ func TestFinalizeDeploy_RotationOfOneBuildIsANewDeploymentAndPromotion(t *testin
 	}
 	if a, b := AppDeployStackName("proj", "web", before), AppDeployStackName("proj", "web", after); a == b {
 		t.Errorf("both Deployments name stack %q; a rotation must provision its own", a)
+	}
+}
+
+// Rotating twice is three Deployments of one build, not a pair that keeps
+// overwriting itself — and all three still address the same published bytes,
+// which is what makes a rotation free of a framework rebuild.
+func TestFinalizeDeploy_TwoRotationsOfOneBuildAreThreeDistinctDeployments(t *testing.T) {
+	cfg := Config{ArtifactRoot: edgeAppTree(t), Env: "prod", Edge: testLoaderEdge()}
+	manifest := nextManifest()
+	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+	ids := []DeploymentIdentity{buildOnly("WEB1"), fingerprinted("WEB1", "fp2"), fingerprinted("WEB1", "fp3")}
+
+	fake := &recordingRootStack{}
+	ctx := context.Background()
+	specs := []edge.RootStackSpec{{Version: "v1"}}
+	var state edge.RootStackState
+	for i, id := range ids {
+		record, err := buildDeploymentRecord(cfg, manifest, app, id, nil)
+		if err != nil {
+			t.Fatalf("buildDeploymentRecord: %v", err)
+		}
+		next, err := finalizeDeploy(ctx, fake, specs, state, fmt.Sprintf("promo%d", i+1), "", "", int64(100*(i+1)), []appDeployResult{{App: "web", Identity: id, Record: record}})
+		if err != nil {
+			t.Fatalf("finalizeDeploy %d: %v", i+1, err)
+		}
+		state = next
+	}
+
+	if len(fake.staged) != 3 || len(fake.promotions) != 3 {
+		t.Fatalf("staged = %d records over %d promotions, want 3 and 3", len(fake.staged), len(fake.promotions))
+	}
+	wantIdentities := []string{"WEB1", "WEB1~fp2", "WEB1~fp3"}
+	names := map[string]bool{}
+	for i, want := range wantIdentities {
+		if got := fake.staged[i].Identity; got != want {
+			t.Errorf("staged[%d].Identity = %q, want %q", i, got, want)
+		}
+		if got := fake.promotions[i].Builds["web"]; got != want {
+			t.Errorf("promotions[%d].Builds[web] = %q, want %q", i, got, want)
+		}
+		names[AppDeployStackName("proj", "web", ids[i])] = true
+	}
+	if len(names) != 3 {
+		t.Errorf("app-deploy stack names = %v, want three distinct ones", names)
+	}
+
+	for i, record := range fake.staged {
+		if want := "assets/proj/web/WEB1"; record.AssetPrefix != want {
+			t.Errorf("staged[%d].AssetPrefix = %q, want %q on every rotation", i, record.AssetPrefix, want)
+		}
+		if want := "prod/proj/web/WEB1"; record.IsrPrefix != want {
+			t.Errorf("staged[%d].IsrPrefix = %q, want %q on every rotation", i, record.IsrPrefix, want)
+		}
+		if want := "edge/proj/web/WEB1/bundle.json"; record.EdgeWorkers.BundleKey != want {
+			t.Errorf("staged[%d].EdgeWorkers.BundleKey = %q, want %q on every rotation", i, record.EdgeWorkers.BundleKey, want)
+		}
 	}
 }
 
