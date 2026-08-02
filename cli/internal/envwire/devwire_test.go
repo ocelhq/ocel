@@ -57,6 +57,15 @@ func TestDefineEnv_DeclaresThroughDevserversOwnNodeSpawn(t *testing.T) {
 		}
 	})
 
+	// Dev generates its client accessor from these, and exports each one under
+	// the framework's public prefix. A client flag that failed to travel would
+	// leave a browser read landing on the SDK's throwing fallback.
+	t.Run("a client-accessible declaration arrives as one", func(t *testing.T) {
+		if got := strings.Join(srv.ClientKeys(), ","); got != "PUBLIC_SITE_URL" {
+			t.Errorf("client keys = %q, want PUBLIC_SITE_URL", got)
+		}
+	})
+
 	t.Run("the verdict is exactly the cells dev's store leaves short", func(t *testing.T) {
 		err := srv.CheckEnv(context.Background())
 		refusal, ok := err.(*envgate.Refusal)

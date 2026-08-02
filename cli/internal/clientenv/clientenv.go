@@ -72,27 +72,34 @@ type App struct {
 // alone — no generated file, no edit to a config the developer maintains.
 func Generate(apps []App) error {
 	for _, app := range apps {
-		keys := clientKeys(app)
-		path := filepath.Join(app.Dir, accessorPath)
-		if len(keys) == 0 {
-			// An app that had client values and no longer does keeps a truthful
-			// accessor rather than a stale one; its config still points here.
-			if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
-				continue
-			}
-		}
-
-		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-			return fmt.Errorf("create %s: %w", filepath.Dir(accessorPath), err)
-		}
-		if err := os.WriteFile(path, []byte(accessor(keys)), 0o644); err != nil {
-			return fmt.Errorf("write %s: %w", accessorPath, err)
-		}
-		if err := mapSpecifier(app.Dir); err != nil {
+		if err := GenerateKeys(app.Dir, clientKeys(app)); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// GenerateKeys writes one directory's accessor for the keys named. It is what
+// a caller with declarations and no per-app resolution behind them has: dev,
+// where one flat dotfile answers every app, generates the same accessor a
+// deploy does from the keys the run declared.
+func GenerateKeys(dir string, keys []string) error {
+	path := filepath.Join(dir, accessorPath)
+	if len(keys) == 0 {
+		// An app that had client values and no longer does keeps a truthful
+		// accessor rather than a stale one; its config still points here.
+		if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+			return nil
+		}
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create %s: %w", filepath.Dir(accessorPath), err)
+	}
+	if err := os.WriteFile(path, []byte(accessor(keys)), 0o644); err != nil {
+		return fmt.Errorf("write %s: %w", accessorPath, err)
+	}
+	return mapSpecifier(dir)
 }
 
 // accessor is the generated module. Every value is a literal

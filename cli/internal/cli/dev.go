@@ -18,6 +18,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/ocelhq/ocel/cli/internal/appbuilder"
+	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/credentials"
 	"github.com/ocelhq/ocel/cli/internal/devserver"
 	"github.com/ocelhq/ocel/cli/internal/discovery"
@@ -217,13 +218,49 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 		return nil, err
 	}
 
+	// Generated here as it is at deploy, because an import that resolves at
+	// deploy and not in dev is one a developer meets for the first time in
+	// production: without the accessor, `ocel/env/client` lands on the SDK's
+	// fallback and every client read throws.
+	clientKeys := srv.ClientKeys()
+	if err := generateClientAccessors(cfg, clientKeys); err != nil {
+		return nil, err
+	}
+
 	syncResult := <-srv.Sync()
 	if syncResult.Err != nil {
 		return nil, fmt.Errorf("sync failed: %w", syncResult.Err)
 	}
 
 	reportLiveValues(stdout, syncResult.LiveKeys)
-	return resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, appFolder), nil
+	env := resolvedEnv(syncResult.ProjectConfig.EnvVars, syncResult.LiveValues, dotfile, syncResult.Resources, appFolder)
+	return withPublicNames(env, clientKeys), nil
+}
+
+// generateClientAccessors writes the client accessor into every app of the
+// project. Dev resolves one flat set of values for the whole project, so every
+// app's accessor names the same keys — the per-app divergence a deploy can
+// express is not something dev's dotfile has.
+func generateClientAccessors(cfg *projectconfig.Config, keys []string) error {
+	for _, dir := range appDirs(cfg) {
+		if err := clientenv.GenerateKeys(dir, keys); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// withPublicNames exports each client-accessible value a second time under the
+// framework's public prefix. That name, and only that name, is what the
+// framework's static replacement inlines into a browser bundle, so without it
+// the generated accessor reads undefined in dev.
+func withPublicNames(env map[string]string, keys []string) map[string]string {
+	for _, key := range keys {
+		if value, ok := env[key]; ok {
+			env[clientenv.PublicName(key)] = value
+		}
+	}
+	return env
 }
 
 // reportLiveValues tells the developer what dev just did differently from a

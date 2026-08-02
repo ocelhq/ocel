@@ -944,3 +944,76 @@ func TestRunDev_ALiveClassKeyIsNotRefusedForHavingNoLocalValue(t *testing.T) {
 		t.Errorf("stdout = %q, want the live-value notice to name DB_PASSWORD", stdout.String())
 	}
 }
+
+// A client-accessible value is read through the generated accessor, and until
+// dev generated one the import landed on the SDK's throwing fallback: the same
+// code that works in a deploy threw under `ocel dev`, which is where a
+// developer writes it. Dev now generates the same accessor a deploy does, and
+// exports the value under the framework's public prefix so the accessor's
+// literal member expression has something behind it.
+func TestRunDev_GeneratesTheClientAccessorAndExportsThePrefixedValue(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("uses a POSIX shell fixture command")
+	}
+
+	resolveServer := newFakeResolveServer(t)
+	defer resolveServer.Close()
+
+	root := t.TempDir()
+	t.Cleanup(func() { _ = lockfile.Remove(root) })
+
+	withCredentials(t, resolveServer.URL)
+	writeLink(t, root, resolveServer.URL, "proj_"+t.Name())
+	writeFile(t, filepath.Join(root, "tsconfig.json"), "{\n  \"compilerOptions\": {}\n}\n")
+	writeFile(t, filepath.Join(root, ".env"), "PUBLIC_SITE_URL=https://local.example.com\nSTRIPE_API_KEY=sk_local\n")
+	writeFile(t, filepath.Join(root, "ocel", "main.ts"), declareEnvScript(
+		`{"key":"PUBLIC_SITE_URL","class":"VARIABLE_CLASS_PLAIN","required":true,"clientAccessible":true}`,
+		`{"key":"STRIPE_API_KEY","class":"VARIABLE_CLASS_PLAIN","required":true}`,
+	))
+
+	envDumpPath := filepath.Join(root, "env.out")
+	appCmd := []string{"sh", "-c", "env > " + envDumpPath + "; exit 7"}
+
+	var stdout, stderr syncBuffer
+	err := runDev(context.Background(), nil, root, appCmd, &stdout, &stderr, strings.NewReader(""))
+
+	var exitErr *ExitError
+	if !errors.As(err, &exitErr) || exitErr.Code != 7 {
+		t.Fatalf("runDev err = %v, want exit 7 (no refusal); stderr=%s", err, stderr.String())
+	}
+
+	accessor, readErr := os.ReadFile(filepath.Join(root, ".ocel", "env-client.ts"))
+	if readErr != nil {
+		t.Fatalf("dev generated no client accessor: %v", readErr)
+	}
+	if !strings.Contains(string(accessor), "PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_PUBLIC_SITE_URL") {
+		t.Errorf("accessor = %s, want it to name the prefixed entry", accessor)
+	}
+	if strings.Contains(string(accessor), "STRIPE_API_KEY") {
+		t.Errorf("accessor names a server-only value:\n%s", accessor)
+	}
+	if tsconfig := readTestFile(t, filepath.Join(root, "tsconfig.json")); !strings.Contains(tsconfig, `"ocel/env/client": ["./.ocel/env-client.ts"]`) {
+		t.Errorf("tsconfig does not point the import at the accessor:\n%s", tsconfig)
+	}
+
+	dumped, readErr := os.ReadFile(envDumpPath)
+	if readErr != nil {
+		t.Fatalf("read env dump: %v", readErr)
+	}
+	env := toMap(strings.Split(strings.TrimRight(string(dumped), "\n"), "\n"))
+	if got, want := env["NEXT_PUBLIC_PUBLIC_SITE_URL"], "https://local.example.com"; got != want {
+		t.Errorf("NEXT_PUBLIC_PUBLIC_SITE_URL = %q, want %q — without it the accessor reads undefined", got, want)
+	}
+	if _, ok := env["NEXT_PUBLIC_STRIPE_API_KEY"]; ok {
+		t.Error("a server-only value was exported under the public prefix")
+	}
+}
+
+func readTestFile(t *testing.T, path string) string {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(data)
+}

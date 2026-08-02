@@ -415,15 +415,29 @@ func clientApps(cfg *projectconfig.Config, variables map[string][]manifestbuilde
 	if len(cfg.Apps) == 0 {
 		return []clientenv.App{{Dir: cfg.Dir, Variables: variables[rootApp]}}
 	}
+	dirs := appDirs(cfg)
 	apps := make([]clientenv.App, 0, len(cfg.Apps))
-	for _, a := range cfg.Apps {
+	for i, a := range cfg.Apps {
 		apps = append(apps, clientenv.App{
 			Name:      a.Name,
-			Dir:       filepath.Join(cfg.Dir, a.Path),
+			Dir:       dirs[i],
 			Variables: variables[a.Name],
 		})
 	}
 	return apps
+}
+
+// appDirs is where each of the project's apps lives. A project that configures
+// none has exactly one app and it is the project itself.
+func appDirs(cfg *projectconfig.Config) []string {
+	if len(cfg.Apps) == 0 {
+		return []string{cfg.Dir}
+	}
+	dirs := make([]string, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		dirs = append(dirs, filepath.Join(cfg.Dir, a.Path))
+	}
+	return dirs
 }
 
 // envScope is what a gate refusal has to name to be actionable: the apps that
