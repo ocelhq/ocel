@@ -16,7 +16,7 @@ func TestWatch_BurstOfChangesTriggersOnChangeOnce(t *testing.T) {
 	defer cancel()
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, nil, 50*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
+	if err := Watch(ctx, Set{Dirs: []string{dir}}, 50*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 
@@ -39,7 +39,7 @@ func TestWatch_NewSubdirectoryIsWatchedForFutureChanges(t *testing.T) {
 	defer cancel()
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, nil, 20*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
+	if err := Watch(ctx, Set{Dirs: []string{dir}}, 20*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 
@@ -53,12 +53,10 @@ func TestWatch_NewSubdirectoryIsWatchedForFutureChanges(t *testing.T) {
 	waitForCalls(t, &calls, 2)
 }
 
-// A watched directory holds files that have nothing to do with what the
-// watcher is for: watching a project root for its dotfile would otherwise
-// re-run everything on every write to package.json or an editor's scratch
-// file. The predicate decides, and a rejected path must not even reset the
-// debounce.
-func TestWatch_IgnoresAnEventThePredicateRejects(t *testing.T) {
+// A watched file sits in a directory full of files that have nothing to do
+// with what the watch is for: a project root holds package.json, an editor's
+// scratch files, and node_modules. Only the named file counts.
+func TestWatch_IgnoresEveryPathBesideTheWatchedFile(t *testing.T) {
 	dir := t.TempDir()
 	dotfile := filepath.Join(dir, ".env")
 
@@ -66,8 +64,7 @@ func TestWatch_IgnoresAnEventThePredicateRejects(t *testing.T) {
 	defer cancel()
 
 	var calls atomic.Int32
-	accept := func(path string) bool { return path == dotfile }
-	if err := Watch(ctx, []string{dir}, accept, 20*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
+	if err := Watch(ctx, Set{Files: []string{dotfile}}, 20*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 
@@ -81,13 +78,45 @@ func TestWatch_IgnoresAnEventThePredicateRejects(t *testing.T) {
 	waitForCalls(t, &calls, 1)
 }
 
+// A file's directory is watched only to see that file change. Recursing into
+// what else appears there would put node_modules, .next and dist under watch
+// as a build creates them, and exhaust the kernel's descriptors — a cost no
+// predicate can refund, because it runs after the descriptor is taken.
+func TestWatch_AFilesDirectoryDoesNotRecurseIntoNewSubdirectories(t *testing.T) {
+	root := t.TempDir()
+	dotfile := filepath.Join(root, ".env")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	var calls atomic.Int32
+	fsw, err := start(ctx, Set{Files: []string{dotfile}}, 20*time.Millisecond, func() { calls.Add(1) }, nil)
+	if err != nil {
+		t.Fatalf("start: %v", err)
+	}
+
+	sub := filepath.Join(root, "node_modules")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+
+	writeFile(t, dotfile, "API_TOKEN=first")
+	waitForCalls(t, &calls, 1)
+
+	for _, watched := range fsw.WatchList() {
+		if watched == sub {
+			t.Fatalf("watching %s, want only the file's own directory", sub)
+		}
+	}
+}
+
 func TestWatch_StopsReactingAfterContextCancelled(t *testing.T) {
 	dir := t.TempDir()
 
 	ctx, cancel := context.WithCancel(context.Background())
 
 	var calls atomic.Int32
-	if err := Watch(ctx, []string{dir}, nil, 10*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
+	if err := Watch(ctx, Set{Dirs: []string{dir}}, 10*time.Millisecond, func() { calls.Add(1) }, nil); err != nil {
 		t.Fatalf("Watch: %v", err)
 	}
 	cancel()

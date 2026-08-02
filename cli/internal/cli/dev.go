@@ -263,16 +263,9 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 		return fmt.Errorf("resolve watch directories: %w", err)
 	}
 
-	dotfilePath := filepath.Join(cfg.Dir, dotenv.FileName)
-	watched := dirs
-	if !slices.Contains(watched, cfg.Dir) {
-		watched = append(slices.Clone(dirs), cfg.Dir)
-	}
-	accept := func(path string) bool {
-		return path == dotfilePath || underAnyDir(dirs, path)
-	}
+	set := watcher.Set{Dirs: dirs, Files: []string{filepath.Join(cfg.Dir, dotenv.FileName)}}
 
-	return watcher.Watch(ctx, watched, accept, watchDebounce, func() {
+	return watcher.Watch(ctx, set, watchDebounce, func() {
 		srv.ResetManifest()
 		resolved, err := resolveOnce(ctx, srv, cfg, projectEnv, stdout, stderr)
 		if err != nil {
@@ -285,18 +278,6 @@ func watchAndReResolve(ctx context.Context, srv *devserver.Server, cfg *projectc
 	}, func(err error) {
 		fmt.Fprintln(stderr, "watch error:", err)
 	})
-}
-
-// underAnyDir reports whether path sits under one of dirs, at any depth — a
-// sub-directory created after the watch started is watched too, and its files
-// belong to the same discovery pass as the ones already there.
-func underAnyDir(dirs []string, path string) bool {
-	for _, dir := range dirs {
-		if strings.HasPrefix(path, dir+string(filepath.Separator)) {
-			return true
-		}
-	}
-	return false
 }
 
 // runFollower connects to the leader at leaderAddr, waits for its initial
