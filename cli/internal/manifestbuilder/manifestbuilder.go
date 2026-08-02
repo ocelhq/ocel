@@ -63,6 +63,10 @@ type Variable struct {
 	// never reaches the manifest, which describes what a deployed function is
 	// delivered rather than what a bundle already carries.
 	ClientAccessible bool
+	// Version is the store version of the cell this value resolved from, zero
+	// for a cell that never had one. Nothing in delivery reads it: it travels
+	// so a Deployment record can name which value the deploy shipped.
+	Version int64
 }
 
 // Function is a single collected function unit: the pure input to Build for
@@ -305,7 +309,7 @@ func manifestVariables(variables []Variable) []*deploymentsv1.ManifestVariable {
 	}
 	out := make([]*deploymentsv1.ManifestVariable, 0, len(variables))
 	for _, v := range variables {
-		out = append(out, &deploymentsv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder})
+		out = append(out, &deploymentsv1.ManifestVariable{Key: v.Key, Class: v.Class, Value: v.Value, Folder: v.Folder, Version: v.Version})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Key < out[j].Key })
 	return out

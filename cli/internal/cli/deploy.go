@@ -357,6 +357,7 @@ func appVariables(definitions []*resourcesv1.VariableDefinition, resolved map[st
 			Class:            definition.GetClass(),
 			Value:            cell.Value,
 			Folder:           cell.Folder,
+			Version:          cell.Version,
 			ClientAccessible: definition.GetClientAccessible(),
 		})
 	}

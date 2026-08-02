@@ -232,6 +232,33 @@ func TestToApps_CarriesTheFolderBindingIntoTheManifest(t *testing.T) {
 	}
 }
 
+// TestAppVariables_CarriesTheVersionEachValueResolvedAt proves the store
+// version of the cell each key came from survives the join, which is what lets
+// a Deployment record say which value it shipped. A live-class key carries its
+// cell's version here too — narrowing it to what a runtime fetch can honour is
+// the record's decision, not the join's.
+func TestAppVariables_CarriesTheVersionEachValueResolvedAt(t *testing.T) {
+	definitions := []*resourcesv1.VariableDefinition{
+		definition("PLAIN_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+		definition("LIVE_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+	}
+	resolved := map[string]envgate.Resolved{
+		"PLAIN_KEY": {Value: "v", Version: 2},
+		"LIVE_KEY":  {Version: 9},
+	}
+
+	got := appVariables(definitions, resolved)
+	if len(got) != 2 {
+		t.Fatalf("appVariables = %+v, want both declarations", got)
+	}
+	if got[0].Key != "PLAIN_KEY" || got[0].Version != 2 {
+		t.Errorf("PLAIN_KEY = %+v, want the version its cell resolved at", got[0])
+	}
+	if got[1].Key != "LIVE_KEY" || got[1].Version != 9 {
+		t.Errorf("LIVE_KEY = %+v, want its cell's version carried too", got[1])
+	}
+}
+
 // TestAppVariables_CarriesTheFolderEachKeyResolvedFrom proves the folder
 // resolution computed survives the join. A live-class value carries no
 // plaintext, so its folder is the only thing that makes it addressable at

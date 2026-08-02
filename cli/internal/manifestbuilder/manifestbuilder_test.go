@@ -580,3 +580,24 @@ func TestBuild_CarriesEachVariablesResolvedFolder(t *testing.T) {
 		t.Errorf("ROOT_KEY folder = %q, want the empty root spelling — the store's %q sentinel is never written above the store", got, "/")
 	}
 }
+
+// TestManifestVariables_LowersTheResolvedVersion proves the store version a
+// value resolved at reaches the manifest, which is the only route by which a
+// Deployment record can name what it shipped. Nothing in delivery reads it: a
+// cell that never had a version lowers as zero rather than as an absence a
+// consumer would have to distinguish.
+func TestManifestVariables_LowersTheResolvedVersion(t *testing.T) {
+	got := manifestVariables([]Variable{
+		{Key: "VERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "v", Version: 4},
+		{Key: "UNVERSIONED", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "u"},
+	})
+	if len(got) != 2 {
+		t.Fatalf("manifestVariables = %v, want both", got)
+	}
+	if got[0].GetKey() != "UNVERSIONED" || got[0].GetVersion() != 0 {
+		t.Errorf("UNVERSIONED = %v, want version 0", got[0])
+	}
+	if got[1].GetKey() != "VERSIONED" || got[1].GetVersion() != 4 {
+		t.Errorf("VERSIONED = %v, want the version it resolved at", got[1])
+	}
+}
