@@ -23,8 +23,11 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// Cell addresses one stored value. Only the class-wide cells matter to the
-// gate: a named-environment override is a value, not a requirement.
+// Cell addresses one stored value, across every environment that reads it. A
+// named-environment override is a value the run that is that environment
+// resolves from the same cell, never a second cell of its own — a key that
+// varied by environment would let one environment's value stand in for the
+// class-wide value every other reads.
 type Cell struct {
 	Key    string `json:"key"`
 	Folder string `json:"folder"`
@@ -181,11 +184,11 @@ type Gate struct {
 	scope  Scope
 
 	mu sync.Mutex
-	// cells is the class-wide set and nothing else: it is what the gate's
-	// verdict and the matrix's own state are read from. overrides is the rest,
-	// held apart so a named-environment value can answer for the one
-	// environment holding it without ever counting as the value every other
-	// environment resolves.
+	// cells is the class-wide set and nothing else; overrides is the rest, held
+	// apart so a named-environment value can answer for the one environment
+	// holding it without ever counting as the value every other environment
+	// resolves. What each read of them means is classWideCells and
+	// resolvedCells, which is where the two are put back together.
 	cells       []Stored
 	overrides   map[Cell][]Override
 	definitions []*resourcesv1.VariableDefinition
