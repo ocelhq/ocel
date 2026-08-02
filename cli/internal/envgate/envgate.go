@@ -42,6 +42,26 @@ type Stored struct {
 	Version     int64
 }
 
+// heldCells is every cell the store holds, at the version it holds it at. One
+// map answers both questions a verdict asks — whether a cell is filled, and
+// which value filled it — so the two can never drift apart.
+type heldCells map[Cell]int64
+
+func (h heldCells) has(cell Cell) bool {
+	_, ok := h[cell]
+	return ok
+}
+
+// heldCells reads the store rows the gate has, under the lock its caller
+// already holds.
+func (g *Gate) heldCells() heldCells {
+	held := make(heldCells, len(g.cells))
+	for _, row := range g.cells {
+		held[row.Cell] = row.Version
+	}
+	return held
+}
+
 // Values is the store as the gate needs it. The CLI has no cloud SDK
 // dependency, so both operations are answered by the provider binary.
 type Values interface {
@@ -252,10 +272,7 @@ func (g *Gate) Check() error {
 	problems := append([]*resourcesv1.VariableProblem(nil), g.problems...)
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	apps := readers(g.scope.Apps)
-	held := make(map[Cell]bool, len(g.cells))
-	for _, row := range g.cells {
-		held[row.Cell] = true
-	}
+	held := g.heldCells()
 	g.mu.Unlock()
 
 	problems = append(problems, unresolved(definitions, apps, held, problems)...)
@@ -276,7 +293,7 @@ func (g *Gate) Check() error {
 // what the gate refuses on and what the build would have run with are one
 // answer. A cell the declaring process already complained about is left to it —
 // its message is the more specific of the two.
-func unresolved(definitions []*resourcesv1.VariableDefinition, apps []App, held map[Cell]bool, reported []*resourcesv1.VariableProblem) []*resourcesv1.VariableProblem {
+func unresolved(definitions []*resourcesv1.VariableDefinition, apps []App, held heldCells, reported []*resourcesv1.VariableProblem) []*resourcesv1.VariableProblem {
 	named := make(map[Cell]bool, len(reported))
 	for _, problem := range reported {
 		named[Cell{Key: problem.GetKey(), Folder: problem.GetFolder()}] = true

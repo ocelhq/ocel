@@ -79,12 +79,7 @@ func (g *Gate) Matrix() Matrix {
 	g.mu.Lock()
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	apps := append([]App(nil), g.scope.Apps...)
-	held := make(map[Cell]bool, len(g.cells))
-	versions := make(map[Cell]int64, len(g.cells))
-	for _, row := range g.cells {
-		held[row.Cell] = true
-		versions[row.Cell] = row.Version
-	}
+	held := g.heldCells()
 	overrides := make(map[Cell][]string, len(g.overrides))
 	for cell, environments := range g.overrides {
 		overrides[cell] = append([]string(nil), environments...)
@@ -110,8 +105,8 @@ func (g *Gate) Matrix() Matrix {
 			row.Cells = append(row.Cells, MatrixCell{
 				Folder:    folder,
 				State:     state(definition, folder),
-				Set:       held[cell],
-				Version:   versions[cell],
+				Set:       held.has(cell),
+				Version:   held[cell],
 				Overrides: overrides[cell],
 				Problem:   complaints[cell],
 			})
@@ -148,7 +143,7 @@ func state(definition *resourcesv1.VariableDefinition, folder string) CellState 
 // missing is what one app cannot resolve. A key scoped away from the app's
 // folder is absent from the answer rather than reported: the app was never
 // meant to read it, so it is not a gap in that app's values.
-func missing(definitions []*resourcesv1.VariableDefinition, binding string, held map[Cell]bool) []Cell {
+func missing(definitions []*resourcesv1.VariableDefinition, binding string, held heldCells) []Cell {
 	var out []Cell
 	for _, definition := range definitions {
 		if !definition.GetRequired() {
@@ -177,7 +172,7 @@ func missing(definitions []*resourcesv1.VariableDefinition, binding string, held
 // override's folder earns one on the same terms: the column carries nothing
 // required and nothing filled, but without it a surviving value has nowhere to
 // be named.
-func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held map[Cell]bool, overrides map[Cell][]string) []string {
+func columns(definitions []*resourcesv1.VariableDefinition, apps []App, held heldCells, overrides map[Cell][]string) []string {
 	seen := map[string]bool{}
 	for _, definition := range definitions {
 		for _, folder := range definition.GetFolders() {

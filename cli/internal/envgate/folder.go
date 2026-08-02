@@ -65,12 +65,7 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	}
 
 	g.mu.Lock()
-	held := make(map[Cell]bool, len(g.cells))
-	versions := make(map[Cell]int64, len(g.cells))
-	for _, row := range g.cells {
-		held[row.Cell] = true
-		versions[row.Cell] = row.Version
-	}
+	held := g.heldCells()
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	g.mu.Unlock()
 
@@ -98,34 +93,34 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 
 	resolved := make(map[string]Resolved, len(hops))
 	for _, h := range hops {
-		if h.live {
-			resolved[h.cell.Key] = Resolved{Folder: h.cell.Folder, Version: versions[h.cell]}
-			continue
+		from := Resolved{Folder: h.cell.Folder, Version: held[h.cell]}
+		if !h.live {
+			if !plaintext[h.cell].found {
+				continue
+			}
+			from.Value = plaintext[h.cell].value
 		}
-		if !plaintext[h.cell].found {
-			continue
-		}
-		resolved[h.cell.Key] = Resolved{Folder: h.cell.Folder, Value: plaintext[h.cell].value, Version: versions[h.cell]}
+		resolved[h.cell.Key] = from
 	}
 	return resolved, nil
 }
 
 // hop is the two-hop rule itself.
-func hop(definition *resourcesv1.VariableDefinition, binding string, held map[Cell]bool) (Cell, bool) {
+func hop(definition *resourcesv1.VariableDefinition, binding string, held heldCells) (Cell, bool) {
 	if scope := definition.GetFolders(); len(scope) > 0 {
 		if binding == "" || !contains(scope, binding) {
 			return Cell{}, false
 		}
 		cell := Cell{Key: definition.GetKey(), Folder: binding}
-		return cell, held[cell]
+		return cell, held.has(cell)
 	}
 	if binding != "" {
-		if cell := (Cell{Key: definition.GetKey(), Folder: binding}); held[cell] {
+		if cell := (Cell{Key: definition.GetKey(), Folder: binding}); held.has(cell) {
 			return cell, true
 		}
 	}
 	cell := Cell{Key: definition.GetKey()}
-	return cell, held[cell]
+	return cell, held.has(cell)
 }
 
 func (g *Gate) binding(app string) (string, bool) {
