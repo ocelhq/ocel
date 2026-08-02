@@ -86,6 +86,50 @@ func TestRenderAppBundle_LiveValuesArePinnedByCoordinateAndNeverBaked(t *testing
 	}
 }
 
+// TestRenderAppBundle_APreviewPinsItsOwnEnvironmentAndProductionPinsNone is
+// where the override axis is decided. A preview's functions resolve overrides
+// for the environment they are, so the deploy states which one that is;
+// production has a single environment and pins nothing, which is what keeps its
+// runtime reading one cell per key.
+func TestRenderAppBundle_APreviewPinsItsOwnEnvironmentAndProductionPinsNone(t *testing.T) {
+	app := &deploymentsv1.ManifestApp{
+		Name:      "web",
+		Variables: []*deploymentsv1.ManifestVariable{scopedVariable("DB_PASSWORD", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET)},
+	}
+
+	for name, tc := range map[string]struct {
+		cfg  Config
+		want string
+	}{
+		"a preview": {cfg: previewOf(liveConfig(), "pr-42"), want: "pr-42"},
+		"production": {cfg: func() Config {
+			cfg := liveConfig()
+			cfg.Class, cfg.Identity = deploymentsv1.Environment_CLASS_PRODUCTION, "prod"
+			return cfg
+		}()},
+	} {
+		t.Run(name, func(t *testing.T) {
+			bundle, err := renderAppBundle(tc.cfg, "shop", app)
+			if err != nil {
+				t.Fatalf("renderAppBundle: %v", err)
+			}
+			manifest, err := live.Parse(bundle.Live)
+			if err != nil {
+				t.Fatalf("parse the live manifest: %v", err)
+			}
+			if manifest.Environment != tc.want {
+				t.Errorf("environment = %q, want %q", manifest.Environment, tc.want)
+			}
+		})
+	}
+}
+
+// previewOf is the same substrate deployed as one named preview environment.
+func previewOf(cfg Config, identity string) Config {
+	cfg.Class, cfg.Identity = deploymentsv1.Environment_CLASS_PREVIEW, identity
+	return cfg
+}
+
 // TestRenderAppBundle_ALiveValueNeedsTheSubstratesStore proves a deploy that
 // cannot say where the store is refuses rather than shipping a manifest the
 // runtime will fail to use. The failure names the app and the key, because in

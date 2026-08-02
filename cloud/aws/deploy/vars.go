@@ -198,11 +198,12 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 	}
 
 	manifest, err := live.Render(live.Manifest{
-		Slug:   slug,
-		Table:  cfg.VarsTable,
-		KeyARN: cfg.VarsKeyARN,
-		Class:  cfg.VarsClass,
-		Keys:   keys,
+		Slug:        slug,
+		Table:       cfg.VarsTable,
+		KeyARN:      cfg.VarsKeyARN,
+		Class:       cfg.VarsClass,
+		Environment: overrideEnvironment(cfg),
+		Keys:        keys,
 	})
 	if err != nil {
 		return appBundle{}, fmt.Errorf("pin %s's live values: %w", app.GetName(), err)
@@ -226,6 +227,22 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 		Live:        manifest,
 		Fingerprint: fingerprintValues(values),
 	}, nil
+}
+
+// overrideEnvironment is the named environment this deploy's functions resolve
+// overrides for: the preview's own identity, which is exactly the key the
+// runtime would otherwise have to derive from a ref it cannot see. Production
+// gets none — it has a single environment, so an override there is a row
+// nothing could ever write and a second address on every read.
+//
+// It is pinned rather than resolved at runtime because it is the identity of
+// the deployment, not one of its values: which folder and which environment a
+// key reads from is code-declared topology, and only the value itself is live.
+func overrideEnvironment(cfg Config) string {
+	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
+		return ""
+	}
+	return cfg.Identity
 }
 
 // recordedAudit is what one app's Deployment record says it shipped with: a
