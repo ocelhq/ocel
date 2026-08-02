@@ -38,6 +38,11 @@ type envOptions struct {
 // hold one. Production is a single environment, so a value there binds
 // class-wide and nothing else: accepting the flag would write a row no
 // production function will ever read.
+//
+// envSession runs it for every subcommand, before anything is resolved or
+// spawned, so a subcommand added later cannot quietly omit it — and so the
+// refusal costs nothing: there is no store to ask about a coordinate that
+// cannot exist.
 func (o envOptions) checkEnvironment() error {
 	if o.environment == "" || o.preview {
 		return nil
@@ -144,6 +149,9 @@ func withEnvCommand(cmd *cobra.Command, run func(context.Context, string) error)
 // `ocel env` subcommand goes through it: the store is only reachable through a
 // live provider session.
 func envSession(ctx context.Context, cwd string, opts envOptions, stdout, stderr io.Writer, drive func(*providerrunner.Runner, *projectconfig.Config, *projectconfig.ProviderDescriptor) error) error {
+	if err := opts.checkEnvironment(); err != nil {
+		return err
+	}
 	cfg, err := projectconfig.Resolve(cwd)
 	if err != nil {
 		return err
@@ -207,9 +215,6 @@ func runEnvSet(ctx context.Context, cwd, key, value string, opts envOptions, std
 		if err := envgate.ValidateFolder(opts.folder); err != nil {
 			return err
 		}
-	}
-	if err := opts.checkEnvironment(); err != nil {
-		return err
 	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		definitions, err := declaredVariables(ctx, cfg, runner, provider, key, opts, stderr)
@@ -312,9 +317,6 @@ func overridden(values []*envv1.ValueMetadata) bool {
 }
 
 func runEnvGet(ctx context.Context, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	if err := opts.checkEnvironment(); err != nil {
-		return err
-	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		resp, err := runner.GetValue(ctx, &envv1.GetValueRequest{
 			Options:         []byte(provider.Options),
@@ -344,9 +346,6 @@ func runEnvGet(ctx context.Context, cwd, key string, opts envOptions, stdout, st
 }
 
 func runEnvRm(ctx context.Context, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	if err := opts.checkEnvironment(); err != nil {
-		return err
-	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		resp, err := runner.DeleteValue(ctx, &envv1.DeleteValueRequest{
 			Options:         []byte(provider.Options),
@@ -367,9 +366,6 @@ func runEnvRm(ctx context.Context, cwd, key string, opts envOptions, stdout, std
 }
 
 func runEnvHistory(ctx context.Context, cwd, key string, opts envOptions, stdout, stderr io.Writer) error {
-	if err := opts.checkEnvironment(); err != nil {
-		return err
-	}
 	return envSession(ctx, cwd, opts, stdout, stderr, func(runner *providerrunner.Runner, cfg *projectconfig.Config, provider *projectconfig.ProviderDescriptor) error {
 		resp, err := runner.ListVersions(ctx, &envv1.ListVersionsRequest{
 			Options:         []byte(provider.Options),
