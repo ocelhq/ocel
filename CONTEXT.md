@@ -204,8 +204,11 @@ staleness bound.
   which application code imports as `ocel/env/client`. That specifier resolves
   through a `paths` entry in the app's own `tsconfig.json` or `jsconfig.json`,
   so two apps resolving one key differently each inline their own value; an app
-  with neither config keeps the SDK's fallback, which refuses the read. The
-  accessor names each
+  with neither config keeps the SDK's fallback, which refuses the read. Where
+  that entry cannot be written truthfully — a config ocel cannot read, or one
+  extending a base it cannot follow or whose own `paths` a child's would
+  replace — generation refuses, naming the file and the entry to add by hand,
+  rather than leaving a mapping that resolves nowhere. The accessor names each
   value as a literal `process.env.NEXT_PUBLIC_<KEY>` member expression so the
   framework's own static replacement does the inlining; nothing computed can
   stand in for that literal, which is why the module is generated rather than

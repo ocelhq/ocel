@@ -101,6 +101,11 @@ describe("ocel/env/client with no accessor generated", () => {
     expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(/this app/);
   });
 
+  it("says a config ocel cannot write into is refused, not silently skipped", () => {
+    expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(/refuses/);
+    expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(/by hand/);
+  });
+
   it("is the same error class `ocel/env` exports, on both node and edge", () => {
     expect(EnvClientErrorFromEnv).toBe(EnvClientError);
     expect(EnvClientErrorFromEdge).toBe(EnvClientError);
