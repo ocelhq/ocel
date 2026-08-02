@@ -8,12 +8,14 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"slices"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/ocelhq/ocel/cloud/aws/vars"
 	"github.com/ocelhq/ocel/cloud/aws/vars/live"
 )
 
@@ -529,6 +531,77 @@ func TestResolveLiveValues_ReadsThePinnedCoordinatesAndNeverTheSentinels(t *test
 	}
 	if cells[1].Folder != "/web" {
 		t.Errorf("scoped key folder = %q, want the pinned folder", cells[1].Folder)
+	}
+}
+
+// TestResolveLiveValues_APreviewReadsItsOwnOverrideBesideTheClassWideValue
+// proves the environment the deploy pinned is what turns an override into
+// something a function can resolve. Both cells are named in the one query the
+// reveal already costs, so the override is looked for without a second round
+// trip.
+func TestResolveLiveValues_APreviewReadsItsOwnOverrideBesideTheClassWideValue(t *testing.T) {
+	cells := manifestCells(live.Manifest{
+		Slug:        "shop",
+		Environment: "pr-42",
+		Keys:        []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+	})
+
+	want := []vars.Coordinate{
+		{Slug: "shop", Key: "DB_PASSWORD"},
+		{Slug: "shop", Key: "DB_PASSWORD", Environment: "pr-42"},
+		{Slug: "shop", Key: "SESSION_SECRET", Folder: "/web"},
+		{Slug: "shop", Key: "SESSION_SECRET", Folder: "/web", Environment: "pr-42"},
+	}
+	if !reflect.DeepEqual(cells, want) {
+		t.Errorf("cells = %+v, want %+v", cells, want)
+	}
+}
+
+// TestResolveLiveValues_ProductionAsksForOneCellPerKey is the reason the
+// environment is pinned rather than derived. Production has a single
+// environment, so an override cannot exist there; naming one anyway would put a
+// second address on every key's read for a row that is never written.
+func TestResolveLiveValues_ProductionAsksForOneCellPerKey(t *testing.T) {
+	cells := manifestCells(live.Manifest{
+		Slug: "shop",
+		Keys: []live.Key{{Key: "DB_PASSWORD"}, {Key: "SESSION_SECRET", Folder: "/web"}},
+	})
+
+	if len(cells) != 2 {
+		t.Fatalf("cells = %+v, want one per pinned key", cells)
+	}
+	for _, c := range cells {
+		if c.Environment != "" {
+			t.Errorf("cell %+v names an environment production cannot have", c)
+		}
+	}
+}
+
+// TestResolved_AnOverrideWinsForItsOwnEnvironmentAndNothingElseChanges is the
+// binding rule itself: the environment that holds a value gets it, and every
+// key it holds none for resolves class-wide. The pair is asserted together
+// because the failure that matters is one leaking into the other — an override
+// that also replaces its neighbours, or one the class-wide value overwrites
+// depending on which cell the store answered with first.
+func TestResolved_AnOverrideWinsForItsOwnEnvironmentAndNothingElseChanges(t *testing.T) {
+	classWide := func(key, value string) vars.Value {
+		return vars.Value{Metadata: vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: key}}, Plaintext: value}
+	}
+	override := func(key, value string) vars.Value {
+		return vars.Value{Metadata: vars.Metadata{Coordinate: vars.Coordinate{Slug: "shop", Key: key, Environment: "pr-42"}}, Plaintext: value}
+	}
+
+	for name, values := range map[string][]vars.Value{
+		"class-wide answered first": {classWide("DB_PASSWORD", "shared"), override("DB_PASSWORD", "mine"), classWide("SESSION_SECRET", "shared")},
+		"override answered first":   {override("DB_PASSWORD", "mine"), classWide("DB_PASSWORD", "shared"), classWide("SESSION_SECRET", "shared")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := resolved(values)
+			want := map[string]string{"DB_PASSWORD": "mine", "SESSION_SECRET": "shared"}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("resolved = %v, want %v", got, want)
+			}
+		})
 	}
 }
 

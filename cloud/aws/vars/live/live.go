@@ -32,12 +32,20 @@ const FilePath = ".ocel/variables.live.json"
 // substrate's, resolved at deploy from the account's bootstrap rather than
 // discovered at runtime: resolving them in the sandbox would mean linking a
 // CloudFormation client into the cold path of every cold start.
+//
+// Environment is the named environment these functions run in, pinned at
+// deploy because it is the identity of the deployment itself and not a value.
+// A key resolves from the override that environment holds when there is one,
+// and from the class-wide value otherwise. Empty in production, which has one
+// environment and therefore only class-wide values: the runtime then reads one
+// cell per key rather than probing for an override that cannot exist.
 type Manifest struct {
-	Slug   string `json:"slug"`
-	Table  string `json:"table"`
-	KeyARN string `json:"keyArn"`
-	Class  string `json:"class"`
-	Keys   []Key  `json:"keys"`
+	Slug        string `json:"slug"`
+	Table       string `json:"table"`
+	KeyARN      string `json:"keyArn"`
+	Class       string `json:"class"`
+	Environment string `json:"environment,omitempty"`
+	Keys        []Key  `json:"keys"`
 }
 
 // Key is one live variable's coordinate, less the components the manifest
@@ -47,9 +55,10 @@ type Manifest struct {
 // used everywhere above the store; the store owns the sentinel it renders that
 // as, and nothing here may spell it.
 //
-// There is no environment component: every live value binds class-wide today,
-// and a field nothing populates would only invite the sentinel to be written
-// out literally, which the store rejects.
+// There is no environment component: which environment a key may be overridden
+// in is the whole package's, stated once on the manifest, and a per-key one
+// would only invite the class-wide sentinel to be written out literally, which
+// the store rejects.
 type Key struct {
 	Key    string `json:"key"`
 	Folder string `json:"folder,omitempty"`

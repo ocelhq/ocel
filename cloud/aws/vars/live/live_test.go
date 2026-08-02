@@ -73,6 +73,55 @@ func TestRenderParse_RoundTripsTheAddressAndOnlyTheAddress(t *testing.T) {
 	}
 }
 
+// TestRenderParse_ProductionPinsNoEnvironment is the other half of the address:
+// production has one environment, so the manifest names none and the runtime
+// has no override to look for. The field must be absent rather than empty, for
+// the reason the root folder is: a component the store spells itself is not one
+// a package may carry a second spelling of.
+func TestRenderParse_ProductionPinsNoEnvironment(t *testing.T) {
+	raw, err := Render(Manifest{
+		Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "production",
+		Keys: []Key{{Key: "DB_PASSWORD"}},
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(string(raw), "environment") {
+		t.Errorf("rendered %s, which names an environment for a class that has only one", raw)
+	}
+
+	got, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Environment != "" {
+		t.Errorf("environment = %q, want none", got.Environment)
+	}
+}
+
+// TestRenderParse_APreviewCarriesTheEnvironmentItsOverridesAreAddressedBy pins
+// the one component that decides whether a runtime read looks for an override
+// at all. It rides the manifest once rather than per key: every key in a
+// package resolves for the same environment, because it is the deployment's
+// identity and not the key's.
+func TestRenderParse_APreviewCarriesTheEnvironmentItsOverridesAreAddressedBy(t *testing.T) {
+	raw, err := Render(Manifest{
+		Slug: "shop", Table: "ocel-vars", KeyARN: "arn:key", Class: "preview",
+		Environment: "pr-42",
+		Keys:        []Key{{Key: "DB_PASSWORD"}},
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	got, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got.Environment != "pr-42" {
+		t.Errorf("environment = %q, want pr-42 — without it the runtime reads class-wide and the override is dead", got.Environment)
+	}
+}
+
 // TestParse_RefusesWhatItCannotRead proves a manifest that will not decode is
 // an error rather than an empty one. Absorbing it would hand the sandbox a
 // function with no addresses and no complaint, and the values would be read at

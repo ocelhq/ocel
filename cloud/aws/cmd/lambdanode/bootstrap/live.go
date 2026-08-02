@@ -66,11 +66,30 @@ func (f storeFetcher) fetchLive(ctx context.Context) (map[string]string, error) 
 	if err != nil {
 		return nil, err
 	}
+	return resolved(values), nil
+}
+
+// resolved is the precedence between the two cells a key can answer from: the
+// override this environment holds wins, and a key it holds none for falls
+// through to the class-wide value. It is two passes rather than one because the
+// store answers in key order, which says nothing about which of a key's cells
+// came back first.
+//
+// A production function only ever reads one cell per key, so both passes see
+// the same set and the second does nothing.
+func resolved(values []vars.Value) map[string]string {
 	out := make(map[string]string, len(values))
 	for _, v := range values {
-		out[v.Coordinate.Key] = v.Plaintext
+		if v.Coordinate.Environment == "" {
+			out[v.Coordinate.Key] = v.Plaintext
+		}
 	}
-	return out, nil
+	for _, v := range values {
+		if v.Coordinate.Environment != "" {
+			out[v.Coordinate.Key] = v.Plaintext
+		}
+	}
+	return out
 }
 
 // liveValuesMsg is the control-socket message the membrane pushes to node. It
@@ -350,14 +369,22 @@ func manifestKeys(m live.Manifest) []string {
 	return keys
 }
 
-// manifestCells renders the pinned addresses as store coordinates. The
-// environment component is left empty rather than spelled: the class-wide
-// sentinel is the store's own rendering of it, and a coordinate that names it
-// literally is refused.
+// manifestCells renders the pinned addresses as store coordinates: the
+// class-wide cell for every key, and — only where the deploy pinned a named
+// environment — that environment's override beside it. Both are read in the one
+// query the store's reveal already costs, so looking for an override adds no
+// round trip and finding none costs nothing.
+//
+// The class-wide cell's environment component is left empty rather than
+// spelled: the sentinel is the store's own rendering of it, and a coordinate
+// that names it literally is refused.
 func manifestCells(m live.Manifest) []vars.Coordinate {
 	cells := make([]vars.Coordinate, 0, len(m.Keys))
 	for _, k := range m.Keys {
 		cells = append(cells, vars.Coordinate{Slug: m.Slug, Folder: k.Folder, Key: k.Key})
+		if m.Environment != "" {
+			cells = append(cells, vars.Coordinate{Slug: m.Slug, Folder: k.Folder, Key: k.Key, Environment: m.Environment})
+		}
 	}
 	return cells
 }
