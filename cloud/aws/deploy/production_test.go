@@ -755,6 +755,52 @@ func TestFinalizeProductionDeploy_SecondDeployProducesNewPromotionRetainingPrior
 	}
 }
 
+// A rotation reuses the framework build, so both Deployments carry the same
+// build id and only the value fingerprint tells them apart. The rotation still
+// stages its own record and issues its own promotion, and the promotion the
+// prior Deployment was made live by is left exactly as it was.
+func TestFinalizeDeploy_RotationOfOneBuildIsANewDeploymentAndPromotion(t *testing.T) {
+	fake := &recordingRootStack{}
+	ctx := context.Background()
+	specs := []edge.RootStackSpec{{Version: "v1"}}
+	before, after := buildOnly("B1"), fingerprinted("B1", "fp2")
+
+	result := func(id DeploymentIdentity) []appDeployResult {
+		return []appDeployResult{{
+			App:      "web",
+			Identity: id,
+			Record:   edge.DeploymentRecord{App: "web", Identity: id.String(), AssetPrefix: "assets/proj/web/B1"},
+		}}
+	}
+
+	state, err := finalizeDeploy(ctx, fake, specs, nil, "promo1", "", "", 100, result(before))
+	if err != nil {
+		t.Fatalf("first finalizeDeploy: %v", err)
+	}
+	if _, err := finalizeDeploy(ctx, fake, specs, state, "promo2", "", "", 200, result(after)); err != nil {
+		t.Fatalf("rotation finalizeDeploy: %v", err)
+	}
+
+	if len(fake.staged) != 2 {
+		t.Fatalf("staged = %d records, want 2: a rotation is its own Deployment", len(fake.staged))
+	}
+	if got := []string{fake.staged[0].Identity, fake.staged[1].Identity}; got[0] != "B1" || got[1] != "B1~fp2" {
+		t.Errorf("staged identities = %v, want [B1 B1~fp2]", got)
+	}
+	if len(fake.promotions) != 2 {
+		t.Fatalf("promotions = %d, want 2: a rotation is its own promotion", len(fake.promotions))
+	}
+	if got := fake.promotions[1].Builds["web"]; got != "B1~fp2" {
+		t.Errorf("rotation promotion Builds[web] = %q, want %q", got, "B1~fp2")
+	}
+	if got := fake.promotions[0].Builds["web"]; got != "B1" {
+		t.Errorf("prior promotion Builds[web] = %q, want %q — the prior Deployment stays intact", got, "B1")
+	}
+	if a, b := AppDeployStackName("proj", "web", before), AppDeployStackName("proj", "web", after); a == b {
+		t.Errorf("both Deployments name stack %q; a rotation must provision its own", a)
+	}
+}
+
 // orderTrackingRootStack wraps recordingRootStack to additionally record the
 // relative order of reconcile/stage/promote calls, which recordingRootStack's
 // own per-kind slices cannot express on their own.
