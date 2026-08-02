@@ -30,15 +30,24 @@ type Cell struct {
 	Folder string `json:"folder"`
 }
 
-// Stored is one row the store holds: which cell it addresses, which named
-// environment it belongs to if any, and the version a write against it must
-// expect. Environment stays here rather than on Cell because a cell is a map
-// key throughout the verdict, and a key that varied by environment would let an
+// Address is one row's coordinates: the cell, and the named environment holding
+// it — empty for the class-wide value every environment falls back to. It is
+// what Reveal reads at and what the UI writes, deletes and reads history at, so
+// none of those has an address of its own to keep in step.
+//
+// Environment stays here rather than on Cell because a cell is a map key
+// throughout the verdict, and a key that varied by environment would let an
 // override stand in for the class-wide value nothing else can supply.
-type Stored struct {
+type Address struct {
 	Cell        Cell
 	Environment string
-	Version     int64
+}
+
+// Stored is one row the store holds: where it is, and the version a write
+// against it must expect.
+type Stored struct {
+	Address
+	Version int64
 }
 
 // Override is one named environment's own value for a cell: the environment
@@ -142,17 +151,7 @@ type Values interface {
 	// The answer is keyed by cell rather than by row because a run resolves
 	// one environment: each cell is asked for at exactly one address, and
 	// which address that was is this call's business rather than its caller's.
-	Reveal(ctx context.Context, rows []Read) (map[Cell]string, error)
-}
-
-// Read is one row to decrypt: a cell, and the named environment whose override
-// answers for it when this run resolves one. The environment lives here rather
-// than on Cell because a cell is a map key throughout the verdict, and a key
-// that varied by environment would let an override stand in for the class-wide
-// value nothing else can supply.
-type Read struct {
-	Cell        Cell
-	Environment string
+	Reveal(ctx context.Context, rows []Address) (map[Cell]string, error)
 }
 
 // App is one application and the variable folder it binds. An empty Folder is
@@ -257,14 +256,14 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 	g.mu.Lock()
 	defer g.mu.Unlock()
 
-	var wanted []Read
+	var wanted []Address
 	seen := map[Cell]bool{}
 	for _, cell := range cells {
 		if _, held := g.plaintext[cell]; held || seen[cell] {
 			continue
 		}
 		seen[cell] = true
-		wanted = append(wanted, Read{Cell: cell, Environment: g.resolvedEnvironment(cell)})
+		wanted = append(wanted, Address{Cell: cell, Environment: g.resolvedEnvironment(cell)})
 	}
 
 	if len(wanted) > 0 {
@@ -275,9 +274,9 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 		if g.plaintext == nil {
 			g.plaintext = map[Cell]revealed{}
 		}
-		for _, read := range wanted {
-			value, ok := found[read.Cell]
-			g.plaintext[read.Cell] = revealed{value: value, found: ok}
+		for _, at := range wanted {
+			value, ok := found[at.Cell]
+			g.plaintext[at.Cell] = revealed{value: value, found: ok}
 		}
 	}
 
@@ -483,7 +482,7 @@ func why(problem *resourcesv1.VariableProblem) string {
 // reads the same way twice. A batched read fails whole, so what a user is short
 // of is every cell it asked for — a message naming none of them leaves nothing
 // to act on.
-func describeAll(rows []Read) string {
+func describeAll(rows []Address) string {
 	names := make([]string, 0, len(rows))
 	for _, row := range rows {
 		names = append(names, describe(row.Cell))

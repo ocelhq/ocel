@@ -334,7 +334,7 @@ type fakeValues struct {
 func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
 	var stored []envgate.Stored
 	for cell := range v.plaintext {
-		stored = append(stored, envgate.Stored{Cell: cell, Version: 1})
+		stored = append(stored, envgate.Stored{Address: envgate.Address{Cell: cell}, Version: 1})
 	}
 	sort.Slice(stored, func(i, j int) bool {
 		if stored[i].Cell.Key != stored[j].Cell.Key {
@@ -345,7 +345,7 @@ func (v *fakeValues) List(context.Context) ([]envgate.Stored, error) {
 	return stored, nil
 }
 
-func (v *fakeValues) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
+func (v *fakeValues) Reveal(_ context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
 	v.mu.Lock()
 	for _, row := range rows {
 		v.reads = append(v.reads, row.Cell)

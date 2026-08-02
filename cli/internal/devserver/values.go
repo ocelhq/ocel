@@ -88,11 +88,11 @@ func (v *flatValues) List(context.Context) ([]envgate.Stored, error) {
 	for _, key := range keys {
 		folders := slices.Sorted(slices.Values(v.scopes[key]))
 		if len(folders) == 0 {
-			stored = append(stored, envgate.Stored{Cell: envgate.Cell{Key: key}})
+			stored = append(stored, envgate.Stored{Address: envgate.Address{Cell: envgate.Cell{Key: key}}})
 			continue
 		}
 		for _, folder := range folders {
-			stored = append(stored, envgate.Stored{Cell: envgate.Cell{Key: key, Folder: folder}})
+			stored = append(stored, envgate.Stored{Address: envgate.Address{Cell: envgate.Cell{Key: key, Folder: folder}}})
 		}
 	}
 	return stored, nil
@@ -102,7 +102,7 @@ func (v *flatValues) List(context.Context) ([]envgate.Stored, error) {
 // broadcast itself. A row's environment is ignored because dev has no named
 // environments: the gate never resolves one here, and a flat file has nowhere
 // to hold an override anyway.
-func (v *flatValues) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
+func (v *flatValues) Reveal(_ context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	found := make(map[envgate.Cell]string, len(rows))

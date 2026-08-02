@@ -487,15 +487,17 @@ func (v runnerValues) List(ctx context.Context) ([]envgate.Stored, error) {
 	for _, value := range resp.GetValues() {
 		c := value.GetCoordinate()
 		stored = append(stored, envgate.Stored{
-			Cell:        envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()},
-			Environment: c.GetEnvironment(),
-			Version:     value.GetVersion(),
+			Address: envgate.Address{
+				Cell:        envgate.Cell{Key: c.GetKey(), Folder: c.GetFolder()},
+				Environment: c.GetEnvironment(),
+			},
+			Version: value.GetVersion(),
 		})
 	}
 	return stored, nil
 }
 
-func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
+func (v runnerValues) Reveal(ctx context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
 	named := make([]*envv1.Cell, 0, len(rows))
 	for _, row := range rows {
 		named = append(named, &envv1.Cell{Folder: row.Cell.Folder, Key: row.Cell.Key, Environment: row.Environment})

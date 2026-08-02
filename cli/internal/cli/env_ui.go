@@ -167,11 +167,11 @@ func envGate(cfg *projectconfig.Config, runner *providerrunner.Runner, provider 
 
 // coordinate is one address on the wire: the cell, and the named environment
 // whose override the page addressed, empty for the class-wide value.
-func (v runnerValues) coordinate(at envgate.Read) *envv1.Coordinate {
+func (v runnerValues) coordinate(at envgate.Address) *envv1.Coordinate {
 	return &envv1.Coordinate{Slug: v.slug, Folder: at.Cell.Folder, Key: at.Cell.Key, Environment: at.Environment}
 }
 
-func (v runnerValues) Set(ctx context.Context, at envgate.Read, value string, expected *int64) error {
+func (v runnerValues) Set(ctx context.Context, at envgate.Address, value string, expected *int64) error {
 	_, err := v.runner.SetValue(ctx, &envv1.SetValueRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
@@ -183,7 +183,7 @@ func (v runnerValues) Set(ctx context.Context, at envgate.Read, value string, ex
 	return staleOrBroken(err)
 }
 
-func (v runnerValues) Delete(ctx context.Context, at envgate.Read, expected *int64) error {
+func (v runnerValues) Delete(ctx context.Context, at envgate.Address, expected *int64) error {
 	_, err := v.runner.DeleteValue(ctx, &envv1.DeleteValueRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,
@@ -205,7 +205,7 @@ func staleOrBroken(err error) error {
 	return err
 }
 
-func (v runnerValues) History(ctx context.Context, at envgate.Read) ([]varsui.Version, error) {
+func (v runnerValues) History(ctx context.Context, at envgate.Address) ([]varsui.Version, error) {
 	resp, err := v.runner.ListVersions(ctx, &envv1.ListVersionsRequest{
 		Options:         v.options,
 		ProtocolVersion: manifestbuilder.SchemaVersion,

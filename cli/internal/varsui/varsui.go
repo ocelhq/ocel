@@ -54,9 +54,9 @@ type Store interface {
 	// delete is expectation-bound for the same reason a write is — a page that
 	// renders a value somebody has since replaced must not be able to destroy
 	// the replacement.
-	Set(ctx context.Context, at envgate.Read, value string, expected *int64) error
-	Delete(ctx context.Context, at envgate.Read, expected *int64) error
-	History(ctx context.Context, at envgate.Read) ([]Version, error)
+	Set(ctx context.Context, at envgate.Address, value string, expected *int64) error
+	Delete(ctx context.Context, at envgate.Address, expected *int64) error
+	History(ctx context.Context, at envgate.Address) ([]Version, error)
 }
 
 // Version is one entry of a cell's change history. It carries no plaintext:
@@ -259,7 +259,7 @@ func (s *Session) handleSet(w http.ResponseWriter, r *http.Request) {
 		fail(w, http.StatusBadRequest, fmt.Errorf("read this request: %w", err))
 		return
 	}
-	at := envgate.Read{Cell: envgate.Cell{Key: req.Key, Folder: req.Folder}, Environment: req.Environment}
+	at := envgate.Address{Cell: envgate.Cell{Key: req.Key, Folder: req.Folder}, Environment: req.Environment}
 
 	// The same checks the CLI's own write path makes. The matrix draws only
 	// cells that exist and draws a forbidden one unfillable, so reaching here
@@ -333,7 +333,7 @@ func (s *Session) writable(environment string) error {
 // replaced. Only a class-wide write does: the complaint described the value
 // this run resolved, and this run resolves no override — the session manages
 // every environment's values at once rather than standing in any one of them.
-func (s *Session) forget(at envgate.Read) {
+func (s *Session) forget(at envgate.Address) {
 	if at.Environment == "" {
 		s.opts.Gate.Forget(at.Cell)
 	}
@@ -372,8 +372,8 @@ func addressable(folder string) error {
 	return envgate.ValidateFolder(folder)
 }
 
-func queryAddress(r *http.Request) envgate.Read {
-	return envgate.Read{
+func queryAddress(r *http.Request) envgate.Address {
+	return envgate.Address{
 		Cell:        envgate.Cell{Key: r.URL.Query().Get("key"), Folder: r.URL.Query().Get("folder")},
 		Environment: r.URL.Query().Get("environment"),
 	}

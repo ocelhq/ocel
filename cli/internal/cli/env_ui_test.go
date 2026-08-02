@@ -48,7 +48,7 @@ func storeValue(t *testing.T, ctx context.Context, runner *providerrunner.Runner
 // revealOne reads back one cell through the batched reveal, for the assertions
 // that only care about a single value.
 func revealOne(ctx context.Context, values runnerValues, cell envgate.Cell) (string, bool, error) {
-	found, err := values.Reveal(ctx, []envgate.Read{{Cell: cell}})
+	found, err := values.Reveal(ctx, []envgate.Address{{Cell: cell}})
 	if err != nil {
 		return "", false, err
 	}
@@ -110,7 +110,7 @@ func TestRunnerValues_SetAgainstAStaleVersionIsRefusedAsAStaleValue(t *testing.T
 
 	withRunnerValues(t, root, envOptions{}, func(ctx context.Context, slug string, runner *providerrunner.Runner, values runnerValues) error {
 		storeValue(t, ctx, runner, envClass(envOptions{}), &envv1.Coordinate{Slug: slug, Key: "API_URL"}, "https://someone-elses.example")
-		at := envgate.Read{Cell: envgate.Cell{Key: "API_URL"}}
+		at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
 		unset := int64(0)
 		if err := values.Set(ctx, at, "https://mine.example", &unset); !errors.Is(err, varsui.ErrStaleValue) {
@@ -141,7 +141,7 @@ func TestRunnerValues_DeleteAgainstAStaleVersionIsRefusedAsAStaleValue(t *testin
 		coordinate := &envv1.Coordinate{Slug: slug, Key: "API_URL"}
 		storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://first.example")
 		storeValue(t, ctx, runner, envClass(envOptions{}), coordinate, "https://someone-elses.example")
-		at := envgate.Read{Cell: envgate.Cell{Key: "API_URL"}}
+		at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}}
 
 		rendered := int64(1)
 		if err := values.Delete(ctx, at, &rendered); !errors.Is(err, varsui.ErrStaleValue) {

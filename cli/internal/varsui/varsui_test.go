@@ -28,7 +28,7 @@ import (
 type fakeStore struct {
 	cells     map[envgate.Cell]string
 	versions  map[envgate.Cell]int64
-	held      map[envgate.Read]string
+	held      map[envgate.Address]string
 	overrides []envgate.Stored
 
 	// environments is what the provider enumerates for this session: what an
@@ -40,23 +40,23 @@ type fakeStore struct {
 }
 
 func newFakeStore() *fakeStore {
-	return &fakeStore{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}, held: map[envgate.Read]string{}}
+	return &fakeStore{cells: map[envgate.Cell]string{}, versions: map[envgate.Cell]int64{}, held: map[envgate.Address]string{}}
 }
 
 func (s *fakeStore) override(cell envgate.Cell, environment string) {
-	s.overrides = append(s.overrides, envgate.Stored{Cell: cell, Environment: environment, Version: 1})
-	s.held[envgate.Read{Cell: cell, Environment: environment}] = "override"
+	s.overrides = append(s.overrides, envgate.Stored{Address: envgate.Address{Cell: cell, Environment: environment}, Version: 1})
+	s.held[envgate.Address{Cell: cell, Environment: environment}] = "override"
 }
 
 func (s *fakeStore) List(context.Context) ([]envgate.Stored, error) {
 	out := make([]envgate.Stored, 0, len(s.cells)+len(s.overrides))
 	for cell := range s.cells {
-		out = append(out, envgate.Stored{Cell: cell, Version: s.versions[cell]})
+		out = append(out, envgate.Stored{Address: envgate.Address{Cell: cell}, Version: s.versions[cell]})
 	}
 	return append(out, s.overrides...), nil
 }
 
-func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.Cell]string, error) {
+func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Address) (map[envgate.Cell]string, error) {
 	found := map[envgate.Cell]string{}
 	for _, row := range rows {
 		if value, ok := s.cells[row.Cell]; ok {
@@ -69,7 +69,7 @@ func (s *fakeStore) Reveal(_ context.Context, rows []envgate.Read) (map[envgate.
 // version is what the row at one address is currently held at, zero when it
 // holds nothing. An override is versioned like any other row: it is a value,
 // and two people can edit it as easily as they can edit the class-wide one.
-func (s *fakeStore) version(at envgate.Read) int64 {
+func (s *fakeStore) version(at envgate.Address) int64 {
 	if at.Environment == "" {
 		return s.versions[at.Cell]
 	}
@@ -85,25 +85,25 @@ func (s *fakeStore) version(at envgate.Read) int64 {
 // describes the row refuses the operation. Both mutations run it, so a session
 // that dropped a version on its way through is a test failure rather than a
 // fixture that was going to refuse regardless.
-func (s *fakeStore) stale(at envgate.Read, expected *int64) bool {
+func (s *fakeStore) stale(at envgate.Address, expected *int64) bool {
 	return expected != nil && *expected != s.version(at)
 }
 
-func (s *fakeStore) Set(_ context.Context, at envgate.Read, value string, expected *int64) error {
+func (s *fakeStore) Set(_ context.Context, at envgate.Address, value string, expected *int64) error {
 	s.expected = append(s.expected, expected)
 	if s.stale(at, expected) {
 		return varsui.ErrStaleValue
 	}
 	s.held[at] = value
 	if at.Environment != "" {
-		s.overrides = append(s.overrides, envgate.Stored{Cell: at.Cell, Environment: at.Environment, Version: 1})
+		s.overrides = append(s.overrides, envgate.Stored{Address: at, Version: 1})
 		return nil
 	}
 	s.cells[at.Cell] = value
 	return nil
 }
 
-func (s *fakeStore) Delete(_ context.Context, at envgate.Read, expected *int64) error {
+func (s *fakeStore) Delete(_ context.Context, at envgate.Address, expected *int64) error {
 	s.expected = append(s.expected, expected)
 	if s.stale(at, expected) {
 		return varsui.ErrStaleValue
@@ -121,7 +121,7 @@ func (s *fakeStore) Delete(_ context.Context, at envgate.Read, expected *int64) 
 	return nil
 }
 
-func (s *fakeStore) History(_ context.Context, at envgate.Read) ([]varsui.Version, error) {
+func (s *fakeStore) History(_ context.Context, at envgate.Address) ([]varsui.Version, error) {
 	_, held := s.held[at]
 	if _, classWide := s.cells[at.Cell]; !held && !(classWide && at.Environment == "") {
 		return nil, nil
@@ -522,7 +522,7 @@ func TestSession_AnOverrideIsWrittenBesideTheClassWideValueRatherThanOverIt(t *t
 		t.Fatalf("PUT = %d: %s", resp.StatusCode, bodyOf(t, resp))
 	}
 
-	at := envgate.Read{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
+	at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
 	if got := store.held[at]; got != "https://staging.example" {
 		t.Errorf("staging holds %q, want the override that was written", got)
 	}
@@ -556,7 +556,7 @@ func TestSession_RefusesAnOverrideAgainstAnEnvironmentThatDoesNotExist(t *testin
 // rendered for that environment's own row — not the class-wide one beside it —
 // and is refused when it no longer holds.
 func TestSession_AnOverrideWriteExpectsTheVersionRenderedForItsOwnEnvironment(t *testing.T) {
-	at := envgate.Read{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
+	at := envgate.Address{Cell: envgate.Cell{Key: "API_URL"}, Environment: "staging"}
 
 	for name, tc := range map[string]struct {
 		version    int64

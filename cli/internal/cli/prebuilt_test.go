@@ -260,10 +260,10 @@ type oneValue struct {
 }
 
 func (v oneValue) List(context.Context) ([]envgate.Stored, error) {
-	return []envgate.Stored{{Cell: v.cell}}, nil
+	return []envgate.Stored{{Address: envgate.Address{Cell: v.cell}}}, nil
 }
 
-func (v oneValue) Reveal(context.Context, []envgate.Read) (map[envgate.Cell]string, error) {
+func (v oneValue) Reveal(context.Context, []envgate.Address) (map[envgate.Cell]string, error) {
 	return map[envgate.Cell]string{v.cell: v.value}, nil
 }
 
@@ -338,6 +338,6 @@ type emptyValues struct{}
 
 func (emptyValues) List(context.Context) ([]envgate.Stored, error) { return nil, nil }
 
-func (emptyValues) Reveal(context.Context, []envgate.Read) (map[envgate.Cell]string, error) {
+func (emptyValues) Reveal(context.Context, []envgate.Address) (map[envgate.Cell]string, error) {
 	return nil, nil
 }
