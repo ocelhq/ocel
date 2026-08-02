@@ -412,6 +412,54 @@ func TestRunPreviewUp_AnOverrideIsTheOnlyValueItsOwnEnvironmentNeeds(t *testing.
 	}
 }
 
+// Removing a preview removes compute, not values. A long-lived branch torn
+// down and put back up is the case the whole rule exists for: the override
+// someone deliberately set has to be what the rebuilt environment resolves,
+// without anyone setting it again.
+func TestRunPreviewUp_ARedeployedBranchFindsTheOverrideItAlreadyHad(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+	stubGit(t, "feature/login", "")
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	envSet(t, root, "POSTHOG_ID", "ph_shared", envOptions{preview: true})
+	envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
+
+	var got map[string]map[string]string
+	prev := buildApp
+	buildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
+		got = envByApp
+		return nil
+	}
+	t.Cleanup(func() { buildApp = prev })
+
+	up := func(when string) {
+		t.Helper()
+		got = nil
+		var stdout, stderr bytes.Buffer
+		if err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+			t.Fatalf("runPreviewUp %s err = %v; stdout=%s stderr=%s", when, err, stdout.String(), stderr.String())
+		}
+		if len(got) == 0 {
+			t.Fatalf("no app was built %s, so nothing resolved a value", when)
+		}
+		for app, env := range got {
+			if env["POSTHOG_ID"] != "ph_staging" {
+				t.Errorf("%s built %s with POSTHOG_ID=%q, want %q", when, app, env["POSTHOG_ID"], "ph_staging")
+			}
+		}
+	}
+
+	up("before the teardown")
+
+	var rm bytes.Buffer
+	if err := runPreviewRm(context.Background(), root, previewRmOptions{name: "staging", yes: true}, &rm, &rm, strings.NewReader("")); err != nil {
+		t.Fatalf("runPreviewRm err = %v; out=%s", err, rm.String())
+	}
+
+	up("after the branch was rebuilt")
+}
+
 func TestRunDeploy_AHalfCompletedFolderRenameStopsTheDeployNamingBothFiles(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
 	writeAppsConfig(t, root, `
