@@ -129,6 +129,11 @@ func checkVariableNames(vars map[string]string) error {
 	return nil
 }
 
+// rootAppEnv is the key envByApp carries the builder process's own environment
+// under. A project that configures no apps has no name to key by — the builder
+// is what detects its one app — so that app's values travel under none.
+const rootAppEnv = ""
+
 // builderEnv is the environment the node builder runs under: the CLI's own,
 // then the values of the app nothing configured — exported before the build
 // because that is the only moment a framework can inline one into what it
@@ -219,7 +224,7 @@ func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]m
 	if err != nil {
 		return fmt.Errorf("marshal build request: %w", err)
 	}
-	return builderExec(ctx, builderPath, builderEnv(platform.AdapterPath(cfg.Dir), envByApp[""]), payload, stderr)
+	return builderExec(ctx, builderPath, builderEnv(platform.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr)
 }
 
 // CollectFunctions returns the functions in a project's build output,
