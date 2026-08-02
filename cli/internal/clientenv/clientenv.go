@@ -29,15 +29,19 @@ import (
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
-// PublicPrefix is the framework's own public prefix: the environment names it
-// will inline into a browser bundle, and the only ones it will.
-const PublicPrefix = "NEXT_PUBLIC_"
+// nextPublicPrefix is Next's public prefix: the environment names it will
+// inline into a browser bundle, and the only ones it will. It is named for the
+// framework rather than for the idea because this package delivers exactly one
+// framework's convention — the accessor it generates is Next's
+// static-replacement shape too — and a second framework makes both of them a
+// choice keyed on the app's framework rather than a constant.
+const nextPublicPrefix = "NEXT_PUBLIC_"
 
 // PublicName is the build-environment entry a client-accessible key is
 // delivered under. The key's own name is kept whole, so a project reading
 // `process.env.PUBLIC_SITE_URL` itself and a project reading it through the
 // accessor never disagree about which variable is which.
-func PublicName(key string) string { return PublicPrefix + key }
+func PublicName(key string) string { return nextPublicPrefix + key }
 
 // specifier is what application code imports. It resolves to the SDK's
 // throwing fallback until an app's tsconfig maps it at the generated file.
