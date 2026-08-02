@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -180,5 +181,90 @@ func TestRemovePreview_LeavesArtifactsWhenThePointerRemovalFailed(t *testing.T) 
 	}
 	if rec.swept != nil {
 		t.Errorf("swept %v after a failed pointer removal, want nothing", rec.swept)
+	}
+}
+
+// valueRecorder stands in for the substrate's variable store, recording which
+// projects a teardown emptied and failing on demand.
+type valueRecorder struct {
+	purged []string
+	err    error
+}
+
+func (r *valueRecorder) Purge(_ context.Context, slug string) (int, error) {
+	r.purged = append(r.purged, slug)
+	if r.err != nil {
+		return 0, r.err
+	}
+	return 7, nil
+}
+
+var _ ValueStore = (*valueRecorder)(nil)
+
+func TestPurgeProjectValues_EmptiesTheProjectsPartitionAndReportsTheStep(t *testing.T) {
+	values := &valueRecorder{}
+	var steps []string
+	cfg := Config{Values: values}
+
+	if err := purgeProjectValues(context.Background(), cfg, "shop", func(m string) { steps = append(steps, m) }); err != nil {
+		t.Fatalf("purgeProjectValues: %v", err)
+	}
+
+	if want := []string{"shop"}; !reflect.DeepEqual(values.purged, want) {
+		t.Errorf("purged = %v, want %v", values.purged, want)
+	}
+	if len(steps) != 1 {
+		t.Errorf("reported steps = %v, want the removal reported as one step", steps)
+	}
+}
+
+// A bootstrap predating the variable store leaves nothing to remove, which is
+// not a failure and not a step worth reporting.
+func TestPurgeProjectValues_NoStoreIsNothingToRemove(t *testing.T) {
+	var steps []string
+
+	if err := purgeProjectValues(context.Background(), Config{}, "shop", func(m string) { steps = append(steps, m) }); err != nil {
+		t.Fatalf("purgeProjectValues: %v", err)
+	}
+	if steps != nil {
+		t.Errorf("reported %v with no store configured, want nothing", steps)
+	}
+}
+
+func TestPurgeProjectValues_ReportsAFailedRemoval(t *testing.T) {
+	values := &valueRecorder{err: errors.New("table is on fire")}
+
+	err := purgeProjectValues(context.Background(), Config{Values: values}, "shop", nil)
+	if err == nil {
+		t.Fatal("purgeProjectValues err = nil, want the failure reported")
+	}
+	if !strings.Contains(err.Error(), "table is on fire") {
+		t.Errorf("err = %v, want it to carry what the store said", err)
+	}
+}
+
+// Removing one preview removes compute, not values: the override someone set
+// for that environment is what a redeploy of the same branch resolves, and
+// overrides are tiny.
+func TestRemovePreview_KeepsTheEnvironmentsOverrides(t *testing.T) {
+	values := &valueRecorder{}
+	fake := &recordingRootStack{
+		pointerRemoval: edge.PointerRemoval{
+			RemainingPointers: 0,
+			RemovedRoutes:     []edge.RemovedRoute{{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"}},
+		},
+	}
+	ctx := context.Background()
+	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
+	if err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	if err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, nil, nil); err != nil {
+		t.Fatalf("RemovePreview: %v", err)
+	}
+
+	if values.purged != nil {
+		t.Errorf("removing preview %q emptied %v: a redeployed branch would lose the override set for it", "pr-1", values.purged)
 	}
 }

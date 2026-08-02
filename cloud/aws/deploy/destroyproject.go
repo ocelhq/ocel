@@ -115,12 +115,43 @@ func DestroyProject(ctx context.Context, stack edge.RootStack, state edge.RootSt
 		}
 	}
 
+	if err := purgeProjectValues(ctx, cfg, slug, report); err != nil {
+		errs = append(errs, err)
+	}
+
 	report("Purging project assets")
 	if err := purgeProjectAssets(ctx, cfg, slug); err != nil {
 		errs = append(errs, err)
 	}
 
 	return result, errors.Join(errs...)
+}
+
+// ValueStore is the variable store as a teardown sees it: one call that empties
+// everything a project holds in this substrate's env class.
+type ValueStore interface {
+	Purge(ctx context.Context, slug string) (int, error)
+}
+
+// purgeProjectValues removes a destroyed project's stored variable values —
+// current values and version history alike, for this substrate's class only.
+// Leaving them would leave secrets in a table the operator believes they
+// emptied, and nothing else would ever reclaim them: the store holds no
+// reference to the stacks and assets the rest of the teardown removes.
+//
+// It runs after the compute is gone, so nothing is left reading a value while
+// it disappears, and like every other step it is best-effort: its failure is
+// returned for the caller to join and report, never to abort the teardown, and
+// a re-run empties whatever the failure left.
+func purgeProjectValues(ctx context.Context, cfg Config, slug string, report func(string)) error {
+	if cfg.Values == nil {
+		return nil
+	}
+	nilSafe(report)("Removing the project's stored variable values")
+	if _, err := cfg.Values.Purge(ctx, slug); err != nil {
+		return fmt.Errorf("remove %s's stored variable values: %w", slug, err)
+	}
+	return nil
 }
 
 // rootStackWorkerNames resolves the exact set of edge workers a project's root

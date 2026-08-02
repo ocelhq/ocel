@@ -289,6 +289,14 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 		}
 	}
 
+	// Every pointer of the project is going, so the whole preview class's
+	// partition goes with them — class-wide preview values and every named
+	// environment's override alike. Removing one preview (RemovePreview) never
+	// reaches here: that keeps its overrides for the redeploy of the same branch.
+	if err := purgeProjectValues(ctx, cfg, slug, report); err != nil {
+		errs = append(errs, err)
+	}
+
 	report("Purging preview assets")
 	if err := purgePreviewAssets(ctx, cfg, slug, plan.Pointers); err != nil {
 		errs = append(errs, err)

@@ -98,6 +98,12 @@ type Config struct {
 	// store's own class token, not the deploy's environment segment: a preview
 	// deploy of any environment reads the preview class's partition.
 	VarsClass string
+	// Values is the substrate's variable store, opened for the one thing a
+	// teardown does to it: emptying a destroyed project's partition. A deploy
+	// never reads through it — values reach a function through the manifest the
+	// gate resolved — so it is set only on a teardown Config. Nil when the
+	// bootstrap predates the store, which leaves nothing to remove.
+	Values ValueStore
 
 	// ListenerCodePath is the built listener-Lambda handler archive registerBucket
 	// deploys. Packaging it (building + zipping the handler binary) rides the
