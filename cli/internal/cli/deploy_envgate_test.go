@@ -378,6 +378,40 @@ func TestRunPreviewUp_TheEnvironmentBeingDeployedResolvesItsOwnOverride(t *testi
 	}
 }
 
+// A required key only one environment holds a value for is not a gap for that
+// environment — it is that environment's value. Refusing it would refuse the
+// deploy of a branch whose configuration is complete, and would disagree with
+// the live path, which serves the same override from the same row.
+func TestRunPreviewUp_AnOverrideIsTheOnlyValueItsOwnEnvironmentNeeds(t *testing.T) {
+	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true}]`)
+	stubGit(t, "feature/login", "")
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	envSet(t, root, "POSTHOG_ID", "ph_staging", envOptions{preview: true, environment: "staging"})
+
+	var got map[string]map[string]string
+	prev := buildApp
+	buildApp = func(_ context.Context, _ *projectconfig.Config, envByApp map[string]map[string]string, _ io.Writer) error {
+		got = envByApp
+		return nil
+	}
+	t.Cleanup(func() { buildApp = prev })
+
+	var stdout, stderr bytes.Buffer
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{name: "staging"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runPreviewUp err = %v, want staging's own override to satisfy the gate; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if len(got) == 0 {
+		t.Fatal("no app was built, so nothing resolved a value")
+	}
+	for app, env := range got {
+		if env["POSTHOG_ID"] != "ph_staging" {
+			t.Errorf("%s built with POSTHOG_ID=%q, want %q", app, env["POSTHOG_ID"], "ph_staging")
+		}
+	}
+}
+
 func TestRunDeploy_AHalfCompletedFolderRenameStopsTheDeployNamingBothFiles(t *testing.T) {
 	root := setUpEnvGateFixture(t, `[{"key":"POSTHOG_ID","class":"VARIABLE_CLASS_PLAIN","required":true,"folders":["/web","/admin"],"source":"ocel/env.ts"}]`)
 	writeAppsConfig(t, root, `

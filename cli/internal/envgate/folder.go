@@ -65,7 +65,7 @@ func (g *Gate) Resolve(ctx context.Context, app string) (map[string]Resolved, er
 	}
 
 	g.mu.Lock()
-	held := g.heldCells()
+	held := g.resolvedCells()
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	g.mu.Unlock()
 

@@ -343,6 +343,31 @@ func TestGate_AnOverrideOnlyKeyDoesNotSatisfyTheDeployGate(t *testing.T) {
 	}
 }
 
+// The other side of the same rule, and the one that decides whether a preview
+// can deploy at all: the run that *is* the environment holding an override
+// resolves it, so the gate is not short of a cell that environment is the only
+// holder of. Refusing here would refuse a value the live path goes on serving —
+// the baked and live halves of one class disagreeing about one row.
+func TestGate_AnOverrideSatisfiesTheGateForTheRunThatIsThatEnvironment(t *testing.T) {
+	values := newFakeValues()
+	values.override("STRIPE_API_KEY", "", "staging", "sk_staging")
+
+	g := prefetched(t, values, envgate.Scope{
+		Apps:        []envgate.App{{Name: "api"}},
+		Preview:     true,
+		Environment: "staging",
+	})
+	resp := declare(t, g, def("STRIPE_API_KEY", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN))
+
+	if err := g.Check(); err != nil {
+		t.Fatalf("Check err = %v, want staging's own override to satisfy the gate for staging", err)
+	}
+	cells := resp.GetCells()
+	if len(cells) != 1 || cells[0].GetValue() != "sk_staging" {
+		t.Errorf("cells = %+v, want the one cell holding staging's own value", cells)
+	}
+}
+
 // An override answers for the environment holding it and for nothing else, so a
 // run bound to no environment must never see one. Each class leaks differently,
 // so each is asked the question it can answer: a live class answers presence

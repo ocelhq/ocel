@@ -62,7 +62,7 @@ func Orphaned(environments []string, environment string) bool {
 	return environment != "" && !slices.Contains(environments, environment)
 }
 
-// heldCells is every cell the store holds, at the version it holds it at. One
+// heldCells is a set of cells with values, at the version each is held at. One
 // map answers both questions a verdict asks — whether a cell is filled, and
 // which value filled it — so the two can never drift apart.
 type heldCells map[Cell]int64
@@ -72,14 +72,59 @@ func (h heldCells) has(cell Cell) bool {
 	return ok
 }
 
-// heldCells reads the store rows the gate has, under the lock its caller
-// already holds.
-func (g *Gate) heldCells() heldCells {
-	held := make(heldCells, len(g.cells))
+// classWideCells is the store's class-wide set: what every environment reads
+// where none of its own holds a value. It is what the matrix draws, because the
+// matrix presents every environment's values at once rather than standing in
+// any one of them.
+//
+// Callers hold g.mu.
+func (g *Gate) classWideCells() heldCells {
+	cells := make(heldCells, len(g.cells))
 	for _, row := range g.cells {
-		held[row.Cell] = row.Version
+		cells[row.Cell] = row.Version
 	}
-	return held
+	return cells
+}
+
+// resolvedCells is what this run actually reads: the class-wide set, overlaid
+// with the overrides the run's own environment holds. It is what the verdict
+// and the deploy's resolution are both formed from, so a cell an override
+// answers is never one the run is called short of — the gate would otherwise
+// refuse an environment for a value that environment is the only holder of, and
+// refuse it for a value the live path serves.
+//
+// A run bound to no environment sees the class-wide set and nothing else, which
+// is every production deploy: an override answers only where the run is the
+// environment holding it.
+//
+// Callers hold g.mu.
+func (g *Gate) resolvedCells() heldCells {
+	cells := g.classWideCells()
+	if g.scope.Environment == "" {
+		return cells
+	}
+	for cell := range g.overrides {
+		if version, ok := g.ownOverride(cell); ok {
+			cells[cell] = version
+		}
+	}
+	return cells
+}
+
+// ownOverride is the version this run's own environment holds for a cell, and
+// whether it holds one at all.
+//
+// Callers hold g.mu.
+func (g *Gate) ownOverride(cell Cell) (int64, bool) {
+	if g.scope.Environment == "" {
+		return 0, false
+	}
+	for _, override := range g.overrides[cell] {
+		if override.Environment == g.scope.Environment {
+			return override.Version, true
+		}
+	}
+	return 0, false
 }
 
 // Values is the store as the gate needs it. The CLI has no cloud SDK
@@ -182,8 +227,8 @@ func (g *Gate) Prefetch(ctx context.Context) error {
 		}
 		overrides[row.Cell] = append(overrides[row.Cell], Override{Environment: row.Environment, Version: row.Version})
 	}
-	for _, held := range overrides {
-		sort.Slice(held, func(i, j int) bool { return held[i].Environment < held[j].Environment })
+	for _, forCell := range overrides {
+		sort.Slice(forCell, func(i, j int) bool { return forCell[i].Environment < forCell[j].Environment })
 	}
 
 	g.mu.Lock()
@@ -245,18 +290,12 @@ func (g *Gate) reveal(ctx context.Context, cells []Cell) (map[Cell]revealed, err
 
 // resolvedEnvironment is where one cell's value comes from for this run: the
 // run's own environment when that environment holds an override, and class-wide
-// otherwise. A run bound to no environment always resolves class-wide, which is
-// every production deploy.
+// otherwise.
 //
 // Callers hold g.mu.
 func (g *Gate) resolvedEnvironment(cell Cell) string {
-	if g.scope.Environment == "" {
-		return ""
-	}
-	for _, held := range g.overrides[cell] {
-		if held.Environment == g.scope.Environment {
-			return g.scope.Environment
-		}
+	if _, ok := g.ownOverride(cell); ok {
+		return g.scope.Environment
 	}
 	return ""
 }
@@ -267,7 +306,7 @@ func (g *Gate) resolvedEnvironment(cell Cell) string {
 // ever holding a live secret.
 func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvRequest) (*resourcesv1.DeclareEnvResponse, error) {
 	g.mu.Lock()
-	stored := append([]Stored(nil), g.cells...)
+	held := g.resolvedCells()
 	g.definitions = append(g.definitions, req.GetDefinitions()...)
 	g.mu.Unlock()
 
@@ -276,11 +315,7 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 		if definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
 			continue
 		}
-		for _, row := range stored {
-			if row.Cell.Key == definition.GetKey() {
-				wanted = append(wanted, row.Cell)
-			}
-		}
+		wanted = append(wanted, cellsOf(held, definition.GetKey())...)
 	}
 	plaintext, err := g.reveal(ctx, wanted)
 	if err != nil {
@@ -290,11 +325,7 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	var cells []*resourcesv1.VariableCell
 	for _, definition := range req.GetDefinitions() {
 		live := definition.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET
-		for _, row := range stored {
-			cell := row.Cell
-			if cell.Key != definition.GetKey() {
-				continue
-			}
+		for _, cell := range cellsOf(held, definition.GetKey()) {
 			var value string
 			if !live {
 				if !plaintext[cell].found {
@@ -311,6 +342,19 @@ func (g *Gate) DeclareEnv(ctx context.Context, req *resourcesv1.DeclareEnvReques
 	}
 
 	return &resourcesv1.DeclareEnvResponse{Cells: cells}, nil
+}
+
+// cellsOf is every cell this run holds for one key, in folder order so one
+// declaration is answered the same way twice.
+func cellsOf(held heldCells, key string) []Cell {
+	var out []Cell
+	for cell := range held {
+		if cell.Key == key {
+			out = append(out, cell)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Folder < out[j].Folder })
+	return out
 }
 
 // ReportEnvProblems records the declaring process's verdict.
@@ -336,7 +380,7 @@ func (g *Gate) Check() error {
 	problems := append([]*resourcesv1.VariableProblem(nil), g.problems...)
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	apps := readers(g.scope.Apps)
-	held := g.heldCells()
+	held := g.resolvedCells()
 	g.mu.Unlock()
 
 	problems = append(problems, unresolved(definitions, apps, held, problems)...)

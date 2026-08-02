@@ -86,10 +86,14 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	g.mu.Lock()
 	definitions := append([]*resourcesv1.VariableDefinition(nil), g.definitions...)
 	apps := append([]App(nil), g.scope.Apps...)
-	held := g.heldCells()
+	// The cells are drawn class-wide and the app readout is resolved: a cell
+	// holds what every environment reads, while an app can run on whatever this
+	// run resolves — which is the gate's own verdict, and the two must agree.
+	classWide := g.classWideCells()
+	resolved := g.resolvedCells()
 	overrides := make(map[Cell][]Override, len(g.overrides))
-	for cell, held := range g.overrides {
-		for _, override := range held {
+	for cell, forCell := range g.overrides {
+		for _, override := range forCell {
 			override.Orphaned = Orphaned(environments, override.Environment)
 			overrides[cell] = append(overrides[cell], override)
 		}
@@ -102,7 +106,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 	}
 	g.mu.Unlock()
 
-	columns := columns(definitions, apps, held, overrides)
+	columns := columns(definitions, apps, classWide, overrides)
 	m := Matrix{Columns: columns}
 	for _, definition := range definitions {
 		row := MatrixRow{
@@ -115,8 +119,8 @@ func (g *Gate) Matrix(environments []string) Matrix {
 			row.Cells = append(row.Cells, MatrixCell{
 				Folder:    folder,
 				State:     state(definition, folder),
-				Set:       held.has(cell),
-				Version:   held[cell],
+				Set:       classWide.has(cell),
+				Version:   classWide[cell],
 				Overrides: overrides[cell],
 				Problem:   complaints[cell],
 			})
@@ -127,7 +131,7 @@ func (g *Gate) Matrix(environments []string) Matrix {
 		m.Apps = append(m.Apps, AppResolution{
 			Name:    app.Name,
 			Folder:  app.Folder,
-			Missing: missing(definitions, app.Folder, held),
+			Missing: missing(definitions, app.Folder, resolved),
 		})
 	}
 	return m
