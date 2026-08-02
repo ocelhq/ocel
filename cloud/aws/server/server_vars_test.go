@@ -179,6 +179,117 @@ func TestRevealValues_ReadsEveryNamedCellInOneQuery(t *testing.T) {
 	}
 }
 
+func atVersion(n int64) *int64 { return &n }
+
+// guardedCell is one cell reached through the provider, optionally already
+// holding a value at version 1, so a write's expectation has something to be
+// checked against.
+func guardedCell(t *testing.T, seeded bool) (*VarsServer, *envv1.Coordinate) {
+	t.Helper()
+	s := testAccount(&countingCFN{}, newFakeDynamo(), &fakeKMS{})
+	coordinate := &envv1.Coordinate{Slug: "shop", Key: "STRIPE_API_KEY"}
+	if seeded {
+		if _, err := s.SetValue(context.Background(), &envv1.SetValueRequest{
+			Coordinate: coordinate,
+			Value:      "sk-seed",
+		}); err != nil {
+			t.Fatalf("seeding the cell: %v", err)
+		}
+	}
+	return s, coordinate
+}
+
+func wantsFailedPrecondition(t *testing.T, err error) {
+	t.Helper()
+	var connectErr *connect.Error
+	if !errors.As(err, &connectErr) || connectErr.Code() != connect.CodeFailedPrecondition {
+		t.Fatalf("err = %v, want CodeFailedPrecondition (the guard the caller asked for)", err)
+	}
+}
+
+// The version the caller believes is current has to reach the store unchanged,
+// because each of its three states means something different: absent writes
+// blind, zero demands that no live value is set, and N demands that exact live
+// version. Dropping the field here would turn every guarded write the UI makes
+// into a blind one that silently overwrites a concurrent edit.
+func TestSetValue_ForwardsTheCallersExpectedVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		seeded      bool
+		expected    *int64
+		wantStale   bool
+		wantVersion int64
+	}{
+		{name: "absent writes blind over a live value", seeded: true, wantVersion: 2},
+		{name: "absent writes blind into an unset cell", seeded: false, wantVersion: 1},
+		{name: "zero loses against a live value", seeded: true, expected: atVersion(0), wantStale: true},
+		{name: "zero writes into an unset cell", seeded: false, expected: atVersion(0), wantVersion: 1},
+		{name: "the live version writes", seeded: true, expected: atVersion(1), wantVersion: 2},
+		{name: "that same version loses against an unset cell", seeded: false, expected: atVersion(1), wantStale: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, coordinate := guardedCell(t, tc.seeded)
+
+			resp, err := s.SetValue(context.Background(), &envv1.SetValueRequest{
+				Coordinate:      coordinate,
+				Value:           "sk-live",
+				ExpectedVersion: tc.expected,
+			})
+
+			if tc.wantStale {
+				wantsFailedPrecondition(t, err)
+				return
+			}
+			if err != nil {
+				t.Fatalf("SetValue: %v", err)
+			}
+			if got := resp.GetMetadata().GetVersion(); got != tc.wantVersion {
+				t.Errorf("wrote version %d, want %d", got, tc.wantVersion)
+			}
+		})
+	}
+}
+
+// A delete is a write of a tombstone, so it carries the same expectation and
+// must forward it the same way — and zero keeps a landed delete idempotent
+// rather than turning a repeat into a lost race.
+func TestDeleteValue_ForwardsTheCallersExpectedVersion(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		seeded      bool
+		expected    *int64
+		wantStale   bool
+		wantDeleted bool
+	}{
+		{name: "absent deletes blind", seeded: true, wantDeleted: true},
+		{name: "absent against an unset cell deletes nothing", seeded: false},
+		{name: "zero loses against a live value", seeded: true, expected: atVersion(0), wantStale: true},
+		{name: "zero on an unset cell is a landed delete repeated", seeded: false, expected: atVersion(0)},
+		{name: "the live version deletes", seeded: true, expected: atVersion(1), wantDeleted: true},
+		{name: "that same version loses against an unset cell", seeded: false, expected: atVersion(1), wantStale: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, coordinate := guardedCell(t, tc.seeded)
+
+			resp, err := s.DeleteValue(context.Background(), &envv1.DeleteValueRequest{
+				Coordinate:      coordinate,
+				ExpectedVersion: tc.expected,
+			})
+
+			if tc.wantStale {
+				wantsFailedPrecondition(t, err)
+				return
+			}
+			if err != nil {
+				t.Fatalf("DeleteValue: %v", err)
+			}
+			if resp.GetDeleted() != tc.wantDeleted {
+				t.Errorf("deleted = %v, want %v", resp.GetDeleted(), tc.wantDeleted)
+			}
+		})
+	}
+}
+
 func TestCoordinateRoundTripsThroughTheWire(t *testing.T) {
 	want := vars.Coordinate{Slug: "shop", Folder: "/checkout", Key: "STRIPE_API_KEY", Environment: "staging"}
 	if got := toCoordinate(toCoordinateProto(want)); got != want {
