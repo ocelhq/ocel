@@ -277,7 +277,8 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 		return nil, err
 	}
 
-	clients := clientApps(cfg, variables)
+	plans := appPlans(cfg, variables)
+	clients := clientApps(plans)
 	if prebuilt {
 		if err := clientenv.CheckFresh(cfg.Dir, clients); err != nil {
 			return nil, err
@@ -287,7 +288,7 @@ func collectAndBuildManifest(ctx context.Context, cfg *projectconfig.Config, gat
 		if err := clientenv.Generate(clients); err != nil {
 			return nil, err
 		}
-		if err := buildApp(ctx, cfg, buildEnv(variables), buildOut); err != nil {
+		if err := buildApp(ctx, cfg, buildEnv(plans), buildOut); err != nil {
 			return nil, err
 		}
 		// Recorded after the build, because what it records is what the output
@@ -377,17 +378,44 @@ func variablesByApp(variables map[string][]manifestbuilder.Variable, functions [
 	return byApp
 }
 
+// appPlan is one app as everything downstream of resolution needs it: the name
+// the build will run it under, the directory its own files live in, and what
+// it resolved. The app a project configuring none deploys has no name yet —
+// nothing knows what the builder will detect — and its directory is the
+// project itself.
+type appPlan struct {
+	name      string
+	dir       string
+	variables []manifestbuilder.Variable
+}
+
+// appPlans is the project's apps, paired with their resolution. It is the one
+// place the root stand-in is translated into the app a build sees, so the
+// build environment, the generated accessors and the freshness record cannot
+// disagree about what an app is or where it lives.
+func appPlans(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []appPlan {
+	if len(cfg.Apps) == 0 {
+		return []appPlan{{dir: cfg.Dir, variables: variables[rootApp]}}
+	}
+	plans := make([]appPlan, 0, len(cfg.Apps))
+	for _, a := range cfg.Apps {
+		plans = append(plans, appPlan{
+			name:      a.Name,
+			dir:       filepath.Join(cfg.Dir, a.Path),
+			variables: variables[a.Name],
+		})
+	}
+	return plans
+}
+
 // buildEnv is what each app's build runs with: its own plaintext values, keyed
 // by the app the builder will run them for. Only the plaintext class belongs
 // in a build process's environment at all — nothing else is a build's to read.
-//
-// The root stand-in is keyed by no app, because nothing yet knows the name of
-// the app the builder will detect for a project that configures none.
-func buildEnv(variables map[string][]manifestbuilder.Variable) map[string]map[string]string {
-	byApp := make(map[string]map[string]string, len(variables))
-	for app, vars := range variables {
+func buildEnv(plans []appPlan) map[string]map[string]string {
+	byApp := make(map[string]map[string]string, len(plans))
+	for _, plan := range plans {
 		env := make(map[string]string)
-		for _, v := range vars {
+		for _, v := range plan.variables {
 			if v.Class != resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN {
 				continue
 			}
@@ -399,45 +427,20 @@ func buildEnv(variables map[string][]manifestbuilder.Variable) map[string]map[st
 				env[clientenv.PublicName(v.Key)] = v.Value
 			}
 		}
-		if app == rootApp {
-			app = ""
-		}
-		byApp[app] = env
+		byApp[plan.name] = env
 	}
 	return byApp
 }
 
-// clientApps pairs each app's resolution with the directory its generated
-// accessor and config live in — the app's own, so two apps never share one
-// accessor. The root stand-in is keyed by no app, matching buildEnv, and its
-// directory is the project itself.
-func clientApps(cfg *projectconfig.Config, variables map[string][]manifestbuilder.Variable) []clientenv.App {
-	if len(cfg.Apps) == 0 {
-		return []clientenv.App{{Dir: cfg.Dir, Variables: variables[rootApp]}}
-	}
-	dirs := appDirs(cfg)
-	apps := make([]clientenv.App, 0, len(cfg.Apps))
-	for i, a := range cfg.Apps {
-		apps = append(apps, clientenv.App{
-			Name:      a.Name,
-			Dir:       dirs[i],
-			Variables: variables[a.Name],
-		})
+// clientApps is each app's browser half: its resolution, and the directory its
+// generated accessor and config live in — the app's own, so two apps never
+// share one accessor.
+func clientApps(plans []appPlan) []clientenv.App {
+	apps := make([]clientenv.App, 0, len(plans))
+	for _, plan := range plans {
+		apps = append(apps, clientenv.App{Name: plan.name, Dir: plan.dir, Variables: plan.variables})
 	}
 	return apps
-}
-
-// appDirs is where each of the project's apps lives. A project that configures
-// none has exactly one app and it is the project itself.
-func appDirs(cfg *projectconfig.Config) []string {
-	if len(cfg.Apps) == 0 {
-		return []string{cfg.Dir}
-	}
-	dirs := make([]string, 0, len(cfg.Apps))
-	for _, a := range cfg.Apps {
-		dirs = append(dirs, filepath.Join(cfg.Dir, a.Path))
-	}
-	return dirs
 }
 
 // envScope is what a gate refusal has to name to be actionable: the apps that

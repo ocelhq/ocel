@@ -88,15 +88,13 @@ func TestAppVariables_CarriesClientAccessibilityFromTheDeclaration(t *testing.T)
 // the build runs, and nothing else there. A server-only value under that
 // prefix would be inlined into the browser bundle by the framework itself.
 func TestBuildEnv_ExportsAClientValueUnderThePublicPrefixAndNoServerOnlyOne(t *testing.T) {
-	variables := map[string][]manifestbuilder.Variable{
-		"storefront": {
-			{Key: "PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
-			{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
-			{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
-		},
-	}
+	plans := []appPlan{{name: "storefront", variables: []manifestbuilder.Variable{
+		{Key: "PUBLIC_SITE_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "https://example.com", ClientAccessible: true},
+		{Key: "INTERNAL_URL", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "http://internal"},
+		{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
+	}}}
 
-	env := buildEnv(variables)["storefront"]
+	env := buildEnv(plans)["storefront"]
 	if got, want := env["NEXT_PUBLIC_PUBLIC_SITE_URL"], "https://example.com"; got != want {
 		t.Errorf("NEXT_PUBLIC_PUBLIC_SITE_URL = %q, want %q", got, want)
 	}
@@ -114,20 +112,20 @@ func TestBuildEnv_ExportsAClientValueUnderThePublicPrefixAndNoServerOnlyOne(t *t
 // with: an encrypted-class value has no business in a build process's
 // environment, whatever app it belongs to.
 func TestBuildEnv_ExportsOnlyPlaintextValues(t *testing.T) {
-	variables := map[string][]manifestbuilder.Variable{
-		"admin": {
+	plans := []appPlan{
+		{name: "admin", variables: []manifestbuilder.Variable{
 			{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"},
 			{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"},
 			{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
-		},
-		"storefront": {
+		}},
+		{name: "storefront", variables: []manifestbuilder.Variable{
 			{Key: "SHARED_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "same"},
 			{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"},
 			{Key: "STRIPE_API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Value: "sk-live"},
-		},
+		}},
 	}
 
-	env := buildEnv(variables)
+	env := buildEnv(plans)
 	if got, want := env["admin"]["SHARED_ID"], "same"; got != want {
 		t.Errorf("admin SHARED_ID = %q, want %q", got, want)
 	}
@@ -144,12 +142,12 @@ func TestBuildEnv_ExportsOnlyPlaintextValues(t *testing.T) {
 // a key two apps resolve differently is inlinable by both — it is not the
 // build's job to pick one value or to leave the key unset.
 func TestBuildEnv_GivesEachAppItsOwnValueForADivergedKey(t *testing.T) {
-	variables := map[string][]manifestbuilder.Variable{
-		"storefront": {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}},
-		"admin":      {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}},
+	plans := []appPlan{
+		{name: "storefront", variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-store"}}},
+		{name: "admin", variables: []manifestbuilder.Variable{{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-admin"}}},
 	}
 
-	env := buildEnv(variables)
+	env := buildEnv(plans)
 	if got, want := env["storefront"]["POSTHOG_ID"], "ph-store"; got != want {
 		t.Errorf("storefront POSTHOG_ID = %q, want %q", got, want)
 	}
@@ -167,7 +165,7 @@ func TestBuildEnv_TheRootStandInIsKeyedByNoAppAtAll(t *testing.T) {
 		rootApp: {{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Value: "ph-123"}},
 	}
 
-	env := buildEnv(variables)
+	env := buildEnv(appPlans(&projectconfig.Config{Dir: t.TempDir()}, variables))
 	if _, ok := env[rootApp]; ok {
 		t.Errorf("env = %v, still keyed by a placeholder name no build knows", env)
 	}

@@ -242,8 +242,8 @@ func discoverAndSync(ctx context.Context, srv *devserver.Server, cfg *projectcon
 // app's accessor names the same keys — the per-app divergence a deploy can
 // express is not something dev's dotfile has.
 func generateClientAccessors(cfg *projectconfig.Config, keys []string) error {
-	for _, dir := range appDirs(cfg) {
-		if err := clientenv.GenerateKeys(dir, keys); err != nil {
+	for _, plan := range appPlans(cfg, nil) {
+		if err := clientenv.GenerateKeys(plan.dir, keys); err != nil {
 			return err
 		}
 	}
