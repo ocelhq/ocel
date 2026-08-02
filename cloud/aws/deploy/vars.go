@@ -13,6 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cloud/aws/vars"
 	"github.com/ocelhq/ocel/cloud/aws/vars/baked"
 	"github.com/ocelhq/ocel/cloud/aws/vars/live"
+	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -224,6 +225,48 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 		Live:        manifest,
 		Fingerprint: fingerprintValues(values),
 	}, nil
+}
+
+// recordedVariables is what one app's Deployment record says it shipped with:
+// every variable it resolved, at the store coordinate and version it resolved
+// at, sorted by key so one deploy's record is comparable to another's.
+//
+// A live-class value is recorded as latest-at-runtime rather than at the
+// version this deploy saw: it is fetched from the store when it is read, so a
+// version here would be the ledger claiming a reproducibility the runtime
+// cannot honour.
+//
+// Production only. The record is the audit ledger of what is serving the
+// project's users, and a preview's Deployments are neither long-lived nor
+// audited; keeping them out means one class of record to reason about rather
+// than two. Nothing is lost by it: baked values ride the immutable artifact,
+// so no rollback or delivery path reads this.
+func recordedVariables(cfg Config, app *deploymentsv1.ManifestApp) []edge.VariableRecord {
+	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION {
+		return nil
+	}
+	var records []edge.VariableRecord
+	for _, v := range app.GetVariables() {
+		record := edge.VariableRecord{Key: v.GetKey(), Folder: v.GetFolder()}
+		if v.GetClass() == resourcesv1.VariableClass_VARIABLE_CLASS_SECRET {
+			record.Live = true
+		} else {
+			record.Version = v.GetVersion()
+		}
+		records = append(records, record)
+	}
+	sort.Slice(records, func(i, j int) bool { return records[i].Key < records[j].Key })
+	return records
+}
+
+// recordedFingerprint is the other half of the same audit record — the digest
+// of the values this Deployment baked — gated the same way, because a preview
+// records no audit at all.
+func recordedFingerprint(cfg Config, id DeploymentIdentity) string {
+	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION {
+		return ""
+	}
+	return id.Fingerprint()
 }
 
 // fingerprintValuesHexLen is how much of the digest an identity carries. 48

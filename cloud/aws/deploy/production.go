@@ -692,10 +692,12 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	name := app.GetName()
 	urlByLogical := functionURLsByLogicalName(outs)
 	record := edge.DeploymentRecord{
-		App:          name,
-		Identity:     id.String(),
-		FunctionURLs: appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
-		CreatedAt:    time.Now().Unix(),
+		App:              name,
+		Identity:         id.String(),
+		FunctionURLs:     appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
+		CreatedAt:        time.Now().Unix(),
+		ValueFingerprint: recordedFingerprint(cfg, id),
+		Variables:        recordedVariables(cfg, app),
 	}
 	if app.GetFramework() != frameworkNext {
 		return record, nil

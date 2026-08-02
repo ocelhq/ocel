@@ -7,11 +7,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 // setStoreWorkerBundle writes a deployments-store worker bundle and exports
@@ -414,6 +416,113 @@ func TestBuildDeploymentRecord_RouteHostnamesByClass(t *testing.T) {
 			t.Errorf("RouteHostnames = %v, want none: production routes are project-lifetime", record.RouteHostnames)
 		}
 	})
+}
+
+// varsManifest is one Next app carrying the variables a Deployment record has
+// to be able to account for.
+func varsManifest(variables ...*deploymentsv1.ManifestVariable) *deploymentsv1.Manifest {
+	return &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next", Variables: variables}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+	}
+}
+
+// An operator auditing a promotion needs the record to say which values it
+// shipped: the fingerprint that distinguishes it from another Deployment of
+// the same build, and the store coordinate and version of every key behind it.
+func TestBuildDeploymentRecord_ProductionCarriesTheFingerprintAndPerKeyVersions(t *testing.T) {
+	manifest := varsManifest(
+		&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
+		&deploymentsv1.ManifestVariable{Key: "API_KEY", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE, Folder: "/admin", Version: 5},
+	)
+	cfg := Config{
+		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
+		Slug:         "proj",
+		Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
+	}
+	id := fingerprinted("WEB1", "abc123")
+
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if record.ValueFingerprint != id.Fingerprint() {
+		t.Errorf("ValueFingerprint = %q, want %q", record.ValueFingerprint, id.Fingerprint())
+	}
+	want := []edge.VariableRecord{
+		{Key: "API_KEY", Folder: "/admin", Version: 5},
+		{Key: "POSTHOG_ID", Version: 2},
+	}
+	if !reflect.DeepEqual(record.Variables, want) {
+		t.Errorf("Variables = %+v, want %+v sorted by key", record.Variables, want)
+	}
+}
+
+// A live value is whatever the store holds when the runtime fetches it, so
+// recording the version the deploy happened to see would be the ledger
+// claiming a reproducibility it cannot deliver.
+func TestBuildDeploymentRecord_LiveKeysAreRecordedAsLatestAtRuntime(t *testing.T) {
+	manifest := varsManifest(
+		&deploymentsv1.ManifestVariable{Key: "SESSION_SECRET", Class: resourcesv1.VariableClass_VARIABLE_CLASS_SECRET, Folder: "/api", Version: 7},
+	)
+	cfg := Config{
+		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
+		Slug:         "proj",
+		Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
+	}
+
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	want := []edge.VariableRecord{{Key: "SESSION_SECRET", Folder: "/api", Live: true}}
+	if !reflect.DeepEqual(record.Variables, want) {
+		t.Errorf("Variables = %+v, want %+v — latest-at-runtime, never a version", record.Variables, want)
+	}
+}
+
+// A preview keeps no audit ledger, so it records nothing — and recording
+// nothing is the normal outcome, not a failure the deploy has to survive.
+func TestBuildDeploymentRecord_PreviewRecordsNoVariablesAndIsNotAnError(t *testing.T) {
+	manifest := varsManifest(
+		&deploymentsv1.ManifestVariable{Key: "POSTHOG_ID", Class: resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN, Version: 2},
+	)
+	cfg := Config{
+		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
+		Slug:         "proj",
+		Class:        deploymentsv1.Environment_CLASS_PREVIEW,
+		Identity:     "pr-42",
+	}
+	id := fingerprinted("WEB1", "abc123")
+
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], id, nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if record.Variables != nil || record.ValueFingerprint != "" {
+		t.Errorf("preview record = %+v, want no audit fields at all", record)
+	}
+	if record.Identity != id.String() || record.AssetPrefix != appAssetR2Prefix("proj", "web", id.BuildID()) {
+		t.Errorf("preview record = %+v, want the rest of it unchanged", record)
+	}
+}
+
+func TestBuildDeploymentRecord_AnAppWithNoVariablesRecordsNothing(t *testing.T) {
+	manifest := varsManifest()
+	cfg := Config{
+		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
+		Slug:         "proj",
+		Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
+	}
+
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if record.Variables != nil {
+		t.Errorf("Variables = %+v, want nil rather than an empty list on the wire", record.Variables)
+	}
 }
 
 // The generic worker is AWS_IAM-gated behind its Lambdas, so it must be handed
