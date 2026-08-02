@@ -304,6 +304,66 @@ func TestRenderBakedBundle_AnAppWithNoBakedValuesCostsNothing(t *testing.T) {
 	}
 }
 
+// TestRenderBakedBundle_FingerprintTracksThePlaintextNotTheCiphertext is the
+// executable form of the constraint the whole rotation path rests on. The data
+// key is drawn fresh every render, so the ciphertext differs even when nothing
+// changed; a fingerprint taken over it would mint a new Deployment identity on
+// every deploy unconditionally. It has to be taken over the values.
+func TestRenderBakedBundle_FingerprintTracksThePlaintextNotTheCiphertext(t *testing.T) {
+	app := &deploymentsv1.ManifestApp{
+		Name:      "web",
+		Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
+	}
+
+	first, err := renderAppBundle(liveConfig(), "shop", app)
+	if err != nil {
+		t.Fatalf("renderAppBundle: %v", err)
+	}
+	second, err := renderAppBundle(liveConfig(), "shop", app)
+	if err != nil {
+		t.Fatalf("renderAppBundle: %v", err)
+	}
+	if bytes.Equal(first.Ciphertext, second.Ciphertext) {
+		t.Fatal("the two renders share ciphertext; this test can no longer tell the plaintext digest from a ciphertext one")
+	}
+	if first.Fingerprint == "" {
+		t.Fatal("Fingerprint is empty for an app that bakes a value")
+	}
+	if first.Fingerprint != second.Fingerprint {
+		t.Errorf("Fingerprint = %q then %q for unchanged values; every deploy would mint a new Deployment", first.Fingerprint, second.Fingerprint)
+	}
+
+	app.Variables = []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live-2", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)}
+	rotated, err := renderAppBundle(liveConfig(), "shop", app)
+	if err != nil {
+		t.Fatalf("renderAppBundle: %v", err)
+	}
+	if rotated.Fingerprint == first.Fingerprint {
+		t.Error("a rotated value renders the same Fingerprint; the rotation would collide with the Deployment it replaces")
+	}
+}
+
+// TestRenderBakedBundle_NoBakedValuesHaveNoFingerprint keeps an app that bakes
+// nothing on a bare-build-id identity, so its records and stack names are
+// byte-for-byte what they were before fingerprints existed.
+func TestRenderBakedBundle_NoBakedValuesHaveNoFingerprint(t *testing.T) {
+	app := &deploymentsv1.ManifestApp{
+		Name: "web",
+		Variables: []*deploymentsv1.ManifestVariable{
+			variable("POSTHOG_ID", "ph", resourcesv1.VariableClass_VARIABLE_CLASS_PLAIN),
+			variable("WEBHOOK_SECRET", "", resourcesv1.VariableClass_VARIABLE_CLASS_SECRET),
+		},
+	}
+
+	bundle, err := renderAppBundle(liveConfig(), "shop", app)
+	if err != nil {
+		t.Fatalf("renderAppBundle: %v", err)
+	}
+	if bundle.Fingerprint != "" {
+		t.Errorf("Fingerprint = %q, want empty: nothing is baked", bundle.Fingerprint)
+	}
+}
+
 // TestFingerprintValues_SameValuesSameDigestDifferentValuesDifferent proves
 // what the identity rests on: the fingerprint is a function of the values
 // themselves, so an unchanged set re-renders to the same Deployment identity

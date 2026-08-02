@@ -109,11 +109,17 @@ func variableEnv(app *deploymentsv1.ManifestApp) map[string]string {
 // rides in the package rather than the configuration so a handful of
 // coordinates does not compete for the environment budget.
 //
+// Fingerprint is the second half of the app's Deployment identity: a digest of
+// the values sealed here, taken over the plaintext rather than the ciphertext
+// the fresh data key makes different on every render. Empty when nothing is
+// baked.
+//
 // The zero bundle is an app that declared neither.
 type appBundle struct {
-	Envelope   string
-	Ciphertext []byte
-	Live       []byte
+	Envelope    string
+	Ciphertext  []byte
+	Live        []byte
+	Fingerprint string
 }
 
 // env is the bundle's contribution to function configuration. It is accounted
@@ -213,9 +219,10 @@ func renderAppBundle(cfg Config, slug string, app *deploymentsv1.ManifestApp) (a
 		return appBundle{}, fmt.Errorf("seal %s's encrypted variables: %w", app.GetName(), err)
 	}
 	return appBundle{
-		Envelope:   base64.StdEncoding.EncodeToString(key),
-		Ciphertext: ciphertext,
-		Live:       manifest,
+		Envelope:    base64.StdEncoding.EncodeToString(key),
+		Ciphertext:  ciphertext,
+		Live:        manifest,
+		Fingerprint: fingerprintValues(values),
 	}, nil
 }
 
