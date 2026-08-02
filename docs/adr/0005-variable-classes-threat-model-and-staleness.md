@@ -279,11 +279,22 @@ environment it belongs to.
   an empty map today (`cli/internal/provision/provision.go:76-91`). Dev's
   live-value semantics are therefore described here as designed, not as
   exercised.
-- **Client-value immutability per Deployment is deliberately not documented
-  here.** `clientAccessible` exists only as a declared flag today; nothing on the
-  CLI or Go side reads it, and there is no build-time inlining path to describe.
-  That guarantee is carried by bd `ocelhq-xd5j.15` AC5 and should be written
-  when the mechanism exists.
+- **A client-accessible value is frozen into the browser bundle at build time,
+  whatever its class.** It is delivered to the app build under the framework's
+  public prefix and inlined by the framework's own static replacement, so the
+  bytes a browser receives are a copy taken at build time. No class escapes
+  this: `plain` is the only class client access is allowed on, and even a
+  rotation of that value leaves already-built pages serving the old one until a
+  build replaces them. The rotation guarantee stated above is a server-side
+  guarantee; the docs must not let it be read as a client-side one.
+- **A `--prebuilt` deploy whose bundle predates a change to a client-accessible
+  value is refused.** A vars-only deploy reuses build output and so skips the
+  step that hands client values to the framework build. Letting it proceed would
+  ship a Deployment whose server side holds the new value and whose browser
+  bundle holds the old one — the same key disagreeing with itself across the
+  wire, silently. Refusing names the changed key and the remedy: a full build.
+  Both halves of the rule live in the CLI, since the build environment and the
+  reuse decision are both its.
 - **A gate refusal is recoverable in a terminal, and the abandoned case is not.**
   `ocel deploy` and `ocel preview up` now open the bundled vars UI on the same
   gate and provider session, block, and resume into the build; resuming forces a

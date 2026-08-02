@@ -198,7 +198,16 @@ staleness bound.
 - **Client-accessible** — an orthogonal flag, not a fourth class, marking a value
   the browser may read. Only a plain variable may carry it: a value the browser
   can read cannot also be one kept from it, and the combination is refused where
-  the definition is written.
+  the definition is written. It is delivered to the app build under the
+  framework's public prefix and read through the **client accessor** — a
+  generated module in the project (`.ocel/env-client.ts`) exporting `clientEnv`,
+  which application code imports as `ocel/env/client`. The accessor names each
+  value as a literal `process.env.NEXT_PUBLIC_<KEY>` member expression so the
+  framework's own static replacement does the inlining; nothing computed can
+  stand in for that literal, which is why the module is generated rather than
+  shipped. Server-only values have no accessor to reach them from. A
+  client-accessible value is consequently frozen into the bundle at build time
+  regardless of class — see ADR 0005. _Avoid_: public, exposed.
 
 - **Cell** — the address of one stored value: a key plus a folder. It is the
   unit the discovery gate rules on, the unit the store holds, and the unit a
