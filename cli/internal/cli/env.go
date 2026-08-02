@@ -315,11 +315,13 @@ func runEnvLs(ctx context.Context, cwd string, opts envOptions, stdout, stderr i
 			return err
 		}
 		// The enumeration is only asked for when something in the listing has to
-		// be judged against it, so a project with no overrides pays nothing and
-		// a production listing — where an override cannot exist — never calls
-		// it at all.
+		// be judged against it, so a project with no overrides pays nothing. A
+		// production listing never asks: named environments are the preview
+		// substrate's, so any row addressed at one there is orphaned by
+		// definition, and judging it against the preview names would report a
+		// row nothing can read as live.
 		var environments []string
-		if overridden(resp.GetValues()) {
+		if opts.preview && overridden(resp.GetValues()) {
 			if environments, err = namedEnvironments(ctx, runner, provider, cfg.Slug); err != nil {
 				return err
 			}

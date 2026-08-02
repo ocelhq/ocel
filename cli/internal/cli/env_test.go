@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
@@ -356,6 +357,44 @@ func TestRunEnvRm_AnOrphanedOverrideIsListedAndRemovable(t *testing.T) {
 	}
 	if strings.Contains(after.String(), "STRIPE_API_KEY") {
 		t.Errorf("ls = %q, want the removed orphan gone from the listing", after.String())
+	}
+}
+
+// seedFakeValue writes one row straight into the fake store, at a coordinate
+// the CLI's own write path refuses. It is how a listing is shown a row that
+// only a store predating a rule, or a caller that never had one, could leave.
+func seedFakeValue(t *testing.T, class deploymentsv1.Environment_Class, c *envv1.Coordinate, value string) {
+	t.Helper()
+	store, err := loadFakeStore()
+	if err != nil {
+		t.Fatalf("load the fake store: %v", err)
+	}
+	store[fakeCoordinateID(class, c)] = &fakeCell{
+		Class:      class,
+		Coordinate: fakeCoordinate{Slug: c.GetSlug(), Folder: c.GetFolder(), Key: c.GetKey(), Environment: c.GetEnvironment()},
+		Versions:   []fakeCellData{{Value: value, Ts: 1_700_000_000}},
+	}
+	if err := saveFakeStore(store); err != nil {
+		t.Fatalf("save the fake store: %v", err)
+	}
+}
+
+// Named environments belong to the preview substrate, so a production row
+// addressed at one is unreadable whatever previews happen to exist. Judging it
+// against the preview enumeration would call a dead row live because a preview
+// of the same name is running — two different partitions, one name.
+func TestRunEnvLs_AProductionOverrideIsOrphanedThoughAPreviewSharesItsName(t *testing.T) {
+	root := setUpEnvFixture(t)
+	seedFakeValue(t, deploymentsv1.Environment_CLASS_PRODUCTION,
+		&envv1.Coordinate{Slug: "test-app", Key: "STRIPE_API_KEY", Environment: "staging"}, "sk_stray")
+	t.Setenv(fakeEnvironmentsEnvVar, "staging")
+
+	var ls bytes.Buffer
+	if err := runEnvLs(context.Background(), root, envOptions{}, &ls, &ls); err != nil {
+		t.Fatalf("runEnvLs err = %v; out=%s", err, ls.String())
+	}
+	if !strings.Contains(ls.String(), "orphaned") {
+		t.Errorf("ls = %q, want the production row marked orphaned: no production function reads a named environment", ls.String())
 	}
 }
 
