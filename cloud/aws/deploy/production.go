@@ -105,7 +105,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 		return Result{}, err
 	}
 
-	identities, err := assignIdentities(cfg, manifest)
+	identities, err := assignIdentities(cfg, manifest, baked)
 	if err != nil {
 		return Result{}, err
 	}
@@ -630,9 +630,13 @@ func newRandomID() (string, error) {
 // BuildPlan consumes, and the one place an identity is derived: the app's build
 // id — a Next app's routing-manifest buildId (assigned at build time, immutable
 // per build), or a freshly minted id for a framework with none — plus the
-// fingerprint of the values baked into this Deployment. No path here computes
-// a fingerprint yet, so every identity renders as its bare build id.
-func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest) (DeploymentIdentities, error) {
+// fingerprint of the values baked into this Deployment.
+//
+// The fingerprint comes from the bundles already rendered for this deploy, so
+// the values that were sealed and the values the identity names cannot drift
+// apart. An app that bakes nothing has no fingerprint and keeps its bare build
+// id.
+func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest, bundles map[string]appBundle) (DeploymentIdentities, error) {
 	identities := make(DeploymentIdentities, len(manifest.GetApps()))
 	for _, app := range manifestApps(manifest) {
 		name := app.GetName()
@@ -640,7 +644,7 @@ func assignIdentities(cfg Config, manifest *deploymentsv1.Manifest) (DeploymentI
 		if err != nil {
 			return nil, err
 		}
-		id, err := NewDeploymentIdentity(buildID, "")
+		id, err := NewDeploymentIdentity(buildID, bundles[name].Fingerprint)
 		if err != nil {
 			return nil, fmt.Errorf("deployment identity for %s: %w", name, err)
 		}

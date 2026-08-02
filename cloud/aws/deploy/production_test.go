@@ -827,7 +827,7 @@ func TestAssignIdentities_NextAppTakesItsBuildIDWithNoFingerprint(t *testing.T) 
 		Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
 	}
 
-	ids, err := assignIdentities(cfg, manifest)
+	ids, err := assignIdentities(cfg, manifest, nil)
 	if err != nil {
 		t.Fatalf("assignIdentities: %v", err)
 	}
@@ -845,7 +845,7 @@ func TestAssignIdentities_FrameworkWithNoBuildIDGetsAMintedOne(t *testing.T) {
 		Apps: []*deploymentsv1.ManifestApp{{Name: "api", Framework: "express"}},
 	}
 
-	ids, err := assignIdentities(Config{ArtifactRoot: t.TempDir()}, manifest)
+	ids, err := assignIdentities(Config{ArtifactRoot: t.TempDir()}, manifest, nil)
 	if err != nil {
 		t.Fatalf("assignIdentities: %v", err)
 	}
@@ -854,6 +854,49 @@ func TestAssignIdentities_FrameworkWithNoBuildIDGetsAMintedOne(t *testing.T) {
 	}
 	if ids["api"].Fingerprint() != "" {
 		t.Errorf("Fingerprint = %q, want empty: nothing is baked yet", ids["api"].Fingerprint())
+	}
+}
+
+// TestAssignIdentities_BakedValuesFingerprintTheIdentity is what lets a
+// rotation exist at all: the build id is unchanged by a vars-only deploy, so
+// the values the Deployment bakes are the only thing that can tell it from the
+// Deployment it replaces.
+func TestAssignIdentities_BakedValuesFingerprintTheIdentity(t *testing.T) {
+	cfg := Config{ArtifactRoot: writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+	})}
+	manifest := &deploymentsv1.Manifest{
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
+	}
+
+	ids, err := assignIdentities(cfg, manifest, map[string]appBundle{"web": {Fingerprint: "abc123"}})
+	if err != nil {
+		t.Fatalf("assignIdentities: %v", err)
+	}
+	if got, want := ids["web"].String(), "WEB1~abc123"; got != want {
+		t.Errorf("rendered identity = %q, want %q", got, want)
+	}
+}
+
+// TestAssignIdentities_NothingBakedStaysTheBareBuildID holds the line that
+// makes fingerprints free for everyone who bakes nothing: their records, stack
+// names and promotions are byte-for-byte what they were before.
+func TestAssignIdentities_NothingBakedStaysTheBareBuildID(t *testing.T) {
+	cfg := Config{ArtifactRoot: writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+	})}
+	manifest := &deploymentsv1.Manifest{
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: frameworkNext}},
+	}
+
+	ids, err := assignIdentities(cfg, manifest, map[string]appBundle{"web": {Live: []byte("{}")}})
+	if err != nil {
+		t.Fatalf("assignIdentities: %v", err)
+	}
+	if got, want := ids["web"].String(), "WEB1"; got != want {
+		t.Errorf("rendered identity = %q, want the bare build id %q", got, want)
 	}
 }
 
