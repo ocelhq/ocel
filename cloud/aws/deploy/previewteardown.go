@@ -56,7 +56,7 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 		}
 	}
 
-	targets, err := PreviewReclaimTargets(slug, pointer, cfg.Env, removal.RemovedRecordKeys)
+	targets, err := PreviewReclaimTargets(slug, pointer, cfg.Env, removal.RemovedRecordKeys, removal.SurvivingRecordKeys)
 	if err != nil {
 		errs = append(errs, err)
 	} else if err := Reclaim(ctx, cfg, targets, progress, log); err != nil {
@@ -154,7 +154,7 @@ func previewSweepWorkers(slug string, removal edge.PointerRemoval, deployed []st
 		}
 	}
 	for _, key := range removal.RemovedRecordKeys {
-		if app, _, ok := splitRemovedRecordKey(key); ok {
+		if app, _, ok := splitRecordKey(key); ok {
 			add(previewGenericName(slug, app))
 		}
 	}

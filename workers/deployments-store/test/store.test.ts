@@ -337,6 +337,25 @@ describe("prune", () => {
     expect(await store.record("web", "build-3")).toEqual(makeRecord({ buildId: "build-3" }));
   });
 
+  // A rotation's two Deployments share one build id, and the assets, ISR
+  // entries and edge bundle are keyed by that build id alone. The host reclaims
+  // a build's storage only when nothing left in the store still names it, which
+  // it can only tell from what survived.
+  it("reports the record keys the store still holds", async () => {
+    const store = storeStub();
+    await store.putStaged(makeRecord({ buildId: "build-1" }));
+    await store.promote(makePromotion({ promotionId: "promo-1", builds: { web: "build-1" } }));
+    await store.putStaged(makeRecord({ buildId: "build-1~fp2" }));
+    await store.promote(
+      makePromotion({ promotionId: "promo-2", ts: 2_000, builds: { web: "build-1~fp2" } }),
+    );
+
+    const result = await store.prune(1);
+
+    expect(result.removedRecordKeys).toEqual(["record:web/build-1"]);
+    expect(result.survivingRecordKeys).toEqual(["record:web/build-1~fp2"]);
+  });
+
   it("pins the active promotion even when it falls outside the keep window", async () => {
     const store = storeStub();
     await seedPromotions(store, 5);

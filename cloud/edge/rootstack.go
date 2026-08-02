@@ -280,6 +280,11 @@ type PruneResult struct {
 	// exactly which underlying artifacts (stacks, R2 assets, ISR entries) it
 	// still needs to reclaim.
 	RemovedRecordKeys []string `json:"removedRecordKeys"`
+	// SurvivingRecordKeys are the record keys the store still holds afterwards.
+	// Two Deployments of one build (a rotation) share the assets, ISR entries
+	// and edge bundle keyed by that build id, so the caller reclaims a build's
+	// storage only when none of these still names it.
+	SurvivingRecordKeys []string `json:"survivingRecordKeys"`
 }
 
 // RemovedRoute is one worker route a removed pointer owned: the app it fronted

@@ -76,6 +76,13 @@ export interface PruneResult {
   // it still needs to reclaim. Kept in this prefixed form because the Go host
   // (cloud/aws/deploy/prune.go ReclaimTargets) parses it verbatim.
   removedRecordKeys: string[];
+  // The "record:<app>/<buildId>" keys the store still holds afterwards. Two
+  // Deployments of one build (a rotation) are two records naming one build id,
+  // and the assets, ISR entries and edge bundle are keyed by that build id
+  // alone, so the host reclaims a build's storage only when none of these
+  // still names it. The store keeps a build id opaque; splitting one back into
+  // its parts is the host's business.
+  survivingRecordKeys: string[];
 }
 
 // One worker route a removed pointer owned: the app it fronted and the hostname
@@ -421,6 +428,7 @@ export function prune(
       keptPromotionIds: kept,
       removedPromotionIds: removed.map((p) => p.promotionId),
       removedRecordKeys,
+      survivingRecordKeys: remainingRecordKeys(store),
     };
   });
 }
@@ -470,6 +478,7 @@ export function removePointer(
       keptPromotionIds: [],
       removedPromotionIds: removed.map((p) => p.promotionId),
       removedRecordKeys,
+      survivingRecordKeys: remainingRecordKeys(store),
       remainingPointers: previewPointerCount(store),
       removedRoutes,
     };
@@ -496,6 +505,17 @@ function distinctRoutes(
     }
   }
   return routes;
+}
+
+// Every record key left in the store, read after the deletions so a caller
+// sees exactly what survived.
+function remainingRecordKeys(store: SqlStore): string[] {
+  return store.sql
+    .exec<{ app: string; build_id: string }>(
+      `SELECT app, build_id FROM records ORDER BY app, build_id`,
+    )
+    .toArray()
+    .map((r) => recordKey(r.app, r.build_id));
 }
 
 function previewPointerCount(store: SqlStore): number {

@@ -12,7 +12,7 @@ import (
 )
 
 func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1", "record:api/build-2"})
+	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1", "record:api/build-2"}, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -45,14 +45,14 @@ func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
 // it, and the prefix belongs to exactly one build, so no live deployment can
 // lose the bundle it loads from.
 func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"})
+	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
 	if want := "edge/proj1/web/build-1"; got[0].EdgePrefix != want {
 		t.Errorf("EdgePrefix = %q, want %q", got[0].EdgePrefix, want)
 	}
-	other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"})
+	other, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-2"}, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -67,7 +67,7 @@ func TestReclaimTargets_ReclaimsTheBuildsEdgePrefix(t *testing.T) {
 // off it.
 func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testing.T) {
 	id := fingerprinted("build-1", "fp1")
-	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()})
+	got, err := ReclaimTargets("proj1", "prod", []string{"record:web/" + id.String()}, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -82,7 +82,7 @@ func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testi
 	if !reflect.DeepEqual(got, []PruneTarget{want}) {
 		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
 	}
-	plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"})
+	plain, err := ReclaimTargets("proj1", "prod", []string{"record:web/build-1"}, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -91,8 +91,52 @@ func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testi
 	}
 }
 
+// A rotation leaves two Deployments sharing one build id. Pruning the older
+// one must destroy its own stack but leave the build's assets, ISR entries and
+// edge bundle alone — the surviving Deployment serves from exactly those.
+func TestReclaimTargets_BuildASurvivingDeploymentSharesKeepsItsStorage(t *testing.T) {
+	rotated := fingerprinted("build-1", "fp2")
+	got, err := ReclaimTargets("proj1", "prod",
+		[]string{"record:web/build-1"},
+		[]string{"record:web/" + rotated.String()})
+	if err != nil {
+		t.Fatalf("ReclaimTargets: %v", err)
+	}
+	want := []PruneTarget{{
+		App:      "web",
+		Identity: buildOnly("build-1"),
+		Stack:    AppDeployStackName("proj1", "web", buildOnly("build-1")),
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ReclaimTargets = %+v, want the stack alone %+v", got, want)
+	}
+}
+
+// The last Deployment of a build still gives its storage up: a surviving
+// Deployment of another build, or of the same build id under another app,
+// pins nothing here.
+func TestReclaimTargets_LastDeploymentOfABuildStillReclaimsItsStorage(t *testing.T) {
+	got, err := ReclaimTargets("proj1", "prod",
+		[]string{"record:web/build-1"},
+		[]string{"record:web/build-2", "record:api/build-1"})
+	if err != nil {
+		t.Fatalf("ReclaimTargets: %v", err)
+	}
+	want := []PruneTarget{{
+		App:         "web",
+		Identity:    buildOnly("build-1"),
+		Stack:       AppDeployStackName("proj1", "web", buildOnly("build-1")),
+		AssetPrefix: appAssetR2Prefix("proj1", "web", "build-1"),
+		CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "build-1"),
+		EdgePrefix:  appEdgeR2Prefix("proj1", "web", "build-1"),
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
+	}
+}
+
 func TestReclaimTargets_EmptyInputYieldsNil(t *testing.T) {
-	got, err := ReclaimTargets("proj1", "prod", nil)
+	got, err := ReclaimTargets("proj1", "prod", nil, nil)
 	if err != nil {
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
@@ -103,7 +147,7 @@ func TestReclaimTargets_EmptyInputYieldsNil(t *testing.T) {
 
 func TestReclaimTargets_MalformedKeyErrors(t *testing.T) {
 	for _, key := range []string{"no-slash", "record:/build-1", "record:web/"} {
-		if _, err := ReclaimTargets("proj1", "prod", []string{key}); err == nil {
+		if _, err := ReclaimTargets("proj1", "prod", []string{key}, nil); err == nil {
 			t.Errorf("ReclaimTargets(%q) err = nil, want an error for a malformed key", key)
 		}
 	}
@@ -181,6 +225,19 @@ func TestDeletePrefix_EmptyBucketOrNilDeleterIsNoOp(t *testing.T) {
 	}
 	if fake.call != 0 {
 		t.Errorf("expected no ListObjectsV2 call for an empty bucket, got %d", fake.call)
+	}
+}
+
+// An empty prefix matches every object in the bucket, so it must never reach
+// the delete loop: it is how a PruneTarget says a surviving Deployment still
+// serves this build's storage.
+func TestDeletePrefix_EmptyPrefixIsANoOp(t *testing.T) {
+	fake := &fakePrefixDeleter{pages: [][]string{{"prod/proj1/web/build-1/cache/a"}}}
+	if err := deletePrefix(context.Background(), fake, "bucket", ""); err != nil {
+		t.Fatalf("deletePrefix: %v", err)
+	}
+	if fake.call != 0 || fake.deleted != nil {
+		t.Errorf("deleted %v in %d list calls, want the whole bucket left alone", fake.deleted, fake.call)
 	}
 }
 
