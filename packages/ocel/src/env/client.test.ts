@@ -5,6 +5,8 @@ import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { clientEnv, EnvClientError } from "./client.js";
+import { EnvClientError as EnvClientErrorFromEdge } from "./edge.js";
+import { EnvClientError as EnvClientErrorFromEnv } from "./index.js";
 
 // GENERATED is the accessor a project declaring one client-accessible variable
 // gets written to `.ocel/env-client.ts`, verbatim. It is the contract the CLI's
@@ -91,6 +93,17 @@ describe("ocel/env/client with no accessor generated", () => {
     expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(EnvClientError);
     expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(/PUBLIC_SITE_URL/);
     expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(/env-client/);
+  });
+
+  it("names both commands that generate the accessor, and names it per app", () => {
+    expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(/ocel dev/);
+    expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(/ocel deploy/);
+    expect(() => clientEnv.PUBLIC_SITE_URL).toThrow(/this app/);
+  });
+
+  it("is the same error class `ocel/env` exports, on both node and edge", () => {
+    expect(EnvClientErrorFromEnv).toBe(EnvClientError);
+    expect(EnvClientErrorFromEdge).toBe(EnvClientError);
   });
 
   it("answers a runtime's symbol probes, because inspecting is not reading", () => {

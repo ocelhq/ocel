@@ -1,6 +1,7 @@
-// The read path's errors live apart from the read path itself, because there
-// are two of them — the node one and the edge one — and a definitions module
-// shared by both tiers must be able to name the same error either way.
+// These errors live apart from the read path itself because the read path has
+// two builds — the node one and the edge one — and a definitions module shared
+// by both tiers must be able to name the same error either way. An error only
+// one module can raise stays with that module.
 
 // EnvValueError is a variable that cannot be read: nothing set it, or what is
 // set does not satisfy its schema. It names the key and the command that

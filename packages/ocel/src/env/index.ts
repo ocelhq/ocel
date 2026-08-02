@@ -19,6 +19,7 @@ export {
   type VariableClass,
   type VariableDefinition,
 } from "./definition.js";
+export { EnvClientError } from "./client.js";
 export { EnvEdgeError, EnvValueError } from "./errors.js";
 export { EnvScopeError } from "./scope.js";
 
