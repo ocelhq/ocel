@@ -1,0 +1,1846 @@
+{
+  "next": "16.2.10",
+  "variants": [
+    {
+      "variant": "default",
+      "config": {
+        "path": "/_next/image",
+        "deviceSizes": [
+          640,
+          750,
+          828,
+          1080,
+          1200,
+          1920,
+          2048,
+          3840
+        ],
+        "imageSizes": [
+          32,
+          48,
+          64,
+          96,
+          128,
+          256,
+          384
+        ],
+        "qualities": [
+          75
+        ],
+        "formats": [
+          "image/webp"
+        ],
+        "domains": [
+          "legacy.example"
+        ],
+        "minimumCacheTTL": 14400,
+        "maximumRedirects": 3,
+        "maximumResponseBody": 50000000,
+        "dangerouslyAllowSVG": false,
+        "dangerouslyAllowLocalIP": false,
+        "contentSecurityPolicy": "script-src 'none'; frame-src 'none'; sandbox;",
+        "contentDispositionType": "attachment",
+        "remotePatterns": [
+          {
+            "protocol": "https",
+            "hostname": "^(?:(?!\\.)(?:(?:(?!(?:^|\\/)\\.).)*?)\\.allowed\\.example\\/?)$",
+            "pathname": "^(?:\\/img(?:\\/(?!\\.{1,2}(?:\\/|$))(?:(?:(?!(?:^|\\/)\\.{1,2}(?:\\/|$)).)*?)|$))$"
+          }
+        ],
+        "localPatterns": [
+          {
+            "pathname": "^(?:(?!(?:^|\\/)\\.{1,2}(?:\\/|$))(?:(?:(?!(?:^|\\/)\\.{1,2}(?:\\/|$)).)*?)\\/?)$",
+            "search": ""
+          }
+        ],
+        "configHash": "e627184a8e6e71f31401a491a1bf05520a1f9588522beac0fa277b1e2af8a906"
+      },
+      "cases": [
+        {
+          "name": "url-missing",
+          "request": {
+            "search": "w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-empty",
+          "request": {
+            "search": "url=&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-array",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&url=%2F_fixtures%2Ficon.ico&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be an array"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-too-long",
+          "note": "3073 characters, one past the cap",
+          "request": {
+            "search": "url=%2Faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is too long"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-protocol-relative",
+          "request": {
+            "search": "url=%2F%2Fevil.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be a protocol-relative URL (//)"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-protocol-relative-allowlisted-host",
+          "note": "the // check must precede the relative/absolute branch or this is a full allowlist bypass",
+          "request": {
+            "search": "url=%2F%2Flegacy.example%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be a protocol-relative URL (//)"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-recursive",
+          "request": {
+            "search": "url=%2F_next%2Fimage%3Furl%3D%252Ffoo.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be recursive"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-recursive-percent-encoded",
+          "note": "the guard decodes before matching, so a prefix check would miss this",
+          "request": {
+            "search": "url=%2F_next%2F%2569mage&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be recursive"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-recursive-behind-asset-prefix",
+          "note": "matched anywhere in the pathname, not as a prefix",
+          "request": {
+            "search": "url=%2Fcdn-prefix%2F_next%2Fimage&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be recursive"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-local-with-search",
+          "note": "localPatterns defaults to search: \"\", so any query string is refused",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png%3Fv%3D1&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-local-allowed",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "url-absolute-unparseable",
+          "request": {
+            "search": "url=https%3A%2F%2F%5B&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is invalid"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-ftp",
+          "request": {
+            "search": "url=ftp%3A%2F%2Fcdn.allowed.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is invalid"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-data",
+          "request": {
+            "search": "url=data%3Aimage%2Fpng%3Bbase64%2CAAAA&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is invalid"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-denied",
+          "request": {
+            "search": "url=https%3A%2F%2Fevil.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-suffix-attack",
+          "note": "the compiled hostname regex is anchored, so a suffixed host is not a match",
+          "request": {
+            "search": "url=https%3A%2F%2Fallowed.example.evil.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-userinfo-attack",
+          "note": "userinfo is not hostname",
+          "request": {
+            "search": "url=https%3A%2F%2Fcdn.allowed.example%40evil.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-wrong-pathname",
+          "request": {
+            "search": "url=https%3A%2F%2Fcdn.allowed.example%2Fother%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-allowed",
+          "note": "passes validation; the fetch then fails, which is the origin's problem, not the edge's",
+          "request": {
+            "search": "url=https%3A%2F%2Fcdn.allowed.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 500,
+          "body": {
+            "text": "Internal Server Error"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-allowed-with-port",
+          "note": "matching is against url.hostname — url.host would carry :8443 and fail the pattern",
+          "request": {
+            "search": "url=https%3A%2F%2Fcdn.allowed.example%3A8443%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 500,
+          "body": {
+            "text": "Internal Server Error"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-allowed-domain",
+          "request": {
+            "search": "url=https%3A%2F%2Flegacy.example%2Fanything.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 500,
+          "body": {
+            "text": "Internal Server Error"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-missing",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-array",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&w=750&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) cannot be an array"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-fractional",
+          "note": "the integer regex must run before parseInt, which would read this as 99",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=99.9&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-not-a-number",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=abc&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-negative",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=-640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-zero",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=0&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-not-in-sizes",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=641&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) of 641 is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-fractional-and-q-missing",
+          "note": "pins the interleaving: the w regex is checked before q's presence",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=99.9",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-zero-and-q-missing",
+          "note": "pins the interleaving: q's presence is checked before w's value",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=0",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-missing",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-array",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75&q=50",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) cannot be an array"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-fractional",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75.5",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) must be an integer between 1 and 100"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-zero",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=0",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) must be an integer between 1 and 100"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-over-100",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=101",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) must be an integer between 1 and 100"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-not-in-qualities",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=50",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) of 50 is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-and-q-in-image-sizes",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=32&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-absent",
+          "note": "no Accept at all negotiates nothing; the output keeps the source format",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-any",
+          "note": "getSupportedMimeType's literal accept.includes() guard makes this negotiate nothing",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "*/*"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-image-wildcard",
+          "note": "same guard: a wildcard subtype is resolved and then discarded",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/*"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-browser",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-webp-only",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/webp"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-avif-only",
+          "note": "avif is not in the configured formats, so nothing is negotiated",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/avif"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-webp-q-zero",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/webp;q=0,image/png"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-malformed-parameter",
+          "note": "registered divergence 6: @hapi/accept throws on a valueless parameter, so Next 500s before it looks at the image; the edge declines to negotiate and lets the request reach the origin",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/webp;q"
+          },
+          "status": 500,
+          "body": {
+            "text": "Internal Server Error"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "animated-gif",
+          "request": {
+            "search": "url=%2F_fixtures%2Fanimated.gif&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 83,
+            "sha256": "c50ecb3bb60ca27cf22dc711e44780b65fdaf31fe1c6bfd3665f99e4d7531164"
+          },
+          "contentType": "image/gif",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"animated.gif\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "svg",
+          "request": {
+            "search": "url=%2F_fixtures%2Fvector.svg&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is valid but image type is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "ico",
+          "request": {
+            "search": "url=%2F_fixtures%2Ficon.ico&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 159,
+            "sha256": "8b6bb9b38f0ded8daf091dc93aab6ad13e272b4dbf6e83f63fd943d5ca46e8ed"
+          },
+          "contentType": "image/x-icon",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept, Accept-Encoding",
+          "contentDisposition": "attachment; filename=\"icon.ico\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "not-an-image",
+          "request": {
+            "search": "url=%2F_fixtures%2Fnot-an-image.txt&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 400,
+          "body": {
+            "text": "The requested resource isn't a valid image."
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "missing-source",
+          "request": {
+            "search": "url=%2F_fixtures%2Fabsent.png&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 400,
+          "body": {
+            "text": "The requested resource isn't a valid image."
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "static-import",
+          "note": "a /_next/static/media source is the only one that gets an immutable Cache-Control",
+          "request": {
+            "search": "url=%2F_next%2Fstatic%2Fmedia%2Fphoto.0bbghjvljtq89.png&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=315360000, immutable",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "static-import-accept-any",
+          "request": {
+            "search": "url=%2F_next%2Fstatic%2Fmedia%2Fphoto.0bbghjvljtq89.png&w=640&q=75",
+            "accept": "*/*"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=315360000, immutable",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        }
+      ]
+    },
+    {
+      "variant": "svg",
+      "config": {
+        "path": "/_next/image",
+        "deviceSizes": [
+          640,
+          750,
+          828,
+          1080,
+          1200,
+          1920,
+          2048,
+          3840
+        ],
+        "imageSizes": [
+          32,
+          48,
+          64,
+          96,
+          128,
+          256,
+          384
+        ],
+        "qualities": [
+          75
+        ],
+        "formats": [
+          "image/webp"
+        ],
+        "domains": [
+          "legacy.example"
+        ],
+        "minimumCacheTTL": 14400,
+        "maximumRedirects": 3,
+        "maximumResponseBody": 50000000,
+        "dangerouslyAllowSVG": true,
+        "dangerouslyAllowLocalIP": false,
+        "contentSecurityPolicy": "script-src 'none'; frame-src 'none'; sandbox;",
+        "contentDispositionType": "attachment",
+        "remotePatterns": [
+          {
+            "protocol": "https",
+            "hostname": "^(?:(?!\\.)(?:(?:(?!(?:^|\\/)\\.).)*?)\\.allowed\\.example\\/?)$",
+            "pathname": "^(?:\\/img(?:\\/(?!\\.{1,2}(?:\\/|$))(?:(?:(?!(?:^|\\/)\\.{1,2}(?:\\/|$)).)*?)|$))$"
+          }
+        ],
+        "localPatterns": [
+          {
+            "pathname": "^(?:(?!(?:^|\\/)\\.{1,2}(?:\\/|$))(?:(?:(?!(?:^|\\/)\\.{1,2}(?:\\/|$)).)*?)\\/?)$",
+            "search": ""
+          }
+        ],
+        "configHash": "11b7f65dad915a42d74b14ef363852c044706a84d63e13e08a410458b5666c7a"
+      },
+      "cases": [
+        {
+          "name": "url-missing",
+          "request": {
+            "search": "w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-empty",
+          "request": {
+            "search": "url=&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-array",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&url=%2F_fixtures%2Ficon.ico&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be an array"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-too-long",
+          "note": "3073 characters, one past the cap",
+          "request": {
+            "search": "url=%2Faaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is too long"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-protocol-relative",
+          "request": {
+            "search": "url=%2F%2Fevil.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be a protocol-relative URL (//)"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-protocol-relative-allowlisted-host",
+          "note": "the // check must precede the relative/absolute branch or this is a full allowlist bypass",
+          "request": {
+            "search": "url=%2F%2Flegacy.example%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be a protocol-relative URL (//)"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-recursive",
+          "request": {
+            "search": "url=%2F_next%2Fimage%3Furl%3D%252Ffoo.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be recursive"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-recursive-percent-encoded",
+          "note": "the guard decodes before matching, so a prefix check would miss this",
+          "request": {
+            "search": "url=%2F_next%2F%2569mage&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be recursive"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-recursive-behind-asset-prefix",
+          "note": "matched anywhere in the pathname, not as a prefix",
+          "request": {
+            "search": "url=%2Fcdn-prefix%2F_next%2Fimage&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter cannot be recursive"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-local-with-search",
+          "note": "localPatterns defaults to search: \"\", so any query string is refused",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png%3Fv%3D1&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-local-allowed",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "url-absolute-unparseable",
+          "request": {
+            "search": "url=https%3A%2F%2F%5B&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is invalid"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-ftp",
+          "request": {
+            "search": "url=ftp%3A%2F%2Fcdn.allowed.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is invalid"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-data",
+          "request": {
+            "search": "url=data%3Aimage%2Fpng%3Bbase64%2CAAAA&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is invalid"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-denied",
+          "request": {
+            "search": "url=https%3A%2F%2Fevil.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-suffix-attack",
+          "note": "the compiled hostname regex is anchored, so a suffixed host is not a match",
+          "request": {
+            "search": "url=https%3A%2F%2Fallowed.example.evil.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-userinfo-attack",
+          "note": "userinfo is not hostname",
+          "request": {
+            "search": "url=https%3A%2F%2Fcdn.allowed.example%40evil.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-wrong-pathname",
+          "request": {
+            "search": "url=https%3A%2F%2Fcdn.allowed.example%2Fother%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"url\" parameter is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-allowed",
+          "note": "passes validation; the fetch then fails, which is the origin's problem, not the edge's",
+          "request": {
+            "search": "url=https%3A%2F%2Fcdn.allowed.example%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 500,
+          "body": {
+            "text": "Internal Server Error"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-allowed-with-port",
+          "note": "matching is against url.hostname — url.host would carry :8443 and fail the pattern",
+          "request": {
+            "search": "url=https%3A%2F%2Fcdn.allowed.example%3A8443%2Fimg%2Fa.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 500,
+          "body": {
+            "text": "Internal Server Error"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "url-absolute-allowed-domain",
+          "request": {
+            "search": "url=https%3A%2F%2Flegacy.example%2Fanything.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 500,
+          "body": {
+            "text": "Internal Server Error"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-missing",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-array",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&w=750&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) cannot be an array"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-fractional",
+          "note": "the integer regex must run before parseInt, which would read this as 99",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=99.9&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-not-a-number",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=abc&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-negative",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=-640&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-zero",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=0&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-not-in-sizes",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=641&q=75",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) of 641 is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-fractional-and-q-missing",
+          "note": "pins the interleaving: the w regex is checked before q's presence",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=99.9",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"w\" parameter (width) must be an integer greater than 0"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-zero-and-q-missing",
+          "note": "pins the interleaving: q's presence is checked before w's value",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=0",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-missing",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) is required"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-array",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75&q=50",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) cannot be an array"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-fractional",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75.5",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) must be an integer between 1 and 100"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-zero",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=0",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) must be an integer between 1 and 100"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-over-100",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=101",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) must be an integer between 1 and 100"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "q-not-in-qualities",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=50",
+            "accept": null
+          },
+          "status": 400,
+          "body": {
+            "text": "\"q\" parameter (quality) of 50 is not allowed"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "w-and-q-in-image-sizes",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=32&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-absent",
+          "note": "no Accept at all negotiates nothing; the output keeps the source format",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": null
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-any",
+          "note": "getSupportedMimeType's literal accept.includes() guard makes this negotiate nothing",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "*/*"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-image-wildcard",
+          "note": "same guard: a wildcard subtype is resolved and then discarded",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/*"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-browser",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-webp-only",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/webp"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-avif-only",
+          "note": "avif is not in the configured formats, so nothing is negotiated",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/avif"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-webp-q-zero",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/webp;q=0,image/png"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "accept-malformed-parameter",
+          "note": "registered divergence 6: @hapi/accept throws on a valueless parameter, so Next 500s before it looks at the image; the edge declines to negotiate and lets the request reach the origin",
+          "request": {
+            "search": "url=%2F_fixtures%2Fphoto.png&w=640&q=75",
+            "accept": "image/webp;q"
+          },
+          "status": 500,
+          "body": {
+            "text": "Internal Server Error"
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "animated-gif",
+          "request": {
+            "search": "url=%2F_fixtures%2Fanimated.gif&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 83,
+            "sha256": "c50ecb3bb60ca27cf22dc711e44780b65fdaf31fe1c6bfd3665f99e4d7531164"
+          },
+          "contentType": "image/gif",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"animated.gif\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "svg",
+          "request": {
+            "search": "url=%2F_fixtures%2Fvector.svg&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 115,
+            "sha256": "76c31e46e2934b1935d5438b4cb2df9c37f57fdb941ad5c1e59b011f625e9f27"
+          },
+          "contentType": "image/svg+xml",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept, Accept-Encoding",
+          "contentDisposition": "attachment; filename=\"vector.svg\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "ico",
+          "request": {
+            "search": "url=%2F_fixtures%2Ficon.ico&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 159,
+            "sha256": "8b6bb9b38f0ded8daf091dc93aab6ad13e272b4dbf6e83f63fd943d5ca46e8ed"
+          },
+          "contentType": "image/x-icon",
+          "cacheControl": "public, max-age=14400, must-revalidate",
+          "vary": "Accept, Accept-Encoding",
+          "contentDisposition": "attachment; filename=\"icon.ico\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "not-an-image",
+          "request": {
+            "search": "url=%2F_fixtures%2Fnot-an-image.txt&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 400,
+          "body": {
+            "text": "The requested resource isn't a valid image."
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "missing-source",
+          "request": {
+            "search": "url=%2F_fixtures%2Fabsent.png&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 400,
+          "body": {
+            "text": "The requested resource isn't a valid image."
+          },
+          "contentType": null,
+          "cacheControl": null,
+          "vary": null,
+          "contentDisposition": null,
+          "csp": null
+        },
+        {
+          "name": "static-import",
+          "note": "a /_next/static/media source is the only one that gets an immutable Cache-Control",
+          "request": {
+            "search": "url=%2F_next%2Fstatic%2Fmedia%2Fphoto.0bbghjvljtq89.png&w=640&q=75",
+            "accept": "image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 94,
+            "sha256": "f4dddc98504ee29e6a530586d8af1c905c978f9cd7e544cd3983cf4b884da214"
+          },
+          "contentType": "image/webp",
+          "cacheControl": "public, max-age=315360000, immutable",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.webp\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        },
+        {
+          "name": "static-import-accept-any",
+          "request": {
+            "search": "url=%2F_next%2Fstatic%2Fmedia%2Fphoto.0bbghjvljtq89.png&w=640&q=75",
+            "accept": "*/*"
+          },
+          "status": 200,
+          "body": {
+            "bytes": 149,
+            "sha256": "5a77fe04996d9ae37a460591d912e81928a49bc3e5c83814770844be3b7ddc7c"
+          },
+          "contentType": "image/png",
+          "cacheControl": "public, max-age=315360000, immutable",
+          "vary": "Accept",
+          "contentDisposition": "attachment; filename=\"photo.png\"",
+          "csp": "script-src 'none'; frame-src 'none'; sandbox;"
+        }
+      ]
+    }
+  ]
+}

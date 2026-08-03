@@ -8,6 +8,7 @@
     "dev": "wrangler dev",
     "start": "wrangler dev",
     "test": "vitest",
+    "fixtures:image": "node scripts/generate-image-fixtures.mjs",
     "typecheck": "tsc --noEmit",
     "cf-typegen": "wrangler types"
   },

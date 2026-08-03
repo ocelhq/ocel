@@ -53,6 +53,13 @@ asserts the difference rather than hiding it.
    (CVSS 9.5, arbitrary file content disclosure via unfuzzed libvips operations).
 5. **Cache scope is project-wide and deploy-surviving** (Vercel's model), not Next's
    per-build disk cache.
+6. **A malformed `Accept` parameter does not fail the request at the edge.** `@hapi/accept`
+   throws on a parameter with no value (`Accept: image/webp;q`), so Next answers 500 before
+   it looks at the image. The edge needs the negotiated type only as a cache-key component —
+   the origin negotiates the response for itself, and its own 500 is not cached — so it
+   declines to negotiate (empty media type) and lets the request through rather than
+   manufacturing an error the tier that owns the response would raise anyway. Fixture:
+   `accept-malformed-parameter`.
 
 ## Cache key
 
@@ -94,7 +101,7 @@ Static-import images (`/_next/static/media`, `/_next/static/immutable/media`) ge
 Emission order and values match Next:
 
 ```
-Vary: Accept                     (unconditional)
+Vary: Accept                     (served images only — see below)
 Cache-Control: <as above>
 ETag: <sha256 of output, base64url>   (upstream etag for passthrough responses)
 Content-Type: <negotiated>
@@ -103,6 +110,12 @@ Content-Security-Policy: <images.contentSecurityPolicy>
 X-Nextjs-Cache: MISS | STALE | HIT
 x-ocel-cache: HIT | MISS | STALE | BYPASS
 ```
+
+Error responses carry none of these. As the fixtures record, every 400 and every 500 Next
+returns from this route is a bare body with no `Vary`, no `Content-Type` and no
+`Cache-Control`; only a served image carries the header block above. (A passthrough body
+Next's own server compressed also picks up `Vary: Accept, Accept-Encoding` — an artifact of
+that server's compression middleware, not of the optimizer.)
 
 `CacheStatus` in `workers/nextjs/src/cache.ts` gains `STALE`.
 
@@ -243,8 +256,14 @@ Tests: deploy-path unit tests asserting both targets receive identical keys and 
 
 Branch: `image-opt-edge-validation`
 
-Add the route to `workers/nextjs/src/index.ts`. It must be handled **before** the
-`serveStaticAsset` fallthrough. Origin is stubbed in this PR.
+Add the route to `workers/nextjs/src/index.ts`. It must be handled **before middleware
+runs**, which is where Next handles it (`handleNextImageRequest` inside
+`normalizeAndAttachMetadata`, ahead of `handleCatchallMiddlewareRequest`) — and therefore
+also before the `serveStaticAsset` fallthrough. A broad matcher such as
+`['/((?!api).*)']` otherwise redirects every image to the app's login page on our edge
+while `next start` serves it, and costs an edge invocation per image. Route matching
+strips `basePath` and then tests `/_next/image`, as Next does, so an app under a
+`basePath` serves both the prefixed and the bare path. Origin is stubbed in this PR.
 
 Validation must reproduce Next exactly, including error message text, in this order:
 
@@ -268,6 +287,12 @@ Validation must reproduce Next exactly, including error message text, in this or
 | `q` fails `/^[0-9]+$/` or outside 1..100 | 400 | `"q" parameter (quality) must be an integer between 1 and 100` |
 | `qualities` set and `q` not in it | 400 | `"q" parameter (quality) of ${q} is not allowed` |
 
+The table groups the rows by parameter for readability; Next interleaves the last
+few, and the fixtures pin the interleaving. Both `q` presence checks (missing,
+array, non-integer) run **before** `w`'s value checks (`<= 0`, not in
+`deviceSizes ∪ imageSizes`), so `?w=0` with no `q` is a quality error and
+`?w=99.9` with no `q` is a width error.
+
 Critical details:
 - The `//` check must run **before** the `startsWith("/")` relative/absolute branch.
   Getting this wrong is a full allowlist bypass (Next PR #65752, reported by GitBook).
@@ -276,6 +301,11 @@ Critical details:
 - `/^[0-9]+$/` must run before `parseInt` — `parseInt("99.9") === 99`.
 - Matching uses `new RegExp(compiledSource)` against the precompiled patterns from PR 1.
   No glob library in the worker.
+- A `url` that neither `decodeURIComponent` nor `new URL` can handle (`/%`, `%2F%25`,
+  `/a%zz`, `/\[/x.png`) makes Next throw and answer **500** with a bare
+  `Internal Server Error`. The edge reproduces that status with a controlled response:
+  an uncaught throw here is a Cloudflare 1101 "Worker threw exception" page, reachable
+  unauthenticated by anyone who can spell the route.
 
 Also in this PR: **the differential fixture generator**. A script runs the real Next server
 in `examples/next-test` over a request matrix and records
