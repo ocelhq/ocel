@@ -60,6 +60,19 @@ asserts the difference rather than hiding it.
    declines to negotiate (empty media type) and lets the request through rather than
    manufacturing an error the tier that owns the response would raise anyway. Fixture:
    `accept-malformed-parameter`.
+7. **`images.dangerouslyAllowLocalIP` is ignored.** Under `next start` the flag disables a
+   check on a server the app owns alone, so the blast radius is that app. Our optimizer is
+   account-global and holds read access to *every* tenant's asset plane, so honouring one
+   app's flag would open IMDS — and that cross-tenant position — to anyone who can reach the
+   route. The IP policy is default-deny with no per-app exception. An app that sets the flag
+   gets no error and no effect.
+8. **`X-Content-Type-Options: nosniff` on every served image.** Next emits none. This route
+   serves attacker-influenced bytes from the app's own origin under a content type the
+   optimizer picked, which is precisely where content-type confusion pays off — a bypass
+   type returned unmodified is returned under a type the sniffer inferred, not one the
+   source declared. The header costs nothing and bounds the damage of any future sniffer
+   defect. (Review found exactly such a defect: a wildcard sentinel made `image/x-icon`
+   match almost any payload.)
 
 ## Cache key
 
@@ -178,8 +191,10 @@ image/jpeg                                      otherwise
    type is not allowed`.
 3. `ANIMATABLE_TYPES` (webp, png, gif) that are animated -> returned unmodified.
 4. `BYPASS_TYPES` (svg, x-icon, x-icns, bmp, jxl, heic) -> returned unmodified.
-5. Otherwise transform. AVIF quality is rescaled `max(round(q * 50/80), 1)` with
-   `effort: 3`. WebP/PNG use quality directly; JPEG uses `{quality, mozjpeg: true}`.
+5. Otherwise transform. AVIF quality is rescaled `max(q - 20, 1)` with `effort: 3` —
+   Next 16.2.10's `image-optimizer.js:885`, verified against the installed package. (An
+   earlier draft of this document said `max(round(q * 50/80), 1)`, which appears nowhere in
+   Next 16 and would have put the default `q=75` at 47 against Next's 55.) WebP/PNG use quality directly; JPEG uses `{quality, mozjpeg: true}`.
    Resize is `.rotate()` then `resize(width, undefined, {withoutEnlargement: true})`.
 
 ## Failure behavior
@@ -390,7 +405,29 @@ change misses.
 
 ## PR 5 — origin: the shared image optimizer
 
-Branch: `image-opt-origin-lambda`
+Split in two. The optimizer is where the entire security checklist lives and needs no AWS
+to review or test; the distribution plumbing needs a cut GitHub release and a real account
+apply, both human-gated. Bundling them would have held complete, reviewed security work
+behind two manual steps.
+
+- **PR 5a — `image-opt-origin-lambda`.** The Lambda itself: transform, validation, trust
+  model, the SSRF / resource-limit / sharp hardening below, and the adversarial test
+  corpus. Pure code, tested standalone, no AWS. Nothing binds it yet, so the worker still
+  answers 502 exactly as it does today.
+- **PR 5b — `image-opt-origin-wiring`.** Bootstrap CFN creates the function; the CLI
+  downloads, verifies and uploads the artifact; the worker binds it. Both human-gated
+  steps land here.
+
+Source lives in a new **`packages/image-optimizer`**, not in `packages/lambda-entrypoints`.
+Its lifecycle is the reason: this artifact is account-global, versioned independently and
+pinned by a digest compiled into the CLI, whereas `lambda-entrypoints` ships per-deploy
+alongside an app build. A separate package also keeps sharp — a heavy native dependency —
+out of the per-deploy graph.
+
+The deployable zip is built by declaring `linux/arm64/glibc` in the package's pnpm
+`supportedArchitectures` and cross-installing the native binary. No Docker, no emulation,
+reproducible in CI. The repo already ships per-platform native packages
+(`packages/native-lib/provider-aws-*`), so this is the established pattern here.
 
 ### Compute
 
@@ -407,8 +444,17 @@ every app in the substrate.
 
 ### Ownership and distribution
 
-Account-global, created by bootstrap CloudFormation (`cloud/aws/bootstrap/`), which
-creates no Lambda today. One function per AWS account, shared by preview and production.
+(PR 5b.) Account-global, created by bootstrap CloudFormation (`cloud/aws/bootstrap/`),
+which creates no Lambda today. One function per AWS account, shared by preview and
+production.
+
+The worker learns the Function URL from a new `OCEL_IMAGE_OPTIMIZER_URL` env var, not from
+the routing manifest: the manifest describes a build, and an account-global function is not
+a property of any build. Bootstrap runs before any app deploy, so the URL exists by the
+time a worker is deployed. Absent leaves `imageOrigin` unbound and every valid image
+request a 502 — today's behavior exactly, which is what makes 5a safe to land alone.
+The call is SigV4-signed with the existing edge credentials, like every other Function URL
+forward.
 
 The CLI holds a compiled-in artifact version and sha256, downloads the zip from a GitHub
 release asset, verifies the digest **fail-closed**, and uploads it into the customer's own
