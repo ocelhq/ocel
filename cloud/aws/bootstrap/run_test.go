@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -26,14 +27,26 @@ import (
 type fakeCFN struct {
 	templates map[string]string
 	statuses  map[string]cfntypes.StackStatus
-	creates   int
-	updates   int
-	noops     int
+	// outputs is what every existing stack in this account reports, so a test can
+	// stand in for the values CloudFormation only knows after a settle — the
+	// artifact bucket the optimizer's zip is uploaded into, for one.
+	outputs map[string]string
+	creates int
+	updates int
+	noops   int
 }
 
 func newFakeCFN() *fakeCFN {
-	return &fakeCFN{templates: map[string]string{}, statuses: map[string]cfntypes.StackStatus{}}
+	return &fakeCFN{
+		templates: map[string]string{},
+		statuses:  map[string]cfntypes.StackStatus{},
+		// Every settled stack has an artifact bucket, and the optimizer's zip is
+		// uploaded into it, so one is reported by default.
+		outputs: map[string]string{outputArtifactBucket: "ocel-artifacts-test"},
+	}
 }
+
+var templateVersionRE = regexp.MustCompile(`(?s)` + outputVersion + `:.*?Value: '(\d+)'`)
 
 // validationError is CloudFormation's untyped ValidationError, which is how it
 // reports both a missing stack and a no-op update.
@@ -49,9 +62,23 @@ func (f *fakeCFN) DescribeStacks(_ context.Context, in *cloudformation.DescribeS
 	if _, ok := f.templates[name]; !ok {
 		return nil, validationError{msg: "Stack with id " + name + " does not exist"}
 	}
+	var outputs []cfntypes.Output
+	for k, v := range f.outputs {
+		outputs = append(outputs, cfntypes.Output{OutputKey: aws.String(k), OutputValue: aws.String(v)})
+	}
+	// The version is a literal in the body rather than something only a settle
+	// knows, and *which* version a given pass stamped is load-bearing — a first
+	// bootstrap deliberately seeds one that fails the gate. So it is read back out
+	// of the template the account actually holds, not from f.outputs.
+	if _, ok := f.outputs[outputVersion]; !ok {
+		if m := templateVersionRE.FindStringSubmatch(f.templates[name]); m != nil {
+			outputs = append(outputs, cfntypes.Output{OutputKey: aws.String(outputVersion), OutputValue: aws.String(m[1])})
+		}
+	}
 	return &cloudformation.DescribeStacksOutput{Stacks: []cfntypes.Stack{{
 		StackName:   aws.String(name),
 		StackStatus: f.statuses[name],
+		Outputs:     outputs,
 	}}}, nil
 }
 
@@ -123,7 +150,7 @@ func TestRun_ExternalTrustProvisionsEdgeReader(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+	if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if ed.bootstraps != 1 {
@@ -145,7 +172,7 @@ func TestRun_ExternalTrustProvisionsEdgeReader(t *testing.T) {
 // never provisions preview's against production.
 func TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass(t *testing.T) {
 	for _, tc := range []struct {
-		run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, func(string), func(string)) error
+		run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, OptimizerArtifact, func(string), func(string)) error
 		want edge.Class
 	}{
 		{Run, edge.ClassProduction},
@@ -153,7 +180,7 @@ func TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass(t *testing.T) {
 	} {
 		t.Run(string(tc.want), func(t *testing.T) {
 			ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
-			if err := tc.run(context.Background(), newFakeCFN(), newFakeSSM(), &fakeIAM{}, ed, nil, nil); err != nil {
+			if err := tc.run(context.Background(), newFakeCFN(), newFakeSSM(), &fakeIAM{}, ed, preloadedArtifact(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			if ed.class != tc.want {
@@ -170,7 +197,7 @@ func TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass(t *testing.T) {
 func TestRun_InternalTrustLeavesNoCredential(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
-		run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, func(string), func(string)) error
+		run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, OptimizerArtifact, func(string), func(string)) error
 		stackName string
 		credParam string
 	}{
@@ -181,7 +208,7 @@ func TestRun_InternalTrustLeavesNoCredential(t *testing.T) {
 			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 			ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustInternal}}
 
-			if err := tc.run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+			if err := tc.run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			template := cfn.templates[tc.stackName]
@@ -210,7 +237,7 @@ func TestRun_PreviewTakesEdgeFirstPath(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	if err := RunPreview(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+	if err := RunPreview(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 		t.Fatalf("RunPreview: %v", err)
 	}
 	if ed.bootstraps != 1 {
@@ -235,7 +262,7 @@ func TestRun_PersistsEdgeValues(t *testing.T) {
 	values := map[string]string{"bucketName": "edge-cache-7f3", "namespaceId": "ns-42"}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal, Values: values}}
 
-	if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+	if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	got, err := ReadEdgeValues(context.Background(), ssmc, ClassProduction)
@@ -259,7 +286,7 @@ func TestRun_NoEdgeValuesStoresNothing(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+	if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if _, ok := ssmc.params[EdgeValuesParamName]; ok {
@@ -289,7 +316,7 @@ func TestRun_IgnoresUnrecognisedOffer(t *testing.T) {
 		},
 	}}
 
-	if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+	if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if !hasEdgeUser(t, cfn.templates[StackName]) {
@@ -309,7 +336,7 @@ func TestRun_NoOffersStoresNoCacheStore(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+	if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 	if _, ok := ssmc.params[CacheStoreParamName]; ok {
@@ -323,7 +350,7 @@ func TestRun_NoOffersStoresNoCacheStore(t *testing.T) {
 func TestRun_AdoptsCacheStorePerClass(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		run   func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, func(string), func(string)) error
+		run   func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, OptimizerArtifact, func(string), func(string)) error
 		class string
 		param string
 	}{
@@ -337,7 +364,7 @@ func TestRun_AdoptsCacheStorePerClass(t *testing.T) {
 				Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offeredStore()}},
 			}}
 
-			if err := tc.run(context.Background(), newFakeCFN(), ssmc, &fakeIAM{}, ed, nil, nil); err != nil {
+			if err := tc.run(context.Background(), newFakeCFN(), ssmc, &fakeIAM{}, ed, preloadedArtifact(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			if _, ok := ssmc.params[tc.param]; !ok {
@@ -367,7 +394,7 @@ func TestRun_DanglingCacheStoreTokenFailsBootstrap(t *testing.T) {
 		Offers: []edge.Offer{{Kind: edge.OfferCacheStore, Values: offer}},
 	}}
 
-	err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil)
+	err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil)
 	if err == nil {
 		t.Fatal("expected Run to fail on an unrecoverable cache-store credential")
 	}
@@ -389,7 +416,7 @@ func TestRun_Idempotent(t *testing.T) {
 	}}
 
 	for i := range 2 {
-		if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+		if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 			t.Fatalf("Run %d: %v", i+1, err)
 		}
 	}
@@ -423,7 +450,7 @@ func TestRunPreview_Idempotent(t *testing.T) {
 
 	var passphrase string
 	for i := range 2 {
-		if err := RunPreview(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+		if err := RunPreview(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 			t.Fatalf("RunPreview %d: %v", i+1, err)
 		}
 		if i == 0 {
@@ -480,7 +507,7 @@ func TestRun_EdgeBootstrapFailureStopsProvisioning(t *testing.T) {
 	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
 	ed := &fakeEdge{err: errors.New("edge API unreachable")}
 
-	err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil)
+	err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil)
 	if err == nil {
 		t.Fatal("expected Run to fail when the edge bootstrap fails")
 	}

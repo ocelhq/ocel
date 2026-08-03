@@ -340,7 +340,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	// AWS_IAM-gated) with the edge reader's key, and addresses the ISR stores
 	// directly under the same key. The bundle is the same bytes for every app, so
 	// both are bound once here.
-	generic = withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg)
+	generic = withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg)
 
 	base := edge.RootStackSpec{
 		Version:         version,
@@ -581,6 +581,19 @@ func withCacheCoordinates(worker edge.Worker, cfg Config) edge.Worker {
 		}
 	}
 	return worker
+}
+
+// withImageOptimizer binds the substrate's image optimizer Function URL onto the
+// worker, which signs its POSTs to it with the edge credentials bound above. A
+// substrate with no optimizer (an older bootstrap, or a provider build pinning no
+// artifact) binds nothing rather than binding empty: the worker reads that as no
+// origin and answers every valid /_next/image request 502, which is what it did
+// before an optimizer existed.
+func withImageOptimizer(worker edge.Worker, cfg Config) edge.Worker {
+	if cfg.ImageOptimizerURL == "" {
+		return worker
+	}
+	return withVar(worker, edge.ImageOptimizerURLVar, cfg.ImageOptimizerURL)
 }
 
 // genericWorkerBundle reads the frozen generic worker's compiled bundle: the

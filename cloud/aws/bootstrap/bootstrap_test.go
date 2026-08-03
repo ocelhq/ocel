@@ -69,7 +69,7 @@ type parsedTemplate struct {
 
 func parseTemplate(t *testing.T) parsedTemplate {
 	t.Helper()
-	return parseTemplateStr(t, stackTemplate(edge.TrustExternal))
+	return parseTemplateStr(t, stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion))
 }
 
 func parseTemplateStr(t *testing.T, template string) parsedTemplate {
@@ -91,8 +91,8 @@ func TestStackTemplate_StateTable(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal)},
-		{"preview", previewStackTemplate(edge.TrustExternal)},
+		{"production", stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -175,8 +175,8 @@ func TestArtifactBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal)},
-		{"preview", previewStackTemplate(edge.TrustExternal)},
+		{"production", stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -227,8 +227,8 @@ func TestAssetBucket(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal)},
-		{"preview", previewStackTemplate(edge.TrustExternal)},
+		{"production", stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseTemplateStr(t, tc.template)
@@ -338,7 +338,7 @@ func TestCheckDeployed_ReadsPreviewClassMarker(t *testing.T) {
 // the preview class marker so CheckDeployedPreview surfaces it.
 func TestPreviewStackTemplate_StampsPreviewClass(t *testing.T) {
 	var tmpl parsedTemplate
-	if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal)), &tmpl); err != nil {
+	if err := yaml.Unmarshal([]byte(previewStackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)), &tmpl); err != nil {
 		t.Fatalf("preview template is not valid YAML: %v", err)
 	}
 	if got := tmpl.Outputs[outputInfraClass].Value; got != ClassPreview {
@@ -357,9 +357,12 @@ type edgeUserTemplate struct {
 				PolicyName     string `yaml:"PolicyName"`
 				PolicyDocument struct {
 					Statement []struct {
-						Effect    string         `yaml:"Effect"`
-						Action    any            `yaml:"Action"`
-						Resource  string         `yaml:"Resource"`
+						Effect string `yaml:"Effect"`
+						Action any    `yaml:"Action"`
+						// any, not string: this struct is unmarshalled against every
+						// resource in the template, and the image optimizer's role grants
+						// a list of prefixes rather than one Resource.
+						Resource  any            `yaml:"Resource"`
 						Condition map[string]any `yaml:"Condition"`
 					} `yaml:"Statement"`
 				} `yaml:"PolicyDocument"`
@@ -382,8 +385,8 @@ func TestEdgeUser(t *testing.T) {
 		template string
 		userName string
 	}{
-		{"production", stackTemplate(edge.TrustExternal), EdgeUserName},
-		{"preview", previewStackTemplate(edge.TrustExternal), EdgePreviewUserName},
+		{"production", stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion), EdgeUserName},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion), EdgePreviewUserName},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var tmpl edgeUserTemplate

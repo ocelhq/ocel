@@ -138,6 +138,12 @@ type Config struct {
 	// bootstrap predates it.
 	AssetBucket string
 
+	// ImageOptimizerURL is the Function URL of the substrate's image optimizer
+	// (from bootstrap), bound onto every worker so /_next/image has an origin.
+	// Empty on a substrate that bootstrapped none, which leaves the binding off
+	// entirely and every valid image request a 502.
+	ImageOptimizerURL string
+
 	// CacheStoreBucket and CacheStoreUploader address the substrate's adopted
 	// cache store — the edge-provisioned bucket the singular ISR entry path now
 	// lives in, seeded here and read back by both the origin's cache handler and

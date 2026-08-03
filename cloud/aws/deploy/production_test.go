@@ -666,6 +666,44 @@ func TestRootStackSpecs_BindsCacheCoordinates(t *testing.T) {
 	})
 }
 
+// The image optimizer is account-global like the stores above and rides as a var
+// for the same reason. A substrate that bootstrapped none must bind nothing at
+// all: the worker reads an absent var as "no optimizer" and answers every valid
+// /_next/image request 502, whereas a var bound to the empty string would be a
+// URL it tries to POST to.
+func TestRootStackSpecs_BindsImageOptimizerURL(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	manifest := &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+	}
+
+	t.Run("bound from the substrate's optimizer", func(t *testing.T) {
+		url := "https://opt123.lambda-url.eu-west-1.on.aws/"
+		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", ImageOptimizerURL: url}
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		if got := specs[0].Generic.Vars[edge.ImageOptimizerURLVar]; got != url {
+			t.Errorf("Vars[%s] = %q, want %q", edge.ImageOptimizerURLVar, got, url)
+		}
+	})
+
+	t.Run("absent on a substrate with no optimizer", func(t *testing.T) {
+		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		if _, ok := specs[0].Generic.Vars[edge.ImageOptimizerURLVar]; ok {
+			t.Errorf("Vars[%s] must be unset, not bound empty", edge.ImageOptimizerURLVar)
+		}
+	})
+}
+
 func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testing.T) {
 	fake := &recordingRootStack{}
 	ctx := context.Background()
