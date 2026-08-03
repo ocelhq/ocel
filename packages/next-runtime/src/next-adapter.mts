@@ -1,7 +1,7 @@
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { createHash } from "node:crypto";
-import { writeFileSync } from "node:fs";
+import { createReadStream, createWriteStream, writeFileSync } from "node:fs";
 import {
   copyFile,
   cp,
@@ -11,11 +11,19 @@ import {
   readdir,
   readlink,
   rm,
+  stat,
   symlink,
   writeFile,
 } from "node:fs/promises";
 import { basename, dirname, join, relative, sep } from "node:path";
+import { pipeline } from "node:stream/promises";
+import {
+  compileImageConfig,
+  imageConfigHash,
+  serializeImageConfig,
+} from "./image-config.mjs";
 import { packBundles, type PackedMember } from "./pack.mjs";
+import { stableStringify } from "./stable-json.mjs";
 
 const launcherName = "__next_launcher.cjs";
 const dispatchName = "__ocel_dispatch.cjs";
@@ -112,6 +120,8 @@ const adapter = {
         `ocel: the nodejs middleware runtime is not supported — ${middleware.sourcePage || middleware.filePath} must export \`config = { runtime: 'edge' }\``,
       );
     }
+
+    const images = compileImageConfig(config.images);
 
     const functionRoutes = allRoutes.filter((r) => r.runtime === "nodejs");
     const edgeRoutes = allRoutes.filter((r) => r.runtime === "edge");
@@ -271,22 +281,18 @@ const adapter = {
     // adapter copies it verbatim into the static output and makes each file
     // routable — otherwise a request for e.g. /favicon.svg has no dispatch entry
     // and 404s despite the file existing.
+    //
+    // Both sets are hashed on the way through: the image cache key identifies a
+    // local source by its content hash, so identical bytes keep their optimized
+    // variants across a redeploy and changed bytes cannot serve a stale one.
     const publicFiles = await collectPublicFiles(projectDir);
-    for (const p of publicFiles) {
-      const dest = join(outputRoot, "static", p.pathname);
-      await mkdir(dirname(dest), { recursive: true });
-      await copyFile(p.filePath, dest);
-    }
-
-    // static files
-    for (const s of outputs.staticFiles) {
-      const normalize = (p: string) =>
-        ["/404", "/500"].some((i) => p === i) ? `${p}.html` : p;
-
-      const dest = join(outputRoot, "static", normalize(s.pathname));
-
-      await mkdir(dirname(dest), { recursive: true });
-      await copyFile(s.filePath, dest);
+    const assetHashes: Record<string, string> = {};
+    for (const file of [...publicFiles, ...outputs.staticFiles]) {
+      const pathname = servedPathname(file.pathname);
+      assetHashes[pathname] = await copyHashedFile(
+        file.filePath,
+        join(outputRoot, "static", pathname),
+      );
     }
 
     // Seed each prerendered route's cache entry from the build output.
@@ -298,6 +304,10 @@ const adapter = {
       appName,
       basePath: config.basePath || "",
       i18n: config.i18n ?? undefined,
+      ...(images && {
+        images: { ...images, configHash: imageConfigHash(images) },
+      }),
+      assetHashes,
       pathnames: [
         ...new Set([
           ...routableOutputs.map((o) => o.pathname),
@@ -410,6 +420,16 @@ const adapter = {
       JSON.stringify(routingManifest),
     );
 
+    // Its own artifact because the account-global optimizer holds no authority:
+    // it loads this file from the asset bucket rather than trusting anything the
+    // edge sends.
+    if (images) {
+      await writeFile(
+        join(outputRoot, "image-config.json"),
+        serializeImageConfig(images),
+      );
+    }
+
     await emitEdgeBundle(outputRoot, [
       ...edgeRoutes,
       ...(middleware ? [middleware] : []),
@@ -470,19 +490,6 @@ function edgeEntryOf(output: EdgeOutput): {
     );
   }
   return output.edgeRuntime;
-}
-
-// stableStringify serializes with keys in sorted order at every level. The
-// bundle's bytes are content-hashed downstream into the dynamic worker's id, so
-// an unchanged build must produce an identical file.
-function stableStringify(value: unknown): string {
-  return JSON.stringify(value, (_key, val) =>
-    val && typeof val === "object" && !Array.isArray(val)
-      ? Object.fromEntries(
-          Object.entries(val).sort(([a], [b]) => (a < b ? -1 : 1)),
-        )
-      : val,
-  );
 }
 
 // The bundle's main module. Turbopack's edge chunks are classic scripts that
@@ -975,6 +982,32 @@ function renderLauncher(
       `})`,
     ].join("\n") + "\n"
   );
+}
+
+// The path a static file is actually served at, which is also how it is keyed
+// in the asset hash map: the error pages arrive as extensionless routes.
+function servedPathname(pathname: string): string {
+  return pathname === "/404" || pathname === "/500"
+    ? `${pathname}.html`
+    : pathname;
+}
+
+// Copies a file and returns the sha256 of its bytes, hashing as it streams so
+// neither memory nor a per-file size cap bounds what a build can ship.
+async function copyHashedFile(src: string, dest: string): Promise<string> {
+  await mkdir(dirname(dest), { recursive: true });
+  const hash = createHash("sha256");
+  await pipeline(
+    createReadStream(src),
+    async function* (chunks) {
+      for await (const chunk of chunks) {
+        hash.update(chunk);
+        yield chunk;
+      }
+    },
+    createWriteStream(dest, { mode: (await stat(src)).mode }),
+  );
+  return hash.digest("hex");
 }
 
 // collectPublicFiles walks a project's public/ directory and returns each file
