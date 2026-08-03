@@ -18,11 +18,22 @@ const nextConfig: NextConfig = fixtures
     }
   : {
       // What every ordinary build and deploy gets. Next allows no remote host by
-      // default, so the deployed app's own remote image needs one entry — without
-      // it Next, and the edge that reimplements Next, both answer /_next/image
+      // default, so the deployed app's own remote image needs an entry — without
+      // one, Next and the edge that reimplements it both answer /_next/image
       // with 400 "url" parameter is not allowed.
+      //
+      // Both hosts, because picsum.photos serves nothing itself: it 302s to
+      // fastly.picsum.photos. Next follows that hop without consulting the
+      // allowlist again, and the optimizer here deliberately does not
+      // (divergence 1, packages/image-optimizer/src/upstream.mts) — an open
+      // redirect on one tenant's allowlisted CDN would otherwise be a fetch
+      // primitive aimed at every other tenant in the account. So an app
+      // deployed on Ocel names the host its images actually come from.
       images: {
-        remotePatterns: [{ protocol: "https", hostname: "picsum.photos" }],
+        remotePatterns: [
+          { protocol: "https", hostname: "picsum.photos" },
+          { protocol: "https", hostname: "fastly.picsum.photos" },
+        ],
       },
     };
 
