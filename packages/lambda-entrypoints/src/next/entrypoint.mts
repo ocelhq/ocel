@@ -5,6 +5,17 @@ import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { awaitLiveValues } from "../shared/live-values.mjs";
 import { reportFatalBoot, serveInvoke, type Invoke } from "../shared/membrane.mjs";
 
+// Next deletes the flight headers off the live request object before it
+// constructs the incremental cache for a prerendered route, so by the time the
+// cache handler sees those same headers it can no longer tell an RSC request
+// from a document one — and would answer both with the html variant. Marking
+// here, before Next runs, is the only point where the distinction still exists.
+// The key is a symbol so it stays out of `Object.keys`, and therefore out of
+// everything that enumerates or serializes headers, including the app-visible
+// `headers()`. Registered rather than local because the cache handler is a
+// separate bundle: only the global registry makes the two the same symbol.
+const RSC_REQUEST = Symbol.for("ocel.rsc-request");
+
 async function boot(): Promise<void> {
   // OCEL_HANDLER points at the generated launcher beside the app's .next dir,
   // so its dirname is the Next project root and its default export is the
@@ -30,6 +41,7 @@ async function boot(): Promise<void> {
   // background bridge — which is how a handler defers work onto the request it
   // is serving without the request waiting for it.
   const invoke: Invoke = (req, res, ocel) => {
+    if (req.headers.rsc === "1") (req.headers as any)[RSC_REQUEST] = true;
     // Pages Router bundles read unstable_cache's incremental cache off
     // globalThis (see incremental-cache.mts); App Router bundles construct
     // their own per request and overwrite this, so publishing it

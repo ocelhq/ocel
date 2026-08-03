@@ -127,6 +127,97 @@ test("serves a seeded prerender and restores its binary payloads", async () => {
   expect(entry?.value.rscData.toString()).toBe("RSC");
 });
 
+// Next replays the entry's headers verbatim and never overrides a content-type
+// that is already set, so an RSC request answered with the html variant's
+// headers goes out as text/html — which the client router reads as "not flight
+// data" and answers with a full document reload instead of a soft navigation.
+test("answers an RSC request with the RSC variant's headers", async () => {
+  const store = fakeStore();
+  seedPage(store, "index");
+  store.entries.get("index")!.value.headers = {
+    "content-type": "text/html; charset=utf-8",
+    vary: "RSC",
+  };
+  store.entries.get("index")!.value.rscHeaders = {
+    "content-type": "text/x-component",
+    vary: "RSC",
+  };
+
+  const handler = new OcelCacheHandler({ _requestHeaders: { rsc: "1" } });
+  const entry = await handler.get("/", { kind: "APP_PAGE" });
+
+  expect(entry?.value.headers["content-type"]).toBe("text/x-component");
+});
+
+// The production case: for a prerendered route Next deletes the flight headers
+// off the live request object before it builds the incremental cache, so `rsc`
+// is already gone by the time the handler is constructed. Only the membrane's
+// mark, set before Next ran, still says what the client asked for.
+test("negotiates on the membrane's mark once Next has stripped the flight headers", async () => {
+  const store = fakeStore();
+  seedPage(store, "index");
+  store.entries.get("index")!.value.headers = {
+    "content-type": "text/html; charset=utf-8",
+  };
+  store.entries.get("index")!.value.rscHeaders = {
+    "content-type": "text/x-component",
+  };
+
+  const headers: Record<string | symbol, any> = { rsc: "1" };
+  headers[Symbol.for("ocel.rsc-request")] = true;
+  delete headers.rsc;
+
+  const entry = await new OcelCacheHandler({ _requestHeaders: headers }).get("/", {
+    kind: "APP_PAGE",
+  });
+
+  expect(entry?.value.headers["content-type"]).toBe("text/x-component");
+});
+
+// The mark must not reach application code: Next's `headers()` and everything
+// else that reads a request's headers enumerates or serializes string keys. It
+// does survive a spread, which is what keeps it readable if Next clones.
+test("the membrane's mark is invisible to header enumeration", () => {
+  const headers: Record<string | symbol, any> = {};
+  headers[Symbol.for("ocel.rsc-request")] = true;
+
+  expect(Object.keys(headers)).toEqual([]);
+  expect(JSON.stringify(headers)).toBe("{}");
+  expect({ ...headers }[Symbol.for("ocel.rsc-request")]).toBe(true);
+});
+
+test("leaves a non-RSC request on the html variant's headers", async () => {
+  const store = fakeStore();
+  seedPage(store, "index");
+  store.entries.get("index")!.value.headers = {
+    "content-type": "text/html; charset=utf-8",
+  };
+  store.entries.get("index")!.value.rscHeaders = {
+    "content-type": "text/x-component",
+  };
+
+  const entry = await new OcelCacheHandler().get("/", { kind: "APP_PAGE" });
+
+  expect(entry?.value.headers["content-type"]).toBe("text/html; charset=utf-8");
+});
+
+// An entry written before per-variant capture has no rscHeaders. Serving it
+// with the html content-type is the same reload bug, so drop the header and let
+// Next derive it from the flight payload it is about to send.
+test("drops the html content-type when an entry predates variant capture", async () => {
+  const store = fakeStore();
+  seedPage(store, "index", { tags: "products" });
+  store.entries.get("index")!.value.headers = {
+    "content-type": "text/html; charset=utf-8",
+    "x-next-cache-tags": "products",
+  };
+
+  const handler = new OcelCacheHandler({ _requestHeaders: { rsc: "1" } });
+  const entry = await handler.get("/", { kind: "APP_PAGE" });
+
+  expect(entry?.value.headers).toEqual({ "x-next-cache-tags": "products" });
+});
+
 test("misses when no entry was seeded", async () => {
   fakeStore();
   const entry = await new OcelCacheHandler().get("/absent", { kind: "APP_PAGE" });
