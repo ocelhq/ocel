@@ -325,15 +325,22 @@ func planPreviewProjectTeardown(ctx context.Context, cfg Config, slug string) (P
 }
 
 // purgePreviewAssets deletes a project's whole preview R2/S3 footprint: its
-// static assets and edge bundles (env-agnostic, one project-rooted prefix
-// each), each pointer's env-scoped ISR/prerender entries (in both the asset
-// bucket and the cache store), and its function artifacts from the preview
-// substrate's own artifact bucket. Deleting a prefix nothing was written to is
-// a no-op.
+// static assets, image configs and edge bundles (env-agnostic, one
+// project-rooted prefix each), each pointer's env-scoped ISR/prerender entries
+// (in both the asset bucket and the cache store), and its function artifacts
+// from the preview substrate's own artifact bucket. Deleting a prefix nothing
+// was written to is a no-op.
 func purgePreviewAssets(ctx context.Context, cfg Config, slug string, pointers []string) error {
 	errs := []error{purgeProjectArtifacts(ctx, cfg, slug)}
 	for _, prefix := range []string{projectAssetR2Prefix(slug), projectEdgeR2Prefix(slug)} {
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, prefix); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	// The static assets' other half, plus the image configs that only ever land
+	// here: uploadStaticAssets publishes both into the account's own bucket.
+	for _, prefix := range []string{projectAssetR2Prefix(slug), projectImageConfigPrefix(slug)} {
+		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, prefix); err != nil {
 			errs = append(errs, err)
 		}
 	}

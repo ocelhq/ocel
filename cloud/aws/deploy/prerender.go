@@ -168,7 +168,7 @@ type uploadTarget struct {
 
 func (t uploadTarget) validate() error {
 	if t.bucket == "" {
-		return fmt.Errorf("this project has cache entries to seed but no asset bucket is configured; re-run `ocel bootstrap`")
+		return fmt.Errorf("this project has objects to publish but no asset bucket is configured; re-run `ocel bootstrap`")
 	}
 	if t.up == nil {
 		return fmt.Errorf("no asset uploader configured")

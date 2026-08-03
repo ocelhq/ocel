@@ -2,7 +2,10 @@ package deploy
 
 import (
 	"context"
+	"errors"
+	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
@@ -174,6 +177,242 @@ func TestUploadStaticAssets_ARotationReusesTheBuildsObjects(t *testing.T) {
 	}
 	if len(store.puts) != 0 {
 		t.Errorf("rotation uploaded %v, want nothing: the build's assets are already published", store.puts)
+	}
+}
+
+// sortedPuts is one uploader's recorded keys in a comparable order — the
+// uploads fan out concurrently, so only the set is meaningful.
+func sortedPuts(f *fakeUploader) []string {
+	keys := append([]string(nil), f.puts...)
+	sort.Strings(keys)
+	return keys
+}
+
+// imageConfigTree seeds one Next app whose build emitted a compiled image
+// config beside its routing manifest, as an app with optimizable images does.
+func imageConfigTree(t *testing.T) string {
+	t.Helper()
+	return writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+		"apps/web/image-config.json":     `{"formats":["image/webp"]}`,
+		"apps/web/static/logo.png":       "PNG",
+	})
+}
+
+// mirrorConfig is the two-target asset-plane Config: the adopted R2 store the
+// worker reads and the account's own S3 bucket the image optimizer reads.
+func mirrorConfig(root string, store, asset *fakeUploader) Config {
+	return Config{
+		ArtifactRoot: root, Env: "prod",
+		AssetBucket: "assets", Uploader: asset,
+		CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+}
+
+// TestUploadStaticAssets_MirrorsIdenticalKeysAndBytesToBothTargets proves the
+// static assets are published twice under one key layout: R2 is the hot tier the
+// worker reads, and the account's own bucket is the source of truth the
+// account-global image optimizer reads — which is what lets that optimizer hold
+// no R2 credentials at all.
+func TestUploadStaticAssets_MirrorsIdenticalKeysAndBytesToBothTargets(t *testing.T) {
+	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+	cfg := mirrorConfig(imageConfigTree(t), store, asset)
+
+	if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		t.Fatalf("uploadStaticAssets: %v", err)
+	}
+
+	key := "assets/proj/web/WEB1/logo.png"
+	if got := sortedPuts(store); !reflect.DeepEqual(got, []string{key}) {
+		t.Errorf("cache store keys = %v, want %v", got, []string{key})
+	}
+	want := []string{key, "image-config/proj/web/WEB1.json"}
+	if got := sortedPuts(asset); !reflect.DeepEqual(got, want) {
+		t.Errorf("asset bucket keys = %v, want %v", got, want)
+	}
+	if store.putBodies[key] != asset.putBodies[key] {
+		t.Errorf("mirrored bodies differ: store = %q, asset = %q", store.putBodies[key], asset.putBodies[key])
+	}
+	if store.contentTypes[key] != asset.contentTypes[key] {
+		t.Errorf("mirrored content-types differ: store = %q, asset = %q", store.contentTypes[key], asset.contentTypes[key])
+	}
+	for _, b := range asset.buckets {
+		if b != "assets" {
+			t.Errorf("mirrored into bucket %q, want the account's own %q", b, "assets")
+		}
+	}
+}
+
+// TestUploadStaticAssets_PublishesTheImageConfigOutsideThePublicWebRoot pins the
+// key the optimizer loads the compiled image config from, and the bytes it
+// hashes against the manifest's configHash. The key sits outside
+// assets/<project>/<app>/<build id>, which is the app's public web root: a
+// config under it would be served to anyone who asked for /image-config.json.
+// It goes to the account's own bucket alone — the worker reads the compiled
+// patterns off the routing manifest, so an R2 copy would have no reader.
+func TestUploadStaticAssets_PublishesTheImageConfigOutsideThePublicWebRoot(t *testing.T) {
+	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+	cfg := mirrorConfig(imageConfigTree(t), store, asset)
+
+	if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		t.Fatalf("uploadStaticAssets: %v", err)
+	}
+
+	key := "image-config/proj/web/WEB1.json"
+	if got, want := asset.putBodies[key], `{"formats":["image/webp"]}`; got != want {
+		t.Errorf("image config bytes = %q, want %q — the origin hashes exactly these", got, want)
+	}
+	if got, want := asset.contentTypes[key], "application/json"; got != want {
+		t.Errorf("image config content-type = %q, want %q", got, want)
+	}
+	if _, published := store.putBodies[key]; published {
+		t.Errorf("published %q to the cache store, want the asset bucket alone", key)
+	}
+	for _, k := range sortedPuts(store) {
+		if strings.HasPrefix(k, "image-config/") {
+			t.Errorf("cache store received %q, want no image config in R2 at all", k)
+		}
+	}
+}
+
+// TestUploadStaticAssets_AProjectsOwnImageConfigAssetDoesNotCollide proves a
+// project shipping public/image-config.json keeps it: its static asset and the
+// compiled config are two distinct keys, so neither upload can overwrite the
+// other.
+func TestUploadStaticAssets_AProjectsOwnImageConfigAssetDoesNotCollide(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json":    `{"buildId":"WEB1"}`,
+		"apps/web/image-config.json":        `{"formats":["image/webp"]}`,
+		"apps/web/static/image-config.json": `{"mine":true}`,
+	})
+	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+
+	if err := uploadStaticAssets(context.Background(), mirrorConfig(root, store, asset), nextManifest()); err != nil {
+		t.Fatalf("uploadStaticAssets: %v", err)
+	}
+
+	if got, want := asset.putBodies["assets/proj/web/WEB1/image-config.json"], `{"mine":true}`; got != want {
+		t.Errorf("the project's own public/image-config.json = %q, want %q", got, want)
+	}
+	if got, want := asset.putBodies["image-config/proj/web/WEB1.json"], `{"formats":["image/webp"]}`; got != want {
+		t.Errorf("compiled image config = %q, want %q", got, want)
+	}
+}
+
+// TestUploadStaticAssets_AppWithoutAnImageConfigPublishesNone proves an app that
+// generates no /_next/image URLs (a custom loader, or unoptimized images) emits
+// no config artifact and the upload treats its absence as normal.
+func TestUploadStaticAssets_AppWithoutAnImageConfigPublishesNone(t *testing.T) {
+	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+	cfg := mirrorConfig(staticAppTree(t), store, asset)
+
+	if err := uploadStaticAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("uploadStaticAssets: %v", err)
+	}
+	for _, key := range append(sortedPuts(store), sortedPuts(asset)...) {
+		if strings.HasPrefix(key, "image-config/") {
+			t.Errorf("published %q for a build that emitted no image config", key)
+		}
+	}
+}
+
+// TestUploadStaticAssets_RepublishesTheImageConfigOverAPresentObject proves the
+// config is put unconditionally rather than skip-if-exists. Its bytes are what
+// the manifest's configHash covers, so a stale object left at this key by an
+// earlier publish of the same build id would fail the origin's hash check on
+// every image request — whereas re-uploading a static asset that is already
+// there would only be waste.
+func TestUploadStaticAssets_RepublishesTheImageConfigOverAPresentObject(t *testing.T) {
+	present := map[string]bool{
+		"image-config/proj/web/WEB1.json": true,
+		"assets/proj/web/WEB1/logo.png":   true,
+	}
+	store := &fakeUploader{exists: present}
+	asset := &fakeUploader{exists: present}
+	cfg := mirrorConfig(imageConfigTree(t), store, asset)
+
+	if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
+		t.Fatalf("uploadStaticAssets: %v", err)
+	}
+
+	if got := sortedPuts(store); got != nil {
+		t.Errorf("cache store keys = %v, want nothing re-put", got)
+	}
+	want := []string{"image-config/proj/web/WEB1.json"}
+	if got := sortedPuts(asset); !reflect.DeepEqual(got, want) {
+		t.Errorf("asset bucket keys = %v, want %v", got, want)
+	}
+}
+
+// TestUploadStaticAssets_EitherTargetFailingFailsTheDeploy proves neither half
+// of the asset plane may degrade silently: a build whose assets reached R2 but
+// not S3 would serve pages while every image 502s, and one that reached S3 but
+// not R2 would 404 its own static files.
+func TestUploadStaticAssets_EitherTargetFailingFailsTheDeploy(t *testing.T) {
+	boom := errors.New("bucket is on fire")
+	for _, tc := range []struct {
+		name         string
+		store, asset *fakeUploader
+	}{
+		{"cache store put fails", &fakeUploader{exists: map[string]bool{}, putErr: boom}, &fakeUploader{exists: map[string]bool{}}},
+		{"asset bucket put fails", &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}, putErr: boom}},
+		{"asset bucket head fails", &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}, headErr: boom}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := mirrorConfig(imageConfigTree(t), tc.store, tc.asset)
+
+			err := uploadStaticAssets(context.Background(), cfg, nextManifest())
+			if err == nil {
+				t.Fatal("uploadStaticAssets = nil, want the failed target to fail the deploy")
+			}
+			if !errors.Is(err, boom) {
+				t.Errorf("err = %v, want it to carry what the bucket said", err)
+			}
+		})
+	}
+}
+
+// TestUploadStaticAssets_MissingAssetBucketFailsTheDeploy proves a bootstrap
+// predating the asset bucket fails loudly rather than publishing the R2 half
+// alone: the image optimizer reads only the S3 copy.
+func TestUploadStaticAssets_MissingAssetBucketFailsTheDeploy(t *testing.T) {
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: imageConfigTree(t), Env: "prod",
+		CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+
+	if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err == nil {
+		t.Fatal("uploadStaticAssets = nil, want an error for a missing asset bucket")
+	}
+}
+
+// TestUploadPrerenderAssets_RouteEntriesAreNotMirroredToTheAssetBucket proves
+// the ISR cache stays single-homed while the asset plane is mirrored: the image
+// optimizer never reads a cache entry, so a second copy would double the upload
+// time and the storage for no reader. (Fetch entries land in the asset bucket
+// for their own, unrelated reason — they are origin-private.)
+func TestUploadPrerenderAssets_RouteEntriesAreNotMirroredToTheAssetBucket(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json":     `{"buildId":"WEB1"}`,
+		"apps/web/cache/index.cache.json":    `{"lastModified":1,"value":{"kind":"APP_PAGE"}}`,
+		"apps/web/fetch-cache/a1.cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
+	})
+	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
+	cfg := mirrorConfig(root, store, asset)
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+
+	entry := "prod/proj/web/WEB1/cache/index.cache.json"
+	if got := sortedPuts(store); !reflect.DeepEqual(got, []string{entry, "prod/proj/web/WEB1/tag-clock.json"}) {
+		t.Errorf("cache store keys = %v, want the route entry and the tag clock", got)
+	}
+	for _, key := range sortedPuts(asset) {
+		if key == entry {
+			t.Errorf("route entry %q was mirrored to the asset bucket, want it R2-only", key)
+		}
 	}
 }
 
