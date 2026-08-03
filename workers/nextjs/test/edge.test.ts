@@ -229,6 +229,8 @@ function deps(overrides: Partial<RouteDeps> = {}): RouteDeps {
       dispatch: {},
     },
     functionUrls: {},
+    slug: "p1",
+    app: "web",
     assetStore: assetStoreServing({}),
     ...overrides,
   } as RouteDeps;

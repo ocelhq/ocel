@@ -57,6 +57,8 @@ function deps(over: Partial<RouteDeps>): RouteDeps {
   return {
     manifest: { buildId: "t", basePath: "", pathnames: [], routes: {}, dispatch: {} },
     functionUrls: {},
+    slug: "p1",
+    app: "web",
     assetStore: noAssets(),
     ...over,
   };

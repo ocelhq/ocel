@@ -16,6 +16,13 @@ import {
   storeInColo,
   withStatus,
 } from "./cache";
+import {
+  isImageRequest,
+  serveImage,
+  unprovisionedImageOrigin,
+  type ImageConfig,
+  type ImageOrigin,
+} from "./image";
 import { composePpr, resumeRequest } from "./ppr";
 import {
   intercept,
@@ -188,6 +195,11 @@ interface Manifest {
   dispatch: Record<string, DispatchTarget>;
   // Absent when the app ships no middleware.
   middleware?: { entryKey: string; matchers?: MiddlewareMatcher[] };
+  // Absent when the app opted out of the built-in optimizer (a custom loader,
+  // or unoptimized: true). next/image then emits the original src and never
+  // requests /_next/image, so the route is not registered at all and the path
+  // falls through to the asset store exactly as any other unmatched path.
+  images?: ImageConfig;
 }
 
 // What resolveRoutes never hands back: the middleware's own Response, the
@@ -216,6 +228,12 @@ interface RouteResult {
 export interface RouteDeps {
   manifest: Manifest;
   functionUrls: Record<string, string>;
+  // This worker's own naming scope (env.OCEL_SLUG / env.OCEL_APP, ADR 0005).
+  // Carried here rather than read from the manifest because it identifies the
+  // deployment target, not the build: the image origin loads its config from
+  // image-config/<slug>/<app>/<buildId>.json.
+  slug: string;
+  app: string;
   // Serves this Deployment's static output (see assets.ts).
   assetStore: AssetStoreDeps;
   // Injectable so lambda/external forwarding can be observed in tests.
@@ -236,6 +254,12 @@ export interface RouteDeps {
   // Absent outside a Worker request (and in routing tests): routes then forward
   // to their origin uncached.
   cache?: CacheDeps;
+
+  // Where a validated /_next/image request goes. The route is registered by the
+  // manifest's `images` section, not by this — so until PR 5 provisions the
+  // optimizer nothing binds it and every valid image request is a 502, in
+  // production as much as in tests.
+  imageOrigin?: ImageOrigin;
 
   // Present when the deploy bound a cache store and injected its prefix:
   // prerender routes then read the authoritative ISR cache directly from the
@@ -263,7 +287,17 @@ export interface RouteDeps {
 // store is unreachable and no cached Deployment can stand in.
 export async function resolveRouteDeps(
   deployments: DeploymentsDeps,
-  base: Omit<RouteDeps, "manifest" | "functionUrls" | "interception" | "deployments" | "assetStore" | "edge"> & {
+  base: Omit<
+    RouteDeps,
+    | "manifest"
+    | "functionUrls"
+    | "interception"
+    | "deployments"
+    | "assetStore"
+    | "edge"
+    | "slug"
+    | "app"
+  > & {
     interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
     assetStore: Omit<AssetStoreDeps, "assetPrefix">;
     // What the edge invoker is built from once the Deployment names a bundle:
@@ -287,6 +321,8 @@ export async function resolveRouteDeps(
   const { edgeWorkers } = record;
   return {
     ...rest,
+    slug: deployments.slug,
+    app: deployments.app,
     edge:
       edgeRuntime && edgeWorkers
         ? createEdgeInvoker(
@@ -331,6 +367,34 @@ function unavailableResponse(): Response {
   });
 }
 
+// The image route, ahead of routing and therefore ahead of middleware — where
+// Next runs it too (handleNextImageRequest is called from
+// normalizeAndAttachMetadata, before handleCatchallMiddlewareRequest). Behind
+// middleware, an app whose matcher is broad enough to cover /_next/image would
+// have every image redirected to its login page here and served normally by
+// `next start`, and would pay an edge invocation per image on the way. It also
+// sits ahead of every asset fallthrough: /_next/image is in no build's static
+// output, so the request would otherwise be answered with the build's 404 page.
+// Registered only where the build emitted an image config.
+function imageResponse(
+  request: Request,
+  deps: RouteDeps,
+): Promise<Response> | undefined {
+  const { manifest } = deps;
+  if (!manifest.images) return undefined;
+  const url = new URL(request.url);
+  if (!isImageRequest(url.pathname, manifest.basePath)) return undefined;
+
+  return serveImage(request, url, {
+    config: manifest.images,
+    basePath: manifest.basePath,
+    slug: deps.slug,
+    app: deps.app,
+    buildId: manifest.buildId,
+    origin: deps.imageOrigin ?? unprovisionedImageOrigin,
+  });
+}
+
 // serve is the whole request path: buffer, route, dispatch. The body is read
 // here rather than at dispatch because middleware may consume it — routing gets
 // a fresh stream over the buffer, and the forward that follows reuses the same
@@ -339,6 +403,9 @@ export async function serve(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
+  const image = imageResponse(request, deps);
+  if (image) return image;
+
   const body = await bufferBody(request);
   if (body) {
     request = new Request(request.url, {

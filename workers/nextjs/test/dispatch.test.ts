@@ -41,6 +41,8 @@ function baseDeps(overrides: Partial<RouteDeps> = {}): RouteDeps {
       dispatch: {},
     },
     functionUrls: {},
+    slug: "p1",
+    app: "web",
     assetStore: noAssets(),
     ...overrides,
   };
