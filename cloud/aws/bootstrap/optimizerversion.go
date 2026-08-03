@@ -29,10 +29,10 @@ package bootstrap
 const (
 	// ImageOptimizerArtifactVersion is the released artifact's version, which is
 	// also the release tag it is published under.
-	ImageOptimizerArtifactVersion = ""
+	ImageOptimizerArtifactVersion = "0.0.2"
 
 	// ImageOptimizerArtifactSHA256 is the lowercase hex sha256 of that asset's
 	// bytes. The build-zip script produces a reproducible archive (fixed
 	// timestamps, sorted entries), so this digest is stable across machines.
-	ImageOptimizerArtifactSHA256 = ""
+	ImageOptimizerArtifactSHA256 = "cf9fbda3b06deee93898bf00e5f629b2889f456b562839bc16e7312c3277f383"
 )
