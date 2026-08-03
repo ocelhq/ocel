@@ -1,6 +1,6 @@
 {
   "name": "@ocel/cli-platform",
-  "version": "0.0.0",
+  "version": "0.0.1",
   "private": true,
   "type": "module",
   "description": "the node side of the ocel cli — bundled by generate.sh and embedded in the Go binary",
