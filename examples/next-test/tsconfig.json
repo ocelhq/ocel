@@ -19,6 +19,8 @@
       }
     ],
     "paths": {
+      "ocel/env/client": ["./.ocel/env-client.ts"],
+
       "@/*": ["./*"]
     }
   },

@@ -5,6 +5,6 @@ export default defineConfig({
   slug: "adapter2",
   provider: awsProvider(),
   domains: {
-    production: "nextest.ocel.dev"
+    preview: "*.ocel.site"
   }
 });
