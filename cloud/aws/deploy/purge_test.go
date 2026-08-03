@@ -61,6 +61,8 @@ func TestPurgeProjectAssets_SweepsTheArtifactPrefixAlongsideTheRest(t *testing.T
 	}
 
 	wantAWS := []string{
+		"asset-bucket|assets/shop/",
+		"asset-bucket|image-config/shop/",
 		"asset-bucket|prod/shop/",
 		"artifact-bucket|shop/",
 	}
@@ -87,6 +89,8 @@ func TestPurgePreviewAssets_SweepsTheArtifactPrefixAndEveryPointersISR(t *testin
 
 	wantAWS := []string{
 		"artifact-bucket|shop/",
+		"asset-bucket|assets/shop/",
+		"asset-bucket|image-config/shop/",
 		"asset-bucket|preview-pr-1/shop/",
 		"asset-bucket|preview-staging/shop/",
 	}
@@ -261,7 +265,8 @@ func TestDestroyProject_AFailedValueRemovalDoesNotStopTheStepsAfterIt(t *testing
 	if values.purged == nil {
 		t.Fatal("the teardown never reached the value store, so nothing was stepped over")
 	}
-	if want := []string{"asset-bucket|prod/shop/", "artifact-bucket|shop/"}; !reflect.DeepEqual(awsSide.swept, want) {
+	want := []string{"asset-bucket|assets/shop/", "asset-bucket|image-config/shop/", "asset-bucket|prod/shop/", "artifact-bucket|shop/"}
+	if !reflect.DeepEqual(awsSide.swept, want) {
 		t.Errorf("account-side sweeps = %v, want %v — the steps after a failed value removal must still run", awsSide.swept, want)
 	}
 	if cacheSide.swept == nil {

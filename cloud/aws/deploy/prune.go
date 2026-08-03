@@ -28,11 +28,12 @@ import (
 // surviving record still shares — Reclaim never needs to re-read the record
 // itself.
 //
-// The three storage prefixes are build-keyed, so each is empty whenever a
-// surviving Deployment still serves from it: there is nothing to reclaim, only
-// a stack to destroy. AssetPrefix and EdgePrefix carry no environment and so
-// are shared with every pointer's Deployments of the build; CachePrefix carries
-// the environment segment and so is shared only with the pruned pointer's own.
+// The storage prefixes are build-keyed, so each is empty whenever a surviving
+// Deployment still serves from it: there is nothing to reclaim, only a stack to
+// destroy. AssetPrefix, ImageConfigKey and EdgePrefix carry no environment and
+// so are shared with every pointer's Deployments of the build; CachePrefix
+// carries the environment segment and so is shared only with the pruned
+// pointer's own.
 type PruneTarget struct {
 	App      string
 	Identity DeploymentIdentity
@@ -43,6 +44,10 @@ type PruneTarget struct {
 	// AssetPrefix is the R2 static-assets prefix uploadStaticAssets wrote
 	// this build's output under (ADR 0002).
 	AssetPrefix string
+	// ImageConfigKey is the asset-bucket key uploadStaticAssets wrote this
+	// build's compiled image config at — a single object outside the assets
+	// prefix, so it is swept by its own full key rather than with the rest.
+	ImageConfigKey string
 	// CachePrefix is the ISR/prerender-config prefix uploadPrerenderAssets
 	// wrote this build's cache entries under, in whichever bucket(s) they
 	// landed in (entryTarget, at deploy time, may have been either).
@@ -119,6 +124,7 @@ func reclaimTargets(slug, env string, removedRecordKeys, survivingRecordKeys, su
 		build := appBuild{app, id.BuildID()}
 		if !sharedElsewhere[build] {
 			target.AssetPrefix = appAssetR2Prefix(slug, app, id.BuildID())
+			target.ImageConfigKey = imageConfigKey(slug, app, id.BuildID())
 			target.EdgePrefix = appEdgeR2Prefix(slug, app, id.BuildID())
 		}
 		if !servedHere[build] {
@@ -208,13 +214,14 @@ func asPrefixDeleter(up ArtifactUploader) PrefixDeleter {
 }
 
 // Reclaim destroys one Promotion's collected app-deploy stacks and deletes
-// the R2/S3 objects they published: the static-assets and edge-bundle prefixes
-// from the adopted cache store, and the ISR/prerender prefix from both the
-// asset bucket (fetch-cache entries always land there) and the adopted cache
-// store (route entries may have). Deleting a prefix nothing was ever written
-// to is a no-op, so trying both buckets unconditionally is safe. Performs the
-// real Pulumi destroy and S3/R2 calls; not exercised by unit tests, like
-// Destroy.
+// the R2/S3 objects they published: the edge-bundle prefix from the adopted
+// cache store, the static-assets prefix from both halves of the asset plane
+// (uploadStaticAssets publishes it to both), the image config from the asset
+// bucket alone, and the ISR/prerender prefix from both the asset bucket
+// (fetch-cache entries always land there) and the adopted cache store (route
+// entries may have). Deleting a prefix nothing was ever written to is a no-op,
+// so trying both buckets unconditionally is safe. Performs the real Pulumi
+// destroy and S3/R2 calls; not exercised by unit tests, like Destroy.
 func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, log func(string)) error {
 	for _, t := range targets {
 		if progress != nil {
@@ -231,6 +238,12 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, l
 			return err
 		}
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, t.EdgePrefix); err != nil {
+			return err
+		}
+		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, t.AssetPrefix); err != nil {
+			return err
+		}
+		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, t.ImageConfigKey); err != nil {
 			return err
 		}
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, t.CachePrefix); err != nil {

@@ -19,20 +19,22 @@ func TestReclaimTargets_DerivesStackAndPrefixesPerRecord(t *testing.T) {
 
 	want := []PruneTarget{
 		{
-			App:         "web",
-			Identity:    buildOnly("build-1"),
-			Stack:       AppDeployStackName("proj1", "web", buildOnly("build-1")),
-			AssetPrefix: appAssetR2Prefix("proj1", "web", "build-1"),
-			CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "build-1"),
-			EdgePrefix:  appEdgeR2Prefix("proj1", "web", "build-1"),
+			App:            "web",
+			Identity:       buildOnly("build-1"),
+			Stack:          AppDeployStackName("proj1", "web", buildOnly("build-1")),
+			AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
+			ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
+			CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
+			EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
 		},
 		{
-			App:         "api",
-			Identity:    buildOnly("build-2"),
-			Stack:       AppDeployStackName("proj1", "api", buildOnly("build-2")),
-			AssetPrefix: appAssetR2Prefix("proj1", "api", "build-2"),
-			CachePrefix: appAssetPrefixFor("prod", "proj1", "api", "build-2"),
-			EdgePrefix:  appEdgeR2Prefix("proj1", "api", "build-2"),
+			App:            "api",
+			Identity:       buildOnly("build-2"),
+			Stack:          AppDeployStackName("proj1", "api", buildOnly("build-2")),
+			AssetPrefix:    appAssetR2Prefix("proj1", "api", "build-2"),
+			ImageConfigKey: imageConfigKey("proj1", "api", "build-2"),
+			CachePrefix:    appAssetPrefixFor("prod", "proj1", "api", "build-2"),
+			EdgePrefix:     appEdgeR2Prefix("proj1", "api", "build-2"),
 		},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -72,12 +74,13 @@ func TestReclaimTargets_FingerprintedIdentityKeysTheStackNotThePrefixes(t *testi
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
 	want := PruneTarget{
-		App:         "web",
-		Identity:    id,
-		Stack:       AppDeployStackName("proj1", "web", id),
-		AssetPrefix: appAssetR2Prefix("proj1", "web", "build-1"),
-		CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "build-1"),
-		EdgePrefix:  appEdgeR2Prefix("proj1", "web", "build-1"),
+		App:            "web",
+		Identity:       id,
+		Stack:          AppDeployStackName("proj1", "web", id),
+		AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
+		ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
+		CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
+		EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
 	}
 	if !reflect.DeepEqual(got, []PruneTarget{want}) {
 		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)
@@ -125,12 +128,13 @@ func TestReclaimTargets_LastDeploymentOfABuildStillReclaimsItsStorage(t *testing
 		t.Fatalf("ReclaimTargets: %v", err)
 	}
 	want := []PruneTarget{{
-		App:         "web",
-		Identity:    buildOnly("build-1"),
-		Stack:       AppDeployStackName("proj1", "web", buildOnly("build-1")),
-		AssetPrefix: appAssetR2Prefix("proj1", "web", "build-1"),
-		CachePrefix: appAssetPrefixFor("prod", "proj1", "web", "build-1"),
-		EdgePrefix:  appEdgeR2Prefix("proj1", "web", "build-1"),
+		App:            "web",
+		Identity:       buildOnly("build-1"),
+		Stack:          AppDeployStackName("proj1", "web", buildOnly("build-1")),
+		AssetPrefix:    appAssetR2Prefix("proj1", "web", "build-1"),
+		ImageConfigKey: imageConfigKey("proj1", "web", "build-1"),
+		CachePrefix:    appAssetPrefixFor("prod", "proj1", "web", "build-1"),
+		EdgePrefix:     appEdgeR2Prefix("proj1", "web", "build-1"),
 	}}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("ReclaimTargets = %+v, want %+v", got, want)

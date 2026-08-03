@@ -224,12 +224,13 @@ func PlanProjectTeardown(ctx context.Context, cfg Config, slug string) (ProjectT
 	return classifyProjectStacks(slug, names), nil
 }
 
-// purgeProjectAssets deletes a project's whole R2/S3 footprint: its static
-// assets and edge bundles (in the adopted cache store), its ISR/prerender
-// entries (which land in both the asset bucket and the cache store), and its
-// function deployment artifacts, rooted at the project prefix so every app and
-// build under it goes at once. Deleting a prefix nothing was written to is a
-// no-op, mirroring Reclaim's per-build sweep at project scope.
+// purgeProjectAssets deletes a project's whole R2/S3 footprint: its edge
+// bundles (in the adopted cache store), its static assets and ISR/prerender
+// entries (which land in both the asset bucket and the cache store), its image
+// configs (asset bucket only), and its function deployment artifacts, rooted at
+// the project prefix so every app and build under it goes at once. Deleting a
+// prefix nothing was written to is a no-op, mirroring Reclaim's per-build sweep
+// at project scope.
 func purgeProjectAssets(ctx context.Context, cfg Config, slug string) error {
 	assets := projectAssetR2Prefix(slug)
 	isr := projectISRPrefix(cfg.Env, slug)
@@ -242,6 +243,8 @@ func purgeProjectAssets(ctx context.Context, cfg Config, slug string) error {
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, assets},
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, projectEdgeR2Prefix(slug)},
 		{asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, isr},
+		{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, assets},
+		{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, projectImageConfigPrefix(slug)},
 		{asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, isr},
 	} {
 		if err := deletePrefix(ctx, t.deleter, t.bucket, t.prefix); err != nil {
@@ -271,6 +274,14 @@ func purgeProjectArtifacts(ctx context.Context, cfg Config, slug string) error {
 // this one as a prefix.
 func projectAssetR2Prefix(slug string) string {
 	return path.Join("assets", slug) + "/"
+}
+
+// projectImageConfigPrefix is the image-config prefix root under which every
+// app and build of a project lives (imageConfigKey without the app/build tail),
+// trailing-slashed for the same reason projectAssetR2Prefix is. Asset bucket
+// only — the config is never mirrored to the cache store.
+func projectImageConfigPrefix(slug string) string {
+	return path.Join("image-config", slug) + "/"
 }
 
 // projectEdgeR2Prefix is the edge-bundle prefix root under which every app and

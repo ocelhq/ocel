@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -123,6 +124,7 @@ func TestArtifactKey(t *testing.T) {
 type fakeUploader struct {
 	exists  map[string]bool
 	headErr error
+	putErr  error
 
 	// Callers upload concurrently (uploadPrerenderAssets crawls under an
 	// errgroup), so what PutObject records is written from many goroutines at
@@ -146,6 +148,9 @@ func (f *fakeUploader) HeadObject(_ context.Context, in *s3.HeadObjectInput, _ .
 }
 
 func (f *fakeUploader) PutObject(_ context.Context, in *s3.PutObjectInput, _ ...func(*s3.Options)) (*s3.PutObjectOutput, error) {
+	if f.putErr != nil {
+		return nil, f.putErr
+	}
 	key := aws.ToString(in.Key)
 	// A conditional create is refused by an object already there, which is how
 	// R2 answers a redeploy's seed of a build whose snapshot is already live.
@@ -246,6 +251,24 @@ func TestUploadArtifact_HeadErrorSurfaces(t *testing.T) {
 	}
 	if len(f.puts) != 0 {
 		t.Errorf("PutObject called despite HeadObject error: %v", f.puts)
+	}
+}
+
+// TestUploadArtifact_FailuresNameTheBucket proves a failure says which store
+// refused it. The asset plane publishes one key to two buckets, so a message
+// carrying the key alone cannot tell an R2 failure from an S3 one — and the two
+// have entirely different remedies.
+func TestUploadArtifact_FailuresNameTheBucket(t *testing.T) {
+	denied := errors.New("AccessDenied")
+	for _, bucket := range []string{"r2-cache-store", "s3-asset-bucket"} {
+		head := uploadArtifact(context.Background(), &fakeUploader{headErr: denied}, bucket, "assets/proj/web/B1/logo.png", "", bodyFn(new(bool)))
+		if head == nil || !strings.Contains(head.Error(), bucket) {
+			t.Errorf("head failure = %v, want it to name %q", head, bucket)
+		}
+		put := putArtifact(context.Background(), &fakeUploader{putErr: denied}, bucket, "assets/proj/web/B1/logo.png", "", []byte("PNG"))
+		if put == nil || !strings.Contains(put.Error(), bucket) {
+			t.Errorf("put failure = %v, want it to name %q", put, bucket)
+		}
 	}
 }
 

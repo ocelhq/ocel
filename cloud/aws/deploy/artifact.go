@@ -258,7 +258,7 @@ func uploadArtifact(ctx context.Context, up ArtifactUploader, bucket, key, conte
 		return nil
 	}
 	if !isNotFound(err) {
-		return fmt.Errorf("head artifact %s: %w", key, err)
+		return fmt.Errorf("head artifact %s/%s: %w", bucket, key, err)
 	}
 	data, err := body()
 	if err != nil {
@@ -280,7 +280,7 @@ func putArtifact(ctx context.Context, up ArtifactUploader, bucket, key, contentT
 		in.ContentType = aws.String(contentType)
 	}
 	if _, err := up.PutObject(ctx, in); err != nil {
-		return fmt.Errorf("upload artifact %s: %w", key, err)
+		return fmt.Errorf("upload artifact %s/%s: %w", bucket, key, err)
 	}
 	return nil
 }

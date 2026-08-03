@@ -197,8 +197,8 @@ Requirements:
   The `.hostname` contract is asserted in PR 3 instead, where the consumer lives.
 - Write the compiled config as `image-config.json`, a sibling of `routing-manifest.json`
   in the adapter's output root. PR 2 uploads it to
-  `assets/<slug>/<app>/<buildID>/image-config.json`; the origin hashes those bytes and
-  compares against `configHash`.
+  `image-config/<slug>/<app>/<buildID>.json` in the S3 asset bucket; the origin hashes
+  those bytes and compares against `configHash`.
 - Absent keys carry meaning and must survive the JSON round trip: unset `localPatterns`
   and unset `qualities` mean "allow", whereas `localPatterns: []` means deny-all. Omit
   the keys rather than emitting `undefined` or `[]`.
@@ -213,8 +213,20 @@ Today `cloud/aws/deploy/assets.go` uploads static assets to R2 only, at
 `assets/<slug>/<app>/<buildID>/...`. S3 is used for function zips and fetch-cache.
 
 Change: static assets go to **both** R2 and the account S3 asset bucket, under **identical
-keys**. Also write the compiled image config to
-`assets/<slug>/<app>/<buildID>/image-config.json` in both.
+keys**.
+
+The compiled image config goes to the S3 asset bucket **only**, at
+`image-config/<slug>/<app>/<buildID>.json` — deliberately *not* under the `assets/`
+prefix. `assets/<slug>/<app>/<buildID>/` is the app's public web root: the worker serves
+any unmatched path from it (`key = ${assetPrefix}${url.pathname}`), so a config placed
+there is served to the internet with `max-age=31536000, immutable`, disclosing every
+allowed remote image hostname and the `dangerouslyAllowSVG` setting. It would also
+key-collide exactly with a project's own `public/image-config.json`, producing a race whose
+loser is either a silently replaced user asset or a config that fails the origin's hash
+check and 502s every image for the life of the build.
+
+There is no R2 copy of the config: the origin reads it from S3, and the worker takes the
+compiled patterns and `configHash` from the routing manifest.
 
 R2 remains the hot read tier; S3 becomes the source of truth for the asset plane and is
 what the optimizer reads (so the optimizer never needs R2 credentials).
@@ -327,7 +339,7 @@ The Worker holds **zero authority**. Edge sends
 `{slug, app, buildId, url, w, q, accept, configHash}`.
 
 The origin:
-1. Loads the image config from `assets/<slug>/<app>/<buildId>/image-config.json` in S3
+1. Loads the image config from `image-config/<slug>/<app>/<buildId>.json` in S3
    (same bucket and IAM grant it already needs for assets), memoized in-process by
    `configHash` across warm invocations.
 2. Asserts `sha256(config) === configHash` — no downgrade.
