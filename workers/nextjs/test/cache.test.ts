@@ -424,7 +424,7 @@ describe("serveCached", () => {
 
     clock.ms = 5_000; // 5s old: past revalidate=1, inside expiration=100
     const stale = await serveCached(req(), t, deps, origin, refresh);
-    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(stale.headers.get("x-ocel-cache")).toBe("STALE");
     await deps.flush();
     expect(refresh.calls).toBe(1);
   });
@@ -446,7 +446,7 @@ describe("serveCached", () => {
 
     clock.ms = 5_000; // 5s old: past the response's own 1s window.
     const stale = await serveCached(req(), t, deps, origin, refresh);
-    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(stale.headers.get("x-ocel-cache")).toBe("STALE");
     await deps.flush();
     expect(refresh.calls).toBe(1);
   });
@@ -485,7 +485,7 @@ describe("serveCached", () => {
 
     clock.ms = 5_000; // past revalidate=1, still inside the manifest's 100s.
     const stale = await serveCached(req(), t, deps, origin, refresh);
-    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(stale.headers.get("x-ocel-cache")).toBe("STALE");
     expect(origin.calls).toBe(1);
   });
 
@@ -512,7 +512,7 @@ describe("serveCached", () => {
 
     clock.ms = 5_000; // past revalidate=1, inside expiration=100
     const stale = await serveCached(req(), t, deps, stamped, stamped);
-    expect(stale.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(stale.headers.get("x-ocel-cache")).toBe("STALE");
     expect(stale.headers.get("x-nextjs-cache")).toBe("STALE");
     await deps.flush();
   });
@@ -559,7 +559,7 @@ describe("serveCached", () => {
 
     clock.ms = 1_000; // time-fresh (age 1s << revalidate 3600) but tag says stale
     const hit = await serveCached(req(), t, deps, origin, refresh, clockTags);
-    expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(hit.headers.get("x-ocel-cache")).toBe("STALE");
     await deps.flush();
     expect(refresh.calls).toBe(1);
   });
@@ -577,7 +577,7 @@ describe("serveCached", () => {
 
     clock.ms = 1_000;
     const hit = await serveCached(req(), t, deps, origin, refresh, clockUntrusted);
-    expect(hit.headers.get("x-ocel-cache")).toBe("HIT"); // served, not a miss
+    expect(hit.headers.get("x-ocel-cache")).toBe("STALE"); // served, not a miss
     await deps.flush();
     expect(refresh.calls).toBe(1);
   });

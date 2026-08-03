@@ -6,9 +6,18 @@
 //
 // The origin holds all the authority (it reloads the config from S3 and
 // re-validates against it); this tier exists to turn a bad request into a 400
-// without spending an invocation on it.
+// without spending an invocation on it, and a repeat request into a colo hit
+// without spending one either — which is why the cache key and the TTL
+// derivation live here too, next to the validation that names their inputs.
 
 import { mediaType } from "./accept";
+import {
+  deltaSeconds,
+  serveCachedImage,
+  withStatus,
+  NEXT_CACHE_STATUS,
+  type CacheDeps,
+} from "./cache";
 
 // The `images` section of the routing manifest: PR 1's compiled output plus the
 // hash of the artifact the optimizer will independently load and verify. Every
@@ -56,6 +65,12 @@ export interface ImageConfig {
 // slug and app are that identity's other two thirds: the origin loads the
 // config from image-config/<slug>/<app>/<buildId>.json, so no two of the three
 // may be dropped here and reconstructed there.
+//
+// accept is the raw header and mimeType is what this tier negotiated out of it.
+// Both are sent because the cache key commits to the negotiated type: were the
+// origin to negotiate its own from the raw header and land anywhere else, the
+// entry would be addressed as one format and hold another. mimeType is the
+// answer; accept remains for everything else a transform may want from it.
 export interface ImageOriginRequest {
   slug: string;
   app: string;
@@ -64,6 +79,7 @@ export interface ImageOriginRequest {
   w: number;
   q: number;
   accept: string;
+  mimeType: string;
   configHash: string;
 }
 
@@ -76,6 +92,16 @@ export interface ImageDeps {
   app: string;
   buildId: string;
   origin: ImageOrigin;
+  // The build's content hash per served asset path (PR 1). It is what makes an
+  // optimized image outlive the build it was first requested under: identical
+  // bytes keep their key across a redeploy, changed bytes cannot answer under
+  // the old one. Absent — an older manifest, or a path the build never hashed —
+  // falls back to a build-scoped identity, which is correct but flushes on
+  // every deploy.
+  assetHashes?: Record<string, string>;
+  // Absent outside a Worker request (and in routing tests): the image is served
+  // uncached rather than not at all.
+  cache?: CacheDeps;
 }
 
 const DUMMY_ORIGIN = "http://n";
@@ -277,10 +303,20 @@ export function validateImageRequest(
       quality,
       mimeType: getSupportedMimeType(config.formats, accept),
       isAbsolute,
-      isStatic: rawUrl.startsWith(`${basePath}/_next/static/media`),
+      isStatic: STATIC_IMPORT_PREFIXES.some((prefix) =>
+        rawUrl.startsWith(`${basePath}${prefix}`),
+      ),
     },
   };
 }
+
+// Where the build writes the images an `import logo from "./logo.png"` emits.
+// Their content hash is in the filename, so the bytes behind one of these paths
+// can never change and the response is immutable rather than revalidated.
+const STATIC_IMPORT_PREFIXES = [
+  "/_next/static/media",
+  "/_next/static/immutable/media",
+];
 
 function parseAbsolute(url: string): URL | undefined {
   try {
@@ -327,25 +363,172 @@ function errorResponse(status: number, message: string): Response {
 export async function serveImage(request: Request, url: URL, deps: ImageDeps): Promise<Response> {
   const accept = request.headers.get("accept") ?? "";
   const result = validateImageRequest(url, accept, deps.config, deps.basePath);
-  if (!result.ok) return errorResponse(result.status, result.message);
+  // A rejection is bare except for the cache status — no Vary, no Content-Type,
+  // no Cache-Control, because Next's own 400s carry none of those and the
+  // fixtures record it. x-ocel-cache is not Next's to match: it is the tier
+  // signal an operator reads, and a route that stamped it on a 502 but not on a
+  // 400 would be answering the same question two ways.
+  if (!result.ok) {
+    return withStatus(errorResponse(result.status, result.message), "BYPASS");
+  }
 
-  return deps.origin({
-    slug: deps.slug,
-    app: deps.app,
-    buildId: deps.buildId,
-    url: result.params.href,
-    w: result.params.width,
-    q: result.params.quality,
-    accept,
-    configHash: deps.config.configHash,
+  const { params } = result;
+  const origin = async () =>
+    servedImage(
+      await deps.origin({
+        slug: deps.slug,
+        app: deps.app,
+        buildId: deps.buildId,
+        url: params.href,
+        w: params.width,
+        q: params.quality,
+        accept,
+        mimeType: params.mimeType,
+        configHash: deps.config.configHash,
+      }),
+      deps.config,
+    );
+
+  return serveCachedImage(
+    request,
+    { key: await imageCacheKey(params, deps) },
+    deps.cache,
+    origin,
+    // Immutability is a property of the url this request used, not of the bytes
+    // behind it: a static import and its public/ twin are the same file, hash to
+    // the same key and share one entry, and only the hashed url may promise a
+    // browser it will never change.
+    params.isStatic ? IMMUTABLE : undefined,
+  );
+}
+
+// The optimizer's own header, marking a response it could not transform and
+// passed through unmodified. It is the one signal that separates a served
+// original from an optimized image, and the TTL rule turns on it.
+export const IMAGE_PASSTHROUGH = "x-ocel-image-passthrough";
+
+const IMMUTABLE = "public, max-age=315360000, immutable";
+
+// The optimizer relays the upstream image server's Cache-Control as its own —
+// the worker never talks to that server, so this is the only place that
+// directive exists at the edge. It is read for the TTL and then replaced: what
+// some third-party CDN told our origin is not what this deployment tells a
+// browser.
+//
+// A passthrough is the one case where it is not read at all. The bytes are the
+// ones the transform failed on, and Next holds those for the configured minimum
+// and no longer, whatever the upstream would have allowed.
+//
+// What comes out is the entry's window and the browser's default alike. The one
+// request-scoped claim on top of it — immutable, for a content-hashed url — is
+// serveCachedImage's, because it is not true of the bytes and so cannot be
+// stored with them.
+function servedImage(response: Response, config: ImageConfig): Response {
+  if (response.status !== 200) return response;
+
+  const passthrough = response.headers.has(IMAGE_PASSTHROUGH);
+  const upstream = passthrough
+    ? 0
+    : (deltaSeconds(response.headers.get("cache-control"), "s-maxage", "max-age") ?? 0);
+  const ttl = Math.max(config.minimumCacheTTL, upstream);
+
+  const headers = new Headers(response.headers);
+  // Read above and dropped here, before the entry is written: that the transform
+  // failed is the deployment's business, not the browser's.
+  headers.delete(IMAGE_PASSTHROUGH);
+  headers.set("vary", "accept");
+  headers.set("cache-control", `public, max-age=${ttl}, must-revalidate`);
+  // The freshness of the response as it leaves the optimizer. Every tier above
+  // restates it from the entry it answers with; nothing else ever writes MISS.
+  headers.set(NEXT_CACHE_STATUS, "MISS");
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
   });
+}
+
+// Bumping this invalidates every optimized image in every tier at once, without
+// touching a stored byte: nothing can be addressed under the old key again.
+const KEY_VERSION = 1;
+
+// The identity of one optimized variant. configHash is not optional decoration:
+// without it, tightening remotePatterns would leave every variant admitted
+// under the looser config still addressable. The negotiated mimeType stands in
+// for the whole Accept header — the output bytes depend on Accept only through
+// that negotiation, and the formats it negotiates against are themselves
+// covered by configHash — so a hundred browsers' Accept strings collapse onto
+// the single entry they all describe.
+async function imageCacheKey(params: ImageParams, deps: ImageDeps): Promise<string> {
+  const digest = await sha256(
+    JSON.stringify([
+      KEY_VERSION,
+      deps.slug,
+      sourceIdentity(params, deps),
+      params.width,
+      params.quality,
+      params.mimeType,
+      deps.config.configHash,
+    ]),
+  );
+  return `https://image.ocel/${digest}`;
+}
+
+// What the optimized bytes were made from. A remote source is named by its
+// normalized absolute url and nothing else — the worker cannot know its
+// content. A local one is named by the content hash the build took of it, so
+// the variant survives a redeploy that did not touch the file and is
+// unreachable by one that did.
+function sourceIdentity(params: ImageParams, deps: ImageDeps): string {
+  if (params.isAbsolute) return params.href;
+  const path = assetPath(params.href, deps.basePath);
+  const hash = path === undefined ? undefined : deps.assetHashes?.[path];
+  return hash ?? `${deps.buildId}${normalized(params.href)}`;
+}
+
+// The href as the build's asset hash map keys it: the pathname alone (a query
+// string names no file), decoded, with the basePath the browser saw stripped
+// back off — the map is written from the build's output paths, which know
+// nothing of where the app is mounted.
+//
+// Under a basePath, a path that does not carry it names no file this deployment
+// serves, so it gets no hash rather than the hash of the file it resembles.
+function assetPath(href: string, basePath: string): string | undefined {
+  const parsed = parseUrl(href);
+  if (!parsed) return undefined;
+  const pathname = decode(parsed.pathname);
+  if (pathname === undefined) return undefined;
+  if (basePath && !pathname.startsWith(`${basePath}/`)) return undefined;
+  return pathname.slice(basePath.length);
+}
+
+// The href as the fallback identity names it, so that the two branches agree on
+// what one source is. Next's default localPatterns admit /x/../a.png alongside
+// /a.png; new URL resolves both to the same pathname, which is what the hash-map
+// branch has always keyed on. The query survives — a local route may serve
+// different bytes per query, and unlike a path it names no file to hash.
+function normalized(href: string): string {
+  const parsed = parseUrl(href);
+  const pathname = parsed && decode(parsed.pathname);
+  return pathname ? `${pathname}${parsed.search}` : href;
+}
+
+async function sha256(value: string): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(value),
+  );
+  return [...new Uint8Array(digest)]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 // The seam the optimizer lands behind. A validated request with nowhere to go
 // is a 502 and is never cached: the request was well-formed, and it is the
-// substrate — not the client — that could not answer it. PR 4 wraps this in the
-// colo cache and PR 5 replaces the body with the signed Function URL call;
-// ImageOrigin is what every caller is written against, so neither moves them.
+// substrate — not the client — that could not answer it. PR 5 replaces the body
+// with the signed Function URL call; ImageOrigin is what every caller and the
+// colo tier around it are written against, so it moves nobody.
 export const unprovisionedImageOrigin: ImageOrigin = async () =>
   new Response("No image optimizer is provisioned for this deployment.", {
     status: 502,

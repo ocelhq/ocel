@@ -70,10 +70,17 @@ sha256([
   sourceIdentity,       // local: content hash;  remote: absolute normalized URL
   width,
   quality,
-  accept,               // normalized
+  mimeType,             // the NEGOTIATED type — '' | image/avif | image/webp
   configHash,           // sha256 of the compiled image config
 ])
 ```
+
+The `Accept` header enters the key only through `getSupportedMimeType(formats, accept)`,
+never raw. Output bytes depend on `Accept` solely through that negotiation, and `formats`
+is already covered by `configHash`, so keying on the resolved type is lossless — and it
+collapses the combinatorial spread of real browser `Accept` strings that all resolve to
+the same format onto a single entry. Keying on the raw header would fragment the cache
+into many entries holding identical bytes.
 
 `configHash` is mandatory: without it, tightening `remotePatterns` could be bypassed by
 entries admitted under the old config.
@@ -88,6 +95,12 @@ fall back to `buildId + path`, which is correct but deployment-scoped.
 `ttl = max(minimumCacheTTL, upstreamMaxAge)` where `upstreamMaxAge` is parsed from the
 upstream `Cache-Control`, reading `s-maxage` first and falling back to `max-age`.
 `Expires` is never consulted (Next does not consult it either).
+
+The worker never talks to the upstream image server, so the origin contract is: **the
+optimizer's response carries the upstream's `Cache-Control` as its own.** That mirrors
+Next's internals, where the optimizer and the cache are the same process. The worker
+parses it to derive `ttl`, then replaces it with the browser-facing value below — the
+upstream directive is never forwarded to the client.
 
 On optimization failure fallback, `ttl = minimumCacheTTL` — upstream Cache-Control is
 ignored on that path, matching Next.
@@ -111,13 +124,31 @@ X-Nextjs-Cache: MISS | STALE | HIT
 x-ocel-cache: HIT | MISS | STALE | BYPASS
 ```
 
-Error responses carry none of these. As the fixtures record, every 400 and every 500 Next
-returns from this route is a bare body with no `Vary`, no `Content-Type` and no
-`Cache-Control`; only a served image carries the header block above. (A passthrough body
+Error responses carry none of these **except `x-ocel-cache`**. As the fixtures record,
+every 400 and every 500 Next returns from this route is a bare body with no `Vary`, no
+`Content-Type` and no `Cache-Control`; only a served image carries the rest of the header
+block above.
+
+`x-ocel-cache` is the one exception because it is Ocel's own diagnostic, not Next's: there
+is no conformance fixture for it to match, and an operator debugging a 400 would otherwise
+get no tier signal at all. It is stamped on **every** response this route returns —
+validation errors included — which also removes the indefensible asymmetry of a 502
+carrying it while a 400 does not. (A passthrough body
 Next's own server compressed also picks up `Vary: Accept, Accept-Encoding` — an artifact of
 that server's compression middleware, not of the optimizer.)
 
-`CacheStatus` in `workers/nextjs/src/cache.ts` gains `STALE`.
+`CacheStatus` in `workers/nextjs/src/cache.ts` gains `STALE`, and it is emitted by **both**
+route classes, not just images. Until now a stale colo serve on a prerendered route
+reported `HIT`, on the reasoning that the header names the tier that answered and
+staleness only drives the background refresh. That made one header mean two different
+things once images needed to report freshness. A stale **colo** serve is now `STALE` on a
+prerendered route exactly as on an image.
+
+The R2 tier is the one place freshness stays out of this header: a stale R2 serve still
+reports a bare `PRERENDER`, with its freshness in `X-Nextjs-Cache`. `PRERENDER` names the
+tier that answered, and there is no `STALE_PRERENDER` worth minting for it.
+This is a deliberate behavior change to the prerender path, and its existing tests and the
+comments asserting HIT-when-stale change with it.
 
 ## Format negotiation
 
@@ -325,6 +356,27 @@ Branch: `image-opt-colo-cache`
 
 Wire the image route through the existing colo cache machinery in
 `workers/nextjs/src/cache.ts` (`serveCached`, `storeInColo`, `refreshOnce`, `evaluate`).
+
+`serveCached` as written cannot carry an image response. Its storability gate
+(`storagePolicy`) demands `s-maxage`, which an image response — `public, max-age=<ttl>,
+must-revalidate` — does not have, so every image would be refused storage. And
+`fromStorage` overwrites `cache-control` with `public, max-age=0, must-revalidate`, which
+would destroy the very TTL/`immutable` header this spec requires reach the browser.
+
+So the shared read path is **extracted**, not branched: an internal
+lookup → `evaluate` → serve-or-refresh core takes a policy, and `serveCached` and a new
+`serveCachedImage` become thin callers that each own their storability gate and their
+served-response headers.
+
+```
+colo(request, target, deps, policy, origin)   // shared core
+serveCached(...)      -> colo(..., prerenderPolicy, ...)
+serveCachedImage(...) -> colo(..., imagePolicy, ...)
+
+policy = { storable(response), forServe(response, status, stale) }
+```
+
+Neither route class carries the other's rules, and the sequence exists once.
 
 - Cache key as specified above, including `configHash`.
 - TTL derivation as specified above.
