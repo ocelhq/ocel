@@ -608,11 +608,11 @@ export function functionUrlImageOrigin(
   };
 }
 
-// The statuses the optimizer answers with for itself, and the only ones whose
-// body may reach a client. 400 is its re-validation, 500 its transform failure,
-// 502 its upstream's; all three are Next's own messages, pinned by the
+// The error statuses the optimizer answers with for itself, and the only ones
+// whose body may reach a client. 400 is its re-validation, 500 its transform
+// failure, 502 its upstream's; all three are Next's own messages, pinned by the
 // conformance fixtures.
-const OPTIMIZER_STATUSES = new Set([200, 400, 500, 502]);
+const OPTIMIZER_STATUSES = new Set([400, 500, 502]);
 
 // Everything else on this hop was written by AWS, not by the optimizer, and this
 // route is unauthenticated. A Function URL that refuses the call answers 403 with
@@ -623,11 +623,34 @@ const OPTIMIZER_STATUSES = new Set([200, 400, 500, 502]);
 // 403 every route. So an unrecognised status becomes the substrate's own 502 and
 // the body is discarded unread. 502 is also the status the colo tier refuses to
 // store, so nothing AWS wrote is cached either.
+//
+// A 200, though, is not enough on its own. The Function URL is RESPONSE_STREAM,
+// which commits its status line before the handler is entered, so a function
+// that never initialises — a bundle that throws while its module graph loads, a
+// missing native binary — still answers 200, with Lambda's own JSON error
+// payload for a body: errorType, errorMessage, and a stack trace naming
+// /var/task and every bundled dependency's version. That is what a released
+// artifact did, and what a browser was served as an image.
+//
+// The optimizer types every 200 it writes, so the type is what separates its
+// answer from the runtime's. An untyped or non-image 200 is the substrate
+// failing, which is the 502 below: the body is discarded unread, and 502 is the
+// status neither tier will store, so a crashing optimizer poisons no cache.
 function relayed(response: Response): Response {
-  if (OPTIMIZER_STATUSES.has(response.status)) return response;
+  const own =
+    response.status === 200
+      ? isImage(response.headers.get("content-type"))
+      : OPTIMIZER_STATUSES.has(response.status);
+  if (own) return response;
   response.body?.cancel().catch(() => {});
   return new Response("The image optimizer could not be reached.", {
     status: 502,
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
+}
+
+// The type as it was written. Casing and parameters belong to whoever produced
+// the bytes; this only asks which family they claimed.
+function isImage(contentType: string | null): boolean {
+  return contentType?.trimStart().toLowerCase().startsWith("image/") ?? false;
 }

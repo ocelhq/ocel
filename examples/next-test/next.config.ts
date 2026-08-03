@@ -16,6 +16,14 @@ const nextConfig: NextConfig = fixtures
         dangerouslyAllowSVG: fixtures === "svg",
       },
     }
-  : {};
+  : {
+      // What every ordinary build and deploy gets. Next allows no remote host by
+      // default, so the deployed app's own remote image needs one entry — without
+      // it Next, and the edge that reimplements Next, both answer /_next/image
+      // with 400 "url" parameter is not allowed.
+      images: {
+        remotePatterns: [{ protocol: "https", hostname: "picsum.photos" }],
+      },
+    };
 
 export default nextConfig;
