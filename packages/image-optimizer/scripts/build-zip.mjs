@@ -24,6 +24,8 @@ import { mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:f
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { esbuildArgs } from "./bundle.mjs";
+
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const manifest = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const out = join(root, "dist", "zip");
@@ -34,22 +36,11 @@ rmSync(stage, { recursive: true, force: true });
 mkdirSync(stage, { recursive: true });
 mkdirSync(out, { recursive: true });
 
-// sharp is external: a native addon cannot be bundled, and it is the only
-// dependency that has to arrive as a real node_modules tree. Everything else —
-// the AWS SDK, undici, ipaddr.js — is pure JS and folds into the one file.
+// The flags live in bundle.mjs, which test/bundle.test.mts builds from as well,
+// so what is checked and what is shipped cannot drift apart.
 execFileSync(
   "pnpm",
-  [
-    "exec",
-    "esbuild",
-    join(root, "src", "index.mts"),
-    "--bundle",
-    "--platform=node",
-    "--target=node22",
-    "--format=esm",
-    "--external:sharp",
-    `--outfile=${join(out, "index.mjs")}`,
-  ],
+  ["exec", "esbuild", ...esbuildArgs(join(root, "src", "index.mts"), join(out, "index.mjs"))],
   { cwd: root, stdio: "inherit" },
 );
 

@@ -75,9 +75,19 @@ function serveThrough(
   });
 }
 
+// What the optimizer answers a valid request with: bytes and the type it
+// negotiated. The type is not decoration — it is what tells this hop that the
+// optimizer wrote the 200 and not the Lambda runtime underneath it.
+function imageResponse() {
+  return new Response("bytes", {
+    status: 200,
+    headers: { "content-type": "image/webp" },
+  });
+}
+
 describe("functionUrlImageOrigin", () => {
   it("POSTs the validated request as JSON through the signing fetch", async () => {
-    const recorded = recordingFetch(() => new Response("bytes", { status: 200 }));
+    const recorded = recordingFetch(() => imageResponse());
     const origin = functionUrlImageOrigin(OPTIMIZER_URL, recorded.fetch)!;
 
     const response = await origin(PAYLOAD);
@@ -97,7 +107,7 @@ describe("functionUrlImageOrigin", () => {
   });
 
   it("sends no client header to the optimizer", async () => {
-    const recorded = recordingFetch(() => new Response("bytes"));
+    const recorded = recordingFetch(() => imageResponse());
     const origin = functionUrlImageOrigin(OPTIMIZER_URL, recorded.fetch)!;
 
     await origin(PAYLOAD);
@@ -162,6 +172,58 @@ describe("functionUrlImageOrigin", () => {
       const response = await origin(PAYLOAD);
       expect(response.status).toBe(502);
       expect(await response.text()).not.toContain("aws internals");
+    }
+  });
+
+  it("discards a 200 that is not an image", async () => {
+    // The Function URL is RESPONSE_STREAM, which commits its status line before
+    // the handler runs. A function that fails to initialise therefore answers
+    // 200 — with Lambda's own JSON error payload, carrying errorType,
+    // errorMessage and a stack trace naming /var/task and every bundled
+    // dependency's version. A released artifact did exactly this, and status
+    // alone cannot tell it from an image.
+    const crash = JSON.stringify({
+      errorType: "Error",
+      errorMessage: 'Dynamic require of "node:https" is not supported',
+      trace: ["    at file:///var/task/index.mjs:11:9"],
+    });
+    const recorded = recordingFetch(
+      () =>
+        new Response(crash, {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+    const origin = functionUrlImageOrigin(OPTIMIZER_URL, recorded.fetch)!;
+
+    const response = await origin(PAYLOAD);
+
+    expect(response.status).toBe(502);
+    const body = await response.text();
+    expect(body).not.toContain("/var/task");
+    expect(body).not.toContain("errorMessage");
+  });
+
+  it("relays every image type the optimizer can negotiate", async () => {
+    for (const type of [
+      "image/avif",
+      "image/webp",
+      "image/png",
+      "image/jpeg",
+      "image/gif",
+      "image/svg+xml",
+      // Casing and parameters are the origin's to write, not this hop's to
+      // normalise.
+      "IMAGE/WEBP",
+      "image/webp; charset=binary",
+    ]) {
+      const recorded = recordingFetch(
+        () => new Response("bytes", { status: 200, headers: { "content-type": type } }),
+      );
+      const origin = functionUrlImageOrigin(OPTIMIZER_URL, recorded.fetch)!;
+      const response = await origin(PAYLOAD);
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe("bytes");
     }
   });
 
