@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { dispatchResult, serve, type RouteDeps } from "../src/index";
 import type { AssetBucket } from "../src/assets";
+import type { CacheDeps } from "../src/cache";
 import {
   getSupportedMimeType,
   isImageRequest,
@@ -276,7 +277,9 @@ describe("serveImage", () => {
     expect(await response.text()).toBe("optimized");
     // The whole payload, asserted exactly: PR 5's origin loads
     // image-config/<slug>/<app>/<buildId>.json and re-validates against it, so
-    // a field missing here is a field it cannot reconstruct.
+    // a field missing here is a field it cannot reconstruct. mimeType is the
+    // negotiation this tier already performed and keyed the entry on — the
+    // origin is told the answer rather than asked to arrive at it again.
     expect(seen).toEqual([
       {
         slug: "p1",
@@ -286,6 +289,7 @@ describe("serveImage", () => {
         w: 640,
         q: 75,
         accept: "image/webp",
+        mimeType: "image/webp",
         configHash: BASE_CONFIG.configHash,
       },
     ]);
@@ -459,6 +463,50 @@ describe("the /_next/image route", () => {
       w: 640,
       q: 75,
     });
+  });
+
+  // The colo tier's own behavior is test/image-cache.test.ts's; this is the
+  // wiring — that the route reaches it at all, under the manifest's build id
+  // and asset hashes rather than something reconstructed at the seam.
+  it("serves a repeat request from the colo cache, across a redeploy", async () => {
+    const clock = { ms: 0 };
+    const pending: Promise<unknown>[] = [];
+    const cache: CacheDeps = {
+      cache: caches.default,
+      now: () => clock.ms,
+      waitUntil: (promise) => {
+        pending.push(promise);
+      },
+    };
+    let calls = 0;
+    const deps = imageDeps({
+      cache,
+      imageOrigin: async () => {
+        calls++;
+        return new Response("optimized", {
+          status: 200,
+          headers: { "cache-control": "public, max-age=60" },
+        });
+      },
+    });
+    deps.manifest.assetHashes = { "/a.png": "f".repeat(64) };
+    const image = () =>
+      serve(
+        imageRequest("https://app.example/_next/image?url=%2Fa.png&w=640&q=75"),
+        deps,
+      );
+
+    expect((await image()).headers.get("x-ocel-cache")).toBe("MISS");
+    await Promise.all(pending.splice(0));
+
+    clock.ms = 1_000;
+    expect((await image()).headers.get("x-ocel-cache")).toBe("HIT");
+
+    deps.manifest.buildId = "b2";
+    const redeployed = await image();
+    expect(redeployed.headers.get("x-ocel-cache")).toBe("HIT");
+    expect(await redeployed.text()).toBe("optimized");
+    expect(calls).toBe(1);
   });
 
   it("answers a validated request with 502 when no origin is provisioned", async () => {

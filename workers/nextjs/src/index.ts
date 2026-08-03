@@ -200,6 +200,11 @@ interface Manifest {
   // requests /_next/image, so the route is not registered at all and the path
   // falls through to the asset store exactly as any other unmatched path.
   images?: ImageConfig;
+  // Every static file the build emitted, by served path, with the sha256 of its
+  // bytes. The image cache keys a local source by its hash, so an optimized
+  // variant outlives the build it was produced under. Absent on a manifest
+  // built before the adapter emitted it.
+  assetHashes?: Record<string, string>;
 }
 
 // What resolveRoutes never hands back: the middleware's own Response, the
@@ -392,6 +397,8 @@ function imageResponse(
     app: deps.app,
     buildId: manifest.buildId,
     origin: deps.imageOrigin ?? unprovisionedImageOrigin,
+    assetHashes: manifest.assetHashes,
+    cache: deps.cache,
   });
 }
 
