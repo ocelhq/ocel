@@ -7,6 +7,7 @@ import {
   stat,
   utimes,
 } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +16,7 @@ import {
   PHASE_PRODUCTION_BUILD,
 } from "next/constants.js";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { defaultImages } from "./fixtures.mts";
 
 // Absent OCEL_OUTPUT_DIR, onBuildComplete writes everything under
 // process.cwd(), mirroring how the real builder invokes it inside `next build`
@@ -85,7 +87,7 @@ async function synthProject() {
     projectDir,
     repoRoot: projectDir,
     distDir: join(projectDir, ".next"),
-    config: { basePath: "" },
+    config: { basePath: "", images: defaultImages },
     nextVersion: "16.2.10",
     buildId: "test-build",
   };
@@ -203,7 +205,7 @@ async function synthDedupProject() {
     projectDir,
     repoRoot: projectDir,
     distDir: join(projectDir, ".next"),
-    config: { basePath: "" },
+    config: { basePath: "", images: defaultImages },
     nextVersion: "16.2.10",
     buildId: "test-build",
   };
@@ -336,7 +338,7 @@ async function synthPrerenderProject() {
     projectDir,
     repoRoot: projectDir,
     distDir: join(projectDir, ".next"),
-    config: { basePath: "" },
+    config: { basePath: "", images: defaultImages },
     nextVersion: "16.2.10",
     buildId: "test-build",
   };
@@ -812,6 +814,122 @@ test("enumerates public/ files as static in the routing manifest", async () => {
   expect(manifest.dispatch["/icons/logo.png"]).toEqual({ kind: "static" });
 });
 
+// Adds one built static file to a synthetic project, standing in for the
+// _next/static output a real build emits.
+async function withStaticFile(
+  projectDir: string,
+  args: {
+    outputs: {
+      staticFiles: { pathname: string; id: string; filePath: string }[];
+    };
+  },
+  pathname: string,
+  contents: string,
+) {
+  const filePath = join(projectDir, ".next", pathname);
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, contents);
+  args.outputs.staticFiles.push({ pathname, id: pathname, filePath });
+}
+
+test("carries the compiled image config and its hash into the manifest", async () => {
+  const { projectDir, args } = await synthProject();
+  args.config.images = {
+    ...defaultImages,
+    remotePatterns: [{ protocol: "https", hostname: "*.example.com" }],
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const { images } = await readManifest(projectDir);
+  expect(images.path).toBe("/_next/image");
+  expect(images.minimumCacheTTL).toBe(14400);
+  expect(images.remotePatterns[0].protocol).toBe("https");
+  expect(new RegExp(images.remotePatterns[0].hostname).test("a.example.com")).toBe(
+    true,
+  );
+  expect(images.configHash).toMatch(/^[0-9a-f]{64}$/);
+});
+
+test("writes an image config artifact the manifest's configHash covers", async () => {
+  const { projectDir, args } = await synthProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const bytes = await readFile(
+    join(projectDir, ".ocel/output/image-config.json"),
+  );
+  const { images } = await readManifest(projectDir);
+  expect(createHash("sha256").update(bytes).digest("hex")).toBe(
+    images.configHash,
+  );
+  expect(JSON.parse(bytes.toString()).configHash).toBeUndefined();
+});
+
+// public/ is where <Image src="/logo.png" /> resolves, so it is the source that
+// most needs a content hash — a path missing from the map falls back to a
+// deploy-scoped cache key.
+test("hashes both public/ and built static files into the manifest", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/_next/static/media/logo.png", "PNG");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const { assetHashes } = await readManifest(projectDir);
+  expect(assetHashes["/_next/static/media/logo.png"]).toBe(
+    createHash("sha256").update("PNG").digest("hex"),
+  );
+  expect(assetHashes["/icons/logo.png"]).toBe(
+    createHash("sha256").update("x").digest("hex"),
+  );
+  expect(assetHashes["/next.svg"]).toBe(
+    createHash("sha256").update("<svg/>").digest("hex"),
+  );
+  expect(
+    await readFile(
+      join(projectDir, ".ocel/output/static/_next/static/media/logo.png"),
+      "utf8",
+    ),
+  ).toBe("PNG");
+});
+
+// A served path must hit the map, and the error pages are served as the .html
+// files they are written out as.
+test("keys the error pages by the path they are served at", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/404", "gone");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const { assetHashes } = await readManifest(projectDir);
+  expect(assetHashes["/404.html"]).toBe(
+    createHash("sha256").update("gone").digest("hex"),
+  );
+  expect(assetHashes["/404"]).toBeUndefined();
+});
+
+test("omits the image config when the app opted out of optimization", async () => {
+  const { projectDir, args } = await synthProject();
+  args.config.images = { ...defaultImages, unoptimized: true };
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect((await readManifest(projectDir)).images).toBeUndefined();
+  expect(await exists(join(projectDir, ".ocel/output/image-config.json"))).toBe(
+    false,
+  );
+  expect(warn).toHaveBeenCalledWith(
+    expect.stringMatching(/images\.unoptimized is true/),
+  );
+  warn.mockRestore();
+});
+
 test("writes no Vercel-style prerender config or fallback files", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
@@ -1214,7 +1332,7 @@ test("keeps content-type on an APP_ROUTE cache entry", async () => {
     projectDir,
     repoRoot: projectDir,
     distDir: join(projectDir, ".next"),
-    config: { basePath: "" },
+    config: { basePath: "", images: defaultImages },
     nextVersion: "16.2.10",
     buildId: "test-build",
   };

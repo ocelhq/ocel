@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 
 import adapter from "../src/next-adapter.mts";
+import { defaultImages } from "./fixtures.mts";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -166,7 +167,7 @@ async function synthEdgeProject() {
     projectDir,
     repoRoot: projectDir,
     distDir: join(projectDir, ".next"),
-    config: { basePath: "" },
+    config: { basePath: "", images: defaultImages },
     nextVersion: "16.2.10",
     buildId: "test-build",
   };
