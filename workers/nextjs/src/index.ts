@@ -24,6 +24,7 @@ import {
   type ImageConfig,
   type ImageOrigin,
 } from "./image";
+import type { ImageStore } from "./image-store";
 import { composePpr, resumeRequest } from "./ppr";
 import {
   intercept,
@@ -274,6 +275,12 @@ export interface RouteDeps {
   // 502, in production as much as in tests.
   imageOrigin?: ImageOrigin;
 
+  // The cache store as the durable image tier reads and writes it. Present
+  // wherever the store is bound at all; unlike the ISR tier it needs no prefix
+  // from the Deployment, because an optimized image is keyed by its content and
+  // outlives every build.
+  imageStore?: ImageStore;
+
   // Present when the deploy bound a cache store and injected its prefix:
   // prerender routes then read the authoritative ISR cache directly from the
   // store before falling open to the Lambda origin. Absent leaves the Lambda
@@ -407,6 +414,7 @@ function imageResponse(
     origin: deps.imageOrigin ?? unprovisionedImageOrigin,
     assetHashes: manifest.assetHashes,
     cache: deps.cache,
+    imageStore: deps.imageStore,
   });
 }
 
@@ -1152,6 +1160,7 @@ export default {
           env.OCEL_IMAGE_OPTIMIZER_URL,
           originFetch ?? fetch,
         ),
+        imageStore: store,
         assetStore: {
           store,
           cache: caches.default,

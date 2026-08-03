@@ -12,12 +12,19 @@
 
 import { mediaType } from "./accept";
 import {
+  answerableImageRequest,
   deltaSeconds,
   serveCachedImage,
   withStatus,
   NEXT_CACHE_STATUS,
   type CacheDeps,
 } from "./cache";
+import {
+  durableImageOrigin,
+  durableImageRefresh,
+  imageObjectKey,
+  type ImageStore,
+} from "./image-store";
 
 // The `images` section of the routing manifest: PR 1's compiled output plus the
 // hash of the artifact the optimizer will independently load and verify. Every
@@ -102,6 +109,11 @@ export interface ImageDeps {
   // Absent outside a Worker request (and in routing tests): the image is served
   // uncached rather than not at all.
   cache?: CacheDeps;
+  // The durable tier under the colo cache (see image-store.ts), engaged only
+  // alongside `cache` — the write it does is fire-and-forget and needs that
+  // waitUntil. Absent on a substrate that bound no cache store, which leaves
+  // the read path exactly the colo cache and the optimizer.
+  imageStore?: ImageStore;
 }
 
 const DUMMY_ORIGIN = "http://n";
@@ -389,11 +401,31 @@ export async function serveImage(request: Request, url: URL, deps: ImageDeps): P
       deps.config,
     );
 
+  const { digest, key } = await imageCacheKey(params, deps);
+
+  // The durable tier engages only where the colo tier above it does: it needs
+  // that tier's waitUntil, and a method the colo tier may not answer from is a
+  // method this one may not read or write for either.
+  let readThrough = origin;
+  let refresh = origin;
+  if (deps.imageStore && deps.cache && answerableImageRequest(request)) {
+    const objectKey = imageObjectKey(deps.slug, digest);
+    readThrough = durableImageOrigin(deps.imageStore, deps.cache, objectKey, origin);
+    // A local source's key is a content hash of the file, so the stored bytes
+    // are the only bytes it can ever name; a remote source's key is a url, whose
+    // content the worker cannot know — so only that one has anything to re-derive
+    // when the colo entry goes stale.
+    refresh = params.isAbsolute
+      ? durableImageRefresh(deps.imageStore, deps.cache, objectKey, origin)
+      : readThrough;
+  }
+
   return serveCachedImage(
     request,
-    { key: await imageCacheKey(params, deps) },
+    { key },
     deps.cache,
-    origin,
+    readThrough,
+    refresh,
     // Immutability is a property of the url this request used, not of the bytes
     // behind it: a static import and its public/ twin are the same file, hash to
     // the same key and share one entry, and only the hashed url may promise a
@@ -460,7 +492,13 @@ const KEY_VERSION = 1;
 // that negotiation, and the formats it negotiates against are themselves
 // covered by configHash — so a hundred browsers' Accept strings collapse onto
 // the single entry they all describe.
-async function imageCacheKey(params: ImageParams, deps: ImageDeps): Promise<string> {
+//
+// Both forms of the one identity: the digest itself, which is how the durable
+// tier names its object, and the synthetic url the colo cache is keyed by.
+async function imageCacheKey(
+  params: ImageParams,
+  deps: ImageDeps,
+): Promise<{ digest: string; key: string }> {
   const digest = await sha256(
     JSON.stringify([
       KEY_VERSION,
@@ -472,7 +510,7 @@ async function imageCacheKey(params: ImageParams, deps: ImageDeps): Promise<stri
       deps.config.configHash,
     ]),
   );
-  return `https://image.ocel/${digest}`;
+  return { digest, key: `https://image.ocel/${digest}` };
 }
 
 // What the optimized bytes were made from. A remote source is named by its

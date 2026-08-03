@@ -266,6 +266,15 @@ const prerenderPolicy: ColoPolicy = {
   },
 };
 
+// An image entry carries the freshness window as a plain max-age, so there is no
+// separate storability signal to read: a max-age of zero is the whole of what
+// "do not keep this" can look like here. Exported because the durable tier gates
+// its own write on the same rule, and the two tiers holding different ideas of
+// what is worth keeping is exactly the drift this avoids.
+export function imageStorable(response: Response): boolean {
+  return (deltaSeconds(response.headers.get("cache-control"), "max-age") ?? 0) > 0;
+}
+
 // Built per request, because what the browser is told depends on the request and
 // not on the entry: identical bytes reached through a content-hashed static
 // import url and through its `public/` twin share one entry, and only the former
@@ -273,11 +282,7 @@ const prerenderPolicy: ColoPolicy = {
 // into another's, in an isolate serving many at once.
 function imagePolicy(servedCacheControl: string | undefined): ColoPolicy {
   return {
-    // An image entry carries the freshness window as a plain max-age, so there
-    // is no separate storability signal to read: a max-age of zero is the whole
-    // of what "do not keep this" can look like here.
-    storable: (response) =>
-      (deltaSeconds(response.headers.get("cache-control"), "max-age") ?? 0) > 0,
+    storable: imageStorable,
     // No expiration, and deliberately so. Next encodes an expireAt in the
     // entry's filename, but ImageOptimizerCache.get uses it for one thing only —
     // `isStale: now > expireAt` — and returns the buffer whatever it says, with
@@ -493,10 +498,26 @@ export async function serveCached(
   return colo(target, deps, prerenderPolicy, origin, originBlocking, tagClock);
 }
 
-// The image tier. There is no separate blocking origin to refresh from — an
-// optimization has no draft or bypass mode, so the one call is both — and no
-// tag clock: an image is invalidated by its content hash changing, which is a
-// different key rather than a stale entry.
+// HEAD is safe and cacheable, and an optimization has none of the per-visitor
+// semantics that make a prerender bypass on it, so it is answered from the entry
+// a GET would read and populates that entry in full — the lookup key is
+// synthesized, so it is a GET whatever the method was. Only the body is dropped,
+// once, at the end. Exported because every tier under this one has to engage on
+// exactly the same set: a method this returns false for is served uncached, and
+// a durable tier that still read and wrote its store for it would be answering a
+// POST from stored bytes and stamping the result BYPASS in the same breath.
+export function answerableImageRequest(request: Request): boolean {
+  return request.method === "GET" || request.method === "HEAD";
+}
+
+// The image tier. No tag clock: an image is invalidated by its content hash
+// changing, which is a different key rather than a stale entry.
+//
+// The two origin thunks are the same call except for what they are allowed to
+// read: a background refresh must not be answerable by the very tier it is
+// refreshing, or the entry is rewritten from the bytes it already held and the
+// optimizer becomes unreachable for that key. See image.ts, which decides which
+// sources that applies to.
 //
 // servedCacheControl overrides the header the browser is given without touching
 // the entry; see imagePolicy.
@@ -505,21 +526,16 @@ export async function serveCachedImage(
   target: CacheTarget,
   deps: CacheDeps | undefined,
   origin: () => Promise<Response>,
+  originBlocking: () => Promise<Response>,
   servedCacheControl?: string,
 ): Promise<Response> {
   const policy = imagePolicy(servedCacheControl);
-  // HEAD is safe and cacheable, and an optimization has none of the per-visitor
-  // semantics that make a prerender bypass on it, so it is answered from the
-  // entry a GET would read and populates that entry in full — the lookup key is
-  // synthesized, so it is a GET whatever the method was. Only the body is
-  // dropped, once, at the end.
-  const answerable = request.method === "GET" || request.method === "HEAD";
   // No cache to consult (a routing test, or a substrate that bound none) and a
   // method no cache may answer are the same case: served, and honest about
   // having been served uncached.
   const response =
-    deps && answerable
-      ? await colo(target, deps, policy, origin, origin)
+    deps && answerableImageRequest(request)
+      ? await colo(target, deps, policy, origin, originBlocking)
       : policy.forServe(await origin(), "BYPASS");
 
   return request.method === "HEAD" ? headResponse(response) : response;

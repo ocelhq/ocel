@@ -134,8 +134,11 @@ Content-Type: <negotiated>
 Content-Disposition: <images.contentDispositionType>, sanitized filename
 Content-Security-Policy: <images.contentSecurityPolicy>
 X-Nextjs-Cache: MISS | STALE | HIT
-x-ocel-cache: HIT | MISS | STALE | BYPASS
+x-ocel-cache: HIT | MISS | STALE | PRERENDER | BYPASS
 ```
+
+`PRERENDER` on this route names the durable R2 tier (PR 6) answering: the colo cache
+missed, the stored object was served in the optimizer's place, and no optimization ran.
 
 Error responses carry none of these **except `x-ocel-cache`**. As the fixtures record,
 every 400 and every 500 Next returns from this route is a bare body with no `Vary`, no
@@ -562,11 +565,27 @@ Branch: `image-opt-r2-tier`
 Read path becomes colo -> R2 -> origin. Write path: on an origin hit,
 `waitUntil(colo.put + R2.put)`; on an R2 hit, `waitUntil(colo.put)` and serve.
 
-Writes use SigV4 via `aws4fetch` and the existing edge credentials — the same mechanism
+**Amended at implementation.** The paragraph below specified SigV4 via `aws4fetch` and
+the existing edge credentials; the verification it demanded found that mechanism does not
+exist. The bucket is R2, and R2's S3 API authenticates only against keys R2 itself issued
+— the access key id is the Cloudflare API token's id and the secret is the hex SHA-256 of
+the token's value (`cloud/edge/cloudflare/r2.go`, `mintToken`). No AWS IAM credential
+authenticates there, whatever it is signed for; the worker does carry an S3 signer over
+`OCEL_EDGE_ACCESS_KEY_ID`/`OCEL_EDGE_SECRET_KEY` (`signing.ts`, `awsServiceFetch`), but it
+signs for AWS's S3 and R2 would reject its keys as unknown. The pair that would work is
+derived from the R2 token at bootstrap and shipped out as Offers to the AWS side; it is
+never bound to this worker, and binding it would be precisely the new credential the
+section rules out. What the worker does already hold is
+the `OCEL_CACHE_STORE` binding the ISR tier reads through, which is read/write and needs
+no signing at all. Writes therefore go through `.put()` on that binding: no new
+credential, no new binding, no signing — the section's own constraint, met more strictly
+than by the mechanism it named.
+
+~~Writes use SigV4 via `aws4fetch` and the existing edge credentials — the same mechanism
 the worker already uses for signed origin calls. The R2 token is minted with the
 "Workers R2 Storage Bucket Item Write" permission group, so no new credential or binding
 is required. Verify this before building; if writes are not actually permitted, stop and
-report rather than widening the token silently.
+report rather than widening the token silently.~~
 
 Layout:
 ```
