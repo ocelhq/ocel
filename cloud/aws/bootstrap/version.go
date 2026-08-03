@@ -24,7 +24,39 @@ import "fmt"
 // its own table, separate from the state table, and one KMS key per env class.
 // An account bootstrapped before it has nowhere to put a value, so it is told
 // to re-run bootstrap rather than failing at the first write.
-const RequiredBootstrapVersion = 7
+// Version 8 added the per-substrate image optimizer: a Lambda behind a Function
+// URL, its read-only role on that substrate's own asset bucket, and the edge
+// user's named Allow on that one function. An account bootstrapped before it has
+// no optimizer, so it is told to re-run bootstrap — the same hard version gate
+// every earlier bump uses, with the same one-command remedy, because an account
+// that is never told anything is an account that silently never gets one.
+//
+// What is deliberately SOFT is the optimizer's *presence* within a version-8
+// account. The version output is stamped from this constant unconditionally, not
+// from whether the function was created, so a substrate that reached version 8
+// without an optimizer — a provider build pinning no artifact yet — still passes
+// the gate and deploys normally. It publishes no Function URL, the worker binds
+// no image origin, and every valid /_next/image request answers 502 exactly as
+// it did before an optimizer existed. Failing the deploy on a missing optimizer
+// would hold an app's whole deployment hostage to one route.
+const RequiredBootstrapVersion = 8
+
+// seedingBootstrapVersion is what the *first* of a first bootstrap's two settles
+// stamps. That pass exists only to raise the buckets the artifact is uploaded
+// into, so it runs before the artifact is obtained and deliberately carries no
+// optimizer — and if the artifact is then refused, bootstrap errors out with that
+// stack already created. Stamping the required version there would leave a
+// virgin account passing CheckCompat with no optimizer at all: `ocel up` would
+// succeed and every image would 502 with nothing pointing at the cause. Stamped
+// one short of it, the same account is told exactly what it needs to hear — its
+// bootstrap is out of date, re-run `ocel bootstrap` — which is also honest, since
+// what the seeding pass raised is precisely a pre-optimizer substrate.
+//
+// Only the second settle stamps RequiredBootstrapVersion. What it does NOT
+// require is that an optimizer exist: a build pinning no artifact skips the
+// seeding pass entirely, settles once, and stamps the required version with no
+// function, which is the deliberate softness described above.
+const seedingBootstrapVersion = RequiredBootstrapVersion - 1
 
 // Compatibility is the outcome of comparing the deployed bootstrap version
 // against the version a provider requires.

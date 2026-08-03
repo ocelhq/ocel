@@ -84,8 +84,8 @@ func varsSubstrates() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, stackTemplate(edge.TrustExternal)},
-		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal)},
+		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
+		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
 	}
 }
 
@@ -244,7 +244,7 @@ func TestRun_ProvisionsTheVariableStoreIdempotently(t *testing.T) {
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
 	for i := range 2 {
-		if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+		if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 			t.Fatalf("Run %d: %v", i+1, err)
 		}
 	}
@@ -266,7 +266,7 @@ func TestRun_ProvisionsTheVariableStoreIdempotently(t *testing.T) {
 // block, this fails loudly instead of upgrading from a fiction.
 func preStoreTemplate(t *testing.T) string {
 	t.Helper()
-	tmpl := stackTemplate(edge.TrustExternal)
+	tmpl := stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)
 	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
 		if block == "" || !strings.Contains(tmpl, block) {
 			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)
@@ -299,7 +299,7 @@ func TestRun_UpgradesAPreStoreAccountToTheVariableStore(t *testing.T) {
 	}
 
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
-	if err := Run(context.Background(), cfn, ssmc, iamc, ed, nil, nil); err != nil {
+	if err := Run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 

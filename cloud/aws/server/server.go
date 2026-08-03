@@ -268,10 +268,13 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ArtifactRoot:     artifactRoot(),
 		ArtifactBucket:   deployed.ArtifactBucket,
 		AssetBucket:      deployed.AssetBucket,
-		Env:              envSegment(env),
-		EdgeAccessKeyID:  edgeCreds.AccessKeyID,
-		EdgeSecretKey:    edgeCreds.SecretAccessKey,
-		EdgeValues:       edgeValues,
+		// Empty on a substrate that bootstrapped no optimizer, which leaves the
+		// worker's image origin unbound rather than bound to nothing.
+		ImageOptimizerURL: deployed.ImageOptimizerURL,
+		Env:               envSegment(env),
+		EdgeAccessKeyID:   edgeCreds.AccessKeyID,
+		EdgeSecretKey:     edgeCreds.SecretAccessKey,
+		EdgeValues:        edgeValues,
 
 		Slug:               manifest.GetSlug(),
 		StoreScriptName:    deploymentsStore.ScriptName,
@@ -394,7 +397,14 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	if preview {
 		run = bootstrap.RunPreview
 	}
-	if err := run(ctx, cfn, ssmClient, iamClient, cloudflare.New(), progress, logf); err != nil {
+	// The image optimizer's artifact is downloaded from its pinned release and
+	// uploaded into this account's own artifact bucket; nothing is granted
+	// cross-account and no Region map is consulted.
+	artifact := bootstrap.OptimizerArtifact{
+		Source: bootstrap.ReleaseSource{},
+		Store:  s3.NewFromConfig(awscfg),
+	}
+	if err := run(ctx, cfn, ssmClient, iamClient, cloudflare.New(), artifact, progress, logf); err != nil {
 		return stream.Send(failureResult(err))
 	}
 	return stream.Send(okResult())

@@ -526,11 +526,70 @@ async function sha256(value: string): Promise<string> {
 
 // The seam the optimizer lands behind. A validated request with nowhere to go
 // is a 502 and is never cached: the request was well-formed, and it is the
-// substrate — not the client — that could not answer it. PR 5 replaces the body
-// with the signed Function URL call; ImageOrigin is what every caller and the
-// colo tier around it are written against, so it moves nobody.
+// substrate — not the client — that could not answer it. This is what a
+// substrate with no provisioned optimizer keeps answering, and what a substrate
+// that has one falls back to when the call itself cannot be made.
 export const unprovisionedImageOrigin: ImageOrigin = async () =>
   new Response("No image optimizer is provisioned for this deployment.", {
     status: 502,
     headers: { "content-type": "text/plain; charset=utf-8" },
   });
+
+// functionUrlImageOrigin POSTs the validated request to the substrate's image
+// optimizer, or is undefined when the substrate named none — the caller then
+// keeps unprovisionedImageOrigin and every valid image request stays a 502,
+// exactly as it did before an optimizer existed.
+//
+// doFetch is the worker's SigV4-signing origin fetch: the optimizer's Function
+// URL is AWS_IAM-gated like every app Lambda, and this call is signed by the same
+// edge credentials through the same path. The whole request is the JSON body —
+// the optimizer reads no header for any purpose — so nothing of the client's
+// request reaches it but the fields the edge already validated.
+//
+// A URL that is not a URL binds nothing rather than throwing per request, and a
+// call that cannot complete is the substrate's 502 rather than an uncaught
+// exception: this route runs ahead of middleware on an unauthenticated path, and
+// a throw here is a Worker crash page.
+export function functionUrlImageOrigin(
+  url: string | undefined,
+  doFetch: typeof fetch,
+): ImageOrigin | undefined {
+  if (!url || !parseAbsolute(url)) return undefined;
+  return async (payload) => {
+    try {
+      return relayed(
+        await doFetch(url, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(payload),
+        }),
+      );
+    } catch {
+      return unprovisionedImageOrigin(payload);
+    }
+  };
+}
+
+// The statuses the optimizer answers with for itself, and the only ones whose
+// body may reach a client. 400 is its re-validation, 500 its transform failure,
+// 502 its upstream's; all three are Next's own messages, pinned by the
+// conformance fixtures.
+const OPTIMIZER_STATUSES = new Set([200, 400, 500, 502]);
+
+// Everything else on this hop was written by AWS, not by the optimizer, and this
+// route is unauthenticated. A Function URL that refuses the call answers 403 with
+// AWS's own IAM denial — "User: arn:aws:iam::<account>:user/ocel-edge is not
+// authorized to perform: lambda:InvokeFunctionUrl on resource: arn:aws:lambda:…"
+// — which names the account, the region, the edge identity and the function.
+// 403 is a live state, not a hypothetical: missing or rotated edge credentials
+// 403 every route. So an unrecognised status becomes the substrate's own 502 and
+// the body is discarded unread. 502 is also the status the colo tier refuses to
+// store, so nothing AWS wrote is cached either.
+function relayed(response: Response): Response {
+  if (OPTIMIZER_STATUSES.has(response.status)) return response;
+  response.body?.cancel().catch(() => {});
+  return new Response("The image optimizer could not be reached.", {
+    status: 502,
+    headers: { "content-type": "text/plain; charset=utf-8" },
+  });
+}

@@ -17,6 +17,7 @@ import {
   withStatus,
 } from "./cache";
 import {
+  functionUrlImageOrigin,
   isImageRequest,
   serveImage,
   unprovisionedImageOrigin,
@@ -120,6 +121,13 @@ export interface Env {
   OCEL_AWS_REGION?: string;
   OCEL_STATE_TABLE?: string;
   OCEL_ISR_BUCKET?: string;
+  // The Function URL of the substrate's image optimizer, which /_next/image is
+  // forwarded to under the same signed path as every other origin call. A worker
+  // var and not a routing-manifest field: the manifest describes one build, and
+  // one optimizer serves every app and deployment in the substrate. Absent on a
+  // substrate that bootstrapped none, which leaves the image origin unbound and
+  // every valid image request a 502.
+  OCEL_IMAGE_OPTIMIZER_URL?: string;
   // The dynamic-worker loader the Deployment's edge bundle is compiled through.
   // Optional so a substrate without the binding degrades to a 500 on the edge
   // routes alone rather than failing to boot.
@@ -261,9 +269,9 @@ export interface RouteDeps {
   cache?: CacheDeps;
 
   // Where a validated /_next/image request goes. The route is registered by the
-  // manifest's `images` section, not by this — so until PR 5 provisions the
-  // optimizer nothing binds it and every valid image request is a 502, in
-  // production as much as in tests.
+  // manifest's `images` section, not by this — so on a substrate whose bootstrap
+  // provisioned no optimizer nothing binds it and every valid image request is a
+  // 502, in production as much as in tests.
   imageOrigin?: ImageOrigin;
 
   // Present when the deploy bound a cache store and injected its prefix:
@@ -1137,6 +1145,13 @@ export default {
       {
         fetch,
         originFetch,
+        // The optimizer is a Function URL like any app Lambda, so it is called
+        // through the same signing fetch. An unsigned worker (an edge inside the
+        // provider's trust boundary) forwards plainly, as it does everywhere else.
+        imageOrigin: functionUrlImageOrigin(
+          env.OCEL_IMAGE_OPTIMIZER_URL,
+          originFetch ?? fetch,
+        ),
         assetStore: {
           store,
           cache: caches.default,

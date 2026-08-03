@@ -444,9 +444,36 @@ every app in the substrate.
 
 ### Ownership and distribution
 
-(PR 5b.) Account-global, created by bootstrap CloudFormation (`cloud/aws/bootstrap/`),
-which creates no Lambda today. One function per AWS account, shared by preview and
-production.
+(PR 5b.) Created by bootstrap CloudFormation (`cloud/aws/bootstrap/`), which creates no
+Lambda today.
+
+**One optimizer per substrate, not one per account.** An earlier draft said one function
+per account shared by preview and production; that predates the fact that bootstrap deploys
+two stacks and each carries its *own* `AssetBucket` and its own edge IAM user. The optimizer
+reads originals and configs from the asset bucket, so a single shared function would need
+read access to both — breaking the preview/production isolation the split buckets exist to
+provide. Each stack creates its own, reading only its own bucket, invoked only by its own
+edge user. No cross-substrate grant anywhere.
+
+The edge user's existing Lambda-invoke statement is conditioned on the `ocel:app` tag being
+present, and the optimizer belongs to no app. It gets **its own explicit Allow on its own
+function ARN** rather than a loosened condition or a fabricated `ocel:app` tag: the edge
+gains exactly one new named callable target, and every app function stays governed by the
+tag as before.
+
+**Accepted, and stated rather than assumed: nothing binds the caller's identity to the
+`slug` it names.** One edge user serves every app in a substrate, so IAM cannot separate
+projects at this seam — any principal that can invoke the Function URL can read any of that
+substrate's `image-config/<slug>/…` artifacts. The scope is one customer's own projects
+inside their own AWS account, called by their own edge identity, and the artifact is a
+compiled allowlist rather than a secret. Binding it would require a per-app signing secret
+distributed to and rotated across every worker, which is not worth it for an in-account
+boundary.
+
+The CLI's artifact version and sha256 live in a **hand-bumped Go constants file beside
+`bootstrap/version.go`**, mirroring `RequiredBootstrapVersion`. The release workflow updates
+it, so a digest change shows up in a reviewable diff. Fetching the digest from the same
+place as the artifact would make verifying one against the other prove nothing.
 
 The worker learns the Function URL from a new `OCEL_IMAGE_OPTIMIZER_URL` env var, not from
 the routing manifest: the manifest describes a build, and an account-global function is not

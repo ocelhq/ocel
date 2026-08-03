@@ -296,7 +296,17 @@ function imagePolicy(servedCacheControl: string | undefined): ColoPolicy {
       // Absent, the derived window is also what the browser gets. Present, it
       // is a claim about the url this request used — never about the entry —
       // and so it is applied here rather than stored.
-      if (servedCacheControl) {
+      //
+      // A 200 only. The claim is about bytes that were optimized, and a
+      // static-import url's claim is `immutable` for ten years: stamped on the
+      // 502 a substrate with no optimizer answers, or on the 403 a rotated edge
+      // key answers, it would pin that failure in every browser that saw it,
+      // unrevalidatable, past any redeploy, re-bootstrap or purge. The colo tier
+      // refuses to store a non-200 for exactly this reason and cannot be told
+      // about a browser's. Next's own errors carry no Cache-Control at all, which
+      // is also what the conformance fixtures record, so bare is both safe (a 4xx
+      // or 5xx here is not heuristically cacheable) and the conforming answer.
+      if (servedCacheControl && response.status === 200) {
         served.headers.set("cache-control", servedCacheControl);
       }
       return served;

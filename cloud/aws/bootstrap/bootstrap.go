@@ -103,6 +103,12 @@ type Deployed struct {
 	// VarsKeyARN is the KMS key every encrypted value of this substrate's class
 	// is encrypted under.
 	VarsKeyARN string
+	// ImageOptimizerURL is the Function URL of this substrate's image optimizer,
+	// bound into every worker so /_next/image has somewhere to go. Empty on a
+	// substrate whose bootstrap rendered no optimizer — an older bootstrap, or a
+	// provider build pinning no artifact — which leaves image requests at the 502
+	// they answered before the optimizer existed.
+	ImageOptimizerURL string
 	// Class is the class the substrate was stamped with at bootstrap
 	// (ClassProduction or ClassPreview), or "" for an older bootstrap predating
 	// the marker.
@@ -171,6 +177,8 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 			d.VarsTable = aws.ToString(o.OutputValue)
 		case outputVarsKeyARN:
 			d.VarsKeyARN = aws.ToString(o.OutputValue)
+		case outputImageOptimizerURL:
+			d.ImageOptimizerURL = aws.ToString(o.OutputValue)
 		case outputInfraClass:
 			d.Class = aws.ToString(o.OutputValue)
 		case outputVersion:
@@ -193,19 +201,32 @@ type substrate struct {
 	class     string
 	stackName string
 	stackStep string
-	template  func(edge.TrustBoundary) string
+	template  func(edge.TrustBoundary, optimizerCode, int) string
+}
+
+func productionSubstrate() substrate {
+	return substrate{
+		class:     ClassProduction,
+		stackName: StackName,
+		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
+		template:  stackTemplate,
+	}
+}
+
+func previewSubstrate() substrate {
+	return substrate{
+		class:     ClassPreview,
+		stackName: PreviewStackName,
+		stackStep: "Ensuring preview infrastructure (CloudFormation)",
+		template:  previewStackTemplate,
+	}
 }
 
 // Run creates or updates the bootstrap CloudFormation stack and ensures the
 // Pulumi passphrase exists, idempotently. progress reports discrete steps and
 // log forwards detail; both may be nil.
-func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, progress, log func(string)) error {
-	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, substrate{
-		class:     ClassProduction,
-		stackName: StackName,
-		stackStep: "Ensuring Pulumi state bucket and state table (CloudFormation)",
-		template:  stackTemplate,
-	}, progress, log)
+func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact OptimizerArtifact, progress, log func(string)) error {
+	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedOptimizer(), productionSubstrate(), progress, log)
 }
 
 // RunPreview creates or updates the preview infrastructure stack — the shared
@@ -221,13 +242,8 @@ func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 // live account. Like Run, that CloudFormation orchestration is the opt-in-e2e
 // seam: this signature is final and the passphrase/stamping contract is settled;
 // the preview stack template is filled in and exercised against real infra.
-func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, progress, log func(string)) error {
-	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, substrate{
-		class:     ClassPreview,
-		stackName: PreviewStackName,
-		stackStep: "Ensuring preview infrastructure (CloudFormation)",
-		template:  previewStackTemplate,
-	}, progress, log)
+func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact OptimizerArtifact, progress, log func(string)) error {
+	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedOptimizer(), previewSubstrate(), progress, log)
 }
 
 // run bootstraps one substrate, edge first. The edge is a pure producer here —
@@ -235,7 +251,10 @@ func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAM
 // then provisions: an edge outside the provider's trust boundary needs the edge
 // reader IAM user and a static access key to sign its reads with, an edge inside
 // it needs neither, so neither is created.
-func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, sub substrate, progress, log func(string)) error {
+// pin is the optimizer artifact this build ships; it is a parameter rather than
+// read from the constants here so a test can exercise the whole placement path
+// against a fixture artifact without a cut release.
+func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact OptimizerArtifact, pin optimizerPin, sub substrate, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
@@ -268,7 +287,45 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	}
 
 	report(progress, sub.stackStep)
-	if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust), []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}); err != nil {
+	namedIAM := []cfntypes.Capability{cfntypes.CapabilityCapabilityNamedIam}
+
+	// The image optimizer's code must already sit in this account's own artifact
+	// bucket before CloudFormation can point a function at it — and on a first
+	// bootstrap that bucket is created by this very stack. So a first bootstrap
+	// settles the stack once without the optimizer to raise the buckets, places
+	// the artifact, and settles again; every later one already knows the bucket
+	// and takes a single pass.
+	//
+	// On an account that already has the bucket, the artifact step runs before
+	// anything is upserted, so a refused artifact leaves that account exactly as
+	// it was. A first bootstrap cannot have that: its seeding pass is what creates
+	// the bucket, and it necessarily precedes the artifact. So the seeding pass
+	// stamps seedingBootstrapVersion — see version.go — and a refused artifact
+	// leaves a stack that exists but does not satisfy the gate, which sends the
+	// operator back to `ocel bootstrap` instead of letting an optimizer-less
+	// account deploy and 502 every image.
+	deployed, err := checkStack(ctx, cfn, sub.stackName)
+	if err != nil {
+		return err
+	}
+	if pin.pinned() && deployed.ArtifactBucket == "" {
+		if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, optimizerCode{}, seedingBootstrapVersion), namedIAM); err != nil {
+			return err
+		}
+		if deployed, err = checkStack(ctx, cfn, sub.stackName); err != nil {
+			return err
+		}
+	}
+
+	code, err := ensureOptimizerArtifact(ctx, artifact, deployed.ArtifactBucket, pin)
+	if err != nil {
+		return err
+	}
+	if !code.present() {
+		report(log, "no image optimizer artifact is pinned in this provider build; none is created, and /_next/image answers 502 as it did before")
+	}
+
+	if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, code, RequiredBootstrapVersion), namedIAM); err != nil {
 		return err
 	}
 
@@ -404,7 +461,7 @@ func generatePassphrase() (string, error) {
 // the given trust posture. The BootstrapVersion output is single-sourced from
 // RequiredBootstrapVersion so the deployed version and the provider's
 // requirement never drift.
-func stackTemplate(trust edge.TrustBoundary) string {
+func stackTemplate(trust edge.TrustBoundary, optimizer optimizerCode, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel bootstrap - account-global resources for the Ocel AWS provider.
 Resources:
@@ -422,17 +479,17 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%s%s%sOutputs:
+%s%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
-%s%s%s%s  %s:
+%s%s%s%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), edgeUserResource(EdgeUserName, trust), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassProduction)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(optimizer), edgeUserResource(EdgeUserName, trust, optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(optimizer), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
@@ -446,7 +503,7 @@ Resources:
 // account, so — like RunPreview itself — they are added and exercised there.
 // The stamped class, the shared backend, and the stack's independent lifecycle
 // are settled here.
-func previewStackTemplate(trust edge.TrustBoundary) string {
+func previewStackTemplate(trust edge.TrustBoundary, optimizer optimizerCode, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel preview infrastructure - shared substrate per-PR previews are carved from.
 Resources:
@@ -464,17 +521,17 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%s%s%sOutputs:
+%s%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
     Value: !Ref StateBucket
-%s%s%s%s  %s:
+%s%s%s%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), edgeUserResource(EdgePreviewUserName, trust), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), outputVersion, RequiredBootstrapVersion, outputInfraClass, ClassPreview)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(optimizer), edgeUserResource(EdgePreviewUserName, trust, optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(optimizer), outputVersion, version, outputInfraClass, ClassPreview)
 }
 
 // stateTableResource renders the StateTable resource block shared by both
@@ -642,6 +699,10 @@ func assetBucketOutput() string {
 // function does and nothing else in the account is expected to. Both actions are
 // required since AWS's October 2025 change, and both honor aws:ResourceTag.
 //
+// The image optimizer belongs to no app and therefore carries no such tag, so it
+// gets a statement of its own naming just that function — see
+// imageOptimizerInvokeStatement for why not the two shortcuts.
+//
 // userName is the deterministic name the imperative access-key step
 // (ensureEdgeCredentials, which also carries the credential rotation runbook)
 // looks the user up by. The block is a Resources child, so it is emitted before
@@ -650,7 +711,7 @@ func assetBucketOutput() string {
 // It renders nothing for an edge inside the provider's trust boundary: such an
 // edge reads under the provider's native identity, so a user whose only purpose
 // is to hold a long-lived key would be a dangling credential in the account.
-func edgeUserResource(userName string, trust edge.TrustBoundary) string {
+func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer optimizerCode) string {
 	if trust != edge.TrustExternal {
 		return ""
 	}
@@ -693,7 +754,7 @@ func edgeUserResource(userName string, trust edge.TrustBoundary) string {
                 Condition:
                   'Null':
                     'aws:ResourceTag/ocel:app': 'false'
-`, userName, StateTableIndexName)
+%s`, userName, StateTableIndexName, imageOptimizerInvokeStatement(optimizer))
 }
 
 // CloudFormation surfaces both "stack does not exist" and the no-op update as

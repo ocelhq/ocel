@@ -54,3 +54,15 @@ const (
 	StateTableVar  = "OCEL_STATE_TABLE"
 	AssetBucketVar = "OCEL_ISR_BUCKET"
 )
+
+// ImageOptimizerURLVar names the substrate's image optimizer Function URL, which
+// the worker POSTs a validated /_next/image request to and signs with the same
+// edge credentials as every other Function-URL forward.
+//
+// A worker var and not a field of the routing manifest: the manifest describes
+// one build, and one optimizer serves every project, app and deployment in the
+// substrate — it is a property of the substrate, like the stores above. Bootstrap
+// raises it before any app deploys, so the URL exists by the time a worker is
+// uploaded. Left unbound where a substrate has no optimizer, which is what keeps
+// every valid image request the 502 it was before one existed.
+const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
