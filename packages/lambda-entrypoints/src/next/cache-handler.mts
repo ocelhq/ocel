@@ -99,6 +99,30 @@ async function carryForwardVariantHeaders(
   }
 }
 
+// The membrane's mark, set on the request headers before Next runs. Registered
+// so this bundle and the entrypoint's resolve to the same symbol.
+const RSC_REQUEST = Symbol.for("ocel.rsc-request");
+
+// negotiateVariant answers an RSC request with the RSC variant's own headers.
+// Next replays the entry's `headers` verbatim onto the response and
+// send-payload only fills in a content-type that is not already set, so an RSC
+// request served from an APP_PAGE entry would go out labelled
+// `text/html` — which the client router reads as "not flight data" and answers
+// with a full document reload instead of the soft navigation. The prerender
+// stores the RSC variant's headers alongside the html one; hand those back
+// instead, exactly as the edge worker negotiates. An entry predating
+// per-variant capture has no rscHeaders: drop the html content-type and let
+// send-payload derive it from the flight payload.
+function negotiateVariant(
+  value: Record<string, any>,
+  isRscRequest: boolean,
+): Record<string, any> {
+  if (!isRscRequest || value.kind !== "APP_PAGE") return value;
+  if (value.rscHeaders) return { ...value, headers: value.rscHeaders };
+  const { "content-type": _dropped, ...headers } = value.headers ?? {};
+  return { ...value, headers };
+}
+
 // deserialize rebuilds the value Next expects from the stored JSON. The shared
 // codec restores the binary payloads as Uint8Array; Next wrote and expects Node
 // Buffers, so the bytes are re-wrapped (a Buffer view, no copy) to hand back
@@ -128,6 +152,23 @@ export default class OcelCacheHandler {
   // so tests can drive the cache semantics against a fake.
   static store: CacheStore | undefined;
 
+  // Next constructs the handler once per request and hands it that request's
+  // headers, which is the only way a cached entry can be served as the variant
+  // the client actually asked for.
+  private readonly requestHeaders: Record<string | symbol, any>;
+
+  constructor(ctx?: { _requestHeaders?: Record<string, any> }) {
+    this.requestHeaders = ctx?._requestHeaders ?? {};
+  }
+
+  // `rsc` is gone by the time a prerendered route reaches here — Next strips the
+  // flight headers off this very object first — so the membrane's mark is the
+  // signal that survives. The header is still honoured for every path Next
+  // leaves intact.
+  private get isRscRequest(): boolean {
+    return this.requestHeaders[RSC_REQUEST] === true || this.requestHeaders.rsc === "1";
+  }
+
   private get store(): CacheStore {
     return (OcelCacheHandler.store ??= awsCacheStore());
   }
@@ -152,7 +193,8 @@ export default class OcelCacheHandler {
           return null;
         }
       }
-      return { lastModified: entry.lastModified, value: deserialize(entry.value) };
+      const value = negotiateVariant(entry.value, this.isRscRequest);
+      return { lastModified: entry.lastModified, value: deserialize(value) };
     } catch {
       return null;
     }

@@ -263,29 +263,18 @@
    "note": "The 8 isNextStart-only cases were never declared in deploy mode (absent, not skipped). Both ocelhq-sae attributions were justified by MECHANISM, not route shape: the content-types are literally Go mime.TypeByExtension output and the Pulumi destroy list contains no Lambda for those routes, so despite being .ts 'dynamic' routes they were prerendered into the asset store. The /robots.txt failure asserted on cache-control, which sae's overMatchWarning wrongly routed to sae; refuted by probing after teardown, where /robots.txt still returned 200 with Managed content and no cache-control while the origin 522'd."
   },
   "test/e2e/app-dir/app-prefetch/prefetching.test.ts": {
-   "lastRun": "sweep-2026-07-27c",
+   "lastRun": "verify-2026-08-03-membrane-l21",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 12,
-    "failed": 6,
+    "passed": 17,
+    "failed": 0,
     "known": 0,
-    "skipped": 0
+    "skipped": 1
    },
    "projectSlug": "e2e-sweep-2026-07-27c-8e4a3299",
-   "openIssues": [
-    "ocelhq-a9x",
-    "ocelhq-9q8",
-    "ocelhq-7gk"
-   ],
-   "failedTests": {
-    "app dir - prefetching › fetch priority › should prefetch links in viewport with low priority": "ocelhq-a9x",
-    "app dir - prefetching › fetch priority › should have an auto priority for all other fetch operations": "ocelhq-a9x",
-    "app dir - prefetching › fetch priority › should respect multiple prefetch types to the same URL": "ocelhq-a9x",
-    "app dir - prefetching › should not fetch again when a static page was prefetched": "ocelhq-9q8",
-    "app dir - prefetching › should not unintentionally modify the requested prefetch by escaping the uri encoded query params": "ocelhq-9q8",
-    "app dir - prefetching › should not suppress prefetches after navigating back": "ocelhq-7gk"
-   },
-   "note": "Every failure attributed; zero unexplained. 3 are the harness defect ocelhq-a9x (2 real fetch-priority assertions plus 1 cascade whose only errors belong to the PREVIOUS test's request handler), 1 is the headed deviation ocelhq-7gk, and 2 were confirmed as ocelhq-9q8 by a follow-up staged probe (project e2e-stg4-6bd7a09e) that captured content-type: text/html on RSC requests whose bodies are correct flight data. POSITIVE REFUTATION of ocelhq-hzp for this suite: no 'router state header ... could not be parsed' anywhere, and the two tests that hand-craft Next-Router-State-Tree both PASSED."
+   "openIssues": [],
+   "failedTests": {},
+   "note": "[verify-2026-08-03-membrane-l21] Targeted re-run against membrane layer 21 (the corrected ocelhq-9q8 fix, exercised via OCEL_MEMBRANE_LAYER_ARN): EXIT=0, 17 passed / 1 skipped / 18 total, 0 failed. Both ocelhq-9q8 tests now pass ('should not fetch again when a static page was prefetched', 'should not unintentionally modify the requested prefetch by escaping the uri encoded query params'); layer 19's earlier attempt still failed them. The 3 ocelhq-a9x and 1 ocelhq-7gk failures recorded in sweep-2026-07-27c did not reproduce in this run — those are harness/headed-mode dependent, so treat them as not-observed here rather than proven fixed. PRIOR (sweep-2026-07-27c, 12 passed / 6 failed): Every failure attributed; zero unexplained. 3 are the harness defect ocelhq-a9x (2 real fetch-priority assertions plus 1 cascade whose only errors belong to the PREVIOUS test's request handler), 1 is the headed deviation ocelhq-7gk, and 2 were confirmed as ocelhq-9q8 by a follow-up staged probe (project e2e-stg4-6bd7a09e) that captured content-type: text/html on RSC requests whose bodies are correct flight data. POSITIVE REFUTATION of ocelhq-hzp for this suite: no 'router state header ... could not be parsed' anywhere, and the two tests that hand-craft Next-Router-State-Tree both PASSED."
   },
   "test/e2e/app-dir/next-image/next-image.test.ts": {
    "lastRun": "sweep-2026-07-27c",
@@ -855,10 +844,10 @@
    },
    "projectSlug": "e2e-sweep-2026-07-27d-a3f6337a",
    "openIssues": [
-    "ocelhq-9q8"
+    "ocelhq-7og"
    ],
    "failedTests": {
-    "should work with multi-level relative redirect from subdir": "ocelhq-9q8"
+    "should work with multi-level relative redirect from subdir": "ocelhq-7og"
    }
   },
   "test/e2e/app-dir/service-worker/service-worker-register.test.ts": {
@@ -2556,28 +2545,23 @@
    "failedTests": {}
   },
   "test/e2e/app-dir/segment-cache/cached-navigations/cached-navigations.test.ts": {
-   "lastRun": "sweep-2026-07-28b",
+   "lastRun": "verify-2026-08-03-membrane-l21",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 8,
-    "failed": 6,
+    "passed": 12,
+    "failed": 2,
     "known": 0,
     "skipped": 0
    },
-   "knownCauseCount": 6,
+   "knownCauseCount": 2,
    "openIssues": [
-    "ocelhq-9q8",
-    "ocelhq-kqzv",
-    "ocelhq-nlns"
+    "ocelhq-kqzv"
    ],
    "failedTests": {
-    "cached navigations > serves a fully static page without any requests on the second navigation": "ocelhq-9q8",
     "cached navigations > defers fallback params to the runtime stage": "ocelhq-kqzv",
-    "cached navigations > caches runtime-prefetchable content from the initial HTML for subsequent navigations": "ocelhq-kqzv",
-    "cached navigations > caches a fully static page from the initial HTML for subsequent navigations": "ocelhq-9q8",
-    "cached navigations > caches a partially static page from the initial HTML for subsequent navigations": "ocelhq-nlns",
     "cached navigations > reuses cached page segment across different fallback params after navigation": "ocelhq-kqzv"
-   }
+   },
+   "note": "[verify-2026-08-03-membrane-l21] Targeted re-run against membrane layer 21 (the corrected ocelhq-9q8 fix, exercised via OCEL_MEMBRANE_LAYER_ARN): 12 passed / 2 failed / 14 total, down from 5 failed under layer 19 and 6 under sweep-2026-07-28b. Newly passing: 'serves a fully static page without any requests on the second navigation' and 'caches a fully static page from the initial HTML for subsequent navigations' (both ocelhq-9q8), plus 'caches runtime-prefetchable content from the initial HTML for subsequent navigations' (was ocelhq-kqzv C11) and 'caches a partially static page from the initial HTML for subsequent navigations' (was ocelhq-nlns) — those last two were evidently downstream of the content-type mislabelling. The 2 survivors are ocelhq-kqzv C10a/C10b and are NOT a regression: C10b already failed in sweep-2026-07-28b, six days before either membrane layer existed, and its single pass in the layer-19 run was the outlier; it is timing-sensitive (a race between the seeding prefetch and the click)."
   },
   "test/e2e/app-dir/segment-cache/prefetch-app-shell/prefetch-app-shell.test.ts": {
    "lastRun": "sweep-2026-07-28b",
@@ -7438,7 +7422,15 @@
      "kind": "build-artifact",
      "pattern": ".ocel/output/apps/<app>/cache/*.cache.json with value.headers content-type text/html and value.rscHeaders content-type text/x-component",
      "confidence": "specific",
-     "check": "STATIC confirmation, no deploy needed: the entry stores both variants and the Lambda cache-handler serves value.headers. Cheapest possible detection for future sweeps."
+     "check": "RETIRED AS A DETECTOR [verify-2026-08-03-membrane-l21]. Build output is UNCHANGED by the fix — the entry always carried both variants, and that was never the bug; only the Lambda cache-handler's replay of the wrong one was. So this static grep cannot distinguish fixed from broken. Kept for mechanism context only.",
+     "supersededBy": "live-probe"
+    },
+    {
+     "kind": "http-header",
+     "id": "live-probe",
+     "pattern": "an `RSC: 1` response carrying x-ocel-cache: MISS that returns content-type text/html instead of text/x-component",
+     "confidence": "specific",
+     "check": "CHEAPEST DETECTION as of verify-2026-08-03-membrane-l21. Send `RSC: 1` (no Next-Router-Prefetch) to a prerendered app page and look only at rows with x-ocel-cache: MISS and x-amzn-requestid present (genuine Lambda responses, not edge-worker). Fixed => text/x-component. Broken => text/html; charset=utf-8, while the prefetch variant still correctly returns text/x-component; that asymmetry is the fingerprint. Verified across /fully-static, /partially-static, /runtime-prefetchable and / on project e2e-v2c-b0505567."
     }
    ],
    "note": "Confirmed on new evidence in sweep-2026-07-27c and now owns 3 tests across 2 suites (metadata added app-prefetch's 2 prefetch-reuse failures). The payload is RIGHT and only the label is wrong. SECOND OBSERVATION worth its own issue: every RSC request is x-ocel-cache: MISS with x-amzn-requestid present (invokes Lambda) while the equivalent HTML request is PRERENDER/HIT and never touches Lambda, despite cache-control: s-maxage=31536000. Every prefetch of a static page therefore costs an invocation, which interacts badly with ocelhq-9d3's quota of 10. sweep-2026-07-27e: also owns all 9 failures in interception-dynamic-segment. Those look like an interception/route-selection defect (modal slot resolves to @modal/[...catchAll]) but are purely downstream of this content-type: the worker/Lambda select the (.) route correctly. Ruled out vs ocelhq-hzp (these are 200s, and Next-Router-State-Tree + RSC:1 on this preview returned 200, not 500) and vs ocelhq-dan (no action redirect, no per-route-split involvement). sweep-2026-07-27e: ALSO owns router-autoscroll 'should scroll to top of document with new metadata'. Reproduced live on e2e-stg-534df07b: the click's non-prefetch RSC fetch returns text/html, the router hard-reloads, and document.documentElement.scrollTop keeps reading the OLD page's 8388 until the reload commits at ~1500ms - the earlier rebuttal ('a hard load would land at top:0 so it would PASS') was wrong about the interval, not the endpoint. Metadata is a red herring: the passing control /hoisted takes the identical hard-reload path and passes only because its reload lands inside the 3000ms retry budget. Refuted en route: the __NEXT_EXPERIMENTAL_APP_NEW_SCROLL_HANDLER harness-gap theory (the failing test is ungated, predates the flag via next.js f8afd611df / #74748, and upstream CI runs the suite with the flag set to false); also ruled out ocelhq-wiw (head-rewrite, different path - the delivered <head> here is correct) and ocelhq-14y (no fetches, no revalidate in the fixture). sweep-2026-07-27g: gained 2 more suites (static-rsc-cache-components, metadata-static-file-intercepting-route), both confirmed at HTTP level. NEW MECHANISM DETAIL: the build-time cache entry stores BOTH variants — value.headers -> text/html and value.rscHeaders -> text/x-component — and the Lambda cache-handler replays the wrong one, so the prefetch path is correct while the non-prefetch path is broken. Also NOT confined to plain prerenders: the static-rsc-cache-components fixture uses cacheComponents: true with a 'use cache' page. In the intercepting-route case the hard nav lands on a DIFFERENT route tree, so interception is lost entirely and the suite reports \"missing metadata\" when the real failure is \"the intercepted route was never rendered\". [sweep-2026-07-28d] New downstream face: it silently breaks CLIENT-SIDE navigation instrumentation. A bare RSC:1 navigation to a prerendered app page answered as text/html degrades the click to a full page reload, which wipes window-scoped state — that is the whole of the instrumentation-client-hook cluster (7 tests), where onRouterTransitionStart itself is correct. Proven live: a __SENTINEL set on window was lost across a click.",
@@ -7448,7 +7440,8 @@
    "notes": "Also the cause of interception-dynamic-single-segment 'should intercept with purely static multi-segment paths' (modal reads 'default'): the degraded hard reload drops next-url, so the @modal slot falls to default.tsx. Only interception targets with dispatch kind: prerender are affected; kind: lambda interception routes serve text/x-component correctly. Sibling failure in that suite is ocelhq-4fg, not this.",
    "reproCaveat": "CORRECTED in sweep-2026-07-28c: the note that \"a fixture using prefetch={false} is the reliable repro\" is only true when the navigation TARGET IS PRERENDERED. With a dynamic (connection()-gated) target the same shape passes - segment-cache/no-prefetch passed for exactly this reason and is NOT a valid control. Further narrowing from live probes: a prerender cache HIT alone does NOT trigger the mistyping (a segment-prefetch request returned text/x-component correctly on a HIT, with x-nextjs-postponed: 2). The mistyped case is a FULL-PAGE (non-segment) RSC read of a prerendered route that went x-ocel-cache: MISS and fell through to Lambda. Fix site is the full-page prerender read path; the segment-prefetch path already stamps text/x-component.",
    "confirmedIn": [
-    "sweep-2026-07-28c: parallel-routes-layouts (+1 test). Mechanism located — the cache-handler replays value.headers instead of value.rscHeaders on the full-page non-segment RSC read that goes x-ocel-cache: MISS."
+    "sweep-2026-07-28c: parallel-routes-layouts (+1 test). Mechanism located — the cache-handler replays value.headers instead of value.rscHeaders on the full-page non-segment RSC read that goes x-ocel-cache: MISS.",
+    "verify-2026-08-03-membrane-l21: FIX VERIFIED, NOT YET SHIPPED — issue stays OPEN. Layer 19's first attempt failed because it keyed off ctx._requestHeaders.rsc, and next.js app-page-runtime.ts stripFlightHeaders() deletes `rsc` from the live headers object BEFORE getIncrementalCache runs, so the predicate could never match in the SSG-RSC case. Layer 21 instead marks the request in entrypoint.mts with req.headers[Symbol.for('ocel.rsc-request')] = true (Symbol.for because the cache handler is a separate module graph; a symbol key also cannot leak into Next's headers() API), and cache-handler.mts returns {...value, headers: value.rscHeaders} for an APP_PAGE entry on an RSC request. Live probe clean across 7 MISS rows; app-prefetch/prefetching 2 failed -> 0, segment-cache/cached-navigations 5 failed -> 2 (both survivors ocelhq-kqzv). GATES BEFORE THIS CAN CLOSE: (1) the change is uncommitted in the working tree; (2) defaultMembraneLayerARN in cloud/aws/deploy/function.go:65 still pins ocel-membrane:18, so no ordinary deploy gets the fix until it is bumped to :21."
    ]
   },
   "ocelhq-iud": {
