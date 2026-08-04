@@ -518,3 +518,40 @@ func TestRun_EdgeBootstrapFailureStopsProvisioning(t *testing.T) {
 		t.Errorf("minted %v / stored %d parameters despite a failed edge bootstrap", iamc.created, len(ssmc.params))
 	}
 }
+
+// TestRun_PublisherFollowsTheISRWriterAdoption is the other half of "an edge
+// that offers no writer degrades instead of breaking". The publisher derives
+// every build's write secret from the substrate's seed and raises through the
+// writer's endpoint; neither exists on a substrate that adopted no writer, so
+// rendering it there would refuse to start on every invocation, retry every
+// batch into the dead-letter queue, and light the alarm from the moment of
+// bootstrap.
+func TestRun_PublisherFollowsTheISRWriterAdoption(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		offers []edge.Offer
+		want   bool
+	}{
+		{"writer adopted", []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("", "cred")}}, true},
+		{"no writer offered", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+			art, _, _ := fixtureArtifactDeps(fixtureArtifact)
+			ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal, Offers: tc.offers}}
+
+			pins := stackPins{publisher: fixturePublisherPin()}
+			if err := run(context.Background(), cfn, ssmc, iamc, ed, art, pins, productionSubstrate(), nil, nil); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			for _, name := range []string{
+				"TagPublisher", "TagPublisherStream", "TagPublisherRole",
+				"TagPublisherDeadLetterQueue", "TagPublisherDeadLetterAlarm",
+			} {
+				if got := strings.Contains(cfn.templates[StackName], name+":"); got != tc.want {
+					t.Errorf("template declares %s = %v, want %v", name, got, tc.want)
+				}
+			}
+		})
+	}
+}
