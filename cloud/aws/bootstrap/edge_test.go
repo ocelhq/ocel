@@ -458,3 +458,49 @@ func TestReadISRWriterFor_AbsentIsNotAnError(t *testing.T) {
 		t.Errorf("ReadISRWriterFor = %+v, want the zero writer", got)
 	}
 }
+
+// TestEnsureISRWriterSeed_IsCreateOnly is the whole reason the seed is a
+// parameter of its own rather than a field of the adopted-writer payload, which
+// every bootstrap overwrites. Each live build's write secret is derived from
+// this seed, and the writer worker holds only the hash: a seed that moved would
+// 401 every deployed function's cache write until that app was redeployed.
+func TestEnsureISRWriterSeed_IsCreateOnly(t *testing.T) {
+	ssmc := newFakeSSM()
+
+	first, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+	if err != nil {
+		t.Fatalf("ensureISRWriterSeed: %v", err)
+	}
+	if first == "" {
+		t.Fatal("ensureISRWriterSeed minted no seed")
+	}
+	again, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+	if err != nil {
+		t.Fatalf("ensureISRWriterSeed (second run): %v", err)
+	}
+	if again != first {
+		t.Errorf("second bootstrap returned seed %q, want the stored %q", again, first)
+	}
+
+	preview, err := ensureISRWriterSeed(context.Background(), ssmc, ClassPreview)
+	if err != nil {
+		t.Fatalf("ensureISRWriterSeed (preview): %v", err)
+	}
+	if preview == first {
+		t.Error("preview and production share a seed; each substrate has its own writer")
+	}
+}
+
+// TestReadISRWriterSeedFor_AbsentIsNotAFailure keeps an account bootstrapped
+// before the seed distinguishable from a broken read: the deploy reports a
+// substrate with no writer and asks for a re-bootstrap, rather than deriving
+// secrets from an empty seed.
+func TestReadISRWriterSeedFor_AbsentIsNotAFailure(t *testing.T) {
+	seed, err := ReadISRWriterSeedFor(context.Background(), newFakeSSM(), ClassProduction)
+	if err != nil {
+		t.Fatalf("ReadISRWriterSeedFor: %v", err)
+	}
+	if seed != "" {
+		t.Errorf("seed = %q, want empty", seed)
+	}
+}

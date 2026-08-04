@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/hmac"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -17,22 +16,15 @@ import (
 // minting each build's write secret, seeding its hash into the writer's
 // per-deploy Durable Object, and retiring it when the build is pruned.
 
-// MintISRWriterSeed generates the per-deploy-run seed every app's write secret
-// is derived from. It is never persisted: a rerun mints a new seed, derives new
-// secrets, and reseeds each build's registry with their hashes.
-func MintISRWriterSeed() (string, error) {
-	buf := make([]byte, 32)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
-}
-
-// isrWriteSecret derives one app's write secret from the deploy's seed and that
-// app's isrPrefix. Deriving rather than minting keeps appCaches a pure function
-// of the deploy — it is called several times per run and every call must agree
-// — while still giving each app a secret that authorizes writes to its slice
-// alone.
+// isrWriteSecret derives one app's write secret from the substrate's seed and
+// that app's isrPrefix. Deriving rather than minting keeps appCaches a pure
+// function of the deploy — it is called several times per run and every call
+// must agree — while still giving each app a secret that authorizes writes to
+// its slice alone.
+//
+// The seed comes from bootstrap (ensureISRWriterSeed) and outlives any one run,
+// so a build's secret is stable across redeploys and reproducible by the tag
+// publisher, which raises that build's invalidations against the same writer.
 func isrWriteSecret(seed, isrPrefix string) string {
 	mac := hmac.New(sha256.New, []byte(seed))
 	mac.Write([]byte(isrPrefix))
@@ -101,14 +93,14 @@ func retireISRWriter(ctx context.Context, cfg Config, isrPrefix string) error {
 // isrWriterReachable reports whether this Config can reach the writer at all. A
 // bootstrap predating it leaves the coordinates empty, and every writer call is
 // then a no-op. It is all a retirement needs: destroy is authorized by the
-// bootstrap credential, not by any deploy's secret, so a prune (which mints no
+// bootstrap credential, not by any deploy's secret, so a prune (which reads no
 // seed) still retires what it reclaims.
 func isrWriterReachable(cfg Config) bool {
 	return cfg.ISRWriterEndpoint != "" && cfg.ISRWriterBootstrapCred != ""
 }
 
-// isrWriterConfigured additionally requires the per-run seed, which only a
-// deploy has: without it there is no secret to derive, so nothing to point a
+// isrWriterConfigured additionally requires the substrate's seed, which only a
+// deploy reads: without it there is no secret to derive, so nothing to point a
 // function at and nothing to seed.
 func isrWriterConfigured(cfg Config) bool {
 	return isrWriterReachable(cfg) && cfg.ISRWriterSeed != ""

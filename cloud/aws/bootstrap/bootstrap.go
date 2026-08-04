@@ -286,6 +286,13 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 			if err := adoptISRWriter(ctx, ssmClient, sub.class, offer.Values); err != nil {
 				return err
 			}
+			// The seed every build's write secret is derived from. It belongs to
+			// the substrate rather than to a deploy run, because the secrets a
+			// live build's functions already hold were derived from it — see
+			// ensureISRWriterSeed.
+			if _, err := ensureISRWriterSeed(ctx, ssmClient, sub.class); err != nil {
+				return err
+			}
 		default:
 			report(log, fmt.Sprintf("ignoring edge offer %q: no provider resource adopts it", offer.Kind))
 		}

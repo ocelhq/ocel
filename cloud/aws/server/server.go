@@ -231,15 +231,18 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, err
 	}
 
-	// The ISR writer's coordinates, plus the seed this run derives each app's
-	// write secret from. The seed is minted per run and never persisted: it and
-	// the secrets it derives live only in this process and the function
+	// The ISR writer's coordinates, plus the substrate's seed each app's write
+	// secret is derived from. The seed is bootstrap's, not this run's: the tag
+	// publisher derives the same secrets from it to raise a build's
+	// invalidations, and a per-run seed would leave every live build holding a
+	// secret nothing else could reproduce. The derived secrets themselves are
+	// never persisted — they live only in this process and the function
 	// environments it writes.
 	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, substrateClass)
 	if err != nil {
 		return deploy.Result{}, err
 	}
-	isrWriterSeed, err := deploy.MintISRWriterSeed()
+	isrWriterSeed, err := bootstrap.ReadISRWriterSeedFor(ctx, ssmClient, substrateClass)
 	if err != nil {
 		return deploy.Result{}, err
 	}
