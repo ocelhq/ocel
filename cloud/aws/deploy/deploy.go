@@ -189,8 +189,8 @@ type Config struct {
 	// worker's coordinates, adopted from account-level bootstrap state: the
 	// endpoint a deployed function writes its ISR entries to, and the bootstrap
 	// credential that authorizes seeding and retiring one build's write secret.
-	// Empty when the bootstrap predates the writer, which leaves functions
-	// writing entries with the object-store credentials they already carry.
+	// Empty only when the substrate adopted no edge cache store either, which
+	// checkISRWriterAgrees is what enforces.
 	ISRWriterEndpoint      string
 	ISRWriterBootstrapCred string
 	// ISRWriterSeed is minted once per deploy run and never persisted. Each
