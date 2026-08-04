@@ -28,6 +28,8 @@ it("builds a bundle that loads and exports the handler", async () => {
 
   const bundle = await import(outfile);
   expect(typeof bundle.handler).toBe("function");
-  // No records, no config read: it must not reach for SSM to do nothing.
-  await expect(bundle.handler({ Records: [] })).resolves.toBeUndefined();
+  // No records, no config read: it must not reach for SSM to do nothing. The
+  // shape it answers with is what the event source mapping's
+  // ReportBatchItemFailures reads, so an empty batch has to carry it too.
+  await expect(bundle.handler({ Records: [] })).resolves.toEqual({ batchItemFailures: [] });
 }, 60_000);

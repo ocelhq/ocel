@@ -44,13 +44,12 @@ const (
 
 	// tagPublisherTimeoutSeconds bounds one batch. A batch fans out over the
 	// builds it touches, so the wall clock is a few round trips rather than one
-	// per record — but a timeout kills the whole batch, and a killed batch is
-	// retried and eventually bisected, so overshooting is cheaper than clipping
-	// a batch that was about to finish.
+	// per record — but a timeout kills the whole batch, so overshooting is
+	// cheaper than clipping a batch that was about to finish.
 	tagPublisherTimeoutSeconds = 60
 
 	// tagPublisherBatchSize and tagPublisherRetries. Retries are bounded so a
-	// permanently failing batch reaches the DLQ instead of blocking its shard
+	// permanently failing record reaches the DLQ instead of blocking its shard
 	// forever: a stream shard is ordered, and an un-retirable record at its head
 	// stalls every later invalidation for that shard.
 	tagPublisherBatchSize = 100
@@ -63,9 +62,9 @@ const (
 	// acknowledges it, which is the point.
 	tagPublisherDLQRetentionSeconds = 1209600
 
-	// The DLQ alarm fires on the first message: a batch reaching the DLQ means
-	// invalidations for those builds were dropped, and there is no healthy rate
-	// of that. Missing data is not breaching — an empty queue publishes no
+	// The DLQ alarm fires on the first message: a record reaching the DLQ means
+	// that build's invalidation was dropped, and there is no healthy rate of
+	// that. Missing data is not breaching — an empty queue publishes no
 	// datapoints at all.
 	tagPublisherAlarmPeriodSeconds = 300
 	tagPublisherAlarmPeriods       = 1
@@ -225,7 +224,8 @@ func tagPublisherResources(code artifactCode, class string) string {
       StartingPosition: LATEST
       BatchSize: %d
       MaximumBatchingWindowInSeconds: 0
-      BisectBatchOnFunctionError: true
+      FunctionResponseTypes:
+        - ReportBatchItemFailures
       MaximumRetryAttempts: %d
       DestinationConfig:
         OnFailure:
@@ -236,7 +236,7 @@ func tagPublisherResources(code artifactCode, class string) string {
   TagPublisherDeadLetterAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
-      AlarmDescription: A tag-snapshot batch exhausted its retries; those builds' invalidations were dropped and their edge replicas are behind.
+      AlarmDescription: A tag-snapshot record exhausted its retries; that build's invalidation was dropped and its edge replica is behind.
       Namespace: AWS/SQS
       MetricName: ApproximateNumberOfMessagesVisible
       Dimensions:

@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 	"testing"
 
@@ -44,11 +45,11 @@ type parsedPublisher struct {
 			Environment struct {
 				Variables map[string]string `yaml:"Variables"`
 			} `yaml:"Environment"`
-			StartingPosition               string `yaml:"StartingPosition"`
-			BatchSize                      int    `yaml:"BatchSize"`
-			MaximumBatchingWindowInSeconds *int   `yaml:"MaximumBatchingWindowInSeconds"`
-			BisectBatchOnFunctionError     bool   `yaml:"BisectBatchOnFunctionError"`
-			MaximumRetryAttempts           *int   `yaml:"MaximumRetryAttempts"`
+			StartingPosition               string   `yaml:"StartingPosition"`
+			BatchSize                      int      `yaml:"BatchSize"`
+			MaximumBatchingWindowInSeconds *int     `yaml:"MaximumBatchingWindowInSeconds"`
+			FunctionResponseTypes          []string `yaml:"FunctionResponseTypes"`
+			MaximumRetryAttempts           *int     `yaml:"MaximumRetryAttempts"`
 			DestinationConfig              struct {
 				OnFailure struct {
 					Destination string `yaml:"Destination"`
@@ -95,8 +96,9 @@ func parsePublisherTemplate(t *testing.T, template string) parsedPublisher {
 
 // TestTagPublisher_ConsumesTheStreamIntoADeadLetterQueue asserts the shape the
 // publisher's liveness rests on: a zero batching window so an invalidation is
-// not held back, bisection and a bounded retry so a poisonous record cannot
-// stall its shard forever, and a queue for what those retries could not place.
+// not held back, per-record failure reporting and a bounded retry so a poisonous
+// record cannot stall its shard or take healthy records down with it, and a
+// queue for what those retries could not place.
 func TestTagPublisher_ConsumesTheStreamIntoADeadLetterQueue(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -130,8 +132,13 @@ func TestTagPublisher_ConsumesTheStreamIntoADeadLetterQueue(t *testing.T) {
 			if w := esm.Properties.MaximumBatchingWindowInSeconds; w == nil || *w != 0 {
 				t.Errorf("MaximumBatchingWindowInSeconds = %v, want 0 — an invalidation must not wait on a batch filling", w)
 			}
-			if !esm.Properties.BisectBatchOnFunctionError {
-				t.Error("BisectBatchOnFunctionError is off, so one bad record retires the whole batch to the DLQ")
+			// A batch fans out over the builds it touches, and one of them can be
+			// permanently unpublishable — a build whose deploy never initialized
+			// the writer 401s forever. Reported per record, only that build's
+			// records are retried; without it every healthy build sharing the
+			// batch is retried and dead-lettered alongside it.
+			if want := []string{"ReportBatchItemFailures"}; !slices.Equal(esm.Properties.FunctionResponseTypes, want) {
+				t.Errorf("FunctionResponseTypes = %v, want %v — one poison build must not fail its batch-mates", esm.Properties.FunctionResponseTypes, want)
 			}
 			if r := esm.Properties.MaximumRetryAttempts; r == nil || *r != tagPublisherRetries {
 				t.Errorf("MaximumRetryAttempts = %v, want %d — unbounded retries stall the shard", r, tagPublisherRetries)

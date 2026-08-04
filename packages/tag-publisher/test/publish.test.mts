@@ -51,7 +51,9 @@ const commands = {
 } as any;
 
 function raises(records: Record<string, TagRecord>): Raises {
-  return new Map([[PREFIX, new Map(Object.entries(records))]]);
+  return new Map([
+    [PREFIX, { records: new Map(Object.entries(records)), sequenceNumbers: ["1"] }],
+  ]);
 }
 
 function publisher(s3: FakeS3, fetchImpl: any) {
@@ -135,28 +137,37 @@ describe("publishAll", () => {
     expect(stored(s3).records.cart).toEqual({ stale: undefined, expired: 500 });
   });
 
-  it("fails the batch when the writer will not take the raise", async () => {
+  it("reports the records back when the writer will not take the raise", async () => {
     // 429 means nothing durable happened and the records are still in hand, so
-    // the batch is retried rather than acknowledged.
+    // they are retried rather than acknowledged.
     const exhausted = vi.fn(async () => new Response(null, { status: 429 }));
-    await expect(
-      publishAll(publisher(new FakeS3(), exhausted), raises({ cart: { expired: 5 } }), 1),
-    ).rejects.toThrow();
+
+    expect(
+      await publishAll(publisher(new FakeS3(), exhausted), raises({ cart: { expired: 5 } }), 1),
+    ).toEqual(["1"]);
   });
 
-  it("attempts every build before failing the batch", async () => {
-    const s3 = seeded();
+  // A build whose deploy never initialized the writer 401s its raise forever.
+  // Reported as the whole batch's failure, it drags every healthy build sharing
+  // the batch through five retries and into the dead-letter queue with it; the
+  // event source retries exactly the records named here and nothing else.
+  it("reports one poison build's records without failing its batch-mates", async () => {
     const other = "prod/acme/admin/BUILD2";
+    const s3 = seeded();
+    s3.objects.set(tagSnapshotKey(other), {
+      body: JSON.stringify({ version: 1, deployedAt: 10, generatedAt: 10, records: {} }),
+      etag: "v0",
+    });
     const fetchImpl = vi.fn(async (url: string) =>
-      url.includes(other) ? new Response(null, { status: 500 }) : new Response(null, { status: 204 }),
+      url.includes(other) ? new Response(null, { status: 401 }) : new Response(null, { status: 204 }),
     );
     const both: Raises = new Map([
-      [PREFIX, new Map([["cart", { expired: 5 }]])],
-      [other, new Map([["home", { expired: 6 }]])],
+      [PREFIX, { records: new Map([["cart", { expired: 500 }]]), sequenceNumbers: ["1", "2"] }],
+      [other, { records: new Map([["home", { expired: 600 }]]), sequenceNumbers: ["3"] }],
     ]);
 
-    await expect(publishAll(publisher(s3, fetchImpl), both, 1)).rejects.toThrow();
-    expect(s3.objects.has(KEY)).toBe(true);
+    expect(await publishAll(publisher(s3, fetchImpl), both, 900)).toEqual(["3"]);
+    expect(stored(s3).records.cart).toEqual({ stale: undefined, expired: 500 });
   });
 
   it("refuses to write over a document it cannot read", async () => {
@@ -165,9 +176,7 @@ describe("publishAll", () => {
     const s3 = new FakeS3();
     s3.objects.set(KEY, { body: JSON.stringify({ version: 2, records: {} }), etag: "v0" });
 
-    await expect(
-      publishAll(publisher(s3, ok), raises({ cart: { expired: 5 } }), 1),
-    ).rejects.toThrow();
+    expect(await publishAll(publisher(s3, ok), raises({ cart: { expired: 5 } }), 1)).toEqual(["1"]);
     expect(s3.puts).toEqual([]);
     expect(stored(s3).version).toBe(2);
   });
