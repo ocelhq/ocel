@@ -25,8 +25,8 @@ guarantor of invalidation.
 ```
 main
  └─ 1  isr-herd/01-cache-api-spike        ocelhq-wvag.1   ✅ CLOSED (measured)
-     └─ 2  isr-writer worker + DO          ocelhq-wvag.2  ✅ code complete, not pushed
-         └─ 3  manifest projection         ocelhq-wvag.3  ✅ code complete, not pushed
+     └─ 2  isr-writer worker + DO          ocelhq-wvag.2  ✅ CLOSED, reviewed ×2, not pushed
+         └─ 3  manifest projection         ocelhq-wvag.3  ✅ CLOSED, reviewed, not pushed  ✅ code complete, not pushed
              └─ 4  streams publisher       ocelhq-wvag.4
                  └─ 5  origin reads snapshot ocelhq-wvag.5
                      └─ 6  get drops BatchGetItem ocelhq-wvag.6
@@ -36,7 +36,9 @@ main
 
 Filed out of band: `ocelhq-wvag.9` (measure the L1 write-visibility window; **blocks `.8`**),
 `ocelhq-wvag.10` (live e2e for the writer), `ocelhq-wvag.11` (destroy leaves per-build writer
-DO instances behind).
+DO instances behind), `ocelhq-wvag.12` (collapse the twice-derived projection key and
+filename into `@ocel/next-cache`; needs a dist build on that package, so it touches the
+Lambda and worker bundling — best done between PRs rather than inside one).
 
 ## Working method
 
@@ -101,13 +103,36 @@ function over one grouping of a route's prerender outputs, so they cannot drift.
 Nothing is fetched at runtime. Bundling is what makes a Lambda for build N unable to read
 build M's headers; a cold-start fetch from S3 was considered and rejected in decision 5.
 
-Verified: `packages/next-runtime` 156 tests; `packages/lambda-entrypoints` 209 of 210 (the
-one failure is the known pre-existing `test/tag-clock.test.mts`, identical on the base
-commit); `workers/nextjs` 523; `packages/next-cache` 34; `pnpm -r typecheck` clean except the
-four `examples/*` packages that fail on the base commit. No Go changed — a `.func` is zipped
-whole, so the new file rides the existing artifact path.
+**PR 3 has been reviewed** (standards + adversarial spec/correctness), and the findings are
+fixed on the branch. Four came out of it:
 
-**PR 2 (`ocelhq-wvag.2`) — code complete, NOT pushed, issue in progress.**
+- **A corrupt projection failed *closed*, in code whose comment claimed fail-open.**
+  `JSON.parse("null")` returns `null` without throwing, so the memo (`??=`) never took, the
+  file was re-read on every `set`, and indexing `null` threw a `TypeError` inside `set`'s try
+  *before* `background()` was scheduled — dropping the write. Every `APP_PAGE` route would
+  have silently stopped caching for the life of the deploy, with no log. `loadVariantHeaders`
+  now rejects anything that is not a non-null, non-array object, and the whole matrix
+  (absent, unreadable, empty, malformed, `null`, array, string, number) is table-tested.
+- **The projection's key space was derived twice** — the adapter's entry key and
+  `cacheKey()` in `@ocel/next-cache` are the same transform, authored independently. Drift
+  would make every lookup miss and quietly disable PPR, the exact failure the projection
+  exists to prevent. Contract tests now pin both that pair and the twice-spelled filename.
+  Collapsing them to one derivation needs a packaging change and is filed as
+  **`ocelhq-wvag.12`** — see below.
+- The acceptance criterion "segment prefetch verified" was asserted only as bytes on the
+  entry; nothing drove a rewritten entry through `reconstructSegment`, the consumer that
+  returns null and disables PPR without `segmentHeaders`. Now covered in `workers/nextjs`,
+  both directions, and the negative was mutation-checked to confirm it has teeth.
+- Comment/name cleanups: `PrerenderGroup.key` → `entryKey` (the name now carries what four
+  lines of comment did), and a paragraph duplicated verbatim across two packages kept once.
+
+Verified after the fixes: `packages/next-runtime` 157; `packages/lambda-entrypoints` 217 of
+218 (the one failure is the known pre-existing `test/tag-clock.test.mts`, identical on the
+base commit); `workers/nextjs` 525; `packages/next-cache` 34; `pnpm -r --no-bail typecheck`
+clean except the four `examples/*` packages that fail on the base commit. No Go changed — a
+`.func` is zipped whole, so the new file rides the existing artifact path.
+
+**PR 2 (`ocelhq-wvag.2`) — code complete and reviewed twice, NOT pushed. Issue CLOSED.**
 
 Branch `isr-herd/02-isr-writer`, rooted on PR 1. New account-level package
 `workers/isr-writer/` (worker entry, per-deploy `IsrDeploy` Durable Object, registry SQL,
@@ -115,13 +140,39 @@ entry read/write, auth primitives), the Go deploy plumbing that provisions it, m
 seeds each build's write secret, and prunes it on retirement, plus the Lambda-side client
 that routes ISR entries through it.
 
-Verified on this branch: `tsc --noEmit` clean across every workspace package (`examples/hono`
-fails, pre-existing and unrelated — the dogfooded SDK is not built); `workers/isr-writer`
-43 tests over 4 files; `packages/lambda-entrypoints` 205 of 206 (the one failure is the
-known pre-existing `test/tag-clock.test.mts:371`, identical on the base commit);
-`workers/nextjs` 523 tests; `packages/next-cache` 34 tests; `wrangler deploy --dry-run`
-succeeds at 8.01 KiB / 2.68 KiB gzipped; all seven Go modules build and `cloud/aws` +
-`cloud/edge/cloudflare` tests pass.
+**The second review happened, and it found three real defects.** All are fixed on the branch:
+
+- **A cold-filled memo was born already spent.** `fromRegistry` hardcoded `refreshed: true`,
+  but `refreshed` is defined as "already re-read *after a token failed against it*". So the
+  one-re-read escape hatch never fired where it was designed to: redeploy the same buildId,
+  and a warm isolate refused the freshly derived secret for up to 60 s while the Lambda
+  logged a false *permanent* failure. Only the failure-triggered re-read sets the flag now.
+  Cost is that a bad token at a cold isolate spends two DO calls instead of one, then the
+  prefix is refused off the memo — the bound that matters still holds.
+- **No in-flight coalescing on the registry read.** The memo stored resolved values, never
+  the pending promise, so every concurrent request on a cold isolate issued its own RPC to a
+  *single-threaded* DO. Sized for writes, this became a herd at the auth boundary once reads
+  joined the hot path — in a PR whose whole purpose is removing herds. In-flight reads now
+  share one round trip, and a rejected read is not cached.
+- **An unknown prefix wrote durable storage, unauthenticated.** `authorized` reached the DO
+  before verifying any credential, and `deployPrefix` checks only the *shape* of a name, so
+  any junk bearer against a well-formed prefix materialized a DO whose constructor ran
+  `ensureSchema` — a storage write. Varying the prefix created unbounded persisted objects,
+  exactly the litter `ocelhq-wvag.11` exists to clean up. `ensureSchema` now runs only on the
+  write path, `secretHash()` tolerates a missing table, and the memo map is capacity-bounded.
+
+Two smaller ones: a misdirected read is no longer indistinguishable from a cold cache (the
+worker marks an entry-miss 404; the Lambda warns on any other 404 and still misses), and the
+credential primitives both account-level workers had copied are now one package,
+`@ocel/worker-auth`.
+
+Verified after the fixes: `pnpm -r --no-bail typecheck` clean across every source package
+(the four `examples/*` failures are pre-existing — the dogfooded SDK is not built);
+`workers/isr-writer` 42; `workers/deployments-store` 63; `packages/worker-auth` 7;
+`packages/next-cache` 34; `workers/nextjs` 523; `packages/lambda-entrypoints` 207 of 208 (the
+known pre-existing `test/tag-clock.test.mts`); `cloud/aws` and `cloud/edge` build and test
+clean. Note `gofmt -l` flags `cloud/edge/cloudflare/cloudflare_test.go` — pre-existing drift
+from `b17467f`, untouched by this stack.
 
 **Nothing is deployed to Cloudflare.** The worker has never run on a real account, which is
 what `ocelhq-wvag.10` exists for.
@@ -223,28 +274,26 @@ and claims every deployment lands on workers.dev.
 
 ## Next step
 
-**PR 2 has not been reviewed since it changed.** It was reviewed once, at 8 commits. It now
-has 16: eight review fixes, then the entry-read rerouting, which is a scope addition that has
-had no independent scrutiny at all. Review the whole branch again before building on it —
-`git diff isr-herd/01-cache-api-spike...isr-herd/02-isr-writer`.
+**PRs 2 and 3 are both reviewed and their findings are fixed.** Nothing in the stack is
+waiting on scrutiny. Branch `isr-herd/04-streams-publisher` off `isr-herd/03-manifest-projection`
+and dispatch `ocelhq-wvag.4`.
 
-Weight the review toward the parts that changed after the first pass:
+Both review rounds landed real defects rather than polish — three in PR 2, one in PR 3 — and
+in every case the failure was silent: a write dropped with no log, a herd at the auth
+boundary, storage written for a caller who never authenticated, a projection that would miss
+forever if two derivations drifted. Keep weighting later reviews toward *what fails without
+saying so*, not toward what throws.
 
-- **Fail-open on the read path.** Next calls `get()` on every request to a cached route and
-  does not wrap it. Try to find any input that makes `readEntry` throw into a render rather
-  than return a miss.
-- **The auth memo, now on the hot path.** It was sized for writes. Confirm reads add no
-  Durable Object round trip, and that the 60 s retirement bound in "Standing notes" is still
-  what the code delivers.
-- **The `isrObjectStore()` deletion and the new deploy-time agreement gate**, which made six
-  Go tests invalid because they adopted a cache store without a writer. Confirm the gate
-  fails in both directions and that no prune or teardown path trips it.
-- The first review's own verdict is in this session's history: the key-derivation confinement
-  held under percent-encoded traversal, prefix confusion and key injection. Re-verify it now
-  that a read endpoint shares the same derivation.
+Three things `.4` should know before it starts:
 
-PR 3 has landed on `isr-herd/03-manifest-projection` and is unreviewed. Branch
-`isr-herd/04-streams-publisher` off it and dispatch `ocelhq-wvag.4`.
+- **It owns the last standing R2 credential's removal.** See "The credential is narrowed, not
+  gone" above. Do not close `.4` without deleting `OCEL_CACHE_STORE_PARAM`, the
+  `OCEL_ISR_STORE_*` injection and `snapshotObjectStore`. Until it lands, every deployed
+  function holds a token that can write any object in the shared `ocel-edge-cache` bucket for
+  every project.
+- **It routes snapshot writes through the PR 2 worker**, so it inherits that worker's
+  assumptions — including the ones still unproven against a real account (`ocelhq-wvag.10`).
+- The write path's fail-open discipline is now established at two seams. Match it.
 
 Two live threads to carry forward:
 
