@@ -2,6 +2,7 @@ import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sha256Hex } from "../src/auth";
+import { IsrDeploy } from "../src/isr-deploy";
 import * as registry from "../src/registry";
 import type { Env } from "../src/env";
 
@@ -136,6 +137,21 @@ describe("entry writes", () => {
     expect((await writeEntryReq(prefix, "../escape", "write-secret")).status).toBe(400);
     expect((await writeEntryReq(prefix, "", "write-secret")).status).toBe(400);
   });
+
+  // The key grammar is @ocel/next-cache's entryObjectKey, the same function the
+  // Lambda derives its own key with. A route the writer refuses but its caller
+  // accepts is a route that renders on every request and never caches, and the
+  // refusal reaches nobody: the caller's throw is raised inside background().
+  // `trailingSlash: true` produces exactly that key on every route.
+  it("accepts a trailing-slash route key, which the direct write path accepted", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    expect((await writeEntryReq(prefix, "blog/", "write-secret", `{"value":9}`)).status).toBe(204);
+
+    const stored = await env.OCEL_CACHE_STORE.get(`${prefix}/cache/blog/.cache.json`);
+    expect(await stored?.text()).toBe(`{"value":9}`);
+  });
 });
 
 describe("destroy", () => {
@@ -167,6 +183,29 @@ describe("routing", () => {
   it("404s an unknown op and a path with no deploy prefix", async () => {
     expect((await SELF.fetch(req("/prod/acme/web/B/nonsense"))).status).toBe(404);
     expect((await SELF.fetch(req("/initialize", { method: "POST" }))).status).toBe(404);
+  });
+
+  // idFromName materializes a storage-backed Durable Object for whatever name it
+  // is handed, and the entry op reaches it before any credential is checked — so
+  // a path that is not a deploy prefix must never get that far, or an
+  // unauthenticated caller can create Durable Objects in the account at will.
+  it("404s a path that is not exactly a four-segment deploy prefix", async () => {
+    const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
+    const paths = [
+      "/aaa/entry",
+      "/prod/acme/entry",
+      "/prod/acme/web/B1/extra/entry",
+      "/prod/acme/web/../entry",
+      "/prod/acme/web/./entry",
+    ];
+    for (const path of paths) {
+      const res = await SELF.fetch(
+        bearerReq(`${path}?key=x`, "anything", { method: "PUT", body: "{}" }),
+      );
+      expect(res.status, path).toBe(404);
+    }
+    expect(secretHash).not.toHaveBeenCalled();
+    secretHash.mockRestore();
   });
 });
 
@@ -207,5 +246,39 @@ describe("secret rotation", () => {
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 61_000);
     expect((await writeEntryReq(prefix, "b", "write-secret")).status).toBe(401);
+  });
+
+  // A bad token buys at most one registry read per memo generation. The prefix
+  // appears verbatim in the R2 paths the edge serves, so it is not secret: were
+  // every failed compare to fall through to the DO, anyone who read one could
+  // starve that deploy's real writes against a single-threaded object.
+  it("re-reads the registry once per memo generation, not once per failed token", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
+
+    for (let i = 0; i < 5; i++) {
+      expect((await writeEntryReq(prefix, "a", `garbage-${i}`)).status).toBe(401);
+    }
+    expect(secretHash).toHaveBeenCalledTimes(1);
+
+    // The one re-read is what the rotation case spends, and it is still there
+    // for a legitimate token that arrives after the garbage.
+    expect((await writeEntryReq(prefix, "a", "write-secret")).status).toBe(204);
+    expect(secretHash).toHaveBeenCalledTimes(1);
+    secretHash.mockRestore();
+  });
+
+  // An unseeded deploy is memoized too, or garbage aimed at a prefix nobody
+  // deployed costs a round trip apiece.
+  it("re-reads the registry once for an unseeded deploy, however many tokens fail", async () => {
+    const prefix = freshPrefix();
+    const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
+
+    for (let i = 0; i < 5; i++) {
+      expect((await writeEntryReq(prefix, "a", `garbage-${i}`)).status).toBe(401);
+    }
+    expect(secretHash).toHaveBeenCalledTimes(1);
+    secretHash.mockRestore();
   });
 });

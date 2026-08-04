@@ -6,6 +6,7 @@ import {
   bytesToBase64,
   cacheKey,
   deserialize,
+  entryObjectKey,
   tagsOf,
   type TagRecord,
 } from "../src/index.mjs";
@@ -18,6 +19,34 @@ describe("cacheKey", () => {
 
   it("strips the leading slash", () => {
     expect(cacheKey("/blog/a")).toBe("blog/a");
+  });
+});
+
+describe("entryObjectKey", () => {
+  const PREFIX = "prod/proj/web/BUILD1";
+
+  it("roots the key under the deploy's own cache slice", () => {
+    expect(entryObjectKey(PREFIX, cacheKey("/blog/post"))).toBe(
+      "prod/proj/web/BUILD1/cache/blog/post.cache.json",
+    );
+  });
+
+  it("keys a trailing-slash route, which the direct write path also accepted", () => {
+    expect(entryObjectKey(PREFIX, cacheKey("/blog/"))).toBe(
+      "prod/proj/web/BUILD1/cache/blog/.cache.json",
+    );
+    expect(entryObjectKey(PREFIX, "blog//post")).toBe(
+      "prod/proj/web/BUILD1/cache/blog//post.cache.json",
+    );
+  });
+
+  it("refuses a key that could climb out of the prefix", () => {
+    expect(entryObjectKey(PREFIX, "../other/entry")).toBeNull();
+    expect(entryObjectKey(PREFIX, "blog/../../escape")).toBeNull();
+    expect(entryObjectKey(PREFIX, "blog/./post")).toBeNull();
+    expect(entryObjectKey(PREFIX, "/absolute")).toBeNull();
+    expect(entryObjectKey(PREFIX, "blog\\post")).toBeNull();
+    expect(entryObjectKey(PREFIX, "")).toBeNull();
   });
 });
 

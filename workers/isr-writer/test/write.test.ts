@@ -1,27 +1,9 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-import { entryObjectKey, writeEntry } from "../src/write";
+import { writeEntry } from "../src/write";
 
 const PREFIX = "prod/proj/web/BUILD1";
-
-describe("entryObjectKey", () => {
-  it("roots the key under the deploy's own cache slice", () => {
-    expect(entryObjectKey(PREFIX, "blog/post")).toBe(
-      "prod/proj/web/BUILD1/cache/blog/post.cache.json",
-    );
-  });
-
-  it("refuses a key that could climb out of the prefix", () => {
-    expect(entryObjectKey(PREFIX, "../other/entry")).toBeNull();
-    expect(entryObjectKey(PREFIX, "blog/../../escape")).toBeNull();
-    expect(entryObjectKey(PREFIX, "/absolute")).toBeNull();
-    expect(entryObjectKey(PREFIX, "blog//post")).toBeNull();
-    expect(entryObjectKey(PREFIX, "blog/./post")).toBeNull();
-    expect(entryObjectKey(PREFIX, "blog\\post")).toBeNull();
-    expect(entryObjectKey(PREFIX, "")).toBeNull();
-  });
-});
 
 describe("writeEntry", () => {
   it("puts the body at the object key as JSON", async () => {
