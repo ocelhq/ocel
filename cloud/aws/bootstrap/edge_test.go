@@ -491,6 +491,39 @@ func TestEnsureISRWriterSeed_IsCreateOnly(t *testing.T) {
 	}
 }
 
+// racingSSM is a second bootstrap running concurrently: the parameter appears
+// between this one's read and its create-only write, which is exactly what SSM
+// answers with ParameterAlreadyExists.
+type racingSSM struct {
+	*fakeSSM
+	winner string
+	raced  bool
+}
+
+func (r *racingSSM) PutParameter(ctx context.Context, in *ssm.PutParameterInput, opts ...func(*ssm.Options)) (*ssm.PutParameterOutput, error) {
+	if !r.raced {
+		r.raced = true
+		r.fakeSSM.params[aws.ToString(in.Name)] = r.winner
+	}
+	return r.fakeSSM.PutParameter(ctx, in, opts...)
+}
+
+// TestEnsureISRWriterSeed_ConvergesOnAConcurrentBootstrap. Two bootstraps racing
+// must agree on one seed rather than the loser failing the whole run: every live
+// build's write secret is derived from whichever seed is in force, so the answer
+// has to be the stored one.
+func TestEnsureISRWriterSeed_ConvergesOnAConcurrentBootstrap(t *testing.T) {
+	ssmc := &racingSSM{fakeSSM: newFakeSSM(), winner: "the-other-bootstraps-seed"}
+
+	seed, err := ensureISRWriterSeed(context.Background(), ssmc, ClassProduction)
+	if err != nil {
+		t.Fatalf("ensureISRWriterSeed lost a race instead of converging: %v", err)
+	}
+	if seed != ssmc.winner {
+		t.Errorf("seed = %q, want the winner's %q", seed, ssmc.winner)
+	}
+}
+
 // TestReadISRWriterSeedFor_AbsentIsNotAFailure keeps an account bootstrapped
 // before the seed distinguishable from a broken read: the deploy reports a
 // substrate with no writer and asks for a re-bootstrap, rather than deriving
