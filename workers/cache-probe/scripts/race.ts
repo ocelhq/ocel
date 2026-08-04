@@ -387,18 +387,30 @@ async function burstSweep(options: RaceOptions, origin: string) {
   let attempted = 0;
 
   for (const size of options.sizes) {
-    let racers = await openRacers(origin, size);
+    // Wider than the burst, so consecutive trials draw a different window of
+    // sockets. A fixed pool of exactly N does not measure the colo: sockets pin
+    // to isolates for the pool's whole life, so 100 trials are 100 repeats of
+    // one isolate combination rather than 100 draws over the colo — and pairs
+    // differ enormously, some seeing each other's claim at once and some not
+    // until W. The gap sweep rotates its pairs for the same reason.
+    const poolSize = size + options.sockets;
+    let racers = await openRacers(origin, poolSize);
     const trials: BurstTrial[] = [];
     let attemptedHere = 0;
 
     for (let trial = 0; trial < options.trials; trial += 1) {
       const key = `race-${randomUUID()}`;
-      const paths = racers.map((_, seq) => raceRoute(options, key, seq));
+      const offset = (trial * size) % poolSize;
+      const burst = Array.from(
+        { length: size },
+        (_, i) => racers[(offset + i) % poolSize]!,
+      );
+      const paths = burst.map((_, seq) => raceRoute(options, key, seq));
       attemptedHere += 1;
       sentAtByPath.clear();
       try {
         const responses = await Promise.all(
-          racers.map((client, seq) => call<RaceResponse>(client, "POST", paths[seq]!)),
+          burst.map((client, seq) => call<RaceResponse>(client, "POST", paths[seq]!)),
         );
         trials.push({
           size,
@@ -409,7 +421,7 @@ async function burstSweep(options: RaceOptions, origin: string) {
         if (error instanceof Abort) throw error;
         discarded += 1;
         await closeRacers(racers).catch(() => {});
-        racers = await openRacers(origin, size);
+        racers = await openRacers(origin, poolSize);
       }
     }
 
