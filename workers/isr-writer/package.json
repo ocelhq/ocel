@@ -12,7 +12,8 @@
     "cf-typegen": "wrangler types"
   },
   "dependencies": {
-    "@ocel/next-cache": "workspace:*"
+    "@ocel/next-cache": "workspace:*",
+    "@ocel/worker-auth": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.12.4",

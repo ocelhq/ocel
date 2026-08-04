@@ -44,6 +44,13 @@ export function initialize(store: SqlStore, secretHash: string): void {
   );
 }
 
+// A hash is only ever accepted from the deploy host in the shape this table
+// stores, so a malformed one is rejected at the door rather than written and
+// then never matched by anything.
+export function isSecretHash(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{64}$/.test(value);
+}
+
 export function secretHash(store: SqlStore): string | undefined {
   if (!initialized(store)) return undefined;
   return store.sql

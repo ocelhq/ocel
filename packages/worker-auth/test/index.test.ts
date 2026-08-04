@@ -1,16 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import {
-  bearer,
-  isSecretHash,
-  matchesHash,
-  matchesSecret,
-  sha256Hex,
-  timingSafeEqual,
-} from "../src/auth";
+import { bearer, matchesHash, matchesSecret, sha256Hex, timingSafeEqual } from "../src/index.js";
 
 const req = (headers?: Record<string, string>) =>
-  new Request("https://writer.example/x", { headers });
+  new Request("https://worker.example/x", { headers });
 
 describe("bearer", () => {
   it("extracts the token from a bearer header", () => {
@@ -45,6 +38,7 @@ describe("matchesSecret", () => {
     expect(await matchesSecret("the-secret", "the-secret")).toBe(true);
     expect(await matchesSecret("wrong", "the-secret")).toBe(false);
     expect(await matchesSecret("", "the-secret")).toBe(false);
+    expect(await matchesSecret("the-secret", "the-secret-but-longer")).toBe(false);
   });
 });
 
@@ -57,19 +51,5 @@ describe("matchesHash", () => {
 
   it("rejects a token compared against a malformed hash", async () => {
     expect(await matchesHash("write-secret", "")).toBe(false);
-  });
-});
-
-describe("isSecretHash", () => {
-  it("accepts a 64-character lowercase hex digest", async () => {
-    expect(isSecretHash(await sha256Hex("x"))).toBe(true);
-  });
-
-  it("rejects anything else", () => {
-    expect(isSecretHash("a".repeat(63))).toBe(false);
-    expect(isSecretHash("A".repeat(64))).toBe(false);
-    expect(isSecretHash("g".repeat(64))).toBe(false);
-    expect(isSecretHash(undefined)).toBe(false);
-    expect(isSecretHash(123)).toBe(false);
   });
 });

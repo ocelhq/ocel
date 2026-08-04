@@ -1,6 +1,8 @@
 import { WorkerEntrypoint } from "cloudflare:workers";
 
-import { authorized, bearer } from "./auth";
+import { bearer } from "@ocel/worker-auth";
+
+import { authorized } from "./auth";
 import { DeploymentsStore } from "./deployments-do";
 import type { DeploymentRecord, PointerRecordResult, Promotion } from "./store";
 import type { Env } from "./env";
