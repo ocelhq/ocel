@@ -86,8 +86,8 @@ describe("tagsOf", () => {
   });
 
   // The shape every stored fetch entry has: it records the tags it was written
-  // under, and its reader passes the same ones back in. BatchGetItem rejects a
-  // repeated key, so a bag here makes a tagged entry permanently unreadable.
+  // under, and its reader passes the same ones back in — so this is the one call
+  // that decides whether the answer is a dependency set or a bag.
   it("names a tag once when the entry and the request agree on it", () => {
     expect(
       tagsOf(

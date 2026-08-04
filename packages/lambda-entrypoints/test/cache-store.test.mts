@@ -30,7 +30,13 @@ const adoptWriter = () =>
     OCEL_ISR_WRITER_SECRET: "write-secret",
   });
 
-afterEach(() => {
+afterEach(async () => {
+  // The tag clock lives on globalThis so the two handler bundles share one, so
+  // resetting modules does not reset it: a store bound to a mock this test built
+  // would answer the next test's reads, and its sync throttle would suppress
+  // them. Unbound before the registry is reset, or importing it here would
+  // repopulate the registry with an unmocked graph for the next test to find.
+  (await import("../src/next/tag-clock.mjs")).setTagClockStore(null);
   vi.useRealTimers();
   vi.resetModules();
   vi.restoreAllMocks();
@@ -41,17 +47,8 @@ afterEach(() => {
 
 const TABLE = "state";
 
-function tagItem(tag: string, expired: number) {
-  return {
-    pk: { S: `TAG#prod#proj#app#BID#${tag}` },
-    sk: { S: "#META" },
-    expired: { N: String(expired) },
-  };
-}
-
 // Drives the store against a scripted DynamoDB: each entry is one send()
-// response, so a test can hand back UnprocessedKeys the way a throttled
-// BatchGetItem does. A response that is an Error is thrown instead.
+// response, in order. A response that is an Error is thrown instead.
 async function storeWithResponses(responses: any[]) {
   const sends: any[] = [];
   vi.doMock("@aws-sdk/client-dynamodb", async (orig) => {
@@ -106,12 +103,21 @@ async function entryStore(responses: any[] = []) {
       },
     };
   });
+  const ddbSent: any[] = [];
   vi.doMock("@aws-sdk/client-dynamodb", async (orig) => {
     const actual = await orig<any>();
-    return { ...actual, DynamoDBClient: class { async send() { return {}; } } };
+    return {
+      ...actual,
+      DynamoDBClient: class {
+        async send(cmd: any) {
+          ddbSent.push(cmd.input);
+          return {};
+        }
+      },
+    };
   });
   const { awsCacheStore } = await import("../src/next/cache-store.mjs");
-  return { store: awsCacheStore(), built, sent };
+  return { store: awsCacheStore(), built, sent, ddbSent };
 }
 
 // Stubs the writer worker, capturing what it was asked for.
@@ -267,78 +273,47 @@ test("stays on the provider's own bucket when no store is adopted", async () => 
   });
 });
 
-// DynamoDB stays the one true clock. Adopting a store moves entries and nothing
-// else: tag reads run in Lambda, where the table is in-region, and taxing every
-// origin render to subsidize the edge is the trade this epic refuses.
-test("leaves the tag path on DynamoDB when a store is adopted", async () => {
-  adoptStore();
-  adoptWriter();
-  const { store, sends } = await storeWithResponses([
-    { Responses: { [TABLE]: [tagItem("products", 111)] } },
+// The read path's whole tag check, against the real store rather than a fake:
+// one GET of this build's snapshot, and nothing sent to the table at all. What
+// it replaces is a BatchGetItem per request per tagged route, whose failure mode
+// was a miss and therefore a re-render — so under a throttled table every
+// tagged route in the fleet re-rendered at once, which is the herd this epic
+// exists to remove. A read reappearing here is silent: it would serve correctly
+// and only cost.
+test("serves a tagged entry off the snapshot, sending nothing to the table", async () => {
+  const entryBody = JSON.stringify({
+    lastModified: 5_000,
+    value: {
+      kind: "APP_PAGE",
+      html: "<html>hi</html>",
+      status: 200,
+      headers: { "x-next-cache-tags": "products" },
+    },
+  });
+  const snapshotBody = JSON.stringify({
+    version: 1,
+    deployedAt: 1,
+    generatedAt: 2,
+    records: { products: { expired: 4_000 } },
+  });
+  const { store, sent, ddbSent } = await entryStore([
+    { Body: { transformToString: async () => entryBody } },
+    { Body: { transformToString: async () => snapshotBody }, ETag: '"v1"' },
   ]);
+  const clock = await import("../src/next/tag-clock.mjs");
+  const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
+  clock.setTagClockStore(awsUseCacheStore());
 
-  expect((await store.readTags(["products"])).get("products")?.expired).toBe(111);
-  expect(sends).toHaveLength(1);
-});
+  const entry = await (await handlerOver(store)).get("/", { kind: "APP_PAGE" });
 
-test("reads tag records back out of a batch response", async () => {
-  const { store } = await storeWithResponses([
-    { Responses: { [TABLE]: [tagItem("products", 111)] } },
+  // The tag's expiry predates the entry, so it cannot expire it — and the only
+  // way to know that was read out of the snapshot object.
+  expect(entry).not.toBeNull();
+  expect(sent.map((s: any) => s.Key)).toEqual([
+    "prod/proj/app/BID/cache/index.cache.json",
+    "prod/proj/app/BID/tag-clock.json",
   ]);
-
-  const found = await store.readTags(["products"]);
-
-  expect(found.get("products")).toEqual({ stale: undefined, expired: 111 });
-});
-
-// BatchGetItem returns throttled keys in UnprocessedKeys on an otherwise
-// successful response, so the SDK's own retries never see them.
-test("retries keys DynamoDB left unprocessed", async () => {
-  const unprocessed = { [TABLE]: { Keys: [tagItem("products", 0)] } };
-  const { store, sends } = await storeWithResponses([
-    { Responses: { [TABLE]: [] }, UnprocessedKeys: unprocessed },
-    { Responses: { [TABLE]: [tagItem("products", 111)] } },
-  ]);
-
-  const found = await store.readTags(["products"]);
-
-  expect(sends).toHaveLength(2);
-  expect(found.get("products")?.expired).toBe(111);
-});
-
-// A tag record that never arrives is indistinguishable from a tag that was never
-// revalidated, and the handler reads that as "not expired" — so giving up
-// quietly would serve stale content. Throwing lets get() degrade to a miss.
-test("throws rather than returning a partial tag read", async () => {
-  const unprocessed = { [TABLE]: { Keys: [tagItem("products", 0)] } };
-  const { store } = await storeWithResponses(
-    Array.from({ length: 4 }, () => ({
-      Responses: { [TABLE]: [] },
-      UnprocessedKeys: unprocessed,
-    })),
-  );
-
-  await expect(store.readTags(["products"])).rejects.toThrow(/unprocessed/);
-});
-
-test("splits reads over BatchGetItem's 100-key limit", async () => {
-  const { store, sends } = await storeWithResponses([
-    { Responses: { [TABLE]: [] } },
-    { Responses: { [TABLE]: [] } },
-  ]);
-
-  await store.readTags(Array.from({ length: 150 }, (_, i) => `t${i}`));
-
-  expect(sends).toHaveLength(2);
-  expect(sends[0].RequestItems[TABLE].Keys).toHaveLength(100);
-  expect(sends[1].RequestItems[TABLE].Keys).toHaveLength(50);
-});
-
-test("skips DynamoDB entirely when there are no tags", async () => {
-  const { store, sends } = await storeWithResponses([]);
-
-  expect((await store.readTags([])).size).toBe(0);
-  expect(sends).toHaveLength(0);
+  expect(ddbSent).toEqual([]);
 });
 
 // The record the singular handler writes is the same record the plural store

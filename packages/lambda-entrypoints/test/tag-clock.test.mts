@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { TagRecordUpdate } from "@ocel/next-cache";
-import type { CacheStore } from "../src/next/cache-store.mjs";
+import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
 import type { TagSnapshotRead, UseCacheStore } from "../src/next/use-cache-store.mjs";
 import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
@@ -106,24 +106,44 @@ async function load(store: UseCacheStore | null, env: Record<string, string> = {
   return { tagClock: clock.tagClock, handler };
 }
 
-// The singular handler's whole backing view. Only the tag write matters here:
-// on the classic ISR model it is the one thing that ever reaches the clock. It
-// lands in the same rows the snapshot is published from, exactly as the real
-// store does — pass null to model a publisher that has not caught up yet.
-function fakeIsrStore(published: ReturnType<typeof fakeStore> | null): CacheStore {
+// The singular handler's whole backing view. Tag writes land in the same rows
+// the snapshot is published from, exactly as the real store does — pass null to
+// model a publisher that has not caught up yet. The store has no tag *read* at
+// all: this tier learns of every invalidation through the shared clock.
+type FakeIsrStore = CacheStore & { entries: Map<string, CacheEntryFile> };
+
+function fakeIsrStore(published: ReturnType<typeof fakeStore> | null): FakeIsrStore {
+  const entries = new Map<string, CacheEntryFile>();
   return {
-    async readEntry() {
+    entries,
+    async readEntry(key) {
+      return entries.get(key) ?? null;
+    },
+    async writeEntry(key, entry) {
+      entries.set(key, entry);
+    },
+    async readFetch() {
       return null;
     },
-    async writeEntry() {},
-    async readTags() {
-      return new Map();
-    },
+    async writeFetch() {},
     async writeTags(tags, record) {
       const writtenAt = Date.now();
       for (const tag of tags) published?.seed(tag, { ...record, writtenAt });
     },
   };
+}
+
+// A prerendered page carrying one tag, under the key the adapter seeds it at.
+function seedPage(isr: FakeIsrStore, tag: string, lastModified = 1_000) {
+  isr.entries.set("index", {
+    lastModified,
+    value: {
+      kind: "APP_PAGE",
+      html: "<html>hi</html>",
+      status: 200,
+      headers: { "x-next-cache-tags": tag },
+    },
+  });
 }
 
 // Loads both caching models against one shared clock, so a test can drive either
@@ -134,8 +154,9 @@ async function loadBoth(store: ReturnType<typeof fakeStore>, published = true) {
   const handler = (await import("../src/next/use-cache-default.mjs")).default;
   const CacheHandler = (await import("../src/next/cache-handler.mjs")).default;
   clock.setTagClockStore(store);
-  CacheHandler.store = fakeIsrStore(published ? store : null);
-  return { tagClock: clock.tagClock, handler, isr: new CacheHandler() };
+  const entries = fakeIsrStore(published ? store : null);
+  CacheHandler.store = entries;
+  return { tagClock: clock.tagClock, handler, isr: new CacheHandler(), entries };
 }
 
 // Runs `fn` the way the membrane runs an invocation: work it defers is collected
@@ -457,4 +478,74 @@ test("works with no durable store bound at all", async () => {
   await expect(handler.updateTags(["products"])).resolves.toBeUndefined();
 
   expect(await handler.get("k", [])).toBeUndefined();
+});
+
+// Next calls refreshTags only ahead of a `use cache` read, and an app on the
+// classic ISR model has none — so if the read path did not sync for itself,
+// nothing on the instance ever would, and an invalidation raised anywhere else
+// would never be observed. That failure is silent: every route keeps serving,
+// and only invalidation is dead.
+test("the classic ISR read path pulls the snapshot itself", async () => {
+  const store = fakeStore();
+  const { isr, entries } = await loadBoth(store);
+  seedPage(entries, "products");
+
+  await isr.get("/", { kind: "APP_PAGE" });
+
+  expect(store.gets).toBe(1);
+});
+
+test("an invalidation raised elsewhere expires an ISR entry once the read syncs", async () => {
+  const store = fakeStore();
+  const { isr, entries } = await loadBoth(store);
+  seedPage(entries, "products");
+  const at = Date.now();
+  store.seed("products", { expired: at, writtenAt: at });
+
+  expect(await isr.get("/", { kind: "APP_PAGE" })).toBeNull();
+});
+
+// Epic decision 2, and the load-bearing half of this whole change. Next
+// re-renders on a miss and does not wrap get(), so failing closed on an
+// unreadable snapshot would not expire one route — it would expire every tagged
+// route on every instance at once, which is exactly the herd the DynamoDB read
+// was removed to prevent. The opposite choice on the remote `use cache` tier is
+// deliberate and bounded: nothing serves from that tier until it has synced.
+test("serves a tagged ISR entry when the build has no usable snapshot", async () => {
+  const store = fakeStore();
+  store.unpublish();
+  const { isr, entries } = await loadBoth(store);
+  seedPage(entries, "products");
+
+  expect(await isr.get("/", { kind: "APP_PAGE" })).not.toBeNull();
+});
+
+test("serves a tagged ISR entry through an object-store outage", async () => {
+  const store = fakeStore();
+  store.breakReads();
+  const { isr, entries } = await loadBoth(store);
+  seedPage(entries, "products");
+
+  expect(await isr.get("/", { kind: "APP_PAGE" })).not.toBeNull();
+});
+
+// A snapshot with no records is a build that has invalidated nothing — a real
+// answer, and a sync. Having no usable snapshot is the absence of an answer. The
+// ISR read serves on either, so the two are only ever told apart by what they
+// leave behind, and collapsing them would take the remote tier's fail-closed
+// gate with them.
+test("an empty snapshot counts as a sync where an unusable one does not", async () => {
+  const store = fakeStore();
+  const empty = await loadBoth(store);
+  seedPage(empty.entries, "products");
+
+  expect(await empty.isr.get("/", { kind: "APP_PAGE" })).not.toBeNull();
+  expect(empty.tagClock.hasSynced).toBe(true);
+
+  store.unpublish();
+  const unusable = await loadBoth(store);
+  seedPage(unusable.entries, "products");
+
+  expect(await unusable.isr.get("/", { kind: "APP_PAGE" })).not.toBeNull();
+  expect(unusable.tagClock.hasSynced).toBe(false);
 });

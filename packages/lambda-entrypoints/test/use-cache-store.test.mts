@@ -329,6 +329,31 @@ test("reports a snapshot at an unknown version as unusable", async () => {
   expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
 });
 
+// A body of `null` parses fine and is an object by typeof, so it reaches the
+// version check as a document rather than being rejected as malformed — which is
+// the one shape a reader is most likely to dereference before judging it.
+test("reports a snapshot document of null as unusable", async () => {
+  const { store } = await storeWithObjects([storedSnapshot(null, '"v1"')]);
+
+  expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
+});
+
+// The opposite answer to every case above it, and the one that must not be
+// folded into them: a build that has invalidated nothing publishes a readable
+// snapshot with no records. Reading that as unusable would leave the remote tier
+// fail-closed for the life of a quiet build.
+test("reads a snapshot with no records as a fresh, empty clock", async () => {
+  const { store } = await storeWithObjects([
+    storedSnapshot({ ...snapshot, records: {} }, '"v1"'),
+  ]);
+
+  expect(await store.readTagSnapshot(null)).toEqual({
+    status: "fresh",
+    records: {},
+    etag: '"v1"',
+  });
+});
+
 test("reports an unparseable snapshot as unusable", async () => {
   const { store } = await storeWithObjects([
     { Body: { transformToString: async () => "{" }, ETag: '"v1"' },

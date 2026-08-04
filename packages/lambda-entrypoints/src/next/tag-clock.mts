@@ -1,4 +1,4 @@
-import { mergeRecord, type TagRecord } from "@ocel/next-cache";
+import { areTagsExpired, mergeRecord, type TagRecord } from "@ocel/next-cache";
 
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
 import { now } from "./use-cache-entry.mjs";
@@ -234,6 +234,32 @@ export const tagClock: TagClock = {
     return state.hasSynced;
   },
 };
+
+// The classic ISR model's whole tag read: a sync on the shared throttle, then a
+// lookup in memory. It syncs for itself because Next calls refreshTags only
+// before a `use cache` read, and an app on the classic model has none — so no
+// other caller would ever pull this instance's snapshot in.
+//
+// It FAILS OPEN, which is the one thing that must not be harmonised with the
+// remote `use cache` tier: nothing here consults hasSynced, so an absent,
+// unreadable or unreachable snapshot serves the entry. This is the path every
+// request to a cached route takes, and Next re-renders on a miss — so failing
+// closed on it would turn one unreadable object into a fleet-wide re-render of
+// every tagged route at once, which is the herd this read exists to remove. The
+// remote tier can afford the opposite choice because nothing serves from it
+// until it has synced; this tier has entries in hand and a clock that is only
+// ever late.
+export async function tagsExpireEntry(
+  tags: string[],
+  lastModified: number,
+): Promise<boolean> {
+  await tagClock.refreshTags();
+  // Wall clock rather than this module's monotonic one: an entry's lastModified
+  // and the watermarks it is weighed against are both Date.now(), and comparing
+  // three timestamps drawn from two sources decides a future expiry by their
+  // skew.
+  return areTagsExpired(tags, state.records, lastModified, Date.now());
+}
 
 // The three CacheHandler methods that are pure clock delegation, shared so both
 // tiers cannot drift apart. Next fans updateTags out to every registered

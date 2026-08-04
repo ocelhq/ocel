@@ -8,13 +8,12 @@ import {
   type TagRecord,
 } from "./cache-store.mjs";
 import {
-  areTagsExpired,
   cacheKey,
   deserialize as deserializeBytes,
   tagsOf,
 } from "@ocel/next-cache";
 import { background } from "../shared/background.mjs";
-import { recordTags } from "./tag-clock.mjs";
+import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
 
 // unchunk flattens whatever Next hands us as a body into something storable. On
 // `set` an html body is a RenderResult; on the way back out of S3 it is already
@@ -147,9 +146,11 @@ function toBuffer(bytes: Uint8Array): Buffer {
 }
 
 // OcelCacheHandler backs Next's server cache with the account-global asset
-// bucket (entries) and state table (tag invalidations), so ISR survives a cold
-// sandbox and revalidateTag reaches every instance rather than just the one that
-// served the call.
+// bucket (entries) and state table (the durable raise a revalidateTag makes), so
+// ISR survives a cold sandbox and an invalidation reaches every instance rather
+// than just the one that served the call. Nothing here reads the table back: the
+// raise leaves through the stream's publisher and returns as this build's tag
+// snapshot, which the shared tag clock is what reads.
 export default class OcelCacheHandler {
   // Bound lazily so importing this module never reaches for AWS or its env, and
   // so tests can drive the cache semantics against a fake.
@@ -198,11 +199,8 @@ export default class OcelCacheHandler {
       if (!entry) return null;
 
       const tags = tagsOf(entry.value, ctx);
-      if (tags.length > 0) {
-        const records = await this.store.readTags(tags);
-        if (areTagsExpired(tags, records, entry.lastModified, Date.now())) {
-          return null;
-        }
+      if (tags.length > 0 && (await tagsExpireEntry(tags, entry.lastModified))) {
+        return null;
       }
       const value = negotiateVariant(entry.value, this.isRscRequest);
       return { lastModified: entry.lastModified, value: deserialize(value) };
