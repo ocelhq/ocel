@@ -653,6 +653,139 @@ describe("dispatchResult", () => {
     expect(lambda).toBe(1);
   });
 
+  // A Cache whose only content is the sentinel for `refreshKey`: this colo has
+  // already admitted a refresh of the route, and no entry is stored, so the
+  // request is answered exactly as it would be otherwise.
+  function coloHoldingSentinel(refreshKey: string): Cache {
+    const url = `https://refresh.ocel/${refreshKey
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/")}`;
+    return {
+      match: async (request: Request) =>
+        request.url === url ? new Response(null) : undefined,
+      put: async () => {},
+      delete: async () => false,
+    } as unknown as Cache;
+  }
+
+  it("leaves the stale R2 refresh to whichever isolate holds the colo's sentinel", async () => {
+    let lambda = 0;
+    const pending: Promise<unknown>[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            config: {},
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async () => {
+        lambda++;
+        return new Response("regenerated", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        });
+      }) as unknown as typeof fetch,
+      cache: {
+        cache: coloHoldingSentinel("t:/blog"),
+        waitUntil: (p: Promise<unknown>) => {
+          pending.push(p);
+        },
+      },
+      interception: {
+        config: interceptionConfig,
+        now: () => 1_000 + 61_000,
+        store: storeOf({
+          [entryKey("blog")]: {
+            lastModified: 1_000,
+            value: { kind: "APP_PAGE", html: "<html>edge</html>", status: 200, headers: {} },
+          },
+        }),
+      },
+    });
+
+    const res = await dispatchBlog(deps);
+
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(res.headers.get("x-nextjs-cache")).toBe("STALE");
+    expect(await res.text()).toBe("<html>edge</html>");
+
+    await Promise.all(pending);
+    expect(lambda).toBe(0);
+  });
+
+  it("leaves a stale PPR shell's refresh to whichever isolate holds the colo's sentinel", async () => {
+    const origins: Request[] = [];
+    const pending: Promise<unknown>[] = [];
+    const pprDispatch = {
+      "/ppr": {
+        kind: "prerender",
+        id: "/ppr",
+        config: {},
+        fallback: { initialRevalidate: 60, initialExpiration: 3600 },
+        pprChain: { headers: { "next-resume": "1" } },
+      },
+    };
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: pprDispatch,
+      },
+      functionUrls: { "/ppr": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        origins.push(req);
+        return new Response("[dynamic]", { status: 200 });
+      }) as unknown as typeof fetch,
+      cache: {
+        cache: coloHoldingSentinel("t:/ppr"),
+        waitUntil: (p: Promise<unknown>) => {
+          pending.push(p);
+        },
+      },
+      interception: {
+        config: interceptionConfig,
+        // 61s past the entry: the shell is stale and would otherwise be refreshed.
+        now: () => 1_000 + 61_000,
+        store: storeOf({
+          [entryKey("ppr")]: {
+            lastModified: 1_000,
+            value: {
+              kind: "APP_PAGE",
+              html: "[shell]",
+              postponed: "POSTPONED",
+              status: 200,
+              headers: {},
+            },
+          },
+        }),
+      },
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/ppr", invocationTarget: { pathname: "/ppr" } },
+      new Request("https://app.example/ppr"),
+      deps,
+    );
+
+    expect(await res.text()).toBe("[shell][dynamic]");
+    await Promise.all(pending);
+    // The resume POST is the visitor's own render and always happens; the
+    // background regeneration is the one the sentinel suppressed.
+    expect(origins.map((req) => req.method)).toEqual(["POST"]);
+  });
+
   it("refreshes the colo entry with the Lambda's fresh body after a stale R2 hit", async () => {
     const pending: Promise<unknown>[] = [];
     const stored = new Map<string, Response>();
