@@ -28,7 +28,7 @@ main
      └─ 2  isr-writer worker + DO          ocelhq-wvag.2  ✅ CLOSED, reviewed ×2, not pushed
          └─ 3  manifest projection         ocelhq-wvag.3  ✅ CLOSED, reviewed, not pushed
              └─ 4  streams publisher       ocelhq-wvag.4  ✅ CLOSED, reviewed, not pushed
-                 └─ 5  origin reads snapshot ocelhq-wvag.5  ← next
+                 └─ 5  origin reads snapshot ocelhq-wvag.5  ✅ CLOSED, not reviewed, not pushed
                      └─ 6  get drops BatchGetItem ocelhq-wvag.6  ⛔ blocked on .13, .14
                          └─ 7  edge L0/L1   ocelhq-wvag.7
                              └─ 8  edge L2 lease ocelhq-wvag.8   ⛔ blocked on .9
@@ -96,6 +96,43 @@ memo. Read decision 6d and commit `79900d5`'s message with that bound in mind �
 worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
+
+**PR 5 (`ocelhq-wvag.5`) — code complete, NOT reviewed, NOT pushed. Issue CLOSED.**
+
+Branch `isr-herd/05-origin-reads-snapshot`, rooted on PR 4. Serves decision 11. Small: two
+commits, one TypeScript and one Go.
+
+The origin's tag clock no longer touches the GSI. `UseCacheStore.queryTagRecords` is replaced
+by `readTagSnapshot(etag: string | null)`, one ETag-conditional `GetObject` of the snapshot
+PR 4's publisher started writing, answering `{status:"fresh", records, etag}` /
+`{status:"unchanged"}` / `{status:"unusable"}`. A cold instance reads one object instead of
+paging a partition; `ClockState.cursor` is gone and an opaque `etag` took its place. The 2 s
+attempt throttle, the in-flight join, the silent catch and `observe()`'s upward merge are
+untouched, so invalidation lag is unchanged.
+
+Three things worth knowing:
+
+- **`unusable` folds absent and unreadable into one answer, and it fails closed.** No
+  `hasSynced`, no records touched, no throw. A snapshot that reads with *zero* records is a
+  different thing entirely and does sync — that distinction is the whole of the fail-closed
+  property, and both halves are tested.
+- **This is the first reader of the S3 copy.** Until now nothing compared it to the R2 one, so
+  a divergence there was invisible. It is now load-bearing for every origin `use cache` read.
+- **The clock's fingerprint moved** from `OCEL_STATE_TABLE_INDEX` to `OCEL_ISR_BUCKET` +
+  `OCEL_ISR_PREFIX` — the snapshot's identity is what a shared clock must agree on now.
+  `OCEL_STATE_TABLE_INDEX` is unset by the deploy and read by nothing.
+
+`dynamodb:Query` on `/index/gsi1` is gone from the **function's** policy. The **edge user's**
+identical grant in `bootstrap.go` was deliberately left alone and filed as **`ocelhq-uroj`**:
+that key's only DynamoDB call is `UpdateItem`, so its `Query` *and* its `BatchGetItem` were
+both already dead before this PR — a separate audit, on an account-global template that
+re-bootstraps every account, and best done after PR 7/8 settle the edge's read paths. The
+index itself stays; the stream publisher is projected through it.
+
+Verified: `packages/lambda-entrypoints` 198/198 — the long-standing failing case died with
+the paging mechanism it tested, so the suite is green for the first time in this stack;
+`packages/next-cache` 41; `pnpm -r --no-bail typecheck` clean except the pre-existing
+`examples/*`; `cloud/aws` builds and tests clean.
 
 **PR 4 (`ocelhq-wvag.4`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
@@ -374,9 +411,9 @@ and claims every deployment lands on workers.dev.
 
 ## Next step
 
-**PRs 2, 3 and 4 are all reviewed and their findings are fixed.** Nothing in the stack is
-waiting on scrutiny. Branch `isr-herd/05-origin-reads-snapshot` off `isr-herd/04-streams-publisher`
-and dispatch `ocelhq-wvag.5`.
+**PR 5 is the only thing in the stack waiting on scrutiny** — PRs 2, 3 and 4 are reviewed and
+their findings are fixed. Review PR 5, then note that `ocelhq-wvag.6` is **blocked on `.13`
+and `.14`**, both human gates, so the next unblocked implementation work is `ocelhq-wvag.7`.
 
 Three review rounds have now landed eleven real defects rather than polish, and **in every
 single case the failure was silent**: a write dropped with no log, a herd at the auth boundary,
@@ -398,17 +435,14 @@ Two methods have earned their keep and are worth repeating:
   (Unit 3's consumer still needs CAS for the S3 copy, which has two sanctioned ESM readers) rather
   than deleting a live dependency. Brief them to push back.
 
-What `.5` should know before it starts:
+Standing constraints PR 5 inherited and every later reader of a snapshot inherits too:
 
-- **It reads the S3 copy PR 4 started writing** — `<isrPrefix>/tag-clock.json` in the provider's
-  asset bucket, same key and same `TagSnapshot` format as the R2 one. Nothing reads it today, so
-  `.5` is the first thing that will notice if it is wrong.
-- The origin keeps its 2 s throttle and in-flight join, swapping the GSI query for an
-  ETag-conditional GET (decision 11). **The remote tier stays fail-closed until first sync** —
-  that is deliberate, not an oversight to tidy up.
-- An absent snapshot must keep failing closed. PR 4's review confirmed the current behaviour end
-  to end: `expired()` returns `"untrusted"` and `interception.ts` falls open to the origin. Never
-  trade that for a growth or latency win.
+- **The remote tier stays fail-closed until first sync**, and an absent or unreadable snapshot
+  is not a sync. That is deliberate, not an oversight to tidy up, and it must never be traded
+  for a growth or latency win. PR 4's review confirmed the edge side end to end: `expired()`
+  returns `"untrusted"` and `interception.ts` falls open to the origin.
+- **Two `tag-clock.json` copies per build still exist** — the R2 one the edge reads and the S3
+  one the origin now reads. They converge independently and nothing compares them.
 
 Live threads to carry forward:
 
