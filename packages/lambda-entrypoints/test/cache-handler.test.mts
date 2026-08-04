@@ -18,17 +18,22 @@ function fakeStore() {
   const tags = new Map<string, TagRecord>();
   let failReads = false;
   let gate: Promise<void> | null = null;
+  // What a `set` costs the ISR writer, counted rather than inferred: the whole
+  // point of the projection is that a rewrite is one round trip.
+  const calls = { readEntry: 0, writeEntry: 0 };
 
   const store: CacheStore & {
     entries: typeof entries;
     fetches: typeof fetches;
     tags: typeof tags;
+    calls: typeof calls;
     breakReads(): void;
     holdWrites(): () => void;
   } = {
     entries,
     fetches,
     tags,
+    calls,
     breakReads() {
       failReads = true;
     },
@@ -43,10 +48,12 @@ function fakeStore() {
       };
     },
     async readEntry(key) {
+      calls.readEntry++;
       if (failReads) throw new Error("s3 is down");
       return entries.get(key) ?? null;
     },
     async writeEntry(key, entry) {
+      calls.writeEntry++;
       if (gate) await gate;
       entries.set(key, entry);
     },
@@ -83,6 +90,7 @@ function fakeStore() {
 
 afterEach(() => {
   OcelCacheHandler.store = undefined;
+  OcelCacheHandler.variantHeaders = undefined;
 });
 
 // Runs `fn` the way the membrane runs an invocation: work it defers is collected
@@ -359,19 +367,39 @@ test("leaves a fetch entry's window unrecorded", async () => {
   expect(store.fetches.get("hash")?.cacheControl).toBeUndefined();
 });
 
+// The build ships route -> {rscHeaders, segmentHeaders} beside the function.
+// This is that file, as the adapter's projection writes it.
+function seedProjection(
+  projection: Record<string, Record<string, unknown>>,
+): void {
+  OcelCacheHandler.variantHeaders = projection;
+}
+
+async function revalidate(key: string, extra: Record<string, unknown> = {}) {
+  const deferred = await invocation(() =>
+    new OcelCacheHandler().set(
+      key,
+      {
+        kind: "APP_PAGE",
+        html: { toUnchunkedString: () => "<html>fresh</html>" },
+        status: 200,
+        headers: { "content-type": "text/html; charset=utf-8" },
+        ...extra,
+      },
+      {},
+    ),
+  );
+  await Promise.all(deferred);
+}
+
 // The per-variant rscHeaders/segmentHeaders exist only in the build's prerender
 // output; Next's runtime set() payload has just a single page-level headers map.
-// A revalidation rewrite must carry the build-seeded values forward, or the edge
-// stops seeing the segment cache markers and silently drops PPR.
-test("preserves build-seeded variant headers across a revalidation write", async () => {
+// A revalidation rewrite must reseed them, or the edge stops seeing the segment
+// cache markers and silently drops PPR.
+test("reseeds the build's variant headers on a revalidation write", async () => {
   const store = fakeStore();
-  store.entries.set("blog", {
-    lastModified: 1_000,
-    value: {
-      kind: "APP_PAGE",
-      html: "<html>seed</html>",
-      status: 200,
-      headers: {},
+  seedProjection({
+    blog: {
       rscHeaders: { "content-type": "text/x-component" },
       segmentHeaders: {
         "content-type": "text/x-component",
@@ -379,22 +407,10 @@ test("preserves build-seeded variant headers across a revalidation write", async
       },
     },
   });
-  const handler = new OcelCacheHandler();
 
-  const deferred = await invocation(() =>
-    handler.set(
-      "/blog",
-      {
-        kind: "APP_PAGE",
-        html: { toUnchunkedString: () => "<html>fresh</html>" },
-        status: 200,
-        headers: { "x-next-cache-tags": "posts" },
-        segmentData: new Map([["/_tree", Buffer.from("TREE")]]),
-      },
-      {},
-    ),
-  );
-  await Promise.all(deferred);
+  await revalidate("/blog", {
+    segmentData: new Map([["/_tree", Buffer.from("TREE")]]),
+  });
 
   const rewritten = store.entries.get("blog");
   expect(rewritten?.value.html).toBe("<html>fresh</html>");
@@ -405,29 +421,62 @@ test("preserves build-seeded variant headers across a revalidation write", async
   });
 });
 
-// A first-ever write for an on-demand route has no prior entry to carry from; it
-// must still write rather than fail on the missing read.
-test("writes without variant headers when no prior entry exists", async () => {
+// The projection is what makes the rewrite a single round trip: it replaces a
+// full GetObject of the prior entry — the whole html+RSC+PPR payload, pulled
+// back through the ISR writer for two small header maps.
+test("a revalidation write is one write and no read", async () => {
   const store = fakeStore();
-  const handler = new OcelCacheHandler();
+  seedProjection({ blog: { rscHeaders: { "content-type": "text/x-component" } } });
 
-  const deferred = await invocation(() =>
-    handler.set(
-      "/blog",
-      {
-        kind: "APP_PAGE",
-        html: { toUnchunkedString: () => "<html>fresh</html>" },
-        status: 200,
-        headers: {},
-      },
-      {},
-    ),
-  );
-  await Promise.all(deferred);
+  await revalidate("/blog");
+
+  expect(store.calls).toEqual({ readEntry: 0, writeEntry: 1 });
+});
+
+// A route the build never prerendered — generated on demand — is in no
+// projection. It has no variant headers to reseed and must still be written.
+test("writes a route the projection does not name", async () => {
+  const store = fakeStore();
+  seedProjection({});
+
+  await revalidate("/blog");
 
   const written = store.entries.get("blog");
   expect(written?.value.html).toBe("<html>fresh</html>");
+  expect(written?.value.rscHeaders).toBeUndefined();
   expect(written?.value.segmentHeaders).toBeUndefined();
+});
+
+// The two things the reseeded headers exist for, end to end from the write that
+// would otherwise have dropped them: the edge replays segmentHeaders to answer a
+// segment prefetch (an entry without them falls open and serves no segment), and
+// an RSC request is negotiated onto rscHeaders rather than going out as html.
+test("a rewritten entry still serves segment prefetch and RSC negotiation", async () => {
+  const store = fakeStore();
+  seedProjection({
+    blog: {
+      rscHeaders: { "content-type": "text/x-component" },
+      segmentHeaders: {
+        "content-type": "text/x-component",
+        "x-nextjs-postponed": "2",
+      },
+    },
+  });
+
+  await revalidate("/blog", {
+    segmentData: new Map([["/_tree", Buffer.from("TREE")]]),
+  });
+
+  const written = store.entries.get("blog")!;
+  expect(written.value.segmentHeaders["x-nextjs-postponed"]).toBe("2");
+  expect(written.value.segmentData["/_tree"]).toBe(
+    Buffer.from("TREE").toString("base64"),
+  );
+
+  const served = await new OcelCacheHandler({
+    _requestHeaders: { rsc: "1" },
+  }).get("/blog", { kind: "APP_PAGE" });
+  expect(served?.value.headers["content-type"]).toBe("text/x-component");
 });
 
 // The entry now lands in the store the edge reads, which is a cross-internet

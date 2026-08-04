@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import {
   awsCacheStore,
   type CacheEntryFile,
@@ -74,28 +77,21 @@ function cacheControlOf(ctx: any): CacheEntryFile["cacheControl"] | undefined {
   return { revalidate, ...(typeof expire === "number" && { expire }) };
 }
 
-// carryForwardVariantHeaders preserves the build-seeded per-variant headers
-// across a revalidation rewrite. They exist only in the prerender output, so a
-// fresh serialize() never has them; without this a revalidated APP_PAGE loses
-// its segment cache markers and the edge stops serving PPR. A missing or
-// unreadable prior entry just means the next build reseeds them — never fail the
-// write over it.
-async function carryForwardVariantHeaders(
-  store: CacheStore,
-  key: string,
-  value: Record<string, any>,
-): Promise<void> {
+// The build's projection of each prerendered route's per-variant headers, laid
+// beside the function by the adapter under this name. It ships in the bundle
+// rather than being fetched, so the code reading it and the build that wrote it
+// are the same artifact and can never be a version apart.
+const variantHeadersPath = "variant-headers.json";
+
+// A route with no projected headers is a route the build never prerendered, and
+// an unreadable projection is a bundle that would have had nothing to reseed
+// from anyway — neither is a reason to fail a write.
+function loadVariantHeaders(): Record<string, Record<string, unknown>> {
+  const root = process.env.LAMBDA_TASK_ROOT ?? process.cwd();
   try {
-    const prior = (await store.readEntry(key))?.value;
-    if (!prior) return;
-    if (value.rscHeaders === undefined && prior.rscHeaders !== undefined) {
-      value.rscHeaders = prior.rscHeaders;
-    }
-    if (value.segmentHeaders === undefined && prior.segmentHeaders !== undefined) {
-      value.segmentHeaders = prior.segmentHeaders;
-    }
+    return JSON.parse(readFileSync(join(root, variantHeadersPath), "utf8"));
   } catch {
-    // Read failed; write without the carried headers rather than dropping it.
+    return {};
   }
 }
 
@@ -152,6 +148,10 @@ export default class OcelCacheHandler {
   // so tests can drive the cache semantics against a fake.
   static store: CacheStore | undefined;
 
+  // Read from the bundle on first use, and overridable so a test can drive the
+  // rewrite against a build's projection without one on disk.
+  static variantHeaders: Record<string, Record<string, unknown>> | undefined;
+
   // Next constructs the handler once per request and hands it that request's
   // headers, which is the only way a cached entry can be served as the variant
   // the client actually asked for.
@@ -171,6 +171,10 @@ export default class OcelCacheHandler {
 
   private get store(): CacheStore {
     return (OcelCacheHandler.store ??= awsCacheStore());
+  }
+
+  private get variantHeaders(): Record<string, Record<string, unknown>> {
+    return (OcelCacheHandler.variantHeaders ??= loadVariantHeaders());
   }
 
   // Next does not wrap get() in a try/catch: a throw surfaces as a render error
@@ -214,6 +218,14 @@ export default class OcelCacheHandler {
       const store = this.store;
       const value = serialize(data);
       if (data.kind === "FETCH") value.tags = ctx?.tags ?? [];
+      // The per-variant rscHeaders/segmentHeaders live only in the build's
+      // prerender output — Next's runtime set() payload carries a single
+      // page-level headers map. Left alone, this rewrite would drop them and
+      // silently disable PPR at the edge, so the build's own projection reseeds
+      // them from inside this bundle rather than from the entry being replaced.
+      if (data.kind === "APP_PAGE") {
+        Object.assign(value, this.variantHeaders[cacheKey(key)]);
+      }
       const isFetch = ctx?.fetchCache || data.kind === "FETCH";
       // The route's freshness window, recorded on the entry. For a path
       // generated on demand this is the only place it is ever known: the build
@@ -226,18 +238,11 @@ export default class OcelCacheHandler {
         value,
         ...(cacheControl && { cacheControl }),
       };
-      background(async () => {
-        if (isFetch) return store.writeFetch(key, entry);
-        // The per-variant rscHeaders/segmentHeaders live only in the build's
-        // prerender output — Next's runtime set() payload carries a single
-        // page-level headers map. Left alone, this rewrite would drop them and
-        // silently disable PPR at the edge, so carry the build-seeded values
-        // forward from the prior entry before overwriting it.
-        if (data.kind === "APP_PAGE") {
-          await carryForwardVariantHeaders(store, cacheKey(key), value);
-        }
-        return store.writeEntry(cacheKey(key), entry);
-      });
+      background(() =>
+        isFetch
+          ? store.writeFetch(key, entry)
+          : store.writeEntry(cacheKey(key), entry),
+      );
     } catch {
       // Swallowed deliberately: see above.
     }
