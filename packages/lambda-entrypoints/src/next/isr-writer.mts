@@ -1,3 +1,4 @@
+import { entryMissHeader } from "@ocel/next-cache";
 import type { CacheEntryFile } from "@ocel/next-cache";
 
 // The origin's half of the ISR writer contract (workers/isr-writer). Route
@@ -92,8 +93,16 @@ export function entryStoreAt(
           headers: { authorization: `Bearer ${secret}` },
           signal: AbortSignal.timeout(readTimeoutMs),
         });
-        // The ordinary miss, and the only one that is not worth a word.
-        if (res.status === 404) return null;
+        // The ordinary miss, and the only one that is not worth a word. A 404
+        // without the marker never reached an entry, so it is a miss that will
+        // repeat for every key forever — still served as a miss, but said out
+        // loud, because nothing else about it is visible.
+        if (res.status === 404) {
+          if (res.headers.get(entryMissHeader) === null) {
+            throw new Error("404 from a writer that reported no entry lookup");
+          }
+          return null;
+        }
         if (!res.ok) throw new Error(`status ${res.status}`);
         return (await res.json()) as CacheEntryFile;
       } catch (err) {

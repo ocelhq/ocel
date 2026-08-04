@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { entryMissHeader } from "@ocel/next-cache";
 import type { CacheEntryFile } from "@ocel/next-cache";
 
 import { IsrWriteRejected, entryStoreAt, isrEntryStore } from "../src/next/isr-writer.mjs";
@@ -101,6 +102,12 @@ test("a half-configured writer is a failure, not a fallback", () => {
   expect(isrEntryStore()).not.toBeNull();
 });
 
+// What the writer answers for an entry it holds no object for, as against the
+// bare 404 anything else about the request produces.
+function entryMissResponse() {
+  return new Response("Not Found", { status: 404, headers: { [entryMissHeader]: "1" } });
+}
+
 // A fetch impl that fails the way the network does, rather than answering.
 function throwingFetch(err: unknown) {
   return (async () => {
@@ -137,7 +144,8 @@ test("a read is bounded by a timeout of its own", async () => {
 // failure degrades to a miss, which makes Next render. A writer outage has to
 // cost latency and nothing else.
 test.each([
-  ["an absent entry", new Response("Not Found", { status: 404 })],
+  ["an absent entry", entryMissResponse()],
+  ["a misdirected read", new Response("Not Found", { status: 404 })],
   ["an unreachable writer", new TypeError("fetch failed")],
   ["a timed-out read", Object.assign(new Error("The operation was aborted"), { name: "TimeoutError" })],
   ["a writer outage", new Response("Internal Error", { status: 503 })],
@@ -161,11 +169,25 @@ test.each([
 test("a miss is silent and a failure is not", async () => {
   const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
 
-  const missing = fakeFetch(new Response("Not Found", { status: 404 })).impl;
+  const missing = fakeFetch(entryMissResponse()).impl;
   await entryStoreAt(WRITER_URL, "write-secret", missing).read("blog/post");
   expect(warned).not.toHaveBeenCalled();
 
   const broken = throwingFetch(new TypeError("fetch failed"));
   await entryStoreAt(WRITER_URL, "write-secret", broken).read("blog/post");
+  expect(warned).toHaveBeenCalledWith(expect.stringContaining("blog/post"));
+});
+
+// A wrong writer URL, or any drift in the path shape between the two halves,
+// answers 404 to every read — which without the marker is indistinguishable from
+// a cache that is merely always cold, forever and with no signal at all. The
+// write path already treats the same failure class as permanent.
+test("a 404 from anywhere but the entry itself warns, and still misses", async () => {
+  const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const misdirected = fakeFetch(new Response("Not Found", { status: 404 })).impl;
+
+  await expect(
+    entryStoreAt(WRITER_URL, "write-secret", misdirected).read("blog/post"),
+  ).resolves.toBeNull();
   expect(warned).toHaveBeenCalledWith(expect.stringContaining("blog/post"));
 });

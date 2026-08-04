@@ -1,3 +1,4 @@
+import { entryMissHeader } from "@ocel/next-cache";
 import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -181,11 +182,22 @@ describe("entry reads", () => {
     }
   });
 
-  it("reports an entry that was never written as a miss", async () => {
+  // A 404 is both "no entry here" and "no such route", and the reader fails open
+  // on either — so without a marker on the first, a writer URL pointing at
+  // nothing at all reads as a cache that is merely always cold.
+  it("marks an entry that was never written as a miss, as no other 404 is", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "write-secret");
 
-    expect((await readEntryReq(prefix, "never-written", "write-secret")).status).toBe(404);
+    const miss = await readEntryReq(prefix, "never-written", "write-secret");
+    expect(miss.status).toBe(404);
+    expect(miss.headers.get(entryMissHeader)).toBe("1");
+
+    for (const path of [`/${prefix}/nonsense`, "/initialize"]) {
+      const res = await SELF.fetch(bearerReq(path, "write-secret"));
+      expect(res.status, path).toBe(404);
+      expect(res.headers.get(entryMissHeader), path).toBeNull();
+    }
   });
 
   it("rejects a read signed with the wrong secret, and one signed with none", async () => {
