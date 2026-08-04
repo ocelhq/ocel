@@ -8,15 +8,25 @@ type Attribute = { S?: string; N?: string };
 
 export interface StreamRecord {
   dynamodb?: {
+    SequenceNumber?: string;
     NewImage?: Record<string, Attribute | undefined>;
   };
+}
+
+// One build's raise: the records to publish, and the stream records that
+// carried them. The sequence numbers are what a build that cannot be published
+// is reported back to the event source as, so its batch-mates are acknowledged
+// rather than retried and dead-lettered alongside it.
+export interface Raise {
+  records: Map<string, TagRecord>;
+  sequenceNumbers: string[];
 }
 
 // Every raise a batch carries, grouped by the build it belongs to. Grouping is
 // what turns a batch of N records into one read-merge-write per build rather
 // than per record, and the merge is monotone so the order within a build does
 // not matter.
-export type Raises = Map<string, Map<string, TagRecord>>;
+export type Raises = Map<string, Raise>;
 
 // A watermark arrives as a string. Anything that is not a finite, non-negative
 // number is not one, and is dropped rather than coerced: the merge only ever
@@ -52,12 +62,15 @@ export function raisesOf(records: readonly StreamRecord[]): Raises {
     const expired = watermark(image.expired);
     if (stale === undefined && expired === undefined) continue;
 
-    const build = raises.get(isrPrefix) ?? new Map<string, TagRecord>();
+    const build: Raise = raises.get(isrPrefix) ?? { records: new Map(), sequenceNumbers: [] };
     const incoming = {
       ...(stale !== undefined ? { stale } : {}),
       ...(expired !== undefined ? { expired } : {}),
     };
-    build.set(tag, mergeRecord(build.get(tag), incoming));
+    build.records.set(tag, mergeRecord(build.records.get(tag), incoming));
+    if (record.dynamodb?.SequenceNumber !== undefined) {
+      build.sequenceNumbers.push(record.dynamodb.SequenceNumber);
+    }
     raises.set(isrPrefix, build);
   }
   return raises;

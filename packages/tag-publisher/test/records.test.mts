@@ -5,6 +5,8 @@ import { raisesOf, type StreamRecord } from "../src/records.mjs";
 
 const PREFIX = "prod/acme/web/BUILD1";
 
+let nextSequence = 0;
+
 function tagRecord(
   tag: string,
   attrs: Record<string, { S?: string; N?: string }>,
@@ -12,6 +14,7 @@ function tagRecord(
 ): StreamRecord {
   return {
     dynamodb: {
+      SequenceNumber: String(++nextSequence),
       NewImage: {
         pk: { S: `${namespace}${tag}` },
         sk: { S: "#META" },
@@ -34,8 +37,25 @@ describe("raisesOf", () => {
     ]);
 
     expect([...raises.keys()].sort()).toEqual(["prod/acme/admin/BUILD2", PREFIX]);
-    expect(raises.get(PREFIX)!.get("cart")).toEqual({ stale: undefined, expired: 100 });
-    expect(raises.get(PREFIX)!.get("home")).toEqual({ stale: 200, expired: undefined });
+    expect(raises.get(PREFIX)!.records.get("cart")).toEqual({ stale: undefined, expired: 100 });
+    expect(raises.get(PREFIX)!.records.get("home")).toEqual({ stale: 200, expired: undefined });
+  });
+
+  // A build that cannot be published is reported back to the event source as
+  // the records that carried it, so its batch-mates are acknowledged.
+  it("remembers which records each build's raise was carried by", () => {
+    const other = tagNamespace("prod/acme/admin/BUILD2");
+    const raises = raisesOf([
+      tagRecord("cart", { expired: { N: "100" } }),
+      tagRecord("cart", { expired: { N: "300" } }, other),
+      tagRecord("home", { stale: { N: "200" } }),
+    ]);
+
+    const [cart, home] = raises.get(PREFIX)!.sequenceNumbers;
+    expect(raises.get("prod/acme/admin/BUILD2")!.sequenceNumbers).toEqual([
+      String(Number(cart) + 1),
+    ]);
+    expect(home).toBe(String(Number(cart) + 2));
   });
 
   it("keeps the later watermark when a batch carries a tag twice", () => {
@@ -43,7 +63,7 @@ describe("raisesOf", () => {
       tagRecord("cart", { expired: { N: "300" } }),
       tagRecord("cart", { expired: { N: "100" }, stale: { N: "50" } }),
     ]);
-    expect(raises.get(PREFIX)!.get("cart")).toEqual({ stale: 50, expired: 300 });
+    expect(raises.get(PREFIX)!.records.get("cart")).toEqual({ stale: 50, expired: 300 });
   });
 
   it("derives the build from gsi1pk, not from a pk a tag can forge", () => {
