@@ -89,10 +89,17 @@ const variantHeadersPath = "variant-headers.json";
 function loadVariantHeaders(): Record<string, Record<string, unknown>> {
   const root = process.env.LAMBDA_TASK_ROOT ?? process.cwd();
   try {
-    return JSON.parse(readFileSync(join(root, variantHeadersPath), "utf8"));
+    const parsed = JSON.parse(readFileSync(join(root, variantHeadersPath), "utf8"));
+    return isProjection(parsed) ? parsed : {};
   } catch {
     return {};
   }
+}
+
+function isProjection(
+  parsed: unknown,
+): parsed is Record<string, Record<string, unknown>> {
+  return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed);
 }
 
 // The membrane's mark, set on the request headers before Next runs. Registered
