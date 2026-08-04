@@ -86,10 +86,11 @@ export interface TagSnapshotStore {
   // — and the edge already falls open on a snapshot it cannot parse — where
   // clobbering the anchor is unbounded.
   read(): Promise<StoredTagSnapshot | null>;
-  // `prior` is what the write is conditioned on, or null to create the object
-  // where none existed. False means the precondition failed: another publisher
-  // got there first and the caller must re-read and merge onto their write.
-  write(snapshot: TagSnapshot, prior: StoredTagSnapshot | null): Promise<boolean>;
+  // `prior` is what the write is conditioned on, and is always a document this
+  // publisher has read: nothing here ever creates the object. False means the
+  // precondition failed — another publisher got there first and the caller must
+  // re-read and merge onto their write.
+  write(snapshot: TagSnapshot, prior: StoredTagSnapshot): Promise<boolean>;
 }
 
 // A publish loses only to another publisher landing first, and each retry starts
@@ -98,8 +99,15 @@ export interface TagSnapshotStore {
 // instance that has observed them, so the bound is small on purpose.
 const publishAttempts = 3;
 
-// Publishes `records` as this build's replica: read, merge, conditional write,
-// retry on precondition failure. False when every attempt lost.
+// Publishes `records` into this build's replica: read, merge, conditional
+// write, retry on precondition failure. False when every attempt lost.
+//
+// A build with no replica gets none created for it. deployedAt has exactly one
+// writer — the deploy's genesis seed — and a document conjured here would carry
+// a zero anchor, against which no record is ever inert, so that build's replica
+// would accumulate every tag it invalidates for the life of the build. Nothing
+// to publish into is not a failure: the reader of an absent replica falls open
+// to the authoritative clock, and only a deploy can put one there.
 //
 // Because the merge only moves watermarks upward, whichever writer wins a race
 // produces a snapshot that contains both writers' invalidations, so no
@@ -116,8 +124,8 @@ export async function publishTagSnapshot(
 ): Promise<boolean> {
   for (let attempt = 0; attempt < publishAttempts; attempt++) {
     const stored = await store.read();
-    const merged = mergeSnapshot(stored?.snapshot ?? null, records, at);
-    if (await store.write(merged, stored)) return true;
+    if (stored === null) return true;
+    if (await store.write(mergeSnapshot(stored.snapshot, records, at), stored)) return true;
   }
   return false;
 }

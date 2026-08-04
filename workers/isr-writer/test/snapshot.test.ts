@@ -73,43 +73,33 @@ describe("raise", () => {
     expect((await stored(prefix))?.deployedAt).toBe(1_000);
   });
 
-  // Zero is the honest answer where no deploy seeded one: nothing may be pruned
-  // from an unanchored snapshot. Inventing an anchor here would prune records
-  // this build has no proof are inert.
-  it("invents no anchor where the deploy seeded no snapshot", async () => {
+  // deployedAt has exactly one writer — the deploy's genesis seed — and no
+  // second chance. A document created here would carry a zero anchor, against
+  // which no record is ever inert, so that build's replica would accumulate
+  // every tag it invalidates for the life of the build. Declining costs the
+  // build nothing: the edge reads an absent replica as untrusted and falls open
+  // to the origin, which is always correct.
+  it("creates no snapshot where the deploy seeded none", async () => {
     const prefix = freshPrefix();
 
     expect(await clockFor(prefix).raise(new Map([["a", { expired: 5_000 }]]), 9_000)).toBe(
-      "published",
+      "absent",
     );
-    expect(await stored(prefix)).toEqual({
-      version: 1,
-      deployedAt: 0,
-      generatedAt: 9_000,
-      records: { a: { expired: 5_000 } },
-    });
+    expect(await stored(prefix)).toBeNull();
   });
 
-  // The genesis seed is a create-only PUT that precedes traffic, but nothing
-  // orders it against the first invalidation of a build. A publisher that
-  // created the object unconditionally would clobber the anchor it just missed.
-  it("keeps the anchor of a genesis seed that lands between its read and its write", async () => {
+  // Absence is a fact about R2 at a moment, not about the build: nothing orders
+  // the genesis seed against the first invalidation of a build, so an instance
+  // that has once found no snapshot must look again rather than decline for its
+  // whole lifetime.
+  it("publishes into a genesis seed that lands after it first found none", async () => {
     const prefix = freshPrefix();
-    let seeded = false;
-    const racing = {
-      get: (key: string) => env.OCEL_CACHE_STORE.get(key),
-      put: async (key: string, body: string, options?: R2PutOptions) => {
-        if (!seeded) {
-          seeded = true;
-          await seedGenesis(prefix, 1_000);
-        }
-        return env.OCEL_CACHE_STORE.put(key, body, options);
-      },
-    } as unknown as R2Bucket;
+    const clock = clockFor(prefix);
 
-    expect(await clockFor(prefix, racing).raise(new Map([["a", { expired: 5_000 }]]), 9_000)).toBe(
-      "published",
-    );
+    expect(await clock.raise(new Map([["a", { expired: 5_000 }]]), 9_000)).toBe("absent");
+    await seedGenesis(prefix, 1_000);
+
+    expect(await clock.raise(new Map([["a", { expired: 5_000 }]]), 9_000)).toBe("published");
     expect(await stored(prefix)).toEqual({
       version: 1,
       deployedAt: 1_000,
