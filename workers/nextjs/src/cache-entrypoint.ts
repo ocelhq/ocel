@@ -12,6 +12,7 @@
 import {
   isGuardRejection,
   publishTagSnapshot,
+  readableSnapshot,
   tagNamespace,
   tagRecordUpdate,
   tagSnapshotKey,
@@ -29,7 +30,6 @@ import {
   createTagClock,
   dropSnapshotMemo,
   parseJson,
-  readableSnapshot,
   type ObjectStoreReader,
 } from "./tag-clock";
 import type { Env } from "./index";

@@ -21,6 +21,7 @@ export {
   mergeRecord,
   mergeSnapshot,
   publishTagSnapshot,
+  readableSnapshot,
   type StoredTagSnapshot,
   type TagSnapshotStore,
 } from "./tag-snapshot.mjs";
