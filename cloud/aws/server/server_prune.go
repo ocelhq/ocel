@@ -142,6 +142,13 @@ func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 		cacheStore = bootstrap.CacheStore{}
 	}
 
+	// Best-effort for the same reason: a substrate with no adopted writer has no
+	// per-build secret to retire, and a reclaim there is complete without one.
+	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, bootstrap.ClassProduction)
+	if err != nil {
+		isrWriter = bootstrap.ISRWriter{}
+	}
+
 	return deploy.Config{
 		Region:             awscfg.Region,
 		BackendURL:         "s3://" + deployed.StateBucket,
@@ -155,5 +162,8 @@ func pruneConfig(ctx context.Context, opts options) (deploy.Config, error) {
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
 		Env:                deployEnv,
 		Values:             teardownValues(awscfg, deployed, bootstrap.ClassProduction),
+
+		ISRWriterEndpoint:      isrWriter.Endpoint,
+		ISRWriterBootstrapCred: isrWriter.BootstrapCred,
 	}, nil
 }

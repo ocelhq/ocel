@@ -127,7 +127,7 @@ func TestISRWriterCalls_AreNoOpsWhenNoWriterWasAdopted(t *testing.T) {
 	for _, cfg := range []Config{
 		{},
 		{ISRWriterEndpoint: srv.URL},
-		{ISRWriterEndpoint: srv.URL, ISRWriterBootstrapCred: "cred-1"},
+		{ISRWriterBootstrapCred: "cred-1"},
 	} {
 		if err := initializeISRWriter(context.Background(), cfg, testPrefix, "s"); err != nil {
 			t.Fatalf("initializeISRWriter with %+v: %v", cfg, err)
@@ -138,6 +138,21 @@ func TestISRWriterCalls_AreNoOpsWhenNoWriterWasAdopted(t *testing.T) {
 	}
 	if len(*calls) != 0 {
 		t.Errorf("calls = %+v, want none without adopted writer coordinates", *calls)
+	}
+}
+
+// A prune mints no seed — it derives no secret and points no function at the
+// writer — but destroy is authorized by the bootstrap credential alone, so a
+// retirement must still reach the worker (epic decision 6d).
+func TestRetireISRWriter_ReachesTheWorkerWithoutADeploySeed(t *testing.T) {
+	srv, calls := fakeWriter(t, http.StatusNoContent)
+	cfg := Config{ISRWriterEndpoint: srv.URL, ISRWriterBootstrapCred: "cred-1"}
+
+	if err := retireISRWriter(context.Background(), cfg, testPrefix); err != nil {
+		t.Fatalf("retireISRWriter: %v", err)
+	}
+	if len(*calls) != 1 || (*calls)[0].path != "/"+testPrefix+"/destroy" {
+		t.Fatalf("calls = %+v, want one POST to /%s/destroy", *calls, testPrefix)
 	}
 }
 

@@ -250,6 +250,13 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		cacheStore = bootstrap.CacheStore{}
 	}
 
+	// Best-effort for the same reason: a substrate with no adopted writer has
+	// no per-build secret to retire, and a reclaim there is complete without one.
+	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, bootstrap.ClassPreview)
+	if err != nil {
+		isrWriter = bootstrap.ISRWriter{}
+	}
+
 	state, err := bootstrap.ReadRootStackStateFor(ctx, ssmClient, bootstrap.ClassPreview, slug)
 	if err != nil {
 		return deploy.Config{}, nil, nil, err
@@ -272,7 +279,11 @@ func (s *Server) previewTeardownContext(ctx context.Context, opts options, slug 
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
 		Env:                envSegment(env),
 		Slug:               env.GetIdentity(),
-		Values:             teardownValues(awscfg, deployed, bootstrap.ClassPreview),
+
+		ISRWriterEndpoint:      isrWriter.Endpoint,
+		ISRWriterBootstrapCred: isrWriter.BootstrapCred,
+
+		Values: teardownValues(awscfg, deployed, bootstrap.ClassPreview),
 	}
 	return cfg, stack, state, nil
 }
