@@ -140,6 +140,22 @@ export function isrToken(html) {
 }
 
 /**
+ * The tag-publisher probe's route, and the tag it raises. Mirrors
+ * smoke-app/app/api/revalidate-tag/route.ts — assert-tag-publisher.mjs reads
+ * them from here so the route and its assertion cannot drift apart.
+ */
+export const TAG_PROBE_ROUTE = "/api/revalidate-tag";
+
+/**
+ * tagProbeTag names one run's invalidation. It must be unique per run: the
+ * assertion proves the publisher carried *this* raise, and a tag some earlier
+ * run already published would be found in the snapshot before the probe fired.
+ */
+export function tagProbeTag(stamp) {
+  return `ocel-publisher-probe-${stamp}`;
+}
+
+/**
  * deployURL is the URL the harness reads from the deploy script's stdout, taken
  * from the CLI's deploy result. A successful deploy that featured no app URL is
  * a failure for our purposes: the harness has nothing to test.
