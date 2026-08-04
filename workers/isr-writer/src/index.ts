@@ -1,4 +1,4 @@
-import { entryObjectKey } from "@ocel/next-cache";
+import { entryMissHeader, entryObjectKey } from "@ocel/next-cache";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { bearer, isSecretHash, matchesHash, matchesSecret } from "./auth";
@@ -127,7 +127,12 @@ export default class extends WorkerEntrypoint<Env> {
 
       if (request.method === "GET") {
         const body = await readEntry(this.env.OCEL_CACHE_STORE, objectKey);
-        if (body === null) return new Response("Not Found", { status: 404 });
+        if (body === null) {
+          return new Response("Not Found", {
+            status: 404,
+            headers: { [entryMissHeader]: "1" },
+          });
+        }
         return new Response(body, {
           headers: { "content-type": "application/json" },
         });

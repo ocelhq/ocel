@@ -140,6 +140,12 @@ export function entryObjectKey(isrPrefix: string, key: string): string | null {
   return `${isrPrefix}/cache/${key}.cache.json`;
 }
 
+// entryMissHeader marks the writer's "no entry under this key" 404, which the
+// reader serves as an ordinary cache miss. Every other 404 it can answer means
+// the request never reached an entry at all — a misconfigured writer URL, a path
+// shape the two sides no longer agree on — and reads identically without this.
+export const entryMissHeader = "ocel-isr-entry-miss";
+
 // tagsOf reports what a cached entry depends on — a set, deliberately: a FETCH
 // entry is stored under the very tags its reader passes back in, so the three
 // sources below always name the explicit ones twice, and DynamoDB's
