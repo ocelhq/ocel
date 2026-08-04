@@ -37,8 +37,10 @@ node "$platform_dir/build-platform.mjs"
   cd "$root"
   pnpm --filter @ocel/worker-nextjs build
   pnpm --filter @ocel/worker-deployments-store build
+  pnpm --filter @ocel/worker-isr-writer build
 )
 cp "$root/workers/nextjs/dist/index.js" "$dist/workers/next-cloudflare.js"
 cp "$root/workers/deployments-store/dist/index.js" "$dist/workers/store-cloudflare.js"
+cp "$root/workers/isr-writer/dist/index.js" "$dist/workers/isr-writer-cloudflare.js"
 
 printf '%s' "$stamp" >"$dist/STAMP"
