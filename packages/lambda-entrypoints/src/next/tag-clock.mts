@@ -3,10 +3,11 @@ import { mergeRecord, type TagRecord } from "@ocel/next-cache";
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
 import { now } from "./use-cache-entry.mjs";
 
-// Invalidations are recorded in the state table and synced back into a local
-// map, so a revalidateTag raised on one instance reaches every other instance
-// within a sync interval. The local map is what answers reads: the index is
-// eventually consistent, and no read may go to the network.
+// Invalidations are recorded in the state table, published from there into one
+// snapshot object per build, and synced back into a local map — so a
+// revalidateTag raised on one instance reaches every other instance within a
+// sync interval. The local map is what answers reads: the snapshot is eventually
+// consistent, and no read may go to the network.
 export interface TagClock {
   updateTags(tags: string[], durations?: { expire?: number }): Promise<void>;
   refreshTags(): Promise<void>;
@@ -21,16 +22,17 @@ interface ClockState {
   records: Map<string, TagRecord>;
   // undefined: not yet bound. null: no durable backend, so the clock is local.
   store: UseCacheStore | null | undefined;
-  // The write time of the last record consumed. null until a sync has completed,
-  // which is what marks the instance cold — and is not the same as a cursor of 0.
-  cursor: number | null;
+  // The version of the snapshot this instance last merged, as the store named
+  // it. Opaque here: it is handed back on the next read so an unchanged clock
+  // costs a 304 rather than the document.
+  etag: string | null;
   hasSynced: boolean;
   lastAttemptAt: number;
   inflight: Promise<void> | null;
 }
 
 // Throttled on the *attempt* rather than the success, so a persistently failing
-// table sees a bounded retry rate instead of one query per request.
+// store sees a bounded retry rate instead of one read per request.
 const syncIntervalMs = 2_000;
 
 // Versioned: a later change to the state's shape must not be adopted by a module
@@ -39,8 +41,8 @@ const stateKey = Symbol.for("ocel.use-cache.tag-clock.v1");
 
 // Next loads each registered handler as its own module graph, so a clock bundled
 // into both handler bundles exists twice. Sharing it through globalThis is what
-// keeps the two copies agreeing on one tag map, one cursor and one query — the
-// same technique Next uses for its own handler registry.
+// keeps the two copies agreeing on one tag map, one snapshot version and one
+// read — the same technique Next uses for its own handler registry.
 // The only place a ClockState's fields are enumerated, so resetting one can
 // never fall behind adding one.
 function initialState(fingerprint: string): ClockState {
@@ -48,7 +50,7 @@ function initialState(fingerprint: string): ClockState {
     fingerprint,
     records: new Map(),
     store: undefined,
-    cursor: null,
+    etag: null,
     hasSynced: false,
     lastAttemptAt: -Infinity,
     inflight: null,
@@ -59,7 +61,8 @@ function sharedState(): ClockState {
   const fingerprint = [
     process.env.OCEL_STATE_TABLE,
     process.env.OCEL_ISR_TAG_NAMESPACE,
-    process.env.OCEL_STATE_TABLE_INDEX,
+    process.env.OCEL_ISR_BUCKET,
+    process.env.OCEL_ISR_PREFIX,
   ].join("\0");
 
   const host = globalThis as Record<symbol, ClockState | undefined>;
@@ -75,7 +78,7 @@ const state = sharedState();
 
 // Bound lazily so importing this module never reaches for AWS or its env. A
 // store that cannot be built leaves the clock local-only, which is what lets the
-// handlers ship ahead of the index they query.
+// handlers ship ahead of the snapshot they read.
 //
 // The binding lives with the shared clock state rather than in each handler,
 // because the two handler bundles and the clock are one instance's worth of
@@ -92,8 +95,9 @@ export function useCacheStore(): UseCacheStore | null {
 }
 
 // Rebinds the shared clock, discarding the state that belonged to the previous
-// store — a tag map and cursor only mean anything against the backend they came
-// from. Production never calls this; tests drive the real clock against a fake.
+// store — a tag map and a snapshot version only mean anything against the
+// backend they came from. Production never calls this; tests drive the real
+// clock against a fake.
 //
 // Assigned in place rather than rebound, because every module copy that has
 // already read the shared state holds this exact object.
@@ -102,8 +106,8 @@ export function setTagClockStore(next: UseCacheStore | null): void {
 }
 
 // Merged rather than replaced, and always upwards: a record arriving from the
-// index must never walk back an invalidation this instance raised itself, which
-// the index is too lagged to have seen yet.
+// snapshot must never walk back an invalidation this instance raised itself,
+// which the snapshot is too lagged to have seen yet.
 function observe(tag: string, incoming: TagRecord): void {
   state.records.set(tag, mergeRecord(state.records.get(tag), incoming));
 }
@@ -113,37 +117,33 @@ async function sync(): Promise<void> {
   if (!backend) return;
 
   try {
-    const cold = state.cursor === null;
-    const since = state.cursor ?? 0;
-    let consumed = since;
-    let cursor: unknown;
+    const read = await backend.readTagSnapshot(state.etag);
 
-    do {
-      const page = await backend.queryTagRecords(since, cursor);
-      for (const record of page.records) {
-        observe(record.tag, record);
-        consumed = Math.max(consumed, record.writtenAt);
-      }
-      cursor = page.cursor;
-      // A cold instance drains the partition, so it knows the full invalidation
-      // history for its deployment before it serves anything. In steady state a
-      // truncated page advances the cursor only as far as it actually read, so
-      // the next sync resumes rather than skipping the remainder.
-    } while (cold && cursor);
+    // No snapshot, or none this reader can understand. The instance keeps
+    // whatever it knows and stays cold: an empty clock read as "nothing was
+    // invalidated" would serve entries the fleet has already thrown away, and
+    // the remote tier is gated on hasSynced precisely to prevent that.
+    if (read.status === "unusable") return;
 
-    state.cursor = consumed;
+    // A cold instance learns the whole invalidation history for its deployment
+    // from one object, and every read after that costs a 304 until a publisher
+    // rewrites it.
+    if (read.status === "fresh") {
+      for (const [tag, record] of Object.entries(read.records)) observe(tag, record);
+      state.etag = read.etag;
+    }
     state.hasSynced = true;
   } catch {
-    // Next does not guard refreshTags, so a throw here fails the request. A
-    // state table outage — or an index that does not exist yet — leaves the
-    // handlers serving on their last known tag state instead, with the cursor
-    // and hasSynced left exactly where they were so nothing is skipped.
+    // Next does not guard refreshTags, so a throw here fails the request. An
+    // object store outage leaves the handlers serving on their last known tag
+    // state instead, with the snapshot version and hasSynced left exactly where
+    // they were so nothing is skipped.
   }
 }
 
-// Starts a drain and records it as the one in flight, which is what lets a
-// concurrent caller join it rather than run a second query against the same
-// cursor. The attempt is marked before it runs rather than after it settles,
+// Starts a sync and records it as the one in flight, which is what lets a
+// concurrent caller join it rather than issue a second read of the same object.
+// The attempt is marked before it runs rather than after it settles,
 // which is what makes the throttle above bound attempts.
 function drain(): Promise<void> {
   state.lastAttemptAt = now();
@@ -155,8 +155,8 @@ function drain(): Promise<void> {
 // The singular handler makes its own durable tag write, which is the raise: the
 // state table's stream carries it to the one publisher, so nothing here reaches
 // the edge's replica. What is left is this instance's own read-your-own-writes —
-// the two caching models share one clock, and the index is too lagged to answer
-// for the event that was just raised through the other model.
+// the two caching models share one clock, and the snapshot is too lagged to
+// answer for the event that was just raised through the other model.
 export function recordTags(tags: string[], record: TagRecord): void {
   for (const tag of tags) observe(tag, record);
 }
@@ -169,7 +169,7 @@ export const tagClock: TagClock = {
   //
   // The local map is updated synchronously, before the durable write, because
   // that is what gives the raising instance read-your-own-writes across an
-  // eventually consistent index.
+  // eventually consistent snapshot.
   async updateTags(tags, durations) {
     const at = now();
     for (const tag of tags) {
