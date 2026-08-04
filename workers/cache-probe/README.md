@@ -17,13 +17,14 @@ deliverable; this package is only how it gets filled in.
 
 `caches.default` is a **no-op on `*.workers.dev`**: `put()` is accepted and silently
 discarded and `match()` never hits. A probe deployed only to workers.dev reports
-`never-cached` for every measurement and proves nothing. Cloudflare documents functional
-cache operations only for Workers on custom domains.
+`never-cached` for every measurement and proves nothing.
 
-Add the route to `wrangler.jsonc` before deploying (there is a commented placeholder):
+Deploy it as a **zone route**, which is how `cloud/edge/cloudflare` attaches a real Ocel app
+that has domains — so the measurement is taken through the same routing production uses. Add
+it to `wrangler.jsonc` before deploying (there is a commented placeholder):
 
 ```jsonc
-"routes": [{ "pattern": "probe.<your-zone>", "custom_domain": true }]
+"routes": [{ "pattern": "probe.<your-zone>/*", "zone_name": "<your-zone>" }]
 ```
 
 The runner prints a warning if it is pointed at a workers.dev host, and the probe echoes the
