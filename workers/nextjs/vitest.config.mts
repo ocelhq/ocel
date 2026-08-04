@@ -22,9 +22,11 @@ export default defineWorkersConfig({
 					// the real binding — a mock would prove nothing about whether a
 					// bundle actually compiles and runs.
 					workerLoaders: { LOADER: {} },
-					// A real bucket for the tag-snapshot republish tests: whether
-					// that read-merge-conditional-write loop converges is a property
-					// of R2's etag preconditions, which a fake cannot exhibit.
+					// A real bucket for the tag-snapshot read tests: the replica is
+					// the one thing the edge still reads straight out of R2, and a
+					// fake would prove nothing about reading back what a publisher
+					// has just written. The write moved to the ISR writer worker,
+					// which owns the merge and is tested against its own bucket.
 					r2Buckets: ["TAG_SNAPSHOT_STORE"],
 				},
 			},

@@ -40,6 +40,7 @@ import {
 // Re-exported from the main module so ctx.exports carries a loopback binding for
 // it, which is the only way the edge's dynamic worker can reach storage.
 export { CacheEntrypoint } from "./cache-entrypoint";
+import type { CacheEntrypointProps, IsrWriterBinding } from "./cache-entrypoint";
 import { normalizeBaseDomain, previewPointer } from "./preview";
 import { edgeOriginFetch } from "./signing";
 import type { ObjectStoreReader } from "./tag-clock";
@@ -106,6 +107,13 @@ export interface Env {
   // active Deployment's ISR prefix, its presence is what lets the worker
   // read the ISR cache directly.
   OCEL_CACHE_STORE?: R2Bucket;
+  // The service binding to the shared ISR writer worker, which owns every
+  // build's tag-clock replica: an invalidation raised on the edge is posted
+  // there rather than written here, so one publisher per build merges them.
+  // Optional like the store — a substrate whose bootstrap predates the writer
+  // leaves an invalidation recorded in DynamoDB and unreplicated, which is what
+  // it was before the edge published at all.
+  ISR_WRITER?: IsrWriterBinding;
   // The edge reader's IAM credentials. The app's Lambdas are provisioned with
   // AWS_IAM Function URL auth, so the worker signs every origin forward with
   // these (SigV4). Absent only on a substrate whose edge runs inside the
@@ -322,12 +330,13 @@ export async function resolveRouteDeps(
     assetStore: Omit<AssetStoreDeps, "assetPrefix">;
     // What the edge invoker is built from once the Deployment names a bundle:
     // the loader binding, the store holding it, and the cache loopback its
-    // entries call back through. The loopback's scope is the Deployment's own
-    // ISR prefix, so it is filled in here rather than by the caller.
+    // entries call back through. Both the loopback's scope and the write secret
+    // its raises carry are the Deployment's own, so the stub is minted here from
+    // the resolved record rather than handed over already made.
     edgeRuntime?: {
       loader: WorkerLoader;
       store: ObjectStoreReader;
-      cacheRpc?: EdgeCacheStub;
+      cacheEntrypoint?: (opts: { props: CacheEntrypointProps }) => EdgeCacheStub;
     };
   },
 ): Promise<RouteDeps | Response> {
@@ -349,8 +358,13 @@ export async function resolveRouteDeps(
             edgeRuntime.loader,
             edgeWorkers,
             edgeRuntime.store,
-            edgeRuntime.cacheRpc
-              ? { rpc: edgeRuntime.cacheRpc, scope: record.isrPrefix }
+            edgeRuntime.cacheEntrypoint
+              ? {
+                  rpc: edgeRuntime.cacheEntrypoint({
+                    props: { isrWriteSecret: record.isrWriteSecret },
+                  }),
+                  scope: record.isrPrefix,
+                }
               : undefined,
           )
         : undefined,
@@ -1187,11 +1201,12 @@ export default {
             ? {
                 loader: env.LOADER,
                 store,
-                // A loopback stub for this script's own CacheEntrypoint.
-                // ctx.exports carries a stub *factory*, and only an invoked
-                // stub serializes into a loaded worker's env — the factory
-                // itself is refused with a DataCloneError.
-                cacheRpc: ctx.exports.CacheEntrypoint({}),
+                // The stub factory for this script's own CacheEntrypoint. It is
+                // handed over uninvoked because only the resolved Deployment
+                // knows the props to mint the stub with; the factory itself
+                // never reaches a loaded worker's env, which refuses it with a
+                // DataCloneError — only an invoked stub serializes.
+                cacheEntrypoint: ctx.exports.CacheEntrypoint,
               }
             : undefined,
       },
