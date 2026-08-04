@@ -1,10 +1,12 @@
 import { entryMissHeader, entryObjectKey } from "@ocel/next-cache";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
-import { bearer, isSecretHash, matchesHash, matchesSecret } from "./auth";
+import { bearer, matchesHash, matchesSecret } from "@ocel/worker-auth";
+
 import { readEntry, writeEntry } from "./entry";
 import { IsrDeploy } from "./isr-deploy";
 import { forget, memoize, memoized } from "./memo";
+import { isSecretHash } from "./registry";
 import type { Env } from "./env";
 import type { Memo } from "./memo";
 
@@ -63,23 +65,22 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
   }
 }
 
-// The account-level ISR writer: a deployed Lambda's ISR entries reach R2 through
-// here rather than through standing R2 credentials of its own (epic decision 6).
-// Every request names the deploy's isrPrefix as its leading path segments and the
-// op as its last:
+// The account-level ISR writer. A deployed Lambda reads and writes its ISR
+// entries through here, so it holds no standing R2 credential of its own for
+// them at all (epic decision 6) — an R2 token scopes to a bucket and nothing
+// finer, so one left on the function even for reads would still be one that can
+// write every project's entries.
 //
-// - POST /<isrPrefix>/initialize seeds that deploy's write-secret hash, and
-//   POST /<isrPrefix>/destroy retires it when its build is pruned. Both are
-//   authorized by the account-level bootstrap credential, as the deployments
-//   store's own initialize is, and it authorizes nothing else.
-// - PUT /<isrPrefix>/entry?key=<cache key> writes one ISR entry and
-//   GET /<isrPrefix>/entry?key=<cache key> reads one back, both authenticated
-//   with that deploy's own write secret. The object key is derived here from the
-//   authenticated prefix, so no caller can address another deploy's slice.
-//   Reads run through here as well as writes so the deployed function holds no
-//   standing R2 credential for entries at all — a bucket-scoped token left on
-//   the Lambda for reads would still be a bucket-scoped token, and R2 tokens
-//   have no key-prefix grammar to narrow it with.
+// Every request names the deploy's isrPrefix as its leading path segments and
+// the op as its last:
+//
+// - POST /<isrPrefix>/initialize and POST /<isrPrefix>/destroy seed and retire
+//   that deploy's write-secret hash, authorized by the account-level bootstrap
+//   credential, which authorizes nothing else.
+// - PUT and GET /<isrPrefix>/entry?key=<cache key> write and read one entry,
+//   authenticated with that deploy's own write secret. The object key is
+//   derived from the authenticated prefix, so no caller can address another
+//   deploy's slice.
 //
 // Auth is verified at this boundary and nowhere else: the DO behind it is
 // unauthenticated, matching workers/deployments-store/src/index.ts.

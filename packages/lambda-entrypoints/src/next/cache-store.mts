@@ -88,13 +88,13 @@ export function awsCacheStore(): CacheStore {
   // caches. A key that cannot be addressed inside this deploy's prefix is a bug
   // in the caller, so it throws here rather than reaching either store.
   const objectKey = (key: string) => {
-    const objectKey = entryObjectKey(prefix, key);
-    if (objectKey === null) {
+    const addressed = entryObjectKey(prefix, key);
+    if (addressed === null) {
       throw new Error(
         `ocel cache handler: cache key ${JSON.stringify(key)} is not addressable inside ${prefix}`,
       );
     }
-    return objectKey;
+    return addressed;
   };
   const fetchKey = (hash: string) => `${prefix}/fetch-cache/${hash}.cache.json`;
   const tagPK = (tag: string) => `${tagNamespace}${tag}`;

@@ -25,11 +25,9 @@ const cacheStoreParamEnv = "OCEL_CACHE_STORE_PARAM"
 // what tells the Next cache handler its route entries live in the adopted store
 // — and therefore travel through the ISR writer worker, in both directions.
 //
-// The two key vars are the standing R2 credential, and their one remaining
-// consumer is the tag-clock snapshot publisher, which still writes
-// tag-clock.json into that store directly. Epic decision 8 (ocelhq-wvag.4)
-// routes it through the writer's Durable Object; deleting these two, and the
-// SecureString and grant behind them, is part of that issue's completion.
+// The two key vars are the last standing R2 credential — see
+// snapshotObjectStore in packages/lambda-entrypoints/src/next/object-store.mts
+// for what still reads them and what retires them.
 const (
 	storeBucketEnv    = "OCEL_ISR_STORE_BUCKET"
 	storeEndpointEnv  = "OCEL_ISR_STORE_ENDPOINT"

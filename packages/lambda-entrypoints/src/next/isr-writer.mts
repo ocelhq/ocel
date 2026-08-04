@@ -16,17 +16,12 @@ import type { CacheEntryFile } from "@ocel/next-cache";
 const writerURLEnv = "OCEL_ISR_WRITER_URL";
 const writerSecretEnv = "OCEL_ISR_WRITER_SECRET";
 
-// The PutObjectCommand this replaced carried the SDK's own connect and request
-// timeouts; a bare fetch carries none, and a hung writer would hold the
-// invocation open — and billing — to the function's timeout. Long enough for a
-// whole prerender payload over a cold connection, short enough to be a fraction
-// of any function's budget.
+// A bare fetch carries no timeout of its own, and a hung writer would hold the
+// invocation open — and billing — to the function's own timeout.
 const writeTimeoutMs = 10_000;
 
-// A read sits on the serving path, and what it buys by waiting is one saved
-// render. Waiting longer than a render takes is therefore never right, however
-// close the entry is to arriving — so this is deliberately a small fraction of
-// the write's budget rather than the same number.
+// A read waits on the serving path, and all it buys by waiting is one saved
+// render: waiting longer than a render takes is never right.
 const readTimeoutMs = 3_000;
 
 export interface EntryStore {
@@ -57,7 +52,7 @@ export class IsrWriteRejected extends Error {
 // isrEntryStore is the writer this deploy was pointed at. Absent coordinates
 // are a broken deploy rather than a mode: entries a deploy with an adopted cache
 // store writes anywhere else are written where nothing reads them.
-export function isrEntryStore(fetchImpl: typeof fetch = fetch): EntryStore {
+export function isrEntryStore(): EntryStore {
   const url = process.env[writerURLEnv];
   const secret = process.env[writerSecretEnv];
   if (!url || !secret) {
@@ -67,7 +62,7 @@ export function isrEntryStore(fetchImpl: typeof fetch = fetch): EntryStore {
         "re-run `ocel bootstrap` and redeploy",
     );
   }
-  return entryStoreAt(url, secret, fetchImpl);
+  return entryStoreAt(url, secret);
 }
 
 export function entryStoreAt(
@@ -80,13 +75,9 @@ export function entryStoreAt(
   const at = (key: string) => `${url}?key=${encodeURIComponent(key)}`;
 
   return {
-    // FAILS OPEN, unconditionally. Next calls get() on the serving path for
-    // every request to a cached route and does not wrap it, so an error raised
-    // here is a broken request rather than a slow one. Every failure — an
-    // unreachable writer, a timeout, a 5xx, a rejected credential, a body that
-    // will not parse — is therefore a miss, which makes Next render: a writer
-    // outage costs latency and origin load, and serves every page correctly
-    // throughout.
+    // FAILS OPEN, unconditionally. Next calls get() on the serving path and does
+    // not wrap it, so an error raised here is a broken request rather than a slow
+    // one. Every failure is a miss instead, which makes Next render.
     async read(key) {
       try {
         const res = await fetchImpl(at(key), {

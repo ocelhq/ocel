@@ -173,15 +173,10 @@ func (c isrConfig) env() map[string]string {
 	// reads an unset name as "this substrate adopted no cache store" and skips
 	// the fetch entirely, which is what keeps an older substrate on S3.
 	//
-	// This is what puts a standing R2 credential on the function, and it now has
-	// exactly one consumer left: the tag-clock snapshot publisher, which still
-	// writes tag-clock.json into the adopted store directly. Route entries stopped
-	// needing it when their reads joined their writes behind the ISR writer.
-	// Epic decision 8 (ocelhq-wvag.4) routes the publisher through the writer's
-	// Durable Object as well; retiring this parameter, the SecureString behind it
-	// and the grant to read it is part of that issue's completion, not optional
-	// follow-on. Until then the function holds a token that can write any object
-	// in the shared bucket, since R2 tokens have no key-prefix grammar.
+	// This parameter is what puts the last standing R2 credential on the function
+	// — see snapshotObjectStore in
+	// packages/lambda-entrypoints/src/next/object-store.mts for what still reads
+	// it and what retires it, this parameter and its grant included.
 	if c.CacheStoreParam != "" {
 		env["OCEL_CACHE_STORE_PARAM"] = c.CacheStoreParam
 	}

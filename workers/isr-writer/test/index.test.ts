@@ -2,7 +2,7 @@ import { entryMissHeader } from "@ocel/next-cache";
 import { SELF, env, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { sha256Hex } from "../src/auth";
+import { sha256Hex } from "@ocel/worker-auth";
 import { IsrDeploy } from "../src/isr-deploy";
 import * as registry from "../src/registry";
 import type { Env } from "../src/env";

@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
-import { constantTimeEqual } from "./auth";
+import { matchesSecret } from "@ocel/worker-auth";
+
 import * as store from "./store";
 import type {
   DeploymentRecord,
@@ -43,7 +44,7 @@ export class DeploymentsStore extends DurableObject<Env> {
   async authorized(token: string): Promise<boolean> {
     const secret = store.storedSecret(this.ctx.storage);
     if (secret === undefined) return false;
-    return constantTimeEqual(token, secret);
+    return matchesSecret(token, secret);
   }
 
   // Clears the instance's storage — history, records, ownership and secret —
