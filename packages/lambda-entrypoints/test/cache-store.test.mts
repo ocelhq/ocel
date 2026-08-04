@@ -39,6 +39,9 @@ afterEach(() => {
   vi.useRealTimers();
   vi.resetModules();
   vi.restoreAllMocks();
+  // A stubbed fetch is the writer worker standing in for itself, and it would
+  // otherwise stand in for the next test's too.
+  vi.unstubAllGlobals();
 });
 
 const TABLE = "state";
@@ -116,23 +119,38 @@ async function entryStore(responses: any[] = []) {
   return { store: awsCacheStore(), built, sent };
 }
 
-test("reads entries out of the adopted cache store when one is injected", async () => {
+// Stubs the writer worker, capturing what it was asked for.
+function writerAnswering(...responses: Response[]) {
+  const calls: Array<[string, any]> = [];
+  vi.stubGlobal("fetch", async (url: any, init: any) => {
+    calls.push([String(url), init ?? {}]);
+    return responses.shift() ?? new Response(null, { status: 204 });
+  });
+  return calls;
+}
+
+// Entry reads travel through the writer exactly as writes do, and that is the
+// whole credential-hygiene argument: with both halves on the far side of the
+// worker, this function holds no R2 credential for entries at all. A read left
+// direct would have kept a bucket-wide R2 token here, since R2 tokens scope to a
+// bucket and have no key-prefix grammar — so nothing would have been won.
+test("routes entry reads through the ISR writer when one is injected", async () => {
   adoptStore();
   adoptWriter();
-  const { store, built, sent } = await entryStore([
-    { Body: { transformToString: async () => `{"lastModified":1,"value":{}}` } },
-  ]);
+  const calls = writerAnswering(
+    new Response(`{"lastModified":1,"value":{}}`, { status: 200 }),
+  );
+
+  const { store, built, sent } = await entryStore();
 
   expect(await store.readEntry("index")).toEqual({ lastModified: 1, value: {} });
-  expect(built[0]).toMatchObject({
-    region: "auto",
-    endpoint: "https://acct.r2.cloudflarestorage.com",
-    credentials: { accessKeyId: "AK", secretAccessKey: "s3cret" },
-  });
-  expect(sent[0]).toMatchObject({
-    Bucket: "isr",
-    Key: "prod/proj/app/BID/cache/index.cache.json",
-  });
+  expect(calls).toHaveLength(1);
+  expect(calls[0][0]).toBe("https://writer.example/prod/proj/app/BID/entry?key=index");
+  expect(calls[0][1].headers.authorization).toBe("Bearer write-secret");
+  // No S3 client is ever built against the adopted store's injected keys, and
+  // nothing is sent to one.
+  expect(built.some((cfg) => cfg.credentials !== undefined)).toBe(false);
+  expect(sent).toHaveLength(0);
 });
 
 // The writer worker puts into the adopted store and nowhere else, and the two
@@ -146,42 +164,54 @@ test("refuses to run with an adopted store and no writer to write into it", asyn
   await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
 });
 
-// The edge reads exactly this key out of exactly this bucket, so origin and edge
-// meet on one object or they disagree about what is cached.
-test("reads entries from the adopted store at the key the edge writes", async () => {
+// One key spelling for both ops, so the worker derives one object key whichever
+// asked. A read that named the key differently from the write would find nothing
+// the origin had just cached: a miss on every request, forever, silently.
+test("names an entry the same way on the read as on the write", async () => {
   adoptStore();
   adoptWriter();
-  const { store, sent } = await entryStore([
-    { Body: { transformToString: async () => `{"lastModified":1,"value":{}}` } },
-  ]);
+  const calls = writerAnswering(
+    new Response(`{"lastModified":1,"value":{}}`, { status: 200 }),
+    new Response(null, { status: 204 }),
+  );
 
-  await store.readEntry("blog/post");
-
-  expect(sent[0]).toMatchObject({
-    Bucket: "isr",
-    Key: "prod/proj/app/BID/cache/blog/post.cache.json",
-  });
-});
-
-// The origin and the writer derive the entry key with the same function, so a
-// route the origin reads back is a route the writer was willing to write.
-// `trailingSlash: true` produces one of these on every route, and the writer
-// used to refuse it — permanently, and where nobody could see it.
-test("reads back a trailing-slash route at the key the writer accepts", async () => {
-  adoptStore();
-  adoptWriter();
-  const { store, sent } = await entryStore([
-    { Body: { transformToString: async () => `{"lastModified":1,"value":{}}` } },
-  ]);
-
+  const { store } = await entryStore();
+  // `trailingSlash: true` produces this key on every route, and it is the one
+  // the two grammars parted company over before.
   await store.readEntry("blog/");
+  await store.writeEntry("blog/", { lastModified: 1, value: {} });
 
-  expect(sent[0]).toMatchObject({ Key: "prod/proj/app/BID/cache/blog/.cache.json" });
+  expect(calls[0][0]).toBe(calls[1][0]);
+  expect(calls[0][0]).toBe("https://writer.example/prod/proj/app/BID/entry?key=blog%2F");
 });
 
-test("refuses a key that would address something outside the deploy's prefix", async () => {
+// An entry read is on the serving path: Next calls get() for every request to a
+// cached route, and does not wrap it. So a writer that is down, slow or refusing
+// has to read as a miss — which makes Next render — rather than as an error,
+// which would make the request fail. A writer outage is slow, never broken.
+test.each([
+  ["unreachable", () => Promise.reject(new TypeError("fetch failed"))],
+  ["timing out", () => Promise.reject(Object.assign(new Error("aborted"), { name: "TimeoutError" }))],
+  ["erroring", () => Promise.resolve(new Response("Internal Error", { status: 503 }))],
+  ["refusing the credential", () => Promise.resolve(new Response("Unauthorized", { status: 401 }))],
+  ["refusing the key", () => Promise.resolve(new Response("Bad Request", { status: 400 }))],
+])("serves a cache miss when the writer is %s", async (_name, outcome) => {
   adoptStore();
   adoptWriter();
+  vi.spyOn(console, "warn").mockImplementation(() => {});
+  vi.stubGlobal("fetch", outcome);
+
+  const { store } = await entryStore();
+
+  await expect(store.readEntry("blog/post")).resolves.toBeNull();
+  // Including the key the writer would refuse outright: unaddressable is a miss
+  // on this side of the boundary too, never a throw into the render.
+  await expect(store.readEntry("../other/index")).resolves.toBeNull();
+});
+
+// The unadopted path keeps its own grammar check, since nothing downstream of it
+// applies one: a key that cannot be addressed inside the prefix is a caller bug.
+test("refuses a key that would address something outside the deploy's prefix", async () => {
   const { store } = await entryStore();
 
   await expect(store.readEntry("../other/index")).rejects.toThrow("not addressable");
@@ -206,10 +236,11 @@ test("keeps fetch entries on the provider's bucket even when a store is adopted"
     Bucket: "assets",
     Key: "prod/proj/app/BID/fetch-cache/deadbeef.cache.json",
   });
-  // The adopted client is built first; the fetch client is the plain one after
-  // it, on the function's own role rather than the edge's injected keys.
-  expect(built[1].endpoint).toBeUndefined();
-  expect(built[1].credentials).toBeUndefined();
+  // The only client this store builds, on the function's own role rather than
+  // any injected keys — adopting a store no longer builds one at all.
+  expect(built).toHaveLength(1);
+  expect(built[0].endpoint).toBeUndefined();
+  expect(built[0].credentials).toBeUndefined();
 });
 
 test("writes fetch entries to the provider's bucket under the fetch prefix", async () => {

@@ -6,9 +6,9 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
-import { isrEntryWriter } from "./isr-writer.mjs";
+import { isrEntryStore, type EntryStore } from "./isr-writer.mjs";
 import {
-  adoptedObjectStore,
+  entriesAdopted,
   providerObjectStore,
   type ObjectStore,
 } from "./object-store.mjs";
@@ -75,19 +75,11 @@ export function awsCacheStore(): CacheStore {
   const table = env("OCEL_STATE_TABLE");
   const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
 
-  // The writer worker puts into the adopted cache store and nothing else, so the
-  // two are one decision and not two: an adopted store means route entries leave
-  // through the writer, and the function holds no standing write credential for
-  // them at all. A deploy with a store and no writer would write to the
-  // provider's bucket and read from the edge's, missing on every request and
-  // re-rendering forever — so it fails here rather than degrading silently.
-  // Reads stay direct: the entry is already public to the edge. Fetch entries
-  // never go near the writer — their bodies are origin-private, and the writer
-  // only ever addresses the deploy's route-entry slice.
-  const adopted = adoptedObjectStore();
-  const entries = adopted ?? providerObjectStore();
-  const fetches = providerObjectStore();
-  const writer = adopted ? isrEntryWriter() : null;
+  // The account's own bucket under the function's own role. It always holds the
+  // fetch entries, whose bodies are origin-private and must never follow route
+  // entries into a third party's store, and it holds the route entries too when
+  // no store was adopted.
+  const provider = providerObjectStore();
 
   const ddb = new DynamoDBClient({});
 
@@ -139,14 +131,29 @@ export function awsCacheStore(): CacheStore {
     );
   }
 
+  // Where route entries live, as one seam whichever side of the writer they are
+  // on. The writer worker holds the adopted cache store and nothing else, so an
+  // adopted store and a writer are one decision and not two: every route entry,
+  // read as well as written, travels through the writer, and this function holds
+  // no R2 credential for entries at all. A deploy with a store and no writer
+  // would write to the provider's bucket and read from the edge's — a miss on
+  // every request and a re-render on every miss — so isrEntryStore() throws here
+  // rather than let it degrade silently. The unadopted arm is the rollback for
+  // the whole colocation: no edge, no writer, entries where they always were.
+  const entries: EntryStore = entriesAdopted()
+    ? isrEntryStore()
+    : {
+        // Async so a refused key rejects rather than throwing at the call, which
+        // is what every caller of a Promise-returning method is written against.
+        read: async (key) => read(provider, objectKey(key)),
+        write: async (key, entry) => write(provider, objectKey(key), entry),
+      };
+
   return {
-    // Async so a refused key rejects rather than throwing at the call, which is
-    // what every caller of a Promise-returning method is written against.
-    readEntry: async (key) => read(entries, objectKey(key)),
-    writeEntry: async (key, entry) =>
-      writer ? writer.write(key, entry) : write(entries, objectKey(key), entry),
-    readFetch: (hash) => read(fetches, fetchKey(hash)),
-    writeFetch: (hash, entry) => write(fetches, fetchKey(hash), entry),
+    readEntry: (key) => entries.read(key),
+    writeEntry: (key, entry) => entries.write(key, entry),
+    readFetch: (hash) => read(provider, fetchKey(hash)),
+    writeFetch: (hash, entry) => write(provider, fetchKey(hash), entry),
 
     // A tag whose record fails to come back is indistinguishable from a tag that
     // was never revalidated, and the caller reads that as "not expired" — so a

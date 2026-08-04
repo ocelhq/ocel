@@ -44,7 +44,11 @@ test("tag records are namespaced exactly as the deploy grants them", () => {
   );
 });
 
-test("the adopted store is bound from exactly the names the membrane injects", async () => {
+// The last binding that still reads the injected R2 credentials: the tag-clock
+// snapshot publisher. Route entries stopped reading them when their reads joined
+// their writes behind the ISR writer worker, and ocelhq-wvag.4 takes the
+// publisher the same way — after which this contract item has no reader here.
+test("the snapshot store is bound from exactly the names the membrane injects", async () => {
   const env = contract.cacheStoreEnv;
   process.env[env.bucket] = "isr";
   process.env[env.endpoint] = "https://acct.r2.cloudflarestorage.com";
@@ -52,8 +56,8 @@ test("the adopted store is bound from exactly the names the membrane injects", a
   process.env[env.accessKeyId] = "AK";
   process.env[env.secretAccessKey] = "s3cret";
 
-  const { adoptedObjectStore } = await import("../src/next/object-store.mjs");
-  const store = adoptedObjectStore()!;
+  const { snapshotObjectStore } = await import("../src/next/object-store.mjs");
+  const store = snapshotObjectStore()!;
 
   expect(store.bucket).toBe("isr");
   expect(await store.client.config.region()).toBe("auto");
@@ -69,7 +73,7 @@ test("the adopted store is bound from exactly the names the membrane injects", a
 // The bucket alone decides adoption, so a rename of it does not degrade to the
 // provider's own store quietly — it has to be the thing this asserts.
 test("no store is adopted when the contract's bucket name is unset", async () => {
-  const { adoptedObjectStore } = await import("../src/next/object-store.mjs");
+  const { snapshotObjectStore } = await import("../src/next/object-store.mjs");
 
-  expect(adoptedObjectStore()).toBeNull();
+  expect(snapshotObjectStore()).toBeNull();
 });

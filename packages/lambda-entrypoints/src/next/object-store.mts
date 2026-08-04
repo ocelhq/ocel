@@ -22,11 +22,24 @@ function env(name: string): string {
   return value;
 }
 
-// adoptedObjectStore is the edge-provisioned store the membrane injected, or
-// null when this substrate adopted none. It is the store the edge itself reads
-// through a native binding; the origin reaches the same objects over the
-// S3-compatible API, so one client type serves both sides.
-export function adoptedObjectStore(): ObjectStore | null {
+// Whether this substrate's edge offered a cache store, which is what decides
+// where route entries live. It reads only the bucket name, never the injected
+// credentials — route entries no longer touch them at all, since both halves of
+// their traffic go through the ISR writer worker.
+export function entriesAdopted(): boolean {
+  return Boolean(process.env[storeBucketEnv]);
+}
+
+// THE LAST STANDING R2 CREDENTIAL. Its one remaining caller is the tag-clock
+// snapshot publisher, which still writes tag-clock.json into the adopted store
+// directly; epic decision 8 routes every runtime snapshot writer through the
+// Durable Object, and when it does (ocelhq-wvag.4) this function, the two key
+// env vars it reads, and the whole injection behind them go with it.
+//
+// Until then the deployed function holds an R2 token that can write any object
+// in the shared bucket, because R2 tokens scope to a bucket and have no
+// key-prefix grammar. Nothing else here may start using it.
+export function snapshotObjectStore(): ObjectStore | null {
   if (!process.env[storeBucketEnv]) return null;
   return {
     bucket: env(storeBucketEnv),

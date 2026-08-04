@@ -13,7 +13,7 @@ import {
   type TagSnapshotStore,
 } from "@ocel/next-cache";
 
-import { adoptedObjectStore } from "./object-store.mjs";
+import { snapshotObjectStore } from "./object-store.mjs";
 
 // A `use cache` entry exactly as it sits in object storage: the metadata and the
 // body in one JSON document, so a read is a single GET and a write is atomic
@@ -101,7 +101,7 @@ function preconditionOf(prior: StoredTagSnapshot | null) {
 // read. An unadopted substrate has no edge replica at all, so there is nothing
 // to publish and no bucket to publish it to.
 function tagSnapshotStore(prefix: string): TagSnapshotStore | null {
-  const store = adoptedObjectStore();
+  const store = snapshotObjectStore();
   if (!store) return null;
 
   const { client, bucket } = store;
