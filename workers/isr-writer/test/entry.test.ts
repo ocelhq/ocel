@@ -1,7 +1,7 @@
 import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
-import { writeEntry } from "../src/write";
+import { readEntry, writeEntry } from "../src/entry";
 
 const PREFIX = "prod/proj/web/BUILD1";
 
@@ -33,5 +33,18 @@ describe("writeEntry", () => {
     } as unknown as R2Bucket;
 
     await expect(writeEntry(bucket, "k", "{}")).rejects.toThrow("Internal Error");
+  });
+});
+
+describe("readEntry", () => {
+  it("returns the body stored at the object key", async () => {
+    const key = `${PREFIX}/cache/read.cache.json`;
+    await writeEntry(env.OCEL_CACHE_STORE, key, `{"value":2}`);
+
+    expect(await readEntry(env.OCEL_CACHE_STORE, key)).toBe(`{"value":2}`);
+  });
+
+  it("reports an absent object as a miss rather than an error", async () => {
+    expect(await readEntry(env.OCEL_CACHE_STORE, `${PREFIX}/cache/never.cache.json`)).toBeNull();
   });
 });

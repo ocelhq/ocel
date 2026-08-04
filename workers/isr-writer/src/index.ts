@@ -2,8 +2,8 @@ import { entryObjectKey } from "@ocel/next-cache";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { bearer, isSecretHash, matchesHash, matchesSecret } from "./auth";
+import { readEntry, writeEntry } from "./entry";
 import { IsrDeploy } from "./isr-deploy";
-import { writeEntry } from "./write";
 import type { Env } from "./env";
 
 export { IsrDeploy };
@@ -73,7 +73,7 @@ async function matches(memo: Memo, token: string): Promise<boolean> {
   return memo.hash !== undefined && (await matchesHash(token, memo.hash));
 }
 
-async function authorizedWrite(env: Env, isrPrefix: string, token: string): Promise<boolean> {
+async function authorized(env: Env, isrPrefix: string, token: string): Promise<boolean> {
   const memo = memoized(isrPrefix) ?? (await fromRegistry(env, isrPrefix));
   if (await matches(memo, token)) return true;
   if (memo.refreshed) return false;
@@ -97,9 +97,14 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
 //   POST /<isrPrefix>/destroy retires it when its build is pruned. Both are
 //   authorized by the account-level bootstrap credential, as the deployments
 //   store's own initialize is, and it authorizes nothing else.
-// - PUT /<isrPrefix>/entry?key=<cache key> writes one ISR entry, authenticated
+// - PUT /<isrPrefix>/entry?key=<cache key> writes one ISR entry and
+//   GET /<isrPrefix>/entry?key=<cache key> reads one back, both authenticated
 //   with that deploy's own write secret. The object key is derived here from the
 //   authenticated prefix, so no caller can address another deploy's slice.
+//   Reads run through here as well as writes so the deployed function holds no
+//   standing R2 credential for entries at all — a bucket-scoped token left on
+//   the Lambda for reads would still be a bucket-scoped token, and R2 tokens
+//   have no key-prefix grammar to narrow it with.
 //
 // Auth is verified at this boundary and nowhere else: the DO behind it is
 // unauthenticated, matching workers/deployments-store/src/index.ts.
@@ -137,13 +142,22 @@ export default class extends WorkerEntrypoint<Env> {
       return new Response(null, { status: 204 });
     }
 
-    if (request.method === "PUT" && op === "entry") {
+    if ((request.method === "PUT" || request.method === "GET") && op === "entry") {
       const token = bearer(request);
-      if (token === null || !(await authorizedWrite(this.env, isrPrefix, token))) {
+      if (token === null || !(await authorized(this.env, isrPrefix, token))) {
         return new Response("Unauthorized", { status: 401 });
       }
       const objectKey = entryObjectKey(isrPrefix, url.searchParams.get("key") ?? "");
       if (objectKey === null) return new Response("Bad Request", { status: 400 });
+
+      if (request.method === "GET") {
+        const body = await readEntry(this.env.OCEL_CACHE_STORE, objectKey);
+        if (body === null) return new Response("Not Found", { status: 404 });
+        return new Response(body, {
+          headers: { "content-type": "application/json" },
+        });
+      }
+
       const outcome = await writeEntry(
         this.env.OCEL_CACHE_STORE,
         objectKey,
