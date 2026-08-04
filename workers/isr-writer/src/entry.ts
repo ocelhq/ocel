@@ -1,3 +1,5 @@
+import { isRateLimited } from "./r2";
+
 export type WriteOutcome = "written" | "rate-limited";
 
 // R2 caps concurrent writes to a single key at one per second and answers the
@@ -19,12 +21,6 @@ export async function writeEntry(
     if (isRateLimited(err)) return "rate-limited";
     throw err;
   }
-}
-
-function isRateLimited(err: unknown): boolean {
-  const e = err as { status?: unknown; code?: unknown; message?: unknown };
-  if (e?.status === 429 || e?.code === 429) return true;
-  return typeof e?.message === "string" && /429|too many requests/i.test(e.message);
 }
 
 // An absent object is a miss, not a failure: the caller renders. Nothing else is
