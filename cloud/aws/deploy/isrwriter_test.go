@@ -42,6 +42,39 @@ func fakeWriter(t *testing.T, status int) (*httptest.Server, *[]writerCall) {
 	return srv, &calls
 }
 
+// adoptISRWriter points a Config at a fake writer that accepts every seed. A
+// deploy onto an adopted cache store must have one — appCaches refuses to build
+// a cache config where only one of the pair was adopted — so every test that
+// adopts a store adopts a writer alongside it.
+func adoptISRWriter(t *testing.T, cfg Config) Config {
+	t.Helper()
+	srv, _ := fakeWriter(t, http.StatusNoContent)
+	cfg.ISRWriterEndpoint = srv.URL
+	cfg.ISRWriterBootstrapCred = "cred-1"
+	cfg.ISRWriterSeed = "seed-1"
+	return cfg
+}
+
+// The writer worker puts into the adopted cache store and no other, while the
+// deployed function reads its entries from whichever store the membrane found.
+// Nothing but this check holds the two adoptions equal, and a deploy that got
+// them from different substrates caches nothing and says nothing.
+func TestAppCaches_RefusesAWriterAndAStoreThatDisagree(t *testing.T) {
+	base := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", StateTable: "state", Env: "prod"}
+
+	storeOnly := base
+	storeOnly.CacheStoreBucket = "isr"
+	storeOnly.CacheStoreUploader = &fakeUploader{exists: map[string]bool{}}
+	if _, err := appCaches(storeOnly, twoAppManifest()); err == nil {
+		t.Error("a cache store with no writer to write into it must fail the deploy")
+	}
+
+	writerOnly := adoptISRWriter(t, base)
+	if _, err := appCaches(writerOnly, twoAppManifest()); err == nil {
+		t.Error("a writer with no adopted cache store must fail the deploy")
+	}
+}
+
 func TestISRWriteSecret_DiffersPerPrefixAndIsStable(t *testing.T) {
 	web := isrWriteSecret("seed-1", "prod/acme/web/B1")
 	admin := isrWriteSecret("seed-1", "prod/acme/admin/B1")
@@ -198,6 +231,8 @@ func TestAppCaches_GivesEachAppItsOwnWriterCoordinates(t *testing.T) {
 		AssetBucket:            "assets",
 		StateTable:             "state",
 		Env:                    "prod",
+		CacheStoreBucket:       "isr",
+		CacheStoreUploader:     &fakeUploader{exists: map[string]bool{}},
 		ISRWriterEndpoint:      "https://writer.example",
 		ISRWriterBootstrapCred: "cred-1",
 		ISRWriterSeed:          "seed-1",

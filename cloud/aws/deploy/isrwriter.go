@@ -46,6 +46,27 @@ func isrWriteSecretHash(secret string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// checkISRWriterAgrees fails a deploy whose writer and cache store were adopted
+// independently of each other.
+//
+// The writer worker puts into the substrate's cache bucket and no other, while
+// the deployed function reads its entries from whichever store the membrane
+// found. The two are adopted from separate SSM parameters, so nothing but this
+// holds them equal: a deploy with a writer and no store would write every entry
+// into R2 and read every entry out of S3, missing on every request and
+// re-rendering forever, with nothing to say so. A deploy with a store and no
+// writer has no credential to write its entries with at all.
+func checkISRWriterAgrees(cfg Config) error {
+	adopted, writer := isrEntriesAdopted(cfg), isrWriterConfigured(cfg)
+	switch {
+	case adopted && !writer:
+		return fmt.Errorf("this substrate adopted an edge cache store but no ISR writer to write into it, so this build could not revalidate anything it cached; re-run `ocel bootstrap`")
+	case !adopted && writer:
+		return fmt.Errorf("this substrate adopted an ISR writer but no edge cache store, so entries would be written where nothing reads them; re-run `ocel bootstrap`")
+	}
+	return nil
+}
+
 // seedISRWriters seeds every cached app's write-secret hash into the writer, so
 // each build's functions can write the moment they go live. A substrate that
 // adopted no writer seeds nothing.
