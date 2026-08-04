@@ -1,7 +1,8 @@
-import { SELF, env } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { SELF, env, runInDurableObject } from "cloudflare:test";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sha256Hex } from "../src/auth";
+import * as registry from "../src/registry";
 import type { Env } from "../src/env";
 
 declare module "cloudflare:test" {
@@ -23,6 +24,10 @@ function bearerReq(path: string, token: string, init: RequestInit = {}) {
 
 // Each test gets its own isrPrefix so the worker's per-isolate hash memo — real,
 // and shared across tests in one isolate — never carries a hash between them.
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 let nextBuild = 0;
 function freshPrefix() {
   return `prod/acme/web/BUILD${nextBuild++}`;
@@ -162,5 +167,45 @@ describe("routing", () => {
   it("404s an unknown op and a path with no deploy prefix", async () => {
     expect((await SELF.fetch(req("/prod/acme/web/B/nonsense"))).status).toBe(404);
     expect((await SELF.fetch(req("/initialize", { method: "POST" }))).status).toBe(404);
+  });
+});
+
+describe("secret rotation", () => {
+  // A redeploy of the same build reseeds the same isrPrefix with a freshly
+  // derived secret. Reseeding behind the worker's back — straight into the DO's
+  // storage — is what an isolate that never saw the initialize sees, so this is
+  // the case where the memo is genuinely a generation behind.
+  async function reseedBehindTheWorker(prefix: string, secret: string) {
+    const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
+    const hash = await sha256Hex(secret);
+    await runInDurableObject(stub, (_instance, ctx) =>
+      registry.initialize(ctx.storage, hash),
+    );
+  }
+
+  it("accepts the reseeded secret and refuses the superseded one", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "first-secret");
+    // Warms the memo with the first generation's hash.
+    expect((await writeEntryReq(prefix, "a", "first-secret")).status).toBe(204);
+
+    await reseedBehindTheWorker(prefix, "second-secret");
+    expect((await writeEntryReq(prefix, "b", "second-secret")).status).toBe(204);
+    expect((await writeEntryReq(prefix, "c", "first-secret")).status).toBe(401);
+  });
+
+  // A retirement an isolate never saw takes effect there once its memo lapses.
+  // The memo is a cache, and this is the bound on how stale it can be.
+  it("refuses a write once the deploy has been retired and the memo has lapsed", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    expect((await writeEntryReq(prefix, "a", "write-secret")).status).toBe(204);
+
+    const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
+    await runInDurableObject(stub, (instance) => instance.destroy());
+
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 61_000);
+    expect((await writeEntryReq(prefix, "b", "write-secret")).status).toBe(401);
   });
 });
