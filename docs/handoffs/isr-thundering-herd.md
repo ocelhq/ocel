@@ -25,19 +25,29 @@ guarantor of invalidation.
 ```
 main
  └─ 1  isr-herd/01-cache-api-spike        ocelhq-wvag.1   ✅ CLOSED (measured)
-     └─ 2  isr-writer worker + DO          ocelhq-wvag.2  ✅ CLOSED, reviewed ×2, not pushed
-         └─ 3  manifest projection         ocelhq-wvag.3  ✅ CLOSED, reviewed, not pushed
-             └─ 4  streams publisher       ocelhq-wvag.4  ✅ CLOSED, reviewed, not pushed
-                 └─ 5  origin reads snapshot ocelhq-wvag.5  ✅ CLOSED, reviewed, not pushed
-                     └─ 6  get drops BatchGetItem ocelhq-wvag.6  ⛔ blocked on .13, .14
-                         └─ 7  edge L0/L1   ocelhq-wvag.7   ✅ CLOSED, reviewed, not pushed
-                             └─ 8  edge L2 lease ocelhq-wvag.8   ⛔ blocked on .9
+     └─ 2  isr-herd/02-isr-writer          ocelhq-wvag.2  ✅ CLOSED, reviewed ×2, not pushed
+         └─ 3  isr-herd/03-manifest-projection ocelhq-wvag.3 ✅ CLOSED, reviewed, not pushed
+             └─ 4  isr-herd/04-streams-publisher ocelhq-wvag.4 ✅ CLOSED, reviewed, not pushed
+                 └─ 5  isr-herd/05-origin-reads-snapshot  dcd4815  ocelhq-wvag.5  ✅ CLOSED
+                     └─ 6a isr-herd/06a-publisher-alarms  3fb0c73  ocelhq-wvag.13 ✅ CLOSED
+                         └─ 6  isr-herd/06-get-drops-batchget 162660a ocelhq-wvag.6 ⛔ on yo9b
+                             └─ 7  isr-herd/07-edge-l0-l1  d9cc24b  ocelhq-wvag.7  ✅ CLOSED
+                                 └─ 8  edge L2 lease       (unstarted) ocelhq-wvag.8 ⛔ on .9
 ```
 
-PR 7 was branched off **PR 5**, not PR 6, because `.6` is gated on two human decisions. Its
-issue was closed with `--force` past that dependency edge. **It will need rebasing once `.6`
-lands ahead of it** — they touch different files (`.6` is the origin Lambda, `.7` is the edge
-worker), so the rebase should be mechanical.
+**The stack was restacked into dependency order on 2026-08-04, and every commit sha on branch
+07 changed.** Any note elsewhere in this document that cites a sha on 07 was written before the
+rebase; the old shape had PR 7 rooted directly on PR 5, jumping the then-blocked `.6`, with the
+between-PR work piled on top of 07. Each tip above was verified green after the move.
+
+- **`isr-herd/06a-publisher-alarms` is new** and the old diagram does not name it. `ocelhq-wvag.13`
+  is a bd dependency *of* `.6`, so its alarms must sit **below** PR 6; they had been committed
+  above PR 7 by mistake. Two commits: `934da28` (the three alarms) and `3fb0c73` (the e2e harness).
+- **`.12` and `.14`'s commits stay on 07** as between-PR commits, as they always were. Note
+  `d9cc24b` (the fix to `.14`'s own stale comment) **must stay behind `fdf045c`** — it rewrites
+  the comment block that commit introduces.
+- **Nothing is pushed and `gh stack` reports these branches are NOT tracked.** The stack is still
+  managed by hand; do not assume a `gt`/`gh stack` restack will do the right thing with it.
 
 Filed out of band: `ocelhq-wvag.9` (measure the L1 write-visibility window; **blocks `.8`**),
 `ocelhq-wvag.10` (live e2e for the writer), `ocelhq-wvag.11` (destroy leaves per-build writer
@@ -47,16 +57,10 @@ position"). Outside the epic,
 `ocelhq-uroj` (the edge user's account-global `Query`/`BatchGetItem` grants, dead before this
 stack began; see PR 5).
 
-**Two of those now block `.6`, deliberately** — it removes the DynamoDB fallback and makes the
-stream publisher the sole guarantor of invalidation fleet-wide, so neither can be forgotten:
-
-- `ocelhq-wvag.13` — the heartbeat **staleness** alarm, deferred out of PR 4. PR 4 ships the
-  heartbeat and a DLQ-depth alarm, which catches a publisher that *errors*. It does not catch one
-  that is alive but wedged — not erroring, not filling the DLQ, just not advancing. That needs a
-  metric source, and the repo has none.
-- `ocelhq-wvag.14` — the human gate to cut and pin the tag-publisher release artifact, mirroring
-  `ocelhq-pf6q.13` for the image optimizer. Both pin constants ship empty, so bootstrap renders
-  **no** publisher until someone cuts it.
+**`.6`'s gates were `.13`, `.14` and `.15`. All three are now closed** — `.13`'s alarms ship on
+`06a`, `.14`'s pin on 07, and `.15` proved the publisher live. **One gate replaced them:
+`ocelhq-yo9b`**, a P1 bug `.15` uncovered, which is now the only thing between `.6` and landing.
+See "Current position".
 
 ## Working method
 
@@ -93,6 +97,14 @@ working (`363236815301`).
 
 ## Standing notes
 
+**`pnpm -r --no-bail typecheck` has exactly ONE failure, and it is not a type error.**
+Every per-PR record below used to say "clean except the four pre-existing `examples/*`
+packages"; that claim was stale and each one now points here instead. The single failure
+is **`examples/next-cache-lab`**, and the directory contains only `package.json` and
+`node_modules`: its sources are untracked and gone. `tsc --noEmit` finds nothing to check,
+prints its help text and exits 1. It is unrelated to the dogfooded-SDK build failure that
+causes the `pnpm -r test` failures, and no change in this stack can fix it.
+
 **Writer retirement is bounded, not instant (PR 2).** The writer worker memoizes each
 deploy's secret hash per isolate. `destroy` clears the memo only in the isolate that served
 it, so an isolate that never handled the retirement keeps authorizing that build's writes
@@ -104,33 +116,156 @@ worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
 
+**The deploy happened. `.13`, `.14` and `.15` are all closed and the publisher is proven live —
+and the deploy that proved it uncovered `ocelhq-yo9b`, which is now the single gate on `.6`.**
+Read `ocelhq-yo9b` first; it is the most consequential thing on this page.
+
+### `ocelhq-yo9b` — the fleet's membrane layer predates PR 2, so the origin's tag raise throws
+
+**NEW P1 BUG, `ready-for-human`, blocks `ocelhq-wvag.6` and `ocelhq-wvag.10`.** Deployed
+functions attach `ocel-membrane` **v21**, pinned as `defaultMembraneLayerARN` in
+`cloud/aws/deploy/function.go`, and that layer predates `ocelhq-wvag.2`. So a route handler's
+`revalidateTag` throws `OCEL_ISR_STORE_REGION is not set` — **after** the response is piped, so
+the caller sees a 200, no `TAG#` record is written, and the publisher is never invoked.
+
+**Every Lambda-side change in PRs 2, 3, 4 and 5 is therefore unverified on a real deploy.** This
+was invisible until a live deploy was driven, because the deploy renders the *new* env surface
+regardless of what the layer inside the function reads. Confirmed by building the current layer
+and diffing the env surface, not by reasoning: nothing anywhere in the repo reads
+`OCEL_ISR_STORE_REGION`, and the current dist reads `OCEL_ISR_WRITER_URL` /
+`OCEL_ISR_WRITER_SECRET` — which is exactly what the deploy sets.
+
+**Shipping the fix is a `.14`-class human gate.** `make publish-layer` republishes the
+**publicly shared** `ocel-membrane` layer that every Ocel function on every account attaches,
+and then the pin is hand-bumped. Authorizing an app deploy is not authorizing a new version of
+the shared runtime.
+
+`OCEL_MEMBRANE_LAYER_ARN` overrides the pin, and that is how `.15` was proven: a throwaway layer
+published under a **different name**, deleted afterwards. The shared layer and its pin were never
+touched.
+
+### `ocelhq-wvag.15` — VERIFIED LIVE on account 363236815301. CLOSED
+
+A real invalidation went **raise → `TAG#` → stream → publisher → both stores**. The asset bucket
+and R2 both hold the probe tag; R2's document showed a non-zero `deployedAt` (genesis-anchored,
+hence prunable — the property PR 4's review added) and an advancing `generatedAt`. DLQ empty, all
+four alarms OK, the ESM's `LastProcessingResult` moved from "No records processed" to "OK". The
+deployed publisher's `CodeSize` is 473419 bytes, byte-identical to the pinned artifact.
+
+**R2 was checked DIRECTLY rather than inferred, and that mattered.**
+`workers/isr-writer/src/index.ts` returns **204 for the `"absent"` outcome as well as for a real
+publish**, so a 204 from the writer is *not* proof the records landed — it cannot distinguish
+"landed" from "there is no snapshot to land in". Do not treat a raise's status as a receipt.
+
+Two further things were proven by the same run:
+
+- **The Cloudflare DO migration fix works live** (`3b6409d` + `eef4de8`, formerly `779ec2b` +
+  `77de9c9`). `ocel-isr-writer-preview` carries **both** `IsrDeploy` and `IsrSnapshot` with
+  separate namespace ids, and bootstrap settled clean on an already-bootstrapped account.
+- **`PolledEventCount` really does emit `0` for an IDLE-but-healthy mapping** — three consecutive
+  5-minute periods of `Sum = 0.0` with no records flowing, alarm at OK. That was the one
+  falsifiable prediction `.13`'s design rested on, and it is now measured rather than reasoned
+  about.
+
+### `ocelhq-wvag.13` — the staleness alarm. CLOSED, on `isr-herd/06a-publisher-alarms`
+
+**The issue's premise was overturned. Do not re-litigate it.** Age of `generatedAt` cannot report
+on the publisher at all:
+
+- The **R2** copy's `generatedAt` is advanced by the snapshot Durable Object's own 60 s heartbeat
+  whether or not the publisher feeds it. The heartbeat **masks** a wedged publisher — the exact
+  failure the alarm exists to catch.
+- The **S3** copy has no heartbeat, so its age just means "nothing has been invalidated lately",
+  which is not a fault.
+
+That kills *both* options the issue proposed — a custom metric per publish, and a scheduled probe
+emitting snapshot age — because both would alarm on a substrate with no invalidation traffic,
+reproducing PR 4's "alarm lit permanently from the moment of bootstrap" finding.
+
+**Replaced by three alarms on metrics Lambda already emits**, opt-in via `MetricsConfig:
+Metrics: [EventCount]` on the event source mapping. No probe, no custom metric, no new
+infrastructure, no change to the artifact:
+
+- **`PolledEventCount`, `TreatMissingData: BREACHING`** — died outright. Lambda emits `0` on every
+  empty poll and emits *nothing at all* from a stopped mapping, so **absence is the signal**.
+- **`FailedInvokeEventCount` > 0** — runs but cannot publish. It counts any response with a
+  non-empty `BatchItemFailures`, i.e. `publishAll`'s own per-build failure report, and fires five
+  retries before anything reaches the DLQ the existing alarm watches.
+- **`IteratorAge` > 5 min** — keeping up badly. Thresholded at five of the DO's 60 s heartbeats so
+  a beat of jitter cannot flap it.
+
+**`MetricsConfig` is load-bearing, not decorative.** Without it the first two metrics are never
+emitted, and the breaching alarm would be lit permanently rather than merely weakened.
+
+### `ocelhq-wvag.6` — IMPLEMENTED, still OPEN, on `isr-herd/06-get-drops-batchget` (`162660a`)
+
+Blocked by `ocelhq-yo9b` alone. `get()` no longer reads DynamoDB: `readTags` and its
+BatchGetItem loop are deleted, and tag expiry comes from the shared tag clock through a new
+`tagsExpireEntry(tags, lastModified)` in `tag-clock.mts`.
+
+**A design choice the issue did not specify:** it reuses PR 5's existing 2 s throttle and
+in-flight join rather than adding a per-request `readTagSnapshot` to `CacheStore`. A snapshot GET
+per `get()` would have swapped one per-request network read for another. The clock also gives the
+singular tier **read-your-own-writes**, which the DynamoDB read never had — `revalidateTag`
+already feeds the same map through `recordTags`.
+
+It **fails open with no fallback**, deliberately the opposite of the remote `use cache` tier,
+which stays fail-closed until first sync. Both are commented at the site as load-bearing and
+**not to be harmonised**.
+
+`dynamodb:BatchGetItem` is dropped from `isrPolicy`; `UpdateItem` stays, because `writeTags` and
+the plural tier's `writeTag` both still need it.
+
+Verified: `lambda-entrypoints` 199, `next-cache` 42, `workers/nextjs` 545, `next-runtime` 157,
+`cloud/aws` build and test clean. Eight mutations applied, each caught by the named test.
+
+Two honest weaknesses, recorded rather than papered over:
+
+- **One `null`-document test passes both ways against one specific mutation.**
+  `use-cache-store` wraps the call in a try/catch, so a `TypeError` lands on the same `unusable`
+  branch. It does catch the production line that matters; it is weaker than it reads.
+- **A latent test-isolation bug was found and fixed.** The tag clock lives on `globalThis` and
+  survives `vi.resetModules()`, so unbinding it in the wrong order silently broke an unrelated
+  plural-write test. That was already true; nothing in that file read the clock before.
+
+### Two small facts worth carrying
+
+- **Next 16.2.10's public `revalidateTag` takes the cache-life profile as a REQUIRED second
+  argument** — `revalidateTag(tag, profile)`. The one-argument form is `updateTag`, which is
+  callable only from a Server Action. (This is the `next/cache` API, distinct from the cache
+  *handler* method names in "Standing constraints".)
+- **A new e2e probe exists:** `scripts/e2e-next/assert-tag-publisher.mjs`, plus the smoke-app
+  route it drives. Left behind by `.15`.
+
 **`ocelhq-wvag.14` — done, and a live bootstrap attempt exposed a Cloudflare defect. Both on the
 PR 7 branch, NOT pushed. `.14` CLOSED; `.15` filed.**
 
-Three commits, taken between PRs like `.12` was:
+Four commits, taken between PRs like `.12` was (shas rewritten by the restack):
 
-- `cc97e5e` — pins `tag-publisher-v0.0.1` and its digest. See the `.14` section below for what
-  was verified and what was split into `ocelhq-wvag.15`.
-- `779ec2b` — **bootstrap was broken for every already-bootstrapped account** and this fixes it.
-  Durable Object migrations are now decided on the deployed classes, not the migration tag,
-  because the Cloudflare API does not report a tag anywhere. Full detail in the PR 4 section.
-- `77de9c9` — review follow-up: a binding carrying `script_name` names another script's class and
-  must not count as deployed here.
+- `fdf045c` (was `cc97e5e`) — pins `tag-publisher-v0.0.1` and its digest. See the `.14` section
+  below for what was verified and what was split into `ocelhq-wvag.15`.
+- `3b6409d` (was `779ec2b`) — **bootstrap was broken for every already-bootstrapped account** and
+  this fixes it. Durable Object migrations are now decided on the deployed classes, not the
+  migration tag, because the Cloudflare API does not report a tag anywhere. Full detail in the
+  PR 4 section.
+- `eef4de8` (was `77de9c9`) — review follow-up: a binding carrying `script_name` names another
+  script's class and must not count as deployed here.
+- `d9cc24b` — corrects `fdf045c`'s own now-stale placeholder comment. It rewrites the block
+  `fdf045c` introduces, so it must stay ordered behind it.
 
-**The order of events matters for whoever picks this up.** `.14`'s acceptance needs a real
-bootstrap; the bootstrap failed on the *Cloudflare* edge before it ever reached AWS. So the
-publisher is pinned and correct, and still completely unobserved.
+**The order of events matters for whoever picks this up.** `.14`'s acceptance needed a real
+bootstrap; the first bootstrap failed on the *Cloudflare* edge before it ever reached AWS. That
+is now resolved — see `ocelhq-wvag.15` above: the migration fix and the publisher are both proven
+live on `363236815301`.
 
 Verified: `cloud/edge` and `cloud/aws` build and test clean, `gofmt` clean. Five mutations
 checked, each caught by the intended test — including reverting to the original bug. The one
 `gofmt -l` hit, `cloud/edge/cloudflare/cloudflare_test.go`, is the pre-existing drift from
 `b17467f` and was deliberately left alone.
 
-**Nothing here has run against Cloudflare or AWS.**
-
 **`ocelhq-wvag.12` — done, on the PR 7 branch, NOT pushed. Issue CLOSED.**
 
-Commit `6928e98`, taken between PRs as planned. `cacheKey` and `variant-headers.json` now
+Commit `7c63132` (was `6928e98`), taken between PRs as planned. `cacheKey` and `variant-headers.json` now
 have one spelling each, in `packages/next-cache/src/naming.mts`, exported at the subpath
 `@ocel/next-cache/naming`. PR 3's contract tests are gone: the property they policed is true
 by construction.
@@ -162,7 +297,7 @@ a module stops being loadable — an added import, and syntax Node cannot erase 
 
 Verified: `next-cache` 42, `next-runtime` 157, `lambda-entrypoints` 197, `workers/nextjs` 545,
 `workers/isr-writer` 70, `tag-publisher` 15, `cli-platform` 38; `pnpm -r --no-bail typecheck`
-clean except the pre-existing `examples/*`; all five build paths green and the built adapter
+clean except `examples/next-cache-lab` (see "Standing notes"); all five build paths green and the built adapter
 dist loads under plain Node.
 
 Two things came out of the review and were **filed rather than fixed**:
@@ -176,9 +311,11 @@ Two things came out of the review and were **filed rather than fixed**:
 
 **PR 7 (`ocelhq-wvag.7`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
-Branch `isr-herd/07-edge-l0-l1`, rooted on **PR 5** (see the stack shape — it jumps the gated
-`.6`). Serves decisions 9 and 12. Two commits, both in `workers/nextjs`: nothing else in the
-repo is touched, and no Go changed.
+Branch `isr-herd/07-edge-l0-l1`, now rooted on **PR 6** (`162660a`) after the restack; it was
+originally branched off PR 5, jumping the then-gated `.6`, and its issue was closed with
+`--force` past that dependency edge. The rebase was mechanical, as predicted — `.6` is the origin
+Lambda, `.7` is the edge worker. Serves decisions 9 and 12. Two commits (`80deb26`, `e826284`),
+both in `workers/nextjs`: nothing else in the repo is touched, and no Go changed.
 
 Two verified herds are closed:
 
@@ -255,7 +392,7 @@ TTL can be re-admitted mid-flight. Both are commented at the site.
 
 Verified after the fixes: `workers/nextjs` 545/545 (was 531 before this PR), `pnpm typecheck`
 and `pnpm build` (`wrangler deploy --dry-run`) clean on the package; `pnpm -r --no-bail
-typecheck` clean except the four pre-existing `examples/*` packages. Every new assertion was
+typecheck` clean except `examples/next-cache-lab` (see "Standing notes"). Every new assertion was
 mutation-checked — including reverting the registration to after the `await`, which fails with
 `TypeError: Body has already been used`, i.e. the clone-ordering invariant breaking rather than
 an assertion merely not matching.
@@ -322,13 +459,12 @@ Four quality findings were applied in `57b92c5`:
 Verified after the fixes: `packages/lambda-entrypoints` 197/197 — the long-standing failing
 case died with the paging mechanism it tested, so the suite is green for the first time in this
 stack; `packages/next-cache` 42; `packages/tag-publisher` 15; `workers/nextjs` 529;
-`workers/isr-writer` 70; `pnpm -r --no-bail typecheck` clean except the pre-existing
-`examples/*`; `cloud/aws` builds and tests clean.
+`workers/isr-writer` 70; `pnpm -r --no-bail typecheck` clean except
+`examples/next-cache-lab` (see "Standing notes"); `cloud/aws` builds and tests clean.
 
 Two `pnpm -r test` failures are **pre-existing and unrelated** — confirmed by running both
 suites at `c887a83`, where they fail identically: `@repo/api` (9 files) and
-`@ocel/provider-aws` (`Cannot find package 'ocel/config'` — the dogfooded SDK is not built,
-the same cause as the `examples/*` typecheck failures).
+`@ocel/provider-aws` (`Cannot find package 'ocel/config'` — the dogfooded SDK is not built).
 
 **PR 4 (`ocelhq-wvag.4`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
@@ -401,7 +537,7 @@ Verified: `workers/isr-writer` 70; `packages/tag-publisher` 15; `packages/next-c
 `workers/nextjs` 529; `workers/deployments-store` 63; `packages/lambda-entrypoints` 190 of 191
 (the known pre-existing `test/tag-clock.test.mts` case, which survives the publisher's retirement
 because it covers cursor advancement, not publishing); `pnpm -r --no-bail typecheck` clean except
-the pre-existing `examples/*`; `cloud/aws` and `cloud/edge` build and test clean.
+`examples/next-cache-lab` (see "Standing notes"); `cloud/aws` and `cloud/edge` build and test clean.
 
 ### Two things PR 4 changed that deserve a human eye
 
@@ -463,7 +599,8 @@ fixed on the branch. Four came out of it:
 Verified after the fixes: `packages/next-runtime` 157; `packages/lambda-entrypoints` 217 of
 218 (the one failure is the known pre-existing `test/tag-clock.test.mts`, identical on the
 base commit); `workers/nextjs` 525; `packages/next-cache` 34; `pnpm -r --no-bail typecheck`
-clean except the four `examples/*` packages that fail on the base commit. No Go changed — a
+clean except `examples/next-cache-lab` (see "Standing notes"), which fails on the base commit
+identically. No Go changed — a
 `.func` is zipped whole, so the new file rides the existing artifact path.
 
 **PR 2 (`ocelhq-wvag.2`) — code complete and reviewed twice, NOT pushed. Issue CLOSED.**
@@ -501,7 +638,7 @@ credential primitives both account-level workers had copied are now one package,
 `@ocel/worker-auth`.
 
 Verified after the fixes: `pnpm -r --no-bail typecheck` clean across every source package
-(the four `examples/*` failures are pre-existing — the dogfooded SDK is not built);
+(the `examples/*` failure is pre-existing — see "Standing notes");
 `workers/isr-writer` 42; `workers/deployments-store` 63; `packages/worker-auth` 7;
 `packages/next-cache` 34; `workers/nextjs` 523; `packages/lambda-entrypoints` 207 of 208 (the
 known pre-existing `test/tag-clock.test.mts`); `cloud/aws` and `cloud/edge` build and test
@@ -600,38 +737,41 @@ and claims every deployment lands on workers.dev.
   manifest. It is load-bearing for correctness: Next's own `SharedCacheControls` override is
   process-local and non-durable, and the render-error clamp rewrites revalidate windows at
   runtime.
-- Correct Next 16.2.10 method names: `updateTags(tags, durations?)` on the plural handler,
-  `revalidateTag(tags, durations?)` on the singular. `expireTags` and `receiveExpiredTags`
-  do not exist.
+- Correct Next 16.2.10 **cache-handler** method names: `updateTags(tags, durations?)` on the
+  plural handler, `revalidateTag(tags, durations?)` on the singular. `expireTags` and
+  `receiveExpiredTags` do not exist.
+- Distinct from those, the **public `next/cache` API**: `revalidateTag(tag, profile)` takes the
+  cache-life profile as a **required** second argument in 16.2.10. The one-argument form is
+  `updateTag`, and it is callable only from a Server Action. A probe route that calls
+  `revalidateTag(tag)` will not compile.
 - Cloudflare Tiered Cache is deliberately not relied on — `originBlocking` sends a
   SigV4-signed request carrying `x-prerender-revalidate` specifically to bypass caching.
 
 ## Next step
 
-**Nothing in the stack is waiting on scrutiny.** PRs 2, 3, 4, 5 and 7 are all reviewed and their
-findings are fixed. Every remaining child is **blocked on a human**, so there is no unblocked
-implementation work left in this epic:
+**The deploy happened, and it superseded the previous plan on this page.** The old "everything
+converges on one deploy" framing is spent: bootstrap ran, the migration fix and the publisher are
+proven live, and `.13`, `.14` and `.15` are all closed. What the deploy bought was one thing the
+plan did not anticipate — it found `ocelhq-yo9b`.
 
-- `ocelhq-wvag.6` — blocked on `.13` (human gate) and now `.15` (needs a deploy). `.14` is closed.
-- `ocelhq-wvag.8` — blocked on `.7` (now closed) and `.9`, which **needs a deploy**.
-- `ocelhq-wvag.9` — needs live measurement on a zone route.
+**`ocelhq-yo9b` is the single gate.** It blocks `.6` (implemented and sitting on
+`isr-herd/06-get-drops-batchget`) and `.10`. Shipping it means republishing the shared
+`ocel-membrane` layer and hand-bumping `defaultMembraneLayerARN` — a human release decision of
+exactly the `.14` / `ocelhq-pf6q.13` class. Nothing else in the stack moves until it does, because
+until then *no deployed function anywhere can raise a tag*.
 
-**Everything left in this epic now converges on one thing: a deploy.** `.9`, `.10` and `.15` all
-need one, and `.15` and `.10` would be exercised by the *same* bootstrap run — the one that
-failed on 2026-08-04 and is now fixed but unverified. Re-running it is the highest-value next
-action, and it does three jobs at once: it proves the migration fix, it is `.10`'s first real
-test, and it is what `.15` measures.
+Remaining state:
 
-**Know what re-running bootstrap now does.** It will get past `ocel-deployments-store-preview`
-and then proceed to create the `ocel-isr-writer-preview` script, which does not exist yet — that
-is new account-level infrastructure, and standing it up is precisely the authorization
-`ocelhq-wvag.10` says has not been given. Getting further than last time is the point, but it is
-also the thing to have decided on deliberately rather than discovered.
+- `ocelhq-wvag.6` — implemented, open, blocked on `ocelhq-yo9b` alone.
+- `ocelhq-wvag.8` — blocked on `.9`. `.7` is closed.
+- `ocelhq-wvag.9` — needs live measurement on a **zone route**. Not gated on `yo9b`: it measures
+  the edge's write-visibility window, which has nothing to do with the Lambda layer.
+- `ocelhq-wvag.10` — blocked on `ocelhq-yo9b`. Its infrastructure now exists; its assertion cannot
+  be driven.
 
-**`ocelhq-wvag.12` is now done** (see "Current position"), and it turned out to need no dist
-build at all. The one piece of work left that needs no gate is **`ocelhq-wvag.11`** (destroy
-leaves per-build writer DO instances behind), plus **`ocelhq-heo2`** which came out of `.12`'s
-review.
+**Open and ungated, so pickable right now:** `ocelhq-wvag.11` (destroy leaves per-build writer DO
+instances behind) and `ocelhq-heo2` (`packages/next-runtime/tsconfig.json` never typechecks its
+tests), which came out of `.12`'s review.
 
 Five review rounds have now landed twelve real defects rather than polish, and **in every
 single case the failure was silent**: a write dropped with no log, a herd at the auth boundary,
@@ -651,6 +791,15 @@ was right. A fixture invented to match an assumption can only ever confirm it. W
 depends on an external API's response shape, pin a **captured real response** — the fix's test
 carries the verbatim body, so the premise is now falsifiable by re-fetching rather than by
 reasoning.
+
+**The fourteenth defect (`ocelhq-yo9b`) is silent again, and its lesson is that no local gate
+could have caught it.** Four PRs of Lambda-side work passed every unit test, typecheck, mutation
+check and review while *none of it was running on a deployed function* — the deploy renders the
+new env surface, the layer inside the function is a hand-bumped pin, and the two drifted apart
+with nothing comparing them. The failure then hid behind a 200 because the throw happens after
+the response is piped. **Where a component's version is a pinned constant, "the code is correct"
+and "the deployed thing runs the code" are separate claims, and only a live run distinguishes
+them.** That is the argument for driving a real deploy earlier in a stack rather than at its end.
 
 A third method earned its keep on PR 7: **make the review clear the hard things explicitly
 before it hunts**. The spec brief named the four properties most likely to be quietly wrong
@@ -696,15 +845,22 @@ Standing constraints PR 7 hands to PR 8, which builds L2 on top of L1:
 
 Live threads to carry forward:
 
-- `ocelhq-wvag.9` blocks `.8`. It needs a deploy, like `.1` did. With `.7` closed it is now the
-  **only** thing standing between this stack and its last PR, so it is the next action.
-- `ocelhq-wvag.13` and `ocelhq-wvag.14` both block `.6`. See the stack shape above.
+- `ocelhq-wvag.9` blocks `.8`. It needs live measurement on a **zone route**, like `.1` did. With
+  `.7` closed it is the only thing standing between this stack and its last PR.
+- `ocelhq-yo9b` blocks `.6` and `.10`, and is the only remaining gate on either. `.13`, `.14` and
+  `.15` are all closed. See the stack shape above.
 
 ## The decisions waiting on a human
 
 `ocelhq-wvag.10` — live e2e for the writer — needs authorization, not just scheduling.
 Running a throwaway probe on a zone route (PR 1) and standing up **account-level
 infrastructure** are different things, and the second has not been approved.
+
+**Partly overtaken by events.** `.15`'s run stood the account-level infrastructure up:
+`ocel-isr-writer-preview` exists on the Cloudflare account carrying both DO classes, and the
+publisher Lambda, its DLQ and its ESM exist on `363236815301`. `.10` itself remains open and is
+now blocked by `ocelhq-yo9b` — with the fleet's membrane layer unable to raise a tag, the
+Lambda → writer → R2 path cannot be driven from a deployed function.
 
 What is unproven until it runs: the script uploading with its DO migration tag on a first
 bootstrap, the R2 binding resolving to the real bucket, a deployed Lambda authenticating
@@ -735,7 +891,8 @@ list or a version's detail. `settings.Migrations` comes back fully zeroed for a 
 demonstrably carries its class. That `""` was indistinguishable from `pendingMigrations`'
 documented "never migrated", so the upload redeclared the whole log.
 
-Fixed in `779ec2b` + `77de9c9`: the decision keys on the **classes the deployed script has**
+Fixed in `3b6409d` + `eef4de8` (was `779ec2b` + `77de9c9`): the decision keys on the **classes
+the deployed script has**
 (`class_name` on each `durable_object_namespace` binding, which the same call *does* report),
 declaring exactly the classes it lacks. `old_tag` is gone — it names a tag we cannot read back,
 so a concurrent bootstrap is rejected by 10074 rather than by the precondition; still rejected,
@@ -747,20 +904,22 @@ this shipped green. It is deleted; the replacement pins the verbatim live respon
 in `cloud/edge/cloudflare/durableobjectmigration_test.go`. Do not re-derive the API shape from
 docs — it was established by calling all four endpoints.
 
-The fix is unit- and mutation-verified but **has not been run against Cloudflare**.
+**The fix is now proven live** (`.15`, 2026-08-04): bootstrap settled clean on the
+already-bootstrapped account and `ocel-isr-writer-preview` carries both `IsrDeploy` and
+`IsrSnapshot` with separate namespace ids.
 
 ### `ocelhq-wvag.14` — cut and pin the tag-publisher release artifact — **DONE**
 
-`tag-publisher-v0.0.1` is cut and both constants are pinned (`cc97e5e`). Verified rather than
+`tag-publisher-v0.0.1` is cut and both constants are pinned (`fdf045c`). Verified rather than
 assumed: the asset downloaded from the public release URL hashes to the pinned digest, and
 `pnpm --filter @ocel/tag-publisher zip` reproduces it byte for byte (473419 bytes), so the
 reproducible-archive claim behind the pin holds. `artifactPin.pinned()` is now true, so
 bootstrap renders the publisher instead of skipping it.
 
-**Its live acceptance was split into `ocelhq-wvag.15`, which now blocks `.6` in its place.**
-Nothing is deployed on account `363236815301`: no publisher Lambda, no SQS queues at all, no
-event source mappings, no artifact under `ocel-tag-publisher/`. `.6` must not land while the
-function that becomes the fleet's sole guarantor of invalidation has never been observed working.
+**Its live acceptance was split into `ocelhq-wvag.15`, and that is now closed too** — the
+publisher is deployed on `363236815301`, running the pinned artifact byte for byte, and has
+carried a real invalidation to both stores. `.6`'s gate passed to `ocelhq-yo9b`, which `.15`
+uncovered.
 
 ### The ISR write-secret seed's new lifecycle
 
