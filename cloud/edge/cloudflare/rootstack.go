@@ -87,12 +87,14 @@ type durableObjectClass struct {
 
 // durableObjectBindingType is the binding type Cloudflare reports a Durable
 // Object namespace under, in both the upload metadata and the settings it reads
-// back. It is how deployedClasses recognises a class the script already has.
+// back.
 const durableObjectBindingType = "durable_object_namespace"
 
-// migrationStep is one entry in a worker's migration log. The log is cumulative:
-// a step that has shipped stays here forever and is never edited, so the classes
-// it names are a complete record of what a script at the end of the log carries.
+// migrationStep is one entry in a worker's migration log, mirroring its
+// wrangler.jsonc. The log is cumulative: a step that has shipped stays here
+// forever and is never edited, so the classes it names are a complete record of
+// what a script at the end of the log carries, and the newest tag is the one an
+// upload declares itself as reaching.
 type migrationStep struct {
 	tag           string
 	sqliteClasses []string
@@ -557,15 +559,14 @@ func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorke
 // script Cloudflare has no record of migrating, and one that named a class the
 // script already has is rejected outright ("Cannot apply new-sqlite-class
 // migration to class C that is already depended on by existing Durable
-// Objects", code 10074). Declaring exactly the missing classes is what satisfies
-// both, and it is decidable from the deployed bindings alone — unlike the
-// migration tag, which the API does not report at all (see deployedClasses).
+// Objects", code 10074).
 //
-// The cost of not keying on the tag is that old_tag, Cloudflare's precondition
-// against the script moving underneath us, cannot be sent: it names a tag we
-// have no way to read back. A concurrent bootstrap that adds a class between
-// this read and the upload is therefore rejected by 10074 rather than by the
-// precondition — still rejected, and never misapplied.
+// It keys on the deployed classes because the migration tag is unreadable; see
+// deployedClasses. The cost is that old_tag, Cloudflare's precondition against
+// the script moving underneath us, cannot be sent: it names a tag we have no way
+// to read back. A concurrent bootstrap that adds a class between this read and
+// the upload is therefore rejected by 10074 rather than by the precondition —
+// still rejected, and never misapplied.
 func pendingMigrations(log []migrationStep, deployedClasses []string) (map[string]any, error) {
 	for _, class := range deployedClasses {
 		if !slices.ContainsFunc(log, func(step migrationStep) bool { return slices.Contains(step.sqliteClasses, class) }) {

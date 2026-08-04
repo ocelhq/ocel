@@ -96,14 +96,38 @@ func TestDeployedClasses_AbsentScriptIsNoClasses(t *testing.T) {
 		t.Fatalf("deployedClasses on an absent script: %v", err)
 	}
 	if len(classes) != 0 {
-		t.Fatalf("deployedClasses = %v, want none for a script that does not exist", classes)
+		t.Errorf("deployedClasses = %v, want none for a script that does not exist", classes)
+	}
+}
+
+// A binding carrying script_name points at a class another script owns. Counting
+// it as deployed here would skip the step that creates this script's own class,
+// and Cloudflare would then reject the binding to a class it never created.
+func TestDeployedClasses_IgnoresAClassOwnedByAnotherScript(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"result":{"bindings":[
+			{"class_name":"IsrDeploy","name":"ISR_WRITER_DO","script_name":"some-other-worker",
+			 "type":"durable_object_namespace"}
+		]},"success":true,"errors":[],"messages":[]}`))
+	}))
+	t.Cleanup(srv.Close)
+	p := &provider{client: cf.NewClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+
+	classes, err := p.deployedClasses(context.Background(), "ocel-isr-writer-preview")
+	if err != nil {
+		t.Fatalf("deployedClasses: %v", err)
+	}
+	if len(classes) != 0 {
+		t.Fatalf("deployedClasses = %v, want none: IsrDeploy belongs to another script", classes)
 	}
 	meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, classes)
 	migrations, ok := meta["migrations"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected a migrations object for an absent script, got %v", meta["migrations"])
+		t.Fatalf("expected a migrations object, got %v", meta["migrations"])
 	}
 	if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"IsrDeploy"}, {"IsrSnapshot"}}) {
-		t.Errorf("migrations.steps = %v, want the whole log", steps)
+		t.Errorf("migrations.steps = %v, want both classes still created locally", steps)
 	}
 }
