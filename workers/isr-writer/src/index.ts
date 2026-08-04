@@ -14,20 +14,43 @@ function stub(env: Env, isrPrefix: string) {
   return env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(isrPrefix));
 }
 
-// Hashes resolved from the registry, memoized for the life of the isolate so a
-// steady stream of entry writes costs one DO round trip rather than one per
-// write. Only a hash that exists is memoized: an uninitialized deploy must stay
-// resolvable once its initialize lands. A retired deploy's entry survives in
-// isolates that never saw the retirement, which costs nothing — the Lambda
-// holding that secret is destroyed by the same prune.
-const secretHashes = new Map<string, string>();
+// Hashes resolved from the registry, memoized per isolate so a steady stream of
+// entry writes costs one DO round trip a minute rather than one per write. The
+// memo is a cache, so it expires: without a bound, a retirement an isolate never
+// saw would never take effect there. A minute is short next to the life of a
+// build and long next to a burst of writes.
+const MEMO_TTL_MS = 60_000;
+const secretHashes = new Map<string, { hash: string; expiresAt: number }>();
 
-async function secretHashFor(env: Env, isrPrefix: string): Promise<string | undefined> {
-  const memoized = secretHashes.get(isrPrefix);
-  if (memoized !== undefined) return memoized;
+function memoizedSecretHash(isrPrefix: string): string | undefined {
+  const entry = secretHashes.get(isrPrefix);
+  if (entry === undefined) return undefined;
+  if (entry.expiresAt <= Date.now()) {
+    secretHashes.delete(isrPrefix);
+    return undefined;
+  }
+  return entry.hash;
+}
+
+function memoizeSecretHash(isrPrefix: string, hash: string): void {
+  secretHashes.set(isrPrefix, { hash, expiresAt: Date.now() + MEMO_TTL_MS });
+}
+
+// Redeploying a build reseeds its registry with a freshly derived secret under
+// the same isrPrefix, so a live memo can be a generation behind. A token that
+// fails against the memo is therefore re-checked against the registry once
+// before it is refused.
+async function authorizedWrite(env: Env, isrPrefix: string, token: string): Promise<boolean> {
+  const memoized = memoizedSecretHash(isrPrefix);
+  if (memoized !== undefined && (await matchesHash(token, memoized))) return true;
+
   const hash = await stub(env, isrPrefix).secretHash();
-  if (hash !== undefined) secretHashes.set(isrPrefix, hash);
-  return hash;
+  if (hash === undefined) {
+    secretHashes.delete(isrPrefix);
+    return false;
+  }
+  memoizeSecretHash(isrPrefix, hash);
+  return hash !== memoized && (await matchesHash(token, hash));
 }
 
 async function readJson<T>(request: Request): Promise<T | undefined> {
@@ -71,7 +94,7 @@ export default class extends WorkerEntrypoint<Env> {
         return new Response("Bad Request", { status: 400 });
       }
       await stub(this.env, isrPrefix).initialize(body.secretHash);
-      secretHashes.set(isrPrefix, body.secretHash);
+      memoizeSecretHash(isrPrefix, body.secretHash);
       return new Response(null, { status: 204 });
     }
 
@@ -86,9 +109,7 @@ export default class extends WorkerEntrypoint<Env> {
 
     if (request.method === "PUT" && op === "entry") {
       const token = bearer(request);
-      if (token === null) return new Response("Unauthorized", { status: 401 });
-      const hash = await secretHashFor(this.env, isrPrefix);
-      if (hash === undefined || !(await matchesHash(token, hash))) {
+      if (token === null || !(await authorizedWrite(this.env, isrPrefix, token))) {
         return new Response("Unauthorized", { status: 401 });
       }
       const key = url.searchParams.get("key") ?? "";
