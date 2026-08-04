@@ -1,19 +1,18 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { TagRecord, TagRecordUpdate } from "@ocel/next-cache";
+import type { TagRecordUpdate } from "@ocel/next-cache";
 import type {
   TagSnapshotRead,
   UseCacheEntry,
   UseCacheStore,
 } from "../src/next/use-cache-store.mjs";
-
-type Row = TagRecordUpdate & { tag: string };
+import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
 // A stand-in for the whole backing pair: an object store keyed by cache key, and
 // this build's published tag snapshot. Both can be broken independently, because
 // a backend outage is a first-class case for this tier.
 function fakeStore() {
   const objects = new Map<string, UseCacheEntry>();
-  const rows = new Map<string, Row>();
+  const rows = new Map<string, TagRow>();
   let objectFailure: Error | null = null;
   let snapshotFailure: Error | null = null;
 
@@ -49,11 +48,7 @@ function fakeStore() {
     async readTagSnapshot(): Promise<TagSnapshotRead> {
       await Promise.resolve();
       if (snapshotFailure) throw snapshotFailure;
-      const records: Record<string, TagRecord> = {};
-      for (const [tag, row] of rows) {
-        records[tag] = { stale: row.stale, expired: row.expired };
-      }
-      return { status: "fresh", records, etag: null };
+      return { status: "fresh", records: publishedRecords(rows), etag: null };
     },
 
     async writeTag(tag, record) {

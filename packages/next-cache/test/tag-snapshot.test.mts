@@ -100,8 +100,16 @@ describe("readableSnapshot", () => {
   });
 
   it("declines a version it was not written against, and a document with no records", () => {
-    expect(readableSnapshot({ ...snapshotOf(1, {}), version: 2 } as unknown as TagSnapshot)).toBeNull();
-    expect(readableSnapshot({ ...snapshotOf(1, {}), records: undefined } as unknown as TagSnapshot)).toBeNull();
+    expect(readableSnapshot({ ...snapshotOf(1, {}), version: 2 })).toBeNull();
+    expect(readableSnapshot({ ...snapshotOf(1, {}), records: undefined })).toBeNull();
     expect(readableSnapshot(null)).toBeNull();
+  });
+
+  // It is handed whatever parsed off the network, and JSON's top level is not
+  // required to be an object at all.
+  it("declines anything that is not a document", () => {
+    for (const parsed of [undefined, 7, "a snapshot", true, [], [snapshotOf(1, {})]]) {
+      expect(readableSnapshot(parsed)).toBeNull();
+    }
   });
 });
