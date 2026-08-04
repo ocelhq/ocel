@@ -42,8 +42,8 @@ worker), so the rebase should be mechanical.
 Filed out of band: `ocelhq-wvag.9` (measure the L1 write-visibility window; **blocks `.8`**),
 `ocelhq-wvag.10` (live e2e for the writer), `ocelhq-wvag.11` (destroy leaves per-build writer
 DO instances behind), `ocelhq-wvag.12` (collapse the twice-derived projection key and
-filename into `@ocel/next-cache`; needs a dist build on that package, so it touches the
-Lambda and worker bundling — best done between PRs rather than inside one). Outside the epic,
+filename into `@ocel/next-cache` — **done**, and it needed no dist build; see "Current
+position"). Outside the epic,
 `ocelhq-uroj` (the edge user's account-global `Query`/`BatchGetItem` grants, dead before this
 stack began; see PR 5).
 
@@ -103,6 +103,52 @@ memo. Read decision 6d and commit `79900d5`'s message with that bound in mind �
 worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
+
+**`ocelhq-wvag.12` — done, on the PR 7 branch, NOT pushed. Issue CLOSED.**
+
+Commit `6928e98`, taken between PRs as planned. `cacheKey` and `variant-headers.json` now
+have one spelling each, in `packages/next-cache/src/naming.mts`, exported at the subpath
+`@ocel/next-cache/naming`. PR 3's contract tests are gone: the property they policed is true
+by construction.
+
+**It needed no packaging change, and the issue's stated blocker was wrong on two counts.**
+Do not re-derive this — it was established by running the builds, not by reading:
+
+- **The artifact that ships is already an esbuild bundle.** `cli/platform/build-platform.mjs`
+  bundles `packages/next-runtime/src/next-adapter.mts` directly, so "next-runtime cannot import
+  it as shipped" was only ever true of the *dev* `tsc` dist at `packages/next-runtime/dist/`.
+- **Node's type-stripping works through the pnpm symlink.** The blocker was narrower than "raw
+  `.mts`": `index.mts` re-exports `./tag-index.mjs`, and Node does not rewrite that specifier.
+  A leaf `.mts` that imports nothing loads fine.
+
+**Avoiding a dist build was the point, not the shortcut.** With `"."` resolving to dist,
+vitest, esbuild and wrangler would all have started reading compiled output instead of source,
+across six build sites, in a repo with no turbo to order them. The `"."` export is untouched
+and every existing importer resolves identically.
+
+**The one thing to know before touching `packages/next-runtime`:** adding the workspace
+dependency made a new mistake writable. An `import { entryObjectKey } from "@ocel/next-cache"`
+in the adapter's source typechecks, passes all 157 next-runtime tests, both wrangler builds and
+both esbuild builds — and breaks `next build`, because every other `@ocel/*` consumer is
+bundled and resolves the graph itself. That is why the guard is
+`packages/next-runtime/test/plain-node-imports.test.mts` and not a test beside the module: it
+resolves each specifier the source imports the way the adapter itself resolves it, from
+`packages/next-runtime`, over the real `node_modules` link. Mutation-checked against both ways
+a module stops being loadable — an added import, and syntax Node cannot erase (an `enum`).
+
+Verified: `next-cache` 42, `next-runtime` 157, `lambda-entrypoints` 197, `workers/nextjs` 545,
+`workers/isr-writer` 70, `tag-publisher` 15, `cli-platform` 38; `pnpm -r --no-bail typecheck`
+clean except the pre-existing `examples/*`; all five build paths green and the built adapter
+dist loads under plain Node.
+
+Two things came out of the review and were **filed rather than fixed**:
+
+- **`ocelhq-heo2`** — `packages/next-runtime/tsconfig.json` includes only `src/**`, so its test
+  files are never typechecked. Pre-existing; this change makes it load-bearing.
+- **Node < 22.18** (or `--no-experimental-strip-types`) breaks the dev `tsc` dist at
+  `next build` with `ERR_UNKNOWN_FILE_EXTENSION`. Loud, not silent, and the new guard fails
+  identically, so CI catches it. CI pins `node-version: 22`, floating. The shipped path is
+  bundled and unaffected.
 
 **PR 7 (`ocelhq-wvag.7`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
@@ -380,8 +426,9 @@ fixed on the branch. Four came out of it:
   `cacheKey()` in `@ocel/next-cache` are the same transform, authored independently. Drift
   would make every lookup miss and quietly disable PPR, the exact failure the projection
   exists to prevent. Contract tests now pin both that pair and the twice-spelled filename.
-  Collapsing them to one derivation needs a packaging change and is filed as
-  **`ocelhq-wvag.12`** — see below.
+  Collapsing them to one derivation was filed as **`ocelhq-wvag.12`**, on the belief that it
+  needed a packaging change. It did not, and the contract tests are gone — see "Current
+  position".
 - The acceptance criterion "segment prefetch verified" was asserted only as bytes on the
   entry; nothing drove a rewritten entry through `reconstructSegment`, the consumer that
   returns null and disables PPR without `segmentHeaders`. Now covered in `workers/nextjs`,
@@ -546,10 +593,10 @@ implementation work left in this epic:
 - `ocelhq-wvag.9` — the one thing that unlocks the rest, and it needs live measurement on a
   zone route. It is the highest-value next action if a deploy can be authorized.
 
-Two pieces of work remain that need no gate: **`ocelhq-wvag.12`** (collapse the twice-derived
-projection key and filename into `@ocel/next-cache`; needs a dist build on that package, so it
-touches Lambda and worker bundling — best done between PRs) and **`ocelhq-wvag.11`** (destroy
-leaves per-build writer DO instances behind).
+**`ocelhq-wvag.12` is now done** (see "Current position"), and it turned out to need no dist
+build at all. The one piece of work left that needs no gate is **`ocelhq-wvag.11`** (destroy
+leaves per-build writer DO instances behind), plus **`ocelhq-heo2`** which came out of `.12`'s
+review.
 
 Five review rounds have now landed twelve real defects rather than polish, and **in every
 single case the failure was silent**: a write dropped with no log, a herd at the auth boundary,
@@ -608,8 +655,6 @@ Live threads to carry forward:
 - `ocelhq-wvag.9` blocks `.8`. It needs a deploy, like `.1` did. With `.7` closed it is now the
   **only** thing standing between this stack and its last PR, so it is the next action.
 - `ocelhq-wvag.13` and `ocelhq-wvag.14` both block `.6`. See the stack shape above.
-- `ocelhq-wvag.12` is best done between PRs — it needs a dist build on `@ocel/next-cache`, which
-  touches Lambda and worker bundling.
 
 ## The decisions waiting on a human
 
