@@ -485,8 +485,8 @@ func TestStackTemplate_OptimizerComputeMatchesTheArtifact(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
+		{"production", stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			tmpl := parseOptimizerTemplate(t, tc.template)
@@ -563,7 +563,7 @@ func TestStackTemplate_OptimizerComputeMatchesTheArtifact(t *testing.T) {
 // the asset bucket its own stack owns, and it may write nothing anywhere. A grant
 // naming any other bucket would hand production's bytes to preview or the reverse.
 func TestStackTemplate_OptimizerReadsOnlyItsOwnSubstrateAsset(t *testing.T) {
-	tmpl := parseOptimizerTemplate(t, stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion))
+	tmpl := parseOptimizerTemplate(t, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion))
 	role, ok := tmpl.Resources["ImageOptimizerRole"]
 	if !ok {
 		t.Fatal("no execution role for the optimizer")
@@ -606,7 +606,7 @@ func TestStackTemplate_OptimizerReadsOnlyItsOwnSubstrateAsset(t *testing.T) {
 // (dropping it would let the edge key invoke every Lambda in the account), and
 // the optimizer's own statement must name the function rather than a wildcard.
 func TestEdgeUser_OptimizerInvokeIsItsOwnNamedStatement(t *testing.T) {
-	template := stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)
+	template := stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)
 	tmpl := parseOptimizerTemplate(t, template)
 	user, ok := tmpl.Resources["EdgeUser"]
 	if !ok {
@@ -657,8 +657,8 @@ func TestStackTemplate_NoArtifactRendersNoOptimizer(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, artifactCode{}, RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, artifactCode{}, RequiredBootstrapVersion)},
+		{"production", stackTemplate(edge.TrustExternal, stackArtifacts{}, RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, stackArtifacts{}, RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if strings.Contains(tc.template, "ImageOptimizer") {
@@ -690,7 +690,7 @@ func TestRun_FirstBootstrapSeedsTheBucketThenPlacesTheArtifact(t *testing.T) {
 	art, store, source := fixtureArtifactDeps(fixtureArtifact)
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	if err := run(context.Background(), cfn, ssmc, iamc, ed, art, fixturePin(), productionSubstrate(), nil, nil); err != nil {
+	if err := run(context.Background(), cfn, ssmc, iamc, ed, art, stackPins{optimizer: fixturePin()}, productionSubstrate(), nil, nil); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if cfn.creates != 1 || cfn.updates != 1 {
@@ -722,7 +722,7 @@ func TestRun_RefusedArtifactLeavesAnExistingAccountAlone(t *testing.T) {
 	art, _, _ := fixtureArtifactDeps([]byte("tampered"))
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	err := run(context.Background(), cfn, ssmc, iamc, ed, art, fixturePin(), productionSubstrate(), nil, nil)
+	err := run(context.Background(), cfn, ssmc, iamc, ed, art, stackPins{optimizer: fixturePin()}, productionSubstrate(), nil, nil)
 	if err == nil {
 		t.Fatal("bootstrap accepted a mismatched artifact")
 	}
@@ -747,7 +747,7 @@ func TestRun_RefusedArtifactOnAVirginAccountFailsTheGate(t *testing.T) {
 	art, _, _ := fixtureArtifactDeps([]byte("tampered"))
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	err := run(context.Background(), cfn, ssmc, iamc, ed, art, fixturePin(), productionSubstrate(), nil, nil)
+	err := run(context.Background(), cfn, ssmc, iamc, ed, art, stackPins{optimizer: fixturePin()}, productionSubstrate(), nil, nil)
 	if err == nil {
 		t.Fatal("bootstrap accepted a mismatched artifact")
 	}
@@ -794,7 +794,7 @@ func TestRun_FirstBootstrapStampsTheRequiredVersionOnlyWhenComplete(t *testing.T
 			art, _, _ := fixtureArtifactDeps(tc.body)
 			ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-			if err := run(context.Background(), cfn, ssmc, iamc, ed, art, tc.pin, productionSubstrate(), nil, nil); err != nil {
+			if err := run(context.Background(), cfn, ssmc, iamc, ed, art, stackPins{optimizer: tc.pin}, productionSubstrate(), nil, nil); err != nil {
 				t.Fatalf("run: %v", err)
 			}
 			deployed, err := CheckDeployed(context.Background(), cfn)
@@ -820,7 +820,7 @@ func TestRun_UnpinnedBuildBootstrapsWithoutAnOptimizer(t *testing.T) {
 	art, store, source := fixtureArtifactDeps(fixtureArtifact)
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	if err := run(context.Background(), cfn, ssmc, iamc, ed, art, artifactPin{}, productionSubstrate(), nil, nil); err != nil {
+	if err := run(context.Background(), cfn, ssmc, iamc, ed, art, stackPins{}, productionSubstrate(), nil, nil); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if cfn.creates != 1 || cfn.updates != 0 {
