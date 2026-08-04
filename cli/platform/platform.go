@@ -55,6 +55,14 @@ func StoreWorkerBundles(projectDir string) map[string]string {
 	}
 }
 
+// ISRWriterBundles maps edge to the ISR writer worker bundle — the other
+// account-level worker, provisioned once per substrate at bootstrap.
+func ISRWriterBundles(projectDir string) map[string]string {
+	return map[string]string{
+		"cloudflare": filepath.Join(DistDir(projectDir), "workers", "isr-writer-cloudflare.js"),
+	}
+}
+
 // varsUIDir is the one subtree Ensure leaves behind: the variables UI is served
 // from memory, so writing it into a project would put bytes on disk that
 // nothing ever opens.

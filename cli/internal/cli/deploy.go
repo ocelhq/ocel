@@ -587,7 +587,7 @@ func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider
 }
 
 // workerBundleEnv is the provider's environment: the inherited one plus the
-// two manifests naming the edge worker bundles in the project's materialized
+// manifests naming the edge worker bundles in the project's materialized
 // platform dist. The provider binary is a separate process in a separate Go
 // module, so env is how it learns those paths (see cloud/edge/bundles.go).
 func workerBundleEnv(projectDir string) ([]string, error) {
@@ -599,9 +599,14 @@ func workerBundleEnv(projectDir string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("marshal store worker bundles: %w", err)
 	}
+	isrWriter, err := json.Marshal(platform.ISRWriterBundles(projectDir))
+	if err != nil {
+		return nil, fmt.Errorf("marshal isr writer worker bundles: %w", err)
+	}
 	return append(os.Environ(),
 		"OCEL_WORKER_BUNDLES="+string(bundles),
 		"OCEL_STORE_WORKER_BUNDLES="+string(store),
+		"OCEL_ISR_WRITER_WORKER_BUNDLES="+string(isrWriter),
 	), nil
 }
 
