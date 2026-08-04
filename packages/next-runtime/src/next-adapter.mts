@@ -27,6 +27,9 @@ import { stableStringify } from "./stable-json.mjs";
 
 const launcherName = "__next_launcher.cjs";
 const dispatchName = "__ocel_dispatch.cjs";
+// Read back at the root of the function's own task directory by the cache
+// handler the membrane layer mounts, which spells this name for itself.
+const variantHeadersName = "variant-headers.json";
 
 // The ocel builder passes this app's own subtree; a bare `next build` outside
 // ocel falls back to the flat cwd path.
@@ -218,6 +221,15 @@ const adapter = {
       return name;
     };
 
+    const prerenderGroups = groupPrerenders(outputs.prerenders);
+
+    // Shipped in the bundle rather than fetched at runtime: a Lambda for build N
+    // can then only ever read build N's projection, which is what makes the
+    // reseeded headers the ones its own build prerendered.
+    const variantHeaders = JSON.stringify(
+      variantHeaderProjection(prerenderGroups),
+    );
+
     await Promise.all(
       bundles.map(async (bundle) => {
         const funcDir = join(outputRoot, "functions", `${bundle.name}.func`);
@@ -261,6 +273,8 @@ const adapter = {
             app: appName,
           }),
         );
+
+        await writeFile(join(funcDir, variantHeadersName), variantHeaders);
       }),
     );
 
@@ -296,7 +310,7 @@ const adapter = {
     }
 
     // Seed each prerendered route's cache entry from the build output.
-    await emitCacheEntries(outputRoot, outputs.prerenders, allRoutes);
+    await emitCacheEntries(outputRoot, prerenderGroups, allRoutes);
     await emitFetchEntries(outputRoot, distDir);
 
     const routingManifest = {
@@ -809,20 +823,24 @@ async function readMaybe(filePath: string | undefined): Promise<Buffer | null> {
   }
 }
 
-// emitCacheEntries seeds one cache entry per prerendered route from the build's
-// own output, so a deployed route serves its prerender instead of re-rendering
-// on the first request to every instance. Next surfaces a route's html, RSC and
-// PPR-segment variants as separate PRERENDER outputs sharing a groupId — the
-// grouping key here — and this recombines each group into the single entry the
-// cache handler reads. Routes whose html variant Next did not prerender (a
-// blocking fallback) have nothing to seed and are skipped.
-async function emitCacheEntries(
-  outputRoot: string,
-  prerenders: readonly any[],
-  routes: readonly { id: string; type?: string }[],
-): Promise<void> {
-  const kindById = new Map(routes.map((r) => [r.id, r.type]));
+// A route's prerender variants, back together. Next surfaces the html, the
+// `.rsc` payload and each PPR segment as separate PRERENDER outputs sharing a
+// groupId; everything downstream wants the route.
+interface PrerenderGroup {
+  // How the cache handler keys this route's entry (e.g. /blog/a → blog/a, / →
+  // index). Taken from the html variant's concrete pathname, never from
+  // parentOutputId, which names the shared function under its dynamic pattern.
+  key: string;
+  html: any;
+  rsc: any;
+  segments: any[];
+}
 
+// groupPrerenders recombines each groupId's outputs into the route they
+// describe. A member is a segment or the `.rsc` payload by its own suffix; the
+// html variant is the one that is neither. A group whose html variant Next did
+// not prerender (a blocking fallback) describes no entry and is dropped.
+function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
   const byGroup = new Map<number, any[]>();
   for (const p of prerenders) {
     const members = byGroup.get(p.groupId);
@@ -830,23 +848,73 @@ async function emitCacheEntries(
     else byGroup.set(p.groupId, [p]);
   }
 
+  const groups: PrerenderGroup[] = [];
+  for (const members of byGroup.values()) {
+    const segments = members.filter((m) => segmentPath(m.pathname) !== null);
+    const pages = members.filter((m) => segmentPath(m.pathname) === null);
+    const html = pages.find((m) => !m.pathname.endsWith(".rsc"));
+    if (!html) continue;
+    groups.push({
+      key: html.pathname === "/" ? "index" : html.pathname.replace(/^\//, ""),
+      html,
+      rsc: pages.find((m) => m.pathname.endsWith(".rsc")),
+      segments,
+    });
+  }
+  return groups;
+}
+
+// The headers the `.rsc` and segment variants were prerendered with. Each
+// variant arrives with its own initialHeaders, and replaying exactly those is
+// what lets a client see what Next would have served — including the segment
+// cache's x-nextjs-postponed: 2 marker, which lives only on the segment variants
+// and is the header PPR support is gated on. The segment variants' headers are
+// identical across a group, so the first one seen stands for all of them.
+function variantHeadersOf(group: PrerenderGroup): Record<string, unknown> {
+  const rscHeaders = group.rsc?.fallback?.initialHeaders;
+  const segmentHeaders = group.segments.find((m) => m.fallback?.initialHeaders)
+    ?.fallback.initialHeaders;
+  return {
+    ...(rscHeaders && { rscHeaders }),
+    ...(segmentHeaders && { segmentHeaders }),
+  };
+}
+
+// What a regenerating Lambda reseeds an entry's variant headers from, keyed the
+// way it keys the entry itself. They exist only here, in the build's prerender
+// output — Next's runtime set() payload carries a single page-level headers map
+// — so a revalidation rewrite that could not reach them would drop the segment
+// cache markers the edge serves PPR by and the content-type an RSC request is
+// negotiated with. Nothing else the routing manifest holds is projected: that is
+// read at the edge, and a function bundle carrying it would carry it dead.
+function variantHeaderProjection(
+  groups: readonly PrerenderGroup[],
+): Record<string, Record<string, unknown>> {
+  const projection: Record<string, Record<string, unknown>> = {};
+  for (const group of groups) {
+    const headers = variantHeadersOf(group);
+    if (Object.keys(headers).length > 0) projection[group.key] = headers;
+  }
+  return projection;
+}
+
+// emitCacheEntries seeds one cache entry per prerendered route from the build's
+// own output, so a deployed route serves its prerender instead of re-rendering
+// on the first request to every instance.
+async function emitCacheEntries(
+  outputRoot: string,
+  groups: readonly PrerenderGroup[],
+  routes: readonly { id: string; type?: string }[],
+): Promise<void> {
+  const kindById = new Map(routes.map((r) => [r.id, r.type]));
+
   const lastModified = Date.now();
 
   await Promise.all(
-    [...byGroup.values()].map(async (members) => {
-      // A member is a segment or the .rsc payload by its own suffix; the base is
-      // the html variant, the one that is neither. Its concrete pathname keys the
-      // entry (e.g. /blog/a → blog/a, / → index) — not parentOutputId, which
-      // names the shared function under its dynamic pattern.
-      const isSegment = (m: any) => segmentPath(m.pathname) !== null;
-      const html = members.find(
-        (m) => !m.pathname.endsWith(".rsc") && !isSegment(m),
-      );
-      const rsc = members.find(
-        (m) => m.pathname.endsWith(".rsc") && !isSegment(m),
-      );
-      const body = await readMaybe(html?.fallback?.filePath);
-      if (!html || !body) return;
+    groups.map(async (group) => {
+      const { key, html, rsc, segments } = group;
+      const body = await readMaybe(html.fallback?.filePath);
+      if (!body) return;
 
       const kind = kindById.get(html.parentOutputId) ?? "APP_PAGE";
 
@@ -860,39 +928,28 @@ async function emitCacheEntries(
         value.headers = html.fallback.initialHeaders;
         value.body = body.toString("base64");
       } else {
-        // Each prerender variant (html, .rsc, per-segment) arrives with its own
-        // initialHeaders; storing them verbatim per variant is what lets the edge
-        // replay exactly what Next would have served — including the segment
-        // cache's x-nextjs-postponed: 2 marker, which lives only on the segment
-        // variants and is the header the client gates PPR support on.
         value.headers = html.fallback.initialHeaders;
         value.html = body.toString("utf8");
         const rscBody = await readMaybe(rsc?.fallback?.filePath);
         if (rscBody) value.rscData = rscBody.toString("base64");
-        if (rsc?.fallback?.initialHeaders) {
-          value.rscHeaders = rsc.fallback.initialHeaders;
-        }
+        // The same two maps the projection ships, from the same reading of the
+        // group: the entry a build seeds and the headers a rewrite reseeds it
+        // with cannot disagree.
+        Object.assign(value, variantHeadersOf(group));
 
-        const segments: Record<string, string> = {};
-        for (const m of members) {
-          const sp = segmentPath(m.pathname);
-          if (!sp) continue;
+        const segmentData: Record<string, string> = {};
+        for (const m of segments) {
           const segBody = await readMaybe(m.fallback?.filePath);
-          if (segBody) segments[sp] = segBody.toString("base64");
-          // The segment variants' headers are identical across a group, so the
-          // first one seen stands for all of them — stored once, not per segment.
-          if (!value.segmentHeaders && m.fallback?.initialHeaders) {
-            value.segmentHeaders = m.fallback.initialHeaders;
+          if (segBody) {
+            segmentData[segmentPath(m.pathname)!] = segBody.toString("base64");
           }
         }
-        if (Object.keys(segments).length > 0) value.segmentData = segments;
+        if (Object.keys(segmentData).length > 0) value.segmentData = segmentData;
         if (html.fallback.postponedState !== undefined) {
           value.postponed = html.fallback.postponedState;
         }
       }
 
-      const key =
-        html.pathname === "/" ? "index" : html.pathname.replace(/^\//, "");
       const dest = join(outputRoot, "cache", `${key}.cache.json`);
       await mkdir(dirname(dest), { recursive: true });
       const entry: CacheEntryFile = { lastModified, value };

@@ -1279,6 +1279,76 @@ test("captures the rsc and segment variants' headers onto an APP_PAGE entry", as
   });
 });
 
+async function readVariantHeaders(projectDir: string, bundle = "bundle-0") {
+  return JSON.parse(
+    await readFile(
+      join(
+        projectDir,
+        ".ocel/output/functions",
+        `${bundle}.func`,
+        "variant-headers.json",
+      ),
+      "utf8",
+    ),
+  );
+}
+
+// A revalidation rewrite carries only Next's single page-level headers map, so
+// the per-variant headers would be lost on the first regeneration. Shipping them
+// beside the function is what lets the rewrite reseed them without reading the
+// entry it is about to overwrite — and bundling rather than fetching makes the
+// projection and the code that reads it the same build by construction.
+test("ships the build's per-variant headers into every function bundle", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect(await readVariantHeaders(projectDir)).toEqual({
+    index: {
+      rscHeaders: { "content-type": "text/x-component" },
+      segmentHeaders: {
+        "content-type": "text/x-component",
+        "x-nextjs-postponed": "2",
+        "x-nextjs-stale-time": "300",
+      },
+    },
+  });
+});
+
+// The projection is the write path's whole reason to exist, so it carries the
+// two header maps and nothing else: the tags, allowQuery, pprChain and entryKeys
+// the routing manifest holds are edge-only, and a route with neither variant has
+// nothing to reseed.
+test("projects only the variant headers, and only for routes that have them", async () => {
+  const { projectDir, args } = await synthPrerenderProject();
+  const appDir = join(projectDir, ".next/server/app");
+  await writeFile(join(appDir, "about.html"), "<html>about</html>");
+  args.outputs.prerenders.push({
+    pathname: "/about",
+    id: "/about",
+    type: "PRERENDER",
+    parentOutputId: "/",
+    groupId: 2,
+    fallback: {
+      filePath: join(appDir, "about.html"),
+      initialRevalidate: false,
+      initialHeaders: { "content-type": "text/html; charset=utf-8" },
+    },
+    config: { allowQuery: [] },
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const projection = await readVariantHeaders(projectDir);
+  expect(Object.keys(projection)).toEqual(["index"]);
+  expect(Object.keys(projection.index)).toEqual([
+    "rscHeaders",
+    "segmentHeaders",
+  ]);
+});
+
 // An APP_ROUTE stores a single body whose type Next cannot re-derive, so its
 // content-type must survive verbatim onto the entry.
 test("keeps content-type on an APP_ROUTE cache entry", async () => {
