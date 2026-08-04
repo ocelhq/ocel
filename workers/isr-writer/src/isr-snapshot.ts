@@ -22,12 +22,18 @@ export const HEARTBEAT_MS = 60_000;
 export class IsrSnapshot extends DurableObject<Env> {
   private clock: TagClock | undefined;
 
+  // Starts the build's heartbeat, which is what gives a build nothing ever
+  // invalidates a liveness signal at all — and those are the builds most likely
+  // to be silently broken. Called by the deploy that seeds the build's write
+  // secret, so the beat does not wait on a first raise that may never come.
+  async begin(isrPrefix: string): Promise<void> {
+    await this.claim(isrPrefix);
+    await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
+  }
+
   async raise(isrPrefix: string, records: Record<string, TagRecord>): Promise<PublishOutcome> {
-    if (this.clock === undefined) {
-      await claimBuild(this.ctx.storage, isrPrefix);
-      this.clock = new TagClock(this.env.OCEL_CACHE_STORE, isrPrefix);
-    }
-    const outcome = await this.clock.raise(new Map(Object.entries(records)), Date.now());
+    const clock = await this.claim(isrPrefix);
+    const outcome = await clock.raise(new Map(Object.entries(records)), Date.now());
     // Slid rather than left to fire: a build publishing on its own traffic is
     // already proving it is alive, and the beat exists for the one that is not.
     await this.ctx.storage.setAlarm(Date.now() + HEARTBEAT_MS);
@@ -49,6 +55,14 @@ export class IsrSnapshot extends DurableObject<Env> {
     await this.ctx.storage.deleteAlarm();
     await this.ctx.storage.deleteAll();
     this.clock = undefined;
+  }
+
+  private async claim(isrPrefix: string): Promise<TagClock> {
+    if (this.clock === undefined) {
+      await claimBuild(this.ctx.storage, isrPrefix);
+      this.clock = new TagClock(this.env.OCEL_CACHE_STORE, isrPrefix);
+    }
+    return this.clock;
   }
 
   private async reclaim(): Promise<TagClock | null> {

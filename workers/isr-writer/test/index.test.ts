@@ -572,6 +572,34 @@ describe("tag raises", () => {
     expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(true);
   });
 
+  // The builds most likely to be silently broken are the ones nothing ever
+  // invalidates, so a beat that only starts on a build's first raise leaves
+  // exactly them with no liveness signal to alarm on. The deploy that seeds a
+  // build's write secret is what starts it.
+  it("beats for a build that has been deployed and never invalidated", async () => {
+    const prefix = freshPrefix();
+    await seedGenesis(prefix, 1_000);
+    await initialize(prefix, "write-secret");
+
+    expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(true);
+
+    const beaten = (await snapshotOf(prefix))!;
+    expect(beaten.generatedAt).toBeGreaterThan(1_000);
+    expect(beaten.deployedAt).toBe(1_000);
+    expect(beaten.records).toEqual({});
+    expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(true);
+  });
+
+  // Starting the beat must not conjure a document: deployedAt has one writer,
+  // and a snapshot created here would carry a zero anchor and never prune.
+  it("creates no snapshot for a deploy whose genesis never landed", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(true);
+    expect(await snapshotOf(prefix)).toBeNull();
+  });
+
   // A build whose snapshot is gone has been retired or pruned. A document
   // conjured for it would carry no deploy anchor, so it could never prune again
   // — and it would be a replica of a build that no longer exists.
