@@ -21,9 +21,23 @@ import (
 
 const (
 	// cacheStorePermissionGroup is the only permission a cache-store token
-	// carries: read, write and list of objects inside one bucket. R2 tokens scope
-	// to buckets and nothing finer — there is no key-prefix grammar — so the
-	// bucket boundary is the whole of the isolation this token expresses.
+	// carries: read, write, list and delete of objects inside one bucket. R2
+	// tokens scope to buckets and nothing finer — there is no key-prefix grammar
+	// — so the bucket boundary is the whole of the isolation this token expresses.
+	//
+	// It cannot be narrowed. The deploy host needs every one of those verbs over
+	// the whole bucket, across every project on the substrate: static assets and
+	// edge bundles are uploaded and swept, prerendered entries are seeded and the
+	// tag clock's genesis written, and prune, preview teardown and project
+	// destroy each delete under prefixes they compute per project. Splitting the
+	// token per project would mean a bucket per project, which is the thing R2's
+	// per-account bucket limits and the shared-cache design both rule out.
+	//
+	// What did change is who holds it. It is minted for the deploy host's own
+	// provider process and lives only there — no long-lived deployed function
+	// carries it any more, since ISR entries travel through the writer worker
+	// and the tag clock is published off the state table's stream. Nothing may
+	// put this token back into a function's environment.
 	cacheStorePermissionGroup = "Workers R2 Storage Bucket Item Write"
 
 	// r2Region is the region an S3-compatible client addresses R2 with. R2 is
