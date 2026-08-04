@@ -104,6 +104,30 @@ worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
 
+**`ocelhq-wvag.14` — done, and a live bootstrap attempt exposed a Cloudflare defect. Both on the
+PR 7 branch, NOT pushed. `.14` CLOSED; `.15` filed.**
+
+Three commits, taken between PRs like `.12` was:
+
+- `cc97e5e` — pins `tag-publisher-v0.0.1` and its digest. See the `.14` section below for what
+  was verified and what was split into `ocelhq-wvag.15`.
+- `779ec2b` — **bootstrap was broken for every already-bootstrapped account** and this fixes it.
+  Durable Object migrations are now decided on the deployed classes, not the migration tag,
+  because the Cloudflare API does not report a tag anywhere. Full detail in the PR 4 section.
+- `77de9c9` — review follow-up: a binding carrying `script_name` names another script's class and
+  must not count as deployed here.
+
+**The order of events matters for whoever picks this up.** `.14`'s acceptance needs a real
+bootstrap; the bootstrap failed on the *Cloudflare* edge before it ever reached AWS. So the
+publisher is pinned and correct, and still completely unobserved.
+
+Verified: `cloud/edge` and `cloud/aws` build and test clean, `gofmt` clean. Five mutations
+checked, each caught by the intended test — including reverting to the original bug. The one
+`gofmt -l` hit, `cloud/edge/cloudflare/cloudflare_test.go`, is the pre-existing drift from
+`b17467f` and was deliberately left alone.
+
+**Nothing here has run against Cloudflare or AWS.**
+
 **`ocelhq-wvag.12` — done, on the PR 7 branch, NOT pushed. Issue CLOSED.**
 
 Commit `6928e98`, taken between PRs as planned. `cacheKey` and `variant-headers.json` now
@@ -588,10 +612,21 @@ and claims every deployment lands on workers.dev.
 findings are fixed. Every remaining child is **blocked on a human**, so there is no unblocked
 implementation work left in this epic:
 
-- `ocelhq-wvag.6` — blocked on `.13` and `.14`, both human gates.
+- `ocelhq-wvag.6` — blocked on `.13` (human gate) and now `.15` (needs a deploy). `.14` is closed.
 - `ocelhq-wvag.8` — blocked on `.7` (now closed) and `.9`, which **needs a deploy**.
-- `ocelhq-wvag.9` — the one thing that unlocks the rest, and it needs live measurement on a
-  zone route. It is the highest-value next action if a deploy can be authorized.
+- `ocelhq-wvag.9` — needs live measurement on a zone route.
+
+**Everything left in this epic now converges on one thing: a deploy.** `.9`, `.10` and `.15` all
+need one, and `.15` and `.10` would be exercised by the *same* bootstrap run — the one that
+failed on 2026-08-04 and is now fixed but unverified. Re-running it is the highest-value next
+action, and it does three jobs at once: it proves the migration fix, it is `.10`'s first real
+test, and it is what `.15` measures.
+
+**Know what re-running bootstrap now does.** It will get past `ocel-deployments-store-preview`
+and then proceed to create the `ocel-isr-writer-preview` script, which does not exist yet — that
+is new account-level infrastructure, and standing it up is precisely the authorization
+`ocelhq-wvag.10` says has not been given. Getting further than last time is the point, but it is
+also the thing to have decided on deliberately rather than discovered.
 
 **`ocelhq-wvag.12` is now done** (see "Current position"), and it turned out to need no dist
 build at all. The one piece of work left that needs no gate is **`ocelhq-wvag.11`** (destroy
@@ -607,6 +642,15 @@ permanently from the moment of bootstrap, a route that stopped refreshing colo-w
 admission record was only ever released on a throw and nothing on that path throws. Not one of
 them threw. Keep weighting reviews toward *what fails without saying so* — that is where this
 stack's bugs actually live.
+
+**The thirteenth defect broke that pattern, and its lesson is different.** The Cloudflare
+migration bug failed *loudly* — a 400 on the first bootstrap. It shipped anyway, because its unit
+test stubbed a `migrations` object the real API never returns. The test did not merely fail to
+catch the bug; it **asserted the false premise**, and passing it was read as evidence the shape
+was right. A fixture invented to match an assumption can only ever confirm it. Where behaviour
+depends on an external API's response shape, pin a **captured real response** — the fix's test
+carries the verbatim body, so the premise is now falsifiable by re-fetching rather than by
+reasoning.
 
 A third method earned its keep on PR 7: **make the review clear the hard things explicitly
 before it hunts**. The spec brief named the four properties most likely to be quietly wrong
@@ -675,20 +719,48 @@ account before the stack that justifies it is complete.
 Either answer is workable. It just should not be decided by an agent inferring consent from
 the fact that credentials happen to be present.
 
-**PR 4 added a second, sharper reason to run it.** The Cloudflare migration generalization
-assumes the script-settings endpoint reports a migration tag for a script migrated with the
-*older single-tag form* — the form PR 2 shipped. If it does not, bootstrap hard-fails on exactly
-the already-bootstrapped accounts the generalization exists to migrate. The pure logic is sound
-and tested both ways; the API response shape is not something a unit test can reach. `bd show
-ocelhq-wvag.10` carries a three-step reproduction, and **only step 3 actually tests it** — steps
-1 and 2 pass either way.
+**PR 4's migration-tag risk fired, and it was worse than predicted — now fixed.** The
+generalization assumed the script-settings endpoint reports a migration tag for a script
+migrated with the *older single-tag form*. The first real bootstrap hard-failed on exactly the
+already-bootstrapped account it exists to migrate:
 
-### `ocelhq-wvag.14` — cut and pin the tag-publisher release artifact
+```
+PUT .../workers/scripts/ocel-deployments-store-preview: 400 code 10074
+"Cannot apply new-sqlite-class migration to class 'DeploymentsStore' that is
+ already depended on by existing Durable Objects"
+```
 
-Also a human gate, mirroring `ocelhq-pf6q.13` for the image optimizer. Both pin constants ship
-empty, so bootstrap deliberately renders **no** publisher at all rather than failing. Until it is
-cut, no origin-raised invalidation reaches a build's edge replica — only edge-raised ones. The
-origin's own tag state is unaffected, so this is bounded, and it is why `.14` blocks `.6`.
+**No migration tag is reported at all** — not by the settings call, the script list, the version
+list or a version's detail. `settings.Migrations` comes back fully zeroed for a script that
+demonstrably carries its class. That `""` was indistinguishable from `pendingMigrations`'
+documented "never migrated", so the upload redeclared the whole log.
+
+Fixed in `779ec2b` + `77de9c9`: the decision keys on the **classes the deployed script has**
+(`class_name` on each `durable_object_namespace` binding, which the same call *does* report),
+declaring exactly the classes it lacks. `old_tag` is gone — it names a tag we cannot read back,
+so a concurrent bootstrap is rejected by 10074 rather than by the precondition; still rejected,
+never misapplied. A binding carrying `script_name` is ignored, since it names another script's
+class.
+
+**The old test stubbed a `migrations` object the real API never returns**, which is exactly why
+this shipped green. It is deleted; the replacement pins the verbatim live response as a fixture
+in `cloud/edge/cloudflare/durableobjectmigration_test.go`. Do not re-derive the API shape from
+docs — it was established by calling all four endpoints.
+
+The fix is unit- and mutation-verified but **has not been run against Cloudflare**.
+
+### `ocelhq-wvag.14` — cut and pin the tag-publisher release artifact — **DONE**
+
+`tag-publisher-v0.0.1` is cut and both constants are pinned (`cc97e5e`). Verified rather than
+assumed: the asset downloaded from the public release URL hashes to the pinned digest, and
+`pnpm --filter @ocel/tag-publisher zip` reproduces it byte for byte (473419 bytes), so the
+reproducible-archive claim behind the pin holds. `artifactPin.pinned()` is now true, so
+bootstrap renders the publisher instead of skipping it.
+
+**Its live acceptance was split into `ocelhq-wvag.15`, which now blocks `.6` in its place.**
+Nothing is deployed on account `363236815301`: no publisher Lambda, no SQS queues at all, no
+event source mappings, no artifact under `ocel-tag-publisher/`. `.6` must not land while the
+function that becomes the fleet's sole guarantor of invalidation has never been observed working.
 
 ### The ISR write-secret seed's new lifecycle
 
