@@ -39,7 +39,17 @@ import "fmt"
 // no image origin, and every valid /_next/image request answers 502 exactly as
 // it did before an optimizer existed. Failing the deploy on a missing optimizer
 // would hold an app's whole deployment hostage to one route.
-const RequiredBootstrapVersion = 8
+//
+// Version 9 turned on the state table's DynamoDB stream (NEW_IMAGE) and hung
+// the account-global tag-snapshot publisher off it: a Lambda, its event source
+// mapping, the SQS queue failed batches land in, and the alarm on that queue's
+// depth. Turning a stream on is an in-place table update — no replacement, no
+// data loss — but an account that never re-runs bootstrap has no stream at all,
+// and after this every tag invalidation reaches the edge's replica only through
+// that stream. So the gate is hard, like every bump before it: an out-of-date
+// account is told to re-run `ocel bootstrap` rather than left invalidating
+// nothing.
+const RequiredBootstrapVersion = 9
 
 // seedingBootstrapVersion is what the *first* of a first bootstrap's two settles
 // stamps. That pass exists only to raise the buckets the artifact is uploaded

@@ -553,6 +553,13 @@ Resources:
 // both index keys — so upload sessions and the ISR handler's own tag records,
 // which write neither, stay out of it entirely. The projection carries every
 // field a sync reads so one query answers it with no follow-up per-tag read.
+//
+// The stream carries NEW_IMAGE because a tag write IS the raise: the publisher
+// that consumes it (publisher.go) needs the item's gsi1pk to learn which build
+// the record belongs to and its watermarks to publish, and none of those are
+// keys. It is the whole table's stream, not one entity's — DynamoDB has no
+// finer grain — so every writer to this table is streamed and the publisher's
+// event filter is what confines it to the TAG# partitions.
 func stateTableResource() string {
 	return fmt.Sprintf(`  StateTable:
     Type: AWS::DynamoDB::Table
@@ -588,6 +595,8 @@ func stateTableResource() string {
       TimeToLiveSpecification:
         AttributeName: expires_at
         Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_IMAGE
 `, StateTableIndexName)
 }
 

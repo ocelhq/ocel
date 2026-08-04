@@ -44,6 +44,9 @@ type parsedTemplate struct {
 				AttributeName string `yaml:"AttributeName"`
 				Enabled       bool   `yaml:"Enabled"`
 			} `yaml:"TimeToLiveSpecification"`
+			StreamSpecification struct {
+				StreamViewType string `yaml:"StreamViewType"`
+			} `yaml:"StreamSpecification"`
 			PublicAccessBlockConfiguration struct {
 				BlockPublicAcls       bool `yaml:"BlockPublicAcls"`
 				BlockPublicPolicy     bool `yaml:"BlockPublicPolicy"`
@@ -153,6 +156,15 @@ func TestStackTemplate_StateTable(t *testing.T) {
 			ttl := table.Properties.TimeToLiveSpecification
 			if ttl.AttributeName != "expires_at" || !ttl.Enabled {
 				t.Errorf("TimeToLiveSpecification = %+v, want expires_at enabled", ttl)
+			}
+
+			// The stream is what the tag-snapshot publisher consumes, and it
+			// must carry the whole item: the publisher reads gsi1pk to learn
+			// which build a record belongs to and the watermarks to publish,
+			// none of which are keys. KEYS_ONLY would leave it re-reading the
+			// table for every record it was just handed.
+			if view := table.Properties.StreamSpecification.StreamViewType; view != "NEW_IMAGE" {
+				t.Errorf("StreamViewType = %q, want NEW_IMAGE", view)
 			}
 
 			if _, ok := tmpl.Outputs[outputStateTable]; !ok {
