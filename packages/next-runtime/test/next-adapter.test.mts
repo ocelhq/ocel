@@ -1279,15 +1279,16 @@ test("captures the rsc and segment variants' headers onto an APP_PAGE entry", as
   });
 });
 
+// The name the cache handler reads the projection back under. Spelled out rather
+// than imported: that handler needs the AWS SDK, which this package does not
+// carry — so both suites pin the name against this literal and a rename that
+// reaches only one side fails here.
+const variantHeadersFile = "variant-headers.json";
+
 async function readVariantHeaders(projectDir: string, bundle = "bundle-0") {
   return JSON.parse(
     await readFile(
-      join(
-        projectDir,
-        ".ocel/output/functions",
-        `${bundle}.func`,
-        "variant-headers.json",
-      ),
+      join(projectDir, ".ocel/output/functions", `${bundle}.func`, variantHeadersFile),
       "utf8",
     ),
   );
@@ -1608,4 +1609,20 @@ test("emits no fetch-cache folder for an app that cached no fetch", async () => 
   await adapter.onBuildComplete(args as never);
 
   expect(await exists(join(projectDir, ".ocel/output/fetch-cache"))).toBe(false);
+});
+
+// The adapter keys the projection — and the entry beside it — the way the cache
+// handler will look it up: with @ocel/next-cache's cacheKey. The function bundle
+// cannot import that package (it ships as raw .mts, and the built adapter runs
+// under plain Node), so the spelling is duplicated here and held to the
+// authority by this test. Should the two ever drift, every runtime lookup
+// silently misses and PPR stops at the edge — which is the failure the whole
+// projection exists to prevent, so it must fail loudly here instead.
+test("keys a prerender group exactly as the cache handler keys the entry", async () => {
+  const { entryKeyOf } = await import("../src/next-adapter.mts");
+  const { cacheKey } = await import("../../next-cache/src/index.mts");
+
+  for (const pathname of ["/", "/blog", "/blog/a", "/blog/a/b/c"]) {
+    expect(entryKeyOf(pathname)).toBe(cacheKey(pathname));
+  }
 });

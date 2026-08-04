@@ -379,12 +379,18 @@ function seedProjection(
   OcelCacheHandler.variantHeaders = projection;
 }
 
-// The same file, but on disk where the handler reads it from — the only way to
-// drive what an actual bundle hands the loader. `null` writes no file at all.
+// What the adapter lays beside the function, spelled out rather than imported:
+// this package cannot load the adapter (it needs `next`) and the adapter cannot
+// load this handler (it needs the AWS SDK), so both suites pin the name against
+// this literal and a rename that reaches only one side fails here.
+const variantHeadersFile = "variant-headers.json";
+
+// The projection on disk where the handler reads it from — the only way to drive
+// what an actual bundle hands the loader. `null` writes no file at all.
 function bundleProjection(contents: string | null): void {
   bundleRoot ??= mkdtempSync(join(tmpdir(), "ocel-bundle-"));
   process.env.LAMBDA_TASK_ROOT = bundleRoot;
-  const path = join(bundleRoot, "variant-headers.json");
+  const path = join(bundleRoot, variantHeadersFile);
   rmSync(path, { force: true });
   if (contents !== null) writeFileSync(path, contents);
 }

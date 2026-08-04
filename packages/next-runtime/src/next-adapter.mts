@@ -836,6 +836,12 @@ interface PrerenderGroup {
   segments: any[];
 }
 
+// `cacheKey` in @ocel/next-cache is the authority on this spelling; a contract
+// test holds this one to it, since the function bundle cannot import it.
+export function entryKeyOf(pathname: string): string {
+  return pathname === "/" ? "index" : pathname.replace(/^\//, "");
+}
+
 // groupPrerenders recombines each groupId's outputs into the route they
 // describe. A member is a segment or the `.rsc` payload by its own suffix; the
 // html variant is the one that is neither. A group whose html variant Next did
@@ -855,7 +861,7 @@ function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
     const html = pages.find((m) => !m.pathname.endsWith(".rsc"));
     if (!html) continue;
     groups.push({
-      key: html.pathname === "/" ? "index" : html.pathname.replace(/^\//, ""),
+      key: entryKeyOf(html.pathname),
       html,
       rsc: pages.find((m) => m.pathname.endsWith(".rsc")),
       segments,
