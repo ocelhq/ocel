@@ -32,7 +32,8 @@ main
                      └─ 6a isr-herd/06a-publisher-alarms  3fb0c73  ocelhq-wvag.13 ✅ CLOSED
                          └─ 6  isr-herd/06-get-drops-batchget 162660a ocelhq-wvag.6 ⛔ on yo9b
                              └─ 7  isr-herd/07-edge-l0-l1  d9cc24b  ocelhq-wvag.7  ✅ CLOSED
-                                 └─ 8  edge L2 lease       (unstarted) ocelhq-wvag.8 ⛔ on .9
+                                 ├─ 9  isr-herd/09-write-visibility 1616286 ocelhq-wvag.9 ✅ CLOSED (measured)
+                                 └─ 8  edge L2 lease       (unstarted) ocelhq-wvag.8  ← unblocked
 ```
 
 **The stack was restacked into dependency order on 2026-08-04, and every commit sha on branch
@@ -119,6 +120,39 @@ worded as though retirement takes effect everywhere at once, and it does not.
 **The deploy happened. `.13`, `.14` and `.15` are all closed and the publisher is proven live —
 and the deploy that proved it uncovered `ocelhq-yo9b`, which is now the single gate on `.6`.**
 Read `ocelhq-yo9b` first; it is the most consequential thing on this page.
+
+**`ocelhq-wvag.9` is measured and closed, so `.8` is unblocked** — see below; it changes two
+numbers `.8` was going to be built on, and one of them is not comfortable.
+
+### `ocelhq-wvag.9` — the write-visibility window is 10 ms, and PR 1's 201 ms was mostly its own instrument — **DONE**
+
+Branch `isr-herd/09-write-visibility`, rooted on `faac969` (tip of 07). Five commits, nothing
+pushed. Findings in `docs/research/cloudflare-cache-api-spike.md`, section "Follow-up: the L1
+write-visibility window"; the instrument is `workers/cache-probe/scripts/race.ts` plus
+`src/race.ts` and `src/race-analysis.ts`. The `ocel-cache-probe` deploy that took the
+measurement is torn down and both zone routes are verified gone.
+
+Three things to carry forward:
+
+- **Every colo-cache key in `workers/nextjs` is on a synthetic hostname that is on no zone**
+  (`cache.ocel`, `refresh.ocel`, `isr.ocel`, `image.ocel`) and nothing had ever tested whether
+  `caches.default` stores such a key. PR 1 only proved an *on-zone* key, and Miniflare stores
+  any hostname happily. It does store them — 254/254 cross-isolate reads, four runs, two zones.
+  All four tiers are live. This gate ran first because a failure would have superseded the
+  issue with a P1 defect; it is worth knowing it was checked.
+- **`W = 10 ms`, not ~200 ms.** PR 1's 201 ms is ~10 ms of window, ~65 ms of round trip and
+  ~125 ms of PR 1's own cold sockets and 64-way burst queueing — it stamped elapsed time when a
+  read *response returned to the driver*. The comment in `workers/nextjs/src/cache.ts`
+  justifying `refreshSentinelTtlSeconds = 5` by citing "~200 ms" is wrong by a factor of
+  twenty; the constant it justifies is not, and the edit belongs to PR 8.
+- **`.8`'s sizing arithmetic was wrong twice and its description is corrected.** "300 colos /
+  sentinel TTL ≈ 30 rps" assumed a TTL of 10 (PR 7 shipped 5) and one escape per colo. Real
+  sizing is `R = 60 + 0.6·λ_colo`, which holds one DO per route for smooth traffic up to
+  λ ≈ 733 rps per colo. **It does not hold for a synchronized herd**: 128 simultaneous racers
+  produced 54 escapes over the 80 isolates they touched, so `E → I_colo` and `R → 5940 rps`,
+  6× the ceiling `.8` cites as its reason not to shard. Every colo's sentinel expires exactly
+  one TTL after it was taken, so colo-wide synchronization is the system's own default, not a
+  hypothetical. PR 8 must either rule that regime out or size for it.
 
 ### `ocelhq-yo9b` — the fleet's membrane layer predates PR 2, so the origin's tag raise throws
 
