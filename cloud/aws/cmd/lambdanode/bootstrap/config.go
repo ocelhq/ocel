@@ -21,9 +21,15 @@ import (
 // either way the app stays on the provider's own store.
 const cacheStoreParamEnv = "OCEL_CACHE_STORE_PARAM"
 
-// The store coordinates injected into node's environment. The Next cache
-// handler reads these to address the edge-provisioned bucket with the
-// S3-compatible client it already has; absent, it falls back to OCEL_ISR_BUCKET.
+// The store coordinates injected into node's environment. The bucket name is
+// what tells the Next cache handler its route entries live in the adopted store
+// — and therefore travel through the ISR writer worker, in both directions.
+//
+// The two key vars are the standing R2 credential, and their one remaining
+// consumer is the tag-clock snapshot publisher, which still writes
+// tag-clock.json into that store directly. Epic decision 8 (ocelhq-wvag.4)
+// routes it through the writer's Durable Object; deleting these two, and the
+// SecureString and grant behind them, is part of that issue's completion.
 const (
 	storeBucketEnv    = "OCEL_ISR_STORE_BUCKET"
 	storeEndpointEnv  = "OCEL_ISR_STORE_ENDPOINT"
