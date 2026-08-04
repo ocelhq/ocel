@@ -201,7 +201,7 @@ type substrate struct {
 	class     string
 	stackName string
 	stackStep string
-	template  func(edge.TrustBoundary, optimizerCode, int) string
+	template  func(edge.TrustBoundary, artifactCode, int) string
 }
 
 func productionSubstrate() substrate {
@@ -225,7 +225,7 @@ func previewSubstrate() substrate {
 // Run creates or updates the bootstrap CloudFormation stack and ensures the
 // Pulumi passphrase exists, idempotently. progress reports discrete steps and
 // log forwards detail; both may be nil.
-func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact OptimizerArtifact, progress, log func(string)) error {
+func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, progress, log func(string)) error {
 	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedOptimizer(), productionSubstrate(), progress, log)
 }
 
@@ -242,7 +242,7 @@ func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 // live account. Like Run, that CloudFormation orchestration is the opt-in-e2e
 // seam: this signature is final and the passphrase/stamping contract is settled;
 // the preview stack template is filled in and exercised against real infra.
-func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact OptimizerArtifact, progress, log func(string)) error {
+func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, progress, log func(string)) error {
 	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedOptimizer(), previewSubstrate(), progress, log)
 }
 
@@ -254,7 +254,7 @@ func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAM
 // pin is the optimizer artifact this build ships; it is a parameter rather than
 // read from the constants here so a test can exercise the whole placement path
 // against a fixture artifact without a cut release.
-func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact OptimizerArtifact, pin optimizerPin, sub substrate, progress, log func(string)) error {
+func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, pin artifactPin, sub substrate, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
@@ -321,7 +321,7 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 		return err
 	}
 	if pin.pinned() && deployed.ArtifactBucket == "" {
-		if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, optimizerCode{}, seedingBootstrapVersion), namedIAM); err != nil {
+		if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, artifactCode{}, seedingBootstrapVersion), namedIAM); err != nil {
 			return err
 		}
 		if deployed, err = checkStack(ctx, cfn, sub.stackName); err != nil {
@@ -473,7 +473,7 @@ func generatePassphrase() (string, error) {
 // the given trust posture. The BootstrapVersion output is single-sourced from
 // RequiredBootstrapVersion so the deployed version and the provider's
 // requirement never drift.
-func stackTemplate(trust edge.TrustBoundary, optimizer optimizerCode, version int) string {
+func stackTemplate(trust edge.TrustBoundary, optimizer artifactCode, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel bootstrap - account-global resources for the Ocel AWS provider.
 Resources:
@@ -515,7 +515,7 @@ Resources:
 // account, so — like RunPreview itself — they are added and exercised there.
 // The stamped class, the shared backend, and the stack's independent lifecycle
 // are settled here.
-func previewStackTemplate(trust edge.TrustBoundary, optimizer optimizerCode, version int) string {
+func previewStackTemplate(trust edge.TrustBoundary, optimizer artifactCode, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel preview infrastructure - shared substrate per-PR previews are carved from.
 Resources:
@@ -732,7 +732,7 @@ func assetBucketOutput() string {
 // It renders nothing for an edge inside the provider's trust boundary: such an
 // edge reads under the provider's native identity, so a user whose only purpose
 // is to hold a long-lived key would be a dangling credential in the account.
-func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer optimizerCode) string {
+func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer artifactCode) string {
 	if trust != edge.TrustExternal {
 		return ""
 	}

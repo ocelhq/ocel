@@ -30,15 +30,15 @@ func fixtureDigest() string {
 	return hex.EncodeToString(sum[:])
 }
 
-func fixturePin() optimizerPin {
-	return optimizerPin{version: "1.2.3", sha256: fixtureDigest()}
+func fixturePin() artifactPin {
+	return artifactPin{version: "1.2.3", sha256: fixtureDigest()}
 }
 
 // fixtureOptimizerCode is an already-uploaded artifact, for the template tests:
 // they assert what CloudFormation is asked to provision, not how the zip got
 // there.
-func fixtureOptimizerCode() optimizerCode {
-	return optimizerCode{bucket: "ocel-artifacts-test", key: optimizerArtifactKey(fixturePin())}
+func fixtureOptimizerCode() artifactCode {
+	return artifactCode{bucket: "ocel-artifacts-test", key: optimizerArtifactKey(fixturePin())}
 }
 
 // fakeArtifactStore is an S3 bucket holding objects by key, recording every
@@ -133,9 +133,9 @@ func (f *fakeArtifactSource) Fetch(_ context.Context, url string) ([]byte, error
 	return f.body, f.err
 }
 
-func fixtureArtifactDeps(body []byte) (OptimizerArtifact, *fakeArtifactStore, *fakeArtifactSource) {
+func fixtureArtifactDeps(body []byte) (Artifacts, *fakeArtifactStore, *fakeArtifactSource) {
 	store, source := newFakeArtifactStore(), &fakeArtifactSource{body: body}
-	return OptimizerArtifact{Source: source, Store: store}, store, source
+	return Artifacts{Source: source, Store: store}, store, source
 }
 
 // preloadedArtifact is an account that already holds whatever artifact this build
@@ -145,15 +145,15 @@ func fixtureArtifactDeps(body []byte) (OptimizerArtifact, *fakeArtifactStore, *f
 // checksum is the pin's rather than the fixture's, because what the skip turns on
 // is the stored checksum matching the pin — the bytes stand in for a release
 // nobody has cut.
-func preloadedArtifact() OptimizerArtifact {
+func preloadedArtifact() Artifacts {
 	store := newFakeArtifactStore()
 	pin := pinnedOptimizer()
 	key := optimizerArtifactKey(pin)
 	store.put(key, fixtureArtifact)
-	if sum, err := pin.checksum(); err == nil {
+	if sum, err := pin.checksum(optimizerLabel); err == nil {
 		store.checksums[key] = sum
 	}
-	return OptimizerArtifact{Source: &fakeArtifactSource{}, Store: store}
+	return Artifacts{Source: &fakeArtifactSource{}, Store: store}
 }
 
 // TestEnsureOptimizerArtifact_RefusesADigestMismatch is the whole point of
@@ -218,7 +218,7 @@ func TestEnsureOptimizerArtifact_UploadSendsTheDigestToS3(t *testing.T) {
 	if _, err := ensureOptimizerArtifact(context.Background(), art, "ocel-artifacts-test", fixturePin()); err != nil {
 		t.Fatalf("ensureOptimizerArtifact: %v", err)
 	}
-	want, err := fixturePin().checksum()
+	want, err := fixturePin().checksum(optimizerLabel)
 	if err != nil {
 		t.Fatalf("checksum: %v", err)
 	}
@@ -326,7 +326,7 @@ func TestEnsureOptimizerArtifact_RefusesAPinThatIsNotADigest(t *testing.T) {
 	art, store, source := fixtureArtifactDeps(fixtureArtifact)
 
 	_, err := ensureOptimizerArtifact(context.Background(), art, "ocel-artifacts-test",
-		optimizerPin{version: "1.2.3", sha256: "not-a-digest"})
+		artifactPin{version: "1.2.3", sha256: "not-a-digest"})
 	if err == nil {
 		t.Fatal("a pin that is not a sha256 was accepted")
 	}
@@ -340,7 +340,7 @@ func TestEnsureOptimizerArtifact_RefusesAPinThatIsNotADigest(t *testing.T) {
 // compared byte-for-byte would fail closed with a message reporting the same
 // digest twice.
 func TestOptimizerPin_DigestIsCaseInsensitive(t *testing.T) {
-	upper := optimizerPin{version: "1.2.3", sha256: strings.ToUpper(fixtureDigest())}
+	upper := artifactPin{version: "1.2.3", sha256: strings.ToUpper(fixtureDigest())}
 	if got, want := optimizerArtifactKey(upper), optimizerArtifactKey(fixturePin()); got != want {
 		t.Errorf("an uppercase pin keys at %q, want %q", got, want)
 	}
@@ -376,7 +376,7 @@ func TestEnsureOptimizerArtifact_SurfacesADownloadFailure(t *testing.T) {
 // connection and then stalls hangs bootstrap forever, and it follows a redirect
 // off https without comment.
 func TestReleaseSource_DoesNotUseTheDefaultClient(t *testing.T) {
-	client := optimizerReleaseClient()
+	client := artifactReleaseClient()
 	if client.Timeout == 0 {
 		t.Error("the release client has no timeout; a stalled host would hang bootstrap")
 	}
@@ -405,7 +405,7 @@ func TestReleaseSource_DoesNotUseTheDefaultClient(t *testing.T) {
 // installs nothing: the only way to ship an unverified artifact would be to
 // treat a missing digest as "skip the check", and that branch must not exist.
 func TestOptimizerPin_HalfPinnedCountsAsUnpinned(t *testing.T) {
-	for _, p := range []optimizerPin{
+	for _, p := range []artifactPin{
 		{},
 		{version: "1.2.3"},
 		{sha256: fixtureDigest()},
@@ -657,8 +657,8 @@ func TestStackTemplate_NoArtifactRendersNoOptimizer(t *testing.T) {
 		name     string
 		template string
 	}{
-		{"production", stackTemplate(edge.TrustExternal, optimizerCode{}, RequiredBootstrapVersion)},
-		{"preview", previewStackTemplate(edge.TrustExternal, optimizerCode{}, RequiredBootstrapVersion)},
+		{"production", stackTemplate(edge.TrustExternal, artifactCode{}, RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, artifactCode{}, RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if strings.Contains(tc.template, "ImageOptimizer") {
@@ -783,11 +783,11 @@ func TestRun_RefusedArtifactOnAVirginAccountFailsTheGate(t *testing.T) {
 func TestRun_FirstBootstrapStampsTheRequiredVersionOnlyWhenComplete(t *testing.T) {
 	for _, tc := range []struct {
 		name string
-		pin  optimizerPin
+		pin  artifactPin
 		body []byte
 	}{
 		{"pinned and verified", fixturePin(), fixtureArtifact},
-		{"unpinned", optimizerPin{}, fixtureArtifact},
+		{"unpinned", artifactPin{}, fixtureArtifact},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
@@ -820,7 +820,7 @@ func TestRun_UnpinnedBuildBootstrapsWithoutAnOptimizer(t *testing.T) {
 	art, store, source := fixtureArtifactDeps(fixtureArtifact)
 	ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
 
-	if err := run(context.Background(), cfn, ssmc, iamc, ed, art, optimizerPin{}, productionSubstrate(), nil, nil); err != nil {
+	if err := run(context.Background(), cfn, ssmc, iamc, ed, art, artifactPin{}, productionSubstrate(), nil, nil); err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if cfn.creates != 1 || cfn.updates != 0 {
