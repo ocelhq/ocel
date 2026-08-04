@@ -11,17 +11,11 @@
 // from the R2 replica the publisher republishes.
 import {
   isGuardRejection,
-  publishTagSnapshot,
-  readableSnapshot,
   tagNamespace,
   tagRecordUpdate,
-  tagSnapshotKey,
   type EdgeCacheRpc,
   type FetchCacheEntry,
-  type StoredTagSnapshot,
   type TagRecord,
-  type TagSnapshot,
-  type TagSnapshotStore,
 } from "@ocel/next-cache";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
@@ -34,18 +28,15 @@ import {
 } from "./tag-clock";
 import type { Env } from "./index";
 
-// The snapshot replica's bucket: the same R2 binding the tag clock reads, plus
-// the conditional put its republish needs. Narrowed to those two calls rather
-// than typed as R2Bucket so nothing here depends on the rest of it.
-export interface SnapshotBucket extends ObjectStoreReader {
-  // The etag the write landed as, or null when the precondition lost — which is
-  // how R2 reports a conditional put that another publisher got to first.
-  put(
-    key: string,
-    value: string,
-    options?: { onlyIf?: { etagMatches?: string; etagDoesNotMatch?: string } },
-  ): Promise<{ etag: string } | null>;
-}
+// Raises a set of tag invalidations into the build's replica, resolving only
+// once that replica holds them and throwing when it does not. The edge is a
+// raiser and no longer a publisher: one publisher per build owns the merge and
+// the write (workers/isr-writer), so a burst of invalidations coalesces there
+// instead of contending on one R2 key.
+export type SnapshotRaiser = (
+  scope: string,
+  records: Record<string, TagRecord>,
+) => Promise<void>;
 
 export interface EdgeCacheDeps {
   // The account-global AWS coordinates the deploy binds: one bucket and one
@@ -56,10 +47,12 @@ export interface EdgeCacheDeps {
   fetchBucket: string;
   table: string;
   aws: AwsServiceFetch;
-  // The edge-local R2 binding the tag-snapshot replica lives in — a different
-  // store from fetchBucket, deliberately: a replica is edge-readable tag state,
-  // while a fetch entry holds an origin-private response body.
-  snapshots: SnapshotBucket;
+  // The edge-local R2 binding the tag-snapshot replica is read from — a
+  // different store from fetchBucket, deliberately: a replica is edge-readable
+  // tag state, while a fetch entry holds an origin-private response body. Read
+  // only: the replica's one writer is the build's publisher.
+  snapshots: ObjectStoreReader;
+  raise: SnapshotRaiser;
   waitUntil(promise: Promise<unknown>): void;
   now(): number;
 }
@@ -171,20 +164,19 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
     // Two writes, and both are required, but only one may fail the caller. The
     // DynamoDB record is authoritative and durable, so it is awaited and a real
     // failure surfaces: an invalidation that did not record did not happen. The
-    // R2 snapshot is replication — what the edge reads, never what decides — so
-    // it can never surface. Next calls revalidateTag with no try/catch of its
-    // own and a Server Action awaits the drain before responding, so a throw out
-    // of the replication half would fail the very route raising the
-    // invalidation; a replica that cannot be replaced just leaves the edge
-    // reading the last one, exactly as the Lambda publisher's does
-    // (tag-clock.mts publish()).
+    // raise is replication — what the edge reads, never what decides — so it can
+    // never surface. Next calls revalidateTag with no try/catch of its own and a
+    // Server Action awaits the drain before responding, so a throw out of the
+    // replication half would fail the very route raising the invalidation; a
+    // replica the publisher could not replace just leaves the edge reading the
+    // last one.
     //
     // A record written only to DynamoDB is invisible until some Lambda drains
     // the tag index and republishes — and serving from the stale snapshot is
-    // exactly what stops any Lambda from running — so the publish is awaited
+    // exactly what stops any Lambda from running — so the raise is awaited
     // rather than deferred. It is the only thing that makes the invalidation
-    // visible at all, and it is what gives the isolate that raised it
-    // read-your-own-writes.
+    // visible at all, and the writer answers only once the replica holds it,
+    // which is what gives the isolate that raised it read-your-own-writes.
     async revalidateTags(scope, tags, durations) {
       if (tags.length === 0) return;
 
@@ -204,16 +196,9 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
       // Authority first: a replica must never claim an invalidation the record
       // behind it does not have.
       try {
-        const published = await publishTagSnapshot(
-          r2SnapshotStore(deps.snapshots, tagSnapshotKey(scope)),
-          new Map(tags.map((tag) => [tag, record])),
-          at,
-        );
-        if (!published) {
-          console.error("ocel: gave up republishing the tag snapshot; every write lost its race");
-        }
+        await deps.raise(scope, Object.fromEntries(tags.map((tag) => [tag, record])));
       } catch (error) {
-        console.error("ocel: could not republish the tag snapshot", error);
+        console.error("ocel: could not raise the tag invalidation with the isr writer", error);
       } finally {
         // This isolate has just replaced the document its memo holds, so the memo
         // is known-stale — and without the drop an edge route that invalidates
@@ -272,40 +257,40 @@ async function dynamoError(response: Response): Promise<Error> {
   return error;
 }
 
-// The publish loop is @ocel/next-cache's, shared with the Lambda publisher so
-// the two can never merge or condition their writes differently. All this side
-// owns is the transport: R2's native conditional put, where the Lambda has the
-// S3-compatible API's If-Match.
-function r2SnapshotStore(bucket: SnapshotBucket, key: string): TagSnapshotStore {
-  return {
-    async read() {
-      const stored = await bucket.get(key);
-      if (stored === null) return null;
-      const snapshot = readableSnapshot(parseJson<TagSnapshot>(await stored.text()));
-      if (snapshot === null) {
-        // Torn, or written in a format this worker predates. Merging into it
-        // would drop whatever that format carries — the deploy's own anchor
-        // included — so the replica is left exactly as its publisher left it.
-        throw new Error(`ocel: tag snapshot at ${key} is not a document this worker can read`);
-      }
-      return { snapshot, etag: stored.etag ?? null };
-    },
-
-    async write(snapshot, prior) {
-      const put = await bucket.put(key, JSON.stringify(snapshot), precondition(prior));
-      return put !== null;
-    },
-  };
+// The ISR writer worker as this file reaches it: one account-level worker, bound
+// as a service so a raise never leaves the account's own network. Narrowed to
+// the one call rather than typed as Fetcher so nothing here depends on the rest.
+export interface IsrWriterBinding {
+  fetch(request: Request): Promise<Response>;
 }
 
-function precondition(prior: StoredTagSnapshot | null) {
-  // "*" is R2's spelling of "only if the object does not exist", which is what
-  // makes the first publish safe against a concurrent one.
-  if (prior === null) return { onlyIf: { etagDoesNotMatch: "*" } };
-  // R2 has no precondition meaning "write unconditionally", so an object the
-  // store named no version for carries none at all — conditioning on a version
-  // that does not exist would fail every write for the life of the build.
-  return prior.etag === null ? {} : { onlyIf: { etagMatches: prior.etag } };
+// tagRaiser posts a build's invalidations to its publisher. The bearer secret is
+// the deploy's own write secret — the same one its entry reads and writes carry
+// — so the raise authenticates at the writer's one auth boundary rather than on
+// the binding being reachable at all.
+//
+// A raise the writer did not accept throws, and the caller logs it: the records
+// are still held by whoever raised them, and the merge is idempotent, so a
+// throttled build repairs itself on the next invalidation.
+export function tagRaiser(
+  writer: IsrWriterBinding | undefined,
+  secret: string | undefined,
+): SnapshotRaiser {
+  return async (scope, records) => {
+    if (!writer || !secret) {
+      throw new Error("ocel: no isr writer is bound, so this build has no publisher to raise to");
+    }
+    const response = await writer.fetch(
+      new Request(`https://isr-writer/${scope}/tags`, {
+        method: "POST",
+        headers: { authorization: `Bearer ${secret}`, "content-type": "application/json" },
+        body: JSON.stringify({ records }),
+      }),
+    );
+    if (!response.ok) {
+      throw new Error(`ocel: the isr writer refused the tag raise with ${response.status}`);
+    }
+  };
 }
 
 // CacheEntrypoint is how the dynamic worker reaches all of the above: it is
@@ -318,7 +303,18 @@ function precondition(prior: StoredTagSnapshot | null) {
 // substrate that binds none of them must degrade to an uncached edge rather than
 // fail to boot — which is why every one of these bindings is optional and a
 // missing one answers like an empty cache.
-export class CacheEntrypoint extends WorkerEntrypoint<Env> implements EdgeCacheRpc {
+//
+// The one thing no binding can carry is the write secret a raise authenticates
+// with: it belongs to the Deployment, not to the script, so it rides the props
+// the stub is created with (see resolveRouteDeps).
+export interface CacheEntrypointProps {
+  isrWriteSecret?: string;
+}
+
+export class CacheEntrypoint
+  extends WorkerEntrypoint<Env, CacheEntrypointProps>
+  implements EdgeCacheRpc
+{
   private cache(): EdgeCacheRpc | null {
     const { OCEL_AWS_REGION, OCEL_ISR_BUCKET, OCEL_STATE_TABLE, OCEL_CACHE_STORE } = this.env;
     const aws = awsServiceFetch(
@@ -335,6 +331,7 @@ export class CacheEntrypoint extends WorkerEntrypoint<Env> implements EdgeCacheR
       table: OCEL_STATE_TABLE,
       aws,
       snapshots: OCEL_CACHE_STORE,
+      raise: tagRaiser(this.env.ISR_WRITER, this.ctx.props?.isrWriteSecret),
       waitUntil: (promise) => this.ctx.waitUntil(promise),
       now: Date.now,
     });

@@ -1,12 +1,9 @@
-import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
+import { tagSnapshotKey, type TagRecord, type TagSnapshot } from "@ocel/next-cache";
 import { createExecutionContext, env } from "cloudflare:test";
 import { beforeEach, expect, it } from "vitest";
 
-import {
-  CacheEntrypoint,
-  createEdgeCache,
-  type SnapshotBucket,
-} from "../src/cache-entrypoint";
+import { CacheEntrypoint, createEdgeCache, tagRaiser } from "../src/cache-entrypoint";
+import type { ObjectStoreReader } from "../src/tag-clock";
 import type { Env } from "../src/index";
 import type { AwsService } from "../src/signing";
 
@@ -22,16 +19,26 @@ const table = "ocel-state";
 
 // One R2 bucket serves every test, but the snapshot memo is keyed on the binding
 // *object* — so each test wraps the binding in its own delegate and keeps its
-// own isolate-local memo. Real R2 underneath, because whether the republish
-// converges is entirely a property of its etag preconditions.
-function snapshotBucket(hooks: { onGet?: () => Promise<void> } = {}): SnapshotBucket {
+// own isolate-local memo. Real R2 underneath, because this is the replica read
+// path exactly as the worker runs it.
+function snapshotBucket(): ObjectStoreReader {
+  return { get: (key) => env.TAG_SNAPSHOT_STORE.get(key) };
+}
+
+// A recording stand-in for the ISR writer the edge raises through. `land` is
+// what the writer's own R2 put stands for: the contract is that the raise
+// resolves only once the replica holds the records, which is the whole of what
+// gives the raiser read-your-own-writes.
+function raiseRecorder(
+  land: (records: Record<string, TagRecord>) => Promise<void> = async () => {},
+) {
+  const raises: { scope: string; records: Record<string, TagRecord> }[] = [];
   return {
-    async get(key) {
-      const object = await env.TAG_SNAPSHOT_STORE.get(key);
-      await hooks.onGet?.();
-      return object;
+    raises,
+    raise: async (scope: string, records: Record<string, TagRecord>) => {
+      raises.push({ scope, records });
+      await land(records);
     },
-    put: (key, value, options) => env.TAG_SNAPSHOT_STORE.put(key, value, options),
   };
 }
 
@@ -93,14 +100,14 @@ async function seedSnapshot(records: TagSnapshot["records"], deployedAt = 0): Pr
   );
 }
 
-async function storedSnapshot(): Promise<TagSnapshot> {
-  const object = await env.TAG_SNAPSHOT_STORE.get(tagSnapshotKey(scope));
-  return JSON.parse(await object!.text());
-}
-
 function cacheWith(
   aws: ReturnType<typeof awsRecorder>,
-  over: { store?: SnapshotBucket; waitUntil?: (p: Promise<unknown>) => void; now?: () => number } = {},
+  over: {
+    store?: ObjectStoreReader;
+    raise?: (scope: string, records: Record<string, TagRecord>) => Promise<void>;
+    waitUntil?: (p: Promise<unknown>) => void;
+    now?: () => number;
+  } = {},
 ) {
   return createEdgeCache({
     region,
@@ -108,6 +115,7 @@ function cacheWith(
     table,
     aws: aws.send,
     snapshots: over.store ?? snapshotBucket(),
+    raise: over.raise ?? raiseRecorder().raise,
     waitUntil: over.waitUntil ?? (() => {}),
     now: over.now ?? (() => 5_000),
   });
@@ -253,6 +261,7 @@ it("marks tags stale now and dead at the end of an expire window", async () => {
 });
 
 it("treats a rejected guard as the ordinary outcome it is", async () => {
+  const writer = raiseRecorder();
   const aws = awsRecorder((call) =>
     call.service === "dynamodb"
       ? new Response(
@@ -263,10 +272,12 @@ it("treats a rejected guard as the ordinary outcome it is", async () => {
         )
       : new Response("{}"),
   );
-  await expect(cacheWith(aws).revalidateTags(scope, ["posts"])).resolves.toBeUndefined();
-  // The replica is still republished: the winning writer's record is the one
-  // that has to reach the edge.
-  expect((await storedSnapshot()).records.posts).toBeDefined();
+  await expect(
+    cacheWith(aws, { raise: writer.raise }).revalidateTags(scope, ["posts"]),
+  ).resolves.toBeUndefined();
+  // The raise still happens: the winning writer's record is the one that has to
+  // reach the edge.
+  expect(writer.raises).toHaveLength(1);
 });
 
 it("surfaces a tag write that failed for any other reason", async () => {
@@ -274,109 +285,69 @@ it("surfaces a tag write that failed for any other reason", async () => {
   await expect(cacheWith(aws).revalidateTags(scope, ["posts"])).rejects.toThrow(/dynamodb 400/);
 });
 
-it("merges the invalidation into the published snapshot", async () => {
-  await seedSnapshot({ authors: { expired: 4_000 } }, 100);
+it("raises every invalidated tag through the writer, under this deployment's prefix", async () => {
+  const writer = raiseRecorder();
   const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith(aws).revalidateTags(scope, ["posts"]);
+  await cacheWith(aws, { raise: writer.raise }).revalidateTags(scope, ["posts", "authors"], {
+    expire: 60,
+  });
 
-  const snapshot = await storedSnapshot();
-  expect(snapshot).toMatchObject({ version: 1, deployedAt: 100, generatedAt: 5_000 });
-  expect(snapshot.records.posts?.expired).toBe(5_000);
-  // The deploy's anchor and another writer's record both survive the merge.
-  expect(snapshot.records.authors?.expired).toBe(4_000);
+  expect(writer.raises).toEqual([
+    {
+      scope,
+      records: {
+        posts: { stale: 5_000, expired: 65_000 },
+        authors: { stale: 5_000, expired: 65_000 },
+      },
+    },
+  ]);
 });
 
-it("converges when another publisher lands between the read and the write", async () => {
-  await seedSnapshot({}, 100);
-  let raced = false;
-  const store = snapshotBucket({
-    onGet: async () => {
-      if (raced) return;
-      raced = true;
-      await env.TAG_SNAPSHOT_STORE.put(
-        tagSnapshotKey(scope),
-        JSON.stringify({
-          version: 1,
-          deployedAt: 100,
-          generatedAt: 4_000,
-          records: { authors: { expired: 4_000 } },
-        }),
-      );
-    },
+// The record is authoritative and the raise is replication of it, so a raise
+// that outran the record would publish an invalidation nothing durable holds.
+it("records the invalidation durably before raising it", async () => {
+  const order: string[] = [];
+  const aws = awsRecorder(() => {
+    order.push("dynamodb");
+    return new Response("{}");
   });
-  const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith(aws, { store }).revalidateTags(scope, ["posts"]);
+  await cacheWith(aws, {
+    raise: async () => void order.push("raise"),
+  }).revalidateTags(scope, ["posts"]);
 
-  // The losing writer retried from the winner's document, so neither
-  // invalidation is lost.
-  const snapshot = await storedSnapshot();
-  expect(snapshot.records.posts?.expired).toBe(5_000);
-  expect(snapshot.records.authors?.expired).toBe(4_000);
-});
-
-it("does not clobber a replica another publisher created first", async () => {
-  let raced = false;
-  const store = snapshotBucket({
-    onGet: async () => {
-      if (raced) return;
-      raced = true;
-      await env.TAG_SNAPSHOT_STORE.put(
-        tagSnapshotKey(scope),
-        JSON.stringify({
-          version: 1,
-          deployedAt: 100,
-          generatedAt: 4_000,
-          records: { authors: { expired: 4_000 } },
-        }),
-      );
-    },
-  });
-  const aws = awsRecorder(() => new Response("{}"));
-  await cacheWith(aws, { store }).revalidateTags(scope, ["posts"]);
-
-  // The genesis write is conditional on the object not existing, so it loses to
-  // the publisher that got there first and retries from that document.
-  const snapshot = await storedSnapshot();
-  expect(snapshot.deployedAt).toBe(100);
-  expect(snapshot.records.posts?.expired).toBe(5_000);
-  expect(snapshot.records.authors?.expired).toBe(4_000);
+  expect(order).toEqual(["dynamodb", "raise"]);
 });
 
 // Next calls revalidateTag with no try/catch of its own, and a Server Action
 // awaits the drain before responding — so a throw out of the replication half
 // fails the very route that raised the invalidation. The durable record is
-// already written by then; the replica is the edge's copy of it, and a copy that
-// cannot be replaced leaves the edge reading the last one.
-it("leaves a replica it cannot read alone, without failing the route", async () => {
-  await env.TAG_SNAPSHOT_STORE.put(tagSnapshotKey(scope), "{{ not json");
-  const aws = awsRecorder(() => new Response("{}"));
-
-  await expect(cacheWith(aws).revalidateTags(scope, ["posts"])).resolves.toBeUndefined();
-
-  // The durable write still happened: the invalidation is recorded even though
-  // the replica could not be republished.
-  expect(aws.calls.filter((call) => call.service === "dynamodb")).toHaveLength(1);
-  expect(await (await env.TAG_SNAPSHOT_STORE.get(tagSnapshotKey(scope)))!.text()).toBe("{{ not json");
-});
-
-it("does not fail the route when every conditional write is lost", async () => {
-  await seedSnapshot({}, 100);
-  const store = snapshotBucket();
+// already written by then; the replica is the edge's copy of it, and a copy the
+// writer could not replace leaves the edge reading the last one.
+it("does not fail the route when the writer refuses the raise", async () => {
   const aws = awsRecorder(() => new Response("{}"));
 
   await expect(
-    cacheWith(aws, { store: { ...store, put: async () => null } }).revalidateTags(scope, ["posts"]),
+    cacheWith(aws, {
+      raise: async () => {
+        throw new Error("429");
+      },
+    }).revalidateTags(scope, ["posts"]),
   ).resolves.toBeUndefined();
 
+  // The durable write still happened: the invalidation is recorded even though
+  // the replica was not republished.
   expect(aws.calls.filter((call) => call.service === "dynamodb")).toHaveLength(1);
 });
 
+// The writer answers only once R2 holds the merged replica, which is what lets
+// this read go straight back to the store rather than waiting out the memo.
 it("sees its own invalidation on the very next read", async () => {
   const stored = entry();
   const aws = awsRecorder((call) =>
     call.service === "s3" ? new Response(JSON.stringify(stored)) : new Response("{}"),
   );
-  const cache = cacheWith(aws, { store: snapshotBucket() });
+  const writer = raiseRecorder((records) => seedSnapshot(records));
+  const cache = cacheWith(aws, { store: snapshotBucket(), raise: writer.raise });
 
   // Warms this isolate's memo with the pre-invalidation snapshot.
   await seedSnapshot({ posts: { expired: 500 } });
@@ -384,6 +355,64 @@ it("sees its own invalidation on the very next read", async () => {
 
   await cache.revalidateTags(scope, ["posts"]);
   expect(await cache.fetchGet(scope, "abc123", ["posts"])).toBeNull();
+});
+
+// A raise that never landed still leaves this isolate's memo describing a
+// replica the writer may well have replaced, so the memo goes either way.
+it("drops its snapshot memo even when the raise failed", async () => {
+  const stored = entry();
+  const aws = awsRecorder((call) =>
+    call.service === "s3" ? new Response(JSON.stringify(stored)) : new Response("{}"),
+  );
+  const cache = cacheWith(aws, {
+    store: snapshotBucket(),
+    raise: async () => {
+      throw new Error("429");
+    },
+  });
+
+  await seedSnapshot({ posts: { expired: 500 } });
+  expect(await cache.fetchGet(scope, "abc123", ["posts"])).toEqual(stored);
+
+  await cache.revalidateTags(scope, ["posts"]);
+  await seedSnapshot({ posts: { expired: 5_000 } });
+  expect(await cache.fetchGet(scope, "abc123", ["posts"])).toBeNull();
+});
+
+it("posts a raise to the writer under this deploy's own write secret", async () => {
+  const posted: Request[] = [];
+  const raise = tagRaiser(
+    {
+      fetch: async (request: Request) => {
+        posted.push(request);
+        return new Response(null, { status: 204 });
+      },
+    },
+    "write-secret",
+  );
+
+  await raise(scope, { posts: { expired: 5_000 } });
+
+  expect(posted).toHaveLength(1);
+  expect(new URL(posted[0].url).pathname).toBe(`/${scope}/tags`);
+  expect(posted[0].method).toBe("POST");
+  expect(posted[0].headers.get("authorization")).toBe("Bearer write-secret");
+  expect(await posted[0].json()).toEqual({ records: { posts: { expired: 5_000 } } });
+});
+
+it.each([429, 401, 500])("reports a raise the writer answered with %i", async (status) => {
+  const raise = tagRaiser({ fetch: async () => new Response(null, { status }) }, "write-secret");
+  await expect(raise(scope, { posts: { expired: 5_000 } })).rejects.toThrow(String(status));
+});
+
+// The worker script outlives its deployments, so it can find itself serving a
+// build whose deploy predates the writer, or on a substrate that adopted none.
+// There is nowhere to raise to then, and saying so is all this can do.
+it("reports a raise it has no writer to make", async () => {
+  await expect(tagRaiser(undefined, "write-secret")(scope, {})).rejects.toThrow(/no isr writer/);
+  await expect(
+    tagRaiser({ fetch: async () => new Response(null) }, undefined)(scope, {}),
+  ).rejects.toThrow(/no isr writer/);
 });
 
 // The worker script is frozen and outlives its deployments (ADR 0002), so it can
