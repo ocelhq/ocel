@@ -77,15 +77,24 @@ func retireISRWriter(ctx context.Context, cfg Config, isrPrefix string) error {
 	return isrWriterRequest(ctx, cfg, isrPrefix, "destroy", nil)
 }
 
-// isrWriterConfigured reports whether this substrate adopted a writer at all. A
+// isrWriterReachable reports whether this Config can reach the writer at all. A
 // bootstrap predating it leaves the coordinates empty, and every writer call is
-// then a no-op.
+// then a no-op. It is all a retirement needs: destroy is authorized by the
+// bootstrap credential, not by any deploy's secret, so a prune (which mints no
+// seed) still retires what it reclaims.
+func isrWriterReachable(cfg Config) bool {
+	return cfg.ISRWriterEndpoint != "" && cfg.ISRWriterBootstrapCred != ""
+}
+
+// isrWriterConfigured additionally requires the per-run seed, which only a
+// deploy has: without it there is no secret to derive, so nothing to point a
+// function at and nothing to seed.
 func isrWriterConfigured(cfg Config) bool {
-	return cfg.ISRWriterEndpoint != "" && cfg.ISRWriterBootstrapCred != "" && cfg.ISRWriterSeed != ""
+	return isrWriterReachable(cfg) && cfg.ISRWriterSeed != ""
 }
 
 func isrWriterRequest(ctx context.Context, cfg Config, isrPrefix, op string, body any) error {
-	if !isrWriterConfigured(cfg) {
+	if !isrWriterReachable(cfg) {
 		return nil
 	}
 	var reader io.Reader
