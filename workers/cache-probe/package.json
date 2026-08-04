@@ -11,6 +11,7 @@
     "test": "vitest",
     "typecheck": "tsc --noEmit",
     "probe": "node scripts/probe.ts",
+    "race": "node scripts/race.ts",
     "cf-typegen": "wrangler types"
   },
   "devDependencies": {
