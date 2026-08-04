@@ -280,7 +280,10 @@ func (p *provider) deployedClasses(ctx context.Context, name string) ([]string, 
 	}
 	var classes []string
 	for _, binding := range settings.Bindings {
-		if binding.Type == durableObjectBindingType && binding.ClassName != "" {
+		// A binding carrying script_name points at a class another script owns,
+		// so it is no evidence this one has it. Counting it would skip the step
+		// that creates the local class, and the skip would be silent.
+		if binding.Type == durableObjectBindingType && binding.ClassName != "" && binding.ScriptName == "" {
 			classes = append(classes, binding.ClassName)
 		}
 	}
