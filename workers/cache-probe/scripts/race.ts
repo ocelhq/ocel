@@ -6,26 +6,12 @@
 //   node scripts/race.ts --base https://probe.example.com --phase burst --trials 100 \
 //     --sizes 2,8,32,128 --window <the gap phase's W in ms>
 //
-// Three rules this script exists to enforce, and the reasons a run is worthless
-// without them:
-//
-//   Nothing is ever retried. A resend against a key the first send just claimed
-//   reports claimed:false and manufactures a suppression that never happened.
-//   Any non-200, redirect or network error discards the WHOLE trial, and the
-//   discards are counted.
-//
-//   Every racer gets its own pre-warmed socket. TCP+TLS handshakes cost tens of
-//   milliseconds — the same order as the quantity being measured — so a burst on
-//   cold connections spreads its own arrivals wider than the window and
-//   under-reports escapes.
-//
-//   The gap sweep never differences a Worker's clock against anything. The delay
-//   between two racers is imposed here, on one clock, and both racers pay the
-//   same round trip, so the driver's own latency cancels out of it. That is the
-//   whole reason the sweep exists rather than a single timed write.
-//
-// See README.md for the phases and for why the base URL must not be workers.dev.
+// See README.md for the phases, for why the base URL must not be workers.dev,
+// and for the three rules the gates below enforce. They are stated there once
+// rather than restated here; each gate carries its own reason at the line that
+// enforces it.
 
+import diagnosticsChannel from "node:diagnostics_channel";
 import { randomUUID } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
@@ -33,103 +19,26 @@ import { fileURLToPath } from "node:url";
 
 import { Client } from "undici";
 
+import { Abort } from "../src/abort.ts";
+import { parseRaceOptions, type RaceOptions } from "../src/race-options.ts";
 import {
   chooseWindow,
   distribution,
+  outcomeOf,
   sizingTable,
   summarizeBurst,
   summarizeGap,
+  type BurstSummary,
   type BurstTrial,
+  type Distribution,
   type GapSummary,
   type GapTrial,
-  type RaceOutcome,
+  type RaceResponse,
+  type SizingRow,
+  type WindowResult,
 } from "../src/race-analysis.ts";
 
 const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
-
-class Abort extends Error {}
-
-// ---------------------------------------------------------------------------
-// Options
-
-interface RaceOptions {
-  base: string;
-  phase: "control" | "gap" | "burst";
-  trials: number;
-  deltas: number[];
-  sizes: number[];
-  sockets: number;
-  scope: "onzone" | "offzone";
-  windowMs: number | null;
-  colos: number;
-  sentinelTtlSeconds: number;
-  out: string;
-}
-
-const DEFAULT_DELTAS = [0, 10, 25, 50, 100, 150, 200, 300, 500, 1_000];
-const DEFAULT_SIZES = [2, 8, 32, 128];
-
-function parseOptions(argv: string[], defaultOut: string): RaceOptions {
-  const flags = new Map<string, string>();
-  for (let i = 0; i < argv.length; i += 2) {
-    const flag = argv[i];
-    if (!flag?.startsWith("--")) throw new Abort(`unexpected argument: ${flag}`);
-    const value = argv[i + 1];
-    if (value === undefined || value.startsWith("--")) {
-      throw new Abort(`${flag} requires a value`);
-    }
-    flags.set(flag.slice(2), value);
-  }
-
-  const base = flags.get("base");
-  if (!base) throw new Abort("--base <https://probe.example.com> is required");
-  const phase = flags.get("phase") ?? "control";
-  if (phase !== "control" && phase !== "gap" && phase !== "burst") {
-    throw new Abort(`--phase must be control, gap or burst, got "${phase}"`);
-  }
-  const scope = flags.get("scope") ?? "offzone";
-  if (scope !== "onzone" && scope !== "offzone") {
-    throw new Abort(`--scope must be onzone or offzone, got "${scope}"`);
-  }
-  const number = (name: string, fallback: number, min = Number.MIN_VALUE) => {
-    const raw = flags.get(name);
-    if (raw === undefined) return fallback;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed) || parsed < min) {
-      throw new Abort(`--${name} must be a number >= ${min}, got "${raw}"`);
-    }
-    return parsed;
-  };
-  const list = (name: string, fallback: number[]) => {
-    const raw = flags.get(name);
-    if (raw === undefined) return fallback;
-    return raw.split(",").map((part) => {
-      const parsed = Number(part);
-      if (!Number.isFinite(parsed) || parsed < 0) {
-        throw new Abort(`--${name} must be non-negative numbers, got "${part}"`);
-      }
-      return parsed;
-    });
-  };
-
-  return {
-    base: base.replace(/\/$/, ""),
-    phase,
-    scope,
-    trials: number("trials", phase === "gap" ? 200 : 100),
-    deltas: list("deltas", DEFAULT_DELTAS),
-    sizes: list("sizes", DEFAULT_SIZES),
-    // Two racers are the minimum a gap trial can pair, and a pool of one can
-    // never produce a cross-isolate pair at all.
-    sockets: Math.max(2, number("sockets", 16)),
-    // A window of zero is a real answer — the claim is colo-visible at once —
-    // so it must be expressible, which a positive-only flag would forbid.
-    windowMs: flags.has("window") ? number("window", 0, 0) : null,
-    colos: number("colos", 300),
-    sentinelTtlSeconds: number("sentinelTtl", 5),
-    out: flags.get("out") ?? defaultOut,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Transport. One Client is one socket. A bare Client neither retries nor
@@ -147,6 +56,32 @@ async function call<T>(client: Client, method: "GET" | "POST", path: string): Pr
     throw new Error(`${method} ${path} -> ${response.statusCode}: ${body.slice(0, 120)}`);
   }
   return JSON.parse(body) as T;
+}
+
+// When each racer's first byte actually reached its socket. Calling `request`
+// does not send: undici queues the write and resumes it off the loop, so the
+// driver's own map() timestamps are microseconds apart no matter how long the
+// sends really take, and a dispersion computed from them can never exceed a
+// window measured in milliseconds. This channel publishes immediately before
+// the request head is written, which is the closest observable moment to a
+// send that the client offers.
+const sentAtByPath = new Map<string, number>();
+diagnosticsChannel.subscribe("undici:client:sendHeaders", (message) => {
+  const { request } = message as { request: { path: string } };
+  sentAtByPath.set(request.path, performance.now());
+});
+
+// Every racer in a trial is on a fresh key and a distinct seq, so the paths are
+// unique and the map is emptied per trial rather than growing across a sweep.
+function dispersionOf(paths: string[]): number {
+  const sent = paths.map((path) => sentAtByPath.get(path));
+  if (sent.some((at) => at === undefined)) {
+    throw new Abort(
+      "undici did not report a send for every racer, so the burst's concurrency cannot be " +
+        "bounded. Escapes without that bound are not interpretable; the run is void.",
+    );
+  }
+  return Math.max(...(sent as number[])) - Math.min(...(sent as number[]));
 }
 
 interface Identity {
@@ -235,6 +170,11 @@ type ControlVerdict =
   // tier in workers/nextjs is inert, silently, failing open. This outranks the
   // window entirely.
   | "offzone-inert"
+  // The mirror image: the production shape stores and the on-zone one does not.
+  // Nothing in workers/nextjs depends on an on-zone key, so this is not a
+  // product defect — but it is not `inconclusive` either, and the advice for
+  // that verdict (raise --sockets) would not move it.
+  | "onzone-inert"
   // Nothing stored anywhere: workers.dev, or the route is not live.
   | "cache-inert"
   // No read ever reached an isolate other than the writer's, so neither arm can
@@ -248,7 +188,8 @@ function controlVerdict(onzone: ControlArm, offzone: ControlArm): ControlVerdict
   }
   if (onzone.visible && offzone.visible) return "both-scopes-visible";
   if (onzone.visible) return "offzone-inert";
-  return "inconclusive";
+  if (offzone.visible) return "onzone-inert";
+  return "cache-inert";
 }
 
 async function control(options: RaceOptions, origin: string) {
@@ -264,21 +205,24 @@ async function control(options: RaceOptions, origin: string) {
 
 interface Preflight {
   host: string;
-  colo: string | null;
+  colo: string;
   control: Awaited<ReturnType<typeof control>>;
   cleanBurst: number;
-  rttMs: ReturnType<typeof distribution>;
+  rttMs: Distribution | null;
+}
+
+function assertNotWorkersDev(host: string) {
+  if (!host.endsWith("workers.dev")) return;
+  throw new Abort(
+    `${host} is a workers.dev subdomain, where caches.default is inert. Every ` +
+      "racer would claim, E would equal N, and the run would read as a maximal\n" +
+      "alarming result that measured nothing. Deploy to a zone route.",
+  );
 }
 
 async function preflight(options: RaceOptions, origin: string): Promise<Preflight> {
   const host = new URL(options.base).host;
-  if (host.endsWith("workers.dev")) {
-    throw new Abort(
-      `${host} is a workers.dev subdomain, where caches.default is inert. Every ` +
-        "racer would claim, E would equal N, and the run would read as a maximal\n" +
-        "alarming result that measured nothing. Deploy to a zone route.",
-    );
-  }
+  assertNotWorkersDev(host);
 
   const measured = await control(options, origin);
   if (measured.verdict !== "both-scopes-visible") {
@@ -299,6 +243,18 @@ async function preflight(options: RaceOptions, origin: string): Promise<Prefligh
     Array.from({ length: 200 }, (_, i) => call<Identity>(clients[i % 20]!, "GET", "/identity")),
   );
 
+  // One runner reaches one colo, and every trial's classification is an
+  // argument about one colo's cache. A null colo means request.cf was absent,
+  // which would make two racers compare equal on "unknown" and pass the
+  // mixed-colo gate; a second colo means the sweep is pooling two caches.
+  const colos = new Set(clean.map((c) => c.colo));
+  if (colos.size !== 1 || clean[0]!.colo === null) {
+    throw new Abort(
+      `the preflight burst reported colos ${JSON.stringify([...colos])}. A run is about ` +
+        "one colo's cache, and neither an absent colo nor two of them can be attributed.",
+    );
+  }
+
   // The round trip PR 1 never recorded, taken sequentially on one warm socket so
   // it is a latency and not a queueing delay.
   const latencies: number[] = [];
@@ -311,7 +267,7 @@ async function preflight(options: RaceOptions, origin: string): Promise<Prefligh
 
   return {
     host,
-    colo: clean[0]?.colo ?? null,
+    colo: clean[0]!.colo,
     control: measured,
     cleanBurst: clean.length,
     rttMs: distribution(latencies),
@@ -319,41 +275,54 @@ async function preflight(options: RaceOptions, origin: string): Promise<Prefligh
 }
 
 // ---------------------------------------------------------------------------
+// The trial loop's shared failure policy. A transport failure discards the
+// whole trial rather than repairing it — a resend against a key the first send
+// just claimed reports claimed:false and manufactures a suppression that never
+// happened. But discards are not free: the pool is rebuilt after each one, so a
+// run full of them is also resampling its isolates as it goes. Above a small
+// ratio the run is not reporting on the cache and says so instead of printing a
+// window over whatever survived.
+
+function assertDiscardsTolerable(options: RaceOptions, discarded: number, attempted: number) {
+  if (attempted === 0 || discarded / attempted <= options.maxDiscardRate) return;
+  throw new Abort(
+    `${discarded} of ${attempted} trials were discarded on transport failures ` +
+      `(${((discarded / attempted) * 100).toFixed(1)}%, ceiling ` +
+      `${(options.maxDiscardRate * 100).toFixed(1)}%). Each discard also rebuilds the ` +
+      "socket pool, so the isolates being sampled moved mid-run. Fix the deploy — a fresh " +
+      "zone route takes minutes to reach every edge machine — and re-run.",
+  );
+}
+
+// A key nobody has written cannot suppress anybody, so whichever racer runs
+// `match` first must miss and claim. This asserts that reasoning; it can only
+// fire if the claim primitive or the key minting changed underneath it. A zero
+// here is a theorem and is NOT evidence that anything was measured — do not
+// report it as one.
+function assertSomebodyClaimed(zeroClaimTrials: number, where: string) {
+  if (zeroClaimTrials === 0) return;
+  throw new Abort(
+    `${zeroClaimTrials} trial(s) at ${where} had no claim at all on a key nobody had ` +
+      "written. The instrument is broken, not the cache.",
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Phase 1 — the gap sweep.
 
-interface RaceResponse extends Identity {
-  claimed: boolean;
-  key: string;
-  scope: string;
-  seq: string | null;
-}
-
-function outcomeOf(response: RaceResponse, key: string, seq: number): RaceOutcome {
-  if (response.key !== key || response.seq !== String(seq)) {
-    throw new Abort(
-      `racer ${seq} on key ${key} was answered for key ${response.key} seq ` +
-        `${response.seq}. One racer received another's body; the run is void.`,
-    );
-  }
-  return {
-    seq,
-    claimed: response.claimed,
-    isolate: response.isolate,
-    colo: response.colo ?? "unknown",
-  };
-}
-
-const racePath = (options: RaceOptions, key: string, seq: number) =>
+const raceRoute = (options: RaceOptions, key: string, seq: number) =>
   `/race?key=${key}&seq=${seq}&scope=${options.scope}&ttl=${options.sentinelTtlSeconds}`;
 
 async function gapSweep(options: RaceOptions, origin: string) {
   const summaries: GapSummary[] = [];
   const trialsByDelta: Record<number, GapTrial[]> = {};
   let discarded = 0;
+  let attempted = 0;
 
   for (const deltaMs of options.deltas) {
     let racers = await openRacers(origin, options.sockets);
     const trials: GapTrial[] = [];
+    let attemptedHere = 0;
 
     for (let trial = 0; trial < options.trials; trial += 1) {
       // Never reused: a warm key would report the follower suppressed by a
@@ -364,13 +333,14 @@ async function gapSweep(options: RaceOptions, origin: string) {
       const first = trial % racers.length;
       const offset = 1 + (Math.floor(trial / racers.length) % (racers.length - 1));
       const second = (first + offset) % racers.length;
+      attemptedHere += 1;
 
       try {
         const sentA = performance.now();
-        const a = call<RaceResponse>(racers[first]!, "POST", racePath(options, key, 0));
+        const a = call<RaceResponse>(racers[first]!, "POST", raceRoute(options, key, 0));
         await sleep(Math.max(0, deltaMs - (performance.now() - sentA)));
         const sentB = performance.now();
-        const b = call<RaceResponse>(racers[second]!, "POST", racePath(options, key, 1));
+        const b = call<RaceResponse>(racers[second]!, "POST", raceRoute(options, key, 1));
         const [first_, second_] = await Promise.all([a, b]);
 
         trials.push({
@@ -390,50 +360,49 @@ async function gapSweep(options: RaceOptions, origin: string) {
     }
 
     await closeRacers(racers);
-    const summary = summarizeGap(deltaMs, trials);
-    if (summary.excluded["zero-claims"] > 0) {
-      throw new Abort(
-        `${summary.excluded["zero-claims"]} trial(s) at delta ${deltaMs}ms had no claim ` +
-          "at all on a key nobody had written. The instrument is broken, not the cache.",
-      );
-    }
+    attempted += attemptedHere;
+    assertDiscardsTolerable(options, discarded, attempted);
+    const summary = summarizeGap(deltaMs, trials, attemptedHere);
+    assertSomebodyClaimed(summary.excluded["zero-claims"], `delta ${deltaMs}ms`);
     summaries.push(summary);
     trialsByDelta[deltaMs] = trials;
     console.log(
       `  delta ${String(deltaMs).padStart(5)}ms  decidable ${String(summary.decidable).padStart(4)}` +
         `  second claimed ${summary.secondClaims}` +
-        `  rate ${summary.secondClaimRate === null ? "n/a" : summary.secondClaimRate.toFixed(4)}`,
+        `  rate ${summary.secondClaimRate === null ? "n/a" : summary.secondClaimRate.toFixed(4)}` +
+        (summary.trials === summary.attempted ? "" : `  (${summary.attempted} attempted)`),
     );
   }
 
-  return { summaries, trialsByDelta, discarded, window: chooseWindow(summaries) };
+  return { summaries, trialsByDelta, attempted, discarded, window: chooseWindow(summaries) };
 }
 
 // ---------------------------------------------------------------------------
 // Phase 2 — the burst.
 
 async function burstSweep(options: RaceOptions, origin: string) {
-  const summaries = [];
+  const summaries: BurstSummary[] = [];
   const trialsBySize: Record<number, BurstTrial[]> = {};
   let discarded = 0;
+  let attempted = 0;
 
   for (const size of options.sizes) {
     let racers = await openRacers(origin, size);
     const trials: BurstTrial[] = [];
+    let attemptedHere = 0;
 
     for (let trial = 0; trial < options.trials; trial += 1) {
       const key = `race-${randomUUID()}`;
-      const sentAt: number[] = [];
+      const paths = racers.map((_, seq) => raceRoute(options, key, seq));
+      attemptedHere += 1;
+      sentAtByPath.clear();
       try {
         const responses = await Promise.all(
-          racers.map((client, seq) => {
-            sentAt.push(performance.now());
-            return call<RaceResponse>(client, "POST", racePath(options, key, seq));
-          }),
+          racers.map((client, seq) => call<RaceResponse>(client, "POST", paths[seq]!)),
         );
         trials.push({
           size,
-          dispersionMs: Math.max(...sentAt) - Math.min(...sentAt),
+          dispersionMs: dispersionOf(paths),
           outcomes: responses.map((response, seq) => outcomeOf(response, key, seq)),
         });
       } catch (error) {
@@ -445,19 +414,10 @@ async function burstSweep(options: RaceOptions, origin: string) {
     }
 
     await closeRacers(racers);
-    const summary = summarizeBurst(size, trials, options.windowMs);
-    if (summary.invariantViolations > 0) {
-      throw new Abort(
-        `${summary.invariantViolations} trial(s) at N=${size} did not account for their ` +
-          "racers one-for-one. The instrument is double-counting; the run is void.",
-      );
-    }
-    if (summary.discarded["zero-claims"] > 0) {
-      throw new Abort(
-        `${summary.discarded["zero-claims"]} trial(s) at N=${size} had no claim at all on a ` +
-          "cold key. The instrument is broken, not the cache.",
-      );
-    }
+    attempted += attemptedHere;
+    assertDiscardsTolerable(options, discarded, attempted);
+    const summary = summarizeBurst(size, trials, options.windowMs, attemptedHere);
+    assertSomebodyClaimed(summary.discarded["zero-claims"], `N=${size}`);
     summaries.push(summary);
     trialsBySize[size] = trials;
     console.log(
@@ -466,7 +426,8 @@ async function burstSweep(options: RaceOptions, origin: string) {
         ` (p10 ${summary.escapes?.p10 ?? "n/a"}, p90 ${summary.escapes?.p90 ?? "n/a"},` +
         ` max ${summary.escapes?.max ?? "n/a"})` +
         `  isolates median ${summary.distinctIsolates?.median ?? "n/a"}` +
-        `  dispersion median ${summary.dispersionMs?.median.toFixed(1) ?? "n/a"}ms` +
+        `  dispersion median ${summary.dispersionMs?.median.toFixed(2) ?? "n/a"}ms` +
+        (summary.trials === summary.attempted ? "" : `  (${summary.attempted} attempted)`) +
         (summary.lowerBound ? "  [LOWER BOUND]" : ""),
     );
     if ((summary.singleIsolateRate ?? 0) > 0.1) {
@@ -477,28 +438,32 @@ async function burstSweep(options: RaceOptions, origin: string) {
     }
   }
 
-  return { summaries, trialsBySize, discarded };
+  return { summaries, trialsBySize, attempted, discarded };
 }
 
 // ---------------------------------------------------------------------------
 
+interface Report {
+  startedAt: string;
+  options: RaceOptions;
+  control?: Awaited<ReturnType<typeof control>>;
+  preflight?: Preflight;
+  gap?: Awaited<ReturnType<typeof gapSweep>> & { window: WindowResult };
+  burst?: Awaited<ReturnType<typeof burstSweep>>;
+  sizing?: { isolatesPerColo: number; rows: SizingRow[] };
+}
+
 async function main() {
-  const options = parseOptions(
+  const options = parseRaceOptions(
     process.argv.slice(2),
     resolve(dirname(fileURLToPath(import.meta.url)), `../runs/race-${Date.now()}.json`),
   );
   const origin = new URL(options.base).origin;
 
-  const report: Record<string, unknown> = {
-    startedAt: new Date().toISOString(),
-    options,
-  };
+  const report: Report = { startedAt: new Date().toISOString(), options };
 
   if (options.phase === "control") {
-    const host = new URL(options.base).host;
-    if (host.endsWith("workers.dev")) {
-      throw new Abort(`${host} is a workers.dev subdomain, where caches.default is inert.`);
-    }
+    assertNotWorkersDev(new URL(options.base).host);
     const measured = await control(options, origin);
     report.control = measured;
     console.log(`\nkey-scope control: ${measured.verdict}`);
@@ -532,18 +497,21 @@ async function main() {
       console.log(
         `\nwindow: ${sweep.window.verdict}` +
           (sweep.window.windowMs === null ? "" : ` at ${sweep.window.windowMs}ms`) +
-          `  (discarded trials: ${sweep.discarded})`,
+          `  (discarded ${sweep.discarded} of ${sweep.attempted} attempted trials)`,
       );
     } else {
       console.log(`\nburst (${options.trials} trials per size, scope ${options.scope})`);
       const sweep = await burstSweep(options, origin);
       report.burst = sweep;
-      console.log(`\ndiscarded trials: ${sweep.discarded}`);
+      console.log(`\ndiscarded ${sweep.discarded} of ${sweep.attempted} attempted trials`);
 
-      const isolatesPerColo = Math.max(
-        99,
-        ...sweep.summaries.map((s) => s.distinctIsolates?.max ?? 0),
-      );
+      // The burst's own isolate count is what THIS run touched, and 128 sockets
+      // reached fewer isolates than PR 1's 200-way concurrency did. Both are
+      // lower bounds on the colo, so the cap is whichever is higher — but the
+      // higher one is inherited from another instrument and another session, so
+      // it is passed in rather than assumed.
+      const touched = Math.max(0, ...sweep.summaries.map((s) => s.distinctIsolates?.max ?? 0));
+      const isolatesPerColo = Math.max(touched, options.isolatesPerColo ?? 0);
       if (options.windowMs !== null) {
         const table = sizingTable(
           {
@@ -556,8 +524,9 @@ async function main() {
         );
         report.sizing = { isolatesPerColo, rows: table };
         console.log(
-          `\nL2 sizing at W=${options.windowMs}ms, I_colo>=${isolatesPerColo}, ` +
-            `C=${options.colos}, ttl=${options.sentinelTtlSeconds}s ` +
+          `\nL2 sizing at W=${options.windowMs}ms, I_colo>=${isolatesPerColo}` +
+            (isolatesPerColo === touched ? "" : ` (--isolates, above this run's ${touched})`) +
+            `, C=${options.colos}, ttl=${options.sentinelTtlSeconds}s ` +
             "(lambda is an OPERATOR PARAMETER, not measured here)",
         );
         for (const row of table) {

@@ -5,11 +5,48 @@
 // racers pay the same round trip, so the driver's latency cancels out of it
 // rather than being subtracted from it.
 
+import { Abort } from "./abort.ts";
+
 export interface RaceOutcome {
   seq: number;
   claimed: boolean;
   isolate: string;
   colo: string;
+}
+
+// What the worker answers a racer with. Narrowed into a RaceOutcome by
+// `outcomeOf`, which is where every check on the response's identity lives.
+export interface RaceResponse {
+  isolate: string;
+  colo: string | null;
+  host: string;
+  claimed: boolean;
+  key: string;
+  scope: string;
+  seq: string | null;
+}
+
+// The one live duplicate detector in this instrument. The zone's edge cache
+// sits in front of the worker, so a racer being answered with ANOTHER racer's
+// body is the way a duplicate claim gets manufactured; the worker echoes the
+// key and seq it was asked for, and the echo is checked here against what was
+// sent. A null colo fails the same way rather than defaulting: two racers whose
+// colo is unknown would compare equal and pass the mixed-colo gate that exists
+// to catch exactly that.
+export function outcomeOf(response: RaceResponse, key: string, seq: number): RaceOutcome {
+  if (response.key !== key || response.seq !== String(seq)) {
+    throw new Abort(
+      `racer ${seq} on key ${key} was answered for key ${response.key} seq ` +
+        `${response.seq}. One racer received another's body; the run is void.`,
+    );
+  }
+  if (response.colo === null) {
+    throw new Abort(
+      `racer ${seq} on key ${key} was served without a colo. request.cf was absent, so ` +
+        "no trial can be attributed to a colo and the run is void.",
+    );
+  }
+  return { seq, claimed: response.claimed, isolate: response.isolate, colo: response.colo };
 }
 
 export interface Distribution {
@@ -54,8 +91,10 @@ export interface GapTrial {
 }
 
 export type GapExclusion =
-  // Neither racer claimed a key nobody had ever written. The instrument is
-  // wrong, not the cache — P4.
+  // Neither racer claimed a key nobody had ever written. STRUCTURALLY
+  // UNREACHABLE, like its burst twin: whichever racer runs `match` first on a
+  // fresh UUID key must miss and therefore claim. It asserts that reasoning; a
+  // zero here is not a measurement and must not be reported as one.
   | "zero-claims"
   // The leader did not claim but the follower did: the two arrived out of the
   // order the driver imposed, so the trial measures nothing about Δ.
@@ -66,9 +105,9 @@ export type GapExclusion =
   // the sentinel is ever consulted, so such a trial measures L0, not L1.
   | "same-isolate";
 
-export type GapClassification = GapExclusion | "decidable";
+type GapClassification = GapExclusion | "decidable";
 
-export function classifyGapTrial(trial: GapTrial): GapClassification {
+function classifyGapTrial(trial: GapTrial): GapClassification {
   const { a, b } = trial;
   if (!a.claimed && !b.claimed) return "zero-claims";
   if (!a.claimed) return "leader-did-not-claim";
@@ -79,6 +118,9 @@ export function classifyGapTrial(trial: GapTrial): GapClassification {
 
 export interface GapSummary {
   deltaMs: number;
+  // Trials the runner tried, against the trials that produced a result. See
+  // BurstSummary.attempted.
+  attempted: number;
   trials: number;
   decidable: number;
   secondClaims: number;
@@ -95,7 +137,11 @@ const noExclusions = (): Record<GapExclusion, number> => ({
   "same-isolate": 0,
 });
 
-export function summarizeGap(deltaMs: number, trials: GapTrial[]): GapSummary {
+export function summarizeGap(
+  deltaMs: number,
+  trials: GapTrial[],
+  attempted = trials.length,
+): GapSummary {
   const excluded = noExclusions();
   const decidable: GapTrial[] = [];
   for (const trial of trials) {
@@ -106,6 +152,7 @@ export function summarizeGap(deltaMs: number, trials: GapTrial[]): GapSummary {
   const secondClaims = decidable.filter((t) => t.b.claimed).length;
   return {
     deltaMs,
+    attempted,
     trials: trials.length,
     decidable: decidable.length,
     secondClaims,
@@ -179,14 +226,17 @@ export function chooseWindow(
 
 export interface BurstTrial {
   size: number;
-  // max − min of the driver's own pre-send timestamps. If this exceeds the
-  // window, the racers were not concurrent relative to what is being measured
-  // and the escape count is biased downward.
+  // max − min over the moments undici wrote each racer's first byte to its
+  // socket, NOT over the driver's loop. The loop's own spread is microseconds
+  // and measures nothing: a racer's request is still unsent when the next
+  // iteration begins. If this exceeds the window, the racers were not
+  // concurrent relative to what is being measured and the escape count is
+  // biased downward.
   dispersionMs: number;
   outcomes: RaceOutcome[];
 }
 
-export interface TrialEscapes {
+interface TrialEscapes {
   rawClaims: number;
   // The production-relevant number. Production runs refreshOnce (L0) inside
   // admitRefresh, so two concurrent requests on one isolate collapse to one
@@ -197,7 +247,7 @@ export interface TrialEscapes {
   distinctColos: number;
 }
 
-export function escapesOf(outcomes: RaceOutcome[]): TrialEscapes {
+function escapesOf(outcomes: RaceOutcome[]): TrialEscapes {
   const claimed = outcomes.filter((o) => o.claimed);
   return {
     rawClaims: claimed.length,
@@ -207,10 +257,16 @@ export function escapesOf(outcomes: RaceOutcome[]): TrialEscapes {
   };
 }
 
-export type BurstClassification =
-  // No racer claimed a key nobody had written — the instrument is broken (P4).
+type BurstClassification =
+  // No racer claimed a key nobody had written. STRUCTURALLY UNREACHABLE with
+  // this claim primitive: the globally first `match` on a fresh UUID key must
+  // miss, so somebody claims. Kept as an assertion of that reasoning, not as
+  // evidence — a zero here is a theorem, and the doc must not cite it as a
+  // measurement.
   | "zero-claims"
-  // The burst spanned colos, so it says nothing about one colo's cache.
+  // The burst spanned colos, so it says nothing about one colo's cache. Also
+  // unreachable from a single driver host, which reaches exactly one colo; it
+  // exists so a two-host run would not silently pool two caches.
   | "mixed-colo"
   // Every racer landed on one isolate: L0's territory, not L1's. Kept in its
   // own bucket rather than discarded, because escapes=1 here would otherwise
@@ -218,8 +274,11 @@ export type BurstClassification =
   | "single-isolate"
   | "counted";
 
-export function classifyBurstTrial(trial: BurstTrial): BurstClassification {
-  const { rawClaims, distinctColos, distinctIsolates } = escapesOf(trial.outcomes);
+function classifyBurstTrial({
+  rawClaims,
+  distinctColos,
+  distinctIsolates,
+}: TrialEscapes): BurstClassification {
   if (rawClaims === 0) return "zero-claims";
   if (distinctColos !== 1) return "mixed-colo";
   if (distinctIsolates === 1) return "single-isolate";
@@ -228,6 +287,10 @@ export function classifyBurstTrial(trial: BurstTrial): BurstClassification {
 
 export interface BurstSummary {
   size: number;
+  // Trials the runner tried, against the trials that produced a result. They
+  // differ by the transport failures the runner discarded, and a summary that
+  // reported only the latter would shrink its own denominator in silence.
+  attempted: number;
   trials: number;
   counted: number;
   singleIsolateTrials: number;
@@ -243,35 +306,21 @@ export interface BurstSummary {
   // small against the window, so later racers could already see the claim.
   // Also true when the window is unknown, because then it cannot be ruled out.
   lowerBound: boolean;
-  // Trials whose responses do not account for their racers one-for-one. Any
-  // violation means the instrument is double-counting — the zone serving one
-  // racer's body to another is exactly how that would happen — and the run is
-  // void, so this aborts rather than being footnoted.
-  invariantViolations: number;
-}
-
-// Every racer must be answered exactly once, by its own request, and no isolate
-// may escape more times than it appeared.
-export function accountsForItsRacers(trial: BurstTrial): boolean {
-  const { escapes, distinctIsolates } = escapesOf(trial.outcomes);
-  return (
-    trial.outcomes.length === trial.size &&
-    new Set(trial.outcomes.map((o) => o.seq)).size === trial.size &&
-    escapes <= distinctIsolates
-  );
 }
 
 export function summarizeBurst(
   size: number,
   trials: BurstTrial[],
   windowMs: number | null,
+  attempted = trials.length,
 ): BurstSummary {
   const discarded = { "zero-claims": 0, "mixed-colo": 0 };
   let singleIsolateTrials = 0;
   const counted: { trial: BurstTrial; escapes: TrialEscapes }[] = [];
   for (const trial of trials) {
-    const verdict = classifyBurstTrial(trial);
-    if (verdict === "counted") counted.push({ trial, escapes: escapesOf(trial.outcomes) });
+    const escapes = escapesOf(trial.outcomes);
+    const verdict = classifyBurstTrial(escapes);
+    if (verdict === "counted") counted.push({ trial, escapes });
     else if (verdict === "single-isolate") singleIsolateTrials += 1;
     else discarded[verdict] += 1;
   }
@@ -279,6 +328,7 @@ export function summarizeBurst(
   const dispersion = distribution(counted.map(({ trial }) => trial.dispersionMs));
   return {
     size,
+    attempted,
     trials: trials.length,
     counted: counted.length,
     singleIsolateTrials,
@@ -288,9 +338,7 @@ export function summarizeBurst(
     rawClaims: distribution(counted.map(({ escapes }) => escapes.rawClaims)),
     distinctIsolates: distribution(counted.map(({ escapes }) => escapes.distinctIsolates)),
     dispersionMs: dispersion,
-    lowerBound:
-      windowMs === null || (dispersion !== null && dispersion.median > windowMs),
-    invariantViolations: trials.filter((trial) => !accountsForItsRacers(trial)).length,
+    lowerBound: windowMs === null || (dispersion !== null && dispersion.median > windowMs),
   };
 }
 
