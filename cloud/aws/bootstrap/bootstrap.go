@@ -293,6 +293,7 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	// An unrecognised kind is ignored rather than rejected, so a newer edge paired
 	// with an older provider degrades instead of breaking — and dropping an
 	// adoption here is enough to put the resource it replaced back in service.
+	var isrWriterAdopted bool
 	for _, offer := range edgeOut.Offers {
 		switch offer.Kind {
 		case edge.OfferCacheStore:
@@ -317,6 +318,7 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 			if _, err := ensureISRWriterSeed(ctx, ssmClient, sub.class); err != nil {
 				return err
 			}
+			isrWriterAdopted = true
 		default:
 			report(log, fmt.Sprintf("ignoring edge offer %q: no provider resource adopts it", offer.Kind))
 		}
@@ -357,13 +359,22 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	if code.optimizer, err = ensureOptimizerArtifact(ctx, artifact, deployed.ArtifactBucket, pins.optimizer); err != nil {
 		return err
 	}
-	if code.publisher, err = ensureTagPublisherArtifact(ctx, artifact, deployed.ArtifactBucket, pins.publisher); err != nil {
-		return err
+	// The publisher raises through the writer's endpoint under a secret derived
+	// from the substrate's seed, and a substrate that adopted no writer has
+	// neither. Placed there anyway it would refuse to start on every invocation,
+	// retire every batch to the dead-letter queue, and hold the alarm lit from
+	// the moment of bootstrap.
+	if isrWriterAdopted {
+		if code.publisher, err = ensureTagPublisherArtifact(ctx, artifact, deployed.ArtifactBucket, pins.publisher); err != nil {
+			return err
+		}
 	}
 	if !code.optimizer.present() {
 		report(log, "no image optimizer artifact is pinned in this provider build; none is created, and /_next/image answers 502 as it did before")
 	}
-	if !code.publisher.present() {
+	if !isrWriterAdopted {
+		report(log, "this substrate adopted no ISR writer, so no tag publisher is created; there is no edge replica for it to publish into")
+	} else if !code.publisher.present() {
 		report(log, "no tag publisher artifact is pinned in this provider build; none is created, and tag invalidations reach the edge the way they did before")
 	}
 
