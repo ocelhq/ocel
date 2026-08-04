@@ -185,6 +185,20 @@ type Config struct {
 	StoreEndpoint      string
 	StoreBootstrapCred string
 
+	// ISRWriterEndpoint / ISRWriterBootstrapCred are the shared ISR writer
+	// worker's coordinates, adopted from account-level bootstrap state: the
+	// endpoint a deployed function writes its ISR entries to, and the bootstrap
+	// credential that authorizes seeding and retiring one build's write secret.
+	// Empty when the bootstrap predates the writer, which leaves functions
+	// writing entries with the object-store credentials they already carry.
+	ISRWriterEndpoint      string
+	ISRWriterBootstrapCred string
+	// ISRWriterSeed is minted once per deploy run and never persisted. Each
+	// app's write secret is derived from it and that app's own isrPrefix
+	// (isrWriteSecret), so appCaches stays a pure function of the deploy while
+	// no app can sign a write against another app's slice.
+	ISRWriterSeed string
+
 	// Edge deploys the Next.js routing worker once its Lambdas exist and their
 	// Function URLs are known. Nil unless the project has a Next.js app; the
 	// concrete edge implementation is the end-to-end seam.

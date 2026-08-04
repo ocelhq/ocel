@@ -231,6 +231,19 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		return deploy.Result{}, err
 	}
 
+	// The ISR writer's coordinates, plus the seed this run derives each app's
+	// write secret from. The seed is minted per run and never persisted: it and
+	// the secrets it derives live only in this process and the function
+	// environments it writes.
+	isrWriter, err := bootstrap.ReadISRWriterFor(ctx, ssmClient, substrateClass)
+	if err != nil {
+		return deploy.Result{}, err
+	}
+	isrWriterSeed, err := deploy.MintISRWriterSeed()
+	if err != nil {
+		return deploy.Result{}, err
+	}
+
 	// Which of this project's cells read another project's value decides what
 	// each app's functions may read: a reference is followed where it is read, so
 	// a grant over this project's partition alone would deny at runtime what the
@@ -280,6 +293,10 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		StoreScriptName:    deploymentsStore.ScriptName,
 		StoreEndpoint:      deploymentsStore.Endpoint,
 		StoreBootstrapCred: deploymentsStore.BootstrapCred,
+
+		ISRWriterEndpoint:      isrWriter.Endpoint,
+		ISRWriterBootstrapCred: isrWriter.BootstrapCred,
+		ISRWriterSeed:          isrWriterSeed,
 
 		Uploader:       s3.NewFromConfig(awscfg),
 		Edge:           cloudflare.New(),

@@ -73,7 +73,7 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 		if err != nil {
 			return nil, err
 		}
-		caches[app] = &isrConfig{
+		cache := &isrConfig{
 			Bucket:             cfg.AssetBucket,
 			Prefix:             prefix,
 			Table:              cfg.StateTable,
@@ -81,6 +81,11 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 			CacheStoreParam:    cfg.CacheStoreParam,
 			CacheStoreParamARN: cfg.CacheStoreParamARN,
 		}
+		if isrWriterConfigured(cfg) {
+			cache.WriterURL = cfg.ISRWriterEndpoint + "/" + prefix + "/entry"
+			cache.WriterSecret = isrWriteSecret(cfg.ISRWriterSeed, prefix)
+		}
+		caches[app] = cache
 	}
 	return caches, nil
 }
@@ -136,6 +141,12 @@ func uploadPrerenderAssets(ctx context.Context, cfg Config, manifest *deployment
 	// Seeded before the entries and independently of them: an app with nothing
 	// prerendered still has an edge reading its clock on every request.
 	if err := seedTagSnapshots(ctx, cfg, caches, time.Now()); err != nil {
+		return err
+	}
+	// Likewise independent of what this build prerendered: the first entry an
+	// app writes at runtime is rejected unless its write secret is already
+	// seeded, and that write can happen the moment its functions go live.
+	if err := seedISRWriters(ctx, cfg, caches); err != nil {
 		return err
 	}
 	if len(uploads) == 0 {
