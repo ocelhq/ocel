@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
@@ -184,8 +183,8 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 		t.Fatalf("policy is not valid JSON: %v", err)
 	}
-	if len(doc.Statement) != 3 {
-		t.Fatalf("got %d statements, want 3", len(doc.Statement))
+	if len(doc.Statement) != 2 {
+		t.Fatalf("got %d statements, want 2", len(doc.Statement))
 	}
 
 	s3Stmt := doc.Statement[0]
@@ -213,24 +212,17 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 		t.Errorf("LeadingKeys = %v, want the app's own tag partitions", keys)
 	}
 
-	// An index is not covered by its table's ARN, so the tag-sync query needs
-	// its own statement against the index ARN — a grant on the table alone 403s
-	// the query at runtime. The leading-key constraint is evaluated against the
-	// index's partition key here, which is the tag namespace verbatim; the
-	// trailing * matches zero characters, so the same wildcard admits it.
-	idxStmt := doc.Statement[2]
-	if want := cfg.TableARN + "/index/" + bootstrap.StateTableIndexName; idxStmt.Resource != want {
-		t.Errorf("index Resource = %q, want %q", idxStmt.Resource, want)
-	}
-	if want := []string{"dynamodb:Query"}; !slices.Equal(idxStmt.Action, want) {
-		t.Errorf("index Action = %v, want exactly %v", idxStmt.Action, want)
-	}
-	idxKeys := idxStmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
-	if len(idxKeys) != 1 || idxKeys[0] != "TAG#prod#proj123#marketing#build456#*" {
-		t.Errorf("index LeadingKeys = %v, want the app's own tag partitions", idxKeys)
-	}
-	if !strings.HasPrefix(cfg.tagNamespace(), strings.TrimSuffix(idxKeys[0], "*")) {
-		t.Errorf("tagNamespace %q is not admitted by LeadingKeys %q; the index query would 403", cfg.tagNamespace(), idxKeys[0])
+	// The tag clock reads its whole state from the snapshot object under the S3
+	// grant above, so nothing on this function queries the table's index any
+	// more and no statement may grant it: a Query the runtime never issues is a
+	// standing read of every tag partition this app's namespace admits.
+	for _, stmt := range doc.Statement {
+		if strings.Contains(stmt.Resource, "/index/") {
+			t.Errorf("policy still grants %v on the index %q", stmt.Action, stmt.Resource)
+		}
+		if slices.Contains(stmt.Action, "dynamodb:Query") {
+			t.Errorf("policy still grants dynamodb:Query on %q", stmt.Resource)
+		}
 	}
 }
 
@@ -256,8 +248,8 @@ func TestISRPolicy_CannotReachAnotherAppsPrefix(t *testing.T) {
 		t.Errorf("web's S3 grant %q reaches the admin app", webDoc.Statement[0].Resource)
 	}
 
-	// The table and its index are addressed by a bare ARN both apps share, so
-	// the separation rests entirely on the leading-key condition.
+	// The table is addressed by a bare ARN both apps share, so the separation
+	// rests entirely on the leading-key condition.
 	for _, stmt := range webDoc.Statement[1:] {
 		keys := stmt.Condition["ForAllValues:StringLike"]["dynamodb:LeadingKeys"]
 		if len(keys) != 1 || keys[0] != "TAG#prod#proj#web#WEB1#*" {
@@ -288,8 +280,8 @@ func parsePolicy(t *testing.T, cfg isrConfig) policyDoc {
 	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
 		t.Fatalf("policy is not valid JSON: %v", err)
 	}
-	if len(doc.Statement) != 3 {
-		t.Fatalf("got %d statements, want 3", len(doc.Statement))
+	if len(doc.Statement) != 2 {
+		t.Fatalf("got %d statements, want 2", len(doc.Statement))
 	}
 	return doc
 }
@@ -319,10 +311,11 @@ func TestISREnv_AgreesWithThePolicyScope(t *testing.T) {
 	if want := "TAG#prod#proj123#marketing#build456#"; env["OCEL_ISR_TAG_NAMESPACE"] != want {
 		t.Errorf("OCEL_ISR_TAG_NAMESPACE = %q, want %q", env["OCEL_ISR_TAG_NAMESPACE"], want)
 	}
-	// Carried in the environment so the handler never hardcodes an index name
-	// the template alone controls.
-	if env["OCEL_STATE_TABLE_INDEX"] != bootstrap.StateTableIndexName {
-		t.Errorf("OCEL_STATE_TABLE_INDEX = %q, want %q", env["OCEL_STATE_TABLE_INDEX"], bootstrap.StateTableIndexName)
+	// The index name went with the query that used it: the tag clock reads the
+	// snapshot object under OCEL_ISR_PREFIX, and nothing in the bundle reads
+	// this variable any more.
+	if _, ok := env["OCEL_STATE_TABLE_INDEX"]; ok {
+		t.Errorf("OCEL_STATE_TABLE_INDEX = %q, want it unset", env["OCEL_STATE_TABLE_INDEX"])
 	}
 }
 
@@ -422,7 +415,7 @@ func TestISRCacheStore_LeavesNoStandingCredentialOnTheFunction(t *testing.T) {
 			t.Errorf("policy still grants %s; nothing on this role reads a parameter now", action)
 		}
 	}
-	if doc := parsePolicy(t, cfg); len(doc.Statement) != 3 {
-		t.Errorf("got %d statements, want the three cache grants and nothing more", len(doc.Statement))
+	if doc := parsePolicy(t, cfg); len(doc.Statement) != 2 {
+		t.Errorf("got %d statements, want the two cache grants and nothing more", len(doc.Statement))
 	}
 }
