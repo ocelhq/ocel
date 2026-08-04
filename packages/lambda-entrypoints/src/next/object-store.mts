@@ -48,11 +48,3 @@ export function adoptedObjectStore(): ObjectStore | null {
 export function providerObjectStore(): ObjectStore {
   return { bucket: env("OCEL_ISR_BUCKET"), client: new S3Client({}) };
 }
-
-// isrObjectStore is where the singular cache handler's entries live: the adopted
-// store when there is one, so the edge reads them without leaving its own
-// network, and the provider's own bucket when there is not. Both sides address
-// identical keys, so an un-adopted substrate is a rollback and not a migration.
-export function isrObjectStore(): ObjectStore {
-  return adoptedObjectStore() ?? providerObjectStore();
-}

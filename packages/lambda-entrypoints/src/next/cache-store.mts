@@ -8,7 +8,7 @@ import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 import { isrEntryWriter } from "./isr-writer.mjs";
 import {
-  isrObjectStore,
+  adoptedObjectStore,
   providerObjectStore,
   type ObjectStore,
 } from "./object-store.mjs";
@@ -17,6 +17,7 @@ import {
 // edge worker reads — so they live in @ocel/next-cache and are re-exported here
 // for the handler and its tests.
 import {
+  entryObjectKey,
   isGuardRejection,
   tagRecordUpdate,
   type CacheEntryFile,
@@ -74,18 +75,35 @@ export function awsCacheStore(): CacheStore {
   const table = env("OCEL_STATE_TABLE");
   const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
 
-  const entries = isrObjectStore();
+  // The writer worker puts into the adopted cache store and nothing else, so the
+  // two are one decision and not two: an adopted store means route entries leave
+  // through the writer, and the function holds no standing write credential for
+  // them at all. A deploy with a store and no writer would write to the
+  // provider's bucket and read from the edge's, missing on every request and
+  // re-rendering forever — so it fails here rather than degrading silently.
+  // Reads stay direct: the entry is already public to the edge. Fetch entries
+  // never go near the writer — their bodies are origin-private, and the writer
+  // only ever addresses the deploy's route-entry slice.
+  const adopted = adoptedObjectStore();
+  const entries = adopted ?? providerObjectStore();
   const fetches = providerObjectStore();
-  // Route entries are written through the ISR writer worker when this substrate
-  // adopted one, so the function holds no standing write credential for them.
-  // Reads stay direct — the entry is already public to the edge — and fetch
-  // entries never go near the writer: their bodies are origin-private, and the
-  // writer only ever addresses the deploy's route-entry slice.
-  const writer = isrEntryWriter();
+  const writer = adopted ? isrEntryWriter() : null;
 
   const ddb = new DynamoDBClient({});
 
-  const objectKey = (key: string) => `${prefix}/cache/${key}.cache.json`;
+  // The same grammar the writer worker validates against, since it is the same
+  // function: a key one accepts and the other refuses is a route that never
+  // caches. A key that cannot be addressed inside this deploy's prefix is a bug
+  // in the caller, so it throws here rather than reaching either store.
+  const objectKey = (key: string) => {
+    const objectKey = entryObjectKey(prefix, key);
+    if (objectKey === null) {
+      throw new Error(
+        `ocel cache handler: cache key ${JSON.stringify(key)} is not addressable inside ${prefix}`,
+      );
+    }
+    return objectKey;
+  };
   const fetchKey = (hash: string) => `${prefix}/fetch-cache/${hash}.cache.json`;
   const tagPK = (tag: string) => `${tagNamespace}${tag}`;
 
@@ -122,8 +140,10 @@ export function awsCacheStore(): CacheStore {
   }
 
   return {
-    readEntry: (key) => read(entries, objectKey(key)),
-    writeEntry: (key, entry) =>
+    // Async so a refused key rejects rather than throwing at the call, which is
+    // what every caller of a Promise-returning method is written against.
+    readEntry: async (key) => read(entries, objectKey(key)),
+    writeEntry: async (key, entry) =>
       writer ? writer.write(key, entry) : write(entries, objectKey(key), entry),
     readFetch: (hash) => read(fetches, fetchKey(hash)),
     writeFetch: (hash, entry) => write(fetches, fetchKey(hash), entry),

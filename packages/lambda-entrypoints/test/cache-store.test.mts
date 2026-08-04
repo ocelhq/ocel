@@ -118,6 +118,7 @@ async function entryStore(responses: any[] = []) {
 
 test("reads entries out of the adopted cache store when one is injected", async () => {
   adoptStore();
+  adoptWriter();
   const { store, built, sent } = await entryStore([
     { Body: { transformToString: async () => `{"lastModified":1,"value":{}}` } },
   ]);
@@ -134,18 +135,56 @@ test("reads entries out of the adopted cache store when one is injected", async 
   });
 });
 
+// The writer worker puts into the adopted store and nowhere else, and the two
+// are adopted from separate parameters. A deploy holding one without the other
+// would write into the edge's bucket and read from the provider's — a miss on
+// every request, a re-render on every miss, and no signal anywhere. It is a
+// broken deploy, so it says so at the first thing that asks for a store.
+test("refuses to run with an adopted store and no writer to write into it", async () => {
+  adoptStore();
+
+  await expect(entryStore()).rejects.toThrow("OCEL_ISR_WRITER_URL");
+});
+
 // The edge reads exactly this key out of exactly this bucket, so origin and edge
 // meet on one object or they disagree about what is cached.
-test("writes entries to the adopted cache store at the key the edge reads", async () => {
+test("reads entries from the adopted store at the key the edge writes", async () => {
   adoptStore();
-  const { store, sent } = await entryStore();
+  adoptWriter();
+  const { store, sent } = await entryStore([
+    { Body: { transformToString: async () => `{"lastModified":1,"value":{}}` } },
+  ]);
 
-  await store.writeEntry("blog/post", { lastModified: 1, value: {} });
+  await store.readEntry("blog/post");
 
   expect(sent[0]).toMatchObject({
     Bucket: "isr",
     Key: "prod/proj/app/BID/cache/blog/post.cache.json",
   });
+});
+
+// The origin and the writer derive the entry key with the same function, so a
+// route the origin reads back is a route the writer was willing to write.
+// `trailingSlash: true` produces one of these on every route, and the writer
+// used to refuse it — permanently, and where nobody could see it.
+test("reads back a trailing-slash route at the key the writer accepts", async () => {
+  adoptStore();
+  adoptWriter();
+  const { store, sent } = await entryStore([
+    { Body: { transformToString: async () => `{"lastModified":1,"value":{}}` } },
+  ]);
+
+  await store.readEntry("blog/");
+
+  expect(sent[0]).toMatchObject({ Key: "prod/proj/app/BID/cache/blog/.cache.json" });
+});
+
+test("refuses a key that would address something outside the deploy's prefix", async () => {
+  adoptStore();
+  adoptWriter();
+  const { store } = await entryStore();
+
+  await expect(store.readEntry("../other/index")).rejects.toThrow("not addressable");
 });
 
 // Fetch entries hold upstream response bodies — origin-private data that must
@@ -154,6 +193,7 @@ test("writes entries to the adopted cache store at the key the edge reads", asyn
 // backends diverge: same prefix, different bucket, different credentials.
 test("keeps fetch entries on the provider's bucket even when a store is adopted", async () => {
   adoptStore();
+  adoptWriter();
   const { store, built, sent } = await entryStore([
     { Body: { transformToString: async () => `{"lastModified":9,"value":{}}` } },
   ]);
@@ -174,6 +214,7 @@ test("keeps fetch entries on the provider's bucket even when a store is adopted"
 
 test("writes fetch entries to the provider's bucket under the fetch prefix", async () => {
   adoptStore();
+  adoptWriter();
   const { store, sent } = await entryStore();
 
   await store.writeFetch("deadbeef", { lastModified: 1, value: {} });
@@ -205,6 +246,7 @@ test("stays on the provider's own bucket when no store is adopted", async () => 
 // origin render to subsidize the edge is the trade this epic refuses.
 test("leaves the tag path on DynamoDB when a store is adopted", async () => {
   adoptStore();
+  adoptWriter();
   const { store, sends } = await storeWithResponses([
     { Responses: { [TABLE]: [tagItem("products", 111)] } },
   ]);
