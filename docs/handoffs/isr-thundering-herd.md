@@ -44,6 +44,33 @@ Subagent-driven throughout: a fresh agent implements, a second reviews, a third 
 review fixes. The orchestrator does not write code. Each PR gets unit + e2e coverage; the
 load/herd harness lands with PR 8 and is then run against the whole stack.
 
+Agents own the mechanics end to end — claiming and closing bd issues, wiring dependencies,
+labelling, branching, committing. None of that is a human's job. The only things that stop
+the chain are pushing, creating PRs, and deploying to a real account.
+
+**One agent per worktree at a time.** Two agents in this worktree once switched branches
+under each other mid-run and a commit landed on the wrong branch. It was recovered, but
+serialize work on a branch rather than parallelising into the same checkout.
+
+## Environment preconditions
+
+Cloudflare credentials were exported interactively in a prior session, so **a fresh session
+starts without them** and any deploy or API call will fail in ways that read as a
+misconfiguration rather than a missing credential:
+
+```bash
+export CLOUDFLARE_API_TOKEN=<token>
+export CLOUDFLARE_ACCOUNT_ID=a1731fc73cb2bf6b2979c98033012ca8   # account "Ocel"
+```
+
+Putting those in the shell profile makes the problem go away permanently. Verify with
+`curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+https://api.cloudflare.com/client/v4/user/tokens/verify` — expect `200`. Zones on the
+account: `ocel.app`, `ocel.dev`, `ocel.site`. AWS is authenticated separately and was
+working (`363236815301`).
+
+`wrangler whoami` returns empty even with a valid token; use the API check above instead.
+
 ## Standing notes
 
 **Writer retirement is bounded, not instant (PR 2).** The writer worker memoizes each
@@ -173,14 +200,32 @@ and claims every deployment lands on workers.dev.
 
 ## Next step
 
-Review PR 2, then branch `isr-herd/03-manifest-projection` off `isr-herd/02-isr-writer` and
-dispatch `ocelhq-wvag.3`.
+**PR 2 has not been reviewed since it changed.** It was reviewed once, at 8 commits. It now
+has 16: eight review fixes, then the entry-read rerouting, which is a scope addition that has
+had no independent scrutiny at all. Review the whole branch again before building on it —
+`git diff isr-herd/01-cache-api-spike...isr-herd/02-isr-writer`.
 
-PR 3 deletes `set`'s prior-entry GET (`carryForwardVariantHeaders` in
+Weight the review toward the parts that changed after the first pass:
+
+- **Fail-open on the read path.** Next calls `get()` on every request to a cached route and
+  does not wrap it. Try to find any input that makes `readEntry` throw into a render rather
+  than return a miss.
+- **The auth memo, now on the hot path.** It was sized for writes. Confirm reads add no
+  Durable Object round trip, and that the 60 s retirement bound in "Standing notes" is still
+  what the code delivers.
+- **The `isrObjectStore()` deletion and the new deploy-time agreement gate**, which made six
+  Go tests invalid because they adopted a cache store without a writer. Confirm the gate
+  fails in both directions and that no prune or teardown path trips it.
+- The first review's own verdict is in this session's history: the key-derivation confinement
+  held under percent-encoded traversal, prefix confusion and key injection. Re-verify it now
+  that a read endpoint shares the same derivation.
+
+Then branch `isr-herd/03-manifest-projection` off `isr-herd/02-isr-writer` and dispatch
+`ocelhq-wvag.3`. PR 3 deletes `set`'s prior-entry GET (`carryForwardVariantHeaders` in
 `packages/lambda-entrypoints/src/next/cache-handler.mts`), sourcing `rscHeaders` /
-`segmentHeaders` from a build-time manifest projection instead. Note that read is now a
-writer round trip rather than a direct R2 GET, which makes deleting it worth slightly more
-than the epic costed it at.
+`segmentHeaders` from a build-time manifest projection instead. That read is now a writer
+round trip rather than a direct R2 GET, so deleting it is worth slightly more than the epic
+costed it at.
 
 Two live threads to carry forward:
 
@@ -188,3 +233,22 @@ Two live threads to carry forward:
   than at PR 8.
 - `ocelhq-wvag.4` now owns the last standing R2 credential's removal. See "The credential is
   narrowed, not gone" above.
+
+## The one decision waiting on a human
+
+`ocelhq-wvag.10` — live e2e for the writer — needs authorization, not just scheduling.
+Running a throwaway probe on a zone route (PR 1) and standing up **account-level
+infrastructure** are different things, and the second has not been approved.
+
+What is unproven until it runs: the script uploading with its DO migration tag on a first
+bootstrap, the R2 binding resolving to the real bucket, a deployed Lambda authenticating
+against a seeded hash and landing an entry at the key the edge reads, a genuine R2 429
+(only unit-tested against a fake throw), and `retireISRWriter` against a real prune.
+
+That is a meaningful share of PR 2's risk, and it compounds: PR 4 routes snapshot writes
+through the same worker, so a wrong assumption here propagates. The tradeoff is that
+approving it puts a new account-level worker with a bucket-wide R2 binding on the Ocel
+account before the stack that justifies it is complete.
+
+Either answer is workable. It just should not be decided by an agent inferring consent from
+the fact that credentials happen to be present.
