@@ -26,7 +26,7 @@ guarantor of invalidation.
 main
  └─ 1  isr-herd/01-cache-api-spike        ocelhq-wvag.1   ✅ CLOSED (measured)
      └─ 2  isr-writer worker + DO          ocelhq-wvag.2  ✅ code complete, not pushed
-         └─ 3  manifest projection         ocelhq-wvag.3
+         └─ 3  manifest projection         ocelhq-wvag.3  ✅ code complete, not pushed
              └─ 4  streams publisher       ocelhq-wvag.4
                  └─ 5  origin reads snapshot ocelhq-wvag.5
                      └─ 6  get drops BatchGetItem ocelhq-wvag.6
@@ -83,6 +83,29 @@ memo. Read decision 6d and commit `79900d5`'s message with that bound in mind �
 worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
+
+**PR 3 (`ocelhq-wvag.3`) — code complete, NOT pushed.**
+
+Branch `isr-herd/03-manifest-projection`, rooted on PR 2. Serves decisions 4 and 5.
+
+`next build` now emits a slim projection — route -> `{ rscHeaders, segmentHeaders }`, nothing
+else — into every `.func` as `variant-headers.json`, alongside the launcher and `config.json`
+the adapter already writes there. `set` reads it from the bundle and `carryForwardVariantHeaders`
+is gone: a revalidation write is **one PUT and zero GETs**, and the non-atomic
+read-modify-write went with it. Since PR 2 that GET was a writer round trip, so this removes
+a network hop from every `set`, not just an R2 read.
+
+The entry a build seeds and the projection a rewrite reseeds from are now derived by one
+function over one grouping of a route's prerender outputs, so they cannot drift.
+
+Nothing is fetched at runtime. Bundling is what makes a Lambda for build N unable to read
+build M's headers; a cold-start fetch from S3 was considered and rejected in decision 5.
+
+Verified: `packages/next-runtime` 156 tests; `packages/lambda-entrypoints` 209 of 210 (the
+one failure is the known pre-existing `test/tag-clock.test.mts`, identical on the base
+commit); `workers/nextjs` 523; `packages/next-cache` 34; `pnpm -r typecheck` clean except the
+four `examples/*` packages that fail on the base commit. No Go changed — a `.func` is zipped
+whole, so the new file rides the existing artifact path.
 
 **PR 2 (`ocelhq-wvag.2`) — code complete, NOT pushed, issue in progress.**
 
@@ -220,12 +243,8 @@ Weight the review toward the parts that changed after the first pass:
   held under percent-encoded traversal, prefix confusion and key injection. Re-verify it now
   that a read endpoint shares the same derivation.
 
-Then branch `isr-herd/03-manifest-projection` off `isr-herd/02-isr-writer` and dispatch
-`ocelhq-wvag.3`. PR 3 deletes `set`'s prior-entry GET (`carryForwardVariantHeaders` in
-`packages/lambda-entrypoints/src/next/cache-handler.mts`), sourcing `rscHeaders` /
-`segmentHeaders` from a build-time manifest projection instead. That read is now a writer
-round trip rather than a direct R2 GET, so deleting it is worth slightly more than the epic
-costed it at.
+PR 3 has landed on `isr-herd/03-manifest-projection` and is unreviewed. Branch
+`isr-herd/04-streams-publisher` off it and dispatch `ocelhq-wvag.4`.
 
 Two live threads to carry forward:
 
