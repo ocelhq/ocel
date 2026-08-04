@@ -30,12 +30,23 @@
         "name": "ISR_WRITER_DO",
         "class_name": "IsrDeploy",
       },
+      {
+        "name": "ISR_SNAPSHOT_DO",
+        "class_name": "IsrSnapshot",
+      },
     ],
   },
+  // A cumulative log, not a declaration of the current state: every tag stays
+  // here forever, and an account already carrying v1 is brought forward by the
+  // steps it has not applied yet.
   "migrations": [
     {
       "tag": "v1",
       "new_sqlite_classes": ["IsrDeploy"],
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": ["IsrSnapshot"],
     },
   ],
 }
