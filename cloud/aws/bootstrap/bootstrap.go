@@ -375,7 +375,7 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	if !isrWriterAdopted {
 		report(log, "this substrate adopted no ISR writer, so no tag publisher is created; there is no edge replica for it to publish into")
 	} else if !code.publisher.present() {
-		report(log, "no tag publisher artifact is pinned in this provider build; none is created, and tag invalidations reach the edge the way they did before")
+		report(log, "no tag publisher artifact is pinned in this provider build; none is created, so no origin-raised invalidation reaches a build's edge replica — only the ones raised at the edge itself do. The origin's own tag state is authoritative and unaffected")
 	}
 
 	if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, code, RequiredBootstrapVersion), namedIAM); err != nil {

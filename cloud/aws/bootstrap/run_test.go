@@ -555,3 +555,31 @@ func TestRun_PublisherFollowsTheISRWriterAdoption(t *testing.T) {
 		})
 	}
 }
+
+// TestRun_UnpinnedPublisherSaysWhatStopsReachingTheEdge holds an operator-facing
+// message to what is actually true. It used to promise that invalidations
+// "reach the edge the way they did before ... the Lambda tier's own publisher
+// and the DynamoDB fallback behind it" — but that publisher is gone, so with no
+// publisher pinned nothing carries an origin-raised invalidation to a build's
+// edge replica at all.
+func TestRun_UnpinnedPublisherSaysWhatStopsReachingTheEdge(t *testing.T) {
+	cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+	ed := &fakeEdge{out: edge.BootstrapOutput{
+		Trust:  edge.TrustExternal,
+		Offers: []edge.Offer{{Kind: edge.OfferISRWriter, Values: offeredISRWriter("", "cred")}},
+	}}
+
+	var logged []string
+	logf := func(msg string) { logged = append(logged, msg) }
+	if err := run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), stackPins{}, productionSubstrate(), nil, logf); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+
+	all := strings.Join(logged, "\n")
+	if !strings.Contains(all, "no origin-raised invalidation reaches a build's edge replica") {
+		t.Errorf("an unpinned publisher does not say what stops reaching the edge:\n%s", all)
+	}
+	if strings.Contains(all, "the way they did before") {
+		t.Errorf("an unpinned publisher still claims invalidations reach the edge as before:\n%s", all)
+	}
+}

@@ -15,12 +15,18 @@ package bootstrap
 // BOTH CONSTANTS ARE EMPTY PLACEHOLDERS AND MUST BE FILLED AT RELEASE
 // (ocelhq-wvag.14). No release asset has been cut yet, so nothing can be
 // verified and this build pins nothing. An unpinned build creates no publisher:
-// bootstrap says so and skips it, the stack renders no Lambda, no stream
-// consumer, no DLQ and no alarm, and a build's tag-clock replica is published by
-// whatever published it before — which, until ocelhq-wvag.6 removes it, is the
-// Lambda tier's own publisher and the DynamoDB fallback behind it. That
-// degradation is deliberate: a placeholder digest that let an unverified
-// artifact through would be worse than no publisher.
+// bootstrap says so and skips it, and the stack renders no Lambda, no stream
+// consumer, no DLQ and no alarm.
+//
+// Nothing then carries an origin-raised invalidation to a build's edge replica.
+// The Lambda tier's own publisher was deleted when the durable tag write became
+// the whole raise, so this consumer is the only thing that would have carried
+// it; only invalidations raised at the edge itself reach the replica. What that
+// costs is bounded: the origin reads the state table, which is the authoritative
+// clock and is unaffected, so an unpinned build serves correct pages and a stale
+// edge replica until ocelhq-wvag.14 pins the artifact. That degradation is
+// deliberate: a placeholder digest that let an unverified artifact through would
+// be worse than no publisher.
 //
 // To pin a release, in one commit:
 //  1. `pnpm --filter @ocel/tag-publisher zip` and record
