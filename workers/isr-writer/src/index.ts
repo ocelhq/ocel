@@ -49,6 +49,12 @@ interface Memo {
 
 const secretHashes = new Map<string, Memo>();
 
+// Reads in flight, so a herd arriving on one deploy before its memo is filled
+// shares a single round trip instead of queueing one apiece at a
+// single-threaded object. A read that rejects is not left here: the next
+// request starts a new one.
+const registryReads = new Map<string, Promise<Memo>>();
+
 function memoized(isrPrefix: string): Memo | undefined {
   const memo = secretHashes.get(isrPrefix);
   if (memo === undefined) return undefined;
@@ -65,12 +71,16 @@ function memoize(isrPrefix: string, hash: string | undefined, refreshed: boolean
   return memo;
 }
 
-async function fromRegistry(
-  env: Env,
-  isrPrefix: string,
-  refreshed: boolean,
-): Promise<Memo> {
-  return memoize(isrPrefix, await stub(env, isrPrefix).secretHash(), refreshed);
+function fromRegistry(env: Env, isrPrefix: string, refreshed: boolean): Promise<Memo> {
+  const inFlight = registryReads.get(isrPrefix);
+  if (inFlight !== undefined) return inFlight;
+
+  const read = stub(env, isrPrefix)
+    .secretHash()
+    .then((hash) => memoize(isrPrefix, hash, refreshed))
+    .finally(() => registryReads.delete(isrPrefix));
+  registryReads.set(isrPrefix, read);
+  return read;
 }
 
 async function matches(memo: Memo, token: string): Promise<boolean> {

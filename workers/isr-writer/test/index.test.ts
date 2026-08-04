@@ -287,26 +287,57 @@ describe("routing", () => {
   });
 });
 
-describe("secret rotation", () => {
-  // A redeploy of the same build reseeds the same isrPrefix with a freshly
-  // derived secret. Reseeding behind the worker's back — straight into the DO's
-  // storage — is what an isolate that never saw the initialize sees, so this is
-  // the case where the memo is genuinely a generation behind.
-  async function reseedBehindTheWorker(prefix: string, secret: string) {
-    const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
-    const hash = await sha256Hex(secret);
-    await runInDurableObject(stub, (_instance, ctx) =>
-      registry.initialize(ctx.storage, hash),
-    );
-  }
+// Seeds a deploy straight into the DO's storage, leaving this isolate's memo
+// untouched — which is what every isolate but the one that served the
+// initialize sees, and what a redeploy of the same build does to all of them.
+async function seedBehindTheWorker(prefix: string, secret: string) {
+  const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
+  const hash = await sha256Hex(secret);
+  await runInDurableObject(stub, (_instance, ctx) =>
+    registry.initialize(ctx.storage, hash),
+  );
+}
 
+// The memo only spares the DO once it is filled. A cold isolate taking a herd
+// on one deploy — the case this whole worker exists for — must not turn every
+// request in it into its own round trip to a single-threaded object.
+describe("concurrent registry reads", () => {
+  it("costs one Durable Object round trip for a herd against a cold memo", async () => {
+    const prefix = freshPrefix();
+    await seedBehindTheWorker(prefix, "write-secret");
+    const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
+
+    const results = await Promise.all(
+      Array.from({ length: 10 }, (_, i) => writeEntryReq(prefix, `k${i}`, "write-secret")),
+    );
+    for (const res of results) expect(res.status).toBe(204);
+    expect(secretHash).toHaveBeenCalledTimes(1);
+    secretHash.mockRestore();
+  });
+
+  // Coalescing must not cache the failure: a DO that was unreachable once has to
+  // be reachable on the next request, not for the memo's lifetime.
+  it("retries after a registry read that failed", async () => {
+    const prefix = freshPrefix();
+    await seedBehindTheWorker(prefix, "write-secret");
+    const secretHash = vi
+      .spyOn(IsrDeploy.prototype, "secretHash")
+      .mockRejectedValueOnce(new Error("durable object unreachable"));
+
+    await expect(writeEntryReq(prefix, "a", "write-secret")).rejects.toThrow();
+    expect((await writeEntryReq(prefix, "b", "write-secret")).status).toBe(204);
+    secretHash.mockRestore();
+  });
+});
+
+describe("secret rotation", () => {
   it("accepts the reseeded secret and refuses the superseded one", async () => {
     const prefix = freshPrefix();
     await initialize(prefix, "first-secret");
     // Warms the memo with the first generation's hash.
     expect((await writeEntryReq(prefix, "a", "first-secret")).status).toBe(204);
 
-    await reseedBehindTheWorker(prefix, "second-secret");
+    await seedBehindTheWorker(prefix, "second-secret");
     expect((await writeEntryReq(prefix, "b", "second-secret")).status).toBe(204);
     expect((await writeEntryReq(prefix, "c", "first-secret")).status).toBe(401);
   });
@@ -317,10 +348,10 @@ describe("secret rotation", () => {
   // redeploy is refused for a whole memo lifetime everywhere it did not land.
   it("accepts a redeploy's secret in an isolate whose memo came from a cold fill", async () => {
     const prefix = freshPrefix();
-    await reseedBehindTheWorker(prefix, "first-secret");
+    await seedBehindTheWorker(prefix, "first-secret");
     expect((await writeEntryReq(prefix, "a", "first-secret")).status).toBe(204);
 
-    await reseedBehindTheWorker(prefix, "second-secret");
+    await seedBehindTheWorker(prefix, "second-secret");
     expect((await writeEntryReq(prefix, "b", "second-secret")).status).toBe(204);
   });
 
