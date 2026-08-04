@@ -23,7 +23,17 @@ beforeEach(() => {
   process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#prod#proj#app#BID#";
   process.env.OCEL_STATE_TABLE_INDEX = "gsi1";
   for (const name of Object.keys(storeEnv)) delete process.env[name];
+  // Likewise opt-in: absent, entry writes go straight to the object store.
+  delete process.env.OCEL_ISR_WRITER_URL;
+  delete process.env.OCEL_ISR_WRITER_SECRET;
 });
+
+// What the deploy injects when this substrate adopted an ISR writer.
+const adoptWriter = () =>
+  Object.assign(process.env, {
+    OCEL_ISR_WRITER_URL: "https://writer.example/prod/proj/app/BID/entry",
+    OCEL_ISR_WRITER_SECRET: "write-secret",
+  });
 
 afterEach(() => {
   vi.useRealTimers();
@@ -393,4 +403,47 @@ test("an older singular write cannot walk back a newer plural one", async () => 
 
   const page = await useStore.queryTagRecords(0);
   expect(page.records[0]).toMatchObject({ expired: 2_000, writtenAt: 2_000 });
+});
+
+// With a writer adopted, a route entry leaves through it and never through the
+// object-store client — which is the whole credential-hygiene argument: the
+// function no longer needs a standing write credential for entries.
+test("routes entry writes through the ISR writer when one is injected", async () => {
+  adoptStore();
+  adoptWriter();
+  const fetches: Array<[string, any]> = [];
+  vi.stubGlobal("fetch", async (url: any, init: any) => {
+    fetches.push([String(url), init]);
+    return new Response(null, { status: 204 });
+  });
+
+  const { store, sent } = await entryStore();
+  await store.writeEntry("blog/post", { lastModified: 1, value: {} });
+
+  expect(fetches).toHaveLength(1);
+  expect(fetches[0][0]).toBe(
+    "https://writer.example/prod/proj/app/BID/entry?key=blog%2Fpost",
+  );
+  expect(sent).toHaveLength(0);
+});
+
+// Fetch entries carry origin-private upstream bodies and must never reach the
+// edge's store, writer or not.
+test("keeps fetch entries off the ISR writer", async () => {
+  adoptStore();
+  adoptWriter();
+  const fetches: string[] = [];
+  vi.stubGlobal("fetch", async (url: any) => {
+    fetches.push(String(url));
+    return new Response(null, { status: 204 });
+  });
+
+  const { store, sent } = await entryStore();
+  await store.writeFetch("deadbeef", { lastModified: 1, value: {} });
+
+  expect(fetches).toHaveLength(0);
+  expect(sent[0]).toMatchObject({
+    Bucket: "assets",
+    Key: "prod/proj/app/BID/fetch-cache/deadbeef.cache.json",
+  });
 });

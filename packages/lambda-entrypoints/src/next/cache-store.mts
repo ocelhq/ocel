@@ -6,6 +6,7 @@ import {
 } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
+import { isrEntryWriter } from "./isr-writer.mjs";
 import {
   isrObjectStore,
   providerObjectStore,
@@ -75,6 +76,12 @@ export function awsCacheStore(): CacheStore {
 
   const entries = isrObjectStore();
   const fetches = providerObjectStore();
+  // Route entries are written through the ISR writer worker when this substrate
+  // adopted one, so the function holds no standing write credential for them.
+  // Reads stay direct — the entry is already public to the edge — and fetch
+  // entries never go near the writer: their bodies are origin-private, and the
+  // writer only ever addresses the deploy's route-entry slice.
+  const writer = isrEntryWriter();
 
   const ddb = new DynamoDBClient({});
 
@@ -116,7 +123,8 @@ export function awsCacheStore(): CacheStore {
 
   return {
     readEntry: (key) => read(entries, objectKey(key)),
-    writeEntry: (key, entry) => write(entries, objectKey(key), entry),
+    writeEntry: (key, entry) =>
+      writer ? writer.write(key, entry) : write(entries, objectKey(key), entry),
     readFetch: (hash) => read(fetches, fetchKey(hash)),
     writeFetch: (hash, entry) => write(fetches, fetchKey(hash), entry),
 
