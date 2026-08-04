@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "main": "./dist/next-adapter.mjs",
+  "dependencies": {
+    "@ocel/next-cache": "workspace:*"
+  },
   "scripts": {
     "build": "tsc && node scripts/copy-edge-handler.mjs",
     "typecheck": "tsc --noEmit",

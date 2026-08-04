@@ -26,6 +26,7 @@ export {
   type TagSnapshotStore,
 } from "./tag-snapshot.mjs";
 export type { EdgeCacheRpc, FetchCacheEntry } from "./edge-cache-rpc.mjs";
+export { cacheKey, variantHeadersFile } from "./naming.mjs";
 
 // A cache entry exactly as it sits in S3: one object per route holding the html,
 // the RSC payload and any PPR segments together, so a read is a single GET and a
@@ -136,14 +137,6 @@ export function bytesToBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
   return btoa(binary);
-}
-
-// cacheKey turns Next's key into the object name the adapter seeded at build
-// time. Route entries only: fetch entries are keyed by their own hash into a
-// separate, AWS-private bucket, which no edge reader can reach — so their keying
-// lives with the Lambda store rather than in this shared module.
-export function cacheKey(key: string): string {
-  return key === "/" || key === "" ? "index" : key.replace(/^\//, "");
 }
 
 // entryObjectKey is where a route entry lives in the ISR store. Two sides derive

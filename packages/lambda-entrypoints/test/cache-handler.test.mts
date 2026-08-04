@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { type TagRecord } from "@ocel/next-cache";
+import { variantHeadersFile, type TagRecord } from "@ocel/next-cache";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
 import { runWithWaitUntil } from "../src/shared/background.mjs";
@@ -386,12 +386,6 @@ function seedProjection(
 ): void {
   OcelCacheHandler.variantHeaders = projection;
 }
-
-// What the adapter lays beside the function, spelled out rather than imported:
-// this package cannot load the adapter (it needs `next`) and the adapter cannot
-// load this handler (it needs the AWS SDK), so both suites pin the name against
-// this literal and a rename that reaches only one side fails here.
-const variantHeadersFile = "variant-headers.json";
 
 // The projection on disk where the handler reads it from — the only way to drive
 // what an actual bundle hands the loader. `null` writes no file at all.

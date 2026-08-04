@@ -11,6 +11,7 @@ import {
   cacheKey,
   deserialize as deserializeBytes,
   tagsOf,
+  variantHeadersFile,
 } from "@ocel/next-cache";
 import { background } from "../shared/background.mjs";
 import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
@@ -75,12 +76,6 @@ function cacheControlOf(ctx: any): CacheEntryFile["cacheControl"] | undefined {
   if (typeof revalidate !== "number" && revalidate !== false) return undefined;
   return { revalidate, ...(typeof expire === "number" && { expire }) };
 }
-
-// The build's projection of each prerendered route's per-variant headers, laid
-// beside the function by the adapter under this name. It ships in the bundle
-// rather than being fetched, so the code reading it and the build that wrote it
-// are the same artifact and can never be a version apart.
-const variantHeadersFile = "variant-headers.json";
 
 // A route with no projected headers is a route the build never prerendered, and
 // an unreadable projection is a bundle that would have had nothing to reseed
