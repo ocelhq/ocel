@@ -131,6 +131,16 @@ type isrConfig struct {
 	// parameter not existing, which the membrane reads as "stay on S3".
 	CacheStoreParam    string
 	CacheStoreParamARN string
+
+	// WriterURL and WriterSecret point the cache handler's entry writes at the
+	// account-level ISR writer worker (epic decisions 6/6a): the worker holds
+	// the bucket natively, so the function needs no object-store credentials of
+	// its own to write an entry. Both are plain env vars, deliberately — an SSM
+	// SecureString would put a GetParameter on the cold path to buy protection
+	// a per-deploy secret that rotates every build does not need. Empty when the
+	// substrate adopted no writer.
+	WriterURL    string
+	WriterSecret string
 }
 
 // tagNamespace is the partition-key prefix this app's ISR tag records live
@@ -160,6 +170,13 @@ func (c isrConfig) env() map[string]string {
 	// the fetch entirely, which is what keeps an older substrate on S3.
 	if c.CacheStoreParam != "" {
 		env["OCEL_CACHE_STORE_PARAM"] = c.CacheStoreParam
+	}
+	// Both or neither: the handler routes entry writes through the writer only
+	// when it has an address and a credential for it, and falls back to the
+	// object store it already addresses otherwise.
+	if c.WriterURL != "" && c.WriterSecret != "" {
+		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
+		env["OCEL_ISR_WRITER_SECRET"] = c.WriterSecret
 	}
 	return env
 }

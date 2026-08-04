@@ -249,6 +249,14 @@ func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, l
 		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, t.CachePrefix); err != nil {
 			return err
 		}
+		// The build's write secret retires with the entries it wrote (epic
+		// decision 6d): an empty CachePrefix means a surviving Deployment still
+		// serves this build, so its writer must keep working.
+		if t.CachePrefix != "" {
+			if err := retireISRWriter(ctx, cfg, t.CachePrefix); err != nil {
+				return err
+			}
+		}
 	}
 	return nil
 }
