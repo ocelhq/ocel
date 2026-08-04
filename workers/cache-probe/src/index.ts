@@ -1,4 +1,12 @@
 import { isolateId } from "./isolate";
+import {
+  claim,
+  controlPath,
+  parseScope,
+  racePath,
+  record,
+  scopedKey,
+} from "./race";
 
 // Every judgement is left to the runner. This worker reports what it saw and
 // nothing more — it never compares two isolates' clocks, because Date.now() in a
@@ -78,8 +86,59 @@ export default {
       return new Response("Method Not Allowed", { status: 405 });
     }
 
+    // Two racers must never be answered by one body. The zone's own edge cache
+    // sits in front of this worker, so every racing response is no-store and
+    // every racer's URL is unique by &seq — either alone would be enough, and
+    // a manufactured duplicate claim is not a mistake worth being clever about.
+    const racing = (body: unknown) =>
+      Response.json(body, { headers: { "cache-control": "no-store" } });
+
+    if (url.pathname === "/race") {
+      if (request.method !== "POST") return new Response("Method Not Allowed", { status: 405 });
+      const key = url.searchParams.get("key");
+      if (!key) return new Response("key is required", { status: 400 });
+      const scope = parseScope(url.searchParams.get("scope") ?? "offzone");
+      if (!scope) return new Response("scope must be onzone or offzone", { status: 400 });
+      const ttlSeconds = Number(url.searchParams.get("ttl") ?? "10");
+      if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) {
+        return new Response("ttl must be a positive number", { status: 400 });
+      }
+
+      const claimed = await claim(
+        caches.default,
+        scopedKey(scope, racePath(key), url.origin),
+        ttlSeconds,
+      );
+      return racing({ ...base, claimed, key, scope, seq: url.searchParams.get("seq") });
+    }
+
+    if (url.pathname === "/control") {
+      if (!run) return new Response("run is required", { status: 400 });
+      const scope = parseScope(url.searchParams.get("scope"));
+      if (!scope) return new Response("scope must be onzone or offzone", { status: 400 });
+      const mode = url.searchParams.get("mode") ?? "read";
+      if (mode !== "read" && mode !== "write") {
+        return new Response("mode must be read or write", { status: 400 });
+      }
+
+      const cache = caches.default;
+      const key = scopedKey(scope, controlPath(run), url.origin);
+
+      if (mode === "write") {
+        await cache.put(key, record(60, JSON.stringify({ run, writer: base.isolate })));
+        const verified = await cache.match(key);
+        return racing({ ...base, scope, mode, verified: verified !== undefined });
+      }
+
+      const hit = await cache.match(key);
+      const stored = hit ? ((await hit.json()) as { writer: string }) : null;
+      return racing({ ...base, scope, mode, hit: stored !== null, writer: stored?.writer ?? null });
+    }
+
     return new Response(
-      "cache-probe: GET /identity, PUT|GET /entry?run=<id>&ttl=<seconds>\n",
+      "cache-probe: GET /identity, PUT|GET /entry?run=<id>&ttl=<seconds>,\n" +
+        "  POST /race?key=<id>&seq=<n>&scope=<onzone|offzone>&ttl=<seconds>,\n" +
+        "  GET /control?run=<id>&scope=<onzone|offzone>&mode=<write|read>&seq=<n>\n",
       { status: 404 },
     );
   },
