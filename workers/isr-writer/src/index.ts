@@ -31,10 +31,10 @@ function stub(env: Env, isrPrefix: string) {
 //
 // Two consequences, both deliberate and both bounded by MEMO_TTL_MS:
 //
-// - `refreshed` records that this entry has already been re-read from the
-//   registry after a token failed against it. One re-read is what lets a
-//   redeploy's freshly derived secret in immediately; every further failure is
-//   refused off the memo, so a caller holding a bad token cannot drive DO load.
+// - `refreshed` records that a token has already failed against this entry and
+//   spent its one registry re-read. That re-read is what lets a redeploy's
+//   freshly derived secret in immediately; every further failure is refused off
+//   the memo, so a caller holding a bad token cannot drive DO load.
 // - a retirement this isolate never handled takes effect here only once the memo
 //   lapses, so `destroy` keeps authorizing writes for up to MEMO_TTL_MS in
 //   isolates that did not serve it. Closing that window would mean consulting the
@@ -65,8 +65,12 @@ function memoize(isrPrefix: string, hash: string | undefined, refreshed: boolean
   return memo;
 }
 
-async function fromRegistry(env: Env, isrPrefix: string): Promise<Memo> {
-  return memoize(isrPrefix, await stub(env, isrPrefix).secretHash(), true);
+async function fromRegistry(
+  env: Env,
+  isrPrefix: string,
+  refreshed: boolean,
+): Promise<Memo> {
+  return memoize(isrPrefix, await stub(env, isrPrefix).secretHash(), refreshed);
 }
 
 async function matches(memo: Memo, token: string): Promise<boolean> {
@@ -74,10 +78,10 @@ async function matches(memo: Memo, token: string): Promise<boolean> {
 }
 
 async function authorized(env: Env, isrPrefix: string, token: string): Promise<boolean> {
-  const memo = memoized(isrPrefix) ?? (await fromRegistry(env, isrPrefix));
+  const memo = memoized(isrPrefix) ?? (await fromRegistry(env, isrPrefix, false));
   if (await matches(memo, token)) return true;
   if (memo.refreshed) return false;
-  return matches(await fromRegistry(env, isrPrefix), token);
+  return matches(await fromRegistry(env, isrPrefix, true), token);
 }
 
 async function readJson<T>(request: Request): Promise<T | undefined> {

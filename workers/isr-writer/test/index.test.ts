@@ -311,6 +311,19 @@ describe("secret rotation", () => {
     expect((await writeEntryReq(prefix, "c", "first-secret")).status).toBe(401);
   });
 
+  // The isolate that serves the initialize is one of many. Every other isolate
+  // learns the deploy's hash from an ordinary cache miss, and that memo owes the
+  // next generation a re-read exactly as the initialize-seeded one does — or a
+  // redeploy is refused for a whole memo lifetime everywhere it did not land.
+  it("accepts a redeploy's secret in an isolate whose memo came from a cold fill", async () => {
+    const prefix = freshPrefix();
+    await reseedBehindTheWorker(prefix, "first-secret");
+    expect((await writeEntryReq(prefix, "a", "first-secret")).status).toBe(204);
+
+    await reseedBehindTheWorker(prefix, "second-secret");
+    expect((await writeEntryReq(prefix, "b", "second-secret")).status).toBe(204);
+  });
+
   // A retirement an isolate never saw takes effect there once its memo lapses.
   // The memo is a cache, and this is the bound on how stale it can be.
   it("refuses a write once the deploy has been retired and the memo has lapsed", async () => {
@@ -348,15 +361,16 @@ describe("secret rotation", () => {
   });
 
   // An unseeded deploy is memoized too, or garbage aimed at a prefix nobody
-  // deployed costs a round trip apiece.
-  it("re-reads the registry once for an unseeded deploy, however many tokens fail", async () => {
+  // deployed costs a round trip apiece. The first bad token spends both the cold
+  // fill and the memo's one re-read; every one after it is refused off the memo.
+  it("re-reads the registry twice for an unseeded deploy, however many tokens fail", async () => {
     const prefix = freshPrefix();
     const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
 
     for (let i = 0; i < 5; i++) {
       expect((await writeEntryReq(prefix, "a", `garbage-${i}`)).status).toBe(401);
     }
-    expect(secretHash).toHaveBeenCalledTimes(1);
+    expect(secretHash).toHaveBeenCalledTimes(2);
     secretHash.mockRestore();
   });
 });
