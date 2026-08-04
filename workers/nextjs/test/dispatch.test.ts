@@ -2,6 +2,7 @@ import { tagSnapshotKey } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
+import { sentinelUrl } from "../src/cache";
 import type { AssetBucket } from "../src/assets";
 
 // An in-memory R2-bucket-shaped store, keyed by "<prefix><pathname>" exactly as
@@ -657,10 +658,7 @@ describe("dispatchResult", () => {
   // already admitted a refresh of the route, and no entry is stored, so the
   // request is answered exactly as it would be otherwise.
   function coloHoldingSentinel(refreshKey: string): Cache {
-    const url = `https://refresh.ocel/${refreshKey
-      .split("/")
-      .map(encodeURIComponent)
-      .join("/")}`;
+    const url = sentinelUrl(refreshKey);
     return {
       match: async (request: Request) =>
         request.url === url ? new Response(null) : undefined,
