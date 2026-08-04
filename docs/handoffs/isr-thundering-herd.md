@@ -30,9 +30,14 @@ main
              └─ 4  streams publisher       ocelhq-wvag.4  ✅ CLOSED, reviewed, not pushed
                  └─ 5  origin reads snapshot ocelhq-wvag.5  ✅ CLOSED, reviewed, not pushed
                      └─ 6  get drops BatchGetItem ocelhq-wvag.6  ⛔ blocked on .13, .14
-                         └─ 7  edge L0/L1   ocelhq-wvag.7   ← next unblocked
+                         └─ 7  edge L0/L1   ocelhq-wvag.7   ✅ CLOSED, reviewed, not pushed
                              └─ 8  edge L2 lease ocelhq-wvag.8   ⛔ blocked on .9
 ```
+
+PR 7 was branched off **PR 5**, not PR 6, because `.6` is gated on two human decisions. Its
+issue was closed with `--force` past that dependency edge. **It will need rebasing once `.6`
+lands ahead of it** — they touch different files (`.6` is the origin Lambda, `.7` is the edge
+worker), so the rebase should be mechanical.
 
 Filed out of band: `ocelhq-wvag.9` (measure the L1 write-visibility window; **blocks `.8`**),
 `ocelhq-wvag.10` (live e2e for the writer), `ocelhq-wvag.11` (destroy leaves per-build writer
@@ -98,6 +103,92 @@ memo. Read decision 6d and commit `79900d5`'s message with that bound in mind �
 worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
+
+**PR 7 (`ocelhq-wvag.7`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
+
+Branch `isr-herd/07-edge-l0-l1`, rooted on **PR 5** (see the stack shape — it jumps the gated
+`.6`). Serves decisions 9 and 12. Two commits, both in `workers/nextjs`: nothing else in the
+repo is touched, and no Go changed.
+
+Two verified herds are closed:
+
+- **Variants no longer each start their own render.** Background refresh admission moved from
+  the full variant key to the route (`buildId:routePath`), which `index.ts` already computed
+  for the interception paths and which now rides on `CacheTarget.refreshKey`. One origin render
+  rewrites a route's whole entry — html, RSC and every segment — so route-scoped admission
+  refreshes every variant. **Storage stays variant-keyed**; `target.key` is still what is read,
+  written and joined.
+- **Cold-colo misses coalesce.** The fill is registered *before* `await origin()`, so a second
+  miss on the same entry joins it and is served the entry the leader wrote instead of issuing
+  its own render.
+
+**L1 is a 5 s sentinel on the colo-shared Cache API** (`https://refresh.ocel/<key>`), which
+carries the admission decision across isolates and past the in-flight window, at all three
+refresh sites (colo stale, PPR stale, interception stale). It is consulted only when the caller
+named a route: the image tier names none — an image is invalidated by its content hash
+changing, not by a stale route — and keeps its per-isolate dedupe untouched.
+
+Four things worth knowing:
+
+- **The join key must stay the variant, and this is the sharpest correctness edge in the PR.**
+  A joiner is answered with the leader's entry, so joining across variants would answer an
+  `.rsc` request with HTML. Route-keyed admission applies only to *background* refreshes, whose
+  response nobody serves. Both halves are commented at the sites and tested.
+- **Every cache error admits.** `caches.default` is inert on `*.workers.dev` (PR 1's finding),
+  so a domainless deploy sees every `match` miss and every `put` discarded — and degrades to
+  exactly the old per-isolate dedupe rather than to a suppressed refresh. Asserted against an
+  inert cache and against one whose `match`/`put`/`delete` all throw.
+- **A joined follower now reports `x-ocel-cache: HIT` where it reported `MISS`.** It was
+  answered from this colo's cache, so the header is honest, but dashboards reading MISS as "the
+  origin rendered for this request" will shift.
+- **The acceptance criteria are looser than they read**, deliberately, and the granularity is
+  recorded on the issue: miss collapse is per *isolate* (a blocking miss has nothing to serve
+  while it waits, so a sentinel cannot suppress it — that is `.8`'s job), and route collapse is
+  "roughly one per route per TTL", bounded by the Cache API having no CAS and by a render
+  longer than the TTL being re-admittable mid-flight. N → few, not N → 1, per the issue.
+
+### The review found one defect, and it was silent — the fifth round running
+
+Two independent reviews (standards + spec, the spec one weighted at the silent-failure classes
+that have produced every real finding in this stack). The spec review first *cleared* the four
+things most likely to be wrong — the join key is injective, the `.then` ordering that keeps
+`clone()` ahead of the body being consumed holds even when the promise is already settled, the
+`inFlight` map cannot collide now that it holds both route and variant keys, and every `catch`
+admits — and then found the one that mattered:
+
+- **A refresh that failed without throwing kept the sentinel.** The record was released only on
+  a throw, and *none* of the three refresh paths throw on a failed render: `store()` drops a
+  non-200 silently and the PPR path only cancels a body. An origin 500 therefore left the claim
+  standing and stopped the route refreshing colo-wide for a whole TTL, with no signal — while
+  the code's own comment claimed to have handled exactly that. An admitted refresh now reports
+  whether it **landed** (the origin answered ok), and a refresh that did not land releases.
+  Storing the bytes is deliberately not the test: on the interception path the render's real
+  effect is the Lambda rewriting R2, and a 200 this colo cannot store still did that work.
+
+Three quality findings were applied alongside it:
+
+- **The suppression window shrank by the render duration** — the claim was taken before the
+  render, so a 2 s render left siblings suppressed for 3 s of a 5 s TTL, and the window was
+  smallest exactly when renders were slowest. A landed refresh re-puts the record, so the TTL
+  runs from completion.
+- **The sentinel url had three spellings**, two of them in tests, so a change to the derivation
+  would have left both green and wrong — the same twice-derived-key-space class PR 3's review
+  found. Derived once and exported now.
+- `lookUp` named a call that can admit a background refresh and is made twice, once either side
+  of the join, which is precisely where that matters; and the admit branch restated its own
+  condition in a `??`.
+
+Two bounds were reviewed and **deliberately not fixed**: a follower of a slow leader whose
+response turns out unstorable pays the leader's latency plus its own render (the accepted cost
+of coalescing, versus a timeout carrying its own failure mode), and a render longer than the
+TTL can be re-admitted mid-flight. Both are commented at the site.
+
+Verified after the fixes: `workers/nextjs` 545/545 (was 531 before this PR), `pnpm typecheck`
+and `pnpm build` (`wrangler deploy --dry-run`) clean on the package; `pnpm -r --no-bail
+typecheck` clean except the four pre-existing `examples/*` packages. Every new assertion was
+mutation-checked — including reverting the registration to after the `await`, which fails with
+`TypeError: Body has already been used`, i.e. the clone-ordering invariant breaking rather than
+an assertion merely not matching.
 
 **PR 5 (`ocelhq-wvag.5`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
@@ -446,20 +537,36 @@ and claims every deployment lands on workers.dev.
 
 ## Next step
 
-**Nothing in the stack is waiting on scrutiny.** PRs 2, 3, 4 and 5 are all reviewed and their
-findings are fixed. `ocelhq-wvag.6` is **blocked on `.13` and `.14`**, both human gates, so the
-next unblocked implementation work is **`ocelhq-wvag.7`** — branch `isr-herd/07-edge-l0-l1` off
-`isr-herd/05-origin-reads-snapshot` and note it will need rebasing once `.6` lands ahead of it.
-`ocelhq-wvag.9` is the better thing to start first if a deploy can be authorized, since it
-blocks `.8` and needs live measurement.
+**Nothing in the stack is waiting on scrutiny.** PRs 2, 3, 4, 5 and 7 are all reviewed and their
+findings are fixed. Every remaining child is **blocked on a human**, so there is no unblocked
+implementation work left in this epic:
 
-Four review rounds have now landed eleven real defects rather than polish, and **in every
+- `ocelhq-wvag.6` — blocked on `.13` and `.14`, both human gates.
+- `ocelhq-wvag.8` — blocked on `.7` (now closed) and `.9`, which **needs a deploy**.
+- `ocelhq-wvag.9` — the one thing that unlocks the rest, and it needs live measurement on a
+  zone route. It is the highest-value next action if a deploy can be authorized.
+
+Two pieces of work remain that need no gate: **`ocelhq-wvag.12`** (collapse the twice-derived
+projection key and filename into `@ocel/next-cache`; needs a dist build on that package, so it
+touches Lambda and worker bundling — best done between PRs) and **`ocelhq-wvag.11`** (destroy
+leaves per-build writer DO instances behind).
+
+Five review rounds have now landed twelve real defects rather than polish, and **in every
 single case the failure was silent**: a write dropped with no log, a herd at the auth boundary,
 storage written for a caller who never authenticated, a projection that would miss forever if
 two derivations drifted, a snapshot that grows unboundedly because it was created without an
 anchor, one poison build quietly taking its batch-mates' invalidations to a DLQ, an alarm lit
-permanently from the moment of bootstrap. Not one of them threw. Keep weighting reviews toward
-*what fails without saying so* — that is where this stack's bugs actually live.
+permanently from the moment of bootstrap, a route that stopped refreshing colo-wide because its
+admission record was only ever released on a throw and nothing on that path throws. Not one of
+them threw. Keep weighting reviews toward *what fails without saying so* — that is where this
+stack's bugs actually live.
+
+A third method earned its keep on PR 7: **make the review clear the hard things explicitly
+before it hunts**. The spec brief named the four properties most likely to be quietly wrong
+(the join key's injectivity, the promise-ordering the `clone()` depends on, the shared in-flight
+map's key spaces, every `catch`'s direction) and asked for proof or a counterexample on each.
+It proved all four and then found the defect elsewhere — but a clean review that has *stated
+what it checked* is worth far more than one that merely reports nothing.
 
 Two methods have earned their keep and are worth repeating:
 
@@ -482,10 +589,24 @@ Standing constraints PR 5 inherited and every later reader of a snapshot inherit
 - **Two `tag-clock.json` copies per build still exist** — the R2 one the edge reads and the S3
   one the origin now reads. They converge independently and nothing compares them.
 
+Standing constraints PR 7 hands to PR 8, which builds L2 on top of L1:
+
+- **Admission is route-scoped; storage and the miss-path join are variant-scoped.** L2 keys on
+  `buildId:routePath` like L1 does. Do not extend route-scoped keying to anything whose response
+  is *served* to a request — a joiner is answered with the leader's bytes, so an `.rsc` request
+  joined to an HTML fill is answered with the wrong shape.
+- **Every layer admits on error.** L1 fails open on an inert cache, a missing `delete`, and a
+  `match`/`put`/`delete` that throws. Decision 10 already requires the same of L2.
+- **L1's sizing is measured, not assumed.** `refreshSentinelTtlSeconds = 5` in
+  `workers/nextjs/src/cache.ts` rests on the spike's ~200 ms cross-isolate visibility and its
+  exact 1–60 s TTLs. `ocelhq-wvag.9` measures the write-visibility window that sizes L2, and
+  that number is what tells you how much L1 leaks into L2 — do not size L2 off the epic's
+  original `1 − crossIsolateHitRate` formula, which degenerates to zero.
+
 Live threads to carry forward:
 
-- `ocelhq-wvag.9` blocks `.8`. It needs a deploy, like `.1` did, so start it early rather than
-  at PR 8.
+- `ocelhq-wvag.9` blocks `.8`. It needs a deploy, like `.1` did. With `.7` closed it is now the
+  **only** thing standing between this stack and its last PR, so it is the next action.
 - `ocelhq-wvag.13` and `ocelhq-wvag.14` both block `.6`. See the stack shape above.
 - `ocelhq-wvag.12` is best done between PRs — it needs a dist build on `@ocel/next-cache`, which
   touches Lambda and worker bundling.
