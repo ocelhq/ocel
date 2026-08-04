@@ -32,7 +32,7 @@ main
                      └─ 6a isr-herd/06a-publisher-alarms  3fb0c73  ocelhq-wvag.13 ✅ CLOSED
                          └─ 6  isr-herd/06-get-drops-batchget 162660a ocelhq-wvag.6 ⛔ on yo9b
                              └─ 7  isr-herd/07-edge-l0-l1  d9cc24b  ocelhq-wvag.7  ✅ CLOSED
-                                 ├─ 9  isr-herd/09-write-visibility 1616286 ocelhq-wvag.9 ✅ CLOSED (measured)
+                                 ├─ 9  isr-herd/09-write-visibility 85f73da+ ocelhq-wvag.9 ✅ CLOSED (measured, then re-measured)
                                  └─ 8  edge L2 lease       (unstarted) ocelhq-wvag.8  ← unblocked
 ```
 
@@ -124,35 +124,70 @@ Read `ocelhq-yo9b` first; it is the most consequential thing on this page.
 **`ocelhq-wvag.9` is measured and closed, so `.8` is unblocked** — see below; it changes two
 numbers `.8` was going to be built on, and one of them is not comfortable.
 
-### `ocelhq-wvag.9` — the write-visibility window is 10 ms, and PR 1's 201 ms was mostly its own instrument — **DONE**
+### `ocelhq-wvag.9` — the write-visibility window is 8 ms, and PR 1's 201 ms never contained it — **DONE**
 
-Branch `isr-herd/09-write-visibility`, rooted on `faac969` (tip of 07). Five commits, nothing
-pushed. Findings in `docs/research/cloudflare-cache-api-spike.md`, section "Follow-up: the L1
-write-visibility window"; the instrument is `workers/cache-probe/scripts/race.ts` plus
-`src/race.ts` and `src/race-analysis.ts`. The `ocel-cache-probe` deploy that took the
-measurement is torn down and both zone routes are verified gone.
+Branch `isr-herd/09-write-visibility`, rooted on `faac969` (tip of 07). **Ten commits**, the
+tenth being this handoff edit; last content commit `85f73da`. Nothing pushed. Findings in `docs/research/cloudflare-cache-api-spike.md`, section
+"Follow-up: the L1 write-visibility window"; the instrument is `workers/cache-probe/scripts/race.ts`
+plus `src/race.ts`, `src/race-analysis.ts` and `src/race-options.ts`. **Two deploys of
+`ocel-cache-probe` were taken and both are torn down**, verified via the API each time: the
+script is absent from the account's list and `probe.ocel.dev/*` / `probe.ocel.site/*` are absent
+from both zones' routes.
 
-Three things to carry forward:
+**The first pass's numbers were reviewed, re-measured, and two of them moved.** Read the doc's
+new §8 for the full account. What did not move: the key-scope control, the gap sweep's design,
+and the conclusion that a synchronized herd exceeds one DO per route by an order of magnitude.
+
+Four things to carry forward:
 
 - **Every colo-cache key in `workers/nextjs` is on a synthetic hostname that is on no zone**
   (`cache.ocel`, `refresh.ocel`, `isr.ocel`, `image.ocel`) and nothing had ever tested whether
   `caches.default` stores such a key. PR 1 only proved an *on-zone* key, and Miniflare stores
-  any hostname happily. It does store them — 254/254 cross-isolate reads, four runs, two zones.
+  any hostname happily. It does store them — 340/340 cross-isolate reads, five runs, two zones.
   All four tiers are live. This gate ran first because a failure would have superseded the
   issue with a P1 defect; it is worth knowing it was checked.
-- **`W = 10 ms`, not ~200 ms.** PR 1's 201 ms is ~10 ms of window, ~65 ms of round trip and
-  ~125 ms of PR 1's own cold sockets and 64-way burst queueing — it stamped elapsed time when a
-  read *response returned to the driver*. The comment in `workers/nextjs/src/cache.ts`
-  justifying `refreshSentinelTtlSeconds = 5` by citing "~200 ms" is wrong by a factor of
-  twenty; the constant it justifies is not, and the edit belongs to PR 8.
+- **`W = 8 ms`, not 10 and not ~200 ms.** The first sweep stepped 0, 5, 10, so the drop sat in a
+  5 ms bin and its upper edge was reported as a point value; a 1 ms sweep across that bin, 250
+  trials per Δ, twice, gives `measured` at 8 in both runs. **PR 1's 201 ms does not contain the
+  window at all** — PR 1 started its clock when the `PUT` *returned to the driver*, a full round
+  trip after the write executed at the edge, so the window had already elapsed twice over before
+  that clock started, and the old `10 + 65 + 125` decomposition double-counted it. Cold sockets
+  and 64-way queueing are the most likely explanation for the residual and that is **untested**.
+  The comment in `workers/nextjs/src/cache.ts` justifying `refreshSentinelTtlSeconds = 5` by
+  citing "~200 ms" is wrong by a factor of twenty-five; the constant is not, and the edit
+  belongs to PR 8.
 - **`.8`'s sizing arithmetic was wrong twice and its description is corrected.** "300 colos /
   sentinel TTL ≈ 30 rps" assumed a TTL of 10 (PR 7 shipped 5) and one escape per colo. Real
-  sizing is `R = 60 + 0.6·λ_colo`, which holds one DO per route for smooth traffic up to
-  λ ≈ 733 rps per colo. **It does not hold for a synchronized herd**: 128 simultaneous racers
-  produced 54 escapes over the 80 isolates they touched, so `E → I_colo` and `R → 5940 rps`,
-  6× the ceiling `.8` cites as its reason not to shard. Every colo's sentinel expires exactly
-  one TTL after it was taken, so colo-wide synchronization is the system's own default, not a
-  hypothetical. PR 8 must either rule that regime out or size for it.
+  smooth-traffic sizing is `R = 60 + 0.48·λ_colo`, holding one DO per route to λ ≈ 917 rps per
+  colo. **It does not hold for a synchronized herd**, and every colo's sentinel expires exactly
+  one TTL after it was taken, so colo-wide synchronization is the system's own default. But do
+  **not** derive that regime's number the way this page previously invited: measured `E/I` at
+  N=128 is **0.69–0.78 across four runs, never 1.00**. `E → I_colo` is a worst-case bound no run
+  reproduced. Applying the measured ratio to `I_colo ≥ 99` gives `E ≈ 68–77`, `R ≈ 4 100–4 640
+  rps`; the `E = I_colo` bound gives 5 940. Both are floors. PR 8 must label which row it sizes
+  against — the conclusion (an order of magnitude over the ceiling) is the same either way.
+- **Cross-isolate visibility is NOT uniform inside a colo, and this is new.** Found while
+  diagnosing the burst defect: one pair of sockets had *both* racers claiming 31 of 40 times at
+  zero separation, while another pair had the same socket win 79 of 80 **whichever was
+  dispatched first** — the winner was a property of the connection, not of the race. `W = 8 ms`
+  is a population statistic over isolate pairs, not a property every pair has. Anything in PR 8
+  reasoning about a *specific* pair of isolates is outside what was measured.
+
+**Two review rounds landed on this branch and both found dead detectors, the same class as every
+other finding in this stack.** `dispersionMs` — the burst's only concurrency guard — was stamped
+in the driver's dispatch loop before undici had written a byte, so it read 0.03–0.26 ms and the
+guard was false in every real run; it now comes from `undici:client:sendHeaders` and reads
+0.06–1.22 ms. `invariantViolations` was true by construction of its only caller and its
+certifying test hand-built inputs the driver cannot produce — the `ocelhq-yo9b` pattern verbatim
+— so it is deleted, and the live duplicate detector (`outcomeOf`'s echo check, which never
+fired) moved into `src/` where the suite reaches it. **The burst also sampled one socket pool per
+size, so 100 trials were one draw repeated**; the pool now rotates, and the burst and the gap
+sweep cross-validate at `N = 2` for the first time (1.60/1.73/1.82/1.83 against an independently
+measured 1.75–1.83).
+
+Verified: `workers/cache-probe` 95/95 tests, `pnpm typecheck` and `pnpm build` clean on the
+package; `pnpm -r --no-bail typecheck` clean except `examples/next-cache-lab` (see "Standing
+notes"). Fourteen mutations applied, each caught by the named test.
 
 ### `ocelhq-yo9b` — the fleet's membrane layer predates PR 2, so the origin's tag raise throws
 
@@ -723,8 +758,9 @@ that can write any object in the shared `ocel-edge-cache` bucket for every proje
 - **The colo cache is effectively fully shared, not isolate-local.** Cross-isolate hit rate
   was exact (`412/412`, `456/456`, `199/199`, `409/409`) in four runs and `2386/2388` in the
   fifth — two misses in 3864 cross-isolate reads across all runs, and neither was early. A
-  per-colo L1 sentinel does what PR 7 assumes. **But suppression opens at ~200 ms, not at 0**:
-  the earliest cross-isolate hit was 201–251 ms after the write.
+  per-colo L1 sentinel does what PR 7 assumes. **But suppression does not open at 0**: the
+  earliest cross-isolate hit was 201–251 ms after the write. **`.9` superseded that number —
+  it is 8 ms, and PR 1's 201 ms never contained the window at all. See `.9`'s section.**
 - **TTL is honored exactly from 1 s to 60 s with no floor.** The 1/2/5/10/30/60 s brackets all
   contain the requested TTL, and the reported `age` reaches `ttl − 1` at every step. So
   `snapshotTtlSeconds = 10` in `workers/nextjs/src/tag-clock.ts` **holds as specced** and needs
@@ -741,8 +777,9 @@ the §3 isolate count scaled by `1 − crossIsolateHitRate`. With the cache meas
 that is `99 × (1 − 2386/2388) = 0.083` — under one request, and exactly **zero** in the four
 runs that hit rate `1`. A formula that answers "no fan-in at all" cannot size a lease.
 
-The term that actually sizes L2 is the **write-visibility window**: the ~200 ms between
-`cache.put` returning and the sentinel becoming readable from other isolates. Requests
+The term that actually sizes L2 is the **write-visibility window** between `cache.put` returning
+and the sentinel becoming readable from other isolates — measured by `.9` at **8 ms**, not the
+~200 ms this paragraph originally assumed. Requests
 arriving inside it are unsuppressable by L1 at any hit rate. `workers/cache-probe` writes once
 and then reads, so it cannot measure this. `ocelhq-wvag.9` was filed to race N concurrent
 writers into a cold key and count how many reach `origin()` first; **it blocks
@@ -798,8 +835,8 @@ Remaining state:
 
 - `ocelhq-wvag.6` — implemented, open, blocked on `ocelhq-yo9b` alone.
 - `ocelhq-wvag.8` — blocked on `.9`. `.7` is closed.
-- `ocelhq-wvag.9` — needs live measurement on a **zone route**. Not gated on `yo9b`: it measures
-  the edge's write-visibility window, which has nothing to do with the Lambda layer.
+- `ocelhq-wvag.9` — **done and closed**, measured live on a zone route across two deploys, both
+  torn down.
 - `ocelhq-wvag.10` — blocked on `ocelhq-yo9b`. Its infrastructure now exists; its assertion cannot
   be driven.
 
@@ -872,15 +909,16 @@ Standing constraints PR 7 hands to PR 8, which builds L2 on top of L1:
 - **Every layer admits on error.** L1 fails open on an inert cache, a missing `delete`, and a
   `match`/`put`/`delete` that throws. Decision 10 already requires the same of L2.
 - **L1's sizing is measured, not assumed.** `refreshSentinelTtlSeconds = 5` in
-  `workers/nextjs/src/cache.ts` rests on the spike's ~200 ms cross-isolate visibility and its
-  exact 1–60 s TTLs. `ocelhq-wvag.9` measures the write-visibility window that sizes L2, and
-  that number is what tells you how much L1 leaks into L2 — do not size L2 off the epic's
-  original `1 − crossIsolateHitRate` formula, which degenerates to zero.
+  `workers/nextjs/src/cache.ts` rested on the spike's ~200 ms cross-isolate visibility and its
+  exact 1–60 s TTLs. `ocelhq-wvag.9` has since measured the write-visibility window at **8 ms**,
+  which is what tells you how much L1 leaks into L2 — do not size L2 off the epic's original
+  `1 − crossIsolateHitRate` formula, which degenerates to zero. The 5 s constant is unaffected;
+  the comment justifying it is wrong by a factor of twenty-five.
 
 Live threads to carry forward:
 
-- `ocelhq-wvag.9` blocks `.8`. It needs live measurement on a **zone route**, like `.1` did. With
-  `.7` closed it is the only thing standing between this stack and its last PR.
+- `ocelhq-wvag.9` is **closed and re-measured**, so `.8` is unblocked and is the stack's last PR.
+  Read `.9`'s section for the two numbers it changed and the one it found by accident.
 - `ocelhq-yo9b` blocks `.6` and `.10`, and is the only remaining gate on either. `.13`, `.14` and
   `.15` are all closed. See the stack shape above.
 
