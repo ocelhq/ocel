@@ -29,6 +29,11 @@ const (
 	// parameters holding each substrate's adopted cache store.
 	CacheStoreParamName        = "/ocel/edge/cache-store"
 	CacheStorePreviewParamName = "/ocel/edge/cache-store-preview"
+
+	// ISRWriterParamName / ISRWriterPreviewParamName are the SSM SecureString
+	// parameters holding each substrate's adopted ISR writer worker coordinates.
+	ISRWriterParamName        = "/ocel/edge/isr-writer"
+	ISRWriterPreviewParamName = "/ocel/edge/isr-writer-preview"
 )
 
 // IAMAPI is the subset of the IAM client the edge-credential step needs.
@@ -46,18 +51,19 @@ type EdgeCredentials struct {
 
 // edgeNames are the identities the edge step addresses for one substrate class:
 // its IAM user and the SSM parameters holding its credentials, values, adopted
-// cache store and adopted deployments store.
+// cache store, adopted deployments store and adopted ISR writer.
 type edgeNames struct {
 	user                  string
 	credentialsParam      string
 	valuesParam           string
 	cacheStoreParam       string
 	deploymentsStoreParam string
+	isrWriterParam        string
 }
 
 var edgeNamesByClass = map[string]edgeNames{
-	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName, DeploymentsStoreParamName},
-	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName, DeploymentsStorePreviewParamName},
+	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName, DeploymentsStoreParamName, ISRWriterParamName},
+	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName, DeploymentsStorePreviewParamName, ISRWriterPreviewParamName},
 }
 
 func edgeNamesFor(class string) (edgeNames, error) {
@@ -89,6 +95,17 @@ func DeploymentsStoreParamFor(class string) (string, error) {
 		return "", err
 	}
 	return names.deploymentsStoreParam, nil
+}
+
+// ISRWriterParamFor returns the SSM parameter a substrate class's adopted ISR
+// writer worker coordinates live in. Production and preview each bootstrap
+// their own writer worker, so the parameter is class-keyed.
+func ISRWriterParamFor(class string) (string, error) {
+	names, err := edgeNamesFor(class)
+	if err != nil {
+		return "", err
+	}
+	return names.isrWriterParam, nil
 }
 
 // writeEdgeValues stores the edge's own bootstrap outputs so the deploy path can
@@ -325,6 +342,71 @@ func ReadDeploymentsStoreFor(ctx context.Context, ssmClient SSMAPI, class string
 		return DeploymentsStore{}, fmt.Errorf("parse deployments store: %w", err)
 	}
 	return store, nil
+}
+
+// ISRWriter is the JSON payload stored in SSM: the shared ISR writer worker's
+// coordinates, read at deploy time so a deploy can seed its build's write
+// secret and point that build's functions at the worker.
+type ISRWriter struct {
+	Endpoint      string `json:"endpoint"`
+	ScriptName    string `json:"scriptName"`
+	BootstrapCred string `json:"bootstrapCred"`
+}
+
+// adoptISRWriter persists the edge's offered ISR writer worker for one
+// substrate class. Like the deployments store's coordinates, every field is the
+// edge's current state and is overwritten on every run: the credential is
+// re-minted each bootstrap and read fresh from here at deploy time, so there is
+// no prior secret to preserve.
+func adoptISRWriter(ctx context.Context, ssmClient SSMAPI, class string, values map[string]string) error {
+	paramName, err := ISRWriterParamFor(class)
+	if err != nil {
+		return err
+	}
+	payload, err := json.Marshal(ISRWriter{
+		Endpoint:      values[edge.OfferKeyISRWriterEndpoint],
+		ScriptName:    values[edge.OfferKeyISRWriterScriptName],
+		BootstrapCred: values[edge.OfferKeyISRWriterBootstrapCred],
+	})
+	if err != nil {
+		return fmt.Errorf("marshal isr writer: %w", err)
+	}
+	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:      aws.String(paramName),
+		Value:     aws.String(string(payload)),
+		Type:      ssmtypes.ParameterTypeSecureString,
+		Overwrite: aws.Bool(true),
+	}); err != nil {
+		return fmt.Errorf("write isr writer parameter: %w", err)
+	}
+	return nil
+}
+
+// ReadISRWriterFor returns a substrate class's adopted ISR writer worker
+// coordinates, decrypted. An account whose edge offered none (a bootstrap
+// predating the writer) reads as the zero value rather than as a failure, so
+// the deploy path can tell "no writer" from an error.
+func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, class string) (ISRWriter, error) {
+	paramName, err := ISRWriterParamFor(class)
+	if err != nil {
+		return ISRWriter{}, err
+	}
+	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return ISRWriter{}, nil
+		}
+		return ISRWriter{}, fmt.Errorf("read isr writer parameter: %w", err)
+	}
+	var writer ISRWriter
+	if err := json.Unmarshal([]byte(aws.ToString(out.Parameter.Value)), &writer); err != nil {
+		return ISRWriter{}, fmt.Errorf("parse isr writer: %w", err)
+	}
+	return writer, nil
 }
 
 // adoptCacheStore persists an edge's offered cache store for one substrate class.

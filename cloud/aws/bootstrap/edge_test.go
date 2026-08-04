@@ -389,3 +389,72 @@ func TestAdoptCacheStore_UnknownClass(t *testing.T) {
 		t.Error("expected an error for an unknown substrate class")
 	}
 }
+
+func offeredISRWriter(suffix, cred string) map[string]string {
+	return map[string]string{
+		edge.OfferKeyISRWriterEndpoint:      "https://ocel-isr-writer" + suffix + ".acct.workers.dev",
+		edge.OfferKeyISRWriterScriptName:    "ocel-isr-writer" + suffix,
+		edge.OfferKeyISRWriterBootstrapCred: cred,
+	}
+}
+
+func TestISRWriterParamFor(t *testing.T) {
+	for _, tc := range []struct {
+		class string
+		want  string
+	}{
+		{ClassProduction, ISRWriterParamName},
+		{ClassPreview, ISRWriterPreviewParamName},
+	} {
+		got, err := ISRWriterParamFor(tc.class)
+		if err != nil {
+			t.Fatalf("ISRWriterParamFor(%q): %v", tc.class, err)
+		}
+		if got != tc.want {
+			t.Errorf("ISRWriterParamFor(%q) = %q, want %q", tc.class, got, tc.want)
+		}
+	}
+	if _, err := ISRWriterParamFor("nonsense"); err == nil {
+		t.Error("ISRWriterParamFor(unknown class) = nil error, want an error")
+	}
+	if ISRWriterParamName == ISRWriterPreviewParamName {
+		t.Error("production and preview isr-writer parameters must differ")
+	}
+}
+
+func TestAdoptISRWriter_PreviewStoresSeparately(t *testing.T) {
+	ssmc := newFakeSSM()
+	if err := adoptISRWriter(context.Background(), ssmc, ClassProduction, offeredISRWriter("", "cred-prod")); err != nil {
+		t.Fatalf("production adopt: %v", err)
+	}
+	if err := adoptISRWriter(context.Background(), ssmc, ClassPreview, offeredISRWriter("-preview", "cred-preview")); err != nil {
+		t.Fatalf("preview adopt: %v", err)
+	}
+
+	prod, err := ReadISRWriterFor(context.Background(), ssmc, ClassProduction)
+	if err != nil {
+		t.Fatalf("ReadISRWriterFor(production): %v", err)
+	}
+	prev, err := ReadISRWriterFor(context.Background(), ssmc, ClassPreview)
+	if err != nil {
+		t.Fatalf("ReadISRWriterFor(preview): %v", err)
+	}
+	wantProd := ISRWriter{Endpoint: "https://ocel-isr-writer.acct.workers.dev", ScriptName: "ocel-isr-writer", BootstrapCred: "cred-prod"}
+	wantPrev := ISRWriter{Endpoint: "https://ocel-isr-writer-preview.acct.workers.dev", ScriptName: "ocel-isr-writer-preview", BootstrapCred: "cred-preview"}
+	if prod != wantProd {
+		t.Errorf("production writer = %+v, want %+v", prod, wantProd)
+	}
+	if prev != wantPrev {
+		t.Errorf("preview writer = %+v, want %+v", prev, wantPrev)
+	}
+}
+
+func TestReadISRWriterFor_AbsentIsNotAnError(t *testing.T) {
+	got, err := ReadISRWriterFor(context.Background(), newFakeSSM(), ClassProduction)
+	if err != nil {
+		t.Fatalf("ReadISRWriterFor on an absent parameter: %v", err)
+	}
+	if got != (ISRWriter{}) {
+		t.Errorf("ReadISRWriterFor = %+v, want the zero writer", got)
+	}
+}

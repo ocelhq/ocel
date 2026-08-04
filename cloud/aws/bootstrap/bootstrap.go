@@ -281,6 +281,11 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 			if err := adoptDeploymentsStore(ctx, ssmClient, sub.class, offer.Values); err != nil {
 				return err
 			}
+		case edge.OfferISRWriter:
+			report(progress, "Adopting the ISR writer worker (SSM SecureString)")
+			if err := adoptISRWriter(ctx, ssmClient, sub.class, offer.Values); err != nil {
+				return err
+			}
 		default:
 			report(log, fmt.Sprintf("ignoring edge offer %q: no provider resource adopts it", offer.Kind))
 		}
