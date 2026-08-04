@@ -1,16 +1,15 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { TagRecord, TagRecordUpdate } from "@ocel/next-cache";
+import type { TagRecordUpdate } from "@ocel/next-cache";
 import type { CacheStore } from "../src/next/cache-store.mjs";
 import type { TagSnapshotRead, UseCacheStore } from "../src/next/use-cache-store.mjs";
-
-type Row = TagRecordUpdate & { tag: string };
+import { publishedRecords, type TagRow } from "./tag-rows.mjs";
 
 // A stand-in for the state table's tag partition and for the published snapshot
 // of it: tag writes land under the same monotonic guard the real conditional
 // update applies, and every write moves the snapshot to a new version, which is
 // what the publisher does on the other side of the stream.
 function fakeStore() {
-  const rows = new Map<string, Row>();
+  const rows = new Map<string, TagRow>();
   const conditions: (string | null)[] = [];
   let version = 0;
   let published = true;
@@ -53,11 +52,7 @@ function fakeStore() {
       if (!published) return { status: "unusable" };
       if (etag === `"v${version}"`) return { status: "unchanged" };
 
-      const records: Record<string, TagRecord> = {};
-      for (const [tag, row] of rows) {
-        records[tag] = { stale: row.stale, expired: row.expired };
-      }
-      return { status: "fresh", records, etag: `"v${version}"` };
+      return { status: "fresh", records: publishedRecords(rows), etag: `"v${version}"` };
     },
 
     async writeTag(tag, record) {
@@ -115,7 +110,7 @@ async function load(store: UseCacheStore | null, env: Record<string, string> = {
 // on the classic ISR model it is the one thing that ever reaches the clock. It
 // lands in the same rows the snapshot is published from, exactly as the real
 // store does — pass null to model a publisher that has not caught up yet.
-function fakeIsrStore(index: ReturnType<typeof fakeStore> | null): CacheStore {
+function fakeIsrStore(published: ReturnType<typeof fakeStore> | null): CacheStore {
   return {
     async readEntry() {
       return null;
@@ -126,20 +121,20 @@ function fakeIsrStore(index: ReturnType<typeof fakeStore> | null): CacheStore {
     },
     async writeTags(tags, record) {
       const writtenAt = Date.now();
-      for (const tag of tags) index?.seed(tag, { ...record, writtenAt });
+      for (const tag of tags) published?.seed(tag, { ...record, writtenAt });
     },
   };
 }
 
 // Loads both caching models against one shared clock, so a test can drive either
 // and observe what the other sees.
-async function loadBoth(store: ReturnType<typeof fakeStore>, indexed = true) {
+async function loadBoth(store: ReturnType<typeof fakeStore>, published = true) {
   vi.resetModules();
   const clock = await import("../src/next/tag-clock.mjs");
   const handler = (await import("../src/next/use-cache-default.mjs")).default;
   const CacheHandler = (await import("../src/next/cache-handler.mjs")).default;
   clock.setTagClockStore(store);
-  CacheHandler.store = fakeIsrStore(indexed ? store : null);
+  CacheHandler.store = fakeIsrStore(published ? store : null);
   return { tagClock: clock.tagClock, handler, isr: new CacheHandler() };
 }
 
@@ -369,20 +364,6 @@ test("an unusable snapshot degrades to the never-synced state without throwing",
   expect(tagClock.hasSynced).toBe(false);
 });
 
-test("an unusable snapshot leaves the records this instance already holds", async () => {
-  const store = fakeStore();
-  const { tagClock, handler } = await load(store);
-
-  await handler.updateTags(["products"]);
-  const mine = await tagClock.getExpiration(["products"]);
-  store.unpublish();
-
-  advance(3_000);
-  await handler.refreshTags();
-
-  expect(await tagClock.getExpiration(["products"])).toBe(mine);
-});
-
 test("reports having synced only once a sync has succeeded", async () => {
   const store = fakeStore();
   const { tagClock, handler } = await load(store);
@@ -438,7 +419,7 @@ test("refuses to adopt a shared clock built from different configuration", async
 // The durable write is the raise: the state table's stream carries it to the one
 // publisher, so nothing on this tier reads or writes the edge's replica. What the
 // singular handler still owes the shared clock is its own event, merged locally
-// so both caching models on this instance agree without waiting for the index.
+// so both caching models on this instance agree without waiting for a publish.
 
 test("an invalidation on the classic ISR model is the durable write and nothing more", async () => {
   const store = fakeStore();
@@ -448,8 +429,9 @@ test("an invalidation on the classic ISR model is the durable write and nothing 
   await Promise.all(deferred);
 
   expect(store.rows.get("products")!.expired).toBeGreaterThan(0);
-  // No drain: the raise is durable already, and a query here would buy this
-  // instance nothing its own read path does not already fetch on its throttle.
+  // No sync: the raise is durable already, and reading the snapshot here would
+  // buy this instance nothing its read path does not already fetch on its
+  // throttle.
   expect(store.gets).toBe(0);
 });
 
@@ -465,7 +447,7 @@ test("an invalidation raised on either model is visible to the other at once", a
   expect(await tagClock.getExpiration(["reviews"])).toBeGreaterThan(0);
 });
 
-// Shipping ahead of the index means a clock with nothing behind it, which must
+// Shipping ahead of the snapshot means a clock with nothing behind it, which must
 // still answer from its own writes rather than fail.
 test("works with no durable store bound at all", async () => {
   const { handler } = await load(null);

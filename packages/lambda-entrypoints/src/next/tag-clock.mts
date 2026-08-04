@@ -141,11 +141,9 @@ async function sync(): Promise<void> {
   }
 }
 
-// Starts a sync and records it as the one in flight, which is what lets a
-// concurrent caller join it rather than issue a second read of the same object.
-// The attempt is marked before it runs rather than after it settles,
-// which is what makes the throttle above bound attempts.
-function drain(): Promise<void> {
+// The attempt is marked before the read runs rather than after it settles,
+// which is what makes the throttle above bound attempts rather than successes.
+function startSync(): Promise<void> {
   state.lastAttemptAt = now();
   return (state.inflight = sync().finally(() => {
     state.inflight = null;
@@ -210,7 +208,7 @@ export const tagClock: TagClock = {
     if (state.inflight) return state.inflight;
     if (now() - state.lastAttemptAt < syncIntervalMs) return;
 
-    return drain();
+    return startSync();
   },
 
   async getExpiration(tags) {

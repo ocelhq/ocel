@@ -62,7 +62,7 @@ export class S3TagSnapshotStore implements TagSnapshotStore {
     // cannot parse would write away the deploy anchor, and the anchor has
     // exactly one writer — the deploy's genesis seed — so the build would never
     // prune again.
-    const snapshot = readableSnapshot(JSON.parse(body) as TagSnapshot);
+    const snapshot = readableSnapshot(JSON.parse(body));
     if (snapshot === null) {
       throw new Error(`tag snapshot ${this.key} is not a version this publisher can merge into`);
     }

@@ -56,9 +56,13 @@ export function mergeSnapshot(
 // Every publisher runs it too, and for a stronger reason than a reader does:
 // merging into a document it cannot read would write away whatever that format
 // carries, the deploy anchor included.
-export function readableSnapshot(snapshot: TagSnapshot | null): TagSnapshot | null {
-  if (snapshot?.version !== 1) return null;
-  return snapshot.records && typeof snapshot.records === "object" ? snapshot : null;
+// The argument is whatever the object store handed back, so it is typed as what
+// it is: parsed bytes no one has vouched for yet.
+export function readableSnapshot(snapshot: unknown): TagSnapshot | null {
+  if (typeof snapshot !== "object" || snapshot === null) return null;
+  const { version, records } = snapshot as Partial<TagSnapshot>;
+  if (version !== 1) return null;
+  return records && typeof records === "object" ? (snapshot as TagSnapshot) : null;
 }
 
 // A snapshot as it was found, with the version the next write conditions on. A
