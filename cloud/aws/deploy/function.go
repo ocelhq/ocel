@@ -200,14 +200,14 @@ func isrPolicy(c isrConfig) (string, error) {
 		map[string]any{
 			"Effect": "Allow",
 			// Exactly the calls the handler's tag store makes against the
-			// table: readTags sends BatchGetItem, writeTags and the plural
+			// table, and they are all writes: writeTags and the plural
 			// handler's writeTag send UpdateItem (they merge, so PutItem
-			// would clobber an earlier expiry). Nothing reads the table's
-			// index — the tag clock reads its whole state from the snapshot
+			// would clobber an earlier expiry). Nothing reads the table at
+			// all — both tiers read their whole tag state from the snapshot
 			// object under the S3 grant above. Adding a call means adding
 			// its action here — a mismatch 403s at runtime, and revalidateTag
 			// does not catch, so it throws out of the user's server action.
-			"Action":   []string{"dynamodb:BatchGetItem", "dynamodb:UpdateItem"},
+			"Action":   []string{"dynamodb:UpdateItem"},
 			"Resource": c.TableARN,
 			"Condition": map[string]any{
 				"ForAllValues:StringLike": map[string]any{

@@ -171,12 +171,13 @@ export const entryMissHeader = "ocel-isr-entry-miss";
 
 // tagsOf reports what a cached entry depends on — a set, deliberately: a FETCH
 // entry is stored under the very tags its reader passes back in, so the three
-// sources below always name the explicit ones twice, and DynamoDB's
-// BatchGetItem rejects a key list that repeats a key. Left as a bag, that
-// rejection surfaces as a cache miss, and a tagged entry is then unreachable for
-// as long as it carries the tag. FETCH entries are told their tags per request;
-// everything else carries them in the response headers Next stored alongside
-// the body.
+// sources below always name the explicit ones twice, and what this answers is a
+// dependency set. Both readers weigh the list against a map, so a repeat costs
+// them only a second lookup — but a reader that cannot take one is a tagged
+// entry gone permanently unreadable, which is a failure this shape rules out
+// rather than relies on nobody introducing. FETCH entries are told their tags
+// per request; everything else carries them in the response headers Next stored
+// alongside the body.
 export function tagsOf(value: Record<string, any>, ctx: any): string[] {
   if (value?.kind === "FETCH") {
     return [

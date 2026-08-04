@@ -1,14 +1,12 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, expect, test } from "vitest";
+import { type TagRecord } from "@ocel/next-cache";
+import { afterEach, beforeEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
 import { runWithWaitUntil } from "../src/shared/background.mjs";
-import type {
-  CacheEntryFile,
-  CacheStore,
-  TagRecord,
-} from "../src/next/cache-store.mjs";
+import { setTagClockStore } from "../src/next/tag-clock.mjs";
+import type { CacheEntryFile, CacheStore } from "../src/next/cache-store.mjs";
 
 // A stand-in for S3 + DynamoDB that keeps the handler's two backing stores
 // separate, so a test can revalidate a tag without touching entries and vice
@@ -68,20 +66,6 @@ function fakeStore() {
       if (gate) await gate;
       fetches.set(hash, entry);
     },
-    // Rejects a repeated tag the way BatchGetItem does. A fake that quietly
-    // tolerates duplicates is more permissive than the service it stands for,
-    // and every caller's list would pass here while failing in production.
-    async readTags(names) {
-      if (new Set(names).size !== names.length) {
-        throw new Error("Provided list of item keys contains duplicates");
-      }
-      const found = new Map<string, TagRecord>();
-      for (const n of names) {
-        const rec = tags.get(n);
-        if (rec) found.set(n, rec);
-      }
-      return found;
-    },
     async writeTags(names, record) {
       // Models UpdateItem SET: fields present are overwritten, absent ones kept.
       for (const n of names) tags.set(n, { ...tags.get(n), ...record });
@@ -91,11 +75,40 @@ function fakeStore() {
   return store;
 }
 
+// The tag clock is shared through globalThis so both handler bundles agree on
+// one, which means it outlives a test unless it is put back. Reset before each
+// rather than after, so a test that never binds a snapshot still starts on an
+// empty clock.
+beforeEach(() => {
+  setTagClockStore(null);
+});
+
 afterEach(() => {
   OcelCacheHandler.store = undefined;
   OcelCacheHandler.variantHeaders = undefined;
   delete process.env.LAMBDA_TASK_ROOT;
 });
+
+// This build's published tag snapshot, which is the get path's only source of
+// tag state. Counts what it was asked for: an untagged entry must not pay for a
+// read of it.
+function fakeSnapshot(records: Record<string, TagRecord> = {}) {
+  const reads = { count: 0 };
+  setTagClockStore({
+    async readEntry() {
+      return null;
+    },
+    async writeEntry() {},
+    async readTagSnapshot() {
+      reads.count++;
+      return { status: "fresh", records, etag: '"v1"' };
+    },
+    async writeTag() {
+      return true;
+    },
+  });
+  return reads;
+}
 
 // Runs `fn` the way the membrane runs an invocation: work it defers is collected
 // rather than awaited, so a test can assert what the request itself paid for and
@@ -250,7 +263,7 @@ test("expires an entry whose tag was revalidated after it was written", async ()
 
 test("keeps an entry written after its tag was revalidated", async () => {
   const store = fakeStore();
-  store.tags.set("products", { expired: 500 });
+  fakeSnapshot({ products: { expired: 500 } });
   seedPage(store, "index", { tags: "products", lastModified: 1_000 });
 
   const entry = await new OcelCacheHandler().get("/", { kind: "APP_PAGE" });
@@ -272,19 +285,14 @@ test("leaves entries usable until a future expiry actually arrives", async () =>
   expect(await new OcelCacheHandler().get("/", { kind: "APP_PAGE" })).not.toBeNull();
 });
 
-test("untagged entries never hit the tag store", async () => {
+test("untagged entries never read the tag snapshot", async () => {
   const store = fakeStore();
+  const reads = fakeSnapshot();
   seedPage(store, "index");
-  let reads = 0;
-  const inner = store.readTags;
-  store.readTags = async (t) => {
-    reads++;
-    return inner(t);
-  };
 
   await new OcelCacheHandler().get("/", { kind: "APP_PAGE" });
 
-  expect(reads).toBe(0);
+  expect(reads.count).toBe(0);
 });
 
 // Next does not wrap get() in a try/catch, so a throw would surface as a render
@@ -614,9 +622,7 @@ test("takes fetch tags from the request context", async () => {
 
 // A stored fetch entry records the tags it was written under, and its reader
 // passes the same ones back in — so the tag list this handler builds names them
-// twice unless it dedupes. BatchGetItem rejects a repeated key, and get()
-// swallows the throw into a miss, which makes a tagged entry unreadable for as
-// long as it carries the tag.
+// twice unless it dedupes, and the entry must read back either way.
 test("reads back a fetch entry whose tags the request also names", async () => {
   const store = fakeStore();
   const handler = new OcelCacheHandler();

@@ -197,11 +197,11 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 		t.Errorf("DynamoDB Resource = %q, want the table ARN", ddbStmt.Resource)
 	}
 	// The granted actions must match the calls the handler's tag store actually
-	// makes (BatchGetItem to read, UpdateItem to merge). The two live in
+	// makes, which is UpdateItem to merge and nothing else. The two live in
 	// different languages with nothing linking them, so a missing action is only
 	// discovered as a runtime 403 out of the user's revalidateTag call — which is
 	// exactly what happened when writeTags moved from PutItem to UpdateItem.
-	wantActions := []string{"dynamodb:BatchGetItem", "dynamodb:UpdateItem"}
+	wantActions := []string{"dynamodb:UpdateItem"}
 	if !slices.Equal(ddbStmt.Action, wantActions) {
 		t.Errorf("DynamoDB Action = %v, want exactly %v", ddbStmt.Action, wantActions)
 	}
@@ -212,16 +212,18 @@ func TestISRPolicy_ScopesToTheAppsOwnNamespace(t *testing.T) {
 		t.Errorf("LeadingKeys = %v, want the app's own tag partitions", keys)
 	}
 
-	// The tag clock reads its whole state from the snapshot object under the S3
-	// grant above, so nothing on this function queries the table's index any
-	// more and no statement may grant it: a Query the runtime never issues is a
-	// standing read of every tag partition this app's namespace admits.
+	// Both tiers read their whole tag state from the snapshot object under the S3
+	// grant above, so nothing on this function reads the table any more and no
+	// statement may grant it: a read the runtime never issues is a standing read
+	// of every tag partition this app's namespace admits.
 	for _, stmt := range doc.Statement {
 		if strings.Contains(stmt.Resource, "/index/") {
 			t.Errorf("policy still grants %v on the index %q", stmt.Action, stmt.Resource)
 		}
-		if slices.Contains(stmt.Action, "dynamodb:Query") {
-			t.Errorf("policy still grants dynamodb:Query on %q", stmt.Resource)
+		for _, read := range []string{"dynamodb:Query", "dynamodb:BatchGetItem", "dynamodb:GetItem"} {
+			if slices.Contains(stmt.Action, read) {
+				t.Errorf("policy still grants %s on %q", read, stmt.Resource)
+			}
 		}
 	}
 }

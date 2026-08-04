@@ -1,9 +1,4 @@
-import {
-  DynamoDBClient,
-  BatchGetItemCommand,
-  UpdateItemCommand,
-  type AttributeValue,
-} from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 
 import { isrEntryStore, type EntryStore } from "./isr-writer.mjs";
@@ -38,17 +33,12 @@ export interface CacheStore {
   // the canonical statement of that rule; the sites enforcing it point here.
   readFetch(hash: string): Promise<CacheEntryFile | null>;
   writeFetch(hash: string, entry: CacheEntryFile): Promise<void>;
-  readTags(tags: string[]): Promise<Map<string, TagRecord>>;
+  // Write-only: nothing on the read path asks the table what a tag's state is.
+  // The raise goes here, the stream carries it to the publisher, and every
+  // reader — this handler included — learns of it from the published snapshot
+  // through the shared tag clock.
   writeTags(tags: string[], record: TagRecord): Promise<void>;
 }
-
-// Tag reads sit on the request path, so the retry budget is deliberately small:
-// 50/100/200ms, then give up. Spending longer than that chasing a throttled key
-// costs more than the fresh render giving up buys.
-const batchGetMaxAttempts = 4;
-const batchGetBackoffMs = 50;
-
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function env(name: string): string {
   const value = process.env[name];
@@ -66,7 +56,7 @@ async function streamToString(body: any): Promise<string> {
 }
 
 // awsCacheStore binds entries to whichever object store this substrate adopted
-// and tags to the account-global state table. Keys are namespaced by the
+// and tag writes to the account-global state table. Keys are namespaced by the
 // deploy's <env>/<project>/<app>/<build> prefix, which is also what the
 // function's IAM policy is scoped to — so a key built outside the namespace
 // fails closed rather than reading another app's cache.
@@ -97,7 +87,6 @@ export function awsCacheStore(): CacheStore {
     return addressed;
   };
   const fetchKey = (hash: string) => `${prefix}/fetch-cache/${hash}.cache.json`;
-  const tagPK = (tag: string) => `${tagNamespace}${tag}`;
 
   async function read(
     from: ObjectStore,
@@ -154,53 +143,6 @@ export function awsCacheStore(): CacheStore {
     writeEntry: (key, entry) => entries.write(key, entry),
     readFetch: (hash) => read(provider, fetchKey(hash)),
     writeFetch: (hash, entry) => write(provider, fetchKey(hash), entry),
-
-    // A tag whose record fails to come back is indistinguishable from a tag that
-    // was never revalidated, and the caller reads that as "not expired" — so a
-    // dropped record serves stale content. Throttled keys therefore must not be
-    // silently skipped: drain them, and if they won't drain, throw so get()
-    // degrades to a miss and re-renders. Failing closed beats failing stale.
-    async readTags(tags) {
-      const found = new Map<string, TagRecord>();
-      if (tags.length === 0) return found;
-
-      // BatchGetItem caps at 100 keys per call.
-      for (let i = 0; i < tags.length; i += 100) {
-        // Widened to the SDK's key type: UnprocessedKeys feeds straight back in.
-        let keys: Record<string, AttributeValue>[] = tags
-          .slice(i, i + 100)
-          .map((tag) => ({
-            pk: { S: tagPK(tag) },
-            sk: { S: "#META" },
-          }));
-
-        for (let attempt = 0; keys.length > 0; attempt++) {
-          if (attempt === batchGetMaxAttempts) {
-            throw new Error(
-              `ocel cache handler: ${keys.length} tag key(s) still unprocessed after ${attempt} attempts`,
-            );
-          }
-          // BatchGetItem returns throttled keys in UnprocessedKeys on an
-          // otherwise successful response, so the SDK's own retries never see
-          // them.
-          if (attempt > 0) await sleep(batchGetBackoffMs << (attempt - 1));
-
-          const out = await ddb.send(
-            new BatchGetItemCommand({ RequestItems: { [table]: { Keys: keys } } }),
-          );
-          for (const item of out.Responses?.[table] ?? []) {
-            const tag = item.pk?.S?.slice(tagNamespace.length);
-            if (!tag) continue;
-            found.set(tag, {
-              stale: item.stale?.N ? Number(item.stale.N) : undefined,
-              expired: item.expired?.N ? Number(item.expired.N) : undefined,
-            });
-          }
-          keys = out.UnprocessedKeys?.[table]?.Keys ?? [];
-        }
-      }
-      return found;
-    },
 
     // Merges rather than replaces. Next's own revalidateTag spreads the existing
     // record before applying its updates, so marking a tag stale must not drop an
