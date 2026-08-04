@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
 import { runWithWaitUntil } from "../src/shared/background.mjs";
@@ -91,6 +94,7 @@ function fakeStore() {
 afterEach(() => {
   OcelCacheHandler.store = undefined;
   OcelCacheHandler.variantHeaders = undefined;
+  delete process.env.LAMBDA_TASK_ROOT;
 });
 
 // Runs `fn` the way the membrane runs an invocation: work it defers is collected
@@ -375,6 +379,18 @@ function seedProjection(
   OcelCacheHandler.variantHeaders = projection;
 }
 
+// The same file, but on disk where the handler reads it from — the only way to
+// drive what an actual bundle hands the loader. `null` writes no file at all.
+function bundleProjection(contents: string | null): void {
+  bundleRoot ??= mkdtempSync(join(tmpdir(), "ocel-bundle-"));
+  process.env.LAMBDA_TASK_ROOT = bundleRoot;
+  const path = join(bundleRoot, "variant-headers.json");
+  rmSync(path, { force: true });
+  if (contents !== null) writeFileSync(path, contents);
+}
+
+let bundleRoot: string | undefined;
+
 async function revalidate(key: string, extra: Record<string, unknown> = {}) {
   const deferred = await invocation(() =>
     new OcelCacheHandler().set(
@@ -477,6 +493,50 @@ test("a rewritten entry still serves segment prefetch and RSC negotiation", asyn
     _requestHeaders: { rsc: "1" },
   }).get("/blog", { kind: "APP_PAGE" });
   expect(served?.value.headers["content-type"]).toBe("text/x-component");
+});
+
+// Whatever the bundle holds under variant-headers.json, a write must still land.
+// The projection is a reseeding convenience; a bundle that cannot supply one has
+// nothing to reseed from anyway, and a route that stops caching for the life of
+// a deploy — silently, with no log — is the one outcome that is worse than
+// serving without the variant headers.
+const bundles: [name: string, contents: string | null][] = [
+  ["no file at all", null],
+  ["an empty file", ""],
+  ["malformed JSON", "{"],
+  ["JSON null", "null"],
+  ["an array", "[]"],
+  ["a bare string", '"blog"'],
+  ["a number", "7"],
+];
+
+for (const [name, contents] of bundles) {
+  test(`writes the entry when the bundle holds ${name}`, async () => {
+    const store = fakeStore();
+    bundleProjection(contents);
+
+    await revalidate("/blog");
+
+    const written = store.entries.get("blog");
+    expect(written?.value.html).toBe("<html>fresh</html>");
+    expect(written?.value.rscHeaders).toBeUndefined();
+    expect(written?.value.segmentHeaders).toBeUndefined();
+  });
+}
+
+// An unreadable projection is loaded once, like a readable one. Re-reading it on
+// every set would put a synchronous file read on every APP_PAGE write.
+test("reads an unreadable projection once", async () => {
+  const store = fakeStore();
+  bundleProjection("null");
+
+  await revalidate("/blog");
+  bundleProjection(
+    JSON.stringify({ blog: { rscHeaders: { "content-type": "text/x-component" } } }),
+  );
+  await revalidate("/blog");
+
+  expect(store.entries.get("blog")?.value.rscHeaders).toBeUndefined();
 });
 
 // The entry now lands in the store the edge reads, which is a cross-internet
