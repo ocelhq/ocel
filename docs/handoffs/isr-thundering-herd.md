@@ -26,10 +26,10 @@ guarantor of invalidation.
 main
  └─ 1  isr-herd/01-cache-api-spike        ocelhq-wvag.1   ✅ CLOSED (measured)
      └─ 2  isr-writer worker + DO          ocelhq-wvag.2  ✅ CLOSED, reviewed ×2, not pushed
-         └─ 3  manifest projection         ocelhq-wvag.3  ✅ CLOSED, reviewed, not pushed  ✅ code complete, not pushed
-             └─ 4  streams publisher       ocelhq-wvag.4
-                 └─ 5  origin reads snapshot ocelhq-wvag.5
-                     └─ 6  get drops BatchGetItem ocelhq-wvag.6
+         └─ 3  manifest projection         ocelhq-wvag.3  ✅ CLOSED, reviewed, not pushed
+             └─ 4  streams publisher       ocelhq-wvag.4  ✅ CLOSED, reviewed, not pushed
+                 └─ 5  origin reads snapshot ocelhq-wvag.5  ← next
+                     └─ 6  get drops BatchGetItem ocelhq-wvag.6  ⛔ blocked on .13, .14
                          └─ 7  edge L0/L1   ocelhq-wvag.7
                              └─ 8  edge L2 lease ocelhq-wvag.8   ⛔ blocked on .9
 ```
@@ -39,6 +39,17 @@ Filed out of band: `ocelhq-wvag.9` (measure the L1 write-visibility window; **bl
 DO instances behind), `ocelhq-wvag.12` (collapse the twice-derived projection key and
 filename into `@ocel/next-cache`; needs a dist build on that package, so it touches the
 Lambda and worker bundling — best done between PRs rather than inside one).
+
+**Two of those now block `.6`, deliberately** — it removes the DynamoDB fallback and makes the
+stream publisher the sole guarantor of invalidation fleet-wide, so neither can be forgotten:
+
+- `ocelhq-wvag.13` — the heartbeat **staleness** alarm, deferred out of PR 4. PR 4 ships the
+  heartbeat and a DLQ-depth alarm, which catches a publisher that *errors*. It does not catch one
+  that is alive but wedged — not erroring, not filling the DLQ, just not advancing. That needs a
+  metric source, and the repo has none.
+- `ocelhq-wvag.14` — the human gate to cut and pin the tag-publisher release artifact, mirroring
+  `ocelhq-pf6q.13` for the image optimizer. Both pin constants ship empty, so bootstrap renders
+  **no** publisher until someone cuts it.
 
 ## Working method
 
@@ -86,7 +97,96 @@ worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
 
-**PR 3 (`ocelhq-wvag.3`) — code complete, NOT pushed.**
+**PR 4 (`ocelhq-wvag.4`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
+
+Branch `isr-herd/04-streams-publisher`, rooted on PR 3. Serves decisions 3, 8 and 13. Much the
+largest PR in the stack: it introduces the repo's **first** DynamoDB stream, first event source
+mapping, first SQS queue, first CloudWatch alarm, and a second account-level Lambda.
+
+Built as **four sequential units**, each independently testable, because the issue bundles a
+schema change, a new DO class, a new AWS Lambda, an observability stack and a credential
+removal into one ticket:
+
+1. **The snapshot Durable Object** (`workers/isr-writer/src/{snapshot,isr-snapshot,build,r2}.ts`)
+   — one coordinator per build at `idFromName(isrPrefix)`, which is what makes the in-memory
+   merge safe and the CAS loop unnecessary. New op `POST /<isrPrefix>/tags` on the existing
+   per-deploy write secret. Plus the Go generalization that lets a script gain a DO class.
+2. **The edge stops writing R2** and raises through the DO instead, over a new `ISR_WRITER`
+   service binding.
+3. **DynamoDB Streams + the account-level publisher Lambda** (`packages/tag-publisher/`),
+   mirroring `cloud/aws/bootstrap/optimizer.go` end to end, with the ESM, a DLQ and an alarm.
+4. **The Lambda publisher and the last standing R2 credential are gone.**
+
+### The credential is finally gone — and this time it is demonstrated, not asserted
+
+A deployed function's entire env surface is now `OCEL_ISR_STORE_BUCKET`, `OCEL_ISR_WRITER_URL`,
+`OCEL_ISR_WRITER_SECRET`, `OCEL_HANDLER`. No access key, no secret, no SSM parameter carrying
+one. `cloud/aws/deploy/function.go` has no `ssm:GetParameter` and no `kms:Decrypt` left (the one
+remaining `kms:Decrypt` in `cloud/aws/deploy/` is the variable store's own key, unrelated).
+`cloud/aws/cmd/lambdanode/bootstrap/config.go` was deleted outright. Regression-tested by
+`TestISRCacheStore_LeavesNoStandingCredentialOnTheFunction`, which renders the full env and the
+full policy and asserts the absences.
+
+The only R2 credential left on the substrate is the deploy host's, held by a short-lived
+provider process. `cacheStorePermissionGroup` **cannot** be narrowed — the deploy host needs
+read+write+list+delete bucket-wide for assets, edge bundles, prerender seeding, genesis, prune,
+preview teardown and project destroy, and R2 has no key-prefix grammar. That is now documented
+where the comment used to promise a narrowing.
+
+### Three decisions were taken before building; they are recorded on the issue
+
+The Lambda **stops raising snapshots entirely** (its DynamoDB write is the raise); the
+**heartbeat ships but the staleness alarm is deferred** to `ocelhq-wvag.13`; and **deploy
+genesis seeds both stores**, because `deployedAt` has exactly one writer and an unanchored
+snapshot never prunes. `bd show ocelhq-wvag.4` carries the full text plus four corrections to
+the issue's own scope — including that its proposed ESM filter was **unsafe**: upload-session
+items share `sk = "#META"` and carry HMAC secrets, so the filter must also constrain `pk` to
+`TAG#`. It ships constrained, and the consumer re-derives the build from `gsi1pk` in code as an
+independent second defence.
+
+### What the review turned up
+
+Two independent reviews (spec + adversarial). Six findings, all fixed:
+
+- **The raise path created zero-anchored snapshots.** `deployedAt` has one legitimate writer,
+  and the DO's `etagDoesNotMatch: "*"` stopped it *clobbering* an anchor but not *being* the
+  creator. The same file already refused to create on the heartbeat path, for exactly this
+  reason — the invariant was honoured on one path and violated on the other. Both publishers now
+  decline. Verified first that an absent replica fails **closed**: `expired()` returns
+  `"untrusted"` and `interception.ts` falls open to the origin, never serving stale as fresh.
+- **One poison build dropped its batch-mates' invalidations.** No `ReportBatchItemFailures`, so
+  a build stuck on a 401 took ~2 healthy builds to the DLQ with it every batch, silently.
+- **A substrate with no adopted ISR writer DLQ'd every batch forever** and lit the alarm from
+  the moment of bootstrap — the publisher rendered unconditionally while its seed did not.
+- **The heartbeat never started for a quiet build** — it armed only on first raise, so builds
+  most likely to be silently broken were exactly the ones `.13` would never see.
+- An operator-facing message claimed an unpinned publisher falls back to the Lambda publisher
+  **this same PR deleted**.
+- Two concurrent bootstraps failed instead of converging on one seed.
+
+Verified: `workers/isr-writer` 70; `packages/tag-publisher` 15; `packages/next-cache` 41;
+`workers/nextjs` 529; `workers/deployments-store` 63; `packages/lambda-entrypoints` 190 of 191
+(the known pre-existing `test/tag-clock.test.mts` case, which survives the publisher's retirement
+because it covers cursor advancement, not publishing); `pnpm -r --no-bail typecheck` clean except
+the pre-existing `examples/*`; `cloud/aws` and `cloud/edge` build and test clean.
+
+### Two things PR 4 changed that deserve a human eye
+
+- **The ISR write-secret seed became persistent account state.** It was minted per deploy run and
+  never persisted, so nothing could reproduce a build's secret — and the account-level publisher
+  must derive any build's secret. It is now `/ocel/edge/isr-writer-seed[-preview]`, create-only,
+  SecureString, class-separated (a preview publisher provably cannot read production's, enforced
+  by both the IAM resource list and the KMS encryption-context condition). But it weakens epic
+  decision 6's "per-deploy rotating secret" to per-*build*: redeploying the same buildId no longer
+  rotates, and compromise of that one parameter is forgeable write access to every build's ISR
+  entries and tag clocks, with no rotation automation. This was the only route that avoided a
+  second credential path; it is still a real change to a security property.
+- **Two `tag-clock.json` copies now exist per build** — the R2 one the edge reads, written by the
+  DO, and a new S3 one written by the publisher that **nothing reads until PR 5**. Both get the
+  same genesis anchor and merge monotonically, so they converge independently. But nothing
+  compares them, so until PR 5 a divergence in the S3 copy is invisible.
+
+**PR 3 (`ocelhq-wvag.3`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
 Branch `isr-herd/03-manifest-projection`, rooted on PR 2. Serves decisions 4 and 5.
 
@@ -274,35 +374,51 @@ and claims every deployment lands on workers.dev.
 
 ## Next step
 
-**PRs 2 and 3 are both reviewed and their findings are fixed.** Nothing in the stack is
-waiting on scrutiny. Branch `isr-herd/04-streams-publisher` off `isr-herd/03-manifest-projection`
-and dispatch `ocelhq-wvag.4`.
+**PRs 2, 3 and 4 are all reviewed and their findings are fixed.** Nothing in the stack is
+waiting on scrutiny. Branch `isr-herd/05-origin-reads-snapshot` off `isr-herd/04-streams-publisher`
+and dispatch `ocelhq-wvag.5`.
 
-Both review rounds landed real defects rather than polish — three in PR 2, one in PR 3 — and
-in every case the failure was silent: a write dropped with no log, a herd at the auth
-boundary, storage written for a caller who never authenticated, a projection that would miss
-forever if two derivations drifted. Keep weighting later reviews toward *what fails without
-saying so*, not toward what throws.
+Three review rounds have now landed eleven real defects rather than polish, and **in every
+single case the failure was silent**: a write dropped with no log, a herd at the auth boundary,
+storage written for a caller who never authenticated, a projection that would miss forever if
+two derivations drifted, a snapshot that grows unboundedly because it was created without an
+anchor, one poison build quietly taking its batch-mates' invalidations to a DLQ, an alarm lit
+permanently from the moment of bootstrap. Not one of them threw. Keep weighting reviews toward
+*what fails without saying so* — that is where this stack's bugs actually live.
 
-Three things `.4` should know before it starts:
+Two methods have earned their keep and are worth repeating:
 
-- **It owns the last standing R2 credential's removal.** See "The credential is narrowed, not
-  gone" above. Do not close `.4` without deleting `OCEL_CACHE_STORE_PARAM`, the
-  `OCEL_ISR_STORE_*` injection and `snapshotObjectStore`. Until it lands, every deployed
-  function holds a token that can write any object in the shared `ocel-edge-cache` bucket for
-  every project.
-- **It routes snapshot writes through the PR 2 worker**, so it inherits that worker's
-  assumptions — including the ones still unproven against a real account (`ocelhq-wvag.10`).
-- The write path's fail-open discipline is now established at two seams. Match it.
+- **Reconnaissance before briefing.** PR 4 was scoped by a read-only pass over the real code
+  before a line was written. It found the issue's own ESM filter to be unsafe, its line
+  references stale, a migration flag that could not express the change being asked for, and an
+  unanchored-snapshot problem the spec never mentioned. Three of those would have shipped.
+- **Decomposing a large issue into units with fixed contracts.** PR 4 went out as four sequential
+  briefs, each fixing a contract the next coded against. The one place a brief was wrong — it
+  told Unit 4 that `publishTagSnapshot` was dead code — the implementer refused with evidence
+  (Unit 3's consumer still needs CAS for the S3 copy, which has two sanctioned ESM readers) rather
+  than deleting a live dependency. Brief them to push back.
 
-Two live threads to carry forward:
+What `.5` should know before it starts:
 
-- `ocelhq-wvag.9` blocks `.8`. It needs a deploy, like `.1` did, so start it early rather
-  than at PR 8.
-- `ocelhq-wvag.4` now owns the last standing R2 credential's removal. See "The credential is
-  narrowed, not gone" above.
+- **It reads the S3 copy PR 4 started writing** — `<isrPrefix>/tag-clock.json` in the provider's
+  asset bucket, same key and same `TagSnapshot` format as the R2 one. Nothing reads it today, so
+  `.5` is the first thing that will notice if it is wrong.
+- The origin keeps its 2 s throttle and in-flight join, swapping the GSI query for an
+  ETag-conditional GET (decision 11). **The remote tier stays fail-closed until first sync** —
+  that is deliberate, not an oversight to tidy up.
+- An absent snapshot must keep failing closed. PR 4's review confirmed the current behaviour end
+  to end: `expired()` returns `"untrusted"` and `interception.ts` falls open to the origin. Never
+  trade that for a growth or latency win.
 
-## The one decision waiting on a human
+Live threads to carry forward:
+
+- `ocelhq-wvag.9` blocks `.8`. It needs a deploy, like `.1` did, so start it early rather than
+  at PR 8.
+- `ocelhq-wvag.13` and `ocelhq-wvag.14` both block `.6`. See the stack shape above.
+- `ocelhq-wvag.12` is best done between PRs — it needs a dist build on `@ocel/next-cache`, which
+  touches Lambda and worker bundling.
+
+## The decisions waiting on a human
 
 `ocelhq-wvag.10` — live e2e for the writer — needs authorization, not just scheduling.
 Running a throwaway probe on a zone route (PR 1) and standing up **account-level
@@ -320,3 +436,28 @@ account before the stack that justifies it is complete.
 
 Either answer is workable. It just should not be decided by an agent inferring consent from
 the fact that credentials happen to be present.
+
+**PR 4 added a second, sharper reason to run it.** The Cloudflare migration generalization
+assumes the script-settings endpoint reports a migration tag for a script migrated with the
+*older single-tag form* — the form PR 2 shipped. If it does not, bootstrap hard-fails on exactly
+the already-bootstrapped accounts the generalization exists to migrate. The pure logic is sound
+and tested both ways; the API response shape is not something a unit test can reach. `bd show
+ocelhq-wvag.10` carries a three-step reproduction, and **only step 3 actually tests it** — steps
+1 and 2 pass either way.
+
+### `ocelhq-wvag.14` — cut and pin the tag-publisher release artifact
+
+Also a human gate, mirroring `ocelhq-pf6q.13` for the image optimizer. Both pin constants ship
+empty, so bootstrap deliberately renders **no** publisher at all rather than failing. Until it is
+cut, no origin-raised invalidation reaches a build's edge replica — only edge-raised ones. The
+origin's own tag state is unaffected, so this is bounded, and it is why `.14` blocks `.6`.
+
+### The ISR write-secret seed's new lifecycle
+
+Not a gate, but it should be looked at rather than discovered later. PR 4 made the seed
+persistent account state because the account-level publisher must derive any build's secret and
+the alternative was a second credential path. The consequence is that the per-deploy rotation
+epic decision 6 describes is now per-*build*: redeploying the same buildId does not rotate, and
+that one SSM parameter is forgeable write access to every build's ISR entries and tag clocks,
+with no rotation automation. Production and preview are provably separated. See PR 4's entry in
+"Current position".
