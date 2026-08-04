@@ -1,9 +1,11 @@
-import { entryMissHeader } from "@ocel/next-cache";
-import { SELF, env, runInDurableObject } from "cloudflare:test";
+import { entryMissHeader, tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
+import { SELF, env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sha256Hex } from "@ocel/worker-auth";
 import { IsrDeploy } from "../src/isr-deploy";
+import { IsrSnapshot } from "../src/isr-snapshot";
+import { claimBuild } from "../src/build";
 import * as registry from "../src/registry";
 import type { Env } from "../src/env";
 
@@ -444,5 +446,158 @@ describe("secret rotation", () => {
     }
     expect(secretHash).toHaveBeenCalledTimes(2);
     secretHash.mockRestore();
+  });
+});
+
+// The single writer of a build's tag-clock replica, reached with the same
+// per-deploy write secret every other runtime op carries. A 2xx here is a
+// promise the caller leans on: the raiser reads its own write immediately
+// afterwards, so an answer that outran the R2 write would read as an
+// invalidation that never happened.
+describe("tag raises", () => {
+  function raiseReq(prefix: string, secret: string, body: unknown) {
+    return SELF.fetch(
+      bearerReq(`/${prefix}/tags`, secret, { method: "POST", body: JSON.stringify(body) }),
+    );
+  }
+
+  async function seedGenesis(prefix: string, deployedAt: number) {
+    const genesis: TagSnapshot = { version: 1, deployedAt, generatedAt: deployedAt, records: {} };
+    await env.OCEL_CACHE_STORE.put(tagSnapshotKey(prefix), JSON.stringify(genesis));
+  }
+
+  async function snapshotOf(prefix: string): Promise<TagSnapshot | null> {
+    const object = await env.OCEL_CACHE_STORE.get(tagSnapshotKey(prefix));
+    return object === null ? null : ((await object.json()) as TagSnapshot);
+  }
+
+  function snapshotStub(prefix: string) {
+    return env.ISR_SNAPSHOT_DO.get(env.ISR_SNAPSHOT_DO.idFromName(prefix));
+  }
+
+  it("leaves the R2 document holding the raised records before it answers", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await seedGenesis(prefix, 1_000);
+
+    const res = await raiseReq(prefix, "write-secret", {
+      records: { products: { expired: 5_000 }, blog: { stale: 6_000 } },
+    });
+    expect(res.status).toBe(204);
+    expect((await snapshotOf(prefix))?.records).toEqual({
+      products: { expired: 5_000 },
+      blog: { stale: 6_000 },
+    });
+  });
+
+  it("keeps the deploy anchor the genesis seed wrote", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await seedGenesis(prefix, 1_000);
+
+    await raiseReq(prefix, "write-secret", { records: { a: { expired: 5_000 } } });
+    expect((await snapshotOf(prefix))?.deployedAt).toBe(1_000);
+  });
+
+  it("refuses a raise signed with another deploy's secret, and an unsigned one", async () => {
+    const mine = freshPrefix();
+    const theirs = freshPrefix();
+    await initialize(mine, "my-secret");
+    await initialize(theirs, "their-secret");
+    await seedGenesis(theirs, 1_000);
+
+    expect((await raiseReq(theirs, "my-secret", { records: { a: { expired: 5_000 } } })).status).toBe(401);
+    expect((await raiseReq(theirs, BOOTSTRAP, { records: { a: { expired: 5_000 } } })).status).toBe(401);
+    const unsigned = await SELF.fetch(
+      req(`/${theirs}/tags`, { method: "POST", body: JSON.stringify({ records: {} }) }),
+    );
+    expect(unsigned.status).toBe(401);
+    expect((await snapshotOf(theirs))?.records).toEqual({});
+  });
+
+  it("refuses a body that is not a set of tag records", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    const bodies = [
+      {},
+      { records: null },
+      { records: [] },
+      { records: { a: 7 } },
+      { records: { a: {} } },
+      { records: { a: { expired: "5000" } } },
+      { records: { a: { expired: -1 } } },
+      { records: { "": { expired: 5_000 } } },
+    ];
+    for (const body of bodies) {
+      expect((await raiseReq(prefix, "write-secret", body)).status, JSON.stringify(body)).toBe(400);
+    }
+  });
+
+  // Nothing durable happened, and the caller still holds the records: the merge
+  // is idempotent, so raising them again is the whole of the repair. Reporting
+  // it is what the three-attempt silent give-up never did.
+  it("reports an exhausted publish as a rate limit rather than a success", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    const raise = vi.spyOn(IsrSnapshot.prototype, "raise").mockResolvedValue("exhausted");
+
+    expect((await raiseReq(prefix, "write-secret", { records: { a: { expired: 5_000 } } })).status).toBe(429);
+    raise.mockRestore();
+  });
+
+  it("404s a raise against a path that is not a deploy prefix", async () => {
+    const res = await SELF.fetch(
+      bearerReq("/prod/acme/tags", "write-secret", { method: "POST", body: "{}" }),
+    );
+    expect(res.status).toBe(404);
+  });
+
+  // The document carries no expiry, so an untouched object otherwise means both
+  // "nothing has changed" and "nobody has published in a week".
+  it("advances generatedAt from the heartbeat alarm with no tag activity", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await seedGenesis(prefix, 1_000);
+    await raiseReq(prefix, "write-secret", { records: { a: { expired: 5_000 } } });
+
+    const published = (await snapshotOf(prefix))!;
+    expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(true);
+
+    const beaten = (await snapshotOf(prefix))!;
+    expect(beaten.generatedAt).toBeGreaterThanOrEqual(published.generatedAt);
+    expect(beaten.records).toEqual(published.records);
+    expect(beaten.deployedAt).toBe(1_000);
+    // Liveness that stops after one beat is no liveness at all.
+    expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(true);
+  });
+
+  // A build whose snapshot is gone has been retired or pruned. A document
+  // conjured for it would carry no deploy anchor, so it could never prune again
+  // — and it would be a replica of a build that no longer exists.
+  it("stops beating for a build that has no snapshot to republish", async () => {
+    const prefix = freshPrefix();
+    const stub = snapshotStub(prefix);
+    // What an object evicted between beats wakes up to: its claim on a build,
+    // an alarm due, and nothing in R2 under that build's key.
+    await runInDurableObject(stub, async (_instance, ctx) => {
+      await claimBuild(ctx.storage, prefix);
+      await ctx.storage.setAlarm(Date.now() + 60_000);
+    });
+
+    expect(await runDurableObjectAlarm(stub)).toBe(true);
+    expect(await snapshotOf(prefix)).toBeNull();
+    expect(await runDurableObjectAlarm(stub)).toBe(false);
+  });
+
+  it("stops beating for a deploy that has been retired", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await seedGenesis(prefix, 1_000);
+    await raiseReq(prefix, "write-secret", { records: { a: { expired: 5_000 } } });
+
+    const res = await SELF.fetch(bearerReq(`/${prefix}/destroy`, BOOTSTRAP, { method: "POST" }));
+    expect(res.status).toBe(204);
+    expect(await runDurableObjectAlarm(snapshotStub(prefix))).toBe(false);
   });
 });

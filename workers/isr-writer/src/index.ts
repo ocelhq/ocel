@@ -5,12 +5,14 @@ import { bearer, matchesHash, matchesSecret } from "@ocel/worker-auth";
 
 import { readEntry, writeEntry } from "./entry";
 import { IsrDeploy } from "./isr-deploy";
+import { IsrSnapshot } from "./isr-snapshot";
 import { forget, memoize, memoized } from "./memo";
 import { isSecretHash } from "./registry";
 import type { Env } from "./env";
 import type { Memo } from "./memo";
+import type { TagRecord } from "@ocel/next-cache";
 
-export { IsrDeploy };
+export { IsrDeploy, IsrSnapshot };
 
 // A deploy's isrPrefix, exactly: <env>/<project>/<app>/<buildId>. Every request
 // path is this plus one op segment. The entry op reaches the object named by
@@ -24,8 +26,12 @@ function deployPrefix(segments: string[]): string | null {
   return segments.every((s) => PREFIX_SEGMENT.test(s)) ? segments.join("/") : null;
 }
 
-function stub(env: Env, isrPrefix: string) {
+function deployStub(env: Env, isrPrefix: string) {
   return env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(isrPrefix));
+}
+
+function snapshotStub(env: Env, isrPrefix: string) {
+  return env.ISR_SNAPSHOT_DO.get(env.ISR_SNAPSHOT_DO.idFromName(isrPrefix));
 }
 
 // Reads in flight, so a herd arriving on one deploy before its memo is filled
@@ -38,7 +44,7 @@ function fromRegistry(env: Env, isrPrefix: string, refreshed: boolean): Promise<
   const inFlight = registryReads.get(isrPrefix);
   if (inFlight !== undefined) return inFlight;
 
-  const read = stub(env, isrPrefix)
+  const read = deployStub(env, isrPrefix)
     .secretHash()
     .then((hash) => memoize(isrPrefix, hash, refreshed))
     .finally(() => registryReads.delete(isrPrefix));
@@ -55,6 +61,36 @@ async function authorized(env: Env, isrPrefix: string, token: string): Promise<b
   if (await matches(memo, token)) return true;
   if (memo.refreshed) return false;
   return matches(await fromRegistry(env, isrPrefix, true), token);
+}
+
+// A watermark is a moment, so anything that is not one raises nothing. Rejected
+// rather than coerced: the merge only ever moves watermarks upward, so a value
+// invented here can never be walked back.
+function isWatermark(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
+function tagRecord(value: unknown): TagRecord | null {
+  if (typeof value !== "object" || value === null) return null;
+  const { stale, expired } = value as { stale?: unknown; expired?: unknown };
+  if (stale !== undefined && !isWatermark(stale)) return null;
+  if (expired !== undefined && !isWatermark(expired)) return null;
+  if (stale === undefined && expired === undefined) return null;
+  return {
+    ...(stale !== undefined ? { stale } : {}),
+    ...(expired !== undefined ? { expired } : {}),
+  };
+}
+
+function tagRecords(value: unknown): Record<string, TagRecord> | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const records: Record<string, TagRecord> = {};
+  for (const [tag, entry] of Object.entries(value)) {
+    const record = tagRecord(entry);
+    if (tag === "" || record === null) return null;
+    records[tag] = record;
+  }
+  return records;
 }
 
 async function readJson<T>(request: Request): Promise<T | undefined> {
@@ -81,6 +117,12 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
 //   authenticated with that deploy's own write secret. The object key is
 //   derived from the authenticated prefix, so no caller can address another
 //   deploy's slice.
+// - POST /<isrPrefix>/tags raises tag invalidations into that build's
+//   tag-clock replica, on the same write secret. The body is
+//   {"records": {"<tag>": {"stale"?: ms, "expired"?: ms}}}: 204 once R2 holds
+//   them, 429 when the publisher exhausted its retries and nothing landed, 400
+//   on a body that is not a record set. The 204 is awaited all the way through
+//   the R2 write, because the raiser reads its own write straight afterwards.
 //
 // Auth is verified at this boundary and nowhere else: the DO behind it is
 // unauthenticated, matching workers/deployments-store/src/index.ts.
@@ -102,7 +144,7 @@ export default class extends WorkerEntrypoint<Env> {
       if (!isSecretHash(body?.secretHash)) {
         return new Response("Bad Request", { status: 400 });
       }
-      await stub(this.env, isrPrefix).initialize(body.secretHash);
+      await deployStub(this.env, isrPrefix).initialize(body.secretHash);
       // Not `refreshed`: an isolate that served a redeploy's predecessor still
       // owes the new generation its one registry re-read.
       memoize(isrPrefix, body.secretHash, false);
@@ -113,7 +155,8 @@ export default class extends WorkerEntrypoint<Env> {
       if (!(await this.bootstrapAuthorized(request))) {
         return new Response("Unauthorized", { status: 401 });
       }
-      await stub(this.env, isrPrefix).destroy();
+      await deployStub(this.env, isrPrefix).destroy();
+      await snapshotStub(this.env, isrPrefix).destroy();
       forget(isrPrefix);
       return new Response(null, { status: 204 });
     }
@@ -147,6 +190,24 @@ export default class extends WorkerEntrypoint<Env> {
       // A rate-limited write is reported, not retried: the caller already holds
       // a fresh render and the winner wrote one just as fresh.
       if (outcome === "rate-limited") {
+        return new Response("Too Many Requests", { status: 429 });
+      }
+      return new Response(null, { status: 204 });
+    }
+
+    if (request.method === "POST" && op === "tags") {
+      const token = bearer(request);
+      if (token === null || !(await authorized(this.env, isrPrefix, token))) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      const body = await readJson<{ records?: unknown }>(request);
+      const records = tagRecords(body?.records);
+      if (records === null) return new Response("Bad Request", { status: 400 });
+
+      // Nothing durable happened, and the caller still holds the records: the
+      // merge is idempotent, so raising them again is the whole of the repair.
+      // Saying so is what the three-attempt silent give-up never did.
+      if ((await snapshotStub(this.env, isrPrefix).raise(isrPrefix, records)) === "exhausted") {
         return new Response("Too Many Requests", { status: 429 });
       }
       return new Response(null, { status: 204 });
