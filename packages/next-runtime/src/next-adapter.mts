@@ -1,3 +1,4 @@
+import { cacheKey, variantHeadersFile } from "@ocel/next-cache/naming";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { createHash } from "node:crypto";
@@ -27,9 +28,6 @@ import { stableStringify } from "./stable-json.mjs";
 
 const launcherName = "__next_launcher.cjs";
 const dispatchName = "__ocel_dispatch.cjs";
-// Read back at the root of the function's own task directory by the cache
-// handler the membrane layer mounts, which spells this name for itself.
-const variantHeadersFile = "variant-headers.json";
 
 // The ocel builder passes this app's own subtree; a bare `next build` outside
 // ocel falls back to the flat cwd path.
@@ -835,12 +833,6 @@ interface PrerenderGroup {
   segments: any[];
 }
 
-// `cacheKey` in @ocel/next-cache is the authority on this spelling; a contract
-// test holds this one to it, since the function bundle cannot import it.
-export function entryKeyOf(pathname: string): string {
-  return pathname === "/" ? "index" : pathname.replace(/^\//, "");
-}
-
 // groupPrerenders recombines each groupId's outputs into the route they
 // describe. A member is a segment or the `.rsc` payload by its own suffix; the
 // html variant is the one that is neither. A group whose html variant Next did
@@ -860,7 +852,7 @@ function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
     const html = pages.find((m) => !m.pathname.endsWith(".rsc"));
     if (!html) continue;
     groups.push({
-      entryKey: entryKeyOf(html.pathname),
+      entryKey: cacheKey(html.pathname),
       html,
       rsc: pages.find((m) => m.pathname.endsWith(".rsc")),
       segments,

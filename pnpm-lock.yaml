@@ -767,6 +767,10 @@ importers:
         version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
 
   packages/next-runtime:
+    dependencies:
+      '@ocel/next-cache':
+        specifier: workspace:*
+        version: link:../next-cache
     devDependencies:
       '@types/node':
         specifier: ^24
