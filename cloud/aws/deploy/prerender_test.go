@@ -139,6 +139,7 @@ func TestUploadPrerenderAssets_SeedsTheAdoptedCacheStore(t *testing.T) {
 		ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: asset,
 		CacheStoreBucket: "isr", CacheStoreUploader: store,
 	}
+	cfg = adoptISRWriter(t, cfg)
 
 	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -202,6 +203,7 @@ func TestUploadPrerenderAssets_SeedsTheGenesisTagSnapshot(t *testing.T) {
 		ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
 		Uploader: &fakeUploader{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreUploader: store,
 	}
+	cfg = adoptISRWriter(t, cfg)
 
 	before := time.Now().UnixMilli()
 	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
@@ -243,6 +245,7 @@ func TestUploadPrerenderAssets_KeepsAnExistingSnapshot(t *testing.T) {
 		ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
 		Uploader: &fakeUploader{exists: map[string]bool{}}, CacheStoreBucket: "isr", CacheStoreUploader: store,
 	}
+	cfg = adoptISRWriter(t, cfg)
 
 	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
@@ -420,6 +423,7 @@ func TestUploadPrerenderAssets_FetchEntriesStayOnTheAssetBucket(t *testing.T) {
 		ArtifactRoot: root, AssetBucket: "assets", Env: "prod", Uploader: asset,
 		CacheStoreBucket: "isr", CacheStoreUploader: store,
 	}
+	cfg = adoptISRWriter(t, cfg)
 
 	if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
 		t.Fatalf("uploadPrerenderAssets: %v", err)

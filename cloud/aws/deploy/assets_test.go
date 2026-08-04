@@ -399,7 +399,7 @@ func TestUploadPrerenderAssets_RouteEntriesAreNotMirroredToTheAssetBucket(t *tes
 		"apps/web/fetch-cache/a1.cache.json": `{"lastModified":2,"value":{"kind":"FETCH"}}`,
 	})
 	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
-	cfg := mirrorConfig(root, store, asset)
+	cfg := adoptISRWriter(t, mirrorConfig(root, store, asset))
 
 	if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
 		t.Fatalf("uploadPrerenderAssets: %v", err)

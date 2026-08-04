@@ -171,9 +171,10 @@ func (c isrConfig) env() map[string]string {
 	if c.CacheStoreParam != "" {
 		env["OCEL_CACHE_STORE_PARAM"] = c.CacheStoreParam
 	}
-	// Both or neither: the handler routes entry writes through the writer only
-	// when it has an address and a credential for it, and falls back to the
-	// object store it already addresses otherwise.
+	// Both or neither. Set exactly when this deploy's entries live in the adopted
+	// cache store, which is the only bucket the writer holds — appCaches refuses
+	// a deploy where the two disagree, and the handler refuses to run without
+	// them once a store is adopted, since it has no other way to write an entry.
 	if c.WriterURL != "" && c.WriterSecret != "" {
 		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
 		env["OCEL_ISR_WRITER_SECRET"] = c.WriterSecret

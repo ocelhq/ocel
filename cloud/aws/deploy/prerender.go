@@ -63,6 +63,9 @@ func appAssetPrefixFor(env, slug, app, buildID string) string {
 // one, keyed by app name. An app whose framework has no server-side cache is
 // absent, and so gets neither cache env nor a cache grant.
 func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrConfig, error) {
+	if err := checkISRWriterAgrees(cfg); err != nil {
+		return nil, err
+	}
 	caches := map[string]*isrConfig{}
 	for _, fn := range manifest.GetFunctions() {
 		app := fn.GetApp()
@@ -81,7 +84,7 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 			CacheStoreParam:    cfg.CacheStoreParam,
 			CacheStoreParamARN: cfg.CacheStoreParamARN,
 		}
-		if isrWriterConfigured(cfg) {
+		if isrEntriesAdopted(cfg) {
 			cache.WriterURL = cfg.ISRWriterEndpoint + "/" + prefix + "/entry"
 			cache.WriterSecret = isrWriteSecret(cfg.ISRWriterSeed, prefix)
 		}
@@ -285,10 +288,19 @@ func isPreconditionFailed(err error) bool {
 // when it did not. The cache handler makes the same choice from the coordinates
 // the membrane injects, so the two agree on one bucket by construction.
 func entryTarget(cfg Config) uploadTarget {
-	if cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil {
+	if isrEntriesAdopted(cfg) {
 		return uploadTarget{up: cfg.CacheStoreUploader, bucket: cfg.CacheStoreBucket}
 	}
 	return uploadTarget{up: cfg.Uploader, bucket: cfg.AssetBucket}
+}
+
+// isrEntriesAdopted reports whether this deploy's ISR entries live in the
+// substrate's adopted cache store rather than the provider's own bucket. It is
+// the one question that decides where entries are seeded, where the deployed
+// function reads them back, and — because the writer worker holds that same
+// bucket and no other — whether entry writes go through the writer.
+func isrEntriesAdopted(cfg Config) bool {
+	return cfg.CacheStoreBucket != "" && cfg.CacheStoreUploader != nil
 }
 
 // collectFiles returns every file under dir as slash-separated paths relative to
