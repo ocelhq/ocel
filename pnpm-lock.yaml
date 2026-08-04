@@ -939,6 +939,9 @@ importers:
       typescript:
         specifier: ^5.5.2
         version: 5.9.3
+      undici:
+        specifier: ^7.28.0
+        version: 7.28.0
       vitest:
         specifier: ~3.2.0
         version: 3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)

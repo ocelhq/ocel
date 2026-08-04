@@ -18,7 +18,12 @@ export function summarizeIsolates(samples: IdentitySample[]): IsolateSummary[] {
   const byColo = new Map<string, Set<string>>();
   const counts = new Map<string, number>();
   for (const { colo, isolate } of samples) {
-    (byColo.get(colo) ?? byColo.set(colo, new Set()).get(colo)!).add(isolate);
+    let isolates = byColo.get(colo);
+    if (!isolates) {
+      isolates = new Set();
+      byColo.set(colo, isolates);
+    }
+    isolates.add(isolate);
     counts.set(colo, (counts.get(colo) ?? 0) + 1);
   }
   return [...byColo.entries()]
@@ -33,15 +38,19 @@ export function summarizeIsolates(samples: IdentitySample[]): IsolateSummary[] {
 export interface SentinelObservation {
   reader: string;
   colo: string;
-  // The writer id carried by the cached sentinel, or null when the read missed.
   writer: string | null;
   hit: boolean;
   elapsedMs: number;
 }
 
 export type SentinelVerdict =
-  // Another isolate read the sentinel: L1 as designed is viable.
+  // Nearly every cross-isolate read hit: L1 as designed is viable.
   | "cross-isolate-visible"
+  // Some cross-isolate reads hit and some missed. A colo is many machines, so
+  // this is the expected shape of a real sharing result. L1 suppresses only the
+  // observed fraction, and L2 must be sized by that suppression factor rather
+  // than by colo count.
+  | "partially-visible"
   // Other isolates read and missed while the writer's own isolate hit: L1 is a
   // no-op and L2 must be sized for isolate-count fan-in.
   | "isolate-local"
@@ -49,59 +58,77 @@ export type SentinelVerdict =
   // (the workers.dev case), so the run measured nothing about isolates.
   | "never-cached"
   // No read ever landed on an isolate other than the writer's, so the run
-  // cannot distinguish the two outcomes.
+  // cannot distinguish the outcomes.
   | "inconclusive";
+
+// A cross-isolate hit rate at or above this reads as full sharing rather than
+// partial. Below it the suppression factor, not the verdict, is the finding.
+const FULLY_VISIBLE_HIT_RATE = 0.9;
 
 export interface SentinelSummary {
   verdict: SentinelVerdict;
   readerIsolates: number;
+  crossIsolateReads: number;
   crossIsolateHits: number;
+  crossIsolateHitRate: number | null;
+  writerIsolateReads: number;
   writerIsolateHits: number;
-  misses: number;
   firstCrossIsolateHitMs: number | null;
   foreignColoObservations: number;
 }
 
 export function summarizeSentinel(
   writer: string,
+  writerColo: string | null,
   observations: SentinelObservation[],
 ): SentinelSummary {
-  const writerColo = observations.find((o) => o.reader === writer)?.colo;
   const sameColo = writerColo
     ? observations.filter((o) => o.colo === writerColo)
-    : observations.filter((o, _, all) => o.colo === all[0]?.colo);
+    : observations;
 
   const cross = sameColo.filter((o) => o.reader !== writer);
   const crossHits = cross.filter((o) => o.hit);
-  const writerHits = sameColo.filter((o) => o.reader === writer && o.hit);
+  const own = sameColo.filter((o) => o.reader === writer);
 
   const summary = {
     readerIsolates: new Set(sameColo.map((o) => o.reader)).size,
+    crossIsolateReads: cross.length,
     crossIsolateHits: crossHits.length,
-    writerIsolateHits: writerHits.length,
-    misses: sameColo.filter((o) => !o.hit).length,
+    crossIsolateHitRate: cross.length ? crossHits.length / cross.length : null,
+    writerIsolateReads: own.length,
+    writerIsolateHits: own.filter((o) => o.hit).length,
     firstCrossIsolateHitMs: crossHits.length
       ? Math.min(...crossHits.map((o) => o.elapsedMs))
       : null,
     foreignColoObservations: observations.length - sameColo.length,
   };
 
-  return { ...summary, verdict: sentinelVerdict(summary, cross.length) };
+  return { ...summary, verdict: sentinelVerdict(summary) };
 }
 
-function sentinelVerdict(
-  summary: Omit<SentinelSummary, "verdict">,
-  crossReads: number,
-): SentinelVerdict {
-  if (summary.crossIsolateHits > 0) return "cross-isolate-visible";
-  if (crossReads === 0) return "inconclusive";
-  if (summary.writerIsolateHits > 0) return "isolate-local";
-  return "never-cached";
+function sentinelVerdict(summary: Omit<SentinelSummary, "verdict">): SentinelVerdict {
+  if (summary.crossIsolateReads === 0) return "inconclusive";
+  if (summary.crossIsolateHits === 0) {
+    return summary.writerIsolateHits > 0 ? "isolate-local" : "never-cached";
+  }
+  return summary.crossIsolateHitRate! >= FULLY_VISIBLE_HIT_RATE
+    ? "cross-isolate-visible"
+    : "partially-visible";
+}
+
+export const showsCrossIsolateVisibility = (verdict: SentinelVerdict) =>
+  verdict === "cross-isolate-visible" || verdict === "partially-visible";
+
+export interface TtlRead {
+  isolate: string;
+  hit: boolean;
+  ageSeconds: number | null;
+  cacheControl: string | null;
 }
 
 export interface TtlObservation {
-  hit: boolean;
   elapsedMs: number;
+  reads: TtlRead[];
 }
 
 export type TtlVerdict =
@@ -109,7 +136,8 @@ export type TtlVerdict =
   | "honored"
   // The entry was already gone before the requested TTL elapsed.
   | "evicted-early"
-  // The observed lifetime brackets the requested TTL, so the run proves neither.
+  // The observed lifetime brackets the requested TTL, or no poll was able to
+  // observe the entry's liveness at all, so the run proves neither.
   | "indeterminate"
   | "never-cached";
 
@@ -126,19 +154,45 @@ export interface TtlSummary {
   // demonstrably still live, which is itself worth seeing.
   transientMisses: number;
   polls: number;
+  // Polls whose reads could actually observe the entry: all of them when the
+  // sentinel phase proved the cache is shared, otherwise only those that landed
+  // on the writer's own isolate. A poll that could not observe the entry says
+  // nothing about its lifetime, and counting it would manufacture a confident
+  // evicted-early out of routing luck.
+  authoritativePolls: number;
+  // Cloudflare's own account of the entry, independent of this probe's polling
+  // luck: the largest age it reported bounds the lifetime from below, and a
+  // cache-control differing from what was written answers whether cache.put
+  // rewrites TTLs.
+  maxObservedAgeSeconds: number | null;
+  observedCacheControl: string[];
 }
 
 export function summarizeTtl(
   requestedTtlSeconds: number,
+  writer: string,
   observations: TtlObservation[],
+  crossIsolateVisible: boolean,
 ): TtlSummary {
-  const polls = [...observations].sort((a, b) => a.elapsedMs - b.elapsedMs);
+  const polls = observations
+    .map(({ elapsedMs, reads }) => {
+      const counted = crossIsolateVisible
+        ? reads
+        : reads.filter((r) => r.isolate === writer);
+      return counted.length ? { elapsedMs, hit: counted.some((r) => r.hit) } : null;
+    })
+    .filter((poll) => poll !== null)
+    .sort((a, b) => a.elapsedMs - b.elapsedMs);
+
   const hits = polls.filter((p) => p.hit);
   const lastHitMs = hits.length ? hits[hits.length - 1]!.elapsedMs : null;
   const firstMissAfterLastHitMs =
     lastHitMs === null
       ? null
       : (polls.find((p) => !p.hit && p.elapsedMs > lastHitMs)?.elapsedMs ?? null);
+
+  const hitReads = observations.flatMap((o) => o.reads).filter((r) => r.hit);
+  const ages = hitReads.map((r) => r.ageSeconds).filter((age) => age !== null);
 
   return {
     requestedTtlSeconds,
@@ -149,8 +203,16 @@ export function summarizeTtl(
       lastHitMs === null
         ? 0
         : polls.filter((p) => !p.hit && p.elapsedMs < lastHitMs).length,
-    polls: polls.length,
-    verdict: ttlVerdict(requestedTtlSeconds * 1_000, lastHitMs, firstMissAfterLastHitMs),
+    polls: observations.length,
+    authoritativePolls: polls.length,
+    maxObservedAgeSeconds: ages.length ? Math.max(...ages) : null,
+    observedCacheControl: [
+      ...new Set(hitReads.map((r) => r.cacheControl).filter((cc) => cc !== null)),
+    ].sort(),
+    verdict:
+      polls.length === 0
+        ? "indeterminate"
+        : ttlVerdict(requestedTtlSeconds * 1_000, lastHitMs, firstMissAfterLastHitMs),
   };
 }
 
