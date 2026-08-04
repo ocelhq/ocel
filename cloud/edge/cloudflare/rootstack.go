@@ -129,6 +129,12 @@ var (
 // active Deployment at request time.
 const genericStoreBinding = "DEPLOYMENTS"
 
+// genericISRWriterBinding is the env name the frozen generic worker reads its
+// service binding to the shared ISR writer worker from
+// (workers/nextjs/src/index.ts Env.ISR_WRITER), through which an edge
+// revalidateTag raises the build's invalidations into their one publisher.
+const genericISRWriterBinding = "ISR_WRITER"
+
 // genericSlugBinding is the env name the frozen generic worker reads the
 // project slug from (workers/nextjs/src/index.ts Env.OCEL_SLUG), which it
 // passes on every resolve RPC to address the project's own store instance.
@@ -153,10 +159,7 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	// never get a route.
 	genericUp := upload{accountID: accountID, scriptName: spec.GenericName}
 	if !upToDate {
-		genericUp.worker = bindCodeLoader(bindObjectStore(
-			withVar(withService(spec.Generic, genericStoreBinding, spec.StoreScriptName), genericSlugBinding, slug),
-			spec.Values,
-		))
+		genericUp.worker = genericWorker(spec, slug)
 		assetsJWT, err := p.uploadAssets(ctx, genericUp)
 		if err != nil {
 			return nil, fmt.Errorf("upload generic worker assets: %w", err)
@@ -741,6 +744,26 @@ func withSecret(worker edge.Worker, name, value string) edge.Worker {
 	secrets[name] = value
 	worker.Secrets = secrets
 	return worker
+}
+
+// genericWorker is the frozen per-app worker as it is uploaded: the assembly's
+// own bundle and bindings, plus the ones only the root stack can name — the
+// shared account workers this substrate class provisioned, and the project slug
+// addressing this project's own instance of the store.
+//
+// An unoffered ISR writer binds nothing rather than binding an empty name: an
+// upload naming a script that does not exist is refused outright, and a build
+// that raises nowhere still records every invalidation durably.
+func genericWorker(spec edge.RootStackSpec, slug string) edge.Worker {
+	worker := withVar(
+		withService(spec.Generic, genericStoreBinding, spec.StoreScriptName),
+		genericSlugBinding,
+		slug,
+	)
+	if spec.ISRWriterScriptName != "" {
+		worker = withService(worker, genericISRWriterBinding, spec.ISRWriterScriptName)
+	}
+	return bindCodeLoader(bindObjectStore(worker, spec.Values))
 }
 
 // withService returns worker with one additional service binding, leaving

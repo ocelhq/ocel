@@ -474,3 +474,48 @@ func TestBuildDeploymentRecord_NonNextAppHasNoAssetPrefix(t *testing.T) {
 		t.Errorf("AssetPrefix = %q, want empty for a non-Next app", record.AssetPrefix)
 	}
 }
+
+// TestBuildDeploymentRecord_CarriesTheBuildsWriteSecret proves the record hands
+// the frozen edge worker the secret its tag raises authenticate with. The
+// secret is per-build and the worker script outlives every build it serves, so
+// the Deployment record is the only place it can ride.
+func TestBuildDeploymentRecord_CarriesTheBuildsWriteSecret(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+	})
+	cfg := Config{
+		ArtifactRoot:           root,
+		Env:                    "prod",
+		CacheStoreBucket:       "ocel-edge-cache",
+		CacheStoreUploader:     &fakeUploader{exists: map[string]bool{}},
+		ISRWriterEndpoint:      "https://writer.example",
+		ISRWriterBootstrapCred: "boot",
+		ISRWriterSeed:          "seed-1",
+	}
+	manifest := nextManifest()
+	app := &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}
+
+	record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if want := isrWriteSecret("seed-1", "prod/proj/web/WEB1"); record.IsrWriteSecret != want {
+		t.Errorf("IsrWriteSecret = %q, want the secret derived for this build's prefix", record.IsrWriteSecret)
+	}
+}
+
+// A substrate that adopted no writer has no secret to derive, so the record
+// carries none and the edge raises nowhere rather than with a made-up token.
+func TestBuildDeploymentRecord_NoWriterLeavesNoWriteSecret(t *testing.T) {
+	root := writeTree(t, map[string]string{
+		"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`,
+	})
+	cfg := Config{ArtifactRoot: root, Env: "prod"}
+	record, err := buildDeploymentRecord(cfg, nextManifest(), &deploymentsv1.ManifestApp{Name: "web", Framework: frameworkNext}, buildOnly("WEB1"), nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if record.IsrWriteSecret != "" {
+		t.Errorf("IsrWriteSecret = %q, want empty", record.IsrWriteSecret)
+	}
+}

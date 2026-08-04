@@ -296,6 +296,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 		ISRWriterEndpoint:      isrWriter.Endpoint,
 		ISRWriterBootstrapCred: isrWriter.BootstrapCred,
+		ISRWriterScriptName:    isrWriter.ScriptName,
 		ISRWriterSeed:          isrWriterSeed,
 
 		Uploader:       s3.NewFromConfig(awscfg),

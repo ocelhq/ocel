@@ -967,3 +967,40 @@ func TestAppliedMigrationTag_AbsentScriptCarriesNoTag(t *testing.T) {
 		t.Errorf("appliedMigrationTag = %q, want empty", tag)
 	}
 }
+
+// The generic worker reaches two shared account workers, and neither is
+// something its own assembly can name: only the root stack knows which script
+// each substrate class provisioned.
+func TestGenericWorker_BindsTheAccountWorkersItReaches(t *testing.T) {
+	spec := edge.RootStackSpec{
+		Generic:             testStoreWorker(),
+		StoreScriptName:     "ocel-deployments-store",
+		ISRWriterScriptName: "ocel-isr-writer",
+	}
+
+	worker := genericWorker(spec, "acme-web")
+
+	if worker.Services[genericStoreBinding] != "ocel-deployments-store" {
+		t.Errorf("Services[%s] = %q", genericStoreBinding, worker.Services[genericStoreBinding])
+	}
+	if worker.Services[genericISRWriterBinding] != "ocel-isr-writer" {
+		t.Errorf("Services[%s] = %q", genericISRWriterBinding, worker.Services[genericISRWriterBinding])
+	}
+	if worker.Vars[genericSlugBinding] != "acme-web" {
+		t.Errorf("Vars[%s] = %q", genericSlugBinding, worker.Vars[genericSlugBinding])
+	}
+}
+
+// An upload naming a script that does not exist is refused outright, so a
+// substrate whose bootstrap predates the ISR writer binds nothing and serves
+// on: its builds record invalidations and replicate none, exactly as they did
+// before the edge published at all.
+func TestGenericWorker_LeavesTheISRWriterUnboundWhenTheSubstrateOffersNone(t *testing.T) {
+	spec := edge.RootStackSpec{Generic: testStoreWorker(), StoreScriptName: "ocel-deployments-store"}
+
+	worker := genericWorker(spec, "acme-web")
+
+	if _, bound := worker.Services[genericISRWriterBinding]; bound {
+		t.Errorf("Services = %v, want no %s binding", worker.Services, genericISRWriterBinding)
+	}
+}

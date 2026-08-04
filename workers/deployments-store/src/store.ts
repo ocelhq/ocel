@@ -24,6 +24,10 @@ export interface DeploymentRecord {
   functionUrls: Record<string, string>;
   assetPrefix: string;
   isrPrefix: string;
+  // The build's own write secret for the ISR writer worker, which the serving
+  // worker raises this build's tag invalidations with. Absent on a build
+  // deployed against a substrate that adopted no writer.
+  isrWriteSecret?: string;
   createdAt: number;
   // The build's own edge code (Next edge routes / middleware): where its bundle
   // lives and what runtime the serving worker's loader evaluates it under.

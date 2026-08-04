@@ -131,6 +131,12 @@ type RootStackSpec struct {
 	// StoreScriptName is the shared deployments-store worker's script name
 	// (provisioned once at bootstrap), which Generic service-binds to.
 	StoreScriptName string
+	// ISRWriterScriptName is the shared ISR writer worker's script name, which
+	// Generic service-binds to so an edge revalidateTag raises into the build's
+	// one publisher rather than writing the replica itself. Empty on a
+	// substrate whose bootstrap predates the writer, which binds nothing: a
+	// binding naming a script that does not exist is refused outright.
+	ISRWriterScriptName string
 	// StoreEndpoint is the shared deployments-store worker's HTTP endpoint,
 	// where Reconcile calls /<slug>/initialize to seed the project's instance.
 	StoreEndpoint string
@@ -217,7 +223,14 @@ type DeploymentRecord struct {
 	// reads and the tag-clock snapshot read at it. Disjoint from AssetPrefix so
 	// the two lifecycles never collide.
 	IsrPrefix string `json:"isrPrefix"`
-	CreatedAt int64  `json:"createdAt"`
+	// IsrWriteSecret is this build's own write secret for the shared ISR writer
+	// worker, whose hash the deploy seeded there (see seedISRWriters). The edge
+	// worker raises this build's tag invalidations with it, and it authorizes
+	// that build's slice and no other. It rides the record rather than the
+	// worker script because the script is frozen and outlives every build it
+	// serves. Empty on a substrate that adopted no writer.
+	IsrWriteSecret string `json:"isrWriteSecret,omitempty"`
+	CreatedAt      int64  `json:"createdAt"`
 	// EdgeWorkers is this build's deployment-owned edge code (Next edge
 	// routes/middleware): where its bundle lives and what runtime to evaluate
 	// it under. Omitted when the build produced no edge output at all.
