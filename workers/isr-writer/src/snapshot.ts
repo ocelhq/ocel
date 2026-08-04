@@ -12,7 +12,8 @@ import { isRateLimited } from "./r2";
 // What a publish did, as the caller has to be able to act on it. "unchanged"
 // and "published" both mean R2 holds every record the caller raised; only
 // "exhausted" means it does not, and it is the caller's to raise again.
-// "absent" is the heartbeat's alone: there is no snapshot here to republish.
+// "absent" means there is no snapshot here to publish into, which no retry can
+// change: only a deploy creates one.
 export type PublishOutcome = "published" | "unchanged" | "exhausted" | "absent";
 
 // R2 rate-limits a single key at one write per second, so a burst is answered
@@ -43,11 +44,20 @@ function parseJson<T>(body: string): T | null {
 // Raises that arrive while a publish is in flight are coalesced into the next
 // one, so a herd of invalidations on a build costs writes proportional to the
 // round trip rather than to the herd.
+//
+// It never creates the document, on any path. deployedAt has exactly one writer
+// — the deploy's genesis seed — and a document conjured here would carry a zero
+// anchor, against which no record is ever inert, so that build's replica would
+// grow without bound for the life of the build. A build with no snapshot is
+// answered "absent" instead, which the edge reads as untrusted and falls open
+// to the origin for.
 export class TagClock {
   private readonly key: string;
-  // undefined until this instance has read R2. null means the deploy seeded no
-  // snapshot: the anchor is unknowable, so nothing may be pruned.
-  private held: TagSnapshot | null | undefined;
+  // The document this instance last read or wrote, or null when it must read
+  // R2 again. Absence is never held: nothing orders the deploy's genesis seed
+  // against a build's first invalidation, so an instance that found no snapshot
+  // must look again rather than decline for its whole lifetime.
+  private held: TagSnapshot | null = null;
   private pending = new Map<string, TagRecord>();
   private pendingAt = 0;
   private queued: Promise<PublishOutcome> | undefined;
@@ -96,33 +106,30 @@ export class TagClock {
     for (let attempt = 0; attempt < publishAttempts; attempt++) {
       if (attempt > 0) await backoff(attempt);
       const prior = await this.prior();
+      if (prior === null) return "absent";
       const merged = mergeSnapshot(prior, records, at);
       // Pruning is a removal, so the record set is not monotone: a tag absent
       // from the prior document may be one that was invalidated and then proved
       // inert. Only the merged document can say whether R2 already reflects what
       // was raised, so that is what the write turns on.
-      if (prior !== null && sameRecords(prior.records, merged.records)) return "unchanged";
-      if (await this.put(merged, prior)) return "published";
+      if (sameRecords(prior.records, merged.records)) return "unchanged";
+      if (await this.put(merged)) return "published";
     }
     return "exhausted";
   }
 
-  // Never creates the object. A build with no snapshot is one the deploy never
-  // seeded or the prune has taken, and a document conjured here would carry no
-  // deploy anchor — so it could never prune, for a build that may not exist.
   private async republish(at: number): Promise<PublishOutcome> {
     for (let attempt = 0; attempt < publishAttempts; attempt++) {
       if (attempt > 0) await backoff(attempt);
       const prior = await this.prior();
       if (prior === null) return "absent";
-      if (await this.put(mergeSnapshot(prior, noRecords, at), prior)) return "published";
+      if (await this.put(mergeSnapshot(prior, noRecords, at))) return "published";
     }
     return "exhausted";
   }
 
   private async prior(): Promise<TagSnapshot | null> {
-    if (this.held === undefined) this.held = await this.read();
-    return this.held;
+    return this.held ?? (this.held = await this.read());
   }
 
   private async read(): Promise<TagSnapshot | null> {
@@ -135,16 +142,12 @@ export class TagClock {
     return snapshot;
   }
 
-  private async put(snapshot: TagSnapshot, prior: TagSnapshot | null): Promise<boolean> {
+  // Only ever overwrites a document this instance has read. Every publish path
+  // above declines a build with no snapshot for that reason.
+  private async put(snapshot: TagSnapshot): Promise<boolean> {
     try {
       const written = await this.bucket.put(this.key, JSON.stringify(snapshot), {
         httpMetadata: { contentType: "application/json" },
-        // Nothing orders the deploy's genesis seed against the first
-        // invalidation of a build, and the seed is the only writer of
-        // deployedAt. Creating this object unconditionally would replace the
-        // anchor it just missed with a zero, disabling pruning for the life of
-        // the build; losing the race instead costs a re-read.
-        ...(prior === null ? { onlyIf: { etagDoesNotMatch: "*" } } : {}),
       });
       if (written !== null) {
         this.held = snapshot;
@@ -155,7 +158,7 @@ export class TagClock {
     }
     // Either R2 refused the write or someone else got there first. Both are
     // answered by reading what is actually there and merging onto that.
-    this.held = undefined;
+    this.held = null;
     return false;
   }
 }

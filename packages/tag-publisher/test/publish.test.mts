@@ -69,6 +69,17 @@ function stored(s3: FakeS3): TagSnapshot {
   return JSON.parse(s3.objects.get(KEY)!.body) as TagSnapshot;
 }
 
+// What the deploy's genesis seed leaves behind, and the only place a deployedAt
+// ever comes from. A build with no genesis has nothing to publish into.
+function seeded(key = KEY, deployedAt = 10): FakeS3 {
+  const s3 = new FakeS3();
+  s3.objects.set(key, {
+    body: JSON.stringify({ version: 1, deployedAt, generatedAt: deployedAt, records: {} }),
+    etag: "v0",
+  });
+  return s3;
+}
+
 describe("publishAll", () => {
   let ok: ReturnType<typeof vi.fn>;
 
@@ -77,11 +88,7 @@ describe("publishAll", () => {
   });
 
   it("merges into the deploy's genesis rather than replacing it", async () => {
-    const s3 = new FakeS3();
-    s3.objects.set(KEY, {
-      body: JSON.stringify({ version: 1, deployedAt: 10, generatedAt: 10, records: {} }),
-      etag: "v0",
-    });
+    const s3 = seeded();
 
     await publishAll(publisher(s3, ok), raises({ cart: { expired: 500 } }), 900);
 
@@ -102,8 +109,24 @@ describe("publishAll", () => {
     expect(JSON.parse(init.body)).toEqual({ records: { cart: { expired: 5 } } });
   });
 
-  it("is idempotent: replaying a batch converges on the same document", async () => {
+  // deployedAt has exactly one writer, the deploy's genesis seed. A document
+  // created here would carry a zero anchor, against which no record is ever
+  // inert, so this build's copy would accumulate every tag it invalidates for
+  // the life of the build.
+  it("creates no document where the deploy seeded none", async () => {
     const s3 = new FakeS3();
+
+    await publishAll(publisher(s3, ok), raises({ cart: { expired: 5 } }), 1);
+
+    expect(s3.puts).toEqual([]);
+    expect(s3.objects.has(KEY)).toBe(false);
+    // The two copies are seeded independently and have separate writers, so an
+    // absent S3 copy says nothing about the edge's.
+    expect(ok).toHaveBeenCalledOnce();
+  });
+
+  it("is idempotent: replaying a batch converges on the same document", async () => {
+    const s3 = seeded();
     const p = publisher(s3, ok);
     await publishAll(p, raises({ cart: { expired: 500 } }), 1);
     await publishAll(p, raises({ cart: { expired: 500 } }), 2);
@@ -122,7 +145,7 @@ describe("publishAll", () => {
   });
 
   it("attempts every build before failing the batch", async () => {
-    const s3 = new FakeS3();
+    const s3 = seeded();
     const other = "prod/acme/admin/BUILD2";
     const fetchImpl = vi.fn(async (url: string) =>
       url.includes(other) ? new Response(null, { status: 500 }) : new Response(null, { status: 204 }),
