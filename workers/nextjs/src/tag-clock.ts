@@ -1,5 +1,6 @@
 import {
   areTagsExpired,
+  readableSnapshot,
   tagSnapshotKey,
   type TagRecord,
   type TagSnapshot,
@@ -188,18 +189,6 @@ async function matchSnapshot(
   } catch {
     return null;
   }
-}
-
-// A replica is read only at a version this worker was written against. An
-// unknown version is a format this reader cannot claim to understand, so it
-// declines to guess — which is what lets the format change without a worker
-// fleet misreading it. This is the whole of what a reader may judge: everything
-// else about the document is the publisher's to assert.
-export function readableSnapshot(snapshot: TagSnapshot | null): TagSnapshot | null {
-  if (snapshot?.version !== 1) return null;
-  return snapshot.records && typeof snapshot.records === "object"
-    ? snapshot
-    : null;
 }
 
 export async function storeText(

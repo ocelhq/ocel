@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { latest, mergeRecord, mergeSnapshot, type TagSnapshot } from "../src/index.mjs";
+import {
+  latest,
+  mergeRecord,
+  mergeSnapshot,
+  readableSnapshot,
+  type TagSnapshot,
+} from "../src/index.mjs";
 
 function snapshotOf(
   deployedAt: number,
@@ -81,5 +87,21 @@ describe("mergeSnapshot", () => {
       generatedAt: 7,
       records: { products: { stale: undefined, expired: 1 } },
     });
+  });
+});
+
+// A replica is judged by one rule wherever it is read, because both publishers
+// merge onto whatever that rule accepts: a reader that admitted a document the
+// other declines would merge into it and write the difference away.
+describe("readableSnapshot", () => {
+  it("accepts a document at the version this format is", () => {
+    const snapshot = snapshotOf(5_000, { products: { expired: 6_000 } });
+    expect(readableSnapshot(snapshot)).toBe(snapshot);
+  });
+
+  it("declines a version it was not written against, and a document with no records", () => {
+    expect(readableSnapshot({ ...snapshotOf(1, {}), version: 2 } as unknown as TagSnapshot)).toBeNull();
+    expect(readableSnapshot({ ...snapshotOf(1, {}), records: undefined } as unknown as TagSnapshot)).toBeNull();
+    expect(readableSnapshot(null)).toBeNull();
   });
 });

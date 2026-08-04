@@ -47,6 +47,20 @@ export function mergeSnapshot(
   return { version: 1, deployedAt, generatedAt: at, records: merged };
 }
 
+// A replica is read only at a version this reader was written against. An
+// unknown version is a format it cannot claim to understand, so it declines to
+// guess — which is what lets the format change without a fleet misreading it.
+// This is the whole of what a reader may judge: everything else about the
+// document is the publisher's to assert.
+//
+// Every publisher runs it too, and for a stronger reason than a reader does:
+// merging into a document it cannot read would write away whatever that format
+// carries, the deploy anchor included.
+export function readableSnapshot(snapshot: TagSnapshot | null): TagSnapshot | null {
+  if (snapshot?.version !== 1) return null;
+  return snapshot.records && typeof snapshot.records === "object" ? snapshot : null;
+}
+
 // A snapshot as it was found, with the version the next write conditions on. A
 // null etag means the object exists but the store named no version for it, which
 // is a write that has to proceed unconditionally rather than one that can never
