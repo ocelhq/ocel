@@ -13,17 +13,49 @@ import type { CacheEntryFile } from "@ocel/next-cache";
 const writerURLEnv = "OCEL_ISR_WRITER_URL";
 const writerSecretEnv = "OCEL_ISR_WRITER_SECRET";
 
+// The PutObjectCommand this replaced carried the SDK's own connect and request
+// timeouts; a bare fetch carries none, and a hung writer would hold the
+// invocation open — and billing — to the function's timeout. Long enough for a
+// whole prerender payload over a cold connection, short enough to be a fraction
+// of any function's budget.
+const writeTimeoutMs = 10_000;
+
 export interface EntryWriter {
   write(key: string, entry: CacheEntryFile): Promise<void>;
 }
 
-// isrEntryWriter is the writer this deploy was pointed at, or null when the
-// substrate adopted none — in which case entries keep going straight to the
-// object store. Both coordinates are written together or neither is.
-export function isrEntryWriter(fetchImpl: typeof fetch = fetch): EntryWriter | null {
+// A rejection the writer will give again for the same key however many times it
+// is asked: a malformed key, a secret this build no longer holds. Distinct from
+// a 429 (which is benign) and from a 5xx or a timeout (which the next
+// revalidation retries by itself), because a permanent rejection means this
+// route renders on every request and never caches — so it is logged where it
+// happens rather than left to whatever drains the deferred write.
+export class IsrWriteRejected extends Error {
+  constructor(
+    readonly key: string,
+    readonly status: number,
+  ) {
+    super(
+      `ocel cache handler: isr writer permanently rejected ${key}: status ${status}. ` +
+        `This route will re-render on every request until the deploy is fixed.`,
+    );
+    this.name = "IsrWriteRejected";
+  }
+}
+
+// isrEntryWriter is the writer this deploy was pointed at. Absent coordinates
+// are a broken deploy rather than a mode: entries a deploy with an adopted cache
+// store writes anywhere else are written where nothing reads them.
+export function isrEntryWriter(fetchImpl: typeof fetch = fetch): EntryWriter {
   const url = process.env[writerURLEnv];
   const secret = process.env[writerSecretEnv];
-  if (!url || !secret) return null;
+  if (!url || !secret) {
+    throw new Error(
+      `ocel cache handler: ${writerURLEnv} and ${writerSecretEnv} must both be set ` +
+        `when this deploy reads its ISR entries from an adopted cache store; ` +
+        "re-run `ocel bootstrap` and redeploy",
+    );
+  }
   return writerAt(url, secret, fetchImpl);
 }
 
@@ -37,6 +69,7 @@ export function writerAt(url: string, secret: string, fetchImpl: typeof fetch = 
           "content-type": "application/json",
         },
         body: JSON.stringify(entry),
+        signal: AbortSignal.timeout(writeTimeoutMs),
       });
       if (res.ok) return;
       // R2 caps concurrent writes to one key at 1/sec and the writer reports the
@@ -44,6 +77,11 @@ export function writerAt(url: string, secret: string, fetchImpl: typeof fetch = 
       // that lost is redundant rather than dropped work — retrying it would turn
       // a herd into a retry storm for no gain.
       if (res.status === 429) return;
+      if (res.status < 500) {
+        const rejected = new IsrWriteRejected(key, res.status);
+        console.error(rejected.message);
+        throw rejected;
+      }
       throw new Error(
         `ocel cache handler: isr writer rejected ${key}: status ${res.status}`,
       );

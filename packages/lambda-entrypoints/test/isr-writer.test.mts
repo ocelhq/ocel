@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { CacheEntryFile } from "@ocel/next-cache";
 
-import { isrEntryWriter, writerAt } from "../src/next/isr-writer.mjs";
+import { IsrWriteRejected, isrEntryWriter, writerAt } from "../src/next/isr-writer.mjs";
 
 const URL_ENV = "OCEL_ISR_WRITER_URL";
 const SECRET_ENV = "OCEL_ISR_WRITER_SECRET";
@@ -51,23 +51,51 @@ test("a rate-limited write is accepted without a retry", async () => {
   expect(calls).toHaveLength(1);
 });
 
-test("any other rejection surfaces", async () => {
-  const { impl } = fakeFetch(new Response("Unauthorized", { status: 401 }));
+// A 4xx is the writer saying "not this key, not ever" — the route re-renders on
+// every request and caches on none. The caller runs under background(), which
+// swallows what it catches, so a permanent rejection that arrived as a plain
+// Error would be indistinguishable from the backpressure a 429 reports.
+test("a permanent rejection is distinguishable from rate limiting, and is logged", async () => {
+  const { impl } = fakeFetch(new Response("Bad Request", { status: 400 }));
+  const logged = vi.spyOn(console, "error").mockImplementation(() => {});
 
   await expect(
     writerAt(WRITER_URL, "write-secret", impl).write("blog/post", entry),
-  ).rejects.toThrow("status 401");
+  ).rejects.toBeInstanceOf(IsrWriteRejected);
+  expect(logged).toHaveBeenCalledWith(expect.stringContaining("blog/post"));
 });
 
-test("no writer is configured unless both coordinates are injected", () => {
-  expect(isrEntryWriter()).toBeNull();
+test("a server-side rejection surfaces as an ordinary retryable failure", async () => {
+  const { impl } = fakeFetch(new Response("Internal Error", { status: 503 }));
+
+  const write = writerAt(WRITER_URL, "write-secret", impl).write("blog/post", entry);
+  await expect(write).rejects.toThrow("status 503");
+  await expect(write).rejects.not.toBeInstanceOf(IsrWriteRejected);
+});
+
+// A hung writer would otherwise hold the invocation open to the function's own
+// timeout, billing for the wait — the PutObjectCommand this replaced carried the
+// SDK's timeouts.
+test("a write carries a timeout", async () => {
+  const { impl, calls } = fakeFetch(new Response(null, { status: 204 }));
+
+  await writerAt(WRITER_URL, "write-secret", impl).write("blog/post", entry);
+
+  expect(calls[0][1].signal).toBeInstanceOf(AbortSignal);
+});
+
+// The writer is not optional: a deploy reading entries from an adopted cache
+// store has no other way to write them, so a half-injected pair is a broken
+// deploy and must say so rather than fall back to a standing credential.
+test("a half-configured writer is a failure, not a fallback", () => {
+  expect(() => isrEntryWriter()).toThrow(URL_ENV);
 
   process.env[URL_ENV] = WRITER_URL;
-  expect(isrEntryWriter()).toBeNull();
+  expect(() => isrEntryWriter()).toThrow(SECRET_ENV);
 
   delete process.env[URL_ENV];
   process.env[SECRET_ENV] = "write-secret";
-  expect(isrEntryWriter()).toBeNull();
+  expect(() => isrEntryWriter()).toThrow(URL_ENV);
 
   process.env[URL_ENV] = WRITER_URL;
   expect(isrEntryWriter()).not.toBeNull();
