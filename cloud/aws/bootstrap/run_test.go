@@ -172,7 +172,7 @@ func TestRun_ExternalTrustProvisionsEdgeReader(t *testing.T) {
 // never provisions preview's against production.
 func TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass(t *testing.T) {
 	for _, tc := range []struct {
-		run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, OptimizerArtifact, func(string), func(string)) error
+		run  func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
 		want edge.Class
 	}{
 		{Run, edge.ClassProduction},
@@ -197,7 +197,7 @@ func TestRun_BootstrapsTheEdgeForItsOwnSubstrateClass(t *testing.T) {
 func TestRun_InternalTrustLeavesNoCredential(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
-		run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, OptimizerArtifact, func(string), func(string)) error
+		run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
 		stackName string
 		credParam string
 	}{
@@ -350,7 +350,7 @@ func TestRun_NoOffersStoresNoCacheStore(t *testing.T) {
 func TestRun_AdoptsCacheStorePerClass(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
-		run   func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, OptimizerArtifact, func(string), func(string)) error
+		run   func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
 		class string
 		param string
 	}{

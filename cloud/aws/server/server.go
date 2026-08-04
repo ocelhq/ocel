@@ -421,7 +421,7 @@ func (s *Server) Bootstrap(ctx context.Context, req *deploymentsv1.BootstrapRequ
 	// The image optimizer's artifact is downloaded from its pinned release and
 	// uploaded into this account's own artifact bucket; nothing is granted
 	// cross-account and no Region map is consulted.
-	artifact := bootstrap.OptimizerArtifact{
+	artifact := bootstrap.Artifacts{
 		Source: bootstrap.ReleaseSource{},
 		Store:  s3.NewFromConfig(awscfg),
 	}
