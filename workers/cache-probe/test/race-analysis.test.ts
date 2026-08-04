@@ -2,10 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   chooseWindow,
-  classifyBurstTrial,
-  classifyGapTrial,
   distribution,
-  escapesOf,
+  outcomeOf,
   sizingTable,
   summarizeBurst,
   summarizeGap,
@@ -13,6 +11,7 @@ import {
   type GapSummary,
   type GapTrial,
   type RaceOutcome,
+  type RaceResponse,
 } from "../src/race-analysis.ts";
 
 const outcome = (over: Partial<RaceOutcome> = {}): RaceOutcome => ({
@@ -30,6 +29,46 @@ const gap = (over: { a?: Partial<RaceOutcome>; b?: Partial<RaceOutcome>; deltaMs
   b: outcome({ seq: 1, claimed: false, isolate: "bbbb2222", ...over.b }),
 });
 
+const response = (over: Partial<RaceResponse> = {}): RaceResponse => ({
+  isolate: "aaaa1111",
+  colo: "JNB",
+  host: "probe.example.com",
+  claimed: true,
+  key: "race-1",
+  scope: "offzone",
+  seq: "0",
+  ...over,
+});
+
+describe("outcomeOf", () => {
+  it("narrows a response that answered the racer that sent it", () => {
+    expect(outcomeOf(response(), "race-1", 0)).toEqual({
+      seq: 0,
+      claimed: true,
+      isolate: "aaaa1111",
+      colo: "JNB",
+    });
+  });
+
+  it("refuses a body answered for another racer's seq", () => {
+    expect(() => outcomeOf(response({ seq: "1" }), "race-1", 0)).toThrow(
+      "received another's body",
+    );
+  });
+
+  it("refuses a body answered for another key", () => {
+    expect(() => outcomeOf(response({ key: "race-2" }), "race-1", 0)).toThrow(
+      "received another's body",
+    );
+  });
+
+  it("refuses a colo-less response rather than defaulting it to a shared unknown", () => {
+    // Two racers defaulted to the same "unknown" would compare equal and pass
+    // the mixed-colo gate that exists to catch exactly that.
+    expect(() => outcomeOf(response({ colo: null }), "race-1", 0)).toThrow("without a colo");
+  });
+});
+
 describe("distribution", () => {
   it("is null for no samples, because a distribution over nothing is not zero", () => {
     expect(distribution([])).toBeNull();
@@ -45,30 +84,6 @@ describe("distribution", () => {
     const d = distribution([1, 1, 1, 1_000])!;
     expect(d.max).toBe(1_000);
     expect(d.mean).toBe(250.75);
-  });
-});
-
-describe("classifyGapTrial", () => {
-  it("counts a cross-isolate trial the leader won as decidable", () => {
-    expect(classifyGapTrial(gap())).toBe("decidable");
-  });
-
-  it("rejects a trial where nobody claimed a key nobody had written", () => {
-    expect(classifyGapTrial(gap({ a: { claimed: false } }))).toBe("zero-claims");
-  });
-
-  it("rejects a trial the follower won and the leader lost", () => {
-    expect(classifyGapTrial(gap({ a: { claimed: false }, b: { claimed: true } }))).toBe(
-      "leader-did-not-claim",
-    );
-  });
-
-  it("rejects racers that never shared a cache", () => {
-    expect(classifyGapTrial(gap({ b: { colo: "CPT" } }))).toBe("mixed-colo");
-  });
-
-  it("rejects racers on one isolate, which production collapses in L0", () => {
-    expect(classifyGapTrial(gap({ b: { isolate: "aaaa1111" } }))).toBe("same-isolate");
   });
 });
 
@@ -91,6 +106,25 @@ describe("summarizeGap", () => {
     expect(summary.excluded).toMatchObject({ "mixed-colo": 1, "same-isolate": 1 });
   });
 
+  it("excludes a trial the follower won and the leader lost, which measures nothing about the delay", () => {
+    const summary = summarizeGap(0, [gap({ a: { claimed: false }, b: { claimed: true } })]);
+
+    expect(summary.excluded["leader-did-not-claim"]).toBe(1);
+    expect(summary).toMatchObject({ decidable: 0, secondClaimRate: null });
+  });
+
+  it("buckets a trial nobody claimed apart from one the leader lost", () => {
+    // Unreachable against the real claim primitive — whoever matches first on a
+    // fresh key must miss — but the two are different failures and the runner
+    // aborts on only one of them.
+    const summary = summarizeGap(0, [gap({ a: { claimed: false } })]);
+
+    expect(summary.excluded).toMatchObject({
+      "zero-claims": 1,
+      "leader-did-not-claim": 0,
+    });
+  });
+
   it("reports no rate at all when nothing was decidable", () => {
     expect(summarizeGap(0, [gap({ b: { colo: "CPT" } })]).secondClaimRate).toBeNull();
   });
@@ -102,11 +136,19 @@ describe("summarizeGap", () => {
 
     expect(summarizeGap(50, trials).achievedDeltaMs).toMatchObject({ count: 2, max: 71 });
   });
+
+  it("keeps the trials it was asked for apart from the trials that answered", () => {
+    // A run whose transport failed silently shrinks its own denominator unless
+    // both numbers survive into the summary.
+    expect(summarizeGap(0, [gap(), gap()], 5)).toMatchObject({ attempted: 5, trials: 2 });
+    expect(summarizeGap(0, [gap(), gap()])).toMatchObject({ attempted: 2, trials: 2 });
+  });
 });
 
 const sweep = (rates: [number, number][], decidable = 100): GapSummary[] =>
   rates.map(([deltaMs, rate]) => ({
     deltaMs,
+    attempted: decidable,
     trials: decidable,
     decidable,
     secondClaims: Math.round(rate * decidable),
@@ -197,65 +239,6 @@ const burst = (outcomes: RaceOutcome[], dispersionMs = 1): BurstTrial => ({
   outcomes,
 });
 
-describe("escapesOf", () => {
-  it("collapses two claims on one isolate into one escape, as L0 does in production", () => {
-    const trial = [
-      outcome({ seq: 0, claimed: true, isolate: "aaaa1111" }),
-      outcome({ seq: 1, claimed: true, isolate: "aaaa1111" }),
-      outcome({ seq: 2, claimed: true, isolate: "bbbb2222" }),
-      outcome({ seq: 3, claimed: false, isolate: "cccc3333" }),
-    ];
-
-    expect(escapesOf(trial)).toEqual({
-      rawClaims: 3,
-      escapes: 2,
-      distinctIsolates: 3,
-      distinctColos: 1,
-    });
-  });
-});
-
-describe("classifyBurstTrial", () => {
-  it("counts a multi-isolate single-colo burst somebody claimed", () => {
-    expect(
-      classifyBurstTrial(
-        burst([
-          outcome({ seq: 0, claimed: true, isolate: "aaaa1111" }),
-          outcome({ seq: 1, isolate: "bbbb2222" }),
-        ]),
-      ),
-    ).toBe("counted");
-  });
-
-  it("buckets a burst that never left one isolate as L0's, not L1's", () => {
-    expect(
-      classifyBurstTrial(
-        burst([
-          outcome({ seq: 0, claimed: true }),
-          outcome({ seq: 1, claimed: false }),
-        ]),
-      ),
-    ).toBe("single-isolate");
-  });
-
-  it("discards a burst that spanned colos", () => {
-    expect(
-      classifyBurstTrial(
-        burst([
-          outcome({ seq: 0, claimed: true, isolate: "aaaa1111" }),
-          outcome({ seq: 1, claimed: true, isolate: "bbbb2222", colo: "CPT" }),
-        ]),
-      ),
-    ).toBe("mixed-colo");
-  });
-
-  it("discards a burst in which nobody claimed a cold key", () => {
-    expect(
-      classifyBurstTrial(burst([outcome({ isolate: "a" }), outcome({ isolate: "b" })])),
-    ).toBe("zero-claims");
-  });
-});
-
 describe("summarizeBurst", () => {
   const counted = (escapes: number) =>
     burst([
@@ -288,10 +271,40 @@ describe("summarizeBurst", () => {
       counted: 2,
       singleIsolateTrials: 1,
       singleIsolateRate: 0.25,
-      invariantViolations: 0,
     });
     expect(summary.discarded).toEqual({ "zero-claims": 0, "mixed-colo": 1 });
     expect(summary.escapes).toMatchObject({ count: 2, min: 2, max: 4 });
+  });
+
+  it("collapses two claims on one isolate into one escape, as L0 does in production", () => {
+    const summary = summarizeBurst(
+      4,
+      [
+        burst([
+          outcome({ seq: 0, claimed: true, isolate: "aaaa1111" }),
+          outcome({ seq: 1, claimed: true, isolate: "aaaa1111" }),
+          outcome({ seq: 2, claimed: true, isolate: "bbbb2222" }),
+          outcome({ seq: 3, claimed: false, isolate: "cccc3333" }),
+        ]),
+      ],
+      100,
+    );
+
+    expect(summary.escapes).toMatchObject({ count: 1, median: 2 });
+    expect(summary.rawClaims).toMatchObject({ median: 3 });
+    expect(summary.distinctIsolates).toMatchObject({ median: 3 });
+  });
+
+  it("discards a burst nobody claimed apart from one that never left an isolate", () => {
+    // The first is unreachable against the real claim primitive; the second is
+    // not, and folding them together would read L0's collapse as a broken run.
+    const nobody = summarizeBurst(
+      2,
+      [burst([outcome({ seq: 0, isolate: "a" }), outcome({ seq: 1, isolate: "b" })])],
+      100,
+    );
+    expect(nobody.discarded["zero-claims"]).toBe(1);
+    expect(nobody.singleIsolateTrials).toBe(0);
   });
 
   it("calls escapes a lower bound when the racers spread wider than the window", () => {
@@ -306,18 +319,9 @@ describe("summarizeBurst", () => {
     expect(summarizeBurst(2, [counted(2)], null).lowerBound).toBe(true);
   });
 
-  it("flags a trial whose racers were not each answered once", () => {
-    // What the zone serving one racer's body to another looks like from here:
-    // two responses carrying the same seq, so one racer is unaccounted for.
-    const duplicated = burst([
-      outcome({ seq: 0, claimed: true, isolate: "a" }),
-      outcome({ seq: 0, claimed: true, isolate: "b" }),
-    ]);
-    const short = { ...counted(2), size: 4 };
-
-    expect(summarizeBurst(2, [duplicated], 100).invariantViolations).toBe(1);
-    expect(summarizeBurst(4, [short], 100).invariantViolations).toBe(1);
-    expect(summarizeBurst(2, [counted(2)], 100).invariantViolations).toBe(0);
+  it("keeps the trials it was asked for apart from the trials that answered", () => {
+    expect(summarizeBurst(2, [counted(2)], 10, 7)).toMatchObject({ attempted: 7, trials: 1 });
+    expect(summarizeBurst(2, [counted(2)], 10)).toMatchObject({ attempted: 1, trials: 1 });
   });
 });
 

@@ -22,17 +22,28 @@ const defaults: Record<Numeric, number> & { ttls: number[] } = {
   windowSeconds: 180,
 };
 
-export function parseArgs(argv: string[], defaultOut: string): Options {
+// Shared with race-options.ts so the two runners cannot drift on what an
+// argument vector means. The failure type is a parameter because each runner
+// aborts through its own error class.
+export function tokenizeFlags(
+  argv: string[],
+  fail: (message: string) => Error,
+): Map<string, string> {
   const flags = new Map<string, string>();
   for (let i = 0; i < argv.length; i += 2) {
     const flag = argv[i];
-    if (!flag?.startsWith("--")) throw new Error(`unexpected argument: ${flag}`);
+    if (!flag?.startsWith("--")) throw fail(`unexpected argument: ${flag}`);
     const value = argv[i + 1];
     if (value === undefined || value.startsWith("--")) {
-      throw new Error(`${flag} requires a value`);
+      throw fail(`${flag} requires a value`);
     }
     flags.set(flag.slice(2), value);
   }
+  return flags;
+}
+
+export function parseArgs(argv: string[], defaultOut: string): Options {
+  const flags = tokenizeFlags(argv, (message) => new Error(message));
 
   const base = flags.get("base");
   if (!base) throw new Error("--base <https://probe.example.com> is required");

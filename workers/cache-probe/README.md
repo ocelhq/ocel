@@ -99,6 +99,7 @@ followed by a fan-out of foreign-isolate reads. Verdicts:
 | --- | --- |
 | `both-scopes-visible` | production's synthetic hostnames store and are colo-visible; proceed |
 | `offzone-inert` | **stop.** The on-zone key works and production's shape does not, so L1, the entry tier, the tag-clock front and the image tier are all silently no-ops in production. That is a defect that outranks measuring any window |
+| `onzone-inert` | the mirror image: production's shape stores and an on-zone key does not. Nothing in `workers/nextjs` keys on-zone, so this is not a product defect — but it is a finding about `caches.default`, and raising `--sockets` will not move it |
 | `cache-inert` | nothing stored anywhere: workers.dev, or the route is not live |
 | `inconclusive` | no read reached an isolate other than the writer's; raise `--sockets` |
 
@@ -125,7 +126,18 @@ their own bucket (they measured L0, not L1) and never into the headline.
 
 Escapes print as a **lower bound** whenever the racers' send-time dispersion was not small
 against `W` — racers that were not really concurrent under-report escapes, and "L1 suppresses
-beautifully" is exactly the comfortable answer that failure mode manufactures.
+beautifully" is exactly the comfortable answer that failure mode manufactures. Dispersion is
+taken from undici's `undici:client:sendHeaders` channel, i.e. the moment each racer's first
+byte is written to its socket. It is **not** taken from the driver's own dispatch loop: calling
+`request()` does not send, so those timestamps are microseconds apart however long the sends
+really take, and a guard built on them can never fire.
+
+Three of the burst's four buckets are **structurally unreachable and prove nothing by coming
+back zero**, which is recorded here so no run cites their zeros as validation. `zero-claims`
+cannot fire because the globally first `match` on a fresh UUID key must miss and therefore
+claim; `mixed-colo` cannot fire from a single driver host, which reaches exactly one colo; and
+`single-isolate` is live but near-vacuous at `N ≥ 2` on distinct pre-warmed sockets. The gap
+phase's `leader-did-not-claim` and `same-isolate` buckets are the ones that demonstrably fire.
 
 With `--window`, the phase prints the sizing table PR 8 cites:
 
@@ -148,19 +160,26 @@ Flags (defaults in parentheses):
 | `--trials` (200 gap / 100 burst) | trials per Δ or per `N` |
 | `--deltas` (`0,10,25,50,100,150,200,300,500,1000`) | the Δ sweep, in ms |
 | `--sizes` (`2,8,32,128`) | burst sizes |
-| `--sockets` (16) | pre-warmed connections the gap phase draws its pairs from |
+| `--sockets` (16) | pre-warmed connections the gap phase draws its pairs from; minimum 2, since a pool of one can never produce a cross-isolate pair |
 | `--scope` (`offzone`) | which key shape to race under; `offzone` is production's |
 | `--window` | `W` in ms, so the burst phase can print the sizing table |
 | `--colos` (300) / `--sentinelTtl` (5) | the other two sizing inputs |
+| `--isolates` | an `I_colo` lower bound inherited from another run, if it is higher than this one's; the sizing table caps `E` at the larger of the two |
+| `--maxDiscardRate` (0.02) | abort once this fraction of trials has been discarded on transport failures |
 | `--out` | where to write the raw run |
 
-**Every gate is fatal, not a warning.** The run refuses to start on a workers.dev host or on a
-control that is not `both-scopes-visible`; it aborts on a trial where nobody claimed a cold
-key, or where a racer was answered for another racer's key, because each of those means the
-instrument is broken rather than the cache. Nothing is ever retried: a resend against a key
-the first send just claimed would report `claimed: false` and manufacture a suppression that
-never happened. Any non-200, redirect or network error discards the whole trial, and the
-discards are counted.
+**Every gate is fatal, not a warning.** The run refuses to start on a workers.dev host, on a
+control that is not `both-scopes-visible`, or on a preflight that saw an absent colo or two of
+them; it aborts on a trial where a racer was answered for another racer's key or without a
+colo, because that means the instrument is broken rather than the cache. Nothing is ever
+retried: a resend against a key the first send just claimed would report `claimed: false` and
+manufacture a suppression that never happened.
+
+Any non-200, redirect or network error **discards the whole trial and is counted** — and above
+`--maxDiscardRate` (2% by default) the run aborts rather than printing a window over whatever
+survived. Discards are not free: each one rebuilds the socket pool, so a run full of them is
+resampling its isolates as it goes. Every summary carries `attempted` alongside `trials` so a
+shrinking denominator is visible rather than silent.
 
 ## Surface
 
