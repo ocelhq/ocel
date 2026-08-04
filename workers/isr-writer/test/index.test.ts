@@ -154,6 +154,84 @@ describe("entry writes", () => {
   });
 });
 
+// Entry reads route through the writer for the same reason writes do: with both
+// on this side of the boundary the deployed function holds no standing R2
+// credential at all, which is the whole credential-hygiene case for the worker
+// (epic decision 6). Reads are the hot path — far more frequent than writes —
+// so they lean on exactly the same per-isolate hash memo.
+describe("entry reads", () => {
+  function readEntryReq(prefix: string, key: string, secret: string) {
+    return SELF.fetch(bearerReq(`/${prefix}/entry?key=${encodeURIComponent(key)}`, secret));
+  }
+
+  // The two halves derive the object key with one function (@ocel/next-cache's
+  // entryObjectKey), so a key the writer accepts is a key the reader finds. A
+  // read that resolved anywhere else is a permanent miss: the route re-renders
+  // on every request and the entry it just wrote is never seen again.
+  it("reads back exactly what a write of the same key stored", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    for (const key of ["blog/post", "index", "blog/"]) {
+      expect((await writeEntryReq(prefix, key, "write-secret", `{"k":"${key}"}`)).status).toBe(204);
+
+      const res = await readEntryReq(prefix, key, "write-secret");
+      expect(res.status, key).toBe(200);
+      expect(await res.text()).toBe(`{"k":"${key}"}`);
+    }
+  });
+
+  it("reports an entry that was never written as a miss", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    expect((await readEntryReq(prefix, "never-written", "write-secret")).status).toBe(404);
+  });
+
+  it("rejects a read signed with the wrong secret, and one signed with none", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await writeEntryReq(prefix, "blog/post", "write-secret");
+
+    expect((await readEntryReq(prefix, "blog/post", "other-secret")).status).toBe(401);
+    expect((await SELF.fetch(req(`/${prefix}/entry?key=blog%2Fpost`))).status).toBe(401);
+  });
+
+  it("rejects a read of another deploy's slice", async () => {
+    const mine = freshPrefix();
+    const theirs = freshPrefix();
+    await initialize(mine, "my-secret");
+    await initialize(theirs, "their-secret");
+    await writeEntryReq(theirs, "blog/post", "their-secret", `{"theirs":1}`);
+
+    expect((await readEntryReq(theirs, "blog/post", "my-secret")).status).toBe(401);
+  });
+
+  it("rejects a key that would climb out of the deploy's slice", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    expect((await readEntryReq(prefix, "../escape", "write-secret")).status).toBe(400);
+    expect((await readEntryReq(prefix, "", "write-secret")).status).toBe(400);
+  });
+
+  // The memo is what keeps the serving path off a single-threaded Durable
+  // Object. A DO round trip per read would put every cache hit behind one
+  // object per deploy — the ceiling the epic's decision 6c exists to avoid.
+  it("costs no Durable Object round trip per read once the memo is warm", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+    await writeEntryReq(prefix, "blog/post", "write-secret", `{"value":1}`);
+
+    const secretHash = vi.spyOn(IsrDeploy.prototype, "secretHash");
+    for (let i = 0; i < 10; i++) {
+      expect((await readEntryReq(prefix, "blog/post", "write-secret")).status).toBe(200);
+    }
+    expect(secretHash).not.toHaveBeenCalled();
+    secretHash.mockRestore();
+  });
+});
+
 describe("destroy", () => {
   it("retires the deploy so its secret no longer authorizes a write", async () => {
     const prefix = freshPrefix();

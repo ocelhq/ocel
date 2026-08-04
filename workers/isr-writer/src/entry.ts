@@ -26,3 +26,14 @@ function isRateLimited(err: unknown): boolean {
   if (e?.status === 429 || e?.code === 429) return true;
   return typeof e?.message === "string" && /429|too many requests/i.test(e.message);
 }
+
+// An absent object is a miss, not a failure: the caller renders. Nothing else is
+// swallowed here — the caller's own fail-open decides what a real R2 failure
+// costs, and it can only decide that if it is told.
+export async function readEntry(
+  bucket: R2Bucket,
+  objectKey: string,
+): Promise<string | null> {
+  const object = await bucket.get(objectKey);
+  return object === null ? null : object.text();
+}
