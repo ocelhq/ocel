@@ -98,6 +98,20 @@ func TestAppCaches_OmitsAnAppWithNoPrerenderedContent(t *testing.T) {
 	}
 }
 
+// entryPuts is what a fake uploader received minus the genesis tag clocks. The
+// clock is seeded into every store a build touches and independently of what the
+// build prerendered, so a test about where entries land says so by leaving it
+// out rather than by counting it.
+func entryPuts(puts []string) []string {
+	var out []string
+	for _, key := range puts {
+		if !strings.HasSuffix(key, tagSnapshotSuffix) {
+			out = append(out, key)
+		}
+	}
+	return out
+}
+
 // TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix proves every app's
 // seeded cache entries land under that app's prefix, not one shared with its
 // neighbours.
@@ -109,7 +123,7 @@ func TestUploadPrerenderAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
 	}
 
-	got := append([]string(nil), f.puts...)
+	got := entryPuts(f.puts)
 	sort.Strings(got)
 	want := []string{
 		"prod/proj/admin/ADM1/cache/dash.cache.json",
@@ -145,8 +159,8 @@ func TestUploadPrerenderAssets_SeedsTheAdoptedCacheStore(t *testing.T) {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
 	}
 
-	if len(asset.puts) != 0 {
-		t.Errorf("asset bucket received %v, want nothing once a store is adopted", asset.puts)
+	if got := entryPuts(asset.puts); len(got) != 0 {
+		t.Errorf("asset bucket received entries %v, want none once a store is adopted", got)
 	}
 	got := append([]string(nil), store.puts...)
 	sort.Strings(got)
@@ -182,8 +196,8 @@ func TestUploadPrerenderAssets_UnadoptedStoreStaysOnTheAssetBucket(t *testing.T)
 		t.Fatalf("uploadPrerenderAssets: %v", err)
 	}
 
-	if len(f.buckets) != 3 {
-		t.Fatalf("uploaded %d objects, want 3", len(f.buckets))
+	if len(entryPuts(f.puts)) != 3 {
+		t.Fatalf("uploaded %v, want the three cache entries", entryPuts(f.puts))
 	}
 	for _, b := range f.buckets {
 		if b != "assets" {
@@ -235,6 +249,35 @@ func TestUploadPrerenderAssets_SeedsTheGenesisTagSnapshot(t *testing.T) {
 	}
 }
 
+// TestUploadPrerenderAssets_SeedsTheGenesisIntoBothStores proves the anchor
+// reaches the provider's own bucket as well as the edge's. The stream publisher
+// writes an S3 copy of every build's clock there, and deployedAt has exactly one
+// writer — this one — so a copy that was never seeded is a copy that can never
+// be pruned and grows for the life of the build.
+func TestUploadPrerenderAssets_SeedsTheGenesisIntoBothStores(t *testing.T) {
+	own := &fakeUploader{exists: map[string]bool{}}
+	store := &fakeUploader{exists: map[string]bool{}}
+	cfg := Config{
+		ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod",
+		Uploader: own, CacheStoreBucket: "isr", CacheStoreUploader: store,
+	}
+	cfg = adoptISRWriter(t, cfg)
+
+	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
+		t.Fatalf("uploadPrerenderAssets: %v", err)
+	}
+
+	for _, key := range []string{"prod/proj/web/WEB1/tag-clock.json", "prod/proj/admin/ADM1/tag-clock.json"} {
+		mine, ok := own.putBodies[key]
+		if !ok {
+			t.Fatalf("no snapshot seeded into the provider's own bucket at %q; puts = %v", key, own.puts)
+		}
+		if theirs := store.putBodies[key]; theirs != mine {
+			t.Errorf("%s differs between the two stores:\n own %s\nedge %s", key, mine, theirs)
+		}
+	}
+}
+
 // TestUploadPrerenderAssets_KeepsAnExistingSnapshot proves a redeploy of the
 // same build leaves the live snapshot alone. Overwriting it would throw away
 // every invalidation the running build has accumulated and serve them stale
@@ -259,20 +302,25 @@ func TestUploadPrerenderAssets_KeepsAnExistingSnapshot(t *testing.T) {
 	}
 }
 
-// TestUploadPrerenderAssets_UnadoptedStoreSeedsNoSnapshot proves the rollback
-// path stays silent: with no adopted store there is no edge reading a replica,
-// so there is nothing to seed and nothing to fail over.
-func TestUploadPrerenderAssets_UnadoptedStoreSeedsNoSnapshot(t *testing.T) {
+// TestUploadPrerenderAssets_UnadoptedStoreSeedsOneCopy proves a substrate whose
+// edge offered no store still gets its anchor. There is no edge replica to
+// write, but the publisher's S3 copy is written for every build regardless of
+// where its entries live, and it is the same object here.
+func TestUploadPrerenderAssets_UnadoptedStoreSeedsOneCopy(t *testing.T) {
 	f := &fakeUploader{exists: map[string]bool{}}
 	cfg := Config{ArtifactRoot: twoAppTree(t), AssetBucket: "assets", Env: "prod", Uploader: f}
 
 	if err := uploadPrerenderAssets(context.Background(), cfg, twoAppManifest()); err != nil {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
 	}
+	var seeded int
 	for _, key := range f.puts {
 		if strings.HasSuffix(key, "tag-clock.json") {
-			t.Errorf("seeded %q, want no snapshot without an adopted store", key)
+			seeded++
 		}
+	}
+	if seeded != 2 {
+		t.Errorf("seeded %d snapshots, want one per app into the one bucket that holds both roles", seeded)
 	}
 }
 
@@ -347,8 +395,8 @@ func TestUploadPrerenderAssets_NoPrerenders(t *testing.T) {
 	if err := uploadPrerenderAssets(context.Background(), cfg, nextManifest()); err != nil {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
 	}
-	if len(f.puts) != 0 {
-		t.Errorf("PutObject called %d times, want 0 when there are no prerenders", len(f.puts))
+	if got := entryPuts(f.puts); len(got) != 0 {
+		t.Errorf("uploaded %v, want nothing when there are no prerenders", got)
 	}
 }
 
@@ -387,7 +435,7 @@ func TestUploadPrerenderAssets_UploadsCacheEntries(t *testing.T) {
 		t.Fatalf("uploadPrerenderAssets: %v", err)
 	}
 
-	got := append([]string(nil), f.puts...)
+	got := entryPuts(f.puts)
 	sort.Strings(got)
 	want := []string{
 		"prod/proj/web/BID/cache/blog/post.cache.json",
@@ -432,8 +480,8 @@ func TestUploadPrerenderAssets_FetchEntriesStayOnTheAssetBucket(t *testing.T) {
 	// The hash is the handler's lookup key, so it must survive into the object
 	// name untouched.
 	want := "prod/proj/web/WEB1/fetch-cache/" + hash + ".cache.json"
-	if len(asset.puts) != 1 || asset.puts[0] != want {
-		t.Fatalf("asset bucket got %v, want exactly [%s]", asset.puts, want)
+	if got := entryPuts(asset.puts); len(got) != 1 || got[0] != want {
+		t.Fatalf("asset bucket got %v, want exactly [%s]", got, want)
 	}
 	if asset.buckets[0] != "assets" {
 		t.Errorf("fetch entry landed in %q, want the provider's own %q", asset.buckets[0], "assets")

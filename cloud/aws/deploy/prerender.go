@@ -241,34 +241,55 @@ func genesisSnapshot(at time.Time) tagSnapshot {
 // build timestamp, and anything the publisher could synthesize would be an upper
 // bound, which would prune records that can still legitimately expire an entry.
 //
+// The clock exists twice, and both copies need the anchor. The edge reads the
+// replica in whichever store the substrate adopted; the stream publisher writes
+// its own copy into the provider's asset bucket, which nothing reads until
+// ocelhq-wvag.5. They are the same object on a substrate that adopted no store.
+//
 // Create-only. A redeploy of the same build must keep the snapshot the running
 // build accumulated, so an object already present is the expected outcome and
-// not a failure. A substrate that adopted no store has no edge replica at all:
-// nothing to seed, and nothing to fail.
+// not a failure.
 func seedTagSnapshots(ctx context.Context, cfg Config, caches map[string]*isrConfig, at time.Time) error {
-	if cfg.CacheStoreBucket == "" || cfg.CacheStoreUploader == nil {
-		return nil
-	}
 	body, err := json.Marshal(genesisSnapshot(at))
 	if err != nil {
 		return fmt.Errorf("encode tag snapshot: %w", err)
 	}
 
-	target := entryTarget(cfg)
-	for _, cache := range caches {
-		key := cache.Prefix + tagSnapshotSuffix
-		_, err := target.up.PutObject(ctx, &s3.PutObjectInput{
-			Bucket:      aws.String(target.bucket),
-			Key:         aws.String(key),
-			Body:        bytes.NewReader(body),
-			ContentType: aws.String("application/json"),
-			IfNoneMatch: aws.String("*"),
-		})
-		if err != nil && !isPreconditionFailed(err) {
-			return fmt.Errorf("seed tag snapshot %s: %w", key, err)
+	for _, target := range snapshotTargets(cfg) {
+		for _, cache := range caches {
+			key := cache.Prefix + tagSnapshotSuffix
+			_, err := target.up.PutObject(ctx, &s3.PutObjectInput{
+				Bucket:      aws.String(target.bucket),
+				Key:         aws.String(key),
+				Body:        bytes.NewReader(body),
+				ContentType: aws.String("application/json"),
+				IfNoneMatch: aws.String("*"),
+			})
+			if err != nil && !isPreconditionFailed(err) {
+				return fmt.Errorf("seed tag snapshot %s in %s: %w", key, target.bucket, err)
+			}
 		}
 	}
 	return nil
+}
+
+// snapshotTargets is every store a build's genesis clock has to reach, deduped
+// by bucket: the provider's own, and the adopted one when there is a distinct
+// one. A target that is not configured is skipped rather than failed — a
+// substrate with no asset bucket has nowhere for a build's objects at all, and
+// the upload path already says so.
+func snapshotTargets(cfg Config) []uploadTarget {
+	var targets []uploadTarget
+	for _, t := range []uploadTarget{{up: cfg.Uploader, bucket: cfg.AssetBucket}, entryTarget(cfg)} {
+		if t.validate() != nil {
+			continue
+		}
+		if len(targets) == 1 && targets[0].bucket == t.bucket {
+			continue
+		}
+		targets = append(targets, t)
+	}
+	return targets
 }
 
 // isPreconditionFailed reports whether a conditional write lost to the object it
