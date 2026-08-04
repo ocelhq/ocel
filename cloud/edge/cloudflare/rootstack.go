@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 
 	cf "github.com/cloudflare/cloudflare-go/v4"
@@ -76,29 +77,49 @@ func accountScriptNameFor(worker string, class edge.Class, production, preview s
 	}
 }
 
-// durableObjectClass is one account-level worker's own Durable Object class, a
+// durableObjectClass is one Durable Object class an account-level worker owns, a
 // binding putScript's generic edge.Worker-driven binding set has no concept of:
-// it names a class the script itself exports rather than an external resource,
-// and its migration is declared exactly once, on the bootstrap that first
-// creates the class.
+// it names a class the script itself exports rather than an external resource.
 type durableObjectClass struct {
-	binding      string
-	className    string
-	migrationTag string
+	binding   string
+	className string
 }
 
-// The two account-level Durable Object classes, each mirroring its worker's
+// migrationStep is one entry in a worker's migration log. Cloudflare records the
+// tag of the last step a script has applied and will only carry it forward from
+// there, so the log is cumulative: a step that has shipped stays here forever
+// and is never edited.
+type migrationStep struct {
+	tag           string
+	sqliteClasses []string
+}
+
+// durableObjectWorker is one account-level worker's Durable Object surface: the
+// classes it exports and the migration log that creates them, each mirroring its
 // wrangler.jsonc.
+type durableObjectWorker struct {
+	classes    []durableObjectClass
+	migrations []migrationStep
+}
+
 var (
-	deploymentsStoreDO = durableObjectClass{
-		binding:      "DEPLOYMENTS_DO",
-		className:    "DeploymentsStore",
-		migrationTag: "v1",
+	deploymentsStoreWorker = durableObjectWorker{
+		classes: []durableObjectClass{
+			{binding: "DEPLOYMENTS_DO", className: "DeploymentsStore"},
+		},
+		migrations: []migrationStep{
+			{tag: "v1", sqliteClasses: []string{"DeploymentsStore"}},
+		},
 	}
-	isrWriterDO = durableObjectClass{
-		binding:      "ISR_WRITER_DO",
-		className:    "IsrDeploy",
-		migrationTag: "v1",
+	isrWriterWorker = durableObjectWorker{
+		classes: []durableObjectClass{
+			{binding: "ISR_WRITER_DO", className: "IsrDeploy"},
+			{binding: "ISR_SNAPSHOT_DO", className: "IsrSnapshot"},
+		},
+		migrations: []migrationStep{
+			{tag: "v1", sqliteClasses: []string{"IsrDeploy"}},
+			{tag: "v2", sqliteClasses: []string{"IsrSnapshot"}},
+		},
 	}
 )
 
@@ -457,13 +478,11 @@ func (p *provider) deleteScript(ctx context.Context, accountID, scriptName strin
 
 // putDurableObjectScript uploads an account-level worker that owns a Durable
 // Object class of its own (bootstrapStore and bootstrapISRWriter in
-// cloudflare.go): like putScript, but it additionally binds that class and,
-// only when migrate is true (the bootstrap that first creates it), declares its
-// one SQLite-backed migration. Redeclaring that migration on a later bootstrap
-// would be at best redundant and at worst rejected, so every bootstrap after
-// the first omits it.
-func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do durableObjectClass, migrate bool) error {
-	body, contentType, err := buildDurableObjectScriptMultipart(up.worker, do, migrate)
+// cloudflare.go): like putScript, but it additionally binds every class the
+// script exports and declares the migration steps the deployed script has not
+// applied yet, which appliedTag names.
+func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do durableObjectWorker, appliedTag string) error {
+	body, contentType, err := buildDurableObjectScriptMultipart(up.worker, do, appliedTag)
 	if err != nil {
 		return err
 	}
@@ -474,15 +493,18 @@ func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do dur
 }
 
 // buildDurableObjectScriptMultipart is buildScriptMultipart's counterpart for
-// the account-level workers: the same module/binding shape, plus the worker's
-// own Durable Object binding and, when migrate is true, its migration
-// declaration.
-func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectClass, migrate bool) ([]byte, string, error) {
-	bindings := append(scriptBindings(worker, false), map[string]any{
-		"type":       "durable_object_namespace",
-		"name":       do.binding,
-		"class_name": do.className,
-	})
+// the account-level workers: the same module/binding shape, plus a binding per
+// Durable Object class the script exports and whatever migration steps carry
+// the deployed script from appliedTag to the end of its log.
+func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorker, appliedTag string) ([]byte, string, error) {
+	bindings := scriptBindings(worker, false)
+	for _, class := range do.classes {
+		bindings = append(bindings, map[string]any{
+			"type":       "durable_object_namespace",
+			"name":       class.binding,
+			"class_name": class.className,
+		})
+	}
 	metadata := map[string]any{
 		"main_module":         worker.Main.Name,
 		"compatibility_date":  compatDate,
@@ -490,15 +512,16 @@ func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectClass
 		"observability":       observability,
 		"bindings":            bindings,
 	}
-	if migrate {
-		metadata["migrations"] = map[string]any{
-			"tag":                do.migrationTag,
-			"new_sqlite_classes": []string{do.className},
-		}
+	migrations, err := pendingMigrations(do.migrations, appliedTag)
+	if err != nil {
+		return nil, "", err
+	}
+	if migrations != nil {
+		metadata["migrations"] = migrations
 	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
-		return nil, "", fmt.Errorf("marshal %s worker metadata: %w", do.className, err)
+		return nil, "", fmt.Errorf("marshal %s worker metadata: %w", worker.Main.Name, err)
 	}
 
 	buf := &bytes.Buffer{}
@@ -515,6 +538,46 @@ func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectClass
 		return nil, "", err
 	}
 	return buf.Bytes(), w.FormDataContentType(), nil
+}
+
+// pendingMigrations is the migration declaration that carries a script from the
+// tag it already applied to the end of its log, or nil when it is already there.
+// An empty appliedTag is a script that has never been migrated — a fresh
+// bootstrap, or one that does not exist yet — and gets the whole log.
+//
+// The step list is what makes a class addable to a live script at all: a
+// declaration that named only the newest class would be applied against a
+// script Cloudflare has no record of migrating, and one that named only the
+// oldest would try to create a class that already exists. old_tag is what
+// Cloudflare verifies the deployed script against, so the upload is rejected
+// rather than misapplied if it moved underneath us.
+func pendingMigrations(log []migrationStep, appliedTag string) (map[string]any, error) {
+	pending := log
+	if appliedTag != "" {
+		applied := slices.IndexFunc(log, func(step migrationStep) bool { return step.tag == appliedTag })
+		if applied < 0 {
+			// The script is ahead of the code uploading it. Guessing a path
+			// forward from here is how a class gets deleted.
+			return nil, fmt.Errorf("deployed script carries Durable Object migration tag %q, which this build's migration log does not contain", appliedTag)
+		}
+		pending = log[applied+1:]
+	}
+	if len(pending) == 0 {
+		return nil, nil
+	}
+
+	steps := make([]map[string]any, 0, len(pending))
+	for _, step := range pending {
+		steps = append(steps, map[string]any{"new_sqlite_classes": step.sqliteClasses})
+	}
+	migrations := map[string]any{
+		"new_tag": log[len(log)-1].tag,
+		"steps":   steps,
+	}
+	if appliedTag != "" {
+		migrations["old_tag"] = appliedTag
+	}
+	return migrations, nil
 }
 
 func (p *provider) PutStaged(ctx context.Context, state edge.RootStackState, record edge.DeploymentRecord) error {

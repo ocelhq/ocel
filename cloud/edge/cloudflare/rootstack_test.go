@@ -12,14 +12,17 @@ import (
 	"reflect"
 	"testing"
 
+	cf "github.com/cloudflare/cloudflare-go/v4"
+	"github.com/cloudflare/cloudflare-go/v4/option"
+
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
 // doMetadataFromMultipart mirrors cloudflare_test.go's metadataFromMultipart,
 // for buildDurableObjectScriptMultipart's body.
-func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectClass, migrate bool) map[string]any {
+func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectWorker, appliedTag string) map[string]any {
 	t.Helper()
-	body, contentType, err := buildDurableObjectScriptMultipart(worker, do, migrate)
+	body, contentType, err := buildDurableObjectScriptMultipart(worker, do, appliedTag)
 	if err != nil {
 		t.Fatalf("buildDurableObjectScriptMultipart: %v", err)
 	}
@@ -99,44 +102,118 @@ func TestISRWriterScriptNameFor(t *testing.T) {
 	}
 }
 
-func TestBuildDurableObjectScriptMultipart_BindsTheGivenClass(t *testing.T) {
-	for _, do := range []durableObjectClass{deploymentsStoreDO, isrWriterDO} {
-		meta := doMetadataFromMultipart(t, testStoreWorker(), do, false)
-		bindings, _ := meta["bindings"].([]any)
-		var found map[string]any
-		for _, b := range bindings {
-			if m, ok := b.(map[string]any); ok && m["type"] == "durable_object_namespace" {
-				found = m
+// doBindings returns every durable_object_namespace binding in the metadata,
+// keyed by binding name.
+func doBindings(t *testing.T, meta map[string]any) map[string]string {
+	t.Helper()
+	bindings, _ := meta["bindings"].([]any)
+	found := map[string]string{}
+	for _, b := range bindings {
+		m, ok := b.(map[string]any)
+		if !ok || m["type"] != "durable_object_namespace" {
+			continue
+		}
+		name, _ := m["name"].(string)
+		className, _ := m["class_name"].(string)
+		found[name] = className
+	}
+	return found
+}
+
+// migrationSteps flattens migrations.steps to the sqlite classes each step
+// creates, in order.
+func migrationSteps(t *testing.T, migrations map[string]any) [][]string {
+	t.Helper()
+	steps, ok := migrations["steps"].([]any)
+	if !ok {
+		t.Fatalf("migrations.steps = %v, want a list of steps", migrations["steps"])
+	}
+	out := [][]string{}
+	for _, step := range steps {
+		m, _ := step.(map[string]any)
+		classes, _ := m["new_sqlite_classes"].([]any)
+		names := []string{}
+		for _, c := range classes {
+			name, _ := c.(string)
+			names = append(names, name)
+		}
+		out = append(out, names)
+	}
+	return out
+}
+
+// A worker owns as many Durable Object classes as its wrangler.jsonc declares,
+// and every one of them needs its binding: a class the script exports but the
+// script metadata does not bind is a class no request can reach.
+func TestBuildDurableObjectScriptMultipart_BindsEveryClass(t *testing.T) {
+	for _, do := range []durableObjectWorker{deploymentsStoreWorker, isrWriterWorker} {
+		found := doBindings(t, doMetadataFromMultipart(t, testStoreWorker(), do, ""))
+		if len(found) != len(do.classes) {
+			t.Errorf("bound %d Durable Object classes, want %d: %v", len(found), len(do.classes), found)
+		}
+		for _, class := range do.classes {
+			if found[class.binding] != class.className {
+				t.Errorf("binding %s = %q, want %q", class.binding, found[class.binding], class.className)
 			}
-		}
-		if found == nil {
-			t.Fatalf("no durable_object_namespace binding in %v", bindings)
-		}
-		if found["name"] != do.binding || found["class_name"] != do.className {
-			t.Errorf("DO binding = %v, want name %s class_name %s", found, do.binding, do.className)
 		}
 	}
 }
 
-func TestBuildDurableObjectScriptMultipart_DeclaresMigrationOnlyWhenMigrateTrue(t *testing.T) {
-	for _, do := range []durableObjectClass{deploymentsStoreDO, isrWriterDO} {
-		fresh := doMetadataFromMultipart(t, testStoreWorker(), do, true)
-		migrations, ok := fresh["migrations"].(map[string]any)
-		if !ok {
-			t.Fatalf("expected a migrations object on a fresh deploy, got %v", fresh["migrations"])
-		}
-		if migrations["tag"] != do.migrationTag {
-			t.Errorf("migrations.tag = %v, want %s", migrations["tag"], do.migrationTag)
-		}
-		classes, _ := migrations["new_sqlite_classes"].([]any)
-		if len(classes) != 1 || classes[0] != do.className {
-			t.Errorf("migrations.new_sqlite_classes = %v, want [%s]", classes, do.className)
-		}
+// An account bootstrapping for the first time carries no migration tag, so
+// every step in the log has to be declared at once or the classes after the
+// first are never created.
+func TestBuildDurableObjectScriptMultipart_FreshBootstrapDeclaresTheWholeLog(t *testing.T) {
+	meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, "")
+	migrations, ok := meta["migrations"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected a migrations object on a fresh bootstrap, got %v", meta["migrations"])
+	}
+	if _, present := migrations["old_tag"]; present {
+		t.Errorf("migrations.old_tag = %v, want none: there is no deployed tag to verify against", migrations["old_tag"])
+	}
+	if migrations["new_tag"] != "v2" {
+		t.Errorf("migrations.new_tag = %v, want v2", migrations["new_tag"])
+	}
+	if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"IsrDeploy"}, {"IsrSnapshot"}}) {
+		t.Errorf("migrations.steps = %v, want the whole log", steps)
+	}
+}
 
-		notFresh := doMetadataFromMultipart(t, testStoreWorker(), do, false)
-		if _, present := notFresh["migrations"]; present {
-			t.Errorf("expected no migrations on a non-first reconcile, got %v", notFresh["migrations"])
+// ocelhq-wvag.4: the case a boolean "the script does not exist yet" could not
+// express. An account that already bootstrapped the writer carries v1, so a new
+// class reaches it only if the upload declares the steps v1 is missing —
+// otherwise Cloudflare rejects the binding to a class it never created.
+func TestBuildDurableObjectScriptMultipart_BootstrappedAccountDeclaresWhatItLacks(t *testing.T) {
+	meta := doMetadataFromMultipart(t, testStoreWorker(), isrWriterWorker, "v1")
+	migrations, ok := meta["migrations"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected a migrations object for a script behind the log, got %v", meta["migrations"])
+	}
+	if migrations["old_tag"] != "v1" || migrations["new_tag"] != "v2" {
+		t.Errorf("migrations tags = (%v, %v), want (v1, v2)", migrations["old_tag"], migrations["new_tag"])
+	}
+	if steps := migrationSteps(t, migrations); !reflect.DeepEqual(steps, [][]string{{"IsrSnapshot"}}) {
+		t.Errorf("migrations.steps = %v, want only the step v1 lacks", steps)
+	}
+}
+
+// Redeclaring an applied migration is at best redundant and at worst rejected,
+// and every bootstrap after the last one re-uploads the same script.
+func TestBuildDurableObjectScriptMultipart_UpToDateScriptDeclaresNoMigration(t *testing.T) {
+	for _, do := range []durableObjectWorker{deploymentsStoreWorker, isrWriterWorker} {
+		meta := doMetadataFromMultipart(t, testStoreWorker(), do, do.migrations[len(do.migrations)-1].tag)
+		if _, present := meta["migrations"]; present {
+			t.Errorf("expected no migrations on an up-to-date script, got %v", meta["migrations"])
 		}
+	}
+}
+
+// A deployed tag this build has never heard of is a script ahead of the code
+// uploading it. Guessing a migration path from there is how a class gets
+// deleted; refusing costs a rollback and nothing else.
+func TestBuildDurableObjectScriptMultipart_UnknownAppliedTagIsRefused(t *testing.T) {
+	if _, _, err := buildDurableObjectScriptMultipart(testStoreWorker(), isrWriterWorker, "v9"); err == nil {
+		t.Error("buildDurableObjectScriptMultipart(applied v9) = nil error, want a refusal")
 	}
 }
 
@@ -146,7 +223,7 @@ func TestBuildDurableObjectScriptMultipart_CarriesTheNativeBucketBinding(t *test
 	worker := testStoreWorker()
 	worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(edge.ClassProduction)}
 
-	meta := doMetadataFromMultipart(t, worker, isrWriterDO, true)
+	meta := doMetadataFromMultipart(t, worker, isrWriterWorker, "")
 	bindings, _ := meta["bindings"].([]any)
 	var found map[string]any
 	for _, b := range bindings {
@@ -845,5 +922,48 @@ func TestWithSecret_DoesNotMutateCallersWorker(t *testing.T) {
 	}
 	if out.Secrets["WRITE_SECRET"] != "s" || out.Secrets["EXISTING"] != "1" {
 		t.Errorf("out.Secrets = %v", out.Secrets)
+	}
+}
+
+// ocelhq-wvag.4: how much of the migration log an upload must declare turns on
+// the tag the deployed script already carries, which "does the script exist"
+// cannot express. Cloudflare reports it on the script's own settings.
+func TestAppliedMigrationTag_ReportsTheDeployedTag(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	mux := http.NewServeMux()
+	mux.HandleFunc("/accounts/acct/workers/scripts/migrated/settings", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"success": true, "errors": []any{}, "messages": []any{},
+			"result": map[string]any{"migrations": map[string]any{"new_tag": "v1"}},
+		})
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+	p := &provider{client: cf.NewClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+
+	tag, err := p.appliedMigrationTag(context.Background(), "migrated")
+	if err != nil {
+		t.Fatalf("appliedMigrationTag: %v", err)
+	}
+	if tag != "v1" {
+		t.Errorf("appliedMigrationTag = %q, want v1", tag)
+	}
+}
+
+// A script that does not exist has applied nothing, which is the fresh
+// bootstrap: an answer, not a failure.
+func TestAppliedMigrationTag_AbsentScriptCarriesNoTag(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	srv := httptest.NewServer(http.NotFoundHandler())
+	t.Cleanup(srv.Close)
+	p := &provider{client: cf.NewClient(option.WithBaseURL(srv.URL+"/"), option.WithAPIToken("test"))}
+
+	tag, err := p.appliedMigrationTag(context.Background(), "never-deployed")
+	if err != nil {
+		t.Fatalf("appliedMigrationTag: %v", err)
+	}
+	if tag != "" {
+		t.Errorf("appliedMigrationTag = %q, want empty", tag)
 	}
 }

@@ -152,9 +152,9 @@ func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, cla
 		return edge.Offer{}, err
 	}
 
-	exists, err := p.FindApp(ctx, scriptName)
+	appliedTag, err := p.appliedMigrationTag(ctx, scriptName)
 	if err != nil {
-		return edge.Offer{}, fmt.Errorf("check isr-writer worker: %w", err)
+		return edge.Offer{}, fmt.Errorf("read isr-writer worker migration tag: %w", err)
 	}
 	cred, err := mintSecret()
 	if err != nil {
@@ -163,7 +163,7 @@ func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, cla
 
 	worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(class)}
 	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
-	if err := p.putDurableObjectScript(ctx, up, isrWriterDO, !exists); err != nil {
+	if err := p.putDurableObjectScript(ctx, up, isrWriterWorker, appliedTag); err != nil {
 		return edge.Offer{}, fmt.Errorf("put isr-writer worker: %w", err)
 	}
 	endpoint, err := p.setSubdomain(ctx, up, true)
@@ -187,8 +187,8 @@ func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, cla
 // every bootstrap (so store-worker updates ship) and re-mints the bootstrap
 // credential, which is harmless: the credential authorizes only
 // /<slug>/initialize and is read fresh from the adopted param at deploy time,
-// never held long-term. The DO migration is declared only on the first
-// bootstrap (when no script exists yet); redeclaring it later is rejected.
+// never held long-term. Only the migration steps the deployed script has not
+// applied are declared; redeclaring an applied one is rejected.
 func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName string) (edge.Offer, error) {
 	bundles, err := edge.LoadStoreBundleManifest()
 	if err != nil {
@@ -203,9 +203,9 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName str
 		return edge.Offer{}, err
 	}
 
-	exists, err := p.FindApp(ctx, scriptName)
+	appliedTag, err := p.appliedMigrationTag(ctx, scriptName)
 	if err != nil {
-		return edge.Offer{}, fmt.Errorf("check deployments-store worker: %w", err)
+		return edge.Offer{}, fmt.Errorf("read deployments-store worker migration tag: %w", err)
 	}
 	cred, err := mintSecret()
 	if err != nil {
@@ -213,7 +213,7 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName str
 	}
 
 	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
-	if err := p.putDurableObjectScript(ctx, up, deploymentsStoreDO, !exists); err != nil {
+	if err := p.putDurableObjectScript(ctx, up, deploymentsStoreWorker, appliedTag); err != nil {
 		return edge.Offer{}, fmt.Errorf("put deployments-store worker: %w", err)
 	}
 	endpoint, err := p.setSubdomain(ctx, up, true)
@@ -244,6 +244,33 @@ func readWorkerBundle(path string) (edge.Worker, error) {
 		ContentType: "application/javascript+module",
 		Content:     main,
 	}}, nil
+}
+
+// appliedMigrationTag reports the Durable Object migration tag the deployed
+// script already carries, which is what decides how much of a worker's
+// migration log an upload has to declare. An empty tag means the script has
+// applied nothing — it does not exist yet, or no class was ever created on it.
+//
+// Whether the script merely exists cannot answer this: an account that
+// bootstrapped an earlier version of a worker exists and is still missing every
+// class added since, and Cloudflare rejects a binding to a class it never
+// created (ocelhq-wvag.4).
+func (p *provider) appliedMigrationTag(ctx context.Context, name string) (string, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return "", fmt.Errorf("%s is not set; it is required to query the Cloudflare edge", envAccountID)
+	}
+	settings, err := p.client.Workers.Scripts.ScriptAndVersionSettings.Get(ctx, name, workers.ScriptScriptAndVersionSettingGetParams{
+		AccountID: cf.F(accountID),
+	})
+	var apiErr *cf.Error
+	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return settings.Migrations.NewTag, nil
 }
 
 // FindApp reports whether a Workers script exists under name. A 404 is the
