@@ -1,11 +1,4 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import {
-  publishTagSnapshot,
-  type StoredTagSnapshot,
-  type TagRecord,
-  type TagSnapshot,
-  type TagSnapshotStore,
-} from "@ocel/next-cache";
 import type { CacheStore } from "../src/next/cache-store.mjs";
 import type {
   TagRecordPage,
@@ -13,103 +6,6 @@ import type {
   TagRecordUpdate,
   UseCacheStore,
 } from "../src/next/use-cache-store.mjs";
-
-// A stand-in for the object the edge reads: one versioned blob, written only
-// under a matching etag, exactly as R2's conditional PUT behaves.
-function fakeSnapshots() {
-  let object: { body: string; etag: string | null } | null = null;
-  let version = 0;
-  let failure: Error | null = null;
-  let interposed: TagSnapshot | null = null;
-  let gate: Promise<void> | null = null;
-  let writes = 0;
-  let reads = 0;
-
-  const store: TagSnapshotStore & {
-    readonly current: TagSnapshot | null;
-    readonly writes: number;
-    readonly reads: number;
-    put(snapshot: TagSnapshot): void;
-    putRaw(body: string): void;
-    putUnversioned(snapshot: TagSnapshot): void;
-    interposeOnce(snapshot: TagSnapshot): void;
-    hold(): () => void;
-    breakWrites(err?: Error): void;
-    fixWrites(): void;
-  } = {
-    get current() {
-      return object ? (JSON.parse(object.body) as TagSnapshot) : null;
-    },
-    get writes() {
-      return writes;
-    },
-    get reads() {
-      return reads;
-    },
-    put(snapshot) {
-      object = { body: JSON.stringify(snapshot), etag: `v${++version}` };
-    },
-    putRaw(body) {
-      object = { body, etag: `v${++version}` };
-    },
-    // An object the store returned without an etag: it exists, but names no
-    // version the next write could condition on.
-    putUnversioned(snapshot) {
-      object = { body: JSON.stringify(snapshot), etag: null };
-    },
-    // Another publisher lands `snapshot` in the gap between our next read and
-    // our next write, which is exactly what a precondition failure reports.
-    interposeOnce(snapshot) {
-      interposed = snapshot;
-    },
-    // Stalls every write until the returned release is called, so a test can
-    // prove a caller resolved without the publish rather than racing it.
-    hold() {
-      let release!: () => void;
-      gate = new Promise<void>((resolve) => (release = resolve));
-      return () => {
-        gate = null;
-        release();
-      };
-    },
-    breakWrites(err = new Error("r2 is down")) {
-      failure = err;
-    },
-    fixWrites() {
-      failure = null;
-    },
-
-    async read(): Promise<StoredTagSnapshot | null> {
-      reads++;
-      await Promise.resolve();
-      if (!object) return null;
-      // Mirrors the real store: an unparseable snapshot is surfaced rather than
-      // reported as absent, so it is never replaced with an unanchored one.
-      return { snapshot: JSON.parse(object.body) as TagSnapshot, etag: object.etag };
-    },
-
-    async write(snapshot, prior) {
-      writes++;
-      // Yields, so concurrent publishers really do interleave read and write.
-      await Promise.resolve();
-      if (gate) await gate;
-      if (failure) throw failure;
-      if (interposed) {
-        store.put(interposed);
-        interposed = null;
-      }
-      // Mirrors If-Match / If-None-Match: a stale etag, or a create against an
-      // object that now exists, is a precondition failure and not an error. A
-      // prior naming no version conditions on nothing.
-      const conditional =
-        prior === null ? object !== null : prior.etag !== null && object?.etag !== prior.etag;
-      if (conditional) return false;
-      object = { body: JSON.stringify(snapshot), etag: `v${++version}` };
-      return true;
-    },
-  };
-  return store;
-}
 
 // A stand-in for the state table's tag partition and its index: rows keyed by
 // tag, queried in write order, and written under the same monotonic guard the
@@ -122,13 +18,11 @@ function fakeStore(pageSize = 100) {
   const store: UseCacheStore & {
     rows: typeof rows;
     readonly queries: number;
-    snapshots: ReturnType<typeof fakeSnapshots> | null;
     seed(tag: string, row: TagRecordUpdate): void;
     breakQueries(err?: Error): void;
     fixQueries(): void;
   } = {
     rows,
-    snapshots: fakeSnapshots(),
     get queries() {
       return queries;
     },
@@ -485,193 +379,34 @@ test("refuses to adopt a shared clock built from different configuration", async
   expect(await other.getExpiration(["products"])).toBe(0);
 });
 
-// The snapshot is the edge's read-only replica of the clock. It is published
-// from the sync drain rather than from updateTags, because only the drain holds
-// every invalidation this instance has merged rather than just its own event.
+// The durable write is the raise: the state table's stream carries it to the one
+// publisher, so nothing on this tier reads or writes the edge's replica. What the
+// singular handler still owes the shared clock is its own event, merged locally
+// so both caching models on this instance agree without waiting for the index.
 
-// The publish loop itself is @ocel/next-cache's and is driven straight here;
-// what this tier contributes is the store behind it.
-const publish = (store: UseCacheStore, records: Map<string, TagRecord>) =>
-  publishTagSnapshot(store.snapshots!, records, Date.now());
-
-function snapshotOf(
-  deployedAt: number,
-  records: Record<string, { stale?: number; expired?: number }>,
-): TagSnapshot {
-  return { version: 1, deployedAt, generatedAt: deployedAt, records };
-}
-
-test("publishes the merged clock as a snapshot the edge can read", async () => {
+test("an invalidation on the classic ISR model is the durable write and nothing more", async () => {
   const store = fakeStore();
-  const { handler } = await load(store);
-  const at = Date.now();
-  store.seed("products", { expired: at, writtenAt: at });
+  const { isr } = await loadBoth(store);
 
-  await handler.refreshTags();
+  const deferred = await invocation(() => isr.revalidateTag("products"));
+  await Promise.all(deferred);
 
-  const snapshot = store.snapshots!.current!;
-  expect(snapshot.version).toBe(1);
-  expect(snapshot.records.products!.expired).toBe(at);
-  expect(snapshot.generatedAt).toBeGreaterThan(0);
+  expect(store.rows.get("products")!.expired).toBeGreaterThan(0);
+  // No drain: the raise is durable already, and a query here would buy this
+  // instance nothing its own read path does not already fetch on its throttle.
+  expect(store.queries).toBe(0);
 });
 
-// The whole reason the write is safe under concurrency: the merge only moves
-// watermarks upward, so whichever publisher wins a race produces a snapshot
-// carrying both publishers' invalidations.
-test("concurrent publishers converge with no invalidation lost", async () => {
+test("an invalidation raised on either model is visible to the other at once", async () => {
   const store = fakeStore();
+  const { tagClock, handler, isr } = await loadBoth(store);
 
-  await Promise.all([
-    publish(store, new Map([["a", { expired: 100 }]])),
-    publish(store, new Map([["b", { expired: 200 }]])),
-  ]);
+  await handler.updateTags(["reviews"]);
+  const deferred = await invocation(() => isr.revalidateTag("products"));
+  await Promise.all(deferred);
 
-  const records = store.snapshots!.current!.records;
-  expect(records.a!.expired).toBe(100);
-  expect(records.b!.expired).toBe(200);
-});
-
-test("a publisher carrying an older watermark never walks back a newer one", async () => {
-  const store = fakeStore();
-
-  await publish(store, new Map([["products", { expired: 900, stale: 900 }]]));
-  await publish(store, new Map([["products", { expired: 100, stale: 100 }]]));
-
-  expect(store.snapshots!.current!.records.products).toEqual({
-    expired: 900,
-    stale: 900,
-  });
-});
-
-test("re-reads and retries when another publisher wins the write", async () => {
-  const store = fakeStore();
-  store.snapshots!.interposeOnce(snapshotOf(0, { theirs: { expired: 500 } }));
-
-  await expect(publish(store, new Map([["ours", { expired: 700 }]]))).resolves.toBe(
-    true,
-  );
-
-  const records = store.snapshots!.current!.records;
-  expect(records.theirs!.expired).toBe(500);
-  expect(records.ours!.expired).toBe(700);
-});
-
-// Pruning itself is @ocel/next-cache's rule and is asserted there; what the
-// publisher owes it is the anchor, read back off the snapshot it is replacing.
-test("carries the build's deploy anchor forward across publishes", async () => {
-  const store = fakeStore();
-  store.snapshots!.put(snapshotOf(5_000, {}));
-
-  await publish(store, new Map([["products", { expired: 9_000 }]]));
-
-  expect(store.snapshots!.current!.deployedAt).toBe(5_000);
-});
-
-test("a failed publish is repaired by the next one", async () => {
-  const store = fakeStore();
-  const { handler } = await load(store);
-  const at = Date.now();
-  store.seed("products", { expired: at, writtenAt: at });
-
-  store.snapshots!.breakWrites();
-  await expect(handler.refreshTags()).resolves.toBeUndefined();
-  expect(store.snapshots!.current).toBeNull();
-
-  store.snapshots!.fixWrites();
-  advance(3_000);
-  await handler.refreshTags();
-
-  expect(store.snapshots!.current!.records.products!.expired).toBe(at);
-});
-
-// deployedAt is written only by the deploy's genesis seed, so a publisher that
-// replaced an unreadable blob would seed a zero anchor and disable pruning for
-// the life of the build. The blast radius of declining is one build's replica
-// until its next deploy re-seeds — and the edge already falls open on a snapshot
-// it cannot parse — where clobbering the anchor is unbounded.
-test("refuses to replace a torn snapshot with an unanchored one", async () => {
-  const store = fakeStore();
-  store.snapshots!.putRaw("{not json");
-
-  await expect(publish(store, new Map([["products", { expired: 700 }]]))).rejects.toThrow();
-
-  expect(store.snapshots!.writes).toBe(0);
-});
-
-test("a torn snapshot cannot fail the request that found it", async () => {
-  const store = fakeStore();
-  const { handler } = await load(store);
-  store.snapshots!.putRaw("{not json");
-
-  await expect(handler.refreshTags()).resolves.toBeUndefined();
-  expect(store.snapshots!.writes).toBe(0);
-});
-
-// Conditioning a create on an object that already exists fails every time, so a
-// store that named no version would stall the publisher permanently rather than
-// lose one race.
-test("replaces a snapshot the store named no version for", async () => {
-  const store = fakeStore();
-  store.snapshots!.putUnversioned(snapshotOf(5_000, { theirs: { expired: 6_000 } }));
-
-  await expect(publish(store, new Map([["ours", { expired: 7_000 }]]))).resolves.toBe(
-    true,
-  );
-
-  const snapshot = store.snapshots!.current!;
-  expect(snapshot.deployedAt).toBe(5_000);
-  expect(snapshot.records.theirs!.expired).toBe(6_000);
-  expect(snapshot.records.ours!.expired).toBe(7_000);
-});
-
-// The publisher runs on every sync, but the snapshot only has to be rewritten
-// when something moved — otherwise a busy instance would pay a round trip every
-// sync interval to learn nothing.
-test("does not rewrite the snapshot when no record has moved", async () => {
-  const store = fakeStore();
-  const { handler } = await load(store);
-  const at = Date.now();
-  store.seed("products", { expired: at, writtenAt: at });
-
-  await handler.refreshTags();
-  expect(store.snapshots!.writes).toBe(1);
-
-  advance(3_000);
-  await handler.refreshTags();
-  expect(store.snapshots!.writes).toBe(1);
-});
-
-// The replica carries no expiry, so an unchanged map has nothing to say however
-// long the instance stays warm. Rewriting it on a timer would be a round trip
-// per interval, per instance, to leave the edge reading what it already had.
-test("never rewrites an unchanged snapshot, however long the instance runs", async () => {
-  const store = fakeStore();
-  const { handler } = await load(store);
-  const at = Date.now();
-  store.seed("products", { expired: at, writtenAt: at });
-
-  await handler.refreshTags();
-  expect(store.snapshots!.writes).toBe(1);
-
-  advance(60 * 60_000);
-  await handler.refreshTags();
-  expect(store.snapshots!.writes).toBe(1);
-});
-
-// An unadopted substrate has no edge replica to keep, so the clock has to behave
-// exactly as it did before replication existed.
-test("publishes nothing when the substrate adopted no object store", async () => {
-  const store = fakeStore();
-  store.snapshots = null;
-  const { handler } = await load(store);
-  const at = Date.now();
-  store.seed("products", { expired: at, writtenAt: at });
-
-  await expect(handler.refreshTags()).resolves.toBeUndefined();
-  await expect(handler.updateTags(["reviews"])).resolves.toBeUndefined();
-
-  await handler.set("k", Promise.resolve(entry(["products"])));
-  expect(await handler.get("k", [])).toBeUndefined();
+  expect(await tagClock.getExpiration(["products"])).toBeGreaterThan(0);
+  expect(await tagClock.getExpiration(["reviews"])).toBeGreaterThan(0);
 });
 
 // Shipping ahead of the index means a clock with nothing behind it, which must
@@ -684,96 +419,4 @@ test("works with no durable store bound at all", async () => {
   await expect(handler.updateTags(["products"])).resolves.toBeUndefined();
 
   expect(await handler.get("k", [])).toBeUndefined();
-});
-
-// The sync drain is what publishes, and on an app with no `use cache` anywhere
-// nothing calls into the clock at all: the singular handler's invalidation is
-// the only thing that can wake the publisher.
-
-test("an invalidation on the classic ISR model publishes a snapshot", async () => {
-  const store = fakeStore();
-  const { isr } = await loadBoth(store);
-
-  const deferred = await invocation(() => isr.revalidateTag("products"));
-  await Promise.all(deferred);
-
-  expect(store.snapshots!.current!.records.products!.expired).toBeGreaterThan(0);
-});
-
-// The index is eventually consistent, so a publish that only carried what the
-// drain read back would omit the very invalidation that woke it.
-test("publishes an invalidation the index has not caught up to", async () => {
-  const store = fakeStore();
-  const { isr } = await loadBoth(store, false);
-
-  const deferred = await invocation(() => isr.revalidateTag("products"));
-  await Promise.all(deferred);
-
-  expect(store.snapshots!.current!.records.products!.expired).toBeGreaterThan(0);
-});
-
-// The kick merges its record before draining, so a publisher that bailed out on
-// a failed query would drop exactly the invalidation the kick exists to
-// replicate — and on an app with no `use cache` anywhere, nothing ever runs the
-// clock again to repair it.
-test("publishes the invalidation even when the index query fails", async () => {
-  const store = fakeStore();
-  const { tagClock, isr } = await loadBoth(store);
-  store.breakQueries();
-
-  const deferred = await invocation(() => isr.revalidateTag("products"));
-  await Promise.all(deferred);
-
-  expect(store.snapshots!.current!.records.products!.expired).toBeGreaterThan(0);
-  // A query that never came back read nothing, so the clock is still cold and
-  // the cursor still unset — publishing must not have moved either.
-  expect(tagClock.hasSynced).toBe(false);
-});
-
-// Resolving while the write is stalled is the whole assertion: a publish on the
-// request path would hang here instead.
-test("the invalidating request does not wait for the publish", async () => {
-  const store = fakeStore();
-  const { isr } = await loadBoth(store);
-  const release = store.snapshots!.hold();
-
-  const deferred = await invocation(() => isr.revalidateTag("products"));
-  expect(store.snapshots!.current).toBeNull();
-
-  release();
-  await Promise.all(deferred);
-  expect(store.snapshots!.current).not.toBeNull();
-});
-
-// Next hands revalidateTag through with no try/catch, so anything the publish
-// can throw would fail the request that raised the invalidation.
-test("a failing publish cannot fail the invalidating request", async () => {
-  const store = fakeStore();
-  const { isr } = await loadBoth(store);
-  store.snapshots!.breakWrites();
-  store.breakQueries();
-
-  const deferred = await invocation(() => isr.revalidateTag("products"));
-
-  await expect(Promise.all(deferred)).resolves.toBeDefined();
-  expect(store.snapshots!.current).toBeNull();
-});
-
-// One clock and one publisher: an app that mixes the two caching models must not
-// have them racing each other with half the picture each.
-test("both caching models drive the same publisher", async () => {
-  const store = fakeStore();
-  const { tagClock, handler, isr } = await loadBoth(store);
-
-  await handler.updateTags(["reviews"]);
-  await handler.refreshTags();
-
-  const deferred = await invocation(() => isr.revalidateTag("products"));
-  await Promise.all(deferred);
-
-  expect(Object.keys(store.snapshots!.current!.records).sort()).toEqual([
-    "products",
-    "reviews",
-  ]);
-  expect(await tagClock.getExpiration(["products"])).toBeGreaterThan(0);
 });

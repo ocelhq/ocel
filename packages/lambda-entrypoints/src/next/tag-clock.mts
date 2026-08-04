@@ -1,4 +1,4 @@
-import { mergeRecord, publishTagSnapshot, type TagRecord } from "@ocel/next-cache";
+import { mergeRecord, type TagRecord } from "@ocel/next-cache";
 
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
 import { now } from "./use-cache-entry.mjs";
@@ -27,12 +27,6 @@ interface ClockState {
   hasSynced: boolean;
   lastAttemptAt: number;
   inflight: Promise<void> | null;
-  // Bumped whenever a record actually moves. Comparing it against what was last
-  // published is what lets an idle instance skip the snapshot read entirely,
-  // instead of paying a round trip every sync interval to discover nothing
-  // changed.
-  revision: number;
-  publishedRevision: number;
 }
 
 // Throttled on the *attempt* rather than the success, so a persistently failing
@@ -58,8 +52,6 @@ function initialState(fingerprint: string): ClockState {
     hasSynced: false,
     lastAttemptAt: -Infinity,
     inflight: null,
-    revision: 0,
-    publishedRevision: 0,
   };
 }
 
@@ -109,23 +101,11 @@ export function setTagClockStore(next: UseCacheStore | null): void {
   Object.assign(state, initialState(state.fingerprint), { store: next });
 }
 
-// Records the tag's new state and reports whether anything actually moved, which
-// is what the publisher reads as "there is something new to replicate". Every
-// steady-state sync re-reads the record on the cursor boundary, so counting
-// those as changes would republish every sync interval forever.
-function set(tag: string, record: TagRecord): void {
-  const existing = state.records.get(tag);
-  if (existing?.stale !== record.stale || existing?.expired !== record.expired) {
-    state.revision++;
-  }
-  state.records.set(tag, record);
-}
-
 // Merged rather than replaced, and always upwards: a record arriving from the
 // index must never walk back an invalidation this instance raised itself, which
 // the index is too lagged to have seen yet.
 function observe(tag: string, incoming: TagRecord): void {
-  set(tag, mergeRecord(state.records.get(tag), incoming));
+  state.records.set(tag, mergeRecord(state.records.get(tag), incoming));
 }
 
 async function sync(): Promise<void> {
@@ -159,13 +139,6 @@ async function sync(): Promise<void> {
     // handlers serving on their last known tag state instead, with the cursor
     // and hasSynced left exactly where they were so nothing is skipped.
   }
-
-  // Published even when the query failed, because the local map is what is being
-  // replicated and it is already merged: recordAndPublish merges its record
-  // before draining, so bailing out here would drop the very invalidation the
-  // kick exists to replicate — and on an app with no `use cache` anywhere,
-  // nothing ever runs this clock again to repair it.
-  await publish(backend);
 }
 
 // Starts a drain and records it as the one in flight, which is what lets a
@@ -179,53 +152,13 @@ function drain(): Promise<void> {
   }));
 }
 
-// Publishing from the sync drain rather than from updateTags is what makes the
-// replica whole: updateTags knows only its own event, while the drain holds
-// every invalidation this instance has merged from the index.
-async function publish(backend: UseCacheStore): Promise<void> {
-  const snapshots = backend.snapshots;
-  if (!snapshots) return;
-
-  const revision = state.revision;
-  // Nothing observed since the last publish is nothing to say: the replica the
-  // edge already holds is this instance's answer. There is no expiry to renew,
-  // so a periodic rewrite of an unchanged map would buy the reader nothing.
-  if (revision === state.publishedRevision) return;
-
-  try {
-    // Only a confirmed write advances the mark, so a failed publish is retried
-    // by the next sync rather than mistaken for a live replica.
-    if (!(await publishTagSnapshot(snapshots, state.records, now()))) return;
-    state.publishedRevision = revision;
-  } catch {
-    // The replica is an optimization; DynamoDB remains the authoritative clock
-    // and the origin is still correct. A publish that cannot land leaves the
-    // edge answering from the last one until this instance observes something
-    // new, or another instance publishes what it already has.
-  }
-}
-
-// The singular handler makes its own durable tag write, so on an app with no
-// `use cache` anywhere nothing else ever calls into this clock — and a drain
-// that never runs is a replica that never hears about the invalidation. This is
-// the kick that wakes it, deliberately outside the read path's throttle: it
-// answers one specific event, and throttling it would drop that event.
-//
-// The record is merged locally before the drain because the index is eventually
-// consistent. Publishing only what the query read back would produce a snapshot
-// missing the very invalidation that woke the publisher.
-export async function recordAndPublish(
-  tags: string[],
-  record: TagRecord,
-): Promise<void> {
+// The singular handler makes its own durable tag write, which is the raise: the
+// state table's stream carries it to the one publisher, so nothing here reaches
+// the edge's replica. What is left is this instance's own read-your-own-writes —
+// the two caching models share one clock, and the index is too lagged to answer
+// for the event that was just raised through the other model.
+export function recordTags(tags: string[], record: TagRecord): void {
   for (const tag of tags) observe(tag, record);
-
-  // Joined rather than raced: a sync already in flight was started before this
-  // write and holds the cursor, so a second one alongside it would advance the
-  // cursor past records neither had read.
-  if (state.inflight) await state.inflight;
-
-  await drain();
 }
 
 export const tagClock: TagClock = {
@@ -241,7 +174,7 @@ export const tagClock: TagClock = {
     const at = now();
     for (const tag of tags) {
       const existing = state.records.get(tag) ?? {};
-      set(
+      state.records.set(
         tag,
         durations
           ? {

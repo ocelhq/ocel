@@ -5,15 +5,9 @@ import { createHash } from "node:crypto";
 import {
   isGuardRejection,
   tagRecordUpdate,
-  tagSnapshotKey,
   tagSortKey,
-  type StoredTagSnapshot,
   type TagRecordUpdate,
-  type TagSnapshot,
-  type TagSnapshotStore,
 } from "@ocel/next-cache";
-
-import { snapshotObjectStore } from "./object-store.mjs";
 
 // A `use cache` entry exactly as it sits in object storage: the metadata and the
 // body in one JSON document, so a read is a single GET and a write is atomic
@@ -46,10 +40,6 @@ export interface UseCacheStore {
   writeEntry(key: string, entry: UseCacheEntry): Promise<void>;
   queryTagRecords(since: number, cursor?: unknown): Promise<TagRecordPage>;
   writeTag(tag: string, record: TagRecordUpdate): Promise<boolean>;
-  // null when this substrate adopted no object store: there is no edge reading a
-  // replica, so the publisher stands down and the clock behaves exactly as it
-  // did before replication existed.
-  snapshots: TagSnapshotStore | null;
 }
 
 // One page is deliberately large: a cold instance drains the whole partition,
@@ -81,76 +71,6 @@ function isNotFound(err: any): boolean {
   return err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404;
 }
 
-// R2 returns 412 for a failed If-Match and 412 for a failed If-None-Match on
-// PUT, which is the ordinary outcome of two publishers racing rather than an
-// error. Nothing else may be swallowed here: a 403 means the token lost its
-// grant, and silently reporting that as "someone else won" would leave the
-// replica permanently and invisibly stale.
-function isPreconditionFailure(err: any): boolean {
-  return (
-    err?.name === "PreconditionFailed" || err?.$metadata?.httpStatusCode === 412
-  );
-}
-
-function preconditionOf(prior: StoredTagSnapshot | null) {
-  if (prior === null) return { IfNoneMatch: "*" };
-  return prior.etag === null ? {} : { IfMatch: prior.etag };
-}
-
-// The snapshot lives in the adopted store because that is the one the edge can
-// read. An unadopted substrate has no edge replica at all, so there is nothing
-// to publish and no bucket to publish it to.
-function tagSnapshotStore(prefix: string): TagSnapshotStore | null {
-  const store = snapshotObjectStore();
-  if (!store) return null;
-
-  const { client, bucket } = store;
-  const key = tagSnapshotKey(prefix);
-
-  return {
-    async read() {
-      try {
-        const out = await client.send(
-          new GetObjectCommand({ Bucket: bucket, Key: key }),
-        );
-        const body = await streamToString(out.Body);
-        // A parse failure leaves this try as a throw, which is the contract: an
-        // unparseable snapshot must not be reported as absent.
-        return { snapshot: JSON.parse(body) as TagSnapshot, etag: out.ETag ?? null };
-      } catch (err: any) {
-        if (isNotFound(err)) return null;
-        throw err;
-      }
-    },
-
-    async write(snapshot, prior) {
-      try {
-        await client.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: JSON.stringify(snapshot),
-            ContentType: "application/json",
-            // Creating is conditional too, so a publisher that read "absent"
-            // cannot clobber an object another publisher created in the
-            // meantime — including the deploy's own seed, which is what carries
-            // the build's pruning anchor. An object the store named no version
-            // for is replaced unconditionally: that loses only the
-            // compare-and-swap, which the monotonic merge and the next publish
-            // repair, where conditioning on a version that does not exist would
-            // fail every write for the life of the build.
-            ...preconditionOf(prior),
-          }),
-        );
-        return true;
-      } catch (err: any) {
-        if (isPreconditionFailure(err)) return false;
-        throw err;
-      }
-    },
-  };
-}
-
 // awsUseCacheStore binds the store to the account-global state table. Tag keys
 // are namespaced by the deploy, which is also what the function's IAM policy is
 // scoped to — including on the index, whose partition key must therefore be the
@@ -172,8 +92,6 @@ export function awsUseCacheStore(): UseCacheStore {
   const objectKey = (key: string) => `${prefix}/use-cache/${objectName(key)}.json`;
 
   return {
-    snapshots: tagSnapshotStore(prefix),
-
     async readEntry(key) {
       try {
         const out = await s3.send(
