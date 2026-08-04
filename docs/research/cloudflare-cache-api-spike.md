@@ -12,9 +12,9 @@ Serves `ocelhq-wvag.1` / epic decision 12. Gates `ocelhq-wvag.7` (edge L1 sentin
 
 **Read the follow-up section too before sizing anything.** `ocelhq-wvag.9` measured the write-
 visibility window this run left open and, in doing so, **corrects the "~200 ms" figure below by
-a factor of twenty**: the window is 10 ms, and most of the 201 ms was this instrument's own
-cold sockets and burst queueing. Every claim below that reasons from "~200 ms" is superseded
-there.
+a factor of twenty-five**: the window is 8 ms, and the 201 ms is this instrument's own round
+trip plus its cold sockets and burst queueing — the window is not visible inside it at all.
+Every claim below that reasons from "~200 ms" is superseded there.
 
 ## Why this exists
 
@@ -286,7 +286,7 @@ writes it and the rest of the colo sees it.
 Two qualifications that survive the result and belong in child 7:
 
 - **The suppression window opens at ~200 ms, not at 0.** **← SUPERSEDED by `ocelhq-wvag.9`;
-  it opens at 10 ms. See the follow-up section.** The earliest cross-isolate hit was
+  it opens at 8 ms. See the follow-up section.** The earliest cross-isolate hit was
   201–251 ms after the `PUT` returned, and that number is the *runner's* round trip, so it is
   an upper bound on propagation rather than a measurement of it. Still, L1 cannot suppress a
   request that arrives before the sentinel is written and readable. For a herd, the fan-in that
@@ -357,9 +357,9 @@ measurement came back at effectively full sharing, which makes that factor the w
 
 ## Follow-up: the L1 write-visibility window (`ocelhq-wvag.9`)
 
-Status: **MEASURED** on 2026-08-04 against a second zone-routed deploy of the same package, at
-`probe.ocel.site`, all runs reaching colo `JNB`. Headline: **`W = 10 ms`**, and the first
-thing measured was not `W` at all.
+Status: **MEASURED** on 2026-08-04 against two zone-routed deploys of the same package, at
+`probe.ocel.site`, all runs reaching colo `JNB`. Headline: **`W = 8 ms`**, and the first thing
+measured was not `W` at all.
 
 The spike above ends with "a follow-up measurement is warranted … a cold-key burst that
 measures how many concurrent writers reach `origin()` before the first sentinel becomes
@@ -367,30 +367,38 @@ colo-visible." `scripts/race.ts` is that measurement. It races claimers into a k
 written, each running the exact `match`-then-`put` that `admitRefresh` runs, which the
 write-then-read runner above structurally cannot do.
 
+**This section was rewritten after a review round and a second deploy.** The first pass
+reported `W = 10 ms` off a sweep whose steps were 0, 5, 10 — a 5 ms bin — and reported an
+`E(N)` whose burst phase had two defects that a re-measurement exposed. What the first pass got
+right survived unchanged: the key-scope control, the gap sweep's design, and the conclusion
+that L1 leaks a synchronized herd at roughly the isolate count. What it got wrong is recorded
+in §8 rather than quietly overwritten.
+
 ### Run metadata
 
 | field | value |
 | --- | --- |
-| date | 2026-08-04, ~19:2x–20:0x UTC |
+| date | 2026-08-04, ~19:2x–20:0x UTC (first pass) and ~23:2x–23:5x UTC (re-measurement) |
 | probe host | `probe.ocel.site` (zone route `probe.ocel.site/*`), plus one control run on `probe.ocel.dev`. `ocel.site` was chosen because `ocel.dev` carries the `*.ocel.dev/*` wildcard worker route |
-| deploy | the same `ocel-cache-probe` script and the same two committed zone routes as the runs above; no DNS record was created — both zones already carry a proxied `*` AAAA record |
+| deploy | the same `ocel-cache-probe` script and the same two committed zone routes as the runs above; no DNS record was created — both zones already carry a proxied `*` AAAA record. Torn down after each pass, verified by listing the account's scripts and both zones' routes |
 | runner location | one host outside Cloudflare; every request in every run landed in colo `JNB` |
-| raw run files | `workers/cache-probe/runs/race-{control-1,control-2,control-3,control-dev,gap-1,gap-2,burst-1,burst-2}.json` (gitignored, on the machine that ran them) |
+| raw run files | `workers/cache-probe/runs/race-*.json` (first pass) and `race2-*.json` (re-measurement), gitignored, on the machine that ran them |
 
-| run | invocation (all `node scripts/race.ts --base https://probe.ocel.site`) |
+The re-measurement's runs, all `node scripts/race.ts --base https://probe.ocel.site`:
+
+| run | invocation |
 | --- | --- |
-| control-1..3 | `--phase control --sockets 32` / `--sockets 48` ×2 |
-| control-dev | `--phase control --sockets 48` against `https://probe.ocel.dev` |
-| gap-1 | `--phase gap --trials 200 --deltas 0,5,10,15,20,25,30,40,50,75,100,150,200,300,500,1000 --sockets 16` |
-| gap-2 | `--phase gap --trials 200 --deltas 0,5,10,15,20,25,30,50 --sockets 16` |
-| burst-1, burst-2 | `--phase burst --trials 100 --sizes 2,8,32,128 --window 10` |
+| control | `--phase control --sockets 48` |
+| gap-fine-1, gap-fine-2 | `--phase gap --trials 250 --deltas 0,5,6,7,8,9,10,12,15 --sockets 16` |
+| burst-3 … burst-6 | `--phase burst --trials 100 --sizes 2,8,32,128 --window 10 --isolates 99` (`--window 8` on burst-6) |
+| diagnostics | three ad-hoc runs isolating the fixed-pool defect; see §8 |
 
 A deployment note, matching the one recorded above for `ocel.dev`: for the first ~3 minutes
-after `wrangler deploy`, ~12 % of requests to `probe.ocel.site` returned `522` — the zone route
-had not reached every edge machine and the request fell through to the AAAA record's dummy
-origin. It settled on its own; every run below was taken after three consecutive clean bursts
-of 60. The runner's own preflight repeats that check with 200 requests and aborts on any
-non-200.
+after `wrangler deploy`, a fraction of requests to `probe.ocel.site` returned `522` — the zone
+route had not reached every edge machine and the request fell through to the AAAA record's
+dummy origin. The re-measurement saw 29/60, then 11/60, then clean. Every run below was taken
+after three consecutive clean bursts of 60. The runner's own preflight repeats that check with
+200 requests and aborts on any non-200.
 
 ### 0. The key-scope control, which gates everything else — **P0 held**
 
@@ -412,14 +420,15 @@ foreign-isolate reads at each.
 | control-2 | `probe.ocel.site` | 35/35 | 33/33 | 13 / 14 |
 | control-3 | `probe.ocel.site` | 39/39 | 34/34 | 15 / 17 |
 | control-dev | `probe.ocel.dev` | 37/37 | 36/36 | 16 / 16 |
+| control (re-measurement) | `probe.ocel.site` | 38/38 | 48/48 | 19 / 29 |
 
-**Verdict `both-scopes-visible` in all four runs, 254 of 254 cross-isolate reads hit, and
-`verified: true` on every write.** An off-zone synthetic key stores and is colo-visible
-exactly as an on-zone key is. **The four cache tiers are live in production.** This is a
-negative result and it was the one worth being most afraid of; it is recorded first because a
+**Verdict `both-scopes-visible` in all five runs, 340 of 340 cross-isolate reads hit, and
+`verified: true` on every write.** An off-zone synthetic key stores and is colo-visible exactly
+as an on-zone key is. **The four cache tiers are live in production.** This is a negative
+result and it was the one worth being most afraid of; it is recorded first because an
 `offzone-inert` verdict here would have superseded this whole issue with a P1 defect.
 
-### 1. `W`, the write-visibility window — 10 ms
+### 1. `W`, the write-visibility window — 8 ms
 
 Two racers per trial on a **fresh UUID key**, the second fired a driver-imposed Δ after the
 first was *sent*. Δ is imposed on the driver's single clock and both racers pay the same round
@@ -427,39 +436,48 @@ trip, **so the driver's RTT cancels out of Δ** rather than having to be subtrac
 No two Worker clocks are differenced anywhere, preserving the rule the runner above sets.
 
 The statistic is `P(second claimed | second on a different isolate, same colo, first claimed)`.
-200 trials per Δ, 3 200 trials in run 1.
+The first pass swept 0, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 300, 500, 1000 (200
+trials each) and again at 0, 5, 10, 15, 20, 25, 30, 50 — which put the drop inside the 5–10 ms
+bin and reported its upper edge. The re-measurement swept that bin at 1 ms resolution, 250
+trials per Δ.
 
 | Δ (ms) | run 1 decidable / claims / rate | run 2 decidable / claims / rate |
 | --- | --- | --- |
-| 0 | 158 / 126 / **0.7975** | 151 / 125 / **0.8278** |
-| 5 | 167 / 64 / **0.3832** | 178 / 70 / **0.3933** |
-| 10 | 170 / 6 / **0.0353** | 181 / 4 / **0.0221** |
-| 15 | 153 / 2 / 0.0131 | 162 / 0 / 0.0000 |
-| 20 | 161 / 0 / 0.0000 | 158 / 1 / 0.0063 |
-| 25 | 165 / 0 / 0.0000 | 194 / 0 / 0.0000 |
-| 30 | 159 / 0 / 0.0000 | 182 / 0 / 0.0000 |
-| 40 | 143 / 0 / 0.0000 | — |
-| 50 | 157 / 0 / 0.0000 | 175 / 0 / 0.0000 |
-| 75 | 176 / 0 / 0.0000 | — |
-| 100 | 157 / 0 / 0.0000 | — |
-| 150 | 160 / 0 / 0.0000 | — |
-| 200 | 159 / 0 / 0.0000 | — |
-| 300 | 158 / 0 / 0.0000 | — |
-| 500 | 168 / 0 / 0.0000 | — |
-| 1000 | 147 / 0 / 0.0000 | — |
+| 0 | 241 / 200 / **0.8299** | 231 / 174 / **0.7532** |
+| 5 | 247 / 87 / **0.3522** | 250 / 68 / **0.2720** |
+| 6 | 248 / 53 / **0.2137** | 242 / 33 / **0.1364** |
+| 7 | 248 / 41 / **0.1653** | 241 / 35 / **0.1452** |
+| 8 | 250 / 10 / **0.0400** | 248 / 6 / **0.0242** |
+| 9 | 244 / 6 / 0.0246 | 249 / 4 / 0.0161 |
+| 10 | 239 / 1 / 0.0042 | 228 / 13 / 0.0570 |
+| 12 | 235 / 2 / 0.0085 | 248 / 0 / 0.0000 |
+| 15 | 222 / 0 / 0.0000 | 242 / 3 / 0.0124 |
 
-**`W = 10 ms`, verdict `measured`, in both runs independently.** Defined as: the elapsed time
-after a claimer *begins its `match`* beyond which a second isolate's `match` hits with
+**`W = 8 ms`, verdict `measured`, in both runs independently**, taken as the smallest Δ whose
+rate falls below 0.05 *and stays below it at the next Δ*. Defined more fully as: the elapsed
+time after a claimer *begins its `match`* beyond which a second isolate's `match` hits with
 probability ≥ 0.95. Deliberately end-to-end over the claim path, so it includes the leader's
-`put` duration as well as propagation — a racer arriving during the leader's `put` escapes
-too, and any definition anchored on "after `cache.put` returns" would undercount.
+`put` duration as well as propagation — a racer arriving during the leader's `put` escapes too,
+and any definition anchored on "after `cache.put` returns" would undercount.
 
-Zero trials discarded in either run. Zero `zero-claims` trials and zero `mixed-colo` trials in
-6 400 gap trials across both runs — `foreignColoObservations: 0` in the spike above was not a
-fluke of that instrument. Trials excluded as `same-isolate` ran 6–57 per Δ (production
-collapses those in L0 before the sentinel is consulted, so they are not L1's to measure);
-`leader-did-not-claim` totalled 15 in 6 400, nearly all at Δ=0 where "leader" is arbitrary.
-The achieved Δ tracked the imposed Δ to within ~1.3 ms at the median at every step.
+Two caveats that belong with a 1 ms figure and did not matter at 5 ms resolution:
+
+- **The achieved Δ is not the nominal Δ.** The driver imposes the gap with `setTimeout`, whose
+  floor is about a millisecond: at nominal Δ=0 the achieved median is **1.2 ms**, and at
+  nominal 5…15 the achieved median runs **0.7–0.8 ms below** nominal. So the Δ=0 row is really
+  "≈1.2 ms apart" and `W` against achieved Δ is **8.2 ms**. The nominal figure is the
+  conservative one and is what the sizing below uses.
+- **Run 2's Δ=10 row is 0.0570, above the 0.05 threshold**, while its Δ=9 and Δ=12 rows are
+  0.0161 and 0.0000. That is sampling noise at 13 claims in 228 trials, not a second window; it
+  did not move the verdict, because 8 and 9 both suppress. Recorded rather than smoothed.
+
+Zero trials discarded in either run, out of 2 250 attempted apiece. `mixed-colo` was zero
+(`foreignColoObservations: 0` in the spike above was not a fluke of that instrument), and so
+was `zero-claims` — but see §7: neither of those zeros is evidence of anything. Trials excluded
+as `same-isolate` totalled 68 and 57 (production collapses those in L0 before the sentinel is
+consulted, so they are not L1's to measure); `leader-did-not-claim` totalled 8 and 14, nearly
+all at Δ=0 where "leader" is arbitrary. **Those last two buckets are the live ones**, and their
+non-zero counts are what demonstrates the classifier is not inert.
 
 ### 2. The driver's RTT, and re-reading the spike's 201–251 ms
 
@@ -473,52 +491,81 @@ recorded what that round trip was, so the number could not be decomposed. It is 
 | gap-2 | 68.4 ms | 67.5 ms |
 | burst-1 | 67.3 ms | 66.3 ms |
 | burst-2 | 62.8 ms | 62.3 ms |
+| re-measurement (6 runs) | 62.6–68.1 ms | 61.4–67.8 ms |
 
 Sequential, on one already-warm socket, so it is a latency and not a queueing delay.
 
-**`201 ms ≈ 10 ms of window + ~65 ms of round trip + ~125 ms of the instrument itself.`** The
-residual is not propagation. The spike's sentinel phase stamped `elapsedMs` when a read's
-*response returned to the driver*, and its first read burst was 64 concurrent requests on the
-default undici pool's **cold** sockets — 64 TLS handshakes and 64-way queueing, both inside
-the number. So the 201 ms is an upper bound that is roughly 95 % instrument, and the sentence
-in verdict 1 above — "the suppression window opens at ~200 ms, not at 0" — **overstates the
-window by a factor of about twenty.** The window opens at 10 ms.
+**The honest reading is that `W` is not visible in the 201 ms at all.** The spike's sentinel
+phase started its clock when the `PUT` **returned to the driver** — one full round trip after
+the write executed at the edge — so an 8 ms edge-side window had already elapsed, twice over,
+before that clock started. Adding it back as a term double-counts it. What the 201 ms contains
+is one read round trip (~65 ms) plus ~135 ms of the instrument: the first read burst was 64
+concurrent requests on the default undici pool's **cold** sockets, so 64 TLS handshakes and
+64-way queueing are inside the number. The residual is a subtraction, not a measurement.
+
+So the sentence in verdict 1 above — "the suppression window opens at ~200 ms, not at 0" —
+**overstates the window by a factor of about twenty-five.** The window opens at 8 ms.
 
 This falsifies prediction P5 (that `W` would come out near `201 ms − RTT`). The two methods
-disagree by ~125 ms and the disagreement is fully explained by the older instrument's cold
-sockets and burst queueing; the gap sweep is the method that does not contain them, which is
-why it is the primary instrument here. Recorded as a disagreement rather than resolved by
-picking the convenient number.
+disagree by ~135 ms. Cold sockets and burst queueing are **the most likely explanation, and it
+is untested**: nobody re-ran the old instrument with pre-warmed sockets to watch the 201 ms
+fall to ~70 ms. Per this stack's own rule — an undecidable result reports `inconclusive` rather
+than guessing — that is where it stays. The gap sweep is the primary instrument here because it
+structurally cannot contain either effect, not because its answer is the convenient one.
 
 ### 3. `E(N)`, escapes per colo per stale event
 
-`N` racers on `N` **pre-warmed** sockets at one cold key, 100 trials per `N`. Escapes are
-collapsed by isolate, because production runs `refreshOnce` (L0) inside `admitRefresh`, so two
-concurrent requests on one isolate never both reach the sentinel; `rawClaims` is shown only to
-demonstrate the collapse happened.
+`N` racers on **pre-warmed** sockets at one cold key, 100 trials per `N`, each trial drawn as a
+**rotating window over a pool of `N + 16` sockets**. Escapes are collapsed by isolate, because
+production runs `refreshOnce` (L0) inside `admitRefresh`, so two concurrent requests on one
+isolate never both reach the sentinel; `rawClaims` is shown only to demonstrate the collapse
+happened. **Send dispersion is measured at the socket write** (undici's
+`undici:client:sendHeaders`), not in the driver's dispatch loop — see §8 for why that
+distinction voided the first pass's numbers.
 
-| N | run | counted | escapes min / p10 / median / p90 / max | raw claims median | distinct isolates min–max | send dispersion median | verdict |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| 2 | 1 | 100 | 1 / 1 / **1** / 1 / 1 | 1 | 2–2 | 0.038 ms | not a lower bound |
-| 2 | 2 | 100 | 1 / 2 / **2** / 2 / 2 | 2 | 2–2 | 0.035 ms | not a lower bound |
-| 8 | 1 | 100 | 3 / 4 / **5** / 6 / 6 | 7 | 6–6 | 0.066 ms | not a lower bound |
-| 8 | 2 | 100 | 4 / 5 / **6** / 7 / 8 | 6 | 8–8 | 0.063 ms | not a lower bound |
-| 32 | 1 | 100 | 7 / 8 / **9** / 9 / 11 | 18 | 9–11 | 0.143 ms | not a lower bound |
-| 32 | 2 | 100 | 2 / 9 / **11** / 13 / 14 | 17 | 16–16 | 0.147 ms | not a lower bound |
-| 128 | 1 | 100 | 14 / 40 / **54** / 68 / 80 | 82 | 70–80 | 0.263 ms | not a lower bound |
-| 128 | 2 | 100 | 32 / 46 / **53** / 63 / 67 | 85 | 64–72 | 0.219 ms | not a lower bound |
+| N | run | counted | single-isolate | escapes min / p10 / median / p90 / max | mean | raw claims median | distinct isolates | dispersion median / max | E/I |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 2 | 3 | 100 | 0 | 1 / 1 / **2** / 2 / 2 | 1.60 | 2 | 2–2 | 0.06 / 1.26 ms | 0.80 |
+| 2 | 4 | 89 | 11 | 1 / 1 / **2** / 2 / 2 | 1.82 | 2 | 2–2 | 0.06 / 1.19 ms | 0.91 |
+| 2 | 5 | 92 | 8 | 1 / 1 / **2** / 2 / 2 | 1.83 | 2 | 2–2 | 0.06 / 1.15 ms | 0.91 |
+| 2 | 6 | 100 | 0 | 1 / 1 / **2** / 2 / 2 | 1.73 | 2 | 2–2 | 0.06 / 0.16 ms | 0.86 |
+| 8 | 3 | 100 | 0 | 2 / 3 / **7** / 8 / 8 | 5.95 | 7 | 7–8 | 0.14 / 5.05 ms | 0.74 |
+| 8 | 4 | 100 | 0 | 3 / 4 / **6** / 7 / 7 | 5.69 | 7 | 6–7 | 0.15 / 1.50 ms | 0.81 |
+| 8 | 5 | 100 | 0 | 4 / 5 / **6** / 7 / 8 | 5.96 | 6 | 6–8 | 0.14 / 1.27 ms | 0.74 |
+| 8 | 6 | 100 | 0 | 2 / 4 / **5** / 6 / 7 | 4.85 | 5 | 7–8 | 0.14 / 1.64 ms | 0.61 |
+| 32 | 3 | 100 | 0 | 12 / 17 / **19** / 20 / 22 | 18.45 | 22 | 21–26 | 0.38 / 1.86 ms | 0.71 |
+| 32 | 4 | 100 | 0 | 15 / 18 / **19** / 21 / 24 | 19.40 | 24 | 20–26 | 0.35 / 1.77 ms | 0.75 |
+| 32 | 5 | 100 | 0 | 10 / 19 / **23** / 26 / 27 | 22.55 | 26 | 25–28 | 0.38 / 2.08 ms | 0.81 |
+| 32 | 6 | 100 | 0 | 13 / 15 / **18** / 22 / 24 | 18.07 | 22 | 22–25 | 0.39 / 2.21 ms | 0.72 |
+| 128 | 3 | 100 | 0 | 24 / 47 / **57** / 68 / 72 | 56.23 | 86 | 63–77 | 1.20 / 4.13 ms | 0.73 |
+| 128 | 4 | 100 | 0 | 35 / 47 / **56** / 64 / 70 | 55.63 | 88 | 69–81 | 1.15 / 3.34 ms | 0.69 |
+| 128 | 5 | 100 | 0 | 44 / 55 / **63** / 73 / 81 | 63.17 | 98 | 76–81 | 1.22 / 3.70 ms | 0.78 |
+| 128 | 6 | 100 | 0 | 29 / 42 / **51** / 58 / 63 | 50.28 | 78 | 66–73 | 1.14 / 4.10 ms | 0.69 |
 
-Zero trials discarded, zero `zero-claims`, zero `mixed-colo`, zero `single-isolate` and zero
-invariant violations in all 800 trials across both runs. Send-time dispersion was two orders
-of magnitude below `W` at every `N`, so `E(N)` is not printed as a lower bound.
+Zero trials discarded, out of 400 attempted per run. `E/I` is the mean escape count over the
+run's largest `distinctIsolates`.
 
-The shape that matters: at `N = 128` arriving effectively simultaneously, **about two thirds of
-the isolates the burst touched each escaped** (54 escapes over 80 isolates). L1 is not
-suppressing a synchronized herd to one; it suppresses it to roughly the isolate count.
+**Escapes are not printed as a lower bound**, and unlike the first pass that verdict now rests
+on a dispersion that can actually exceed the window: median send spread is 0.06 ms at `N=2` and
+1.14–1.22 ms at `N=128`, with a worst single trial of 5.05 ms — the same order as `W = 8 ms`,
+not two orders below it. At `N = 128` the guard is within a factor of seven of firing, so
+`E(128)` should be read as a slight under-count rather than as an exact figure.
 
-`I_colo`: this run's highest `distinctIsolates` was **80** at `N = 128`, below the spike's 99,
-so the lower bound stays at **`I_colo ≥ 99`**. It is still a lower bound and still had not
-plateaued — 128 sockets reached at most 80 isolates, so the pool, not the colo, was the limit.
+**The two phases now cross-validate, which they did not before.** The gap sweep measures
+`P(second claims | Δ≈0) = 0.75–0.83` independently of the burst; that predicts a mean of
+`1 + 0.75…0.83 = 1.75–1.83` escapes at `N = 2`, and the burst measures **1.60, 1.73, 1.82,
+1.83**. Two instruments with different failure modes agreeing on a number neither was tuned to
+produce is the strongest evidence in this document.
+
+The shape that matters: at `N = 128` arriving effectively simultaneously, **about three
+quarters of the isolates the burst touched each escaped** — `E/I` ran 0.69–0.78 across four
+runs, never 1.00. L1 is not suppressing a synchronized herd to one; it suppresses it to roughly
+three quarters of the isolate count.
+
+`I_colo`: this re-measurement's highest `distinctIsolates` was **81** at `N = 128`, below the
+spike's 99, so the lower bound stays at **`I_colo ≥ 99`**. It is still a lower bound and still
+had not plateaued — 128 sockets reached at most 81 isolates, so the pool, not the colo, was the
+limit.
 
 ### 4. Sizing L2 — what `ocelhq-wvag.8` should read
 
@@ -532,18 +579,18 @@ R = C · E / refreshSentinelTtlSeconds     sustained L2 request rate
 measurable here**: it is a property of the operator's traffic, not of Cloudflare. It is a
 **parameter**. Saying so is part of the deliverable — otherwise PR 8 hard-codes a guess.
 
-At `W = 0.010 s`, `I_colo ≥ 99`, `C ≈ 300` colos carrying traffic, `refreshSentinelTtlSeconds = 5`:
+At `W = 0.008 s`, `I_colo ≥ 99`, `C ≈ 300` colos carrying traffic, `refreshSentinelTtlSeconds = 5`:
 
 | `λ_colo` (rps) | `E` | `F` | `R` (rps) | vs 500 rps/DO | vs 1000 rps/DO |
 | --- | --- | --- | --- | --- | --- |
-| 1 | 1.01 | 303 | **61** | under | under |
-| 10 | 1.10 | 330 | **66** | under | under |
-| 100 | 2.00 | 600 | **120** | under | under |
-| 1 000 | 11.00 | 3 300 | **660** | **over** | under |
+| 1 | 1.01 | 302 | **60** | under | under |
+| 10 | 1.08 | 324 | **65** | under | under |
+| 100 | 1.80 | 540 | **108** | under | under |
+| 1 000 | 9.00 | 2 700 | **540** | **over** | under |
 
-`R = 60 + 0.6 · λ_colo`, so it crosses 500 rps at `λ_colo ≈ 733` and 1 000 rps at
-`λ_colo ≈ 1 567` — a route taking ~220 000 rps globally before the first ceiling. **For
-smooth traffic, one DO per route survives.**
+`R = 60 + 0.48 · λ_colo`, so it crosses 500 rps at `λ_colo ≈ 917` and 1 000 rps at
+`λ_colo ≈ 1 958` — a route taking ~275 000 rps globally before the first ceiling. **For smooth
+traffic, one DO per route survives.**
 
 Two corrections to `ocelhq-wvag.8`'s own arithmetic fall out of this:
 
@@ -554,30 +601,35 @@ Two corrections to `ocelhq-wvag.8`'s own arithmetic fall out of this:
   either.
 
 **The synchronized-herd case is where `.8`'s rejection of sharding needs a second look.** The
-linear term assumes arrivals spread over `W`. §3 measured what happens when they are not: 128
-simultaneous arrivals produced 54 escapes, bounded by the isolates they touched rather than by
-`1 + λW`. Synchronized arrival is not hypothetical for this system — every colo's sentinel
-expires one TTL after it was taken, so a route hot everywhere re-admits on a shared schedule.
-In that regime `E → I_colo`, and at `I_colo = 99`:
+linear term assumes arrivals spread over `W`. §3 measured what happens when they are not.
+Synchronized arrival is not hypothetical for this system — every colo's sentinel expires one
+TTL after it was taken, so a route hot everywhere re-admits on a shared schedule.
 
-```
-R = 300 × 99 / 5 = 5 940 rps
-```
+Two numbers bound that regime, and **both are extrapolations from a measured ratio onto an
+inherited isolate count, not measurements.** Neither was observed directly, because no run here
+reached 99 isolates:
 
-which is **6× the 1 000 rps per-DO ceiling, and 12× the conservative 500**. That is the number
-`.8` should design against for a synchronized herd, not the 61 rps of the smooth-traffic row.
-`I_colo = 99` is itself a lower bound.
+| basis | `E` | `R = 300 · E / 5` |
+| --- | --- | --- |
+| the **measured** `E/I` ratio (0.69–0.78) applied to `I_colo ≥ 99` | 68–77 | **~4 100–4 640 rps** |
+| the **worst-case bound** `E = I_colo`, which no run reproduced | 99 | **5 940 rps** |
+
+Even the lower row is **8× the 1 000 rps per-DO ceiling and 16× the conservative 500**, so the
+conclusion does not depend on which row is taken: **a synchronized herd exceeds one DO per
+route by an order of magnitude.** But 5 940 is a bound, not a measurement, and PR 8 should
+design against the range and label the row it uses. `I_colo = 99` is itself a lower bound, so
+both rows are floors.
 
 ### 5. Predictions — which held, which did not
 
 | # | prediction | outcome |
 | --- | --- | --- |
-| P0 | an off-zone synthetic key stores and is colo-visible identically to an on-zone key | **held** — 254/254, four runs, two zones |
-| P1 | second-racer claim probability decreases monotonically with Δ and reaches <0.05 by Δ≈250 ms | **held, and by 25×** — monotone, and <0.05 by Δ=10 ms |
-| P2 | at Δ=0 with ≥2 distinct isolates, both racers claim | **held** — 0.80 and 0.83 at Δ=0; and at N=128, 54 escapes over 80 isolates |
-| P3 | escapes ≤ distinct isolates in every trial after collapse | **held** — 0 invariant violations in 800 trials |
-| P4 | escapes ≥ 1 in every trial | **held** — 0 zero-claim trials in 7 200 trials |
-| P5 | `W ≈ 201 ms − median RTT`, within the RTT's own spread | **FALSIFIED** — `W` is 10 ms, not ~132 ms. See §2; the residual is the older instrument's cold sockets and 64-way burst queueing, and the disagreement is reported rather than resolved by choosing |
+| P0 | an off-zone synthetic key stores and is colo-visible identically to an on-zone key | **held** — 340/340, five runs, two zones |
+| P1 | second-racer claim probability decreases monotonically with Δ and reaches <0.05 by Δ≈250 ms | **held, and by 30×** — monotone through the 1 ms sweep, and <0.05 by Δ=8 ms |
+| P2 | at Δ=0 with ≥2 distinct isolates, both racers claim | **held** — 0.75 and 0.83 at Δ=0; and at N=128, ~0.73 of the isolates touched |
+| P3 | escapes ≤ distinct isolates in every trial after collapse | **not a finding — guaranteed by construction.** Escapes is the isolate-set size over a subset of the outcomes, so the inequality is set theory and the detector that "reported" it could not fail. It has been deleted. The live check is `outcomeOf`'s comparison of the worker-echoed key and seq against what was sent, and **it never fired** in any run |
+| P4 | escapes ≥ 1 in every trial | **not a finding — guaranteed by construction.** The globally first `match` on a fresh UUID key must miss and therefore claim. The assertion is kept, but a zero here is a theorem; see §7 |
+| P5 | `W ≈ 201 ms − median RTT`, within the RTT's own spread | **FALSIFIED** — `W` is 8 ms, not ~135 ms. See §2; the residual is most likely the older instrument's cold sockets and 64-way burst queueing, but that explanation was never tested, so the disagreement is reported rather than resolved |
 
 ### 6. Staleness clause
 
@@ -588,21 +640,74 @@ carries the same warning at the mirror itself.
 
 One comment in `workers/nextjs/src/cache.ts` — the one justifying
 `refreshSentinelTtlSeconds = 5` by citing "a sentinel becoming readable from sibling isolates
-at ~200 ms" — is now **wrong by a factor of twenty**. The constant it justifies is unaffected
-(5 s is still far above 10 ms), only the reasoning is. That edit belongs to `ocelhq-wvag.8`,
-not to the probe.
+at ~200 ms" — is now **wrong by a factor of twenty-five**. The constant it justifies is
+unaffected (5 s is still far above 8 ms), only the reasoning is. That edit belongs to
+`ocelhq-wvag.8`, not to the probe.
 
 ### 7. What these numbers do not cover
 
 - **One colo, one runner.** `W` and `E` are JNB's. `C ≈ 300` is an assumption about
   Cloudflare's fleet, not a measurement taken here.
-- **Send-side dispersion only.** The 0.03–0.26 ms dispersion is the spread of the driver's
-  *sends*. Server-side arrival spread at `N = 128` is not measured, and it is the most likely
-  explanation for why 128 near-simultaneous racers produced 54 escapes rather than 80.
-- **`I_colo` is a lower bound and has never plateaued.** 128 sockets reached at most 80
+- **Three of the burst's four buckets are structurally unreachable, and their zeros are not
+  evidence.** `zero-claims` cannot fire because the globally first `match` on a fresh key must
+  miss; `mixed-colo` cannot fire from a single driver host, which reaches one colo;
+  `single-isolate` is live but rare. The first pass cited all three zeros as validation. The
+  buckets that demonstrably fire are the gap sweep's `leader-did-not-claim` and `same-isolate`,
+  and now the burst's `single-isolate` at `N=2` (8–11 per 100 trials, which a fixed pool never
+  produced) — those are the liveness evidence.
+- **Send-side dispersion only, and it is no longer negligible.** The 0.06–1.22 ms median
+  dispersion is the spread of the driver's *socket writes*. Server-side arrival spread is still
+  not measured, and it remains a plausible contributor to `E/I ≈ 0.73` rather than 1.0 at
+  `N = 128`.
+- **Cross-isolate visibility is NOT uniform within a colo.** Measured directly while diagnosing
+  §8: on one pair of sockets both racers claimed 31 of 40 times at zero separation, while on
+  another pair the same socket won 79 of 80 regardless of dispatch order. `W = 8 ms` is a
+  population statistic over pairs, not a property every pair has. Anything reasoning about a
+  *specific* pair of isolates is outside what this measures.
+- **`I_colo` is a lower bound and has never plateaued.** 128 sockets reached at most 81
   isolates here; the spike above reached 99 with 200-way concurrency.
+- **The Δ sweep's resolution is 1 ms and its floor is `setTimeout`'s.** Achieved Δ tracks
+  nominal Δ to within ~1 ms, so `W` is 8 ms nominal and 8.2 ms achieved. Anything finer needs a
+  different pacing mechanism.
 - **`λ_colo` is an operator parameter**, restated here because every conclusion in §4 is
   conditional on it.
+
+### 8. What the first pass got wrong, and how it was found
+
+Recorded rather than overwritten, because both defects are the class this stack keeps
+producing: a green signal from a detector that could not fire.
+
+- **`dispersionMs` measured a JS loop, so the burst's only concurrency guard was dead.** It was
+  `max − min` over timestamps taken in the driver's own `racers.map(...)` callback — before
+  undici had written a byte, since `request()` queues the write and resumes it off the loop. It
+  read 0.03–0.26 ms at `N = 2…128`, so `dispersion.median > windowMs` was false in every real
+  run and the phase printed "not a lower bound" on eight rows, on evidence about a for-loop.
+  Now taken from `undici:client:sendHeaders`, which publishes immediately before the request
+  head goes to the socket. The same bursts then measure 0.06–1.22 ms, and 5.05 ms in the worst
+  single trial — four to twenty times larger, and within reach of `W`.
+- **A fixed socket pool made 100 trials into one draw repeated 100 times.** A socket pins to an
+  isolate for the pool's life, so `N` sockets meant `N` fixed isolates. The tell was in the
+  first pass's own numbers, and it was reported as two "independent reproductions": at `N = 2`,
+  run 1 gave escapes min/p10/median/p90/max **all = 1** over 100 trials while run 2 gave a
+  median of 2 — mutually incompatible, and run 1 incompatible with the gap sweep's 0.80 at
+  vanishing probability.
+
+  It was diagnosed rather than assumed. The re-measurement reproduced the `1` twice more, and
+  then the raw trials showed **seq 1 claiming in 100 of 100 trials and seq 0 in 1** — the racer
+  sent *first* was the one suppressed, which no propagation model explains. A direct experiment
+  then showed the sole claimer was the same socket in 79 of 80 trials **whichever of the two
+  was dispatched first**, so the winner was a property of the connection and not of the race;
+  and a different pool of two had both racers claiming 31 of 40 times at the same separation.
+  The pool is now `N + 16` wide with a rotating window, four runs agree, and `E(2)` lands on
+  the gap sweep's independently measured value.
+
+  The finding underneath the defect is the §7 bullet: **visibility latency varies by isolate
+  pair**, and a fixed pool samples one pair and prints it without a spread.
+
+Three smaller corrections to the first pass's arithmetic and framing: the gap sweep was
+**4 800** trials (16 Δs + 8 Δs, at 200 each), not the 6 400 stated twice; P4's total was
+**5 600** (4 800 + 800), not 7 200; and `leader-did-not-claim` totalled 16, not 15. The
+re-measurement adds 4 500 gap trials and 1 600 burst trials on top.
 
 ## Cleanup
 
