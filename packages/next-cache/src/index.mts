@@ -94,6 +94,28 @@ export function tagNamespace(prefix: string): string {
   return `TAG#${prefix.replaceAll("/", "#")}#`;
 }
 
+// The four segments of an isrPrefix, which is also how many the namespace holds.
+const PREFIX_SEGMENTS = 4;
+
+// tagNamespace's inverse: the isrPrefix a namespace was built from, or null for
+// anything that is not one. The stream consumer derives every build it publishes
+// for through here, so the grammar has exactly one spelling and one reader.
+//
+// It is given gsi1pk, which is the namespace verbatim, rather than pk. A tag
+// record's pk is the namespace with the tag appended, and a tag is arbitrary
+// user input that freely contains "#" — so splitting a pk would let a caller
+// choose which build a record is published to.
+//
+// Null is the answer for every item that is not a tag record, which is the
+// consumer's second line of defence behind its event filter: upload sessions
+// share this table, this sort key, and carry HMAC secrets.
+export function isrPrefixOf(namespace: string): string | null {
+  if (!namespace.startsWith("TAG#") || !namespace.endsWith("#")) return null;
+  const segments = namespace.slice("TAG#".length, -1).split("#");
+  if (segments.length !== PREFIX_SEGMENTS || segments.some((s) => s === "")) return null;
+  return segments.join("/");
+}
+
 // The header Next stamps a route's cache tags onto. For page and route kinds the
 // tags reach a reader only this way — the entry itself is the only record of
 // what it depends on.
