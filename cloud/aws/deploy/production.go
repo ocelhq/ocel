@@ -40,7 +40,7 @@ import (
 // ReconcileRootStack is a no-op once a project's root stack already carries it;
 // bump it only when the frozen generic/store worker bundles change shape in a
 // way that needs re-deploying.
-const rootStackVersion = "9"
+const rootStackVersion = "10"
 
 // appDeployResult is one app's app-deploy-stack outcome, fed into
 // finalizeProductionDeploy after Run has driven that stack (Pulumi) to
@@ -349,9 +349,11 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		StoreScriptName: cfg.StoreScriptName,
 		StoreEndpoint:   cfg.StoreEndpoint,
 		BootstrapCred:   cfg.StoreBootstrapCred,
-		Values:          cfg.EdgeValues,
-		PruneRoutes:     true,
-		Warn:            warn,
+
+		ISRWriterScriptName: cfg.ISRWriterScriptName,
+		Values:              cfg.EdgeValues,
+		PruneRoutes:         true,
+		Warn:                warn,
 	}
 
 	preview := cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW
@@ -743,6 +745,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	}
 	if isr := caches[name]; isr != nil {
 		record.IsrPrefix = isr.Prefix
+		record.IsrWriteSecret = isr.WriterSecret
 	}
 
 	edgeWorkers, err := appEdgeWorkers(cfg, manifest.GetSlug(), name, id.BuildID())

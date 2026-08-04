@@ -193,6 +193,10 @@ type Config struct {
 	// checkISRWriterAgrees is what enforces.
 	ISRWriterEndpoint      string
 	ISRWriterBootstrapCred string
+	// ISRWriterScriptName is the same worker named as the edge names it, which
+	// is what the app worker's service binding to it takes: an edge
+	// revalidateTag raises inside the account rather than over the endpoint.
+	ISRWriterScriptName string
 	// ISRWriterSeed is minted once per deploy run and never persisted. Each
 	// app's write secret is derived from it and that app's own isrPrefix
 	// (isrWriteSecret), so appCaches stays a pure function of the deploy while
