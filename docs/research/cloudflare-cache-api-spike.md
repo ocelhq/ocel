@@ -349,6 +349,7 @@ measurement came back at effectively full sharing, which makes that factor the w
 
 ## Cleanup
 
-This package is a spike. Once the findings above are recorded and children 7 and 8 have
+This package is a spike. Once the findings above are recorded and children 8 and 9 have
 landed against them, `workers/cache-probe` should be deleted; this document is the artefact
-that survives.
+that survives. It was `7 and 8` until `ocelhq-wvag.9` re-used the package for the
+write-visibility measurement below, which the write-then-read runner above could not take.
