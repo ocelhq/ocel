@@ -732,6 +732,58 @@ describe("intercept, PPR entries", () => {
   });
 });
 
+// A revalidation rewrite is the one write that does not read the entry it
+// replaces: Next's runtime set() payload carries a single page-level headers map,
+// and the per-variant maps come back only from the build's projection. So the
+// consumer that decides whether PPR survives a revalidation is this one —
+// reconstructSegment, which serves nothing at all when segmentHeaders is missing.
+// These drive a rewrite-shaped entry through it from both sides.
+describe("intercept, a revalidated entry's segment prefetch", () => {
+  // The projection the Lambda assigns over the rewrite, as the adapter emits it.
+  const projection = {
+    rscHeaders: { "content-type": "text/x-component" },
+    segmentHeaders: SEGMENT_HEADERS,
+  };
+
+  const rewritten = (over: Record<string, unknown> = projection) => ({
+    lastModified: 1_000,
+    value: {
+      kind: "APP_PAGE",
+      status: 200,
+      headers: { "content-type": "text/html; charset=utf-8" },
+      html: "<html>fresh</html>",
+      rscData: btoa("RSC-FRESH"),
+      postponed: "STATE",
+      segmentData: { "/_tree": btoa("TREE-FRESH") },
+      ...over,
+    },
+  });
+
+  const prefetch = (entry: unknown) =>
+    intercept(
+      req({ headers: { RSC: "1", "next-router-segment-prefetch": "/_tree" } }),
+      target({ revalidate: 60, expiration: 3600 }),
+      cfg,
+      storeDeps(stored({ [entryKey("/blog")]: entry }), { now: () => 2_000 }),
+    );
+
+  it("reconstructs the segment from the reseeded variant headers", async () => {
+    const outcome = await prefetch(rewritten());
+
+    expect(outcome?.kind).toBe("complete");
+    const res = (outcome as { response: Response }).response;
+    expect(res.headers.get("x-nextjs-postponed")).toBe("2");
+    expect(res.headers.get("content-type")).toBe("text/x-component");
+    expect(await res.text()).toBe("TREE-FRESH");
+  });
+
+  it("serves nothing once the rewrite drops segmentHeaders", async () => {
+    const { segmentHeaders: _dropped, ...withoutSegments } = projection;
+
+    expect(await prefetch(rewritten(withoutSegments))).toBeNull();
+  });
+});
+
 describe("intercept, entry memo", () => {
   it("collapses a burst on one entry to a single store read", async () => {
     const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
