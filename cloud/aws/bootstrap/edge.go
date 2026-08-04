@@ -460,7 +460,21 @@ func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, class string) (s
 		Type:      ssmtypes.ParameterTypeSecureString,
 		Overwrite: aws.Bool(false),
 	}); err != nil {
-		return "", fmt.Errorf("write isr writer seed parameter: %w", err)
+		// A concurrent bootstrap created it between the read and this write. The
+		// seed in force is whichever one landed, so this one converges on it
+		// rather than failing a run over a race it already lost harmlessly.
+		var exists *ssmtypes.ParameterAlreadyExists
+		if !errors.As(err, &exists) {
+			return "", fmt.Errorf("write isr writer seed parameter: %w", err)
+		}
+		out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+			Name:           aws.String(paramName),
+			WithDecryption: aws.Bool(true),
+		})
+		if err != nil {
+			return "", fmt.Errorf("read isr writer seed parameter a concurrent bootstrap created: %w", err)
+		}
+		return aws.ToString(out.Parameter.Value), nil
 	}
 	return seed, nil
 }
