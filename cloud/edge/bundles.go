@@ -39,36 +39,47 @@ func (m BundleManifest) Path(f Framework, k Kind) (string, error) {
 	return "", fmt.Errorf("no worker bundle for framework %q on edge %q", f, k)
 }
 
-// EnvStoreWorkerBundles names the environment variable the CLI exports the
-// deployments-store worker's bundle manifest in (ADR 0001): a JSON
-// object of edge -> path to that edge's compiled deployments-store
-// entrypoint. Separate from EnvWorkerBundles because the store worker is not a
-// framework's worker — it is the root stack's own, one per edge kind rather
-// than one per (framework, edge) pairing.
-const EnvStoreWorkerBundles = "OCEL_STORE_WORKER_BUNDLES"
+// EnvStoreWorkerBundles / EnvISRWriterWorkerBundles name the environment
+// variables the CLI exports the account-level workers' bundle manifests in
+// (ADR 0001): a JSON object of edge -> path to that edge's compiled entrypoint.
+// Separate from EnvWorkerBundles because neither is a framework's worker — each
+// is one per edge kind rather than one per (framework, edge) pairing.
+const (
+	EnvStoreWorkerBundles     = "OCEL_STORE_WORKER_BUNDLES"
+	EnvISRWriterWorkerBundles = "OCEL_ISR_WRITER_WORKER_BUNDLES"
+)
 
-// StoreBundleManifest is the deployments-store worker bundle the CLI shipped
-// for each edge kind.
+// StoreBundleManifest is one account-level worker's bundle for each edge kind.
 type StoreBundleManifest map[Kind]string
 
-// LoadStoreBundleManifest reads the manifest the CLI exported.
+// LoadStoreBundleManifest reads the deployments-store manifest the CLI
+// exported.
 func LoadStoreBundleManifest() (StoreBundleManifest, error) {
-	raw := os.Getenv(EnvStoreWorkerBundles)
+	return loadKindBundles(EnvStoreWorkerBundles)
+}
+
+// LoadISRWriterBundleManifest reads the ISR writer manifest the CLI exported.
+func LoadISRWriterBundleManifest() (StoreBundleManifest, error) {
+	return loadKindBundles(EnvISRWriterWorkerBundles)
+}
+
+func loadKindBundles(envName string) (StoreBundleManifest, error) {
+	raw := os.Getenv(envName)
 	if raw == "" {
-		return nil, fmt.Errorf("%s is not set; the ocel CLI exports it when spawning a provider", EnvStoreWorkerBundles)
+		return nil, fmt.Errorf("%s is not set; the ocel CLI exports it when spawning a provider", envName)
 	}
 	var m StoreBundleManifest
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", EnvStoreWorkerBundles, err)
+		return nil, fmt.Errorf("parse %s: %w", envName, err)
 	}
 	return m, nil
 }
 
-// Path returns the deployments-store bundle for an edge kind, erroring by
+// Path returns the account-level worker bundle for an edge kind, erroring by
 // naming it when the edge ships none.
 func (m StoreBundleManifest) Path(k Kind) (string, error) {
 	if p := m[k]; p != "" {
 		return p, nil
 	}
-	return "", fmt.Errorf("no deployments-store worker bundle for edge %q", k)
+	return "", fmt.Errorf("no account-level worker bundle for edge %q", k)
 }

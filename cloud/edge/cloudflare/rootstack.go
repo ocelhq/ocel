@@ -40,39 +40,66 @@ const bootstrapSecretBinding = "BOOTSTRAP_SECRET"
 // credential, a project secret, or an owner token), hex-encoded on the wire.
 const secretBytes = 32
 
-// sharedStoreScriptName / previewStoreScriptName are the deployments-store
-// worker script names, one per substrate class: production provisions
-// sharedStoreScriptName, preview provisions previewStoreScriptName. They are
-// distinct scripts so their Durable Object namespaces (which are script-scoped)
-// never collide, letting the two substrates coexist in one account. Each is
-// provisioned once at bootstrap and service-bound by that substrate's projects.
+// The account-level worker script names, one pair per worker and one name per
+// substrate class: production provisions the first, preview the second. They
+// are distinct scripts so their Durable Object namespaces (which are
+// script-scoped) never collide, letting the two substrates coexist in one
+// account. Each is provisioned once at bootstrap.
 const (
 	sharedStoreScriptName  = "ocel-deployments-store"
 	previewStoreScriptName = "ocel-deployments-store-preview"
+
+	isrWriterScriptName        = "ocel-isr-writer"
+	previewISRWriterScriptName = "ocel-isr-writer-preview"
 )
 
 // storeScriptNameFor returns the deployments-store worker script name for a
 // substrate class.
 func storeScriptNameFor(class edge.Class) (string, error) {
+	return accountScriptNameFor("deployments store", class, sharedStoreScriptName, previewStoreScriptName)
+}
+
+// isrWriterScriptNameFor returns the ISR writer worker script name for a
+// substrate class.
+func isrWriterScriptNameFor(class edge.Class) (string, error) {
+	return accountScriptNameFor("isr writer", class, isrWriterScriptName, previewISRWriterScriptName)
+}
+
+func accountScriptNameFor(worker string, class edge.Class, production, preview string) (string, error) {
 	switch class {
 	case edge.ClassProduction:
-		return sharedStoreScriptName, nil
+		return production, nil
 	case edge.ClassPreview:
-		return previewStoreScriptName, nil
+		return preview, nil
 	default:
-		return "", fmt.Errorf("deployments store: unknown substrate class %q", class)
+		return "", fmt.Errorf("%s: unknown substrate class %q", worker, class)
 	}
 }
 
-// The shared deployments-store worker's own Durable Object binding (mirroring
-// its wrangler.jsonc: workers/deployments-store/wrangler.jsonc), which
-// putScript's generic edge.Worker-driven binding set has no concept of — the
-// worker binds its own DeploymentsStore class under this name and declares the
-// class's one migration exactly once, on the bootstrap that first creates it.
-const (
-	doBindingName  = "DEPLOYMENTS_DO"
-	doClassName    = "DeploymentsStore"
-	doMigrationTag = "v1"
+// durableObjectClass is one account-level worker's own Durable Object class, a
+// binding putScript's generic edge.Worker-driven binding set has no concept of:
+// it names a class the script itself exports rather than an external resource,
+// and its migration is declared exactly once, on the bootstrap that first
+// creates the class.
+type durableObjectClass struct {
+	binding      string
+	className    string
+	migrationTag string
+}
+
+// The two account-level Durable Object classes, each mirroring its worker's
+// wrangler.jsonc.
+var (
+	deploymentsStoreDO = durableObjectClass{
+		binding:      "DEPLOYMENTS_DO",
+		className:    "DeploymentsStore",
+		migrationTag: "v1",
+	}
+	isrWriterDO = durableObjectClass{
+		binding:      "ISR_WRITER_DO",
+		className:    "IsrDeploy",
+		migrationTag: "v1",
+	}
 )
 
 // genericStoreBinding is the env name the frozen generic worker reads its
@@ -428,16 +455,15 @@ func (p *provider) deleteScript(ctx context.Context, accountID, scriptName strin
 	return err
 }
 
-// putStoreScript uploads the shared deployments-store worker (bootstrapStore in
-// cloudflare.go): like putScript, but it additionally binds the worker's own
-// DeploymentsStore Durable Object class — a binding no plain edge.Worker
-// carries, since it names a class the script itself exports rather than an
-// external resource — and, only when migrate is true (the bootstrap that first
-// creates the class), declares its one SQLite-backed migration. Redeclaring
-// that migration on a later bootstrap would be at best redundant and at worst
-// rejected, so every bootstrap after the first omits it.
-func (p *provider) putStoreScript(ctx context.Context, up upload, migrate bool) error {
-	body, contentType, err := buildStoreScriptMultipart(up.worker, migrate)
+// putDurableObjectScript uploads an account-level worker that owns a Durable
+// Object class of its own (bootstrapStore and bootstrapISRWriter in
+// cloudflare.go): like putScript, but it additionally binds that class and,
+// only when migrate is true (the bootstrap that first creates it), declares its
+// one SQLite-backed migration. Redeclaring that migration on a later bootstrap
+// would be at best redundant and at worst rejected, so every bootstrap after
+// the first omits it.
+func (p *provider) putDurableObjectScript(ctx context.Context, up upload, do durableObjectClass, migrate bool) error {
+	body, contentType, err := buildDurableObjectScriptMultipart(up.worker, do, migrate)
 	if err != nil {
 		return err
 	}
@@ -447,15 +473,15 @@ func (p *provider) putStoreScript(ctx context.Context, up upload, migrate bool) 
 	return err
 }
 
-// buildStoreScriptMultipart is buildScriptMultipart's counterpart for the
-// shared deployments-store worker: the same module/binding shape, plus the
-// DeploymentsStore Durable Object binding and, when migrate is true, its
-// migration declaration.
-func buildStoreScriptMultipart(worker edge.Worker, migrate bool) ([]byte, string, error) {
+// buildDurableObjectScriptMultipart is buildScriptMultipart's counterpart for
+// the account-level workers: the same module/binding shape, plus the worker's
+// own Durable Object binding and, when migrate is true, its migration
+// declaration.
+func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectClass, migrate bool) ([]byte, string, error) {
 	bindings := append(scriptBindings(worker, false), map[string]any{
 		"type":       "durable_object_namespace",
-		"name":       doBindingName,
-		"class_name": doClassName,
+		"name":       do.binding,
+		"class_name": do.className,
 	})
 	metadata := map[string]any{
 		"main_module":         worker.Main.Name,
@@ -466,13 +492,13 @@ func buildStoreScriptMultipart(worker edge.Worker, migrate bool) ([]byte, string
 	}
 	if migrate {
 		metadata["migrations"] = map[string]any{
-			"tag":                doMigrationTag,
-			"new_sqlite_classes": []string{doClassName},
+			"tag":                do.migrationTag,
+			"new_sqlite_classes": []string{do.className},
 		}
 	}
 	metadataJSON, err := json.Marshal(metadata)
 	if err != nil {
-		return nil, "", fmt.Errorf("marshal deployments-store worker metadata: %w", err)
+		return nil, "", fmt.Errorf("marshal %s worker metadata: %w", do.className, err)
 	}
 
 	buf := &bytes.Buffer{}

@@ -15,13 +15,13 @@ import (
 	"github.com/ocelhq/ocel/cloud/edge"
 )
 
-// storeMetadataFromMultipart mirrors cloudflare_test.go's
-// metadataFromMultipart, for buildStoreScriptMultipart's body.
-func storeMetadataFromMultipart(t *testing.T, worker edge.Worker, migrate bool) map[string]any {
+// doMetadataFromMultipart mirrors cloudflare_test.go's metadataFromMultipart,
+// for buildDurableObjectScriptMultipart's body.
+func doMetadataFromMultipart(t *testing.T, worker edge.Worker, do durableObjectClass, migrate bool) map[string]any {
 	t.Helper()
-	body, contentType, err := buildStoreScriptMultipart(worker, migrate)
+	body, contentType, err := buildDurableObjectScriptMultipart(worker, do, migrate)
 	if err != nil {
-		t.Fatalf("buildStoreScriptMultipart: %v", err)
+		t.Fatalf("buildDurableObjectScriptMultipart: %v", err)
 	}
 	_, params, err := mime.ParseMediaType(contentType)
 	if err != nil {
@@ -74,40 +74,91 @@ func TestStoreScriptNameFor(t *testing.T) {
 	}
 }
 
-func TestBuildStoreScriptMultipart_BindsItsOwnDurableObjectClass(t *testing.T) {
-	meta := storeMetadataFromMultipart(t, testStoreWorker(), false)
+func TestISRWriterScriptNameFor(t *testing.T) {
+	prod, err := isrWriterScriptNameFor(edge.ClassProduction)
+	if err != nil {
+		t.Fatalf("isrWriterScriptNameFor(production): %v", err)
+	}
+	preview, err := isrWriterScriptNameFor(edge.ClassPreview)
+	if err != nil {
+		t.Fatalf("isrWriterScriptNameFor(preview): %v", err)
+	}
+	if prod != isrWriterScriptName || preview != previewISRWriterScriptName {
+		t.Errorf("script names = (%q, %q), want (%q, %q)", prod, preview, isrWriterScriptName, previewISRWriterScriptName)
+	}
+	if prod == preview {
+		t.Error("production and preview isr-writer scripts must differ so their DO namespaces do not collide")
+	}
+	// The two account-level workers must not collide with each other either:
+	// one script name, one DO namespace.
+	if prod == sharedStoreScriptName || preview == previewStoreScriptName {
+		t.Error("the isr-writer and deployments-store scripts must be distinct")
+	}
+	if _, err := isrWriterScriptNameFor(edge.Class("nonsense")); err == nil {
+		t.Error("isrWriterScriptNameFor(unknown class) = nil error, want an error")
+	}
+}
+
+func TestBuildDurableObjectScriptMultipart_BindsTheGivenClass(t *testing.T) {
+	for _, do := range []durableObjectClass{deploymentsStoreDO, isrWriterDO} {
+		meta := doMetadataFromMultipart(t, testStoreWorker(), do, false)
+		bindings, _ := meta["bindings"].([]any)
+		var found map[string]any
+		for _, b := range bindings {
+			if m, ok := b.(map[string]any); ok && m["type"] == "durable_object_namespace" {
+				found = m
+			}
+		}
+		if found == nil {
+			t.Fatalf("no durable_object_namespace binding in %v", bindings)
+		}
+		if found["name"] != do.binding || found["class_name"] != do.className {
+			t.Errorf("DO binding = %v, want name %s class_name %s", found, do.binding, do.className)
+		}
+	}
+}
+
+func TestBuildDurableObjectScriptMultipart_DeclaresMigrationOnlyWhenMigrateTrue(t *testing.T) {
+	for _, do := range []durableObjectClass{deploymentsStoreDO, isrWriterDO} {
+		fresh := doMetadataFromMultipart(t, testStoreWorker(), do, true)
+		migrations, ok := fresh["migrations"].(map[string]any)
+		if !ok {
+			t.Fatalf("expected a migrations object on a fresh deploy, got %v", fresh["migrations"])
+		}
+		if migrations["tag"] != do.migrationTag {
+			t.Errorf("migrations.tag = %v, want %s", migrations["tag"], do.migrationTag)
+		}
+		classes, _ := migrations["new_sqlite_classes"].([]any)
+		if len(classes) != 1 || classes[0] != do.className {
+			t.Errorf("migrations.new_sqlite_classes = %v, want [%s]", classes, do.className)
+		}
+
+		notFresh := doMetadataFromMultipart(t, testStoreWorker(), do, false)
+		if _, present := notFresh["migrations"]; present {
+			t.Errorf("expected no migrations on a non-first reconcile, got %v", notFresh["migrations"])
+		}
+	}
+}
+
+// The writer's whole justification is that a Lambda needs no R2 credentials of
+// its own: the bucket reaches the worker as a native binding instead.
+func TestBuildDurableObjectScriptMultipart_CarriesTheNativeBucketBinding(t *testing.T) {
+	worker := testStoreWorker()
+	worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(edge.ClassProduction)}
+
+	meta := doMetadataFromMultipart(t, worker, isrWriterDO, true)
 	bindings, _ := meta["bindings"].([]any)
 	var found map[string]any
 	for _, b := range bindings {
-		if m, ok := b.(map[string]any); ok && m["type"] == "durable_object_namespace" {
+		if m, ok := b.(map[string]any); ok && m["type"] == "r2_bucket" {
 			found = m
 		}
 	}
 	if found == nil {
-		t.Fatalf("no durable_object_namespace binding in %v", bindings)
+		t.Fatalf("no r2_bucket binding in %v", bindings)
 	}
-	if found["name"] != "DEPLOYMENTS_DO" || found["class_name"] != "DeploymentsStore" {
-		t.Errorf("DO binding = %v, want name DEPLOYMENTS_DO class_name DeploymentsStore", found)
-	}
-}
-
-func TestBuildStoreScriptMultipart_DeclaresMigrationOnlyWhenMigrateTrue(t *testing.T) {
-	fresh := storeMetadataFromMultipart(t, testStoreWorker(), true)
-	migrations, ok := fresh["migrations"].(map[string]any)
-	if !ok {
-		t.Fatalf("expected a migrations object on a fresh deploy, got %v", fresh["migrations"])
-	}
-	if migrations["tag"] != "v1" {
-		t.Errorf("migrations.tag = %v, want v1", migrations["tag"])
-	}
-	classes, _ := migrations["new_sqlite_classes"].([]any)
-	if len(classes) != 1 || classes[0] != "DeploymentsStore" {
-		t.Errorf("migrations.new_sqlite_classes = %v, want [DeploymentsStore]", classes)
-	}
-
-	notFresh := storeMetadataFromMultipart(t, testStoreWorker(), false)
-	if _, present := notFresh["migrations"]; present {
-		t.Errorf("expected no migrations on a non-first reconcile, got %v", notFresh["migrations"])
+	if found["name"] != cacheStoreBinding || found["bucket_name"] != cacheStoreName(edge.ClassProduction) {
+		t.Errorf("r2 binding = %v, want name %s bucket %s", found, cacheStoreBinding, cacheStoreName(edge.ClassProduction))
 	}
 }
 

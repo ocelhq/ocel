@@ -117,7 +117,68 @@ func (p *provider) Bootstrap(ctx context.Context, class edge.Class) (edge.Bootst
 		return out, fmt.Errorf("bootstrap deployments-store worker: %w", err)
 	}
 	out.Offers = append(out.Offers, storeOffer)
+
+	writerOffer, err := p.bootstrapISRWriter(ctx, accountID, class)
+	if err != nil {
+		return out, fmt.Errorf("bootstrap isr-writer worker: %w", err)
+	}
+	out.Offers = append(out.Offers, writerOffer)
 	return out, nil
+}
+
+// bootstrapISRWriter provisions the single shared ISR writer worker for the
+// substrate class and offers the address and credential a deploy needs to seed
+// and reach one build's instance. It is the same shape as bootstrapStore — one
+// account-level script owning a Durable Object namespace, re-uploaded and
+// re-credentialed on every bootstrap — with one addition: the class's cache
+// bucket is bound natively, which is the whole point. With it a deployed Lambda
+// writes its ISR entries through this worker and needs no standing R2
+// credentials of its own.
+func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, class edge.Class) (edge.Offer, error) {
+	scriptName, err := isrWriterScriptNameFor(class)
+	if err != nil {
+		return edge.Offer{}, err
+	}
+	bundles, err := edge.LoadISRWriterBundleManifest()
+	if err != nil {
+		return edge.Offer{}, err
+	}
+	path, err := bundles.Path(edge.KindCloudflare)
+	if err != nil {
+		return edge.Offer{}, err
+	}
+	worker, err := readWorkerBundle(path)
+	if err != nil {
+		return edge.Offer{}, err
+	}
+
+	exists, err := p.FindApp(ctx, scriptName)
+	if err != nil {
+		return edge.Offer{}, fmt.Errorf("check isr-writer worker: %w", err)
+	}
+	cred, err := mintSecret()
+	if err != nil {
+		return edge.Offer{}, fmt.Errorf("mint bootstrap credential: %w", err)
+	}
+
+	worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(class)}
+	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
+	if err := p.putDurableObjectScript(ctx, up, isrWriterDO, !exists); err != nil {
+		return edge.Offer{}, fmt.Errorf("put isr-writer worker: %w", err)
+	}
+	endpoint, err := p.setSubdomain(ctx, up, true)
+	if err != nil {
+		return edge.Offer{}, fmt.Errorf("set isr-writer worker subdomain: %w", err)
+	}
+
+	return edge.Offer{
+		Kind: edge.OfferISRWriter,
+		Values: map[string]string{
+			edge.OfferKeyISRWriterEndpoint:      endpoint,
+			edge.OfferKeyISRWriterScriptName:    scriptName,
+			edge.OfferKeyISRWriterBootstrapCred: cred,
+		},
+	}, nil
 }
 
 // bootstrapStore provisions the single shared deployments-store worker for the
@@ -152,7 +213,7 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName str
 	}
 
 	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
-	if err := p.putStoreScript(ctx, up, !exists); err != nil {
+	if err := p.putDurableObjectScript(ctx, up, deploymentsStoreDO, !exists); err != nil {
 		return edge.Offer{}, fmt.Errorf("put deployments-store worker: %w", err)
 	}
 	endpoint, err := p.setSubdomain(ctx, up, true)
