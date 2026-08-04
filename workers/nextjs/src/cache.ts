@@ -42,6 +42,12 @@ export interface CacheDeps {
 
 export interface CacheTarget {
   key: string;
+  // The route-scoped id a background refresh of this entry is admitted under.
+  // One origin render rewrites a route's whole entry — html, RSC and every
+  // segment together — so admitting per route rather than per variant is what
+  // stops each variant of one stale route starting its own. Absent: the entry
+  // is its own admission scope. Storage is keyed on `key` either way.
+  refreshKey?: string;
   tags?: string[];
   revalidate?: number;
   expiration?: number;
@@ -392,10 +398,10 @@ export async function storeInColo(
   await store(new Request(target.key), target, deps, prerenderPolicy, response);
 }
 
-// Every request arriving on a stale entry would otherwise start its own origin
-// render, so one isolate can put a burst of identical regenerations on a single
-// Lambda. Keyed by the cache object, which is one stable instance per isolate,
-// so the in-flight set neither leaks between isolates nor between tests.
+// Every request arriving on a stale or absent entry would otherwise start its
+// own origin render, so one isolate can put a burst of identical regenerations
+// on a single Lambda. Keyed by the cache object, which is one stable instance
+// per isolate, so the in-flight set neither leaks between isolates nor tests.
 const inFlight = new WeakMap<Cache, Map<string, Promise<unknown>>>();
 
 export function refreshOnce(
@@ -414,6 +420,133 @@ export function refreshOnce(
   deps.waitUntil(promise);
 }
 
+function inFlightFill(
+  deps: CacheDeps,
+  key: string,
+): Promise<unknown> | undefined {
+  return inFlight.get(deps.cache)?.get(key);
+}
+
+// How long one colo's admission of a route suppresses the next. The spike
+// measured a sentinel becoming readable from sibling isolates at ~200ms, and
+// TTLs honored exactly from 1s with no floor, so seconds is far above what the
+// record needs to be useful; the cost of going higher is that a sibling variant
+// of an already-refreshed route keeps serving stale for the rest of the window.
+export const refreshSentinelTtlSeconds = 5;
+
+// The Cache API keys on a URL and an admission key is not one, so synthesize
+// it: its own hostname, so a sentinel can never collide with an entry key, and
+// each path segment encoded on its own so the route's separators survive. The
+// key carries the build id, so two builds cannot collide either.
+function sentinelRequest(key: string): Request {
+  return new Request(
+    `https://refresh.ocel/${key.split("/").map(encodeURIComponent).join("/")}`,
+  );
+}
+
+// True when this caller took the colo's admission. Every cache error admits:
+// admitting twice costs a duplicate render, but reading a cache that cannot
+// answer as another isolate's claim would cost the refresh entirely.
+async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> {
+  try {
+    if (await cache.match(sentinel)) return false;
+    await cache.put(
+      sentinel,
+      new Response(null, {
+        headers: { "cache-control": `max-age=${refreshSentinelTtlSeconds}` },
+      }),
+    );
+  } catch {
+    // Fail open, as above.
+  }
+  return true;
+}
+
+// refreshOnce collapses the requests one isolate holds in flight; the sentinel
+// — a TTL-bounded record on the colo-shared Cache API — collapses the rest of
+// the colo to roughly one refresh per TTL. There is no compare-and-set, so two
+// isolates can both miss it and both proceed; the goal is N to a few, not to
+// one. On a deploy whose cache is inert this degrades to exactly refreshOnce.
+export function admitRefresh(
+  deps: CacheDeps,
+  key: string,
+  run: () => Promise<unknown>,
+): void {
+  const sentinel = sentinelRequest(key);
+  refreshOnce(deps, key, async () => {
+    if (!(await claimSentinel(deps.cache, sentinel))) return;
+    try {
+      await run();
+    } catch {
+      // A refresh that failed must not suppress its own retry for a whole TTL.
+      // One that succeeded must: that suppression is the entire point.
+      try {
+        await deps.cache.delete(sentinel);
+      } catch {
+        // Nothing to fall back to; the claim stands until its TTL lapses.
+      }
+    }
+  });
+}
+
+// Look the entry up and judge it: the served response, or null when this tier
+// cannot answer — absent, of an unrecognized format, or too old to serve even
+// stale, in which case the caller falls through to the tier below.
+async function serveFromColo(
+  keyRequest: Request,
+  target: CacheTarget,
+  deps: CacheDeps,
+  policy: ColoPolicy,
+  originBlocking: () => Promise<Response>,
+  tagClock?: TagClock,
+): Promise<Response | null> {
+  const now = deps.now ?? Date.now;
+  const cached = await deps.cache.match(keyRequest);
+  if (!cached || cached.headers.get(ENTRY_VERSION) !== ENTRY_FORMAT) return null;
+
+  const modified = Number(cached.headers.get(ENTRY_MODIFIED));
+  if (!Number.isFinite(modified)) return null;
+
+  const tags = target.tags ?? [];
+  let tagStale = false;
+  if (tags.length > 0 && tagClock) {
+    const verdict: TagVerdict = await tagClock.expired(tags, modified, now());
+    // Colo tier: an invalidated tag AND an untrusted snapshot both serve
+    // stale-while-revalidate — we already hold the content, and the refresh
+    // drives the Lambda to republish the tag clock. (intercept, one tier
+    // down, falls open on "untrusted" instead.)
+    tagStale = verdict !== false;
+  }
+  const state = evaluate(
+    {
+      lastModified: modified,
+      ...policy.window(cached.headers.get(ENTRY_WINDOW), target),
+    },
+    now(),
+    tagStale,
+  );
+  if (state === "fresh") {
+    return policy.forServe(fromStorage(cached, false), "HIT");
+  }
+  if (state === "stale") {
+    // Serving stale is what triggers the background refresh, which forces a
+    // blocking origin render so the entry is rewritten fresh for the next
+    // request. The serve itself does not wait on it.
+    //
+    // Only a caller that named a route takes the colo-wide decision. An image
+    // names none: it is invalidated by its content hash changing rather than by
+    // a stale route, so it keeps the per-isolate dedupe on its own entry.
+    const admit = target.refreshKey ? admitRefresh : refreshOnce;
+    admit(deps, target.refreshKey ?? target.key, () =>
+      originBlocking().then((response) =>
+        store(keyRequest, target, deps, policy, response),
+      ),
+    );
+    return policy.forServe(fromStorage(cached, true), "STALE");
+  }
+  return null; // "expired" — R2 may already hold a fresher entry.
+}
+
 // The colo tier itself: lookup, verdict, serve-or-refresh. Both route classes
 // run exactly this, and differ only in the policy they bring.
 async function colo(
@@ -425,58 +558,40 @@ async function colo(
   tagClock?: TagClock,
 ): Promise<Response> {
   const keyRequest = new Request(target.key);
-  const now = deps.now ?? Date.now;
-  const cached = await deps.cache.match(keyRequest);
+  const lookUp = () =>
+    serveFromColo(keyRequest, target, deps, policy, originBlocking, tagClock);
 
-  if (cached && cached.headers.get(ENTRY_VERSION) === ENTRY_FORMAT) {
-    const modified = Number(cached.headers.get(ENTRY_MODIFIED));
-    if (Number.isFinite(modified)) {
-      const tags = target.tags ?? [];
-      let tagStale = false;
-      if (tags.length > 0 && tagClock) {
-        const verdict: TagVerdict = await tagClock.expired(tags, modified, now());
-        // Colo tier: an invalidated tag AND an untrusted snapshot both serve
-        // stale-while-revalidate — we already hold the content, and the refresh
-        // drives the Lambda to republish the tag clock. (intercept, one tier
-        // down, falls open on "untrusted" instead.)
-        tagStale = verdict !== false;
-      }
-      const state = evaluate(
-        {
-          lastModified: modified,
-          ...policy.window(cached.headers.get(ENTRY_WINDOW), target),
-        },
-        now(),
-        tagStale,
-      );
-      if (state === "fresh") {
-        return policy.forServe(fromStorage(cached, false), "HIT");
-      }
-      if (state === "stale") {
-        // Serving stale is what triggers the background refresh, which forces a
-        // blocking origin render so the entry is rewritten fresh for the next
-        // request. The serve itself does not wait on it.
-        refreshOnce(deps, target.key, () =>
-          originBlocking().then((response) =>
-            store(keyRequest, target, deps, policy, response),
-          ),
-        );
-        return policy.forServe(fromStorage(cached, true), "STALE");
-      }
-      // "expired": fall through — R2 may already hold a fresher entry.
-    }
+  const hit = await lookUp();
+  if (hit) return hit;
+
+  // A fill for this exact variant is already running in this isolate, so join
+  // it rather than start a second render of the same bytes. The key must stay
+  // the variant, never the route: what a joiner is answered with is the entry
+  // the leader wrote, and an .rsc request joined to an HTML fill would be
+  // answered with the wrong shape.
+  const filling = inFlightFill(deps, target.key);
+  if (filling) {
+    await filling;
+    const joined = await lookUp();
+    if (joined) return joined;
+    // The leader's response was not storable (non-200, no-store, no s-maxage),
+    // so there is no entry to serve and this request must render for itself.
   }
 
-  const response = await origin();
-  const served: CacheStatus =
-    response.headers.get(CACHE_STATUS) === "PRERENDER" ? "PRERENDER" : "MISS";
-  // Single-writer populate: a burst of concurrent misses collapses to one put.
-  // refreshOnce runs the thunk synchronously (so the clone precedes forServe
-  // consuming the body) and dedups by key; a deduped caller never clones.
+  const pending = origin();
+  // Single-writer populate: concurrent misses join the promise registered here
+  // instead of reaching origin at all. Registration precedes the await, both so
+  // that a follower finds it, and so that this reaction on `pending` runs ahead
+  // of the await's — the clone therefore precedes forServe consuming the body.
   refreshOnce(deps, target.key, () =>
-    store(keyRequest, target, deps, policy, response.clone()),
+    pending.then((response) =>
+      store(keyRequest, target, deps, policy, response.clone()),
+    ),
   );
-  const result = policy.forServe(response, served);
+  const response = await pending;
+  const status: CacheStatus =
+    response.headers.get(CACHE_STATUS) === "PRERENDER" ? "PRERENDER" : "MISS";
+  const result = policy.forServe(response, status);
   result.headers.delete(ENTRY_MODIFIED);
   return result;
 }

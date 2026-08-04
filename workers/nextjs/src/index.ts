@@ -8,9 +8,9 @@ import { createEdgeInvoker, type EdgeCacheStub, type EdgeInvoker } from "./edge"
 import {
   CacheDeps,
   CacheTarget,
+  admitRefresh,
   cacheKey,
   hasDraftCookie,
-  refreshOnce,
   serveCached,
   servedFromStore,
   storeInColo,
@@ -770,6 +770,7 @@ async function dispatchPrerender(
 
   const cacheTarget: CacheTarget = {
     key: keyResult.cacheable ? keyResult.key : "",
+    refreshKey,
     tags: target.tags,
     revalidate:
       typeof target.fallback?.initialRevalidate === "number"
@@ -816,7 +817,7 @@ async function dispatchPrerender(
       const hit = await read();
       if (hit?.kind === "ppr") {
         if (hit.stale && revalidates) {
-          refreshOnce(deps.cache, refreshKey, async () =>
+          admitRefresh(deps.cache, refreshKey, async () =>
             (await originBlocking()).body?.cancel(),
           );
         }
@@ -845,7 +846,7 @@ async function dispatchPrerender(
       // request, and this write mirrors that fresh response straight into colo
       // so the next request is a colo HIT instead of another R2 round-trip.
       if (hit.stale && revalidates) {
-        refreshOnce(cache, refreshKey, () =>
+        admitRefresh(cache, refreshKey, () =>
           originBlocking().then((response) =>
             storeInColo(cacheTarget, cache, response),
           ),

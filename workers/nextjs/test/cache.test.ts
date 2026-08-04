@@ -1,9 +1,13 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  admitRefresh,
   cacheKey,
+  deltaSeconds,
   evaluate,
+  refreshSentinelTtlSeconds,
   serveCached,
+  serveCachedImage,
   storagePolicy,
   storeInColo,
   variantPath,
@@ -50,6 +54,47 @@ function countingCache(): Cache & { puts: number } {
     delete: (...args: Parameters<Cache["delete"]>) => real.delete(...args),
   };
   return counting as unknown as Cache & { puts: number };
+}
+
+// Delegates to the real workerd cache while recording every url it was asked
+// about, so a test can assert which synthetic keys a path did and did not touch.
+function recordingCache(): Cache & { urls: string[] } {
+  const real = caches.default;
+  const recording = {
+    urls: [] as string[],
+    match: (request: RequestInfo, ...rest: unknown[]) => {
+      recording.urls.push(new Request(request).url);
+      return real.match(request as Request, ...(rest as []));
+    },
+    put: (request: RequestInfo, response: Response) => {
+      recording.urls.push(new Request(request).url);
+      return real.put(request as Request, response);
+    },
+    delete: (request: RequestInfo, ...rest: unknown[]) => {
+      recording.urls.push(new Request(request).url);
+      return real.delete(request as Request, ...(rest as []));
+    },
+  };
+  return recording as unknown as Cache & { urls: string[] };
+}
+
+// A Cache double modelling only what the sentinel needs: retention against the
+// test's own clock. The real workerd cache expires on real time, which no
+// injected clock can advance.
+function ttlCache(clock: { ms: number }): Cache {
+  const stored = new Map<string, number>();
+  return {
+    match: async (request: Request) => {
+      const until = stored.get(request.url);
+      if (until === undefined || clock.ms >= until) return undefined;
+      return new Response(null);
+    },
+    put: async (request: Request, response: Response) => {
+      const ttl = deltaSeconds(response.headers.get("cache-control"), "max-age");
+      stored.set(request.url, clock.ms + (ttl ?? 0) * 1_000);
+    },
+    delete: async (request: Request) => stored.delete(request.url),
+  } as unknown as Cache;
 }
 
 // An origin returning a fixed response and counting how often it was invoked.
@@ -582,59 +627,150 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
-  it("collapses a burst of concurrent misses to a single colo write", async () => {
+  // A release-gated origin: each call increments `calls` synchronously but
+  // blocks on `gate`, so a burst can be held with its leader mid-fill and its
+  // followers parked on the join. That's what makes the burst deterministic
+  // instead of depending on incidental Promise.all scheduling.
+  function gatedOrigin(respond: (call: number) => Promise<Response>) {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const origin = (async () => {
+      const call = ++origin.calls;
+      await gate;
+      return respond(call);
+    }) as (() => Promise<Response>) & { calls: number; release: () => void };
+    origin.calls = 0;
+    origin.release = release;
+    return origin;
+  }
+
+  // Lets the burst settle into its steady state — leader inside origin(),
+  // followers parked — before the gate is opened.
+  async function untilLeaderIsFilling(origin: { calls: number }) {
+    while (origin.calls < 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+  }
+
+  it("collapses a burst of concurrent misses to a single origin render", async () => {
     const clock = { ms: 0 };
     const cache = countingCache();
     const deps = testDeps(clock, cache);
     const t = target("populate", { revalidate: 60, expiration: 600 });
 
-    // A release-gated origin: every call increments `calls` synchronously but
-    // blocks on `gate` until released, so we can hold all three requests just
-    // past their miss check (and short of refreshOnce) before letting any of
-    // them proceed. That's what makes the burst deterministic instead of
-    // depending on incidental Promise.all scheduling.
-    let calls = 0;
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    const store = async () => {
-      calls++;
-      await gate;
-      return new Response("rendered", {
+    const origin = gatedOrigin(async () =>
+      new Response("rendered", {
         status: 200,
         headers: { "cache-control": "s-maxage=60" },
-      });
-    };
+      }),
+    );
 
     const burst = Promise.all([
-      serveCached(req(), t, deps, store, store),
-      serveCached(req(), t, deps, store, store),
-      serveCached(req(), t, deps, store, store),
+      serveCached(req(), t, deps, origin, origin),
+      serveCached(req(), t, deps, origin, origin),
+      serveCached(req(), t, deps, origin, origin),
     ]);
 
-    // Wait until all three requests are blocked inside origin() (i.e. have
-    // passed the miss check and not yet reached refreshOnce) before releasing
-    // them together.
-    while (calls < 3) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-    release();
+    await untilLeaderIsFilling(origin);
+    origin.release();
 
     const responses = await burst;
     await deps.flush();
 
-    // Each request was still served its own response...
-    for (const res of responses) {
-      expect(res.headers.get("x-ocel-cache")).toBe("MISS");
-    }
-    // ...but the concurrent populates collapsed to exactly one colo write.
+    // Only the leader reached the origin; the followers were answered from the
+    // entry it wrote, so they report HIT rather than MISS.
+    expect(origin.calls).toBe(1);
     expect(cache.puts).toBe(1);
+    expect(responses.map((res) => res.headers.get("x-ocel-cache"))).toEqual([
+      "MISS",
+      "HIT",
+      "HIT",
+    ]);
+    for (const res of responses) {
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("rendered");
+    }
 
     const stored = await caches.default.match(new Request(t.key));
     expect(stored).not.toBeUndefined();
     // A second-generation read is a HIT: the single write is intact.
     clock.ms = 1_000;
-    const hit = await serveCached(req(), t, deps, store, store);
+    const hit = await serveCached(req(), t, deps, origin, origin);
     expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
+  });
+
+  it("falls through to its own origin when the fill it joined stored nothing", async () => {
+    const clock = { ms: 0 };
+    const cache = countingCache();
+    const deps = testDeps(clock, cache);
+    const t = target("unstorable-leader", { revalidate: 60, expiration: 600 });
+
+    const origin = gatedOrigin(async () =>
+      new Response("uncacheable", {
+        status: 200,
+        headers: { "cache-control": "no-store" },
+      }),
+    );
+
+    const burst = Promise.all([
+      serveCached(req(), t, deps, origin, origin),
+      serveCached(req(), t, deps, origin, origin),
+      serveCached(req(), t, deps, origin, origin),
+    ]);
+
+    await untilLeaderIsFilling(origin);
+    origin.release();
+
+    const responses = await burst;
+    await deps.flush();
+
+    // Nothing was stored, so there is no entry to answer the followers with:
+    // each has to render for itself rather than go unanswered.
+    expect(origin.calls).toBe(3);
+    expect(cache.puts).toBe(0);
+    for (const res of responses) {
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+      expect(await res.text()).toBe("uncacheable");
+    }
+  });
+
+  it("falls through to its own origin when the fill it joined rejected", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const t = target("rejecting-leader", { revalidate: 60, expiration: 600 });
+
+    const origin = gatedOrigin(async (call) => {
+      if (call === 1) throw new Error("origin unavailable");
+      return new Response("rendered", {
+        status: 200,
+        headers: { "cache-control": "s-maxage=60" },
+      });
+    });
+
+    const burst = Promise.allSettled([
+      serveCached(req(), t, deps, origin, origin),
+      serveCached(req(), t, deps, origin, origin),
+      serveCached(req(), t, deps, origin, origin),
+    ]);
+
+    await untilLeaderIsFilling(origin);
+    origin.release();
+
+    const [leader, ...followers] = await burst;
+    await deps.flush();
+
+    // The leader's failure is its own; the followers neither hang on it nor
+    // inherit it.
+    expect(leader.status).toBe("rejected");
+    expect(origin.calls).toBe(3);
+    for (const settled of followers) {
+      expect(settled.status).toBe("fulfilled");
+      const res = (settled as PromiseFulfilledResult<Response>).value;
+      expect(res.status).toBe(200);
+      expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+      expect(await res.text()).toBe("rendered");
+    }
   });
 
   it("storeInColo overwrites the entry with a fresh body and a new modified time", async () => {
@@ -680,5 +816,212 @@ describe("serveCached", () => {
 
     const stored = await caches.default.match(new Request(t.key));
     expect(stored?.headers.get("cache-tag")).toBe("a,b");
+  });
+
+  it("admits one refresh across every stale variant of the same route", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const refreshKey = "build:/variants";
+    const html = target("variant-html", { revalidate: 1, refreshKey });
+    const rsc = target("variant-rsc", { revalidate: 1, refreshKey });
+    const htmlOrigin = countingOrigin("s-maxage=1", "html");
+    const rscOrigin = countingOrigin("s-maxage=1", "rsc");
+    const refresh = countingOrigin("s-maxage=1", "refreshed");
+
+    await serveCached(req(), html, deps, htmlOrigin, refresh);
+    await serveCached(req(), rsc, deps, rscOrigin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000;
+    const staleHtml = await serveCached(req(), html, deps, htmlOrigin, refresh);
+    const staleRsc = await serveCached(req(), rsc, deps, rscOrigin, refresh);
+    await deps.flush();
+
+    // Each variant is still answered from its own entry...
+    expect(staleHtml.headers.get("x-ocel-cache")).toBe("STALE");
+    expect(staleRsc.headers.get("x-ocel-cache")).toBe("STALE");
+    expect(await staleHtml.text()).toBe("html");
+    expect(await staleRsc.text()).toBe("rsc");
+    // ...but one origin render rewrites the route, so only one was admitted.
+    expect(refresh.calls).toBe(1);
+  });
+
+  it("keeps suppressing the route once the admitted refresh has settled", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const t = target("settled-refresh", {
+      revalidate: 1,
+      refreshKey: "build:/settled",
+    });
+    const origin = countingOrigin("s-maxage=1");
+    const refresh = countingOrigin("s-maxage=1");
+
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000;
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+    expect(refresh.calls).toBe(1);
+
+    // The refresh rewrote the entry at 5_000 with a 1s window, so this request
+    // is stale again — and nothing about it overlaps the first in flight. Only
+    // the sentinel this colo already holds can suppress it.
+    clock.ms = 6_500;
+    const again = await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+    expect(again.headers.get("x-ocel-cache")).toBe("STALE");
+    expect(refresh.calls).toBe(1);
+  });
+});
+
+describe("serveCachedImage", () => {
+  it("names no route, so it consults no sentinel and dedupes on the entry", async () => {
+    const clock = { ms: 0 };
+    const cache = recordingCache();
+    const deps = testDeps(clock, cache);
+    const one: CacheTarget = { key: "https://cache.ocel/image/one" };
+    const two: CacheTarget = { key: "https://cache.ocel/image/two" };
+    const origin = countingOrigin("max-age=1", "optimized");
+    const refresh = countingOrigin("max-age=1", "reoptimized");
+
+    await serveCachedImage(req(), one, deps, origin, refresh);
+    await serveCachedImage(req(), two, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000;
+    await serveCachedImage(req(), one, deps, origin, refresh);
+    await serveCachedImage(req(), one, deps, origin, refresh);
+    await serveCachedImage(req(), two, deps, origin, refresh);
+    await deps.flush();
+
+    // Per-entry dedupe, exactly as before: one refresh each, not one between.
+    expect(refresh.calls).toBe(2);
+    expect(cache.urls.filter((url) => url.startsWith("https://refresh.ocel/"))).toEqual([]);
+  });
+});
+
+describe("admitRefresh", () => {
+  // A run that records its invocations and can be told to reject.
+  function countingRun(fail = false) {
+    const run = (async () => {
+      run.calls++;
+      if (fail) throw new Error("refresh failed");
+    }) as (() => Promise<unknown>) & { calls: number };
+    run.calls = 0;
+    return run;
+  }
+
+  it("suppresses the next admission of the same route within the sentinel's TTL", async () => {
+    // The real workerd cache expires on real time, so the TTL boundary is
+    // proven against a double that retains against the test's own clock.
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, ttlCache(clock));
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/ttl", run);
+    await deps.flush();
+    expect(run.calls).toBe(1);
+
+    clock.ms = refreshSentinelTtlSeconds * 1_000 - 1;
+    admitRefresh(deps, "build:/ttl", run);
+    await deps.flush();
+    expect(run.calls).toBe(1);
+
+    clock.ms = refreshSentinelTtlSeconds * 1_000;
+    admitRefresh(deps, "build:/ttl", run);
+    await deps.flush();
+    expect(run.calls).toBe(2);
+  });
+
+  it("admits a different route while one route's sentinel stands", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, ttlCache(clock));
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/a", run);
+    await deps.flush();
+    admitRefresh(deps, "build:/b", run);
+    await deps.flush();
+
+    expect(run.calls).toBe(2);
+  });
+
+  it("releases the sentinel when the refresh fails, so the next request retries", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, ttlCache(clock));
+    const failing = countingRun(true);
+    const succeeding = countingRun();
+
+    admitRefresh(deps, "build:/failed", failing);
+    await deps.flush();
+    expect(failing.calls).toBe(1);
+
+    admitRefresh(deps, "build:/failed", succeeding);
+    await deps.flush();
+    expect(succeeding.calls).toBe(1);
+  });
+
+  it("admits every refresh when the colo cache is inert", async () => {
+    // A domainless deploy answers on workers.dev, where caches.default accepts
+    // every put and never hits: L1 must degrade to the per-isolate dedupe.
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, {
+      match: async () => undefined,
+      put: async () => {},
+      delete: async () => false,
+    } as unknown as Cache);
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/inert", run);
+    await deps.flush();
+    admitRefresh(deps, "build:/inert", run);
+    await deps.flush();
+
+    expect(run.calls).toBe(2);
+  });
+
+  it("admits when the cache itself throws", async () => {
+    const clock = { ms: 0 };
+    const thrower = {
+      match: async () => {
+        throw new Error("match exploded");
+      },
+      put: async () => {
+        throw new Error("put exploded");
+      },
+      delete: async () => {
+        throw new Error("delete exploded");
+      },
+    } as unknown as Cache;
+    const deps = testDeps(clock, thrower);
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/throwing", run);
+    await deps.flush();
+    expect(run.calls).toBe(1);
+
+    // And a throwing delete after a failed run neither escapes nor suppresses.
+    const failing = countingRun(true);
+    admitRefresh(deps, "build:/throwing-failure", failing);
+    await deps.flush();
+    expect(failing.calls).toBe(1);
+  });
+
+  it("admits when only put throws, having already seen the sentinel miss", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, {
+      match: async () => undefined,
+      put: async () => {
+        throw new Error("put exploded");
+      },
+      delete: async () => false,
+    } as unknown as Cache);
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/put-throws", run);
+    await deps.flush();
+
+    expect(run.calls).toBe(1);
   });
 });
