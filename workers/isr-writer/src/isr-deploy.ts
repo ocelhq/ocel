@@ -9,11 +9,6 @@ import type { Env } from "./env";
 // call ever reaches here, so the DO stays unauthenticated behind the worker
 // boundary — the same split workers/deployments-store uses.
 export class IsrDeploy extends DurableObject<Env> {
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    registry.ensureSchema(ctx.storage);
-  }
-
   async initialize(secretHash: string): Promise<void> {
     registry.initialize(this.ctx.storage, secretHash);
   }
@@ -23,10 +18,9 @@ export class IsrDeploy extends DurableObject<Env> {
   }
 
   // Retires the deploy: its secret hash is gone, so every entry write signed
-  // with it is refused from here on. The schema is re-created so the same
-  // isrPrefix is immediately reusable.
+  // with it is refused from here on, and the same isrPrefix is back to being
+  // one a later initialize can claim.
   async destroy(): Promise<void> {
     await this.ctx.storage.deleteAll();
-    registry.ensureSchema(this.ctx.storage);
   }
 }

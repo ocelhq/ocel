@@ -4,14 +4,16 @@ import { WorkerEntrypoint } from "cloudflare:workers";
 import { bearer, isSecretHash, matchesHash, matchesSecret } from "./auth";
 import { readEntry, writeEntry } from "./entry";
 import { IsrDeploy } from "./isr-deploy";
+import { forget, memoize, memoized } from "./memo";
 import type { Env } from "./env";
+import type { Memo } from "./memo";
 
 export { IsrDeploy };
 
 // A deploy's isrPrefix, exactly: <env>/<project>/<app>/<buildId>. Every request
-// path is this plus one op segment, and a path that is not is refused before the
-// DO namespace is touched — idFromName materializes storage for whatever name it
-// is handed, and nothing has authenticated the caller yet at that point.
+// path is this plus one op segment. The entry op reaches the object named by
+// that prefix before it has authenticated anyone, so the shape is checked first
+// and the object writes no storage until an initialize (see registry.ts).
 const PREFIX_SEGMENTS = 4;
 const PREFIX_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 
@@ -24,52 +26,11 @@ function stub(env: Env, isrPrefix: string) {
   return env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(isrPrefix));
 }
 
-// Each deploy's secret hash, memoized per isolate so a steady stream of entry
-// writes costs one DO round trip a minute rather than one per write. An absent
-// hash — never seeded, or retired — is memoized too, so garbage aimed at a
-// prefix nobody deployed cannot buy round trips to a single-threaded DO either.
-//
-// Two consequences, both deliberate and both bounded by MEMO_TTL_MS:
-//
-// - `refreshed` records that a token has already failed against this entry and
-//   spent its one registry re-read. That re-read is what lets a redeploy's
-//   freshly derived secret in immediately; every further failure is refused off
-//   the memo, so a caller holding a bad token cannot drive DO load.
-// - a retirement this isolate never handled takes effect here only once the memo
-//   lapses, so `destroy` keeps authorizing writes for up to MEMO_TTL_MS in
-//   isolates that did not serve it. Closing that window would mean consulting the
-//   registry on every write, which is what the memo exists to avoid.
-const MEMO_TTL_MS = 60_000;
-
-interface Memo {
-  hash: string | undefined;
-  expiresAt: number;
-  refreshed: boolean;
-}
-
-const secretHashes = new Map<string, Memo>();
-
 // Reads in flight, so a herd arriving on one deploy before its memo is filled
 // shares a single round trip instead of queueing one apiece at a
 // single-threaded object. A read that rejects is not left here: the next
 // request starts a new one.
 const registryReads = new Map<string, Promise<Memo>>();
-
-function memoized(isrPrefix: string): Memo | undefined {
-  const memo = secretHashes.get(isrPrefix);
-  if (memo === undefined) return undefined;
-  if (memo.expiresAt <= Date.now()) {
-    secretHashes.delete(isrPrefix);
-    return undefined;
-  }
-  return memo;
-}
-
-function memoize(isrPrefix: string, hash: string | undefined, refreshed: boolean): Memo {
-  const memo = { hash, expiresAt: Date.now() + MEMO_TTL_MS, refreshed };
-  secretHashes.set(isrPrefix, memo);
-  return memo;
-}
 
 function fromRegistry(env: Env, isrPrefix: string, refreshed: boolean): Promise<Memo> {
   const inFlight = registryReads.get(isrPrefix);
@@ -152,7 +113,7 @@ export default class extends WorkerEntrypoint<Env> {
         return new Response("Unauthorized", { status: 401 });
       }
       await stub(this.env, isrPrefix).destroy();
-      secretHashes.delete(isrPrefix);
+      forget(isrPrefix);
       return new Response(null, { status: 204 });
     }
 

@@ -13,7 +13,12 @@ export interface SqlStore {
 // plaintext secret is minted by the deploy host, handed to the Lambda as an env
 // var and never sent to Cloudflare, so this table is the whole of what a
 // compromised writer worker could leak.
-export function ensureSchema(store: SqlStore): void {
+//
+// The table is created by initialize and by nothing else, so a deploy that was
+// never initialized leaves no durable storage at all. The worker consults the
+// registry before it has authenticated anyone, and the name it consults comes
+// from the request path.
+function ensureSchema(store: SqlStore): void {
   store.sql.exec(
     `CREATE TABLE IF NOT EXISTS registry (
        id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -22,7 +27,16 @@ export function ensureSchema(store: SqlStore): void {
   );
 }
 
+function initialized(store: SqlStore): boolean {
+  return (
+    store.sql
+      .exec(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'registry'`)
+      .toArray().length > 0
+  );
+}
+
 export function initialize(store: SqlStore, secretHash: string): void {
+  ensureSchema(store);
   store.sql.exec(
     `INSERT INTO registry (id, secret_hash) VALUES (1, ?)
        ON CONFLICT (id) DO UPDATE SET secret_hash = excluded.secret_hash`,
@@ -31,6 +45,7 @@ export function initialize(store: SqlStore, secretHash: string): void {
 }
 
 export function secretHash(store: SqlStore): string | undefined {
+  if (!initialized(store)) return undefined;
   return store.sql
     .exec<{ secret_hash: string }>(`SELECT secret_hash FROM registry WHERE id = 1`)
     .toArray()[0]?.secret_hash;
