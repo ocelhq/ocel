@@ -59,6 +59,24 @@ const OfferCacheStore OfferKind = "cache-store"
 // project's root stack needs to seed and reach its own instance.
 const OfferDeploymentsStore OfferKind = "deployments-store"
 
+// OfferISRWriter offers the shared ISR writer worker the edge provisioned once
+// at bootstrap: the address and credential a deploy needs to seed and reach one
+// build's instance, so its functions write ISR entries through the worker
+// instead of with standing object-store credentials of their own.
+const OfferISRWriter OfferKind = "isr-writer"
+
+// Keys of an OfferISRWriter's Values.
+const (
+	// OfferKeyISRWriterEndpoint is the shared writer worker's HTTP endpoint.
+	OfferKeyISRWriterEndpoint = "endpoint"
+	// OfferKeyISRWriterScriptName is the shared writer worker's script name.
+	OfferKeyISRWriterScriptName = "scriptName"
+	// OfferKeyISRWriterBootstrapCred is the account-level bootstrap credential
+	// that authorizes seeding a deploy's write-secret hash and retiring it
+	// (/<isrPrefix>/initialize and /<isrPrefix>/destroy), and nothing else.
+	OfferKeyISRWriterBootstrapCred = "bootstrapCred"
+)
+
 // Keys of an OfferDeploymentsStore's Values.
 const (
 	// OfferKeyStoreEndpoint is the shared store worker's HTTP endpoint.
