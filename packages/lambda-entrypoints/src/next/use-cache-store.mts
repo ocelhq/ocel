@@ -1,12 +1,15 @@
-import { DynamoDBClient, QueryCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { S3Client, GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { createHash } from "node:crypto";
 
 import {
   isGuardRejection,
+  readableSnapshot,
   tagRecordUpdate,
-  tagSortKey,
+  tagSnapshotKey,
+  type TagRecord,
   type TagRecordUpdate,
+  type TagSnapshot,
 } from "@ocel/next-cache";
 
 // A `use cache` entry exactly as it sits in object storage: the metadata and the
@@ -22,29 +25,27 @@ export interface UseCacheEntry {
   body: string;
 }
 
-export interface TagRecordRow extends TagRecordUpdate {
-  tag: string;
-}
-
-// `cursor` is DynamoDB's LastEvaluatedKey, opaque to the caller: present only
-// when the page was truncated, and handed straight back to read the next one.
-export interface TagRecordPage {
-  records: TagRecordRow[];
-  cursor?: unknown;
-}
+// The outcome of one conditional read of this build's tag clock. `etag` is the
+// store's own version of the object, opaque to the clock and handed straight
+// back on the next read.
+//
+// `unusable` is both an absent snapshot and one this reader cannot understand.
+// Neither is an empty clock: a reader that took either for "nothing has been
+// invalidated" would serve entries the fleet has already thrown away, so the two
+// are one answer and the clock stays fail-closed on it.
+export type TagSnapshotRead =
+  | { status: "fresh"; records: Record<string, TagRecord>; etag: string | null }
+  | { status: "unchanged" }
+  | { status: "unusable" };
 
 // UseCacheStore is the plural cache handlers' whole view of their backing
 // services, so the cache semantics can be exercised without reaching AWS.
 export interface UseCacheStore {
   readEntry(key: string): Promise<UseCacheEntry | null>;
   writeEntry(key: string, entry: UseCacheEntry): Promise<void>;
-  queryTagRecords(since: number, cursor?: unknown): Promise<TagRecordPage>;
+  readTagSnapshot(etag: string | null): Promise<TagSnapshotRead>;
   writeTag(tag: string, record: TagRecordUpdate): Promise<boolean>;
 }
-
-// One page is deliberately large: a cold instance drains the whole partition,
-// and every extra round trip is one more on its first request.
-const tagPageSize = 200;
 
 // The key Next hands a handler is an encodeReply blob of arbitrary bytes and
 // arbitrary length. It is not a legal object key, so it is hashed into one.
@@ -71,14 +72,19 @@ function isNotFound(err: any): boolean {
   return err?.name === "NoSuchKey" || err?.$metadata?.httpStatusCode === 404;
 }
 
-// awsUseCacheStore binds the store to the account-global state table. Tag keys
+// S3 answers a satisfied If-None-Match with a bodiless 304, which the SDK
+// surfaces as a thrown error like any other non-2xx.
+function isNotModified(err: any): boolean {
+  return err?.name === "NotModified" || err?.$metadata?.httpStatusCode === 304;
+}
+
+// awsUseCacheStore binds the store to the account-global state table for tag
+// writes and to the build's own object prefix for everything it reads. Tag keys
 // are namespaced by the deploy, which is also what the function's IAM policy is
-// scoped to — including on the index, whose partition key must therefore be the
-// namespace exactly as granted or the query fails closed with a 403.
+// scoped to.
 export function awsUseCacheStore(): UseCacheStore {
   const table = env("OCEL_STATE_TABLE");
   const tagNamespace = env("OCEL_ISR_TAG_NAMESPACE");
-  const index = env("OCEL_STATE_TABLE_INDEX");
   const bucket = env("OCEL_ISR_BUCKET");
   const prefix = env("OCEL_ISR_PREFIX");
 
@@ -115,39 +121,35 @@ export function awsUseCacheStore(): UseCacheStore {
       );
     },
 
-    async queryTagRecords(since, cursor) {
-      const out = await ddb.send(
-        new QueryCommand({
-          TableName: table,
-          IndexName: index,
-          // Inclusive of the cursor: a truncated page advances it only to the
-          // last record consumed, and a strict `>` would then skip any record
-          // sharing that millisecond. Re-reading the boundary record each sync
-          // is the cheaper mistake, since merging a record is idempotent.
-          KeyConditionExpression: "gsi1pk = :ns AND gsi1sk >= :since",
-          ExpressionAttributeValues: {
-            ":ns": { S: tagNamespace },
-            ":since": { S: tagSortKey(since) },
-          },
-          Limit: tagPageSize,
-          ExclusiveStartKey: cursor as Record<string, any> | undefined,
-        }),
-      );
-
-      const records: TagRecordRow[] = [];
-      for (const item of out.Items ?? []) {
-        // The tag is an explicit attribute rather than a slice of the partition
-        // key, so a reader never has to know the namespace it was written under.
-        const tag = item.tag?.S;
-        if (!tag) continue;
-        records.push({
-          tag,
-          stale: item.stale?.N ? Number(item.stale.N) : undefined,
-          expired: item.expired?.N ? Number(item.expired.N) : undefined,
-          writtenAt: Number(item.gsi1sk?.S ?? 0),
-        });
+    // The whole clock in one GET, conditioned on the version this instance
+    // already merged: the publisher rewrites the object on every invalidation it
+    // observes, so an unchanged object is proof nothing has been raised since.
+    // What this replaces is a paged scan of the tag partition per cold instance.
+    async readTagSnapshot(etag) {
+      let out;
+      try {
+        out = await s3.send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: tagSnapshotKey(prefix),
+            ...(etag !== null ? { IfNoneMatch: etag } : {}),
+          }),
+        );
+      } catch (err: any) {
+        if (isNotModified(err)) return { status: "unchanged" };
+        if (isNotFound(err)) return { status: "unusable" };
+        throw err;
       }
-      return { records, cursor: out.LastEvaluatedKey };
+
+      let snapshot: TagSnapshot | null = null;
+      try {
+        snapshot = readableSnapshot(JSON.parse(await streamToString(out.Body)));
+      } catch {
+        snapshot = null;
+      }
+      if (snapshot === null) return { status: "unusable" };
+
+      return { status: "fresh", records: snapshot.records, etag: out.ETag ?? null };
     },
 
     // Writes into the same record the incremental cache's tag store already

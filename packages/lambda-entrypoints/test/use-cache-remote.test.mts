@@ -1,27 +1,28 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { TagRecordUpdate } from "@ocel/next-cache";
+import type { TagRecord, TagRecordUpdate } from "@ocel/next-cache";
 import type {
+  TagSnapshotRead,
   UseCacheEntry,
   UseCacheStore,
-  TagRecordPage,
-  TagRecordRow,
 } from "../src/next/use-cache-store.mjs";
 
+type Row = TagRecordUpdate & { tag: string };
+
 // A stand-in for the whole backing pair: an object store keyed by cache key, and
-// the state table's tag partition with its index. Both can be broken
-// independently, because a backend outage is a first-class case for this tier.
+// this build's published tag snapshot. Both can be broken independently, because
+// a backend outage is a first-class case for this tier.
 function fakeStore() {
   const objects = new Map<string, UseCacheEntry>();
-  const rows = new Map<string, TagRecordRow>();
+  const rows = new Map<string, Row>();
   let objectFailure: Error | null = null;
-  let queryFailure: Error | null = null;
+  let snapshotFailure: Error | null = null;
 
   const store: UseCacheStore & {
     objects: typeof objects;
     rows: typeof rows;
     seed(tag: string, row: TagRecordUpdate): void;
     breakObjects(): void;
-    breakQueries(): void;
+    breakSnapshot(): void;
   } = {
     objects,
     rows,
@@ -31,8 +32,8 @@ function fakeStore() {
     breakObjects() {
       objectFailure = new Error("s3 is down");
     },
-    breakQueries() {
-      queryFailure = new Error("dynamo is down");
+    breakSnapshot() {
+      snapshotFailure = new Error("s3 is down");
     },
 
     async readEntry(key) {
@@ -45,14 +46,14 @@ function fakeStore() {
       objects.set(key, entry);
     },
 
-    async queryTagRecords(since, cursor): Promise<TagRecordPage> {
+    async readTagSnapshot(): Promise<TagSnapshotRead> {
       await Promise.resolve();
-      if (queryFailure) throw queryFailure;
-      const ordered = [...rows.values()]
-        .sort((a, b) => a.writtenAt - b.writtenAt)
-        .filter((row) => row.writtenAt > since);
-      const start = (cursor as number | undefined) ?? 0;
-      return { records: ordered.slice(start), cursor: undefined };
+      if (snapshotFailure) throw snapshotFailure;
+      const records: Record<string, TagRecord> = {};
+      for (const [tag, row] of rows) {
+        records[tag] = { stale: row.stale, expired: row.expired };
+      }
+      return { status: "fresh", records, etag: null };
     },
 
     async writeTag(tag, record) {
@@ -312,7 +313,7 @@ test("turns an object store outage into a miss rather than a throw", async () =>
 
 test("misses rather than throwing when the clock's own backend is out", async () => {
   const store = fakeStore();
-  store.breakQueries();
+  store.breakSnapshot();
   const { handler, tagClock } = await load(store);
 
   await handler.refreshTags();

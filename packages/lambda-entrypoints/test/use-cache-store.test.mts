@@ -1,11 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 // The store binds its clients from env at construction, so every test needs the
-// table, namespace and index it keys into.
+// table, namespace, bucket and prefix it keys into.
 beforeEach(() => {
   process.env.OCEL_STATE_TABLE = "state";
   process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#prod#proj#app#BID#";
-  process.env.OCEL_STATE_TABLE_INDEX = "gsi1";
   process.env.OCEL_ISR_BUCKET = "assets";
   process.env.OCEL_ISR_PREFIX = "prod/proj/app/BID";
 });
@@ -21,8 +20,7 @@ afterEach(() => {
 });
 
 // Drives the store against a scripted DynamoDB: each entry is one send()
-// response, so a test can hand back a LastEvaluatedKey the way a truncated
-// Query does. A response that is an Error is thrown instead.
+// response, in order. A response that is an Error is thrown instead.
 async function storeWithResponses(responses: any[]) {
   const sends: any[] = [];
   vi.doMock("@aws-sdk/client-dynamodb", async (orig) => {
@@ -160,65 +158,6 @@ test("surfaces failures that are not the guard", async () => {
   ).rejects.toThrow(/down/);
 });
 
-test("queries the index for records written since the cursor", async () => {
-  const { store, sends } = await storeWithResponses([{ Items: [] }]);
-
-  await store.queryTagRecords(1700);
-
-  expect(sends[0]).toMatchObject({
-    TableName: "state",
-    IndexName: "gsi1",
-    // Inclusive: a truncated page advances the cursor only to the last record
-    // consumed, so a strict `>` would skip any record sharing that millisecond.
-    KeyConditionExpression: "gsi1pk = :ns AND gsi1sk >= :since",
-    ExpressionAttributeValues: {
-      ":ns": { S: "TAG#prod#proj#app#BID#" },
-      ":since": { S: "000000000001700" },
-    },
-  });
-  expect(sends[0].Limit).toBeGreaterThan(0);
-  expect(sends[0].ExclusiveStartKey).toBeUndefined();
-});
-
-test("reads tag records back off the index projection", async () => {
-  const { store } = await storeWithResponses([
-    {
-      Items: [
-        {
-          tag: { S: "products" },
-          stale: { N: "1700" },
-          expired: { N: "1800" },
-          gsi1sk: { S: "000000000001700" },
-        },
-        { tag: { S: "reviews" }, gsi1sk: { S: "000000000001900" } },
-      ],
-    },
-  ]);
-
-  const page = await store.queryTagRecords(0);
-
-  expect(page.records).toEqual([
-    { tag: "products", stale: 1700, expired: 1800, writtenAt: 1700 },
-    { tag: "reviews", stale: undefined, expired: undefined, writtenAt: 1900 },
-  ]);
-  expect(page.cursor).toBeUndefined();
-});
-
-test("hands back the response cursor and feeds it into the next page", async () => {
-  const last = { gsi1pk: { S: "TAG#prod#proj#app#BID#" }, gsi1sk: { S: "000000000001700" } };
-  const { store, sends } = await storeWithResponses([
-    { Items: [{ tag: { S: "a" }, gsi1sk: { S: "000000000001700" } }], LastEvaluatedKey: last },
-    { Items: [{ tag: { S: "b" }, gsi1sk: { S: "000000000001800" } }] },
-  ]);
-
-  const first = await store.queryTagRecords(0);
-  expect(first.cursor).toEqual(last);
-
-  const second = await store.queryTagRecords(0, first.cursor);
-  expect(second.cursor).toBeUndefined();
-  expect(sends[1].ExclusiveStartKey).toEqual(last);
-});
-
 // Drives the store against a scripted S3 the same way, so the object key layout
 // and the envelope round-trip are asserted on the command actually emitted.
 async function storeWithObjects(responses: any[]) {
@@ -316,4 +255,92 @@ test("surfaces a read failure that is not an absent object", async () => {
   const { store } = await storeWithObjects([new Error("s3 is down")]);
 
   await expect(store.readEntry("k")).rejects.toThrow(/down/);
+});
+
+const snapshot = {
+  version: 1,
+  deployedAt: 1_000,
+  generatedAt: 1_700,
+  records: { products: { expired: 1_800 }, reviews: { stale: 1_900 } },
+};
+
+const storedSnapshot = (value: unknown, etag?: string) => ({
+  ...objectBody(value),
+  ...(etag !== undefined ? { ETag: etag } : {}),
+});
+
+const notModified = () =>
+  Object.assign(new Error("not modified"), {
+    name: "NotModified",
+    $metadata: { httpStatusCode: 304 },
+  });
+
+// The publisher writes this build's clock to one object under the same prefix
+// the deploy scopes everything else to, so the read is one unconditional GET.
+test("reads the whole tag clock from one object under the build's prefix", async () => {
+  const { store, sends } = await storeWithObjects([storedSnapshot(snapshot, '"v1"')]);
+
+  const read = await store.readTagSnapshot(null);
+
+  expect(sends).toHaveLength(1);
+  expect(sends[0].Bucket).toBe("assets");
+  expect(sends[0].Key).toBe("prod/proj/app/BID/tag-clock.json");
+  // Nothing to condition on yet: a first read must never be answered with a 304.
+  expect(sends[0].IfNoneMatch).toBeUndefined();
+  expect(read).toEqual({
+    status: "fresh",
+    records: snapshot.records,
+    etag: '"v1"',
+  });
+});
+
+test("conditions a later read on the version it already holds", async () => {
+  const { store, sends } = await storeWithObjects([notModified()]);
+
+  const read = await store.readTagSnapshot('"v1"');
+
+  expect(sends[0].IfNoneMatch).toBe('"v1"');
+  expect(read).toEqual({ status: "unchanged" });
+});
+
+test("reads an object the store named no version for", async () => {
+  const { store } = await storeWithObjects([storedSnapshot(snapshot)]);
+
+  expect(await store.readTagSnapshot(null)).toMatchObject({
+    status: "fresh",
+    etag: null,
+  });
+});
+
+// Absent and unreadable are one answer on purpose: either way this reader holds
+// no tag state it may serve on, and the clock has to stay fail-closed.
+test("reports an absent snapshot as unusable rather than as an empty clock", async () => {
+  const missing = Object.assign(new Error("nope"), { name: "NoSuchKey" });
+  const { store } = await storeWithObjects([missing]);
+
+  expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
+});
+
+test("reports a snapshot at an unknown version as unusable", async () => {
+  const { store } = await storeWithObjects([
+    storedSnapshot({ ...snapshot, version: 2 }, '"v1"'),
+  ]);
+
+  expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
+});
+
+test("reports an unparseable snapshot as unusable", async () => {
+  const { store } = await storeWithObjects([
+    { Body: { transformToString: async () => "{" }, ETag: '"v1"' },
+  ]);
+
+  expect(await store.readTagSnapshot(null)).toEqual({ status: "unusable" });
+});
+
+// An outage is not an empty clock either, but it is the clock's to swallow: the
+// store reports it as what it is.
+test("surfaces a snapshot read failure that is neither a 404 nor a 304", async () => {
+  const { store } = await storeWithObjects([new Error("s3 is down")]);
+
+  await expect(store.readTagSnapshot(null)).rejects.toThrow(/down/);
 });

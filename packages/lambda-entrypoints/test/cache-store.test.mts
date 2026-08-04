@@ -10,14 +10,13 @@ const storeEnv = {
 const adoptStore = () => Object.assign(process.env, storeEnv);
 
 // The store binds its clients from env at construction, so every test needs the
-// namespace it keys into — and the index the plural store reads back out of.
-// The adopted-store vars start absent: a test that wants one opts in.
+// bucket, prefix and namespace it keys into. The adopted-store vars start
+// absent: a test that wants one opts in.
 beforeEach(() => {
   process.env.OCEL_ISR_BUCKET = "assets";
   process.env.OCEL_ISR_PREFIX = "prod/proj/app/BID";
   process.env.OCEL_STATE_TABLE = "state";
   process.env.OCEL_ISR_TAG_NAMESPACE = "TAG#prod#proj#app#BID#";
-  process.env.OCEL_STATE_TABLE_INDEX = "gsi1";
   for (const name of Object.keys(storeEnv)) delete process.env[name];
   // Likewise opt-in: absent, entry writes go straight to the object store.
   delete process.env.OCEL_ISR_WRITER_URL;
@@ -385,23 +384,13 @@ test("surfaces a write failure that is not the guard", async () => {
   await expect(store.writeTags(["products"], { expired: 5 })).rejects.toThrow(/down/);
 });
 
-// Enough of UpdateItem's SET and guard, and of the index Query, for a write by
-// one store to be read back by the other. Nothing translates between them: the
-// reader sees exactly the attributes the writer emitted.
+// Enough of UpdateItem's SET and guard for a write by either store to be
+// inspected as the item it actually left on the table — which is the record the
+// stream hands the publisher.
 function fakeTable() {
   const items = new Map<string, Record<string, any>>();
 
-  return (input: any) => {
-    if (input.KeyConditionExpression) {
-      const ns = input.ExpressionAttributeValues[":ns"].S;
-      const since = input.ExpressionAttributeValues[":since"].S;
-      return {
-        Items: [...items.values()]
-          .filter((item) => item.gsi1pk?.S === ns && item.gsi1sk.S >= since)
-          .sort((a, b) => a.gsi1sk.S.localeCompare(b.gsi1sk.S)),
-      };
-    }
-
+  const send = (input: any) => {
     const item = items.get(input.Key.pk.S) ?? { ...input.Key };
     const guard = /attribute_not_exists\((\w+)\) OR \w+ < (:\w+)/.exec(
       input.ConditionExpression,
@@ -420,6 +409,7 @@ function fakeTable() {
     items.set(input.Key.pk.S, item);
     return {};
   };
+  return { send, items };
 }
 
 // Both stores are built from the same mocked client, so they meet on one table
@@ -432,7 +422,7 @@ async function storesOverTable() {
       ...actual,
       DynamoDBClient: class {
         async send(cmd: any) {
-          return table(cmd.input);
+          return table.send(cmd.input);
         }
       },
     };
@@ -443,35 +433,37 @@ async function storesOverTable() {
   });
   const { awsCacheStore } = await import("../src/next/cache-store.mjs");
   const { awsUseCacheStore } = await import("../src/next/use-cache-store.mjs");
-  return { store: awsCacheStore(), useStore: awsUseCacheStore() };
+  return { store: awsCacheStore(), useStore: awsUseCacheStore(), items: table.items };
 }
 
 // The classic ISR model registers only the singular handler and has no `use
 // cache` anywhere, so nothing else writes its tags. Its invalidations have to
-// reach the index on their own — otherwise a Next version that stops fanning
-// revalidateTag out to the plural handlers breaks replication silently.
-test("makes a classic-model invalidation visible to the index reader", async () => {
-  const { store, useStore } = await storesOverTable();
+// reach the stream's index attributes on their own — the publisher derives the
+// build it publishes for from gsi1pk, so an item written without them is an
+// invalidation no other instance ever hears about.
+test("makes a classic-model invalidation visible to the stream publisher", async () => {
+  const { store, items } = await storesOverTable();
 
   await (await handlerOver(store)).revalidateTag("products");
-  const page = await useStore.queryTagRecords(0);
 
-  expect(page.records).toHaveLength(1);
-  expect(page.records[0].tag).toBe("products");
-  expect(page.records[0].expired).toBeGreaterThan(0);
-  expect(page.records[0].writtenAt).toBeGreaterThan(0);
+  const item = items.get("TAG#prod#proj#app#BID#products")!;
+  expect(item.tag.S).toBe("products");
+  expect(item.gsi1pk.S).toBe("TAG#prod#proj#app#BID#");
+  expect(Number(item.expired.N)).toBeGreaterThan(0);
+  expect(Number(item.gsi1sk.S)).toBeGreaterThan(0);
 });
 
 // The two tiers advance one shared watermark, which is only safe while every
 // writer agrees the guard is monotonic.
 test("an older singular write cannot walk back a newer plural one", async () => {
-  const { store, useStore } = await storesOverTable();
+  const { store, useStore, items } = await storesOverTable();
 
   await useStore.writeTag("products", { expired: 2_000, writtenAt: 2_000 });
   await store.writeTags(["products"], { expired: 1_000 });
 
-  const page = await useStore.queryTagRecords(0);
-  expect(page.records[0]).toMatchObject({ expired: 2_000, writtenAt: 2_000 });
+  const item = items.get("TAG#prod#proj#app#BID#products")!;
+  expect(item.expired.N).toBe("2000");
+  expect(Number(item.gsi1sk.S)).toBe(2_000);
 });
 
 // With a writer adopted, a route entry leaves through it and never through the
