@@ -6,15 +6,10 @@ export interface ObjectStore {
   bucket: string;
 }
 
-// The coordinates the membrane injects into node when this substrate's edge
-// offered a cache store. All five are written together or none is, so the
-// bucket alone decides whether a store was adopted and the rest are then
-// required — a partial injection is a bug worth failing on, not falling back on.
+// The whole of what the deploy tells a function about this substrate's adopted
+// cache store. It is a name, not a credential: nothing here signs a request
+// against that bucket, so there is nothing else to inject.
 const storeBucketEnv = "OCEL_ISR_STORE_BUCKET";
-const storeEndpointEnv = "OCEL_ISR_STORE_ENDPOINT";
-const storeRegionEnv = "OCEL_ISR_STORE_REGION";
-const storeAccessKeyEnv = "OCEL_ISR_STORE_ACCESS_KEY_ID";
-const storeSecretEnv = "OCEL_ISR_STORE_SECRET_ACCESS_KEY";
 
 function env(name: string): string {
   const value = process.env[name];
@@ -23,35 +18,14 @@ function env(name: string): string {
 }
 
 // Whether this substrate's edge offered a cache store, which is what decides
-// where route entries live. It reads only the bucket name, never the injected
-// credentials — route entries no longer touch them at all, since both halves of
-// their traffic go through the ISR writer worker.
+// where route entries live. It reads a name and nothing more: route entries
+// travel through the ISR writer worker in both directions, and the tag clock is
+// published off the state table's stream, so a deployed function holds no R2
+// credential at all — which is the point, since an R2 token scopes to a bucket
+// and nothing finer, and that bucket is shared by every project on the
+// substrate. Nothing here may start injecting one again.
 export function entriesAdopted(): boolean {
   return Boolean(process.env[storeBucketEnv]);
-}
-
-// THE LAST STANDING R2 CREDENTIAL. Its one remaining caller is the tag-clock
-// snapshot publisher, which still writes tag-clock.json into the adopted store
-// directly; epic decision 8 routes every runtime snapshot writer through the
-// Durable Object, and when it does (ocelhq-wvag.4) this function, the two key
-// env vars it reads, and the whole injection behind them go with it.
-//
-// Until then the deployed function holds an R2 token that can write any object
-// in the shared bucket, because R2 tokens scope to a bucket and have no
-// key-prefix grammar. Nothing else here may start using it.
-export function snapshotObjectStore(): ObjectStore | null {
-  if (!process.env[storeBucketEnv]) return null;
-  return {
-    bucket: env(storeBucketEnv),
-    client: new S3Client({
-      region: env(storeRegionEnv),
-      endpoint: env(storeEndpointEnv),
-      credentials: {
-        accessKeyId: env(storeAccessKeyEnv),
-        secretAccessKey: env(storeSecretEnv),
-      },
-    }),
-  };
 }
 
 // providerObjectStore is the account's own bucket under the function's own role.

@@ -20,13 +20,12 @@ import (
 // before Lambda hard-kills the sandbox.
 const completionMargin = 500 * time.Millisecond
 
-// startupBudget bounds init as a whole: the globally bootstrapped config fetch
-// (configBudget) and then the wait for node to announce itself, which gets
-// whatever the fetch left. A crashed child is caught by the reaper the moment it
-// exits, so the second half only has to cover the child that is alive but
-// wedged. The total sits under Lambda's ~10s init ceiling, leaving room to
-// report a real init error before the platform kills the sandbox and says
-// nothing useful in its place.
+// startupBudget bounds init as a whole: the local decrypts and then the wait for
+// node to announce itself, which gets whatever they left. A crashed child is
+// caught by the reaper the moment it exits, so the second half only has to cover
+// the child that is alive but wedged. The total sits under Lambda's ~10s init
+// ceiling, leaving room to report a real init error before the platform kills
+// the sandbox and says nothing useful in its place.
 const startupBudget = 8 * time.Second
 
 type Membrane struct {

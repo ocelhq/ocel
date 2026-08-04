@@ -5,10 +5,6 @@ import type { CacheStore } from "../src/next/cache-store.mjs";
 // All five are set together or none is.
 const storeEnv = {
   OCEL_ISR_STORE_BUCKET: "isr",
-  OCEL_ISR_STORE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
-  OCEL_ISR_STORE_REGION: "auto",
-  OCEL_ISR_STORE_ACCESS_KEY_ID: "AK",
-  OCEL_ISR_STORE_SECRET_ACCESS_KEY: "s3cret",
 };
 
 const adoptStore = () => Object.assign(process.env, storeEnv);

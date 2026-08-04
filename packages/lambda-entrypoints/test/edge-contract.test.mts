@@ -12,10 +12,7 @@ import { afterEach, expect, test } from "vitest";
 const contract: {
   tagSnapshotSuffix: string;
   tagNamespace: { isrPrefix: string; partitionKeyPrefix: string };
-  cacheStoreEnv: Record<
-    "bucket" | "endpoint" | "region" | "accessKeyId" | "secretAccessKey",
-    string
-  >;
+  cacheStoreEnv: Record<"bucket", string>;
 } = JSON.parse(
   readFileSync(
     fileURLToPath(
@@ -44,36 +41,25 @@ test("tag records are namespaced exactly as the deploy grants them", () => {
   );
 });
 
-// The last binding that still reads the injected R2 credentials: the tag-clock
-// snapshot publisher. Route entries stopped reading them when their reads joined
-// their writes behind the ISR writer worker, and ocelhq-wvag.4 takes the
-// publisher the same way — after which this contract item has no reader here.
-test("the snapshot store is bound from exactly the names the membrane injects", async () => {
+// The whole of what the deploy still injects about the adopted store, and the
+// whole of what this tier reads: one bucket name, and no credential. Entries
+// travel through the ISR writer worker in both directions and the tag clock is
+// published off the state table's stream, so a deployed function has nothing
+// left to sign an R2 request with.
+test("the adopted store is named by exactly the variable the deploy injects", async () => {
   const env = contract.cacheStoreEnv;
+  expect(Object.keys(env)).toEqual(["bucket"]);
   process.env[env.bucket] = "isr";
-  process.env[env.endpoint] = "https://acct.r2.cloudflarestorage.com";
-  process.env[env.region] = "auto";
-  process.env[env.accessKeyId] = "AK";
-  process.env[env.secretAccessKey] = "s3cret";
 
-  const { snapshotObjectStore } = await import("../src/next/object-store.mjs");
-  const store = snapshotObjectStore()!;
+  const { entriesAdopted } = await import("../src/next/object-store.mjs");
 
-  expect(store.bucket).toBe("isr");
-  expect(await store.client.config.region()).toBe("auto");
-  expect(await store.client.config.endpoint!()).toMatchObject({
-    hostname: "acct.r2.cloudflarestorage.com",
-  });
-  expect(await store.client.config.credentials()).toMatchObject({
-    accessKeyId: "AK",
-    secretAccessKey: "s3cret",
-  });
+  expect(entriesAdopted()).toBe(true);
 });
 
 // The bucket alone decides adoption, so a rename of it does not degrade to the
 // provider's own store quietly — it has to be the thing this asserts.
 test("no store is adopted when the contract's bucket name is unset", async () => {
-  const { snapshotObjectStore } = await import("../src/next/object-store.mjs");
+  const { entriesAdopted } = await import("../src/next/object-store.mjs");
 
-  expect(snapshotObjectStore()).toBeNull();
+  expect(entriesAdopted()).toBe(false);
 });

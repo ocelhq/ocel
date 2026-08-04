@@ -747,18 +747,17 @@ func TestResolveLiveValues_DeclaresExactlyThePinnedKeys(t *testing.T) {
 	}
 }
 
-// TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClasses pins the
+// TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClass pins the
 // composition init actually hands to the child. The declaration has to be in
-// it, and the plaintexts of the classes that do travel in the environment have
+// it, and the plaintexts of the class that does travel in the environment have
 // to still be in it beside the declaration.
-func TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClasses(t *testing.T) {
-	storeEnv := []string{"OCEL_CACHE_STORE=bucket"}
+func TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClass(t *testing.T) {
 	bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
 	l := newLiveValues(resolves(map[string]string{}), []string{"DB_PASSWORD"}, nil)
 
-	got := childEnv(storeEnv, bakedEnv, l)
+	got := childEnv(bakedEnv, l)
 
-	for _, want := range []string{"OCEL_CACHE_STORE=bucket", "OCEL_VAR_STRIPE_KEY=sk_baked", "OCEL_LIVE_KEYS=DB_PASSWORD"} {
+	for _, want := range []string{"OCEL_VAR_STRIPE_KEY=sk_baked", "OCEL_LIVE_KEYS=DB_PASSWORD"} {
 		if !slices.Contains(got, want) {
 			t.Errorf("childEnv = %q, missing %q", got, want)
 		}
@@ -766,9 +765,9 @@ func TestChildEnv_CarriesTheLiveDeclarationBesideTheDeliveredClasses(t *testing.
 
 	// A function with no live values is told nothing extra at all, so it never
 	// waits for a push nothing will send.
-	bare := childEnv(storeEnv, bakedEnv, nil)
-	if len(bare) != 2 {
-		t.Errorf("childEnv for a function with no live values = %q, want only the classes delivered in the environment", bare)
+	bare := childEnv(bakedEnv, nil)
+	if len(bare) != 1 {
+		t.Errorf("childEnv for a function with no live values = %q, want only the class delivered in the environment", bare)
 	}
 }
 
@@ -798,11 +797,10 @@ func TestChildEnv_NeverCarriesALivePlaintext(t *testing.T) {
 		t.Fatalf("prefetch: %v", err)
 	}
 
-	storeEnv := []string{"OCEL_CACHE_STORE=bucket"}
 	bakedEnv := []string{"OCEL_VAR_STRIPE_KEY=sk_baked"}
 	before := os.Environ()
 
-	got := childEnv(storeEnv, bakedEnv, l)
+	got := childEnv(bakedEnv, l)
 
 	for _, entry := range got {
 		for _, secret := range secrets {
@@ -812,9 +810,9 @@ func TestChildEnv_NeverCarriesALivePlaintext(t *testing.T) {
 		}
 	}
 
-	// Nothing beyond the two classes that do travel as values and the one
+	// Nothing beyond the class that does travel as values and the one
 	// declaration: an extra entry is a live value under some other spelling.
-	want := []string{"OCEL_CACHE_STORE=bucket", "OCEL_LIVE_KEYS=DB_PASSWORD,SESSION_SECRET", "OCEL_VAR_STRIPE_KEY=sk_baked"}
+	want := []string{"OCEL_LIVE_KEYS=DB_PASSWORD,SESSION_SECRET", "OCEL_VAR_STRIPE_KEY=sk_baked"}
 	composed := slices.Sorted(slices.Values(got))
 	if !slices.Equal(composed, want) {
 		t.Errorf("childEnv = %q, want exactly %q", composed, want)

@@ -198,19 +198,11 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	}
 	stateTableARN := fmt.Sprintf("arn:aws:dynamodb:%s:%s:table/%s", awscfg.Region, account, deployed.StateTable)
 
-	// The cache-store parameter is named here, not in the Lambda: resolving the
-	// substrate class is already this side's job, and the same name has to appear
-	// in the function's read grant anyway.
-	cacheStoreParam, err := bootstrap.CacheStoreParamFor(substrateClass)
-	if err != nil {
-		return deploy.Result{}, err
-	}
-	cacheStoreParamARN := fmt.Sprintf("arn:aws:ssm:%s:%s:parameter%s", awscfg.Region, account, cacheStoreParam)
-
 	// Seeded ISR entries have to land in the same store the deployed cache
-	// handler reads, and the handler resolves that from this same parameter. A
-	// failed read is therefore fatal rather than best-effort: guessing wrong
-	// costs no error, only every prerendered route silently rendering cold.
+	// handler is told to use, and the handler is told by the bucket name this
+	// read returns. A failed read is therefore fatal rather than best-effort:
+	// guessing wrong costs no error, only every prerendered route silently
+	// rendering cold.
 	cacheStore, err := bootstrap.ReadCacheStore(ctx, ssmClient, substrateClass)
 	if err != nil {
 		return deploy.Result{}, err
@@ -275,8 +267,6 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		VarsClass:      substrateClass,
 		VarsReferenced: varsReferenced,
 
-		CacheStoreParam:    cacheStoreParam,
-		CacheStoreParamARN: cacheStoreParamARN,
 		CacheStoreBucket:   cacheStore.Bucket,
 		CacheStoreUploader: cacheStoreUploader(cacheStore),
 

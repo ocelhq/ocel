@@ -77,14 +77,13 @@ func appCaches(cfg Config, manifest *deploymentsv1.Manifest) (map[string]*isrCon
 			return nil, err
 		}
 		cache := &isrConfig{
-			Bucket:             cfg.AssetBucket,
-			Prefix:             prefix,
-			Table:              cfg.StateTable,
-			TableARN:           cfg.StateTableARN,
-			CacheStoreParam:    cfg.CacheStoreParam,
-			CacheStoreParamARN: cfg.CacheStoreParamARN,
+			Bucket:   cfg.AssetBucket,
+			Prefix:   prefix,
+			Table:    cfg.StateTable,
+			TableARN: cfg.StateTableARN,
 		}
 		if isrEntriesAdopted(cfg) {
+			cache.CacheStoreBucket = cfg.CacheStoreBucket
 			cache.WriterURL = cfg.ISRWriterEndpoint + "/" + prefix + "/entry"
 			cache.WriterSecret = isrWriteSecret(cfg.ISRWriterSeed, prefix)
 		}
