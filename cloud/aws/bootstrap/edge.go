@@ -2,6 +2,8 @@ package bootstrap
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,6 +36,13 @@ const (
 	// parameters holding each substrate's adopted ISR writer worker coordinates.
 	ISRWriterParamName        = "/ocel/edge/isr-writer"
 	ISRWriterPreviewParamName = "/ocel/edge/isr-writer-preview"
+
+	// ISRWriterSeedParamName / ISRWriterSeedPreviewParamName are the SSM
+	// SecureString parameters holding each substrate's ISR write-secret seed.
+	// Deliberately separate from the adopted-writer coordinates above, which
+	// every bootstrap overwrites: see ensureISRWriterSeed.
+	ISRWriterSeedParamName        = "/ocel/edge/isr-writer-seed"
+	ISRWriterSeedPreviewParamName = "/ocel/edge/isr-writer-seed-preview"
 )
 
 // IAMAPI is the subset of the IAM client the edge-credential step needs.
@@ -59,11 +68,12 @@ type edgeNames struct {
 	cacheStoreParam       string
 	deploymentsStoreParam string
 	isrWriterParam        string
+	isrWriterSeedParam    string
 }
 
 var edgeNamesByClass = map[string]edgeNames{
-	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName, DeploymentsStoreParamName, ISRWriterParamName},
-	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName, DeploymentsStorePreviewParamName, ISRWriterPreviewParamName},
+	ClassProduction: {EdgeUserName, EdgeCredentialsParamName, EdgeValuesParamName, CacheStoreParamName, DeploymentsStoreParamName, ISRWriterParamName, ISRWriterSeedParamName},
+	ClassPreview:    {EdgePreviewUserName, EdgeCredentialsPreviewParamName, EdgeValuesPreviewParamName, CacheStorePreviewParamName, DeploymentsStorePreviewParamName, ISRWriterPreviewParamName, ISRWriterSeedPreviewParamName},
 }
 
 func edgeNamesFor(class string) (edgeNames, error) {
@@ -407,6 +417,86 @@ func ReadISRWriterFor(ctx context.Context, ssmClient SSMAPI, class string) (ISRW
 		return ISRWriter{}, fmt.Errorf("parse isr writer: %w", err)
 	}
 	return writer, nil
+}
+
+// ISRWriterSeedParamFor returns the SSM parameter a substrate class's ISR
+// write-secret seed lives in. Exported so the deploy path can name it in the
+// tag publisher's environment and scope that function's read grant to it.
+func ISRWriterSeedParamFor(class string) (string, error) {
+	names, err := edgeNamesFor(class)
+	if err != nil {
+		return "", err
+	}
+	return names.isrWriterSeedParam, nil
+}
+
+// ensureISRWriterSeed creates the substrate's ISR write-secret seed if it does
+// not exist, and never overwrites one. It returns the seed in force.
+//
+// Every build's write secret is HMAC(seed, isrPrefix) — see isrWriteSecret in
+// the deploy package — and the writer worker stores only the hash, per build,
+// from whichever deploy last initialized it. So the seed is account state, not
+// run state: rotating it silently invalidates the secret every live build's
+// functions hold, and each one 401s its cache writes until it is redeployed.
+// Create-only is what makes the derivation stable, which is in turn what lets
+// the stream consumer derive any build's secret rather than needing a second
+// credential path of its own.
+//
+// It lives in a parameter of its own because adoptISRWriter overwrites its
+// whole payload on every bootstrap.
+func ensureISRWriterSeed(ctx context.Context, ssmClient SSMAPI, class string) (string, error) {
+	paramName, err := ISRWriterSeedParamFor(class)
+	if err != nil {
+		return "", err
+	}
+	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
+	})
+	if err == nil {
+		return aws.ToString(out.Parameter.Value), nil
+	}
+	var notFound *ssmtypes.ParameterNotFound
+	if !errors.As(err, &notFound) {
+		return "", fmt.Errorf("read isr writer seed parameter: %w", err)
+	}
+
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", fmt.Errorf("generate isr writer seed: %w", err)
+	}
+	seed := hex.EncodeToString(buf)
+	if _, err := ssmClient.PutParameter(ctx, &ssm.PutParameterInput{
+		Name:      aws.String(paramName),
+		Value:     aws.String(seed),
+		Type:      ssmtypes.ParameterTypeSecureString,
+		Overwrite: aws.Bool(false),
+	}); err != nil {
+		return "", fmt.Errorf("write isr writer seed parameter: %w", err)
+	}
+	return seed, nil
+}
+
+// ReadISRWriterSeedFor returns a substrate class's ISR write-secret seed,
+// decrypted. An account bootstrapped before the seed reads as empty rather than
+// as a failure, which the deploy reports as a substrate with no usable writer.
+func ReadISRWriterSeedFor(ctx context.Context, ssmClient SSMAPI, class string) (string, error) {
+	paramName, err := ISRWriterSeedParamFor(class)
+	if err != nil {
+		return "", err
+	}
+	out, err := ssmClient.GetParameter(ctx, &ssm.GetParameterInput{
+		Name:           aws.String(paramName),
+		WithDecryption: aws.Bool(true),
+	})
+	if err != nil {
+		var notFound *ssmtypes.ParameterNotFound
+		if errors.As(err, &notFound) {
+			return "", nil
+		}
+		return "", fmt.Errorf("read isr writer seed parameter: %w", err)
+	}
+	return aws.ToString(out.Parameter.Value), nil
 }
 
 // adoptCacheStore persists an edge's offered cache store for one substrate class.

@@ -197,10 +197,10 @@ type Config struct {
 	// is what the app worker's service binding to it takes: an edge
 	// revalidateTag raises inside the account rather than over the endpoint.
 	ISRWriterScriptName string
-	// ISRWriterSeed is minted once per deploy run and never persisted. Each
-	// app's write secret is derived from it and that app's own isrPrefix
-	// (isrWriteSecret), so appCaches stays a pure function of the deploy while
-	// no app can sign a write against another app's slice.
+	// ISRWriterSeed is the substrate's write-secret seed, minted once at
+	// bootstrap. Each app's write secret is derived from it and that app's own
+	// isrPrefix (isrWriteSecret), so appCaches stays a pure function of the
+	// deploy while no app can sign a write against another app's slice.
 	ISRWriterSeed string
 
 	// Edge deploys the Next.js routing worker once its Lambdas exist and their
