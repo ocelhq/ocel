@@ -40,6 +40,17 @@ Subagent-driven throughout: a fresh agent implements, a second reviews, a third 
 review fixes. The orchestrator does not write code. Each PR gets unit + e2e coverage; the
 load/herd harness lands with PR 8 and is then run against the whole stack.
 
+## Standing notes
+
+**Writer retirement is bounded, not instant (PR 2).** The writer worker memoizes each
+deploy's secret hash per isolate. `destroy` clears the memo only in the isolate that served
+it, so an isolate that never handled the retirement keeps authorizing that build's writes
+until its memo lapses — up to `MEMO_TTL_MS` (60s) in `workers/isr-writer/src/index.ts`. That
+is the accepted bound, not an oversight: closing it means consulting the Durable Object on
+every entry write, which is what the memo exists to avoid, and epic decision 6c mandates the
+memo. Read decision 6d and commit `79900d5`'s message with that bound in mind — both are
+worded as though retirement takes effect everywhere at once, and it does not.
+
 ## Current position
 
 **PR 1 (`ocelhq-wvag.1`) — code complete, NOT pushed, issue still open.**
