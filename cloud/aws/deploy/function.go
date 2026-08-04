@@ -132,10 +132,14 @@ type isrConfig struct {
 	CacheStoreParam    string
 	CacheStoreParamARN string
 
-	// WriterURL and WriterSecret point the cache handler's entry writes at the
-	// account-level ISR writer worker (epic decisions 6/6a): the worker holds
-	// the bucket natively, so the function needs no object-store credentials of
-	// its own to write an entry. Both are plain env vars, deliberately — an SSM
+	// WriterURL and WriterSecret point the cache handler's entry reads and
+	// writes at the account-level ISR writer worker (epic decisions 6/6a): the
+	// worker holds the bucket natively, so the function needs no object-store
+	// credentials of its own for entries at all — reads go through it too,
+	// because an R2 token scopes to a bucket and nothing finer, so one left here
+	// to read with could still write every project's entries. One URL serves
+	// both ops; the method distinguishes them.
+	// Both are plain env vars, deliberately — an SSM
 	// SecureString would put a GetParameter on the cold path to buy protection
 	// a per-deploy secret that rotates every build does not need. Empty when the
 	// substrate adopted no writer.
@@ -168,13 +172,23 @@ func (c isrConfig) env() map[string]string {
 	// Left unset rather than set empty when there is no parameter: the membrane
 	// reads an unset name as "this substrate adopted no cache store" and skips
 	// the fetch entirely, which is what keeps an older substrate on S3.
+	//
+	// This is what puts a standing R2 credential on the function, and it now has
+	// exactly one consumer left: the tag-clock snapshot publisher, which still
+	// writes tag-clock.json into the adopted store directly. Route entries stopped
+	// needing it when their reads joined their writes behind the ISR writer.
+	// Epic decision 8 (ocelhq-wvag.4) routes the publisher through the writer's
+	// Durable Object as well; retiring this parameter, the SecureString behind it
+	// and the grant to read it is part of that issue's completion, not optional
+	// follow-on. Until then the function holds a token that can write any object
+	// in the shared bucket, since R2 tokens have no key-prefix grammar.
 	if c.CacheStoreParam != "" {
 		env["OCEL_CACHE_STORE_PARAM"] = c.CacheStoreParam
 	}
 	// Both or neither. Set exactly when this deploy's entries live in the adopted
 	// cache store, which is the only bucket the writer holds — appCaches refuses
 	// a deploy where the two disagree, and the handler refuses to run without
-	// them once a store is adopted, since it has no other way to write an entry.
+	// them once a store is adopted, since it has no other way to reach an entry.
 	if c.WriterURL != "" && c.WriterSecret != "" {
 		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
 		env["OCEL_ISR_WRITER_SECRET"] = c.WriterSecret
