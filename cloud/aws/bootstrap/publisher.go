@@ -69,6 +69,27 @@ const (
 	tagPublisherAlarmPeriodSeconds = 300
 	tagPublisherAlarmPeriods       = 1
 
+	// tagPublisherMetricGroup opts the mapping into the event-source-mapping
+	// metrics, which Lambda does not publish otherwise. It is load-bearing for
+	// the silent-poller alarm rather than merely useful to it: that alarm treats
+	// missing data as breaching, so a mapping that never asked for the metric
+	// does not lose the alarm, it lights it permanently.
+	tagPublisherMetricGroup = "EventCount"
+
+	// tagPublisherSilentPollerPeriods is how long the mapping may report nothing
+	// at all before that counts as dead. A healthy poller reports every minute
+	// even with no records to read, so fifteen minutes is not latency tolerance
+	// — it is slack against a transient gap in CloudWatch itself.
+	tagPublisherSilentPollerPeriods = 3
+
+	// tagPublisherIteratorAgeThresholdMs bounds how far behind the stream the
+	// publisher may fall while still processing it. Five times the snapshot
+	// Durable Object's own heartbeat (HEARTBEAT_MS, 60s in
+	// workers/isr-writer/src/isr-snapshot.ts), so a beat's worth of jitter
+	// cannot flap it, and an invalidation this late is unambiguously late.
+	tagPublisherIteratorAgeThresholdMs = 300000
+	tagPublisherIteratorAgePeriods     = 2
+
 	// tagPublisherAssetBucketEnvVar names the bucket holding the S3 copy of every
 	// build's tag clock, which this function writes and (from ocelhq-wvag.5) the
 	// origin reads. tagPublisherWriterParamEnvVar and
@@ -136,10 +157,27 @@ func ensureTagPublisherArtifact(ctx context.Context, art Artifacts, bucket strin
 // belongs to no app, and a fabricated tag would both be a lie and misclassify it
 // for everything keyed off that tag.
 //
-// The alarm is on the DLQ's depth rather than on publisher liveness. A true
-// heartbeat-staleness alarm needs a metric nothing in this account emits yet;
-// ocelhq-wvag.13 invents it, and must land before ocelhq-wvag.6 makes this
-// function the fleet's sole guarantor of on-demand invalidation.
+// Four alarms, covering the ways this function stops carrying invalidations —
+// which matters because ocelhq-wvag.6 makes it the fleet's only guarantor of
+// them, and every one of these failures is otherwise silent:
+//
+//   - dead outright: the mapping stops polling. PolledEventCount is emitted as a
+//     0 on every empty poll and not at all by a disabled mapping, so absence is
+//     the signal and an idle substrate still reports healthy.
+//   - running but not publishing: FailedInvokeEventCount counts a response
+//     carrying batch item failures, which is exactly what publishAll returns, so
+//     this lights five retries before the dead-letter queue does.
+//   - keeping up badly: IteratorAge, against the snapshot object's own heartbeat.
+//   - gave up: DLQ depth, where a record lands once its retries are exhausted.
+//
+// None of it needs a metric this account emits itself. ocelhq-wvag.13 was
+// specified as inventing one — a custom metric per publish, or a probe reading
+// the snapshot's age — and both would have alarmed on a substrate that simply
+// had no invalidation traffic. The age of a published snapshot is not a liveness
+// signal for this function in any case: the R2 copy's generatedAt is advanced by
+// the Durable Object's own heartbeat whether or not this function is feeding it,
+// and the S3 copy's advances only on real invalidations. See that issue for the
+// full decision.
 func tagPublisherResources(code artifactCode, class string) string {
 	if !code.present() {
 		return ""
@@ -233,6 +271,9 @@ func tagPublisherResources(code artifactCode, class string) string {
       FilterCriteria:
         Filters:
           - Pattern: '%s'
+      MetricsConfig:
+        Metrics:
+          - %s
   TagPublisherDeadLetterAlarm:
     Type: AWS::CloudWatch::Alarm
     Properties:
@@ -248,13 +289,61 @@ func tagPublisherResources(code artifactCode, class string) string {
       Threshold: 0
       ComparisonOperator: GreaterThanThreshold
       TreatMissingData: notBreaching
+  TagPublisherSilentPollerAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The tag-snapshot publisher's stream poller has stopped reporting; no invalidation is reaching any build's edge replica.
+      Namespace: AWS/Lambda
+      MetricName: PolledEventCount
+      Dimensions:
+        - Name: EventSourceMappingUUID
+          Value: !Ref TagPublisherStream
+      Statistic: Sum
+      Period: %d
+      EvaluationPeriods: %d
+      Threshold: 0
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+  TagPublisherFailedPublishAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The tag-snapshot publisher is running but failing to publish; those builds' edge replicas are falling behind and will reach the dead-letter queue if it continues.
+      Namespace: AWS/Lambda
+      MetricName: FailedInvokeEventCount
+      Dimensions:
+        - Name: EventSourceMappingUUID
+          Value: !Ref TagPublisherStream
+      Statistic: Sum
+      Period: %d
+      EvaluationPeriods: %d
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
+  TagPublisherIteratorAgeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The tag-snapshot publisher is falling behind the state table's stream; invalidations are reaching the edge late.
+      Namespace: AWS/Lambda
+      MetricName: IteratorAge
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref TagPublisher
+      Statistic: Maximum
+      Period: %d
+      EvaluationPeriods: %d
+      Threshold: %d
+      ComparisonOperator: GreaterThanThreshold
+      TreatMissingData: notBreaching
 `, tagPublisherDLQRetentionSeconds,
 		writerParam, seedParam, writerParam, seedParam,
 		tagPublisherRuntime, tagPublisherArchitecture, tagPublisherHandler, tagPublisherMemoryMB, tagPublisherTimeoutSeconds,
 		code.bucket, code.key,
 		tagPublisherAssetBucketEnvVar, tagPublisherWriterParamEnvVar, writerParam, tagPublisherSeedParamEnvVar, seedParam,
-		tagPublisherBatchSize, tagPublisherRetries, tagPublisherFilter,
-		tagPublisherAlarmPeriodSeconds, tagPublisherAlarmPeriods)
+		tagPublisherBatchSize, tagPublisherRetries, tagPublisherFilter, tagPublisherMetricGroup,
+		tagPublisherAlarmPeriodSeconds, tagPublisherAlarmPeriods,
+		tagPublisherAlarmPeriodSeconds, tagPublisherSilentPollerPeriods,
+		tagPublisherAlarmPeriodSeconds, tagPublisherAlarmPeriods,
+		tagPublisherAlarmPeriodSeconds, tagPublisherIteratorAgePeriods, tagPublisherIteratorAgeThresholdMs)
 }
 
 // isrWriterParamNames is the pair of SSM parameters the publisher reads. Both
