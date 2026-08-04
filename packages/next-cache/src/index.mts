@@ -123,6 +123,23 @@ export function cacheKey(key: string): string {
   return key === "/" || key === "" ? "index" : key.replace(/^\//, "");
 }
 
+// entryObjectKey is where a route entry lives in the ISR store. Two sides derive
+// it: the Lambda, which writes the entry, and the writer worker, which derives it
+// again from the prefix the caller authenticated against so no deploy can address
+// another's slice. Both call this, because a grammar the writer applies more
+// strictly than the writer's caller is a route that renders forever and never
+// caches. Only what could climb out of the prefix is refused — an absolute key, a
+// traversal segment, a backslash — and refused rather than normalized. An empty
+// segment cannot climb anywhere and is left alone: `trailingSlash: true` produces
+// one on every route.
+export function entryObjectKey(isrPrefix: string, key: string): string | null {
+  if (key === "" || key.startsWith("/") || key.includes("\\")) return null;
+  for (const segment of key.split("/")) {
+    if (segment === "." || segment === "..") return null;
+  }
+  return `${isrPrefix}/cache/${key}.cache.json`;
+}
+
 // tagsOf reports what a cached entry depends on — a set, deliberately: a FETCH
 // entry is stored under the very tags its reader passes back in, so the three
 // sources below always name the explicit ones twice, and DynamoDB's
