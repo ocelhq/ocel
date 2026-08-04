@@ -50,10 +50,6 @@ async function storeWithResponses(responses: any[]) {
 test("stays on the provider's bucket when a cache store is adopted", async () => {
   Object.assign(process.env, {
     OCEL_ISR_STORE_BUCKET: "isr",
-    OCEL_ISR_STORE_ENDPOINT: "https://acct.r2.cloudflarestorage.com",
-    OCEL_ISR_STORE_REGION: "auto",
-    OCEL_ISR_STORE_ACCESS_KEY_ID: "AK",
-    OCEL_ISR_STORE_SECRET_ACCESS_KEY: "s3cret",
   });
   const built: any[] = [];
   const sent: any[] = [];

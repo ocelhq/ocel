@@ -122,15 +122,12 @@ type isrConfig struct {
 	Table    string
 	TableARN string
 
-	// CacheStoreParam and CacheStoreParamARN address the SSM parameter holding
-	// the substrate's adopted cache store, which the membrane reads at init and
-	// injects into node. The deploy resolves the substrate class, so the runtime
-	// is handed a parameter name rather than a class to map — one mapping, on the
-	// side that also has to name the parameter in the role's grant. Set whether or
-	// not a store was actually adopted: an unadopted one is signalled by the
-	// parameter not existing, which the membrane reads as "stay on S3".
-	CacheStoreParam    string
-	CacheStoreParamARN string
+	// CacheStoreBucket is the substrate's adopted cache store, and the whole of
+	// what the function is told about it: the name alone is what makes the cache
+	// handler read and write its entries through the ISR writer worker instead of
+	// the provider's own bucket. Empty when the substrate adopted no store, which
+	// is the rollback for the whole colocation.
+	CacheStoreBucket string
 
 	// WriterURL and WriterSecret point the cache handler's entry reads and
 	// writes at the account-level ISR writer worker (epic decisions 6/6a): the
@@ -169,16 +166,13 @@ func (c isrConfig) env() map[string]string {
 		"OCEL_STATE_TABLE_INDEX": bootstrap.StateTableIndexName,
 		"OCEL_ISR_TAG_NAMESPACE": c.tagNamespace(),
 	}
-	// Left unset rather than set empty when there is no parameter: the membrane
-	// reads an unset name as "this substrate adopted no cache store" and skips
-	// the fetch entirely, which is what keeps an older substrate on S3.
-	//
-	// This parameter is what puts the last standing R2 credential on the function
-	// — see snapshotObjectStore in
-	// packages/lambda-entrypoints/src/next/object-store.mts for what still reads
-	// it and what retires it, this parameter and its grant included.
-	if c.CacheStoreParam != "" {
-		env["OCEL_CACHE_STORE_PARAM"] = c.CacheStoreParam
+	// Left unset rather than set empty when no store was adopted: the handler
+	// reads an unset bucket as "entries live in the provider's own store", which
+	// is what keeps an older substrate on S3. A plain variable for the same
+	// reason WriterURL and WriterSecret are — there is nothing secret in a bucket
+	// name, and it is read on every cold start.
+	if c.CacheStoreBucket != "" {
+		env["OCEL_ISR_STORE_BUCKET"] = c.CacheStoreBucket
 	}
 	// Both or neither. Set exactly when this deploy's entries live in the adopted
 	// cache store, which is the only bucket the writer holds — appCaches refuses
@@ -237,37 +231,6 @@ func isrPolicy(c isrConfig) (string, error) {
 				},
 			},
 		},
-	}
-
-	// The membrane reads this parameter at init to find the store its cache
-	// handler writes to. Without the grant the read 403s, and a 403 fails the
-	// init rather than degrading — so the grant and the injected parameter name
-	// have to appear together, which is why both hang off the same field.
-	if c.CacheStoreParamARN != "" {
-		statements = append(statements,
-			map[string]any{
-				"Effect":   "Allow",
-				"Action":   []string{"ssm:GetParameter"},
-				"Resource": c.CacheStoreParamARN,
-			},
-			map[string]any{
-				"Effect": "Allow",
-				// The parameter is a SecureString, so reading it decrypts under
-				// the account's default SSM key, whose ARN the deploy does not
-				// know. The encryption-context condition is what scopes this to
-				// the one parameter rather than to every secret in the account:
-				// SSM puts the parameter's ARN into the encryption context of
-				// every decrypt it makes, so a Resource of "*" cannot be
-				// exercised against anything else.
-				"Action":   []string{"kms:Decrypt"},
-				"Resource": "*",
-				"Condition": map[string]any{
-					"StringEquals": map[string]any{
-						"kms:EncryptionContext:PARAMETER_ARN": c.CacheStoreParamARN,
-					},
-				},
-			},
-		)
 	}
 
 	doc := map[string]any{"Version": "2012-10-17", "Statement": statements}

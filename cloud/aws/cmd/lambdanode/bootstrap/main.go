@@ -35,15 +35,6 @@ func main() {
 	}
 	prefetch := live.start(ctx)
 
-	// Globally bootstrapped config is fetched here, not baked into every
-	// function's environment, and it must land before node is exec'd because it
-	// travels in that child's environment. Whatever the fetch spends comes out of
-	// node's share of the init ceiling, so the remainder is what it gets.
-	storeEnv, err := resolveCacheStoreEnv(ctx, os.Getenv(cacheStoreParamEnv))
-	if err != nil {
-		fatalInit(fmt.Sprintf("failed to resolve cache store config: %v", err))
-	}
-
 	// Encrypted-baked values are opened here for the same reason: they travel
 	// in the child's environment. Both the ciphertext and its key already rode
 	// in with the deployment, so this is local decryption rather than a fetch.
@@ -52,7 +43,7 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}
 
-	membrane, err := bringUp(startNode, live, prefetch, childEnv(storeEnv, bakedEnv, live), startupBudget-time.Since(start))
+	membrane, err := bringUp(startNode, live, prefetch, childEnv(bakedEnv, live), startupBudget-time.Since(start))
 	if err != nil {
 		// Must report init failure BEFORE we start polling the Runtime API.
 		fatalInit(err.Error())
@@ -104,13 +95,12 @@ func bringUp(spawn spawner, live *liveValues, prefetch <-chan error, env []strin
 	return membrane, nil
 }
 
-// childEnv is everything node is told at exec. Two classes travel in it as
-// values; the live class travels as key names only, because a live value
-// reaches node down the control socket and must never be in this process's
-// environment where anything reading the environment would find it.
-func childEnv(storeEnv, bakedEnv []string, live *liveValues) []string {
-	env := make([]string, 0, len(storeEnv)+len(bakedEnv)+1)
-	env = append(env, storeEnv...)
+// childEnv is everything node is told at exec. The baked class travels in it as
+// values; the live class travels as key names only, because a live value reaches
+// node down the control socket and must never be in this process's environment
+// where anything reading the environment would find it.
+func childEnv(bakedEnv []string, live *liveValues) []string {
+	env := make([]string, 0, len(bakedEnv)+1)
 	env = append(env, bakedEnv...)
 	return append(env, live.declaredEnv()...)
 }

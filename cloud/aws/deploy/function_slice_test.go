@@ -353,81 +353,76 @@ func TestTagNamespace_MatchesTheEdgeContract(t *testing.T) {
 	}
 }
 
-// The membrane fails the init when it cannot read the cache-store parameter, so
-// a function whose env names one and whose role does not grant it would not
-// start at all. The two are asserted together for that reason.
-func TestISRCacheStore_GrantsAndNamesTheSameParameter(t *testing.T) {
-	const paramARN = "arn:aws:ssm:us-east-1:1234:parameter/ocel/edge/cache-store"
-	cfg := isrConfig{
-		Bucket:             "assets-xyz",
-		Prefix:             "prod/proj123/marketing/build456",
-		Table:              "state-abc",
-		TableARN:           "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-		CacheStoreParam:    "/ocel/edge/cache-store",
-		CacheStoreParamARN: paramARN,
+// The bucket name is the whole of what a deployed function is told about the
+// adopted store: it is what makes the cache handler read and write its entries
+// through the ISR writer worker rather than the provider's own bucket. It rides
+// in as a plain env var — there is nothing secret left in it, and an SSM
+// SecureString would only put a GetParameter on every cold start.
+//
+// The name is declared independently here and in the handler that reads it, and
+// no build step compares them, so the checked-in edge contract is what fails
+// when one of them moves. The reader's own test asserts against the same file.
+func TestISRCacheStore_NamesTheAdoptedBucketFromTheEdgeContract(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "packages", "next-cache", "fixtures", "edge-contract.json")
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var contract struct {
+		CacheStoreEnv struct {
+			Bucket string `json:"bucket"`
+		} `json:"cacheStoreEnv"`
+	}
+	if err := json.Unmarshal(body, &contract); err != nil {
+		t.Fatalf("parse fixture: %v", err)
 	}
 
-	if got := cfg.env()["OCEL_CACHE_STORE_PARAM"]; got != cfg.CacheStoreParam {
-		t.Errorf("OCEL_CACHE_STORE_PARAM = %q, want %q", got, cfg.CacheStoreParam)
+	cfg := isrConfig{
+		Bucket:           "assets-xyz",
+		Prefix:           "prod/proj123/marketing/build456",
+		Table:            "state-abc",
+		TableARN:         "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		CacheStoreBucket: "ocel-edge-cache",
+	}
+
+	if got := cfg.env()[contract.CacheStoreEnv.Bucket]; got != "ocel-edge-cache" {
+		t.Errorf("%s = %q, want the adopted bucket", contract.CacheStoreEnv.Bucket, got)
+	}
+}
+
+// The credential the function used to be handed is gone with the publisher that
+// read it: no parameter to fetch, no grant to read it, and no decrypt. An R2
+// token scopes to a bucket and nothing finer, so one left on a deployed function
+// would write every project's cache on the substrate.
+func TestISRCacheStore_LeavesNoStandingCredentialOnTheFunction(t *testing.T) {
+	cfg := isrConfig{
+		Bucket:           "assets-xyz",
+		Prefix:           "prod/proj123/marketing/build456",
+		Table:            "state-abc",
+		TableARN:         "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
+		CacheStoreBucket: "ocel-edge-cache",
+	}
+
+	env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg)
+	for name, value := range env {
+		if strings.Contains(name, "ACCESS_KEY") || strings.Contains(name, "SECRET_ACCESS") {
+			t.Errorf("env carries %s = %q", name, value)
+		}
+	}
+	if _, ok := env["OCEL_CACHE_STORE_PARAM"]; ok {
+		t.Error("OCEL_CACHE_STORE_PARAM is set; the parameter it named carried the R2 keys")
 	}
 
 	raw, err := isrPolicy(cfg)
 	if err != nil {
 		t.Fatalf("isrPolicy: %v", err)
 	}
-	var doc struct {
-		Statement []struct {
-			Action    []string `json:"Action"`
-			Resource  string   `json:"Resource"`
-			Condition map[string]map[string]any
+	for _, action := range []string{"ssm:GetParameter", "kms:Decrypt"} {
+		if strings.Contains(raw, action) {
+			t.Errorf("policy still grants %s; nothing on this role reads a parameter now", action)
 		}
 	}
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-		t.Fatalf("policy is not valid JSON: %v", err)
-	}
-	if len(doc.Statement) != 5 {
-		t.Fatalf("got %d statements, want 5 (the three cache grants plus ssm and kms)", len(doc.Statement))
-	}
-
-	ssmStmt := doc.Statement[3]
-	if want := []string{"ssm:GetParameter"}; !slices.Equal(ssmStmt.Action, want) {
-		t.Errorf("ssm Action = %v, want exactly %v", ssmStmt.Action, want)
-	}
-	// Scoped to the one parameter: a wildcard here would hand every function in
-	// the account read access to every other parameter, including the edge
-	// reader's access key.
-	if ssmStmt.Resource != paramARN {
-		t.Errorf("ssm Resource = %q, want %q", ssmStmt.Resource, paramARN)
-	}
-
-	// The parameter is a SecureString, so GetParameter with decryption also needs
-	// kms:Decrypt. The key is the account's default SSM key, whose ARN the deploy
-	// cannot know, so scoping rests entirely on the encryption context SSM sets —
-	// without the condition this statement would be a decrypt grant on the whole
-	// account.
-	kmsStmt := doc.Statement[4]
-	if want := []string{"kms:Decrypt"}; !slices.Equal(kmsStmt.Action, want) {
-		t.Errorf("kms Action = %v, want exactly %v", kmsStmt.Action, want)
-	}
-	if got := kmsStmt.Condition["StringEquals"]["kms:EncryptionContext:PARAMETER_ARN"]; got != paramARN {
-		t.Errorf("kms encryption-context condition = %q, want it bound to %q", got, paramARN)
-	}
-}
-
-// A substrate with no cache-store parameter must deploy exactly as before: no
-// parameter named in the env, and no grant widening the role.
-func TestISRCacheStore_AbsentParameterLeavesEnvAndPolicyUntouched(t *testing.T) {
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-
-	if _, ok := cfg.env()["OCEL_CACHE_STORE_PARAM"]; ok {
-		t.Error("OCEL_CACHE_STORE_PARAM is set; an unset name is what makes the membrane skip the fetch")
-	}
 	if doc := parsePolicy(t, cfg); len(doc.Statement) != 3 {
-		t.Errorf("got %d statements, want the original 3", len(doc.Statement))
+		t.Errorf("got %d statements, want the three cache grants and nothing more", len(doc.Statement))
 	}
 }
