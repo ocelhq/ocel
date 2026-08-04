@@ -29,7 +29,7 @@ const launcherName = "__next_launcher.cjs";
 const dispatchName = "__ocel_dispatch.cjs";
 // Read back at the root of the function's own task directory by the cache
 // handler the membrane layer mounts, which spells this name for itself.
-const variantHeadersName = "variant-headers.json";
+const variantHeadersFile = "variant-headers.json";
 
 // The ocel builder passes this app's own subtree; a bare `next build` outside
 // ocel falls back to the flat cwd path.
@@ -274,7 +274,7 @@ const adapter = {
           }),
         );
 
-        await writeFile(join(funcDir, variantHeadersName), variantHeaders);
+        await writeFile(join(funcDir, variantHeadersFile), variantHeaders);
       }),
     );
 
@@ -827,10 +827,9 @@ async function readMaybe(filePath: string | undefined): Promise<Buffer | null> {
 // `.rsc` payload and each PPR segment as separate PRERENDER outputs sharing a
 // groupId; everything downstream wants the route.
 interface PrerenderGroup {
-  // How the cache handler keys this route's entry (e.g. /blog/a → blog/a, / →
-  // index). Taken from the html variant's concrete pathname, never from
-  // parentOutputId, which names the shared function under its dynamic pattern.
-  key: string;
+  // Taken from the html variant's concrete pathname, never from parentOutputId,
+  // which names the shared function under its dynamic pattern.
+  entryKey: string;
   html: any;
   rsc: any;
   segments: any[];
@@ -861,7 +860,7 @@ function groupPrerenders(prerenders: readonly any[]): PrerenderGroup[] {
     const html = pages.find((m) => !m.pathname.endsWith(".rsc"));
     if (!html) continue;
     groups.push({
-      key: entryKeyOf(html.pathname),
+      entryKey: entryKeyOf(html.pathname),
       html,
       rsc: pages.find((m) => m.pathname.endsWith(".rsc")),
       segments,
@@ -899,7 +898,7 @@ function variantHeaderProjection(
   const projection: Record<string, Record<string, unknown>> = {};
   for (const group of groups) {
     const headers = variantHeadersOf(group);
-    if (Object.keys(headers).length > 0) projection[group.key] = headers;
+    if (Object.keys(headers).length > 0) projection[group.entryKey] = headers;
   }
   return projection;
 }
@@ -918,7 +917,7 @@ async function emitCacheEntries(
 
   await Promise.all(
     groups.map(async (group) => {
-      const { key, html, rsc, segments } = group;
+      const { entryKey, html, rsc, segments } = group;
       const body = await readMaybe(html.fallback?.filePath);
       if (!body) return;
 
@@ -956,7 +955,7 @@ async function emitCacheEntries(
         }
       }
 
-      const dest = join(outputRoot, "cache", `${key}.cache.json`);
+      const dest = join(outputRoot, "cache", `${entryKey}.cache.json`);
       await mkdir(dirname(dest), { recursive: true });
       const entry: CacheEntryFile = { lastModified, value };
       await writeFile(dest, JSON.stringify(entry));
