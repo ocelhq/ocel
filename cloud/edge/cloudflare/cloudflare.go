@@ -152,9 +152,9 @@ func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, cla
 		return edge.Offer{}, err
 	}
 
-	appliedTag, err := p.appliedMigrationTag(ctx, scriptName)
+	deployed, err := p.deployedClasses(ctx, scriptName)
 	if err != nil {
-		return edge.Offer{}, fmt.Errorf("read isr-writer worker migration tag: %w", err)
+		return edge.Offer{}, fmt.Errorf("read isr-writer worker Durable Object classes: %w", err)
 	}
 	cred, err := mintSecret()
 	if err != nil {
@@ -163,7 +163,7 @@ func (p *provider) bootstrapISRWriter(ctx context.Context, accountID string, cla
 
 	worker.ObjectStore = edge.ObjectStore{Binding: cacheStoreBinding, Bucket: cacheStoreName(class)}
 	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
-	if err := p.putDurableObjectScript(ctx, up, isrWriterWorker, appliedTag); err != nil {
+	if err := p.putDurableObjectScript(ctx, up, isrWriterWorker, deployed); err != nil {
 		return edge.Offer{}, fmt.Errorf("put isr-writer worker: %w", err)
 	}
 	endpoint, err := p.setSubdomain(ctx, up, true)
@@ -203,9 +203,9 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName str
 		return edge.Offer{}, err
 	}
 
-	appliedTag, err := p.appliedMigrationTag(ctx, scriptName)
+	deployed, err := p.deployedClasses(ctx, scriptName)
 	if err != nil {
-		return edge.Offer{}, fmt.Errorf("read deployments-store worker migration tag: %w", err)
+		return edge.Offer{}, fmt.Errorf("read deployments-store worker Durable Object classes: %w", err)
 	}
 	cred, err := mintSecret()
 	if err != nil {
@@ -213,7 +213,7 @@ func (p *provider) bootstrapStore(ctx context.Context, accountID, scriptName str
 	}
 
 	up := upload{accountID: accountID, scriptName: scriptName, worker: withSecret(worker, bootstrapSecretBinding, cred)}
-	if err := p.putDurableObjectScript(ctx, up, deploymentsStoreWorker, appliedTag); err != nil {
+	if err := p.putDurableObjectScript(ctx, up, deploymentsStoreWorker, deployed); err != nil {
 		return edge.Offer{}, fmt.Errorf("put deployments-store worker: %w", err)
 	}
 	endpoint, err := p.setSubdomain(ctx, up, true)
@@ -246,31 +246,45 @@ func readWorkerBundle(path string) (edge.Worker, error) {
 	}}, nil
 }
 
-// appliedMigrationTag reports the Durable Object migration tag the deployed
-// script already carries, which is what decides how much of a worker's
-// migration log an upload has to declare. An empty tag means the script has
-// applied nothing — it does not exist yet, or no class was ever created on it.
+// deployedClasses reports the Durable Object classes the deployed script already
+// has, which is what decides how much of a worker's migration log an upload has
+// to declare. No classes means the script has applied nothing — it does not
+// exist yet, or no class was ever created on it.
 //
 // Whether the script merely exists cannot answer this: an account that
 // bootstrapped an earlier version of a worker exists and is still missing every
 // class added since, and Cloudflare rejects a binding to a class it never
 // created (ocelhq-wvag.4).
-func (p *provider) appliedMigrationTag(ctx context.Context, name string) (string, error) {
+//
+// The classes are read rather than the migration tag because the API does not
+// report a tag. Every endpoint that could carry one — this settings call, the
+// script list, the version list and a version's detail — omits it entirely for a
+// script that demonstrably carries its class, so `settings.Migrations` comes back
+// zeroed. Reading a tag from it and finding "" is indistinguishable from a script
+// that was never migrated, which redeclares the class and is rejected with 10074.
+// A class binding is reported, so it is what this decides on.
+func (p *provider) deployedClasses(ctx context.Context, name string) ([]string, error) {
 	accountID := os.Getenv(envAccountID)
 	if accountID == "" {
-		return "", fmt.Errorf("%s is not set; it is required to query the Cloudflare edge", envAccountID)
+		return nil, fmt.Errorf("%s is not set; it is required to query the Cloudflare edge", envAccountID)
 	}
 	settings, err := p.client.Workers.Scripts.ScriptAndVersionSettings.Get(ctx, name, workers.ScriptScriptAndVersionSettingGetParams{
 		AccountID: cf.F(accountID),
 	})
 	var apiErr *cf.Error
 	if errors.As(err, &apiErr) && apiErr.StatusCode == http.StatusNotFound {
-		return "", nil
+		return nil, nil
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	return settings.Migrations.NewTag, nil
+	var classes []string
+	for _, binding := range settings.Bindings {
+		if binding.Type == durableObjectBindingType && binding.ClassName != "" {
+			classes = append(classes, binding.ClassName)
+		}
+	}
+	return classes, nil
 }
 
 // FindApp reports whether a Workers script exists under name. A 404 is the
