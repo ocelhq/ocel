@@ -1,12 +1,5 @@
 import { isolateId } from "./isolate";
 
-// A deployed instrument, not production machinery. It exposes the smallest
-// surface that lets a runner outside Cloudflare decide three things it cannot
-// decide from inside one request: whether a cache.put made by one isolate is
-// readable by another isolate in the same colo, how long an entry written with a
-// short max-age actually survives, and how many isolates a colo spreads a burst
-// across.
-//
 // Every judgement is left to the runner. This worker reports what it saw and
 // nothing more — it never compares two isolates' clocks, because Date.now() in a
 // Worker advances only on I/O and differencing it across isolates would measure
@@ -48,43 +41,45 @@ export default {
           return new Response("ttl must be a positive number", { status: 400 });
         }
         const sentinel: Sentinel = { run, writer: base.isolate, ttlSeconds };
-        const started = Date.now();
         await cache.put(
           key,
           Response.json(sentinel, {
             headers: { "cache-control": `max-age=${ttlSeconds}` },
           }),
         );
-        return Response.json({ ...base, sentinel, putMs: Date.now() - started });
+        // Positive control: read the entry back from the isolate that just wrote
+        // it. Without this, a later run-wide miss cannot be told apart from a
+        // cache that never stored anything at all.
+        const verified = await cache.match(key);
+        return Response.json({
+          ...base,
+          sentinel,
+          verified: verified !== undefined,
+          verifiedCacheControl: verified?.headers.get("cache-control") ?? null,
+        });
       }
 
       if (request.method === "GET") {
-        const started = Date.now();
         const hit = await cache.match(key);
-        const lookupMs = Date.now() - started;
         const sentinel = hit ? ((await hit.json()) as Sentinel) : null;
         return Response.json({
           ...base,
           hit: sentinel !== null,
           writer: sentinel?.writer ?? null,
           requestedTtlSeconds: sentinel?.ttlSeconds ?? null,
-          // Cloudflare's own view of how long it has held the entry, when it
-          // reports one. Independent of any clock this probe reads.
-          age: hit?.headers.get("age"),
-          cacheControl: hit?.headers.get("cache-control"),
-          lookupMs,
+          // Cloudflare's own view of how long it has held the entry, and of the
+          // freshness it decided to store it under. Independent of any clock
+          // this probe reads and of the runner's polling luck.
+          age: hit?.headers.get("age") ?? null,
+          cacheControl: hit?.headers.get("cache-control") ?? null,
         });
-      }
-
-      if (request.method === "DELETE") {
-        return Response.json({ ...base, deleted: await cache.delete(key) });
       }
 
       return new Response("Method Not Allowed", { status: 405 });
     }
 
     return new Response(
-      "cache-probe: GET /identity, PUT|GET|DELETE /entry?run=<id>&ttl=<seconds>\n",
+      "cache-probe: GET /identity, PUT|GET /entry?run=<id>&ttl=<seconds>\n",
       { status: 404 },
     );
   },
