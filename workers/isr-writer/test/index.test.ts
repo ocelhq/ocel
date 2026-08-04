@@ -330,6 +330,35 @@ describe("concurrent registry reads", () => {
   });
 });
 
+// The entry op consults the registry before any credential is checked, so an
+// unauthenticated caller picks the name of the object it reaches. Instantiating
+// one is unavoidable; leaving durable storage behind under an attacker-chosen
+// name is not, and prefixes are unbounded.
+describe("unknown deploys", () => {
+  async function storedTables(prefix: string) {
+    const stub = env.ISR_WRITER_DO.get(env.ISR_WRITER_DO.idFromName(prefix));
+    return runInDurableObject(stub, (_instance, ctx) =>
+      ctx.storage.sql
+        .exec(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'registry'`)
+        .toArray(),
+    );
+  }
+
+  it("writes no durable storage for a prefix nobody deployed", async () => {
+    const prefix = freshPrefix();
+    expect((await writeEntryReq(prefix, "a", "junk")).status).toBe(401);
+
+    expect(await storedTables(prefix)).toEqual([]);
+  });
+
+  it("still stores a deploy that is initialized", async () => {
+    const prefix = freshPrefix();
+    await initialize(prefix, "write-secret");
+
+    expect(await storedTables(prefix)).toEqual([{ name: "registry" }]);
+  });
+});
+
 describe("secret rotation", () => {
   it("accepts the reseeded secret and refuses the superseded one", async () => {
     const prefix = freshPrefix();
