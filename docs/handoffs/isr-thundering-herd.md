@@ -28,9 +28,9 @@ main
      └─ 2  isr-writer worker + DO          ocelhq-wvag.2  ✅ CLOSED, reviewed ×2, not pushed
          └─ 3  manifest projection         ocelhq-wvag.3  ✅ CLOSED, reviewed, not pushed
              └─ 4  streams publisher       ocelhq-wvag.4  ✅ CLOSED, reviewed, not pushed
-                 └─ 5  origin reads snapshot ocelhq-wvag.5  ✅ CLOSED, not reviewed, not pushed
+                 └─ 5  origin reads snapshot ocelhq-wvag.5  ✅ CLOSED, reviewed, not pushed
                      └─ 6  get drops BatchGetItem ocelhq-wvag.6  ⛔ blocked on .13, .14
-                         └─ 7  edge L0/L1   ocelhq-wvag.7
+                         └─ 7  edge L0/L1   ocelhq-wvag.7   ← next unblocked
                              └─ 8  edge L2 lease ocelhq-wvag.8   ⛔ blocked on .9
 ```
 
@@ -38,7 +38,9 @@ Filed out of band: `ocelhq-wvag.9` (measure the L1 write-visibility window; **bl
 `ocelhq-wvag.10` (live e2e for the writer), `ocelhq-wvag.11` (destroy leaves per-build writer
 DO instances behind), `ocelhq-wvag.12` (collapse the twice-derived projection key and
 filename into `@ocel/next-cache`; needs a dist build on that package, so it touches the
-Lambda and worker bundling — best done between PRs rather than inside one).
+Lambda and worker bundling — best done between PRs rather than inside one). Outside the epic,
+`ocelhq-uroj` (the edge user's account-global `Query`/`BatchGetItem` grants, dead before this
+stack began; see PR 5).
 
 **Two of those now block `.6`, deliberately** — it removes the DynamoDB fallback and makes the
 stream publisher the sole guarantor of invalidation fleet-wide, so neither can be forgotten:
@@ -97,10 +99,10 @@ worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
 
-**PR 5 (`ocelhq-wvag.5`) — code complete, NOT reviewed, NOT pushed. Issue CLOSED.**
+**PR 5 (`ocelhq-wvag.5`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
-Branch `isr-herd/05-origin-reads-snapshot`, rooted on PR 4. Serves decision 11. Small: two
-commits, one TypeScript and one Go.
+Branch `isr-herd/05-origin-reads-snapshot`, rooted on PR 4. Serves decision 11. Small: three
+commits, one TypeScript, one Go, one review cleanup.
 
 The origin's tag clock no longer touches the GSI. `UseCacheStore.queryTagRecords` is replaced
 by `readTagSnapshot(etag: string | null)`, one ETag-conditional `GetObject` of the snapshot
@@ -129,10 +131,43 @@ both already dead before this PR — a separate audit, on an account-global temp
 re-bootstraps every account, and best done after PR 7/8 settle the edge's read paths. The
 index itself stays; the stream publisher is projected through it.
 
-Verified: `packages/lambda-entrypoints` 198/198 — the long-standing failing case died with
-the paging mechanism it tested, so the suite is green for the first time in this stack;
-`packages/next-cache` 41; `pnpm -r --no-bail typecheck` clean except the pre-existing
+### The review found no defects — the first round in this stack that did not
+
+Two independent reviews (standards + spec, the spec one weighted at the silent-failure classes
+that produced all eleven prior findings). Both came back clean on behaviour. Mutation-checked
+rather than asserted: deleting the `unusable` guard fails the never-synced test, and deleting
+the etag assignment fails the conditional-request test. The 304 path was checked against the
+shape the JS SDK actually returns — `NotModified`/`$metadata.httpStatusCode === 304`, tested
+*before* the 404 branch, since a 304 read as a failure silently stops the clock and a 304 read
+as `unusable` silently disables the remote tier.
+
+Four quality findings were applied in `57b92c5`:
+
+- **`drain()` was named for the deleted paging model** and now issues one conditional GET.
+  Renamed `startSync()`, with the comment it made redundant deleted and only the non-obvious
+  half kept — that the attempt is stamped *before* the read, which is what bounds the throttle
+  to attempts rather than successes. The same dead vocabulary (`index`, `indexed`, "a drain")
+  was cleaned out of the tests.
+- The deleted production `TagRecordRow` had been **reborn twice in test scope**; it is now one
+  shared `test/tag-rows.mts`.
+- **`readableSnapshot` claimed to take a `TagSnapshot`** while its only untrusted caller hands
+  it arbitrary bytes off the network — it type-checked solely because `JSON.parse` returns
+  `any`. Its parameter is `unknown` now and it rejects non-objects explicitly, which deleted
+  two casts elsewhere.
+- One test named a property it could not falsify (records are only written on the `fresh`
+  branch, so the `unusable` guard cannot affect them). Deleted as redundant; its sibling has
+  the teeth.
+
+Verified after the fixes: `packages/lambda-entrypoints` 197/197 — the long-standing failing
+case died with the paging mechanism it tested, so the suite is green for the first time in this
+stack; `packages/next-cache` 42; `packages/tag-publisher` 15; `workers/nextjs` 529;
+`workers/isr-writer` 70; `pnpm -r --no-bail typecheck` clean except the pre-existing
 `examples/*`; `cloud/aws` builds and tests clean.
+
+Two `pnpm -r test` failures are **pre-existing and unrelated** — confirmed by running both
+suites at `c887a83`, where they fail identically: `@repo/api` (9 files) and
+`@ocel/provider-aws` (`Cannot find package 'ocel/config'` — the dogfooded SDK is not built,
+the same cause as the `examples/*` typecheck failures).
 
 **PR 4 (`ocelhq-wvag.4`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
@@ -411,11 +446,14 @@ and claims every deployment lands on workers.dev.
 
 ## Next step
 
-**PR 5 is the only thing in the stack waiting on scrutiny** — PRs 2, 3 and 4 are reviewed and
-their findings are fixed. Review PR 5, then note that `ocelhq-wvag.6` is **blocked on `.13`
-and `.14`**, both human gates, so the next unblocked implementation work is `ocelhq-wvag.7`.
+**Nothing in the stack is waiting on scrutiny.** PRs 2, 3, 4 and 5 are all reviewed and their
+findings are fixed. `ocelhq-wvag.6` is **blocked on `.13` and `.14`**, both human gates, so the
+next unblocked implementation work is **`ocelhq-wvag.7`** — branch `isr-herd/07-edge-l0-l1` off
+`isr-herd/05-origin-reads-snapshot` and note it will need rebasing once `.6` lands ahead of it.
+`ocelhq-wvag.9` is the better thing to start first if a deploy can be authorized, since it
+blocks `.8` and needs live measurement.
 
-Three review rounds have now landed eleven real defects rather than polish, and **in every
+Four review rounds have now landed eleven real defects rather than polish, and **in every
 single case the failure was silent**: a write dropped with no log, a herd at the auth boundary,
 storage written for a caller who never authenticated, a projection that would miss forever if
 two derivations drifted, a snapshot that grows unboundedly because it was created without an
