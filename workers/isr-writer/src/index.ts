@@ -112,7 +112,9 @@ async function readJson<T>(request: Request): Promise<T | undefined> {
 //
 // - POST /<isrPrefix>/initialize and POST /<isrPrefix>/destroy seed and retire
 //   that deploy's write-secret hash, authorized by the account-level bootstrap
-//   credential, which authorizes nothing else.
+//   credential, which authorizes nothing else. initialize also starts the
+//   build's heartbeat, so a build nothing ever invalidates still republishes
+//   its clock.
 // - PUT and GET /<isrPrefix>/entry?key=<cache key> write and read one entry,
 //   authenticated with that deploy's own write secret. The object key is
 //   derived from the authenticated prefix, so no caller can address another
@@ -145,6 +147,7 @@ export default class extends WorkerEntrypoint<Env> {
         return new Response("Bad Request", { status: 400 });
       }
       await deployStub(this.env, isrPrefix).initialize(body.secretHash);
+      await snapshotStub(this.env, isrPrefix).begin(isrPrefix);
       // Not `refreshed`: an isolate that served a redeploy's predecessor still
       // owes the new generation its one registry re-read.
       memoize(isrPrefix, body.secretHash, false);
