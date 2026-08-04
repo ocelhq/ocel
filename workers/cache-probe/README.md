@@ -58,7 +58,7 @@ Useful flags (defaults in parentheses):
 | --- | --- |
 | `--base` | probe origin, required |
 | `--concurrency` (64) | requests per burst; this is what spreads load across isolates |
-| `--rounds` (4) | census rounds; the sentinel phase reads for `rounds * 2` bursts |
+| `--rounds` (4) | census rounds, each on a fresh connection pool; the sentinel phase reads for `rounds * 2` bursts |
 | `--sentinelSeconds` (60) | TTL for the sentinel entry, long enough not to expire mid-read |
 | `--ttls` (10) | comma-separated TTLs to measure, e.g. `--ttls 1,5,10,30` |
 | `--pollSeconds` (1) | TTL poll interval; it bounds how tightly the lifetime is bracketed |
@@ -71,11 +71,28 @@ Useful flags (defaults in parentheses):
 | route | does |
 | --- | --- |
 | `GET /identity` | `{ isolate, colo, host }` — the isolate id is module state, minted once per isolate |
-| `PUT /entry?run=&ttl=` | `cache.put` a sentinel naming the writing isolate, with `cache-control: max-age=<ttl>` |
-| `GET /entry?run=` | `cache.match`, reporting `hit`, the sentinel's `writer`, and Cloudflare's `age` |
-| `DELETE /entry?run=` | `cache.delete`, for cleaning a colo between runs |
+| `PUT /entry?run=&ttl=` | `cache.put` a sentinel naming the writing isolate, with `cache-control: max-age=<ttl>`, then reads it straight back from the same isolate and reports that as `verified` |
+| `GET /entry?run=` | `cache.match`, reporting `hit`, the sentinel's `writer`, and Cloudflare's `age` and `cache-control` |
 
-Runs are keyed by a unique `run` id, so a repeat run never reads a previous run's entry.
+Runs are keyed by a unique `run` id, so a repeat run never reads a previous run's entry and
+nothing ever needs deleting.
+
+`verified` is the positive control: `false` on a run whose sentinel verdict is `never-cached`
+says the cache stored nothing at all, which is a deployment problem rather than a finding.
+
+## Two confounds the runner works around, and one it cannot
+
+- **Socket reuse.** undici pools keep-alive sockets per origin, so repeating a burst on the
+  default dispatcher replays the same connections. The census opens a fresh dispatcher per
+  round. Whether Cloudflare pins a request to an isolate by connection at all is undocumented
+  — this probe is measuring that layer, so it assumes nothing and just varies the input.
+- **Polling luck in the TTL phase.** If the cache is isolate-local, only a read landing on the
+  writer's isolate can hit, and a fan-out that missed it says nothing about the entry's
+  lifetime. The runner therefore records the serving isolate per read and counts only polls
+  that could observe the entry (`authoritativePolls`); when none could, the verdict is
+  `indeterminate` rather than a confident `evicted-early`.
+- **Colo scope.** A single runner machine reaches one colo, and a colo is many machines. Even
+  a correct run measures the sharing behaviour of the machines that machine's requests reach.
 
 ## What the local test suite does and does not prove
 
@@ -87,11 +104,18 @@ deploy, which is why the findings doc's results sections stay `UNMEASURED` until
 
 ## Verdicts
 
-Sentinel: `cross-isolate-visible` (L1 viable as designed) · `isolate-local` (L1 is a no-op;
-L2 must be sized for isolate-count fan-in) · `never-cached` (cache inert — check the host) ·
-`inconclusive` (every read landed on the writer's own isolate; raise `--concurrency`).
+Sentinel: `cross-isolate-visible` (≥90% of cross-isolate reads hit; L1 viable as designed) ·
+`partially-visible` (some hit, some missed — read `crossIsolateHitRate`, which is the
+suppression factor L2 must be sized by) · `isolate-local` (other isolates read and all missed
+while the writer hit; L1 is a no-op and L2 must be sized for isolate-count fan-in) ·
+`never-cached` (cache inert — check `verified` and the host) · `inconclusive` (every read
+landed on the writer's own isolate; raise `--concurrency`).
 
 TTL: `honored` (a hit at or past the requested TTL) · `evicted-early` (gone before it) ·
-`indeterminate` (the bracket straddles the TTL; lower `--pollSeconds`) · `never-cached`.
+`indeterminate` (the bracket straddles the TTL — lower `--pollSeconds` — or no poll could
+observe the entry at all, i.e. `authoritativePolls` is 0) · `never-cached`.
 `stillLiveAtEndOfWindow` on a `honored` verdict means Cloudflare held the entry well past the
 requested TTL, which is its own finding — raise `--windowSeconds` to bound it.
+`maxObservedAgeSeconds` and `observedCacheControl` are Cloudflare's own account of the entry
+and are independent of polling luck: an `age` well past the requested TTL, or a
+`cache-control` that differs from what was written, answers the floored-TTL question directly.
