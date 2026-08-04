@@ -52,10 +52,10 @@ import "fmt"
 const RequiredBootstrapVersion = 9
 
 // seedingBootstrapVersion is what the *first* of a first bootstrap's two settles
-// stamps. That pass exists only to raise the buckets the artifact is uploaded
-// into, so it runs before the artifact is obtained and deliberately carries no
-// optimizer — and if the artifact is then refused, bootstrap errors out with that
-// stack already created. Stamping the required version there would leave a
+// stamps. That pass exists only to raise the buckets the artifacts are uploaded
+// into, so it runs before either is obtained and deliberately carries neither
+// account-global Lambda — and if an artifact is then refused, bootstrap errors
+// out with that stack already created. Stamping the required version there would leave a
 // virgin account passing CheckCompat with no optimizer at all: `ocel up` would
 // succeed and every image would 502 with nothing pointing at the cause. Stamped
 // one short of it, the same account is told exactly what it needs to hear — its
@@ -63,9 +63,9 @@ const RequiredBootstrapVersion = 9
 // what the seeding pass raised is precisely a pre-optimizer substrate.
 //
 // Only the second settle stamps RequiredBootstrapVersion. What it does NOT
-// require is that an optimizer exist: a build pinning no artifact skips the
-// seeding pass entirely, settles once, and stamps the required version with no
-// function, which is the deliberate softness described above.
+// require is that either function exist: a build pinning no artifact at all
+// skips the seeding pass entirely, settles once, and stamps the required version
+// with no function, which is the deliberate softness described above.
 const seedingBootstrapVersion = RequiredBootstrapVersion - 1
 
 // Compatibility is the outcome of comparing the deployed bootstrap version
