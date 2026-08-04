@@ -7,6 +7,7 @@ import {
   evaluate,
   refreshSentinelTtlSeconds,
   serveCached,
+  sentinelUrl,
   serveCachedImage,
   storagePolicy,
   storeInColo,
@@ -114,6 +115,43 @@ function countingOrigin(
   }) as CountingOrigin;
   fn.calls = 0;
   return fn;
+}
+
+// A release-gated origin: each call increments `calls` synchronously but
+// blocks on `gate`, so a burst can be held with its leader mid-fill and its
+// followers parked on the join. That's what makes the burst deterministic
+// instead of depending on incidental Promise.all scheduling.
+function gatedOrigin(respond: (call: number) => Promise<Response>) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  const origin = (async () => {
+    const call = ++origin.calls;
+    await gate;
+    return respond(call);
+  }) as (() => Promise<Response>) & { calls: number; release: () => void };
+  origin.calls = 0;
+  origin.release = release;
+  return origin;
+}
+
+// Lets the burst settle into its steady state — leader inside origin(),
+// followers parked — before the gate is opened.
+async function untilLeaderIsFilling(origin: { calls: number }) {
+  while (origin.calls < 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+// A refresh thunk that records its invocations and reports how it ended:
+// "landed", "missed" (the origin answered, but not ok) or "threw".
+function countingRun(outcome: "landed" | "missed" | "threw" = "landed") {
+  const run = (async () => {
+    run.calls++;
+    if (outcome === "threw") throw new Error("refresh failed");
+    return outcome === "landed";
+  }) as (() => Promise<boolean>) & { calls: number };
+  run.calls = 0;
+  return run;
 }
 
 const req = (url = "https://app.example/", init?: RequestInit) =>
@@ -627,31 +665,6 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
-  // A release-gated origin: each call increments `calls` synchronously but
-  // blocks on `gate`, so a burst can be held with its leader mid-fill and its
-  // followers parked on the join. That's what makes the burst deterministic
-  // instead of depending on incidental Promise.all scheduling.
-  function gatedOrigin(respond: (call: number) => Promise<Response>) {
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => (release = resolve));
-    const origin = (async () => {
-      const call = ++origin.calls;
-      await gate;
-      return respond(call);
-    }) as (() => Promise<Response>) & { calls: number; release: () => void };
-    origin.calls = 0;
-    origin.release = release;
-    return origin;
-  }
-
-  // Lets the burst settle into its steady state — leader inside origin(),
-  // followers parked — before the gate is opened.
-  async function untilLeaderIsFilling(origin: { calls: number }) {
-    while (origin.calls < 1) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-  }
-
   it("collapses a burst of concurrent misses to a single origin render", async () => {
     const clock = { ms: 0 };
     const cache = countingCache();
@@ -873,6 +886,34 @@ describe("serveCached", () => {
     expect(again.headers.get("x-ocel-cache")).toBe("STALE");
     expect(refresh.calls).toBe(1);
   });
+
+  it("releases the route's sentinel when the admitted refresh's origin errors", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock);
+    const t = target("errored-refresh", {
+      revalidate: 1,
+      refreshKey: "build:/errored",
+    });
+    const origin = countingOrigin("s-maxage=1");
+    // A 500 stores nothing and throws nothing: the refresh simply did not land.
+    const refresh = countingOrigin("s-maxage=1", "boom", 500);
+
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000;
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+    expect(refresh.calls).toBe(1);
+
+    // The route is still stale and nothing succeeded, so the next request must
+    // retry rather than be suppressed for the sentinel's whole TTL.
+    clock.ms = 6_500;
+    const again = await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+    expect(again.headers.get("x-ocel-cache")).toBe("STALE");
+    expect(refresh.calls).toBe(2);
+  });
 });
 
 describe("serveCachedImage", () => {
@@ -897,21 +938,14 @@ describe("serveCachedImage", () => {
 
     // Per-entry dedupe, exactly as before: one refresh each, not one between.
     expect(refresh.calls).toBe(2);
-    expect(cache.urls.filter((url) => url.startsWith("https://refresh.ocel/"))).toEqual([]);
+    // And no sentinel was ever consulted — not even under the entry keys, which
+    // is what an image would fall back to admitting under.
+    expect(cache.urls).not.toContain(sentinelUrl(one.key));
+    expect(cache.urls).not.toContain(sentinelUrl(two.key));
   });
 });
 
 describe("admitRefresh", () => {
-  // A run that records its invocations and can be told to reject.
-  function countingRun(fail = false) {
-    const run = (async () => {
-      run.calls++;
-      if (fail) throw new Error("refresh failed");
-    }) as (() => Promise<unknown>) & { calls: number };
-    run.calls = 0;
-    return run;
-  }
-
   it("suppresses the next admission of the same route within the sentinel's TTL", async () => {
     // The real workerd cache expires on real time, so the TTL boundary is
     // proven against a double that retains against the test's own clock.
@@ -947,19 +981,61 @@ describe("admitRefresh", () => {
     expect(run.calls).toBe(2);
   });
 
-  it("releases the sentinel when the refresh fails, so the next request retries", async () => {
+  it("releases the sentinel when the refresh throws, so the next request retries", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
-    const failing = countingRun(true);
+    const throwing = countingRun("threw");
     const succeeding = countingRun();
 
-    admitRefresh(deps, "build:/failed", failing);
+    admitRefresh(deps, "build:/failed", throwing);
     await deps.flush();
-    expect(failing.calls).toBe(1);
+    expect(throwing.calls).toBe(1);
 
     admitRefresh(deps, "build:/failed", succeeding);
     await deps.flush();
     expect(succeeding.calls).toBe(1);
+  });
+
+  it("releases the sentinel when the refresh never reached the origin", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, ttlCache(clock));
+    const missed = countingRun("missed");
+    const succeeding = countingRun();
+
+    admitRefresh(deps, "build:/missed", missed);
+    await deps.flush();
+    expect(missed.calls).toBe(1);
+
+    admitRefresh(deps, "build:/missed", succeeding);
+    await deps.flush();
+    expect(succeeding.calls).toBe(1);
+  });
+
+  it("measures the suppression from the refresh landing, not from the claim", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, ttlCache(clock));
+    // A 3s render: the claim is taken at 0 and the refresh lands at 3_000.
+    const slow = (async () => {
+      clock.ms += 3_000;
+      return true;
+    }) as () => Promise<boolean>;
+    const next = countingRun();
+
+    admitRefresh(deps, "build:/slow", slow);
+    await deps.flush();
+    expect(clock.ms).toBe(3_000);
+
+    // Past a TTL measured from the claim, still inside one measured from the
+    // landing — the whole window the refresh's own duration would otherwise eat.
+    clock.ms = 3_000 + refreshSentinelTtlSeconds * 1_000 - 1;
+    admitRefresh(deps, "build:/slow", next);
+    await deps.flush();
+    expect(next.calls).toBe(0);
+
+    clock.ms = 3_000 + refreshSentinelTtlSeconds * 1_000;
+    admitRefresh(deps, "build:/slow", next);
+    await deps.flush();
+    expect(next.calls).toBe(1);
   });
 
   it("admits every refresh when the colo cache is inert", async () => {
@@ -1002,7 +1078,7 @@ describe("admitRefresh", () => {
     expect(run.calls).toBe(1);
 
     // And a throwing delete after a failed run neither escapes nor suppresses.
-    const failing = countingRun(true);
+    const failing = countingRun("threw");
     admitRefresh(deps, "build:/throwing-failure", failing);
     await deps.flush();
     expect(failing.calls).toBe(1);

@@ -817,9 +817,11 @@ async function dispatchPrerender(
       const hit = await read();
       if (hit?.kind === "ppr") {
         if (hit.stale && revalidates) {
-          admitRefresh(deps.cache, refreshKey, async () =>
-            (await originBlocking()).body?.cancel(),
-          );
+          admitRefresh(deps.cache, refreshKey, async () => {
+            const response = await originBlocking();
+            response.body?.cancel();
+            return response.ok;
+          });
         }
         return composePpr(
           hit,
@@ -846,11 +848,12 @@ async function dispatchPrerender(
       // request, and this write mirrors that fresh response straight into colo
       // so the next request is a colo HIT instead of another R2 round-trip.
       if (hit.stale && revalidates) {
-        admitRefresh(cache, refreshKey, () =>
-          originBlocking().then((response) =>
-            storeInColo(cacheTarget, cache, response),
-          ),
-        );
+        admitRefresh(cache, refreshKey, async () => {
+          const response = await originBlocking();
+          const landed = response.ok;
+          await storeInColo(cacheTarget, cache, response);
+          return landed;
+        });
       }
       return servedFromStore(hit.response, hit.stale);
     };

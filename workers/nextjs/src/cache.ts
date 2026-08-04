@@ -428,20 +428,27 @@ function inFlightFill(
 }
 
 // How long one colo's admission of a route suppresses the next. The spike
-// measured a sentinel becoming readable from sibling isolates at ~200ms, and
-// TTLs honored exactly from 1s with no floor, so seconds is far above what the
-// record needs to be useful; the cost of going higher is that a sibling variant
-// of an already-refreshed route keeps serving stale for the rest of the window.
+// (docs/research/cloudflare-cache-api-spike.md) measured a sentinel becoming
+// readable from sibling isolates at ~200ms, and TTLs honored exactly from 1s
+// with no floor, so seconds is far above what the record needs to be useful;
+// the cost of going higher is that a sibling variant of an already-refreshed
+// route keeps serving stale for the rest of the window.
 export const refreshSentinelTtlSeconds = 5;
 
 // The Cache API keys on a URL and an admission key is not one, so synthesize
 // it: its own hostname, so a sentinel can never collide with an entry key, and
 // each path segment encoded on its own so the route's separators survive. The
-// key carries the build id, so two builds cannot collide either.
-function sentinelRequest(key: string): Request {
-  return new Request(
-    `https://refresh.ocel/${key.split("/").map(encodeURIComponent).join("/")}`,
-  );
+// key carries the build id, so two builds cannot collide either. Exported
+// because tests assert on the very urls this derives, and a second spelling of
+// it there would stay green through a change to this one.
+export function sentinelUrl(key: string): string {
+  return `https://refresh.ocel/${key.split("/").map(encodeURIComponent).join("/")}`;
+}
+
+function sentinelRecord(): Response {
+  return new Response(null, {
+    headers: { "cache-control": `max-age=${refreshSentinelTtlSeconds}` },
+  });
 }
 
 // True when this caller took the colo's admission. Every cache error admits:
@@ -450,16 +457,29 @@ function sentinelRequest(key: string): Request {
 async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> {
   try {
     if (await cache.match(sentinel)) return false;
-    await cache.put(
-      sentinel,
-      new Response(null, {
-        headers: { "cache-control": `max-age=${refreshSentinelTtlSeconds}` },
-      }),
-    );
+    await cache.put(sentinel, sentinelRecord());
   } catch {
     // Fail open, as above.
   }
   return true;
+}
+
+// A refresh that did not land must not suppress its own retry for a whole TTL.
+// One that did must — and its window is re-based on completion, because the
+// claim was taken before the render and a slow render would otherwise spend the
+// suppression on itself. A render longer than the whole TTL still lets a sibling
+// isolate re-admit mid-render; the goal is N to a few, not N to one.
+async function settleSentinel(
+  cache: Cache,
+  sentinel: Request,
+  landed: boolean,
+): Promise<void> {
+  try {
+    if (landed) await cache.put(sentinel, sentinelRecord());
+    else await cache.delete(sentinel);
+  } catch {
+    // Nothing to fall back to; the claim stands until its TTL lapses.
+  }
 }
 
 // refreshOnce collapses the requests one isolate holds in flight; the sentinel
@@ -467,32 +487,32 @@ async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> 
 // the colo to roughly one refresh per TTL. There is no compare-and-set, so two
 // isolates can both miss it and both proceed; the goal is N to a few, not to
 // one. On a deploy whose cache is inert this degrades to exactly refreshOnce.
+//
+// `run` reports whether the refresh landed: the origin answered ok, which is
+// what the admission was taken for. Storing the bytes is not the test — on the
+// interception path the render's real effect is the Lambda rewriting R2, and a
+// 200 this colo happens not to be able to store still did that work.
 export function admitRefresh(
   deps: CacheDeps,
   key: string,
-  run: () => Promise<unknown>,
+  run: () => Promise<boolean>,
 ): void {
-  const sentinel = sentinelRequest(key);
+  const sentinel = new Request(sentinelUrl(key));
   refreshOnce(deps, key, async () => {
     if (!(await claimSentinel(deps.cache, sentinel))) return;
+    let landed = false;
     try {
-      await run();
-    } catch {
-      // A refresh that failed must not suppress its own retry for a whole TTL.
-      // One that succeeded must: that suppression is the entire point.
-      try {
-        await deps.cache.delete(sentinel);
-      } catch {
-        // Nothing to fall back to; the claim stands until its TTL lapses.
-      }
+      landed = await run();
+    } finally {
+      await settleSentinel(deps.cache, sentinel, landed);
     }
   });
 }
 
-// Look the entry up and judge it: the served response, or null when this tier
-// cannot answer — absent, of an unrecognized format, or too old to serve even
-// stale, in which case the caller falls through to the tier below.
-async function serveFromColo(
+// Null when this tier cannot answer — the entry is absent, of an unrecognized
+// format, or too old to serve even stale — in which case the caller falls
+// through to the tier below.
+async function serveOrAdmitRefresh(
   keyRequest: Request,
   target: CacheTarget,
   deps: CacheDeps,
@@ -532,16 +552,17 @@ async function serveFromColo(
     // Serving stale is what triggers the background refresh, which forces a
     // blocking origin render so the entry is rewritten fresh for the next
     // request. The serve itself does not wait on it.
-    //
+    const refresh = async () => {
+      const response = await originBlocking();
+      const landed = response.ok;
+      await store(keyRequest, target, deps, policy, response);
+      return landed;
+    };
     // Only a caller that named a route takes the colo-wide decision. An image
     // names none: it is invalidated by its content hash changing rather than by
     // a stale route, so it keeps the per-isolate dedupe on its own entry.
-    const admit = target.refreshKey ? admitRefresh : refreshOnce;
-    admit(deps, target.refreshKey ?? target.key, () =>
-      originBlocking().then((response) =>
-        store(keyRequest, target, deps, policy, response),
-      ),
-    );
+    if (target.refreshKey) admitRefresh(deps, target.refreshKey, refresh);
+    else refreshOnce(deps, target.key, refresh);
     return policy.forServe(fromStorage(cached, true), "STALE");
   }
   return null; // "expired" — R2 may already hold a fresher entry.
@@ -558,10 +579,10 @@ async function colo(
   tagClock?: TagClock,
 ): Promise<Response> {
   const keyRequest = new Request(target.key);
-  const lookUp = () =>
-    serveFromColo(keyRequest, target, deps, policy, originBlocking, tagClock);
+  const serveOrRefresh = () =>
+    serveOrAdmitRefresh(keyRequest, target, deps, policy, originBlocking, tagClock);
 
-  const hit = await lookUp();
+  const hit = await serveOrRefresh();
   if (hit) return hit;
 
   // A fill for this exact variant is already running in this isolate, so join
@@ -571,8 +592,11 @@ async function colo(
   // answered with the wrong shape.
   const filling = inFlightFill(deps, target.key);
   if (filling) {
+    // Unbounded by design: a follower of a slow leader that then stores nothing
+    // pays the leader's latency plus its own render, the accepted cost of
+    // coalescing rather than a tunable timeout with its own failure mode.
     await filling;
-    const joined = await lookUp();
+    const joined = await serveOrRefresh();
     if (joined) return joined;
     // The leader's response was not storable (non-200, no-store, no s-maxage),
     // so there is no entry to serve and this request must render for itself.
