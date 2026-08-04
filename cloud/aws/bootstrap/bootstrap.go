@@ -194,6 +194,30 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 	return d, nil
 }
 
+// stackArtifacts is where the account-global Lambdas a stack renders read their
+// code from. Each is independently absent: a build that pins one artifact and
+// not the other renders one function and not the other, and each missing one
+// degrades on its own terms.
+type stackArtifacts struct {
+	optimizer artifactCode
+	publisher artifactCode
+}
+
+func (a stackArtifacts) present() bool { return a.optimizer.present() || a.publisher.present() }
+
+// stackPins is what this provider build ships for those Lambdas. One pinned and
+// the other not is a normal state: each is cut and pinned on its own release.
+type stackPins struct {
+	optimizer artifactPin
+	publisher artifactPin
+}
+
+func (p stackPins) pinned() bool { return p.optimizer.pinned() || p.publisher.pinned() }
+
+func pinnedArtifacts() stackPins {
+	return stackPins{optimizer: pinnedOptimizer(), publisher: pinnedTagPublisher()}
+}
+
 // substrate is the per-class difference between the two bootstrap paths: which
 // stack holds it, which template renders it, and what to call that step. The
 // steps themselves are identical, so both classes share run.
@@ -201,7 +225,7 @@ type substrate struct {
 	class     string
 	stackName string
 	stackStep string
-	template  func(edge.TrustBoundary, artifactCode, int) string
+	template  func(edge.TrustBoundary, stackArtifacts, int) string
 }
 
 func productionSubstrate() substrate {
@@ -226,7 +250,7 @@ func previewSubstrate() substrate {
 // Pulumi passphrase exists, idempotently. progress reports discrete steps and
 // log forwards detail; both may be nil.
 func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, progress, log func(string)) error {
-	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedOptimizer(), productionSubstrate(), progress, log)
+	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedArtifacts(), productionSubstrate(), progress, log)
 }
 
 // RunPreview creates or updates the preview infrastructure stack — the shared
@@ -243,7 +267,7 @@ func Run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 // seam: this signature is final and the passphrase/stamping contract is settled;
 // the preview stack template is filled in and exercised against real infra.
 func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, progress, log func(string)) error {
-	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedOptimizer(), previewSubstrate(), progress, log)
+	return run(ctx, cfn, ssmClient, iamClient, edgeProvider, artifact, pinnedArtifacts(), previewSubstrate(), progress, log)
 }
 
 // run bootstraps one substrate, edge first. The edge is a pure producer here —
@@ -251,10 +275,10 @@ func RunPreview(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAM
 // then provisions: an edge outside the provider's trust boundary needs the edge
 // reader IAM user and a static access key to sign its reads with, an edge inside
 // it needs neither, so neither is created.
-// pin is the optimizer artifact this build ships; it is a parameter rather than
-// read from the constants here so a test can exercise the whole placement path
-// against a fixture artifact without a cut release.
-func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, pin artifactPin, sub substrate, progress, log func(string)) error {
+// pins are the artifacts this build ships; they are a parameter rather than read
+// from the constants here so a test can exercise the whole placement path
+// against fixture artifacts without a cut release.
+func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, edgeProvider edge.Provider, artifact Artifacts, pins stackPins, sub substrate, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
 			f(msg)
@@ -320,8 +344,8 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	if err != nil {
 		return err
 	}
-	if pin.pinned() && deployed.ArtifactBucket == "" {
-		if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, artifactCode{}, seedingBootstrapVersion), namedIAM); err != nil {
+	if pins.pinned() && deployed.ArtifactBucket == "" {
+		if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, stackArtifacts{}, seedingBootstrapVersion), namedIAM); err != nil {
 			return err
 		}
 		if deployed, err = checkStack(ctx, cfn, sub.stackName); err != nil {
@@ -329,12 +353,18 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 		}
 	}
 
-	code, err := ensureOptimizerArtifact(ctx, artifact, deployed.ArtifactBucket, pin)
-	if err != nil {
+	var code stackArtifacts
+	if code.optimizer, err = ensureOptimizerArtifact(ctx, artifact, deployed.ArtifactBucket, pins.optimizer); err != nil {
 		return err
 	}
-	if !code.present() {
+	if code.publisher, err = ensureTagPublisherArtifact(ctx, artifact, deployed.ArtifactBucket, pins.publisher); err != nil {
+		return err
+	}
+	if !code.optimizer.present() {
 		report(log, "no image optimizer artifact is pinned in this provider build; none is created, and /_next/image answers 502 as it did before")
+	}
+	if !code.publisher.present() {
+		report(log, "no tag publisher artifact is pinned in this provider build; none is created, and tag invalidations reach the edge the way they did before")
 	}
 
 	if err := upsertCFNStack(ctx, cfn, sub.stackName, sub.template(edgeOut.Trust, code, RequiredBootstrapVersion), namedIAM); err != nil {
@@ -473,7 +503,7 @@ func generatePassphrase() (string, error) {
 // the given trust posture. The BootstrapVersion output is single-sourced from
 // RequiredBootstrapVersion so the deployed version and the provider's
 // requirement never drift.
-func stackTemplate(trust edge.TrustBoundary, optimizer artifactCode, version int) string {
+func stackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel bootstrap - account-global resources for the Ocel AWS provider.
 Resources:
@@ -491,7 +521,7 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
@@ -501,7 +531,7 @@ Resources:
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(optimizer), edgeUserResource(EdgeUserName, trust, optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(optimizer), outputVersion, version, outputInfraClass, ClassProduction)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), edgeUserResource(EdgeUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
@@ -515,7 +545,7 @@ Resources:
 // account, so — like RunPreview itself — they are added and exercised there.
 // The stamped class, the shared backend, and the stack's independent lifecycle
 // are settled here.
-func previewStackTemplate(trust edge.TrustBoundary, optimizer artifactCode, version int) string {
+func previewStackTemplate(trust edge.TrustBoundary, code stackArtifacts, version int) string {
 	return fmt.Sprintf(`AWSTemplateFormatVersion: '2010-09-09'
 Description: Ocel preview infrastructure - shared substrate per-PR previews are carved from.
 Resources:
@@ -533,7 +563,7 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
     Value: !Ref StateBucket
@@ -543,7 +573,7 @@ Resources:
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(optimizer), edgeUserResource(EdgePreviewUserName, trust, optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(optimizer), outputVersion, version, outputInfraClass, ClassPreview)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), edgeUserResource(EdgePreviewUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), outputVersion, version, outputInfraClass, ClassPreview)
 }
 
 // stateTableResource renders the StateTable resource block shared by both

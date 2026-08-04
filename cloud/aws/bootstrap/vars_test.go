@@ -84,8 +84,8 @@ func varsSubstrates() []struct {
 		class    string
 		template string
 	}{
-		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
-		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)},
+		{"production", ClassProduction, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
+		{"preview", ClassPreview, previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
 	}
 }
 
@@ -266,7 +266,7 @@ func TestRun_ProvisionsTheVariableStoreIdempotently(t *testing.T) {
 // block, this fails loudly instead of upgrading from a fiction.
 func preStoreTemplate(t *testing.T) string {
 	t.Helper()
-	tmpl := stackTemplate(edge.TrustExternal, fixtureOptimizerCode(), RequiredBootstrapVersion)
+	tmpl := stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)
 	for _, block := range []string{varsResources(ClassProduction), varsOutputs()} {
 		if block == "" || !strings.Contains(tmpl, block) {
 			t.Fatalf("cannot derive a pre-store template: the current one has no\n%s", block)
