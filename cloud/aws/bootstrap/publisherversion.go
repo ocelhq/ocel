@@ -37,10 +37,10 @@ package bootstrap
 const (
 	// TagPublisherArtifactVersion is the released artifact's version, which is
 	// also the release tag it is published under.
-	TagPublisherArtifactVersion = ""
+	TagPublisherArtifactVersion = "0.0.1"
 
 	// TagPublisherArtifactSHA256 is the lowercase hex sha256 of that asset's
 	// bytes. The build script produces a reproducible archive (fixed timestamps,
 	// sorted entries), so this digest is stable across machines.
-	TagPublisherArtifactSHA256 = ""
+	TagPublisherArtifactSHA256 = "7b9350c95704369fa5f13ab16f434e1e23e3c19dc87a0d4dec8480f7607bdc5c"
 )
