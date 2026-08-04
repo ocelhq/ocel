@@ -81,7 +81,7 @@ function cacheControlOf(ctx: any): CacheEntryFile["cacheControl"] | undefined {
 // beside the function by the adapter under this name. It ships in the bundle
 // rather than being fetched, so the code reading it and the build that wrote it
 // are the same artifact and can never be a version apart.
-const variantHeadersPath = "variant-headers.json";
+const variantHeadersFile = "variant-headers.json";
 
 // A route with no projected headers is a route the build never prerendered, and
 // an unreadable projection is a bundle that would have had nothing to reseed
@@ -89,7 +89,7 @@ const variantHeadersPath = "variant-headers.json";
 function loadVariantHeaders(): Record<string, Record<string, unknown>> {
   const root = process.env.LAMBDA_TASK_ROOT ?? process.cwd();
   try {
-    const parsed = JSON.parse(readFileSync(join(root, variantHeadersPath), "utf8"));
+    const parsed = JSON.parse(readFileSync(join(root, variantHeadersFile), "utf8"));
     return isProjection(parsed) ? parsed : {};
   } catch {
     return {};
@@ -225,11 +225,8 @@ export default class OcelCacheHandler {
       const store = this.store;
       const value = serialize(data);
       if (data.kind === "FETCH") value.tags = ctx?.tags ?? [];
-      // The per-variant rscHeaders/segmentHeaders live only in the build's
-      // prerender output — Next's runtime set() payload carries a single
-      // page-level headers map. Left alone, this rewrite would drop them and
-      // silently disable PPR at the edge, so the build's own projection reseeds
-      // them from inside this bundle rather than from the entry being replaced.
+      // Reseeded from the build's projection, never from the entry being
+      // replaced — see variantHeaderProjection in the adapter for why.
       if (data.kind === "APP_PAGE") {
         Object.assign(value, this.variantHeaders[cacheKey(key)]);
       }
