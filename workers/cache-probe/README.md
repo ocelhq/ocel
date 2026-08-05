@@ -1,6 +1,6 @@
 # cache-probe
 
-A throwaway instrument for `ocelhq-wvag.1` and `ocelhq-wvag.9`. It answers questions about
+A throwaway instrument for `ocelhq-wvag.1`, `ocelhq-wvag.9` and `ocelhq-wvag.16`. It answers questions about
 Cloudflare's Cache API that Cloudflare does not document, and that the edge L1 sentinel design
 (`ocelhq-wvag.7`) and the L2 lease sizing (`ocelhq-wvag.8`) both rest on.
 
@@ -21,6 +21,8 @@ do at all:
 5. How long after a claimer begins its `match` does a second isolate's `match` see it — the
    **write-visibility window `W`**, which is the term that actually sizes L2.
 6. How many claims **escape** L1 in one colo per stale event at burst size `N`?
+7. How far does a **jittered admission delay** `J` — the one `ocelhq-wvag.16` proposes for L1 —
+   drive that escape count down, and does it approach 1 or plateau above it?
 
 Findings go in `docs/research/cloudflare-cache-api-spike.md`. That document is the
 deliverable; this package is only how it gets filled in.
@@ -88,6 +90,10 @@ node scripts/race.ts --base https://probe.<your-zone> --phase control
 node scripts/race.ts --base https://probe.<your-zone> --phase gap   --trials 200
 node scripts/race.ts --base https://probe.<your-zone> --phase burst --trials 100 \
   --sizes 2,8,32,128 --window <W from the gap phase, in ms>
+
+# the ocelhq-wvag.16 sweep: one burst size, the jitter window swept
+node scripts/race.ts --base https://probe.<your-zone> --phase burst --trials 100 \
+  --sizes 128 --window 8 --jitters 0,100,250,500,1000,2000
 ```
 
 **Phase 0, `--phase control`, gates the other two.** It writes and reads back the same record
@@ -143,7 +149,32 @@ claim; `mixed-colo` cannot fire from a single driver host, which reaches exactly
 `single-isolate` is live but near-vacuous at `N ≥ 2` on distinct pre-warmed sockets. The gap
 phase's `leader-did-not-claim` and `same-isolate` buckets are the ones that demonstrably fire.
 
-With `--window`, the phase prints the sizing table PR 8 cites:
+**`--jitters` sweeps the admission delay (`ocelhq-wvag.16`).** Each racer's worker draws
+`U[0, J)` and sleeps it *before* claiming, so the delay sits on the same side of the network as
+the claim. A driver-imposed delay would also spread the **arrivals**, and arrival spread
+suppresses claims on its own — the effect this instrument has to hold constant. `J = 0`
+reproduces the un-jittered burst exactly, and is the baseline every jittered row is read
+against.
+
+Two live checks guard it, because "the flag was accepted" is not evidence the flag was used:
+
+- **the draws must cover the window.** Each racer echoes the delay it drew, and a run whose
+  draws do not straddle `J/2` aborts. A worker that ignored `--jitter` would otherwise print a
+  collapsed herd for a system that never jittered — the same shape of dead detector as the
+  fixed socket pool that voided the first burst.
+- **the draw must fit inside the request.** The driver times each racer from before the
+  request is queued, which bounds the worker's own wall clock from above, so a delay reported
+  but not slept aborts the run.
+
+`lateEscapes` is what tells a collapse from a floor. It counts, per trial, the escaping
+isolates whose draw put them more than `W` **after the trial's first claim** — measured against
+the first claim rather than the nearest one before it, because the first has had the longest to
+propagate and is therefore the most generous explanation available. If `E` stops falling as `J`
+grows and `lateEscapes ≈ E − 1`, the floor is isolates that cannot see each other's claims at
+any separation (`.9` §7 measured that non-uniformity directly). If `lateEscapes ≈ 0`, the
+window simply has not been outrun yet.
+
+With `--window` and no jitter, the phase prints the sizing table PR 8 cites:
 
 ```
 E = min(1 + λ_colo · W, I_colo)      escapes per colo per stale event
@@ -155,6 +186,12 @@ R = C · E / refreshSentinelTtlSeconds sustained L2 request rate
 measurable here.** It is a property of the operator's traffic, not of Cloudflare, so it is a
 parameter and the table is printed across a range of it.
 
+The table is **suppressed on a jittered sweep**: `E = 1 + λ·W` models the un-jittered path,
+where every arrival inside the window claims. Under jitter the claimant pool inside one window
+is bounded by the isolate count rather than by λ (`1 + I_colo·W/J`, which takes no λ at all),
+and printing the un-jittered model over jittered measurements is exactly the kind of green
+number this package exists not to produce.
+
 Flags (defaults in parentheses):
 
 | flag | meaning |
@@ -164,6 +201,7 @@ Flags (defaults in parentheses):
 | `--trials` (200 gap / 100 burst) | trials per Δ or per `N` |
 | `--deltas` (`0,10,25,50,100,150,200,300,500,1000`) | the Δ sweep, in ms |
 | `--sizes` (`2,8,32,128`) | burst sizes |
+| `--jitters` (`0`) | admission-jitter windows to sweep, in ms; `0` is the un-jittered baseline. Every `--sizes` × `--jitters` cell is a full run of `--trials` |
 | `--sockets` (16) | pre-warmed connections the gap phase draws its pairs from; minimum 2, since a pool of one can never produce a cross-isolate pair |
 | `--scope` (`offzone`) | which key shape to race under; `offzone` is production's |
 | `--window` | `W` in ms, so the burst phase can print the sizing table |
@@ -192,7 +230,7 @@ shrinking denominator is visible rather than silent.
 | `GET /identity` | `{ isolate, colo, host }` — the isolate id is module state, minted once per isolate |
 | `PUT /entry?run=&ttl=` | `cache.put` a sentinel naming the writing isolate, with `cache-control: max-age=<ttl>`, then reads it straight back from the same isolate and reports that as `verified` |
 | `GET /entry?run=` | `cache.match`, reporting `hit`, the sentinel's `writer`, and Cloudflare's `age` and `cache-control` |
-| `POST /race?key=&seq=&scope=&ttl=` | one `match`-then-`put` claim on a cold key, reporting `{ claimed, isolate, colo, key, scope, seq }`. POST so nothing upstream treats a claim as retriable; the cache key itself is a GET `Request`, since `cache.put` throws on anything else |
+| `POST /race?key=&seq=&scope=&ttl=&jitter=` | draws `U[0, jitter)`, sleeps it, then makes one `match`-then-`put` claim on a cold key, reporting `{ claimed, isolate, colo, key, scope, seq, delayMs }`. POST so nothing upstream treats a claim as retriable; the cache key itself is a GET `Request`, since `cache.put` throws on anything else |
 | `GET /control?run=&scope=&mode=write\|read` | Phase 0. `write` puts a record and reads it back from the same isolate (`verified`); `read` reports `hit` and the writing isolate |
 
 `/race` and `/control` answer `cache-control: no-store` on a per-racer unique URL, because the

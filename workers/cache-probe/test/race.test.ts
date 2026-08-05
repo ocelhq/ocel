@@ -17,6 +17,7 @@ interface RaceResponse {
   key: string;
   scope: string;
   seq: string | null;
+  delayMs: number;
 }
 
 describe("/race", () => {
@@ -61,6 +62,28 @@ describe("/race", () => {
 
     expect((await other.json<RaceResponse>()).claimed).toBe(true);
     expect((await elsewhere.json<RaceResponse>()).claimed).toBe(true);
+  });
+
+  it("rejects a negative jitter rather than reading it as none", async () => {
+    expect((await post("/race?key=a&jitter=-5")).status).toBe(400);
+    expect((await post("/race?key=a&jitter=abc")).status).toBe(400);
+  });
+
+  it("draws no delay at all when no jitter was asked for", async () => {
+    const body = await (await post("/race?key=nojitter&seq=0")).json<RaceResponse>();
+    expect(body.delayMs).toBe(0);
+
+    const explicit = await (await post("/race?key=nojitter2&seq=0&jitter=0")).json<RaceResponse>();
+    expect(explicit.delayMs).toBe(0);
+  });
+
+  it("draws and reports a delay inside the window it was given, and spends it", async () => {
+    const started = Date.now();
+    const body = await (await post("/race?key=jittered&seq=0&jitter=40")).json<RaceResponse>();
+
+    expect(body.delayMs).toBeGreaterThan(0);
+    expect(body.delayMs).toBeLessThan(40);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(Math.floor(body.delayMs));
   });
 
   it("marks every racing response no-store, so the zone cannot serve one body twice", async () => {

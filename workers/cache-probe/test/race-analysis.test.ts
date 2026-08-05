@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   chooseWindow,
   distribution,
+  jitterVerdict,
   outcomeOf,
   sizingTable,
   summarizeBurst,
@@ -19,6 +20,7 @@ const outcome = (over: Partial<RaceOutcome> = {}): RaceOutcome => ({
   claimed: false,
   isolate: "aaaa1111",
   colo: "JNB",
+  delayMs: 0,
   ...over,
 });
 
@@ -37,27 +39,32 @@ const response = (over: Partial<RaceResponse> = {}): RaceResponse => ({
   key: "race-1",
   scope: "offzone",
   seq: "0",
+  delayMs: 0,
   ...over,
 });
 
+// A racer that neither asked for jitter nor could have slept any.
+const unjittered = { jitterMs: 0, elapsedMs: 70 };
+
 describe("outcomeOf", () => {
   it("narrows a response that answered the racer that sent it", () => {
-    expect(outcomeOf(response(), "race-1", 0)).toEqual({
+    expect(outcomeOf(response(), "race-1", 0, unjittered)).toEqual({
       seq: 0,
       claimed: true,
       isolate: "aaaa1111",
       colo: "JNB",
+      delayMs: 0,
     });
   });
 
   it("refuses a body answered for another racer's seq", () => {
-    expect(() => outcomeOf(response({ seq: "1" }), "race-1", 0)).toThrow(
+    expect(() => outcomeOf(response({ seq: "1" }), "race-1", 0, unjittered)).toThrow(
       "received another's body",
     );
   });
 
   it("refuses a body answered for another key", () => {
-    expect(() => outcomeOf(response({ key: "race-2" }), "race-1", 0)).toThrow(
+    expect(() => outcomeOf(response({ key: "race-2" }), "race-1", 0, unjittered)).toThrow(
       "received another's body",
     );
   });
@@ -65,7 +72,36 @@ describe("outcomeOf", () => {
   it("refuses a colo-less response rather than defaulting it to a shared unknown", () => {
     // Two racers defaulted to the same "unknown" would compare equal and pass
     // the mixed-colo gate that exists to catch exactly that.
-    expect(() => outcomeOf(response({ colo: null }), "race-1", 0)).toThrow("without a colo");
+    expect(() => outcomeOf(response({ colo: null }), "race-1", 0, unjittered)).toThrow("without a colo");
+  });
+
+  it("refuses a delay drawn outside the window the run asked for", () => {
+    // A worker that ignored --jitter, or drew from its own default, would make
+    // every escape count in the run belong to a different experiment.
+    expect(() => outcomeOf(response({ delayMs: 12 }), "race-1", 0, unjittered)).toThrow(
+      "outside [0, 0]",
+    );
+    expect(() =>
+      outcomeOf(response({ delayMs: 1_400 }), "race-1", 0, { jitterMs: 1_000, elapsedMs: 2_000 }),
+    ).toThrow("outside [0, 1000]");
+    expect(() =>
+      outcomeOf(response({ delayMs: Number.NaN }), "race-1", 0, unjittered),
+    ).toThrow("outside [0, 0]");
+  });
+
+  it("refuses a delay the request was too short to have contained", () => {
+    // Reported but not slept: the escape count would then be an un-jittered
+    // one, printed under a J. The driver's elapsed time starts before the
+    // request is queued, so it bounds the worker's own wall clock from above.
+    expect(() =>
+      outcomeOf(response({ delayMs: 800 }), "race-1", 0, { jitterMs: 1_000, elapsedMs: 70 }),
+    ).toThrow("reported but not spent");
+  });
+
+  it("accepts a delay the request comfortably contained", () => {
+    expect(
+      outcomeOf(response({ delayMs: 800 }), "race-1", 0, { jitterMs: 1_000, elapsedMs: 871 }),
+    ).toMatchObject({ delayMs: 800 });
   });
 });
 
@@ -233,8 +269,9 @@ describe("chooseWindow", () => {
   });
 });
 
-const burst = (outcomes: RaceOutcome[], dispersionMs = 1): BurstTrial => ({
+const burst = (outcomes: RaceOutcome[], dispersionMs = 1, jitterMs = 0): BurstTrial => ({
   size: outcomes.length,
+  jitterMs,
   dispersionMs,
   outcomes,
 });
@@ -322,6 +359,89 @@ describe("summarizeBurst", () => {
   it("keeps the trials it was asked for apart from the trials that answered", () => {
     expect(summarizeBurst(2, [counted(2)], 10, 7)).toMatchObject({ attempted: 7, trials: 1 });
     expect(summarizeBurst(2, [counted(2)], 10)).toMatchObject({ attempted: 1, trials: 1 });
+  });
+
+  const drew = (...delays: number[]) =>
+    burst(
+      delays.map((delayMs, i) => outcome({ seq: i, claimed: true, isolate: `iso-${i}`, delayMs })),
+      1,
+      1_000,
+    );
+
+  it("counts an escape as late when the first claim had longer than a window to reach it", () => {
+    // 0, then 5ms later (inside W=10 and so explained by the window), then
+    // 400ms later (not explained by anything the window can do).
+    const summary = summarizeBurst(3, [drew(0, 5, 400)], 10, 1, 1_000);
+
+    expect(summary.escapes).toMatchObject({ median: 3 });
+    expect(summary.lateEscapes).toMatchObject({ median: 1 });
+  });
+
+  it("measures lateness from the first claim, not the nearest one before it", () => {
+    // Each step is 6ms, inside a 10ms window, but the second and third claims
+    // are 6ms and 12ms after the FIRST — and it is the first that has had the
+    // longest to propagate, so only the third is unexplained.
+    expect(summarizeBurst(3, [drew(0, 6, 12)], 10, 1, 1_000).lateEscapes).toMatchObject({
+      median: 1,
+    });
+  });
+
+  it("has no lateness to report without a window", () => {
+    expect(summarizeBurst(3, [drew(0, 5, 400)], null, 1, 1_000).lateEscapes).toBeNull();
+  });
+
+  it("takes an isolate's earliest draw when it claimed twice", () => {
+    // The later draw would look late; the earlier one is the draw that actually
+    // took the admission, and production's L0 leaves only that one.
+    const trial = burst(
+      [
+        outcome({ seq: 0, claimed: true, isolate: "a", delayMs: 0 }),
+        outcome({ seq: 1, claimed: true, isolate: "b", delayMs: 4 }),
+        outcome({ seq: 2, claimed: true, isolate: "b", delayMs: 900 }),
+      ],
+      1,
+      1_000,
+    );
+
+    expect(summarizeBurst(3, [trial], 10, 1, 1_000)).toMatchObject({
+      escapes: { median: 2 },
+      rawClaims: { median: 3 },
+      lateEscapes: { median: 0 },
+    });
+  });
+
+  it("reports the drawn delays and the window they were drawn from", () => {
+    expect(summarizeBurst(3, [drew(0, 500, 900)], 10, 1, 1_000)).toMatchObject({
+      jitterMs: 1_000,
+      delayMs: { min: 0, max: 900, count: 3 },
+    });
+  });
+});
+
+describe("jitterVerdict", () => {
+  it("calls a run that asked for no jitter and drew none none-requested", () => {
+    expect(jitterVerdict(0, distribution([0, 0, 0]))).toBe("none-requested");
+    expect(jitterVerdict(0, null)).toBe("none-requested");
+  });
+
+  it("calls draws spanning the window's midpoint spread", () => {
+    expect(jitterVerdict(1_000, distribution([1, 400, 980]))).toBe("spread");
+  });
+
+  it("calls a window nobody drew from degenerate", () => {
+    // The failure this exists for: the worker ignores --jitter, every racer
+    // draws zero, and the escape count is an un-jittered one wearing a J.
+    expect(jitterVerdict(1_000, distribution([0, 0, 0]))).toBe("degenerate");
+    expect(jitterVerdict(1_000, null)).toBe("degenerate");
+  });
+
+  it("calls a constant standing in for a draw degenerate, on either side", () => {
+    expect(jitterVerdict(1_000, distribution([900, 900]))).toBe("degenerate");
+    expect(jitterVerdict(1_000, distribution([10, 20]))).toBe("degenerate");
+  });
+
+  it("calls a delay drawn where none was asked for degenerate", () => {
+    expect(jitterVerdict(0, distribution([0, 12]))).toBe("degenerate");
   });
 });
 

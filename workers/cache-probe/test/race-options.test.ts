@@ -18,6 +18,7 @@ describe("parseRaceOptions", () => {
       trials: 100,
       deltas: [0, 10, 25, 50, 100, 150, 200, 300, 500, 1_000],
       sizes: [2, 8, 32, 128],
+      jitters: [0],
       sockets: 16,
       windowMs: null,
       isolatesPerColo: null,
@@ -49,6 +50,12 @@ describe("parseRaceOptions", () => {
     expect(() => parse("--trials", "0")).toThrow("--trials must be at least 1");
     expect(() => parse("--trials", "abc")).toThrow("--trials must be a number");
     expect(() => parse("--trials", "")).toThrow("--trials must be a number");
+  });
+
+  it("sweeps jitter windows and keeps zero, the un-jittered baseline, expressible", () => {
+    expect(parse("--jitters", "0,250,1000").jitters).toEqual([0, 250, 1_000]);
+    expect(() => parse("--jitters", "0,-1")).toThrow("--jitters must be at least 0");
+    expect(() => parse("--jitters", "0,x")).toThrow("--jitters must be a number");
   });
 
   it("refuses a pool of one instead of quietly racing two", () => {
