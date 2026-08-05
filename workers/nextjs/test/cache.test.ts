@@ -7,6 +7,7 @@ import {
   cacheKey,
   deltaSeconds,
   evaluate,
+  refreshBackoffSeconds,
   refreshSentinelTtlSeconds,
   serveCached,
   sentinelUrl,
@@ -17,6 +18,7 @@ import {
   type CacheDeps,
   type CacheTarget,
   type EntryMeta,
+  type RefreshOutcome,
 } from "../src/cache";
 import type { TagVerdict } from "../src/tag-clock";
 import { coloDeps } from "./cache-deps";
@@ -177,14 +179,14 @@ async function untilLeaderIsFilling(origin: { calls: number }) {
   }
 }
 
-// A refresh thunk that records its invocations and reports how it ended:
-// "landed", "missed" (the origin answered, but not ok) or "threw".
-function countingRun(outcome: "landed" | "missed" | "threw" = "landed") {
+// A refresh thunk that records its invocations and reports how it ended: any
+// RefreshOutcome, or "threw".
+function countingRun(outcome: RefreshOutcome | "threw" = "landed") {
   const run = (async () => {
     run.calls++;
     if (outcome === "threw") throw new Error("refresh failed");
-    return outcome === "landed";
-  }) as (() => Promise<boolean>) & { calls: number };
+    return outcome;
+  }) as (() => Promise<RefreshOutcome>) & { calls: number };
   run.calls = 0;
   return run;
 }
@@ -1007,7 +1009,7 @@ describe("serveCached", () => {
     expect(refresh.calls).toBe(1);
   });
 
-  it("releases the route's sentinel when the admitted refresh's origin errors", async () => {
+  it("keeps the route's claim when the admitted refresh's origin refused it", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
     const t = target("errored-refresh", {
@@ -1015,7 +1017,9 @@ describe("serveCached", () => {
       refreshKey: "build:/errored",
     });
     const origin = countingOrigin("s-maxage=1");
-    // A 500 stores nothing and throws nothing: the refresh simply did not land.
+    // A 500 stores nothing and throws nothing. It is also the signal that the
+    // origin is shedding load, so re-admitting at once would aim the colo's
+    // whole arrival rate at an origin that just said it could not cope.
     const refresh = countingOrigin("s-maxage=1", "boom", 500);
 
     await serveCached(req(), t, deps, origin, refresh);
@@ -1026,13 +1030,13 @@ describe("serveCached", () => {
     await deps.flush();
     expect(refresh.calls).toBe(1);
 
-    // The route is still stale and nothing succeeded, so the next request must
-    // retry rather than be suppressed for the sentinel's whole TTL.
+    // Still stale, and still served stale — but the origin is not asked again
+    // inside the backoff.
     clock.ms = 6_500;
     const again = await serveCached(req(), t, deps, origin, refresh);
     await deps.flush();
     expect(again.headers.get("x-ocel-cache")).toBe("STALE");
-    expect(refresh.calls).toBe(2);
+    expect(refresh.calls).toBe(1);
   });
 });
 
@@ -1116,10 +1120,48 @@ describe("admitRefresh", () => {
     expect(succeeding.calls).toBe(1);
   });
 
+  it("holds the claim for the backoff when the origin refused the refresh", async () => {
+    // The throttle-amplification loop: a 429 or a 5xx used to release the claim
+    // at once, so the colo re-admitted on the very next request and the failure
+    // fed the herd it exists to damp.
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, ttlCache(clock));
+    const refused = countingRun("refused");
+
+    admitRefresh(deps, "build:/refused", refused);
+    await deps.flush();
+    expect(refused.calls).toBe(1);
+
+    clock.ms = refreshBackoffSeconds * 1_000 - 1;
+    admitRefresh(deps, "build:/refused", refused);
+    await deps.flush();
+    expect(refused.calls).toBe(1);
+  });
+
+  it("re-admits once the backoff on a refusing origin has lapsed", async () => {
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, ttlCache(clock));
+    const refused = countingRun("refused");
+
+    admitRefresh(deps, "build:/recovers", refused);
+    await deps.flush();
+
+    clock.ms = refreshBackoffSeconds * 1_000;
+    admitRefresh(deps, "build:/recovers", refused);
+    await deps.flush();
+
+    expect(refused.calls).toBe(2);
+  });
+
+  it("backs a refusing origin off for longer than a refresh that landed", async () => {
+    // Both hold the claim; only one of them is a reason to stay away.
+    expect(refreshBackoffSeconds).toBeGreaterThan(refreshSentinelTtlSeconds);
+  });
+
   it("releases the sentinel when the refresh never reached the origin", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
-    const missed = countingRun("missed");
+    const missed = countingRun("failed");
     const succeeding = countingRun();
 
     admitRefresh(deps, "build:/missed", missed);
@@ -1137,8 +1179,8 @@ describe("admitRefresh", () => {
     // A 3s render: the claim is taken at 0 and the refresh lands at 3_000.
     const slow = (async () => {
       clock.ms += 3_000;
-      return true;
-    }) as () => Promise<boolean>;
+      return "landed" as const;
+    }) as () => Promise<RefreshOutcome>;
     const next = countingRun();
 
     admitRefresh(deps, "build:/slow", slow);

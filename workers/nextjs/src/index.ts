@@ -11,6 +11,7 @@ import {
   admitRefresh,
   cacheKey,
   hasDraftCookie,
+  refreshOutcome,
   serveCached,
   servedFromStore,
   storeInColo,
@@ -855,7 +856,7 @@ async function dispatchPrerender(
             async () => {
               const response = await originBlocking();
               response.body?.cancel();
-              return response.ok;
+              return refreshOutcome(response);
             },
             hit.staleForMs,
           );
@@ -890,9 +891,9 @@ async function dispatchPrerender(
           refreshKey,
           async () => {
             const response = await originBlocking();
-            const landed = response.ok;
+            const outcome = refreshOutcome(response);
             await storeInColo(cacheTarget, cache, response);
-            return landed;
+            return outcome;
           },
           hit.staleForMs,
         );
