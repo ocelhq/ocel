@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
+import { coloDeps } from "./cache-deps";
 
 // Many routes share one Lambda ("a bundle"): dispatch[pathname].id is the
 // bundle's identity and the functionUrls key, while entryKey names which route
@@ -16,13 +17,13 @@ function noAssets(): RouteDeps["assetStore"] {
 }
 
 function missingCache(waitUntil: (p: Promise<unknown>) => void = () => {}) {
-  return {
+  return coloDeps({
     cache: {
       match: async () => undefined,
       put: async () => {},
     } as unknown as Cache,
     waitUntil,
-  };
+  });
 }
 
 const isrPrefix = "prod/p/app/build";

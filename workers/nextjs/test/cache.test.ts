@@ -18,6 +18,7 @@ import {
   type EntryMeta,
 } from "../src/cache";
 import type { TagVerdict } from "../src/tag-clock";
+import { coloDeps } from "./cache-deps";
 
 // A CacheDeps backed by the real workerd Cache, with a manual clock and a
 // waitUntil that records background work so tests can flush it deterministically.
@@ -31,16 +32,18 @@ function testDeps(
 } {
   const pending: Promise<unknown>[] = [];
   return {
-    cache,
-    now: () => clock.ms,
-    // Zero, so every test below reads as it did before the admission wait
-    // existed. The wait's own behaviour — that it happens at all, that it
-    // precedes the claim, and that the default is neither zero nor unbounded —
-    // is asserted in "admission jitter" with the default left in place.
-    admissionDelay: () => Promise.resolve(),
-    waitUntil: (promise) => {
-      pending.push(promise);
-    },
+    // coloDeps zeroes the admission wait, so every test below reads as it did
+    // before that wait existed. The wait's own behaviour — that it happens at
+    // all, that it precedes the claim, that its draw is bounded both by the
+    // jitter and by the entry's remaining stale window — is asserted where the
+    // default is left in place or the seam is driven deliberately.
+    ...coloDeps({
+      cache,
+      now: () => clock.ms,
+      waitUntil: (promise) => {
+        pending.push(promise);
+      },
+    }),
     flush: async () => {
       await Promise.all(pending.splice(0));
     },
@@ -1220,17 +1223,22 @@ describe("admitRefresh", () => {
     const run = countingRun();
     const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
 
-    const started = Date.now();
-    admitRefresh(deps, "build:/default", run);
-    expect(run.calls).toBe(0);
-    await deps.flush();
-    const elapsed = Date.now() - started;
+    try {
+      const started = Date.now();
+      admitRefresh(deps, "build:/default", run);
+      expect(run.calls).toBe(0);
+      await deps.flush();
+      const elapsed = Date.now() - started;
 
-    expect(random).toHaveBeenCalled();
-    expect(run.calls).toBe(1);
-    expect(elapsed).toBeGreaterThanOrEqual(admissionJitterMs / 2 - 20);
-    expect(elapsed).toBeLessThan(admissionJitterMs);
-    random.mockRestore();
+      expect(random).toHaveBeenCalled();
+      expect(run.calls).toBe(1);
+      expect(elapsed).toBeGreaterThanOrEqual(admissionJitterMs / 2 - 20);
+      expect(elapsed).toBeLessThan(admissionJitterMs);
+    } finally {
+      // In a finally, or a failure above pins Math.random at 0.5 for every test
+      // after it in this file.
+      random.mockRestore();
+    }
   });
 
   it("admits when only put throws, having already seen the sentinel miss", async () => {

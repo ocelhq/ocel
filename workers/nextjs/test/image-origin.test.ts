@@ -13,6 +13,7 @@ import {
   type ImageOriginRequest,
 } from "../src/image";
 import fixtures from "./fixtures/image-conformance.json";
+import { coloDeps } from "./cache-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
   .config;
@@ -48,7 +49,7 @@ function recordingFetch(response: () => Response | Promise<Response>) {
 // caller names its own slug: the cache is process-wide and the key hashes the
 // slug, so that is what keeps one test's entries out of another's.
 function testCache(): CacheDeps {
-  return { cache: caches.default, now: () => 0, waitUntil: () => {} };
+  return coloDeps({ cache: caches.default, now: () => 0, waitUntil: () => {} });
 }
 
 // serveImage over a request the fixture config accepts, so the origin is
