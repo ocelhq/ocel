@@ -71,6 +71,17 @@ const snapshotMemo = new WeakMap<
 // Only a writer that has just republished the replica needs this: the memo
 // window is what would otherwise answer that writer's own next read from the
 // snapshot it just replaced.
+// Reads in flight, so a burst of tagged requests arriving on one isolate before
+// its memo is filled shares a single round trip instead of issuing one store
+// read apiece. The memo above dedupes across time; this dedupes across
+// concurrency, which is the axis a colo's traffic actually arrives on.
+//
+// A read that rejects is not left here: the next caller starts a new one. It is
+// also not memoized — only the read's own answer is, and a throw never reaches
+// that line — so a joiner gets exactly what a solo caller would have got, and a
+// store blip costs one round trip's worth of callers, not a memo window's.
+const snapshotReads = new WeakMap<ObjectStoreReader, Promise<TagSnapshot | null>>();
+
 export function dropSnapshotMemo(store: ObjectStoreReader): void {
   snapshotMemo.delete(store);
 }
@@ -158,6 +169,19 @@ async function readSnapshot(
   const memoized = snapshotMemo.get(deps.store);
   if (memoized && now - memoized.at < snapshotMemoMs) return memoized.snapshot;
 
+  const inFlight = snapshotReads.get(deps.store);
+  if (inFlight !== undefined) return inFlight;
+
+  const read = fillSnapshot(cfg, deps, now).finally(() => snapshotReads.delete(deps.store));
+  snapshotReads.set(deps.store, read);
+  return read;
+}
+
+async function fillSnapshot(
+  cfg: { isrPrefix: string },
+  deps: TagClockDeps,
+  now: number,
+): Promise<TagSnapshot | null> {
   const key = tagSnapshotKey(cfg.isrPrefix);
   const cacheRequest = new Request(snapshotCacheUrl(key));
   const cached = await matchSnapshot(deps.snapshotCache, cacheRequest);
