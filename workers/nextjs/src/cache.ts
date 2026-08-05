@@ -1,4 +1,5 @@
 // The edge cache logic for prerendered routes.
+import { enqueued, type RevalidationRoute, type RevalidationSender } from "./revalidation";
 import type { TagClock, TagVerdict } from "./tag-clock";
 
 const ENTRY_MODIFIED = "x-ocel-entry-modified";
@@ -80,6 +81,12 @@ export interface CacheDeps {
   // this read every colo that admits renders, whatever another colo wrote to
   // the tier below half a second earlier.
   satisfiedFromBelow?: () => Promise<boolean>;
+  // Deduplicated deferral of an admitted background refresh: true iff the queue
+  // took the message, and then the render happens once, in the consumer, for
+  // every colo that asked. Absent (no queue bound) or false means this caller
+  // renders through originBlocking exactly as it did before the queue existed —
+  // the queue is an optimization with a contract, never a gate.
+  enqueueRevalidation?: RevalidationSender;
 }
 
 export interface CacheTarget {
@@ -93,6 +100,10 @@ export interface CacheTarget {
   tags?: string[];
   revalidate?: number;
   expiration?: number;
+  // How the queue's consumer would name this route back to the origin. Only the
+  // adapter layer can say it (§8), and only where a tier that can resolve it is
+  // bound; absent, an admitted refresh renders here.
+  revalidation?: RevalidationRoute;
 }
 
 export interface CachePolicy {
@@ -732,6 +743,9 @@ async function serveOrAdmitRefresh(
     // blocking origin render so the entry is rewritten fresh for the next
     // request. The serve itself does not wait on it.
     const refresh = async () => {
+      if (await enqueued(deps.enqueueRevalidation, target.revalidation, modified)) {
+        return "landed";
+      }
       const response = await originBlocking();
       const outcome = refreshOutcome(response);
       await store(keyRequest, target, deps, policy, response);

@@ -29,6 +29,12 @@ import {
 import type { ImageStore } from "./image-store";
 import { composePpr, resumeRequest } from "./ppr";
 import {
+  NEXT_RENDER_RECEIPT,
+  enqueued,
+  revalidationSender,
+  type RevalidationRoute,
+} from "./revalidation";
+import {
   intercept,
   type InterceptDeps,
   type InterceptionConfig,
@@ -135,6 +141,10 @@ export interface Env {
   // every other binding: a substrate that binds none of them leaves the edge
   // uncached rather than failing to boot.
   OCEL_AWS_REGION?: string;
+  // The substrate's ISR revalidation queue. Bound only where a consumer exists
+  // to drain it (cloud/edge/resolver.go); unbound, every admitted refresh
+  // renders through the origin as it did before the queue existed.
+  OCEL_REVALIDATE_QUEUE_URL?: string;
   OCEL_STATE_TABLE?: string;
   OCEL_ISR_BUCKET?: string;
   // The Function URL of the substrate's image optimizer, which /_next/image is
@@ -804,9 +814,36 @@ async function dispatchPrerender(
   // whether this particular variant is colo-cacheable.
   const refreshKey = `${deps.manifest.buildId}:${routePath}`;
 
+  // What an admitted refresh would name to the queue instead of rendering it
+  // here: the force-render headers of the blocking leg above (the consumer
+  // sends them verbatim), the receipt this framework stamps on a real
+  // regeneration, and the deploy and route the consumer resolves the origin
+  // from. It names no host — that is the consumer's to resolve — so a route
+  // whose renderer is not one of this deploy's recorded functions, or that no
+  // tier below could resolve a prefix for, names nothing and renders here.
+  const publicUrl = new URL(request.url);
+  const revalidation: RevalidationRoute | undefined =
+    admissionTier && revalidates && target.id !== undefined && routePath.startsWith("/")
+      ? {
+          headers: {
+            "x-prerender-revalidate": target.config.bypassToken ?? "",
+            ...(target.entryKey !== undefined
+              ? { [ENTRY_HEADER]: target.entryKey }
+              : {}),
+            "x-forwarded-host": publicUrl.host,
+            "x-forwarded-proto": publicUrl.protocol.replace(/:$/, ""),
+          },
+          expect: NEXT_RENDER_RECEIPT,
+          isrPrefix: admissionTier.config.isrPrefix,
+          routeId: target.id,
+          routePath,
+        }
+      : undefined;
+
   const cacheTarget: CacheTarget = {
     key: keyResult.cacheable ? keyResult.key : "",
     refreshKey,
+    revalidation,
     tags: target.tags,
     revalidate:
       typeof target.fallback?.initialRevalidate === "number"
@@ -909,6 +946,9 @@ async function dispatchPrerender(
             cacheDeps,
             refreshKey,
             async () => {
+              if (await enqueued(cacheDeps.enqueueRevalidation, revalidation, hit.lastModified)) {
+                return "landed";
+              }
               const response = await originBlocking();
               response.body?.cancel();
               return refreshOutcome(response);
@@ -945,6 +985,9 @@ async function dispatchPrerender(
           cacheDeps,
           refreshKey,
           async () => {
+            if (await enqueued(cacheDeps.enqueueRevalidation, revalidation, hit.lastModified)) {
+              return "landed";
+            }
             const response = await originBlocking();
             const outcome = refreshOutcome(response);
             await storeInColo(cacheTarget, cache, response);
@@ -1285,6 +1328,13 @@ export default {
         cache: {
           cache: caches.default,
           waitUntil: (promise) => ctx.waitUntil(promise),
+          // Built only where the substrate binds a queue and the credentials to
+          // send to it; absent, every admission site below renders as before.
+          enqueueRevalidation: revalidationSender(
+            env.OCEL_REVALIDATE_QUEUE_URL,
+            env.OCEL_EDGE_ACCESS_KEY_ID,
+            env.OCEL_EDGE_SECRET_KEY,
+          ),
         },
         interception: store
           ? {
