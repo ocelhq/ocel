@@ -164,6 +164,19 @@ export const GOLDEN_ROUTE = "/golden";
 export const GOLDEN_MARKER = "golden-body:v1";
 
 /**
+ * The probe page's own `revalidate`, kept short on purpose. `purpose: prefetch`
+ * is read at exactly one place in Next's response cache
+ * (`if (!entry.isStale || context.isPrefetch) return entry;`), where the FIRST
+ * operand short-circuits on a fresh entry — so a comparison made against a
+ * freshly warmed page proves only that the header does not change a fresh
+ * serve, and never evaluates the branch it is guarding. The assertion waits out
+ * this window before each pair so both legs are answered from a STALE entry,
+ * which is the only state where `purpose` can change anything — and the state
+ * suppression puts every governed route into.
+ */
+export const GOLDEN_REVALIDATE_SECONDS = 3;
+
+/**
  * The header the edge stamps on a user-path forward to suppress Next's own
  * self-revalidation (bd ocelhq-wvag.26, workers/nextjs/src/index.ts).
  */

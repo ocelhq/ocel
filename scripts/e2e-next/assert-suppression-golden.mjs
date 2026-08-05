@@ -20,6 +20,20 @@
 // A wrong draft cookie value is not draft mode to Next — it is ignored — so
 // both legs are ordinary renders of the probe page.
 //
+// WHY BOTH LEGS MUST BE STALE. `purpose` is read at one place
+// (`if (!entry.isStale || context.isPrefetch) return entry;`) whose first
+// operand short-circuits on a fresh entry, so a probe of a freshly warmed page
+// never reaches the operand under test. The probe page's window is
+// GOLDEN_REVALIDATE_SECONDS and each pair is preceded by a wait past it.
+//
+// TWO LIMITS OF THIS GATE, recorded rather than fixed. (1) Next emits
+// x-nextjs-cache only when `isSSG && !isDynamicRSCRequest && (!didPostpone ||
+// isPrefetchRSCRequest)` (app-page.js), so the staleness check below cannot
+// fire for a PPR route that postpones — harmless here, since those responses
+// are `private, no-store` and non-cacheable, and the probe page never
+// postpones. (2) the rsc variant sends `RSC: 1` without `Next-Router-Prefetch`,
+// so it compares full flight payloads rather than a router prefetch's.
+//
 // SCOPE: this script is the harness. The AUTHORITATIVE run is the live one in
 // bd ocelhq-wvag.27's session (design §9, e2e item 2). Landing it here proves
 // its logic (unit tested via lib.test.mjs), not the Lambda's behaviour on a
@@ -32,6 +46,7 @@
 
 import {
   GOLDEN_MARKER,
+  GOLDEN_REVALIDATE_SECONDS,
   GOLDEN_ROUTE,
   PREFETCH_PURPOSE_HEADER,
   PREFETCH_PURPOSE_VALUE,
@@ -40,6 +55,8 @@ import {
 
 const SETTLE_MS = 20_000;
 const POLL_INTERVAL_MS = 3_000;
+// Past the probe page's window, with room for the round-trip that warmed it.
+const STALE_WAIT_MS = (GOLDEN_REVALIDATE_SECONDS + 2) * 1_000;
 
 // Any value: hasDraftCookie (workers/nextjs/src/cache.ts) gates on the cookie's
 // presence, and Next ignores a value that is not its previewModeId.
@@ -63,12 +80,28 @@ await settle();
 
 let failures = 0;
 for (const variant of VARIANTS) {
+  // Each pair gets its own wait: the unsuppressed leg of the pair before it
+  // started a render, which will have put the entry back to fresh.
+  await sleep(STALE_WAIT_MS);
   // The suppressed leg first, so a difference cannot be blamed on ordering
-  // against a cold Lambda: it is the one paying any cold start.
+  // against a cold Lambda: it is the one paying any cold start, and so the
+  // entry is still stale when the second leg — the one that will revalidate
+  // it — is sent.
   const withHeader = await probe(variant, {
     [PREFETCH_PURPOSE_HEADER]: PREFETCH_PURPOSE_VALUE,
   });
   const without = await probe(variant, {});
+
+  const freshness = [withHeader.freshness, without.freshness];
+  if (!freshness.includes("STALE")) {
+    log(
+      `${variant.name}: neither leg was answered from a stale entry ` +
+        `(x-nextjs-cache ${freshness.join(" / ")}) — the only branch purpose: prefetch can ` +
+        `change was never evaluated, so no golden claim is made for this variant`,
+    );
+    failures++;
+    continue;
+  }
 
   if (withHeader.tier !== without.tier) {
     log(
@@ -81,7 +114,10 @@ for (const variant of VARIANTS) {
 
   const differences = goldenDifferences(withHeader, without);
   if (differences.length === 0) {
-    log(`${variant.name}: identical (tier ${withHeader.tier}, ${withHeader.body.length} bytes)`);
+    log(
+      `${variant.name}: identical (tier ${withHeader.tier}, x-nextjs-cache ` +
+        `${freshness.join(" / ")}, ${withHeader.body.length} bytes)`,
+    );
     continue;
   }
   failures++;
@@ -109,6 +145,7 @@ async function probe(variant, extra) {
     status: response.status,
     headers: response.headers,
     tier: response.headers.get("x-ocel-cache") ?? "none",
+    freshness: response.headers.get("x-nextjs-cache") ?? "none",
     body: await response.text(),
   };
 }
