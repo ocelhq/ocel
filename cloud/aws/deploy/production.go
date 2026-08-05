@@ -25,8 +25,6 @@ import (
 	"strings"
 	"time"
 
-	"sync"
-
 	ec2 "github.com/pulumi/pulumi-aws/sdk/v7/go/aws/ec2"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
@@ -148,23 +146,17 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	apps := manifestApps(manifest)
 	results := make([]appDeployResult, len(apps))
 	appOutputs := make([][]*deploymentsv1.ResourceOutput, len(apps))
-	var wg sync.WaitGroup
-	for i, app := range apps {
-		i, app := i, app
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			id := identities[app.GetName()]
-			outs, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], log)
-			appOutputs[i] = outs
-			record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs)
-			if err == nil {
-				err = recErr
-			}
-			results[i] = appDeployResult{App: app.GetName(), Identity: id, Record: record, Err: err}
-		}()
-	}
-	wg.Wait()
+	runAppStacks(len(apps), func(i int) {
+		app := apps[i]
+		id := identities[app.GetName()]
+		outs, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], log)
+		appOutputs[i] = outs
+		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs)
+		if err == nil {
+			err = recErr
+		}
+		results[i] = appDeployResult{App: app.GetName(), Identity: id, Record: record, Err: err}
+	})
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
 	if err := stageAndPromote(ctx, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
