@@ -43,9 +43,10 @@ async function once(deps: HandlerDeps, record: SqsRecord): Promise<Outcome> {
 // that group for this batch — its later records are reported unprocessed rather
 // than run out of order — while other groups carry on.
 //
-// A record with no group attribute is its own group, keyed by its message id:
-// one such record failing must not suppress the next, which shares nothing with
-// it.
+// A record with no group attribute — absent or empty; SQS FIFO sends neither,
+// and an empty one would collapse every such record into one shared group — is
+// its own group, keyed by its message id: one such record failing must not
+// suppress the next, which shares nothing with it.
 //
 // Nothing is allowed to throw out of here: a thrown handler fails the whole
 // batch, including groups that succeeded.
@@ -54,7 +55,7 @@ export async function handle(deps: HandlerDeps, event: { Records?: SqsRecord[] }
   const stopped = new Set<string>();
 
   for (const record of event.Records ?? []) {
-    const group = record.attributes?.MessageGroupId ?? record.messageId;
+    const group = record.attributes?.MessageGroupId || record.messageId;
     if (stopped.has(group)) {
       report(context(record.messageId, null), { event: "RevalidateSkipped", reason: "group-stopped" });
       batchItemFailures.push({ itemIdentifier: record.messageId });
