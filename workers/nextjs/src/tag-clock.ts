@@ -52,8 +52,36 @@ export interface TagClock {
 // These TTLs are the entire delay this design adds to an invalidation, because
 // the publisher republishes on every revalidateTag — so an invalidation raised
 // at the origin reaches a PoP within one TTL of being raised.
-const snapshotTtlSeconds = 10;
+export const snapshotTtlSeconds = 10;
 const snapshotMemoMs = 1_000;
+
+// How far below the ceiling a copy's lifetime may be drawn. A flat max-age is a
+// shared schedule: every cache shard in the colo holding the copy was filled in
+// the same cycle, so all of them lapse at the same instant, all of them read the
+// replica, and all of them write it back. That fan-in is bounded by nothing but
+// the shard count, it recurs every TTL, and no tag has to change for it to
+// happen — unlike everything else in this epic it is the steady-state cost of
+// serving tagged traffic at all.
+//
+// Drawn, the shards' lapse instants diffuse apart instead of staying phase
+// locked, and the fan-in at any one instant flattens toward one. This is the
+// argument admissionJitterMs makes for claims (workers/nextjs/src/cache.ts),
+// applied to an expiry rather than to an attempt.
+//
+// Drawn DOWNWARD, so it costs no staleness: the ceiling an invalidation waits
+// out stays exactly snapshotTtlSeconds, and the mean falls from 10s to 8.5s.
+// Seconds are integral because delta-seconds is, which leaves four phases —
+// enough, because the walk compounds every cycle rather than being redrawn from
+// the same offset.
+export const snapshotJitterSeconds = 4;
+
+// Exported so the draw is asserted directly rather than through a header, and
+// so the production default is what a test can exercise. It is the only source
+// of the copy's lifetime: there is no injected alternative to leave unwired.
+export function snapshotMaxAgeSeconds(): number {
+  const drawn = snapshotTtlSeconds - Math.floor(Math.random() * snapshotJitterSeconds);
+  return Math.max(1, drawn);
+}
 
 // Keyed by the binding itself, which is one stable object for the life of an
 // isolate. Keying on the binding rather than on module state is also what keeps
@@ -202,7 +230,7 @@ async function fillSnapshot(
     await deps.snapshotCache.put(
       cacheRequest,
       new Response(body!, {
-        headers: { "cache-control": `max-age=${snapshotTtlSeconds}` },
+        headers: { "cache-control": `max-age=${snapshotMaxAgeSeconds()}` },
       }),
     );
   }
