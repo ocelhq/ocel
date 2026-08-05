@@ -68,7 +68,8 @@ Next serves a stale entry without starting its own render (bd ocelhq-wvag.26) �
 the edge's admission tiers are then the only thing that can start one. That rests
 on one line of `next@16.2.10`, and OpenNext's caveat about it comes with it: a
 change to Next's prefetch handling would break it. `SUPPRESS_SELF_REVALIDATION`
-in `workers/nextjs/src/index.ts` is the one-line revert;
+in `workers/nextjs/src/cache.ts` is the one-line revert — it gates both the stamp
+and the colo tier's refusal to store the stale serve it produces;
 `assert-suppression-golden.mjs` is the tripwire.
 
 It fetches `smoke-app/app/golden/page.tsx` — a prerender whose body carries
@@ -78,6 +79,12 @@ is the header. Status, body bytes and headers must match, modulo the set in
 `GOLDEN_VOLATILE_HEADERS` (`date`/`age`, `x-nextjs-cache`, `x-ocel-cache`, and
 the Cloudflare/transport headers), each excluded for a reason named at the
 constant.
+
+Each pair is preceded by a wait past the probe page's own short `revalidate`, so
+both legs are answered from a STALE entry, and a pair where neither leg reports
+one fails. `purpose` is read beside a first operand that short-circuits on a
+fresh entry, so a comparison made against a freshly warmed page proves only that
+the header does not change a fresh serve.
 
 ```bash
 node scripts/e2e-next/assert-suppression-golden.mjs "$SMOKE_URL"
