@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"regexp"
 	"slices"
 	"strings"
@@ -693,5 +694,61 @@ func TestEdgeUser_SendsToTheQueueAndNothingElse(t *testing.T) {
 				t.Errorf("edge user sends to %v, want only the revalidation queue's own ARN", sendResources)
 			}
 		})
+	}
+}
+
+// TestEnsureRevalidatorArtifact_RefusesADigestMismatch is what the pin in
+// revalidatorversion.go actually buys. The consumer holds an app's bypass token
+// and signs requests at its origin, so bytes that are not the reviewed artifact
+// must never reach a customer's account: bootstrap stops, uploads nothing, and
+// names both digests so an operator can tell a moved release from a tampered
+// download.
+func TestEnsureRevalidatorArtifact_RefusesADigestMismatch(t *testing.T) {
+	art, store, source := fixtureArtifactDeps([]byte("not the revalidator anyone reviewed"))
+
+	code, err := ensureRevalidatorArtifact(context.Background(), art, "ocel-artifacts-test", fixtureRevalidatorPin())
+	if err == nil {
+		t.Fatal("a mismatched revalidator was accepted; it must refuse to deploy")
+	}
+	if code.present() {
+		t.Errorf("a refused revalidator still produced code %+v", code)
+	}
+	if store.puts != 0 {
+		t.Errorf("a refused revalidator was uploaded anyway (%d puts)", store.puts)
+	}
+	if want := revalidatorReleaseURL(fixtureRevalidatorPin().version); len(source.urls) != 1 || source.urls[0] != want {
+		t.Errorf("fetched %v, want exactly [%s]", source.urls, want)
+	}
+	if !strings.Contains(err.Error(), fixtureRevalidatorPin().sha256) {
+		t.Errorf("error does not name the required digest: %v", err)
+	}
+	if !strings.Contains(err.Error(), revalidatorLabel) {
+		t.Errorf("error does not name which artifact refused: %v", err)
+	}
+}
+
+// TestEnsureRevalidatorArtifact_UploadsAVerifiedArtifact is the same guarantee
+// from the other side: the bytes that do hash to the pin are uploaded verbatim,
+// under a key content-addressed on the digest, with the pin handed to S3 so the
+// stored checksum is something a later bootstrap can verify presence against.
+func TestEnsureRevalidatorArtifact_UploadsAVerifiedArtifact(t *testing.T) {
+	art, store, _ := fixtureArtifactDeps(fixtureArtifact)
+
+	code, err := ensureRevalidatorArtifact(context.Background(), art, "ocel-artifacts-test", fixtureRevalidatorPin())
+	if err != nil {
+		t.Fatalf("ensureRevalidatorArtifact: %v", err)
+	}
+	if !strings.Contains(code.key, fixtureDigest()) {
+		t.Errorf("key %q is not content-addressed on the pinned digest", code.key)
+	}
+	if got := string(store.objects[code.key]); got != string(fixtureArtifact) {
+		t.Errorf("uploaded %q, want the verified bytes verbatim", got)
+	}
+	want, err := fixtureRevalidatorPin().checksum(revalidatorLabel)
+	if err != nil {
+		t.Fatalf("checksum: %v", err)
+	}
+	if len(store.putChecksums) != 1 || store.putChecksums[0] != want {
+		t.Errorf("uploaded with checksums %v, want [%s]", store.putChecksums, want)
 	}
 }
