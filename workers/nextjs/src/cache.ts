@@ -43,6 +43,18 @@ export interface CacheDeps {
   // Absent means the real jittered one; tests inject a deterministic delay so
   // they are not sleeping a second apiece. See admissionJitterMs.
   admissionDelay?: (staleForMs: number) => Promise<void>;
+  // The tier below this one, consulted by an admitted background refresh after
+  // it takes the claim and before it renders. True means that tier already
+  // holds a fresher entry — and has mirrored it into this one — so the render
+  // would regenerate what is already there. Absent (no tier below is bound, or
+  // this is the image class, which has none) renders, as before.
+  //
+  // It exists because a background refresh reaches the origin through
+  // originBlocking, which carries x-prerender-revalidate straight to the
+  // Function URL: that call is never absorbed by the tier below, so without
+  // this read every colo that admits renders, whatever another colo wrote to
+  // the tier below half a second earlier.
+  refreshedFromBelow?: () => Promise<boolean>;
 }
 
 export interface CacheTarget {
@@ -535,6 +547,18 @@ async function settleSentinel(
   }
 }
 
+// True when the tier below answered the refresh on its own. Fails open on any
+// error — an unreadable tier below costs a duplicate render, while reading it
+// as fresh would cost the refresh entirely and leave the entry stale until the
+// claim lapsed. See CacheDeps.refreshedFromBelow.
+async function refreshedFromBelow(deps: CacheDeps): Promise<boolean> {
+  try {
+    return (await deps.refreshedFromBelow?.()) === true;
+  } catch {
+    return false;
+  }
+}
+
 // refreshOnce collapses the requests one isolate holds in flight; the sentinel
 // — a TTL-bounded record on the colo-shared Cache API — collapses the rest of
 // the colo to roughly one refresh per TTL. There is no compare-and-set, so two
@@ -564,7 +588,7 @@ export function admitRefresh(
     if (!(await claimSentinel(deps.cache, sentinel))) return;
     let landed = false;
     try {
-      landed = await run();
+      landed = (await refreshedFromBelow(deps)) || (await run());
     } finally {
       await settleSentinel(deps.cache, sentinel, landed);
     }

@@ -1158,6 +1158,96 @@ describe("admitRefresh", () => {
     expect(next.calls).toBe(1);
   });
 
+  it("skips the render when the tier below already holds a fresher entry", async () => {
+    // The whole point of the tier-below read: the origin call an admission
+    // makes goes straight to the Function URL, so nothing else can tell this
+    // colo that another one already regenerated the route.
+    const clock = { ms: 0 };
+    const deps = {
+      ...testDeps(clock, ttlCache(clock)),
+      refreshedFromBelow: async () => true,
+    };
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/already-fresh", run);
+    await deps.flush();
+
+    expect(run.calls).toBe(0);
+  });
+
+  it("holds the claim for a full TTL when the tier below answered for it", async () => {
+    // A refresh satisfied from below is a refresh that landed: the route is
+    // fresh again, so the next admission inside the TTL has nothing to do.
+    const clock = { ms: 0 };
+    const deps = {
+      ...testDeps(clock, ttlCache(clock)),
+      refreshedFromBelow: async () => true,
+    };
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/held", run);
+    await deps.flush();
+    clock.ms = refreshSentinelTtlSeconds * 1_000 - 1;
+    admitRefresh({ ...deps, refreshedFromBelow: async () => false }, "build:/held", run);
+    await deps.flush();
+
+    expect(run.calls).toBe(0);
+  });
+
+  it("renders when the tier below is still stale", async () => {
+    const clock = { ms: 0 };
+    const deps = {
+      ...testDeps(clock, ttlCache(clock)),
+      refreshedFromBelow: async () => false,
+    };
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/still-stale", run);
+    await deps.flush();
+
+    expect(run.calls).toBe(1);
+  });
+
+  it("renders when the tier-below read throws, never suppressing the refresh", async () => {
+    // Fail open, as everywhere on this path: an unreadable tier below costs a
+    // duplicate render, while treating it as fresh would cost the refresh.
+    const clock = { ms: 0 };
+    const deps = {
+      ...testDeps(clock, ttlCache(clock)),
+      refreshedFromBelow: async () => {
+        throw new Error("R2 exploded");
+      },
+    };
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/exploded", run);
+    await deps.flush();
+
+    expect(run.calls).toBe(1);
+  });
+
+  it("consults the tier below only after the claim, so a suppressed admission reads nothing", async () => {
+    const clock = { ms: 0 };
+    const cache = ttlCache(clock);
+    let reads = 0;
+    const deps = {
+      ...testDeps(clock, cache),
+      refreshedFromBelow: async () => {
+        reads++;
+        return false;
+      },
+    };
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/claimed", run);
+    await deps.flush();
+    admitRefresh(deps, "build:/claimed", run);
+    await deps.flush();
+
+    expect(run.calls).toBe(1);
+    expect(reads).toBe(1);
+  });
+
   it("admits every refresh when the colo cache is inert", async () => {
     // A domainless deploy answers on workers.dev, where caches.default accepts
     // every put and never hits: L1 must degrade to the per-isolate dedupe.
