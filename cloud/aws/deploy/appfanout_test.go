@@ -1,11 +1,24 @@
 package deploy
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
+
+// namedApps builds n distinct apps, so a test can tell which app a callback
+// was handed.
+func namedApps(n int) []*deploymentsv1.ManifestApp {
+	apps := make([]*deploymentsv1.ManifestApp, n)
+	for i := range apps {
+		apps[i] = &deploymentsv1.ManifestApp{Name: fmt.Sprintf("app-%d", i)}
+	}
+	return apps
+}
 
 // pinWindow is how long the test holds appConcurrency workers pinned while
 // watching for an over-admission. Proving nothing more was admitted needs a
@@ -27,7 +40,7 @@ func TestRunAppStacksAdmitsAtMostAppConcurrency(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runAppStacks(n, func(i int) {
+		runAppStacks(namedApps(n), func(i int, _ *deploymentsv1.ManifestApp) {
 			atomic.AddInt32(&ran[i], 1)
 
 			mu.Lock()
@@ -106,7 +119,7 @@ func TestRunAppStacksBelowLimitRunsFullyConcurrently(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		runAppStacks(n, func(i int) {
+		runAppStacks(namedApps(n), func(int, *deploymentsv1.ManifestApp) {
 			all.Done()
 			all.Wait() // deadlocks unless all n are live at once
 		})
@@ -119,15 +132,26 @@ func TestRunAppStacksBelowLimitRunsFullyConcurrently(t *testing.T) {
 	}
 }
 
-func TestRunAppStacksRunsEveryIndexExactlyOnce(t *testing.T) {
+// Every app runs exactly once, and each callback is handed the app that its
+// index names: the caller writes results into slot i, so a mismatch would
+// attribute one app's deploy result to another.
+func TestRunAppStacksRunsEveryAppExactlyOnceAtItsOwnIndex(t *testing.T) {
 	n := 5*appConcurrency + 1
+	apps := namedApps(n)
 	ran := make([]int32, n)
+	got := make([]*deploymentsv1.ManifestApp, n)
 
-	runAppStacks(n, func(i int) { atomic.AddInt32(&ran[i], 1) })
+	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
+		atomic.AddInt32(&ran[i], 1)
+		got[i] = app
+	})
 
 	for i, c := range ran {
 		if c != 1 {
 			t.Errorf("index %d ran %d times, want exactly 1", i, c)
+		}
+		if got[i] != apps[i] {
+			t.Errorf("index %d got app %q, want %q", i, got[i].GetName(), apps[i].GetName())
 		}
 	}
 }
