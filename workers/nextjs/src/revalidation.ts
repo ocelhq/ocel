@@ -117,8 +117,19 @@ export function queueSender(
         signal: AbortSignal.timeout(timeoutMs),
       });
       response.body?.cancel();
+      // An empty queue is the healthy state, so a queue that refuses every send
+      // looks exactly like a queue nobody is filling. The status is what tells
+      // a misconfigured region or policy apart from a queue with no work in it;
+      // the record itself is never logged (design amendment D) because it
+      // carries the app's bypass token.
+      if (!response.ok) {
+        console.warn(
+          `ocel: the revalidation queue refused the message with ${response.status} — rendering through the origin instead`,
+        );
+      }
       return response.ok;
-    } catch {
+    } catch (error) {
+      console.warn("ocel: could not send to the revalidation queue", error);
       return false;
     }
   };
@@ -141,7 +152,10 @@ export function revalidationSender(
 
 // The enqueue as an admission site takes it: never throws, and answers false
 // for every reason there is not to have deferred this render — no queue bound,
-// no route to name, or a queue that would not take it.
+// no route to name, or a queue that would not take it. The catch is dead
+// against queueSender, which answers false itself and logs why it did; it is
+// here so a sender this site did not build cannot take an admission down with
+// it.
 export async function enqueued(
   send: RevalidationSender | undefined,
   route: RevalidationRoute | undefined,

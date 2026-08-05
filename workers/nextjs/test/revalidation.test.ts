@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   NEXT_RENDER_RECEIPT,
@@ -51,6 +51,18 @@ const sender = (over: { timeoutMs?: number } = {}) =>
 
 const body = async (request: Request) =>
   new URLSearchParams(await request.text());
+
+// Every failure answers the same false, so the log is the only thing that tells
+// a queue refusing every send apart from a queue nobody is filling.
+const warnings = () => vi.spyOn(console, "warn").mockImplementation(() => {});
+// Serialized rather than stringified: a record logged as an argument is
+// `[object Object]` to String, which is exactly the leak this asserts against.
+const logged = (warn: ReturnType<typeof warnings>) =>
+  JSON.stringify(warn.mock.calls);
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe("revalidationIds", () => {
   it("derives the same dedup id for the same route and entry generation", async () => {
@@ -146,15 +158,33 @@ describe("the queue send", () => {
   });
 
   it("reports refusal on a non-2xx, so the caller renders instead", async () => {
+    const warn = warnings();
     const { accepted } = await capture(
       () => sender()(revalidationMessage(route, 1_000, 42)),
       () => new Response("AccessDenied", { status: 403 }),
     );
 
     expect(accepted).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(logged(warn)).toContain("403");
+  });
+
+  it("names the status and nothing else when the queue refuses", async () => {
+    // The status is what makes the refusal diagnosable; the record carries the
+    // app's bypass token and the body is the protocol's, not ours.
+    const warn = warnings();
+    await capture(
+      () => sender()(revalidationMessage(route, 1_000, 42)),
+      () =>
+        new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 }),
+    );
+
+    expect(logged(warn)).not.toContain("TOKEN");
+    expect(logged(warn)).not.toContain("AccessDenied");
   });
 
   it("reports refusal when the send throws", async () => {
+    const warn = warnings();
     const { accepted } = await capture(
       () => sender()(revalidationMessage(route, 1_000, 42)),
       () => {
@@ -163,9 +193,12 @@ describe("the queue send", () => {
     );
 
     expect(accepted).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(logged(warn)).not.toContain("TOKEN");
   });
 
   it("reports refusal when the send outlives its budget", async () => {
+    const warn = warnings();
     const { accepted } = await capture(
       () => sender({ timeoutMs: 5 })(revalidationMessage(route, 1_000, 42)),
       (request) =>
@@ -175,6 +208,17 @@ describe("the queue send", () => {
     );
 
     expect(accepted).toBe(false);
+    expect(warn).toHaveBeenCalledTimes(1);
+  });
+
+  it("says nothing at all about a send the queue took", async () => {
+    const warn = warnings();
+    const { accepted } = await capture(() =>
+      sender()(revalidationMessage(route, 1_000, 42)),
+    );
+
+    expect(accepted).toBe(true);
+    expect(warn).not.toHaveBeenCalled();
   });
 
   it("bounds every send by one second", () => {
