@@ -143,6 +143,40 @@ it("fails a record whose route the deploy never recorded, without triggering", a
   expect(JSON.parse(lines[0]!).reason).toBe("origin-unusable");
 });
 
+// The exfiltration the resolution seam exists to prevent, driven end to end:
+// the edge writes a document naming its own host under `*/fetch-cache/*` — the
+// one prefix it holds PutObject on — and points `isrPrefix` at that key, with a
+// `#` truncating the `/origin.json` the consumer appends. If the record read
+// ever happens, S3 answers the planted document and the bypass token plus a
+// valid SigV4 signature go to the attacker. Nothing may be read at all.
+it("reads nothing at all for an isrPrefix that names a key the edge could have planted", async () => {
+  const fetched: string[] = [];
+  const { deps } = substrate();
+  const watched: HandlerDeps = {
+    ...deps,
+    fetch: (async (input: string | Request) => {
+      fetched.push(typeof input === "string" ? input : input.url);
+      return new Response(null, { status: 200 });
+    }) as typeof fetch,
+  };
+
+  const response = await handle(watched, {
+    Records: [
+      record("m-1", "g-1", { isrPrefix: "prod/proj/web/BID/fetch-cache/planted.cache.json#" }),
+      record("m-2", "g-2", { isrPrefix: "prod/proj/web/BID/fetch-cache/planted.cache.json?" }),
+      record("m-3", "g-3", { isrPrefix: "prod/proj/web/BID/../../../other-app/BID2" }),
+    ],
+  });
+
+  expect(failures(response)).toEqual(["m-1", "m-2", "m-3"]);
+  expect(fetched).toEqual([]);
+  expect(lines.map((line) => JSON.parse(line).reason as string)).toEqual([
+    "malformed",
+    "malformed",
+    "malformed",
+  ]);
+});
+
 it("keeps a record whose expectation missed out of the failures, and logs it", async () => {
   const { deps } = substrate({ "/blog/post": new Response(null, { status: 200 }) });
 
