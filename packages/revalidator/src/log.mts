@@ -21,7 +21,8 @@ export type FailureReason =
   | "unsignable-host"
   | "timeout"
   | "fetch-failed"
-  | "status-not-ok";
+  | "status-not-ok"
+  | "handler-error";
 
 export type Outcome =
   | { event: "RevalidateOk" }
