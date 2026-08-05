@@ -12,9 +12,9 @@ package bootstrap
 // bytes it actually received, and refuses to deploy anything that does not match
 // (ensureArtifact in artifact.go).
 //
-// BOTH CONSTANTS ARE EMPTY PLACEHOLDERS AND MUST BE FILLED AT RELEASE
-// (ocelhq-wvag.27). No release asset has been cut yet, so nothing can be
-// verified and this build pins nothing. An unpinned build creates no consumer
+// BOTH CONSTANTS ARE EMPTY AND STAY SO UNTIL `revalidator-v0.0.1` IS PUBLISHED
+// (ocelhq-wvag.27; the exact diff that fills them is below). No release asset
+// has been cut yet, so this build pins nothing. An unpinned build creates no consumer
 // at all: bootstrap says so and skips it, and the stack renders no Lambda, no
 // event source mapping, no DLQ and no alarms.
 //
@@ -26,12 +26,31 @@ package bootstrap
 // — a placeholder digest that let an unverified artifact through would be worse
 // than no consumer.
 //
-// To pin a new release, in one commit:
-//  1. `pnpm --filter @ocel/revalidator zip` and record
-//     `sha256sum packages/revalidator/dist/revalidator.zip`.
-//  2. Publish that zip as `revalidatorAssetName` on a GitHub release tagged
-//     `revalidator-v<version>` (see revalidatorReleaseURL).
-//  3. Set both constants below to that version and that digest.
+// THE ARTIFACT IS BUILT AND ITS DIGEST IS ESTABLISHED; ONLY THE RELEASE IS
+// OUTSTANDING (ocelhq-wvag.27). `pnpm --filter @ocel/revalidator zip` was run
+// three times from a clean `dist/` on 2026-08-05 and produced a byte-identical
+// 5843-byte archive each time:
+//
+//	sha256 2f830a670b3fbc9f313018375cb2f1d88f6b5950e986373079d212548ca8a0dd
+//
+// Those bytes were fed through ensureRevalidatorArtifact against that digest:
+// they upload to `ocel-revalidator/0.0.1-<digest>.zip`, and one flipped byte is
+// refused with "revalidator artifact <url> has sha256 <got>, but this build
+// requires <want>; refusing to deploy it" and zero PutObjects. The constants
+// stay empty regardless, because pinning a digest whose release asset does not
+// exist would make every bootstrap fail on a 404 download rather than skip the
+// consumer — an unpinned build is the honest state until the asset is public.
+//
+// To pin it, in one commit, once `revalidator-v0.0.1` exists with
+// `revalidatorAssetName` attached (see revalidatorReleaseURL):
+//
+//	RevalidatorArtifactVersion = "0.0.1"
+//	RevalidatorArtifactSHA256 = "2f830a670b3fbc9f313018375cb2f1d88f6b5950e986373079d212548ca8a0dd"
+//
+// and re-verify by downloading the published asset and hashing it, rather than
+// trusting the local build — that download is the only thing that proves the
+// release carries the reviewed bytes. For any LATER release: rebuild, record
+// `sha256sum packages/revalidator/dist/revalidator.zip`, publish, set both.
 const (
 	// RevalidatorArtifactVersion is the released artifact's version, which is
 	// also the release tag it is published under.
