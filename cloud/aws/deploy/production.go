@@ -158,7 +158,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	})
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
-	if err := stageAndPromote(ctx, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
+	if err := stageAndPromote(ctx, cfg, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
 		return Result{RootStackState: state}, err
 	}
 
@@ -242,7 +242,15 @@ func reconcileRootStack(ctx context.Context, stack edge.RootStack, specs []edge.
 // the active pointer never moves and the previous Deployment keeps serving.
 // Pure of Pulumi/AWS/Cloudflare: the caller has already reconciled the root
 // stack and run every app-deploy stack.
-func stageAndPromote(ctx context.Context, stack edge.RootStack, state edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) error {
+func stageAndPromote(ctx context.Context, cfg Config, stack edge.RootStack, state edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) error {
+	// Before anything is staged, and therefore before anything can serve: a
+	// build that goes live without its origin record has routes that enqueue a
+	// revalidation and never receive one, with the send succeeding and the colo
+	// sentinel re-arming. See originrecord.go.
+	if err := writeOriginRecords(ctx, cfg, results); err != nil {
+		return err
+	}
+
 	var failed []string
 	builds := make(map[string]string, len(results))
 	for _, r := range results {
@@ -302,12 +310,12 @@ func bootstrapCommand(cfg Config) string {
 // for a preview). Pure of Pulumi/AWS/Cloudflare, so this is what unit tests
 // exercise directly against the edge.RootStack fake to assert the reconcile ->
 // stage -> promote sequence and the abort-on-failure behavior.
-func finalizeDeploy(ctx context.Context, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) (edge.RootStackState, error) {
+func finalizeDeploy(ctx context.Context, cfg Config, stack edge.RootStack, specs []edge.RootStackSpec, prior edge.RootStackState, promotionID, tag, pointer string, now int64, results []appDeployResult) (edge.RootStackState, error) {
 	state, err := reconcileRootStack(ctx, stack, specs, prior)
 	if err != nil {
 		return prior, err
 	}
-	if err := stageAndPromote(ctx, stack, state, promotionID, tag, pointer, now, results); err != nil {
+	if err := stageAndPromote(ctx, cfg, stack, state, promotionID, tag, pointer, now, results); err != nil {
 		return state, err
 	}
 	return state, nil
