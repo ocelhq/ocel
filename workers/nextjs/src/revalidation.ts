@@ -105,6 +105,8 @@ export function queueSender(
   return async (message) => {
     try {
       const ids = await revalidationIds(message);
+      // The AWS query protocol, not JSON: JSON is an SDK-side upgrade and we carry
+      // no SDK, and AWS commits to supporting query (design §1 fact 10, §12).
       const response = await send(queueUrl, {
         method: "POST",
         headers: { "content-type": "application/x-www-form-urlencoded" },
