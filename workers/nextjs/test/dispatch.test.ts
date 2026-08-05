@@ -719,6 +719,125 @@ describe("dispatchResult", () => {
     expect(bounds).toEqual([500]);
   });
 
+  // An admitted refresh reaches the Lambda through originBlocking, which is
+  // never routed through the R2 tier — so unless it reads R2 itself, every colo
+  // that admits renders even when another colo rewrote the entry a moment
+  // earlier. These drive the admission with the store rewritten (or not)
+  // underneath it, which is exactly that race.
+  function refreshOverStore(
+    entries: Record<string, unknown>,
+    // Another colo's refresh landing in R2 while this colo's admission is still
+    // waiting out its jitter, which is the window the whole read exists for.
+    landsDuringWait?: string,
+  ) {
+    let lambda = 0;
+    const pending: Promise<unknown>[] = [];
+    const puts: { url: string; body: string }[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/blog": {
+            kind: "prerender",
+            id: "/blog",
+            config: {},
+            fallback: { initialRevalidate: 60 },
+          },
+        },
+      },
+      functionUrls: { "/blog": "https://fn.example.com" },
+      fetch: (async () => {
+        lambda++;
+        return new Response("regenerated", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        });
+      }) as unknown as typeof fetch,
+      cache: coloDeps({
+        cache: {
+          match: async () => undefined,
+          put: async (request: Request, response: Response) => {
+            puts.push({
+              url: new Request(request).url,
+              body: await response.text(),
+            });
+          },
+          delete: async () => false,
+        } as unknown as Cache,
+        waitUntil: (p: Promise<unknown>) => {
+          pending.push(p);
+        },
+        admissionDelay: async () => {
+          if (landsDuringWait === undefined) return;
+          entries[entryKey("blog")] = {
+            lastModified: 1_000 + 61_000,
+            value: {
+              kind: "APP_PAGE",
+              html: landsDuringWait,
+              status: 200,
+              headers: {},
+            },
+          };
+        },
+      }),
+      interception: {
+        config: interceptionConfig,
+        // 61s past the entry below: stale, with no expiration cutoff.
+        now: () => 1_000 + 61_000,
+        store: storeOf(entries),
+      },
+    });
+    return { deps, pending, puts, lambdaCalls: () => lambda };
+  }
+
+  const staleBelow = () => ({
+    [entryKey("blog")]: {
+      lastModified: 1_000,
+      value: {
+        kind: "APP_PAGE",
+        html: "<html>edge</html>",
+        status: 200,
+        headers: {},
+      },
+    },
+  });
+
+  it("does not render when R2 already holds a fresher entry by the time the refresh is admitted", async () => {
+    const { deps, pending, lambdaCalls } = refreshOverStore(
+      staleBelow(),
+      "<html>fresher</html>",
+    );
+
+    await dispatchBlog(deps);
+    await Promise.all(pending);
+
+    expect(lambdaCalls()).toBe(0);
+  });
+
+  it("refills the colo entry from R2 rather than from a render it skipped", async () => {
+    const { deps, pending, puts } = refreshOverStore(
+      staleBelow(),
+      "<html>fresher</html>",
+    );
+
+    await dispatchBlog(deps);
+    await Promise.all(pending);
+
+    expect(puts.map((put) => put.body)).toContain("<html>fresher</html>");
+  });
+
+  it("renders when R2 is still stale by the time the refresh is admitted", async () => {
+    const { deps, pending, lambdaCalls } = refreshOverStore(staleBelow());
+
+    await dispatchBlog(deps);
+    await Promise.all(pending);
+
+    expect(lambdaCalls()).toBe(1);
+  });
+
   // A Cache whose only content is the sentinel for `refreshKey`: this colo has
   // already admitted a refresh of the route, and no entry is stored, so the
   // request is answered exactly as it would be otherwise.

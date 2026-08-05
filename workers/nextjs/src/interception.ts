@@ -90,6 +90,13 @@ export interface InterceptDeps {
   // Overrides the tag clock built from the deps above. Absent, one is built
   // per call from `store`/`snapshotCache`/`waitUntil` via createTagClock.
   tagClock?: TagClock;
+  // Read the entry from the store rather than from the per-isolate memo, and
+  // refresh the memo with what comes back. Set by an admitted background
+  // refresh checking whether the tier below already answered for it: the memo
+  // is what declared the entry stale in the first place and holds that verdict
+  // for entryMemoTtlMs, which outlives the whole admission wait — read through
+  // it and the check could never once report a fresher entry.
+  freshRead?: boolean;
 }
 
 // A static entry (revalidate false/undefined) has no time-based expiry, only
@@ -326,7 +333,7 @@ async function readEntry(
   const now = (deps.now ?? Date.now)();
   const memo = entryMap(deps.store);
 
-  const hit = memo.get(key);
+  const hit = deps.freshRead ? undefined : memo.get(key);
   if (hit) {
     if (now - hit.at < entryMemoTtlMs) return hit.entry;
     if (deps.waitUntil) {
