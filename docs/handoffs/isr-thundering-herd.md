@@ -17,7 +17,7 @@ path, and that a shared coordinator DO is Cloudflare's named anti-pattern.
 
 ## Stack shape
 
-Eight PRs, each rooted on the previous, first rooted at `main`. Dependency-derived order —
+Thirteen PRs, each rooted on the previous, first rooted at `main`. Dependency-derived order —
 note this deliberately inverts the original 1a→1b→2a→2b sequencing, because PR 6 removes the
 DynamoDB fallback and therefore cannot land before the publisher that becomes the sole
 guarantor of invalidation.
@@ -37,12 +37,16 @@ main
                          └─ 6  isr-herd/06-get-drops-batchget 776d806 ocelhq-wvag.6 ✅ CLOSED (gate cleared)
                              └─ 7  isr-herd/07-edge-l0-l1  faac969  ocelhq-wvag.7  ✅ CLOSED
                                  └─ 9  isr-herd/09-write-visibility db25a0f ocelhq-wvag.9 ✅ CLOSED (measured, then re-measured)
-                                     ├─ 10 isr-herd/10-admission-jitter 063ce84+ ocelhq-wvag.16 ✅ CLOSED (measured, built, reviewed ×2, fixed)
-                                     │   └─ 8  edge L2 lease   (unstarted) ocelhq-wvag.8  ← unblocked
-                                     └─ 17 multi-region herd harness (unstarted) ocelhq-wvag.17  ⛔ on .8
+                                     └─ 10 isr-herd/10-admission-jitter 6eddd0e ocelhq-wvag.16 ✅ CLOSED (measured, built, reviewed ×2, fixed)
+                                         └─ 11 isr-herd/11-refresh-reads-r2 4bcfec1 ocelhq-wvag.18 ✅ CLOSED, reviewed, one silent defect fixed
+                                             └─ 12 isr-herd/12-edge-snapshot-join be644ef ocelhq-wvag.19 ✅ CLOSED, reviewed, three defects fixed
+                                                 └─ 13 isr-herd/13-deploy-concurrency-cap 9833239+ ocelhq-5me0 ✅ CLOSED, reviewed (no defects)
+
+  17 multi-region herd harness (unstarted) ocelhq-wvag.17  ← unblocked, and now the next thing
+   └─ 8  edge L2 lease  ocelhq-wvag.8  ⛔ DEFERRED, now blocked ON .17 (edge inverted)
 ```
 
-`+` means "plus this handoff's own commit", which is the tip of 10 as you read this.
+`+` means "plus this handoff's own commit", which is the tip of 13 as you read this.
 
 **The stack was restacked into dependency order on 2026-08-04, and every commit sha on branch
 07 changed.** Any note elsewhere in this document that cites a sha on 07 was written before the
@@ -114,6 +118,13 @@ is **`examples/next-cache-lab`**, and the directory contains only `package.json`
 prints its help text and exits 1. It is unrelated to the dogfooded-SDK build failure that
 causes the `pnpm -r test` failures, and no change in this stack can fix it.
 
+**The account's Lambda concurrency quota is 1000, and the two records that look contradictory
+are not.** The memory `aws-account-lambda-concurrency-quota-is-10` has a **stale key name but
+current content**: it opens "SUPERSEDED 2026-07-27" and states 1000, verified with
+`service-quotas get-service-quota (L-B99A9384)` and `lambda get-account-settings`. There were
+never two contradictory records — only one badly named one. `ocelhq-9d3`'s title is misleading
+for the same reason and was deliberately left alone.
+
 **Writer retirement is bounded, not instant (PR 2).** The writer worker memoizes each
 deploy's secret hash per isolate. `destroy` clears the memo only in the isolate that served
 it, so an isolate that never handled the retirement keeps authorizing that build's writes
@@ -125,17 +136,186 @@ worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
 
-**Nothing in this stack is gated any more.** `ocelhq-yo9b` is closed and proven live, so `.6`
-closed with it; `.9` and `.16` are measured, built and reviewed. `ocelhq-wvag.8` is the next
-thing to build, and `ocelhq-wvag.17` after it.
+**Nothing in this stack is gated any more, and `.8` is no longer the next thing.** `.16`, `.18`,
+`.19` and `ocelhq-5me0` are built and reviewed. **`ocelhq-wvag.17` is the next thing to build**;
+`ocelhq-wvag.8` is deferred behind it.
 
-**Read the margin before designing `.8`.** The jitter took the synchronized fan-in from
+### Epic decision 10 was amended — `.8` is deferred and the `.8`↔`.17` edge is INVERTED
+
+`.8` (the L2 cross-colo lease DO) is **deferred, not built**, and `.8` now depends on `.17`
+rather than the reverse. Established against the code, not against the issue text — do not
+re-derive it from the issue, which still reads as though the lease were the load-shedder:
+
+- **The `C·E` figure is real Lambda renders, not the lease's would-be load.** All three
+  admission sites call `originBlocking` → `render(forward(...))` with `x-prerender-revalidate`,
+  straight at the Function URL. It never routes through `cachingOrigin`, so `intercept()`/R2
+  never absorbed it, and `serveOrAdmitRefresh` on a stale colo hit never consulted the tier
+  below. The measured **423-438 per stale event were 423-438 origin renders.**
+- **The lease decides *who* renders; the refill is what stops the other 429.** The design — now
+  at `docs/research/wvag8-lease-design.md` — concedes this in its §4: without a refill hint,
+  denial only *serialises* ~`C` renders. **The refill needs no coordinator**, so the thing that
+  removes the load is separable from the thing that needs the DO.
+- **`C ≈ 300` is an assumption and the lease's margin is ~1.2×.** `.17` is the only work in the
+  epic that would measure `C`, and the post-`.16` stack is a legitimate "after" to measure
+  against. Sizing a DO whose margin is 1.2× on an unmeasured input is the wrong order.
+
+**What would reverse this** (write it down before arguing with it): a measured `C ≥ 200` on a
+real customer route at `revalidate ≤ 60`; or `.17` showing the throttle-amplification loop
+firing under load, which turns a cost problem into a stability one. Note that a measured
+`C ≈ 400+` would not merely restore `.8`'s priority — it would falsify **one DO per route**
+itself, which is what `.8` is built on.
+
+### `ocelhq-wvag.18` — the refresh rendered what R2 already held, and failure fed the herd — **DONE**
+
+Branch `isr-herd/11-refresh-reads-r2`, rooted on `6eddd0e` (tip of 10). Five commits, `90668dd`
+… `4bcfec1`. Nothing pushed.
+
+An admitted refresh now reads R2 **before** rendering and skips the render when R2 already
+holds a fresher entry. And the throttle-amplification loop is closed: `landed = response.ok`
+meant a 429 or 5xx **deleted** the sentinel, so the colo re-admitted on the very next request
+and a refusing origin fed the herd its damper exists to remove. `RefreshOutcome` is now
+`"landed" | "failed" | "refused"` — a throw still deletes the sentinel (PR 7's finding is
+preserved), a non-ok **re-arms** it for `refreshBackoffSeconds = 30`.
+
+- **Honest note: `"failed"` is a one-producer branch.** Production reaches it only via a throw.
+  It is a real distinction in the type and a fictional one in the traffic today.
+- **The backoff is deliberately NOT capped by the remaining stale window**, unlike `.16`'s draw.
+  Past expiration nothing consults the sentinel at all, so capping would only re-admit sooner
+  against an origin still refusing. The asymmetry with `.16` is intended, not an oversight.
+
+#### The review found a severe silent defect, and it was in a boolean's meaning
+
+`intercept` returned `stale: false` **unconditionally** on both prefetch branches
+(`interception.ts:184` segment prefetch, `:207` full-route static prefetch). That `false` meant
+"prefetches are served without a staleness gate" — not "this entry is fresh". The consequences
+compounded: a prefetch-variant admission was classed `"landed"` with `originBlocking` **never
+called**, the ancient bytes were re-mirrored into L0 restamped as modified-now, the R2 entry was
+never regenerated, and — because **the sentinel is route-keyed** — the whole route's colo-wide
+claim was consumed, blocking the html/`.rsc` admission that would actually have rendered. Next
+prefetches links aggressively, so this is not an edge case. The suite stayed green because every
+new test used a bare HTML GET.
+
+Fixed at the **root**: `stale` now means one thing on every branch — "this entry's window has
+lapsed". Prefetches still serve ungated and still skip the tag check; only the reported verdict
+changed. Two directions were considered and rejected, recorded so they are not re-proposed:
+comparing `lastModified` treats the symptom, and stripping the prefetch headers from the fresh
+read would have mirrored **the wrong variant's bytes**, since the below-read feeds `storeInColo`
+on the request's own variant key.
+
+**This exposed a larger pre-existing bug the review did not name.** At the `index.ts`
+`cachingOrigin` site, a stale prefetch reporting `stale: false` **never admitted a refresh at
+all** — served as `HIT`, never regenerated. Same root, fixed by the same change. Both prefetch
+branches now also stamp `x-ocel-entry-modified`; without it a prefetch mirrored into the colo is
+dated by the mirror, restamping old bytes as fresh.
+
+### `ocelhq-wvag.19` — the snapshot memo dedupes across time, never across concurrency — **DONE**
+
+Branch `isr-herd/12-edge-snapshot-join`, rooted on `4bcfec1` (tip of 11). Five commits, `d98da18`
+… `be644ef`. Nothing pushed.
+
+`readSnapshot` set `snapshotMemo` **after** the await, so every concurrent tagged request in an
+isolate issued its own `store.get()`; above it the only cross-isolate sharing was a Cache API
+entry at a **flat** 10 s TTL that lapsed colo-wide at one instant — the same shared-schedule
+shape `.16` removed from admission. It now has an in-flight join (the shape of
+`workers/isr-writer`'s `registryReads` — the same defect PR 2's review fixed 40 lines away, which
+the edge read path never swept) plus a TTL drawn from `{7,8,9,10}` s, **drawn downward from the
+ceiling so the staleness bound is unchanged**: only the mean moves, 10 → 8.5 s. The cost is ~15%
+more refills, not more staleness.
+
+#### The join introduced two defects of its own, and the review found a third the fix had missed
+
+- **An abandoned read still settles, and both of its effects outlive it.** It wrote the
+  pre-invalidation snapshot into the memo **and** re-`put` the old body, **resurrecting
+  colo-wide the copy the purge had just deleted**. The implementer's claim that this was
+  reachable only on *reject* was true for the wrong reason: on *resolve* it poisons the memo
+  instead.
+- Fixed **structurally rather than by guard**: memo and in-flight read collapsed into **one cell
+  per `(binding, isrPrefix)`**, so a drop deletes the cell and an abandoned read writes into an
+  orphan nothing can reach — the memo half needs no guard at all. The `put` is the only effect
+  outside the cell, and it is the only thing that checks identity.
+- That also fixed a **pre-existing** key defect the copy had inherited: the memo was keyed on the
+  store binding alone while the object read is `tagSnapshotKey(cfg.isrPrefix)`, so across a
+  deploy rollover one isolate serving two prefixes over one binding could answer build N+1 from
+  build N's snapshot.
+
+**The issue's premise was overstated, and this is corrected on the bead.** `I_colo` GETs per colo
+per 10 s is an upper bound. Fan-in per lapse is bounded by arrivals within the fill window —
+`λ_colo × (R2 RTT + ~8 ms write visibility)` — not by `I_colo × W / snapshotMemoMs`, which mixes
+the isolate count with the memo window. That shrinks the size of the win, not the case for the PR.
+
+**Weakness, recorded rather than papered over: the jitter's *effect* here is argued, not
+measured**, unlike `.16`, which had a deployed spike behind it. The review judged no live
+measurement needed — the mechanism is the one `.16` already measured, and the risk here is a
+wiring mistake, not a modelling one. That judgement is written down so the next session does not
+re-open it.
+
+### `ocelhq-5me0` — the app fan-out was unbounded — **DONE**
+
+Branch `isr-herd/13-deploy-concurrency-cap`, rooted on `be644ef` (tip of 12). Two commits,
+`65edd00` and `9833239`. Nothing pushed. Outside the epic; it is here because the sweep below
+found it.
+
+`production.go` fanned out a goroutine per app under a bare `WaitGroup`, each running Pulumi at
+`optup.Parallel(64)`, and N is the user's app count — the **only** unlimited fan-out in the Go
+tree, where every upload path already uses `SetLimit`. Capped at `appConcurrency = 4`. A plain
+`errgroup.Group` **without** a context, deliberately: `WithContext`'s first-error-cancels would
+abort in-flight deploys that today run to completion, silently changing which apps deploy on a
+partial failure. `Parallel(64)` is left alone for lack of a measurement.
+
+The review found **no defects**; its three quality findings are applied in `9833239`, including
+its correction that ~256 is **4× 64, not "the same order"**, and that anchoring to
+`uploadConcurrency` anchors to S3's budget rather than to the control planes this path calls.
+
+**The cap does not fix the `LocalWorkspace`/`PULUMI_HOME` race.** `pulumiEnv` sets no
+`PULUMI_HOME`, so every workspace roots at `~/.pulumi` and four racers race exactly as ten did.
+Filed as **`ocelhq-i68t`**, and now named in `appfanout.go` itself, because a reader of that file
+rather than of the git log would otherwise conclude concurrency there is safe. The two bootstrap
+check-then-create races that had lived only as comments on `ocelhq-5me0` were lifted into
+**`ocelhq-4ljz`** so they survive its closure.
+
+### The herd sweep — five findings filed, and the CLEAN paths are the coverage information
+
+A sweep for herd surfaces **nothing in the epic covers**. Filed: `.19` (built), `ocelhq-5me0`
+(built), and three open:
+
+- **`.20` — the origin tag clock has a failure-independent floor.** `lastAttemptAt: -Infinity`
+  plus a pre-read stamp plus swallowed errors gives `N × 0.5` rps against **one S3 key**,
+  independent of whether the reads succeed. The attempt-relative throttle is what mitigates it,
+  since environments phase-drift rather than staying aligned.
+- **`.21` — `publish.mts` may re-drive the batch tail.** **Inferred from AWS semantics, not from
+  this repo**, so confirming it against current docs is its first acceptance step. Do not treat
+  it as an observed defect.
+- **`.22` — the fail-closed remote tier's herd consequence.** Decision 11 chose fail-closed
+  deliberately; what it never recorded anywhere is what that choice does to a cold fleet.
+- **`ocelhq-pf6q.14` — the image tier has no L1 at all.** Filed under the *image* epic, because
+  `wvag` knowingly out-of-scopes image cache paths.
+
+**What the sweep found CLEAN, which is coverage information and not an absence of output:**
+every cron and alarm in the repo — there are **no** wrangler cron triggers and **no**
+EventBridge/CloudWatch schedules, and the only recurring timer is
+`setAlarm(Date.now() + HEARTBEAT_MS)`, which is **relative rather than wall-clock**, so DOs
+stagger by last-beat time and are correct by construction; the `isr-writer` registry read;
+`IsrSnapshot` and `TagClock`; `ppr.ts`'s per-visitor resume POST; genesis seeding; prune and
+destroy; and every upload fan-out.
+
+### Verified across the whole stack this session
+
+`workers/nextjs` **583 passing / 19 files** at the tip of 12 and unchanged at the tip of 13.
+`cloud/aws` builds and tests clean; `gofmt -l cloud/aws` empty. `pnpm typecheck` and `pnpm build`
+(`wrangler deploy --dry-run`) clean on `workers/nextjs`. `pnpm -r --no-bail typecheck`: exactly
+one failure, `examples/next-cache-lab` (see "Standing notes"). Every parent edge re-derived with
+`git merge-base --is-ancestor`. The one `gofmt -l cloud/edge` hit,
+`cloud/edge/cloudflare/cloudflare_test.go`, is still the pre-existing drift from `b17467f` and is
+still untouched.
+
+**Read the margin before designing `.8`, if and when `.17` reinstates it.** The jitter took the
+synchronized fan-in from
 `F ≈ 20 000-23 000` requests per stale event to **423-438 — and that is a RATE**, an
 instantaneous 423-438 rps at the route's single Durable Object, because it is spread over
 exactly `J = 1 s`. Against Cloudflare's conservative 500 rps that is a margin of **~1.2×, not
 the ~6× the 85-88 rps sustained figure beside it suggests**, and `C ≈ 300` is an assumption:
 the burst crosses 500 rps at `C ≈ 340-355` and 1 000 rps at `C ≈ 685-710`. `.8` carries this as
-an acceptance criterion. See "`ocelhq-wvag.16`" below.
+an acceptance criterion — and see the amendment above: `C` itself is what `.17` measures. See "`ocelhq-wvag.16`" below.
 
 ### `ocelhq-wvag.16` — the herd was self-inflicted, and jitter removes it — **DONE**
 
