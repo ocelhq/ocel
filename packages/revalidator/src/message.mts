@@ -1,40 +1,29 @@
-// The queue's wire format, and the only door a record gets through.
+// The queue's wire format.
+//
+// The message names no host. It names a route — `isrPrefix` (which deploy) and
+// `routeId` (which of that deploy's functions serves it) — and the consumer
+// looks the origin up in the record the deploy itself wrote (see origin.mts).
+// So the edge cannot choose where the app's bypass token is sent, whatever it
+// puts in the message: there is no field that could say.
 //
 // The message is prepared by the edge adapter, which knows the route and the
-// framework; the consumer understands none of that (§8). What it does
-// understand is that the record's headers carry the app's bypass token, so a
-// message naming a host that is not this deploy's own would exfiltrate that
-// token together with a valid signature. Host validation therefore happens
-// here, inside the only function that can produce a RevalidationMessage: a
-// caller holding one is holding a checked one, without having to remember to
-// check.
+// framework; the consumer understands neither (§8). What the edge does declare
+// is the receipt it expects back, which is the whole of the framework contract
+// the consumer evaluates.
 export interface RevalidationMessage {
   v: 1;
-  url: string;
   headers: Record<string, string>;
   expect: { header: string; value: string } | null;
   isrPrefix: string;
+  routeId: string;
   routePath: string;
   lastModified: number;
   enqueuedAt: number;
 }
 
-export type Rejection = "malformed" | "unsupported-version" | "host-not-permitted";
+export type Rejection = "malformed" | "unsupported-version";
 
 export type ParseResult = { ok: true; message: RevalidationMessage } | { ok: false; reason: Rejection };
-
-// The hosts this deploy may be told to trigger, from OCEL_REVALIDATE_ALLOWED_HOSTS
-// (see README). Exact Function URL hosts, comma-separated; unset or empty
-// permits nothing, so a function that was never told its own origin triggers
-// nothing rather than anything.
-export function permittedHosts(value: string | undefined): ReadonlySet<string> {
-  return new Set(
-    (value ?? "")
-      .split(",")
-      .map((host) => host.trim().toLowerCase())
-      .filter((host) => host !== ""),
-  );
-}
 
 function headerMap(value: unknown): Record<string, string> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
@@ -51,19 +40,7 @@ function expectation(value: unknown): RevalidationMessage["expect"] | undefined 
   return { header, value: expected };
 }
 
-function permits(hosts: ReadonlySet<string>, url: string): boolean {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return false;
-  }
-  // `host` rather than `hostname`, so a port cannot smuggle the request
-  // somewhere the pinned host does not answer.
-  return parsed.protocol === "https:" && hosts.has(parsed.host.toLowerCase());
-}
-
-export function parseMessage(body: string, hosts: ReadonlySet<string>): ParseResult {
+export function parseMessage(body: string): ParseResult {
   let raw: Record<string, unknown>;
   try {
     raw = JSON.parse(body) as Record<string, unknown>;
@@ -75,23 +52,26 @@ export function parseMessage(body: string, hosts: ReadonlySet<string>): ParseRes
 
   const headers = headerMap(raw.headers);
   const expect = expectation(raw.expect);
-  const { url, isrPrefix, routePath, lastModified, enqueuedAt } = raw;
+  const { isrPrefix, routeId, routePath, lastModified, enqueuedAt } = raw;
   if (
     headers === undefined ||
     expect === undefined ||
-    typeof url !== "string" ||
     typeof isrPrefix !== "string" ||
+    typeof routeId !== "string" ||
     typeof routePath !== "string" ||
     typeof lastModified !== "number" ||
     typeof enqueuedAt !== "number"
   ) {
     return { ok: false, reason: "malformed" };
   }
-
-  if (!permits(hosts, url)) return { ok: false, reason: "host-not-permitted" };
+  // A route path is a path under the origin, not a URL. Where the trigger
+  // actually lands is checked again after the join (origin.mts); this is the
+  // shape check, so a message that could never resolve is rejected before
+  // anything reads a deploy record for it.
+  if (!routePath.startsWith("/")) return { ok: false, reason: "malformed" };
 
   return {
     ok: true,
-    message: { v: 1, url, headers, expect, isrPrefix, routePath, lastModified, enqueuedAt },
+    message: { v: 1, headers, expect, isrPrefix, routeId, routePath, lastModified, enqueuedAt },
   };
 }

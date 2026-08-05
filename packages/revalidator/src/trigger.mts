@@ -1,7 +1,9 @@
 import { AwsClient } from "aws4fetch";
 
+import { triggerTimeoutMs } from "./limits.mjs";
 import type { Outcome } from "./log.mjs";
 import type { RevalidationMessage } from "./message.mjs";
+import type { Target } from "./origin.mjs";
 
 // One message, one signed HEAD at the origin.
 //
@@ -9,49 +11,32 @@ import type { RevalidationMessage } from "./message.mjs";
 // write, so the trigger costs a render and no transfer. What comes back is read
 // framework-blind: the edge declared the receipt it expects when it enqueued
 // the message, and this evaluates that declaration and nothing else.
+//
+// The target is a `Target`, which only origin.mts produces. Nothing here can be
+// pointed at a host the deploy did not record, because there is no other way to
+// hand this function a URL.
 export interface TriggerDeps {
   fetch: typeof fetch;
   credentials: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
   timeoutMs?: number;
 }
 
-// One render's budget. Ten of these back to back is the batch's worst case,
-// which is what the function timeout and the queue's visibility timeout are
-// sized from (see README).
-export const triggerTimeoutMs = 10_000;
-
-// The region a Function URL host names: `<id>.lambda-url.<region>.on.aws`.
-// aws4fetch guesses region and service from `*.amazonaws.com` hosts only, and a
-// wrong guess is an opaque 403, so it is read here and passed explicitly.
-function regionOf(host: string): string | undefined {
-  const labels = host.split(".");
-  const i = labels.indexOf("lambda-url");
-  return i < 0 ? undefined : labels[i + 1];
-}
-
-// The headers a signature produces. They are copied onto the real request so
-// that what AWS authorizes is exactly `host` plus these: the message's own
-// headers ride unsigned, which keeps a header rewritten in transit from
-// invalidating the signature.
-const SIGV4_HEADERS = ["authorization", "x-amz-date", "x-amz-content-sha256", "x-amz-security-token"];
-
-export async function trigger(deps: TriggerDeps, message: RevalidationMessage): Promise<Outcome> {
-  const region = regionOf(new URL(message.url).host);
-  if (region === undefined) return { event: "RevalidateFailed", reason: "unsignable-host" };
-
-  const client = new AwsClient({ ...deps.credentials, service: "lambda", region });
-  const signed = await client.sign(message.url, { method: "HEAD" });
-
-  const headers = new Headers(message.headers);
-  for (const name of SIGV4_HEADERS) {
-    const value = signed.headers.get(name);
-    if (value !== null) headers.set(name, value);
-  }
+export async function trigger(
+  deps: TriggerDeps,
+  target: Target,
+  message: RevalidationMessage,
+): Promise<Outcome> {
+  const client = new AwsClient({ ...deps.credentials, service: "lambda", region: target.region });
+  // The message's own headers are signed along with `host`, so what AWS
+  // authorizes is exactly the request that gets sent. Nothing sits inside the
+  // TLS session to rewrite them, so signing them costs nothing and narrows what
+  // a captured signature could be replayed with.
+  const signed = await client.sign(target.url, { method: "HEAD", headers: message.headers });
 
   const signal = AbortSignal.timeout(deps.timeoutMs ?? triggerTimeoutMs);
   let response: Response;
   try {
-    response = await deps.fetch(message.url, { method: "HEAD", headers, signal });
+    response = await deps.fetch(target.url, { method: "HEAD", headers: signed.headers, signal });
   } catch {
     return { event: "RevalidateFailed", reason: signal.aborted ? "timeout" : "fetch-failed" };
   }

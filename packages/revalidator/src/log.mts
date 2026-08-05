@@ -1,4 +1,5 @@
 import type { Rejection, RevalidationMessage } from "./message.mjs";
+import type { ResolveFailure } from "./origin.mjs";
 
 // Structured logging for a secret-bearing record.
 //
@@ -18,7 +19,7 @@ export interface LogContext {
 
 export type FailureReason =
   | Rejection
-  | "unsignable-host"
+  | ResolveFailure
   | "timeout"
   | "fetch-failed"
   | "status-not-ok"

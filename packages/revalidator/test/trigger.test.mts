@@ -1,29 +1,8 @@
-import { expect, it } from "vitest";
+import { expect, it, vi } from "vitest";
 
-import { parseMessage, permittedHosts, type RevalidationMessage } from "../src/message.mjs";
+import { triggerTimeoutMs } from "../src/limits.mjs";
 import { trigger, type TriggerDeps } from "../src/trigger.mjs";
-
-const host = "abc123.lambda-url.us-east-1.on.aws";
-const credentials = { accessKeyId: "AKIAEXAMPLE", secretAccessKey: "shhh", sessionToken: "session" };
-
-function message(overrides: Record<string, unknown> = {}): RevalidationMessage {
-  const parsed = parseMessage(
-    JSON.stringify({
-      v: 1,
-      url: `https://${host}/blog/post`,
-      headers: { "x-prerender-revalidate": "token", "x-forwarded-host": "example.com" },
-      expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
-      isrPrefix: "build-1",
-      routePath: "/blog/post",
-      lastModified: 1_700_000_000_000,
-      enqueuedAt: 1_700_000_000_500,
-      ...overrides,
-    }),
-    permittedHosts(host),
-  );
-  if (!parsed.ok) throw new Error(`test message rejected: ${parsed.reason}`);
-  return parsed.message;
-}
+import { credentials, host, resolved } from "./fixture.mjs";
 
 function responding(response: Response): { deps: TriggerDeps; requests: Request[] } {
   const requests: Request[] = [];
@@ -41,46 +20,59 @@ function ok(headers: Record<string, string> = {}): Response {
   return new Response(null, { status: 200, headers });
 }
 
-it("sends HEAD to the message's url with exactly its headers", async () => {
+it("sends HEAD to the resolved target carrying the message's headers and no others", async () => {
   const { deps, requests } = responding(ok({ "x-nextjs-cache": "REVALIDATED" }));
+  const { target, message } = await resolved();
 
-  await trigger(deps, message());
+  await trigger(deps, target, message);
 
   expect(requests).toHaveLength(1);
   const sent = requests[0]!;
   expect(sent.method).toBe("HEAD");
   expect(sent.url).toBe(`https://${host}/blog/post`);
-  expect(sent.headers.get("x-prerender-revalidate")).toBe("token");
+  // Everything the message asked for, and nothing of the message's beyond it:
+  // what is left over is the signature and whatever the runtime adds.
+  const carried = [...sent.headers.keys()].filter((name) => !name.startsWith("x-amz-") && name !== "authorization");
+  expect(carried.sort()).toEqual(["x-forwarded-host", "x-prerender-revalidate"]);
+  expect(sent.headers.get("x-prerender-revalidate")).toBe("s3cr3t-preview-mode-id");
   expect(sent.headers.get("x-forwarded-host")).toBe("example.com");
 });
 
-it("signs as the function's own role against the host's region", async () => {
+it("signs as the function's own role, against the resolved region, over the headers it sends", async () => {
   const { deps, requests } = responding(ok({ "x-nextjs-cache": "REVALIDATED" }));
+  const { target, message } = await resolved();
 
-  await trigger(deps, message());
+  await trigger(deps, target, message);
 
   const authorization = requests[0]!.headers.get("authorization") ?? "";
   expect(authorization).toContain("Credential=AKIAEXAMPLE/");
   expect(authorization).toContain("/us-east-1/lambda/aws4_request");
+  // Nothing sits inside the TLS session to rewrite a header, so the signature
+  // covers the message's headers too rather than `host` alone.
+  expect(authorization).toContain("x-forwarded-host");
+  expect(authorization).toContain("x-prerender-revalidate");
   expect(requests[0]!.headers.get("x-amz-security-token")).toBe("session");
 });
 
 it("succeeds when the declared expectation matches", async () => {
   const { deps } = responding(ok({ "x-nextjs-cache": "REVALIDATED" }));
+  const { target, message } = await resolved();
 
-  await expect(trigger(deps, message())).resolves.toEqual({ event: "RevalidateOk" });
+  await expect(trigger(deps, target, message)).resolves.toEqual({ event: "RevalidateOk" });
 });
 
 it("succeeds when no expectation is declared", async () => {
   const { deps } = responding(ok());
+  const { target, message } = await resolved({ expect: null });
 
-  await expect(trigger(deps, message({ expect: null }))).resolves.toEqual({ event: "RevalidateOk" });
+  await expect(trigger(deps, target, message)).resolves.toEqual({ event: "RevalidateOk" });
 });
 
 it("reports an expect miss when the declared header disagrees", async () => {
   const { deps } = responding(ok({ "x-nextjs-cache": "STALE" }));
+  const { target, message } = await resolved();
 
-  await expect(trigger(deps, message())).resolves.toEqual({
+  await expect(trigger(deps, target, message)).resolves.toEqual({
     event: "RevalidateExpectMiss",
     expected: "REVALIDATED",
     got: "STALE",
@@ -89,8 +81,9 @@ it("reports an expect miss when the declared header disagrees", async () => {
 
 it("reports an expect miss when the declared header is absent", async () => {
   const { deps } = responding(ok());
+  const { target, message } = await resolved();
 
-  await expect(trigger(deps, message())).resolves.toEqual({
+  await expect(trigger(deps, target, message)).resolves.toEqual({
     event: "RevalidateExpectMiss",
     expected: "REVALIDATED",
     got: null,
@@ -99,8 +92,9 @@ it("reports an expect miss when the declared header is absent", async () => {
 
 it("fails on a non-ok response, carrying the status", async () => {
   const { deps } = responding(new Response(null, { status: 429 }));
+  const { target, message } = await resolved();
 
-  await expect(trigger(deps, message())).resolves.toEqual({
+  await expect(trigger(deps, target, message)).resolves.toEqual({
     event: "RevalidateFailed",
     reason: "status-not-ok",
     status: 429,
@@ -108,6 +102,7 @@ it("fails on a non-ok response, carrying the status", async () => {
 });
 
 it("fails when the fetch throws", async () => {
+  const { target, message } = await resolved();
   const deps: TriggerDeps = {
     credentials,
     fetch: (async () => {
@@ -115,13 +110,14 @@ it("fails when the fetch throws", async () => {
     }) as typeof fetch,
   };
 
-  await expect(trigger(deps, message())).resolves.toEqual({
+  await expect(trigger(deps, target, message)).resolves.toEqual({
     event: "RevalidateFailed",
     reason: "fetch-failed",
   });
 });
 
 it("fails as a timeout when the origin outlasts the budget", async () => {
+  const { target, message } = await resolved();
   const deps: TriggerDeps = {
     credentials,
     timeoutMs: 5,
@@ -131,25 +127,32 @@ it("fails as a timeout when the origin outlasts the budget", async () => {
       })) as unknown as typeof fetch,
   };
 
-  await expect(trigger(deps, message())).resolves.toEqual({
+  await expect(trigger(deps, target, message)).resolves.toEqual({
     event: "RevalidateFailed",
     reason: "timeout",
   });
 });
 
-it("fails without fetching when the pinned host cannot be signed", async () => {
-  const { deps, requests } = responding(ok());
-  const unsignable = "origin.example.com";
+// The default budget is the one production runs on — nothing in index.mts
+// passes timeoutMs — and it is the single number the function timeout and the
+// queue's visibility timeout are sized from. Asserting it means catching both
+// the number the signal is built from and that the signal built from it is the
+// one the request actually waits on.
+it("triggers on the documented budget when no caller overrides it", async () => {
+  const { target, message } = await resolved();
+  const timeout = vi.spyOn(AbortSignal, "timeout");
+  const signals: (AbortSignal | null | undefined)[] = [];
+  const deps: TriggerDeps = {
+    credentials,
+    fetch: (async (_input: string, init: RequestInit) => {
+      signals.push(init.signal);
+      return ok({ "x-nextjs-cache": "REVALIDATED" });
+    }) as typeof fetch,
+  };
 
-  const parsed = parseMessage(
-    JSON.stringify({ ...JSON.parse(JSON.stringify(message())), url: `https://${unsignable}/blog/post` }),
-    permittedHosts(unsignable),
-  );
-  if (!parsed.ok) throw new Error("test message rejected");
+  await trigger(deps, target, message);
 
-  await expect(trigger(deps, parsed.message)).resolves.toEqual({
-    event: "RevalidateFailed",
-    reason: "unsignable-host",
-  });
-  expect(requests).toHaveLength(0);
+  expect(timeout).toHaveBeenCalledWith(triggerTimeoutMs);
+  expect(signals[0]).toBe(timeout.mock.results[0]!.value);
+  timeout.mockRestore();
 });
