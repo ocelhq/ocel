@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
@@ -289,11 +290,12 @@ func TestRevalidator_TimeoutFitsInsideTheVisibilityTimeout(t *testing.T) {
 
 // TestRevalidator_ReadsOnlyOriginRecords is the IAM half of the exfiltration
 // defence. The message names the key this role reads, and the edge can write
-// fully-controlled JSON under '${AssetBucket.Arn}/*/fetch-cache/*'. IAM's '*'
-// spans '/', so the '/origin.json' suffix is what makes the two grants
-// disjoint — every key the edge can write ends '.cache.json' — and it is the
-// layer that still holds if the consumer's own prefix validation regresses.
-// Relaxing this Resource to '/*' re-opens a demonstrated token exfiltration.
+// fully-controlled JSON under the asset bucket's fetch-cache segment. IAM's '*'
+// spans '/', so anchoring this grant on the '/origin.json' suffix is half of
+// what keeps it disjoint from that write grant — the other half is asserted by
+// TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead, which is the
+// test that actually establishes the disjointness. Relaxing this Resource to
+// '/*' re-opens a demonstrated token exfiltration.
 func TestRevalidator_ReadsOnlyOriginRecords(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -309,6 +311,97 @@ func TestRevalidator_ReadsOnlyOriginRecords(t *testing.T) {
 			t.Fatal("the revalidator role cannot read the origin record it resolves every trigger from")
 		})
 	}
+}
+
+// iamResourceMatches answers whether an IAM resource pattern admits a key,
+// under IAM's own wildcard semantics: '*' matches any run of characters,
+// including '/'. That last part is the whole reason this test exists — the
+// intuition that a '*' stops at a path separator is what makes two grants look
+// disjoint when they are not.
+func iamResourceMatches(pattern, arn string) bool {
+	parts := strings.Split(pattern, "*")
+	for i := range parts {
+		parts[i] = regexp.QuoteMeta(parts[i])
+	}
+	return regexp.MustCompile("^" + strings.Join(parts, ".*") + "$").MatchString(arn)
+}
+
+// TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead is the
+// disjointness the exfiltration defence is built on, asserted as a property of
+// the two rendered IAM patterns rather than as a claim about the worker's code.
+//
+// The threat is a STOLEN EDGE CREDENTIAL, which is not bound by what
+// workers/nextjs writes. So "every key the edge worker writes ends .cache.json"
+// proves nothing here; what has to hold is that no key at all satisfies both
+// grants. Both patterns are anchored on a trailing literal, and neither literal
+// is a suffix of the other, so no key can end in both — that is the mechanism,
+// and it survives any regression in the worker or in the consumer's parser.
+//
+// The named key below is the exact one that defeated the earlier, unanchored
+// write grant '${AssetBucket.Arn}/*/fetch-cache/*': it is writable by the edge
+// (first '*' = the build prefix, second '*' = 'origin.json') and readable by the
+// consumer (its '*' = the prefix plus the fetch-cache segment). Planting it
+// names an attacker-controlled origin for a victim app, and the consumer signs
+// and delivers that app's bypass token to it.
+func TestAssetBucket_NoKeySatisfiesBothTheEdgeWriteAndTheOriginRead(t *testing.T) {
+	for _, tc := range revalidatorTemplates() {
+		t.Run(tc.name, func(t *testing.T) {
+			write := edgeGrant(t, tc.template, "s3:PutObject")
+			read := revalidatorGrant(t, tc.template, "s3:GetObject")
+
+			for _, key := range []string{
+				"${AssetBucket.Arn}/prod/proj/web/B1/fetch-cache/origin.json",
+				"${AssetBucket.Arn}/prod/proj/web/B1/origin.json",
+				"${AssetBucket.Arn}/prod/proj/web/B1/fetch-cache/a/origin.json",
+			} {
+				if iamResourceMatches(write, key) && iamResourceMatches(read, key) {
+					t.Errorf("%s is both edge-writable under %q and consumer-readable under %q: a stolen edge key plants an origin record and the consumer delivers the app's bypass token to it", key, write, read)
+				}
+			}
+
+			// The general statement, not just the three keys above: a key
+			// admitted by both would have to end in both patterns' trailing
+			// literals at once.
+			writeTail := write[strings.LastIndex(write, "*")+1:]
+			readTail := read[strings.LastIndex(read, "*")+1:]
+			if writeTail == "" || readTail == "" {
+				t.Fatalf("one grant ends in an unanchored wildcard (write %q, read %q); nothing bounds what a key can end in, so the two grants cannot be disjoint", write, read)
+			}
+			if strings.HasSuffix(writeTail, readTail) || strings.HasSuffix(readTail, writeTail) {
+				t.Errorf("write grant ends %q and read grant ends %q; one is a suffix of the other, so a single key satisfies both", writeTail, readTail)
+			}
+		})
+	}
+}
+
+// edgeGrant returns the single Resource the edge user's policy grants action on.
+func edgeGrant(t *testing.T, template, action string) string {
+	t.Helper()
+	user, ok := parseRevalidatorTemplate(t, template).Resources["EdgeUser"]
+	if !ok {
+		t.Fatal("template is missing the EdgeUser")
+	}
+	return soleResource(t, user.Properties.Policies[0].PolicyDocument.Statement, action)
+}
+
+// revalidatorGrant returns the single Resource the consumer role grants action on.
+func revalidatorGrant(t *testing.T, template, action string) string {
+	t.Helper()
+	return soleResource(t, revalidatorPolicy(t, template), action)
+}
+
+func soleResource(t *testing.T, statements []policyStatement, action string) string {
+	t.Helper()
+	var found []string
+	for _, st := range statements {
+		if slices.Contains(st.actions(), action) {
+			found = append(found, st.resources()...)
+		}
+	}
+	if len(found) != 1 {
+		t.Fatalf("%s is granted on %v, want exactly one resource", action, found)
+	}
+	return found[0]
 }
 
 // TestRevalidator_ReachesOnlyWhatItTriggersWith. The function holds every app's

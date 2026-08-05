@@ -195,16 +195,23 @@ func revalidateQueueResources(class string) string {
 //
 // The role is exactly what turning one message into one trigger takes. Its
 // s3:GetObject is scoped to `*/origin.json` and must never be relaxed to `/*`:
-// the edge holds s3:PutObject on `${AssetBucket.Arn}/*/fetch-cache/*` and
+// the edge holds s3:PutObject under the asset bucket's fetch-cache segment and
 // writes fully-controlled JSON bodies there, and the message names the key this
 // role reads. Round-two review of the consumer package demonstrated a working
 // exfiltration from exactly that — a '#' in the message's isrPrefix truncated
 // the appended /origin.json, aws4fetch signed the truncated path, and the
 // consumer delivered the app's bypass token to an origin the edge had planted.
-// The parser now rejects such a prefix, but IAM's '*' spans '/', so requiring
-// the key to END in /origin.json is what makes this read grant and the edge's
-// write grant disjoint — every key the edge can write ends in '.cache.json' —
-// and that holds even if the parser regresses.
+//
+// The parser now rejects such a prefix, and rejects a `fetch-cache` segment
+// outright, but neither read grant nor write grant depends on that. Both are
+// anchored on SUFFIXES, and the two suffixes cannot coexist in one key: this
+// grant admits only keys ending `/origin.json`, and edgeUserResource's write
+// grant admits only keys ending `.cache.json`. That is the whole of the
+// disjointness — it is a property of the two IAM patterns, not of the worker's
+// key-building code, which is what matters because the threat is a stolen edge
+// CREDENTIAL rather than a misbehaving worker. Relaxing EITHER pattern's suffix
+// to a bare `*` re-opens the vector: `*` spans '/', so a single key would then
+// satisfy both.
 //
 // The invoke grant is account-wide over Ocel-tagged functions, and that is
 // accepted rather than overlooked. There is one consumer per substrate and it

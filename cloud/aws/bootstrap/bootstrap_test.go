@@ -435,7 +435,7 @@ func TestEdgeUser(t *testing.T) {
 						t.Error("s3:PutObject must not be granted bucket-wide")
 					}
 				}
-				if st.Resource == "${AssetBucket.Arn}/*/fetch-cache/*" {
+				if st.Resource == "${AssetBucket.Arn}/*/fetch-cache/*.cache.json" {
 					s3Write = hasAction(st.Action, "s3:PutObject")
 				}
 				if st.Resource == "StateTable.Arn" && boundToTagKeys(st.Condition) {
@@ -460,7 +460,7 @@ func TestEdgeUser(t *testing.T) {
 				t.Error("missing s3:GetObject on the asset bucket")
 			}
 			if !s3Write {
-				t.Error("missing s3:PutObject scoped to the fetch-cache prefix")
+				t.Error("missing s3:PutObject scoped to a .cache.json object under the fetch-cache prefix")
 			}
 			if !ddbTable {
 				t.Error("missing dynamodb:BatchGetItem + UpdateItem bounded to the TAG# LeadingKeys")
