@@ -56,10 +56,16 @@ export interface OriginDeps {
 // The region a Function URL host names: `<id>.lambda-url.<region>.on.aws`.
 // aws4fetch guesses region and service from `*.amazonaws.com` hosts only, and a
 // wrong guess is an opaque 403, so it is read here and passed explicitly.
+//
+// Anchored on the whole host, not scanned for a label: what the deploy recorded
+// is what makes the token safe, and the shape is not relied on for that (epic
+// decision D) — but reading the region out of an unanchored match also means
+// signing for `attacker.lambda-url.us-east-1.evil.example`, which is a host
+// this consumer has no business signing anything for.
+const functionUrlHost = /^[a-z0-9]+\.lambda-url\.([a-z0-9-]+)\.on\.aws$/;
+
 function regionOf(host: string): string | undefined {
-  const labels = host.split(".");
-  const i = labels.indexOf("lambda-url");
-  return i < 0 ? undefined : labels[i + 1];
+  return functionUrlHost.exec(host)?.[1];
 }
 
 function compose(origin: string, routePath: string): Resolution {

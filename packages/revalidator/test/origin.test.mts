@@ -75,8 +75,18 @@ it("refuses a route id the deploy never recorded", async () => {
   });
 });
 
-it("refuses a recorded origin that is not a Function URL", async () => {
-  const { deps } = substrate(record(originDocument({ "/": "https://attacker.example.com/" })));
+// The host shape is not what makes the token safe — the record is — but a
+// record that somehow said something else must not be signed for anyway, and
+// "a label somewhere equal to lambda-url" is not a Function URL check: it
+// admits `attacker.lambda-url.us-east-1.evil.example`, whose region it would
+// then read as `us-east-1` and sign against.
+it.each([
+  ["a host of another shape entirely", "https://attacker.example.com/"],
+  ["a suffix that only looks like one", "https://attacker.lambda-url.us-east-1.evil.example/"],
+  ["a deeper name under the real suffix", "https://a.b.lambda-url.us-east-1.on.aws/"],
+  ["a suffix that merely ends the same way", "https://abc123.lambda-url.us-east-1.not-on.aws/"],
+])("refuses a recorded origin that is not a Function URL: %s", async (_name, origin) => {
+  const { deps } = substrate(record(originDocument({ "/": origin })));
 
   await expect(resolve(deps, message())).resolves.toEqual({ ok: false, reason: "origin-unusable" });
 });
