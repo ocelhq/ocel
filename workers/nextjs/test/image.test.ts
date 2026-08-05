@@ -12,6 +12,7 @@ import {
   type ImageOriginRequest,
 } from "../src/image";
 import fixtures from "./fixtures/image-conformance.json";
+import { coloDeps } from "./cache-deps";
 
 // The compiled config the fixture app was served with, so a unit test that
 // narrows one field still matches the real thing everywhere else.
@@ -471,13 +472,13 @@ describe("the /_next/image route", () => {
   it("serves a repeat request from the colo cache, across a redeploy", async () => {
     const clock = { ms: 0 };
     const pending: Promise<unknown>[] = [];
-    const cache: CacheDeps = {
+    const cache: CacheDeps = coloDeps({
       cache: caches.default,
       now: () => clock.ms,
       waitUntil: (promise) => {
         pending.push(promise);
       },
-    };
+    });
     let calls = 0;
     const deps = imageDeps({
       cache,

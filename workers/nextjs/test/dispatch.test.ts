@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
 import { sentinelUrl } from "../src/cache";
+import { coloDeps } from "./cache-deps";
 import type { AssetBucket } from "../src/assets";
 
 // An in-memory R2-bucket-shaped store, keyed by "<prefix><pathname>" exactly as
@@ -317,13 +318,13 @@ describe("dispatchResult", () => {
   // through serveCached and comes back stamped x-ocel-cache; a bypassed route
   // returns the origin response directly, with no such header.
   function missingCache(): NonNullable<RouteDeps["cache"]> {
-    return {
+    return coloDeps({
       cache: {
         match: async () => undefined,
         put: async () => {},
       } as unknown as Cache,
       waitUntil: () => {},
-    };
+    });
   }
 
   function bypassDeps(bypassKey: string): RouteDeps {
@@ -620,7 +621,7 @@ describe("dispatchResult", () => {
           headers: { "cache-control": "s-maxage=60" },
         });
       }) as unknown as typeof fetch,
-      cache: {
+      cache: coloDeps({
         cache: {
           match: async () => undefined,
           put: async () => {},
@@ -628,7 +629,7 @@ describe("dispatchResult", () => {
         waitUntil: (p: Promise<unknown>) => {
           pending.push(p);
         },
-      },
+      }),
       interception: {
         config: interceptionConfig,
         // 61s after the entry was written: stale, but no expiration cutoff.
@@ -693,12 +694,12 @@ describe("dispatchResult", () => {
           headers: { "cache-control": "s-maxage=60" },
         });
       }) as unknown as typeof fetch,
-      cache: {
+      cache: coloDeps({
         cache: coloHoldingSentinel("t:/blog"),
         waitUntil: (p: Promise<unknown>) => {
           pending.push(p);
         },
-      },
+      }),
       interception: {
         config: interceptionConfig,
         now: () => 1_000 + 61_000,
@@ -746,12 +747,12 @@ describe("dispatchResult", () => {
         origins.push(req);
         return new Response("[dynamic]", { status: 200 });
       }) as unknown as typeof fetch,
-      cache: {
+      cache: coloDeps({
         cache: coloHoldingSentinel("t:/ppr"),
         waitUntil: (p: Promise<unknown>) => {
           pending.push(p);
         },
-      },
+      }),
       interception: {
         config: interceptionConfig,
         // 61s past the entry: the shell is stale and would otherwise be refreshed.
@@ -813,7 +814,7 @@ describe("dispatchResult", () => {
       },
       functionUrls: { "/blog": "https://fn.example.com" },
       fetch: (() => lambdaResponse) as unknown as typeof fetch,
-      cache: {
+      cache: coloDeps({
         cache: {
           match: async (req: Request) => stored.get(req.url)?.clone(),
           put: async (req: Request, res: Response) => {
@@ -823,7 +824,7 @@ describe("dispatchResult", () => {
         waitUntil: (p: Promise<unknown>) => {
           pending.push(p);
         },
-      },
+      }),
       interception: {
         config: interceptionConfig,
         // 61s after the entry was written: stale, but no expiration cutoff.
@@ -955,7 +956,7 @@ describe("dispatchResult", () => {
           }) as unknown as typeof fetch)
         : record,
       originFetch: opts.signed ? record : undefined,
-      cache: {
+      cache: coloDeps({
         cache: {
           match: async () => undefined,
           put: async () => {
@@ -963,7 +964,7 @@ describe("dispatchResult", () => {
           },
         } as unknown as Cache,
         waitUntil: () => {},
-      },
+      }),
       interception: {
         config: interceptionConfig,
         now: () => 2_000,
@@ -1315,7 +1316,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
           },
         });
       }) as unknown as typeof fetch,
-      cache: {
+      cache: coloDeps({
         cache: {
           match: async (request: Request) => colo.get(request.url)?.clone(),
           put: async (request: Request, response: Response) => {
@@ -1326,7 +1327,7 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
           pending.push(promise);
         },
         now: () => now,
-      },
+      }),
       interception: {
         config: cfg,
         store,

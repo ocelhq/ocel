@@ -13,6 +13,7 @@ import {
   type ImageDeps,
 } from "../src/image";
 import fixtures from "./fixtures/image-conformance.json";
+import { coloDeps } from "./cache-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
   .config;
@@ -25,11 +26,13 @@ const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig
 function testDeps(clock: { ms: number }): CacheDeps & { flush: () => Promise<void> } {
   const pending: Promise<unknown>[] = [];
   return {
-    cache: caches.default,
-    now: () => clock.ms,
-    waitUntil: (promise) => {
-      pending.push(promise);
-    },
+    ...coloDeps({
+      cache: caches.default,
+      now: () => clock.ms,
+      waitUntil: (promise) => {
+        pending.push(promise);
+      },
+    }),
     flush: async () => {
       await Promise.all(pending.splice(0));
     },
@@ -290,13 +293,13 @@ describe("the image colo tier", () => {
     const clock = { ms: 0 };
     const recording = recordingCache();
     const pending: Promise<unknown>[] = [];
-    const cache: CacheDeps = {
+    const cache: CacheDeps = coloDeps({
       cache: recording,
       now: () => clock.ms,
       waitUntil: (promise) => {
         pending.push(promise);
       },
-    };
+    });
     const d = deps({
       slug: "version",
       cache,

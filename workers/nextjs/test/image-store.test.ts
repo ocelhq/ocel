@@ -14,6 +14,7 @@ import {
 } from "../src/image";
 import type { ImagePutOptions, ImageStore } from "../src/image-store";
 import fixtures from "./fixtures/image-conformance.json";
+import { coloDeps } from "./cache-deps";
 
 const BASE_CONFIG = (fixtures.variants as unknown as Array<{ config: ImageConfig }>)[0]
   .config;
@@ -120,13 +121,13 @@ function harness(
   const clock = { ms: 0 };
   const pending: Promise<unknown>[] = [];
   const recording = recordingCache();
-  const cache: CacheDeps = {
+  const cache: CacheDeps = coloDeps({
     cache: recording,
     now: () => clock.ms,
     waitUntil: (promise) => {
       pending.push(promise);
     },
-  };
+  });
   const store = fakeStore();
   const origin = overrides.origin ?? optimizer();
 

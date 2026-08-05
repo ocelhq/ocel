@@ -2,6 +2,7 @@ import { env } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, serve, type RouteDeps } from "../src/index";
+import { coloDeps } from "./cache-deps";
 import {
   createEdgeInvoker,
   type EdgeCacheBinding,
@@ -786,13 +787,13 @@ describe("edge-parented prerenders", () => {
       // No Function URL at all: the parent renders on the edge.
       functionUrls: {},
       edge,
-      cache: {
+      cache: coloDeps({
         cache: {
           match: async () => undefined,
           put: async () => {},
         } as unknown as Cache,
         waitUntil: () => {},
-      },
+      }),
       interception: {
         config: { isrPrefix },
         now: () => 2_000,
