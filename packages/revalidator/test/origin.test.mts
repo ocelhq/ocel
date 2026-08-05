@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 
 import { originTimeoutMs } from "../src/limits.mjs";
 import { parseMessage, type RevalidationMessage } from "../src/message.mjs";
-import { resolve, type OriginDeps } from "../src/origin.mjs";
+import { resolve, type OriginDeps, type Target } from "../src/origin.mjs";
 import { body, bucket, credentials, host, isrPrefix, originDocument, recordUrl, region } from "./fixture.mjs";
 
 function message(overrides: Record<string, unknown> = {}): RevalidationMessage {
@@ -35,6 +35,30 @@ function substrate(answer: Response | Error | (() => Response)): {
 function record(document: string = originDocument()): () => Response {
   return () => new Response(document, { status: 200 });
 }
+
+// The seam `Target` exists for, checked by the compiler rather than asserted in
+// a comment: `@ts-expect-error` is itself an error when the error it names does
+// not happen, so `pnpm typecheck` fails if either of these ever starts
+// compiling. The branded interface this replaced rejected the first and ADMITTED
+// the second — a real target could be spread, its url replaced, and the brand
+// came along with it.
+//
+// `as Target` still compiles, and always will: TypeScript permits an assertion
+// in either direction. That is why the comments in origin.mts claim a seam and
+// not a theorem, and why the property that actually keeps the token safe lives
+// in message.mts's validation and in reading the deploy's own record.
+it("cannot be spelled from a literal, or from a copy of a real one", async () => {
+  const { deps } = substrate(record());
+  const resolution = await resolve(deps, message());
+  if (!resolution.ok) throw new Error(resolution.reason);
+
+  // @ts-expect-error a literal carries no resolution
+  const fabricated: Target = { url: "https://attacker.example.com/", region: "us-east-1" };
+  // @ts-expect-error and copying a real one drops what made it one
+  const copied: Target = { ...resolution.target, url: "https://attacker.example.com/" };
+
+  expect([fabricated.region, copied.region]).toEqual(["us-east-1", "us-east-1"]);
+});
 
 it("reads the deploy's own record, under the isrPrefix, signed as the function's role", async () => {
   const { deps, requests } = substrate(record());

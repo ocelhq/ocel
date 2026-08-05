@@ -12,9 +12,9 @@ import type { Target } from "./origin.mjs";
 // framework-blind: the edge declared the receipt it expects when it enqueued
 // the message, and this evaluates that declaration and nothing else.
 //
-// The target is a `Target`, which only origin.mts produces. Nothing here can be
-// pointed at a host the deploy did not record, because there is no other way to
-// hand this function a URL.
+// The target is a `Target`, which nothing outside origin.mts can construct or
+// assert into being (see the class there). A caller cannot hand this function a
+// URL that did not come out of a resolution against the deploy's own record.
 export interface TriggerDeps {
   fetch: typeof fetch;
   credentials: { accessKeyId: string; secretAccessKey: string; sessionToken?: string };
