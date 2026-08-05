@@ -28,13 +28,34 @@ That is the same `routeId → Function URL` map the deploy already hands the edg
 in its Cloudflare deployment record, written to the one place keyed by
 `isrPrefix` that the consumer's own account can read.
 
-Resolving rather than validating is what makes the exfiltration class
-impossible instead of merely checked. A compromised edge key can enqueue any
-message it likes; the worst it can name is a `routeId` this deploy recorded, or
-one it did not, and the second is a rejection. There is no allowlist to keep
-current, and no pattern that would admit another AWS customer's Function URL.
+Resolving rather than validating is what removes the *host* from the message.
+It does not remove the *key*: `isrPrefix` chooses which record is read, and a
+lie there is the whole of what a compromised edge key can still steer. So the
+real boundary is this, and it is two things, not one:
+
+- **`isrPrefix` is validated as a key prefix** (`src/message.mts`), to the same
+  standard `routePath` is: dot-free segments of the characters
+  `cloud/aws/deploy` composes it from, no separator, no traversal, no absolute
+  key, nothing empty. Without that check a `#` or a `?` truncates the
+  `/origin.json` the consumer appends, and the message names an arbitrary
+  object — including one under `*/fetch-cache/*`, the prefix the edge holds
+  `s3:PutObject` on and writes fully-controlled JSON bodies to. A fragment
+  never reaches the wire and `aws4fetch` signs `url.pathname`, so the signature
+  would have matched the planted document exactly, and the origin comparison
+  below would have agreed with the planted origin. It also stops
+  `../../../other-app/BID2`, which reads a *sibling app's* record and delivers
+  app A's bypass token to app B's Function URL — logged, before the check, as
+  `RevalidateExpectMiss`, i.e. as a success.
+- **`routeId` cannot steer anything.** A lie there names a route this deploy
+  recorded or one it did not, and the second is a rejection. There is no
+  allowlist to keep current.
+
 The route path is joined onto the recorded origin and the result's origin is
-compared back to it, so a route path that tries to be a URL cannot become one.
+compared back to it, so a route path that tries to be a URL cannot become one —
+but note that this comparison is only as good as the record it read, which is
+why the key matters more than the join. The recorded origin is additionally
+required to be a Function URL host anchored on `.on.aws`; that is defence in
+depth, not the mechanism (`.24`'s IAM scope below is the third layer).
 
 The record is read once per `isrPrefix` per invocation — a batch of ten is
 usually one — and never across invocations: a container that outlived a
@@ -76,15 +97,25 @@ moves.
 ### What `.24` must add for the resolution above to work
 
 - **IAM, on the revalidator role**, alongside its SQS and `lambda:InvokeFunctionUrl`
-  grants:
+  grants — **scoped to the record's own name, not to the bucket**:
 
   ```yaml
   - Effect: Allow
     Action: s3:GetObject
-    Resource: !Sub '${AssetBucket.Arn}/*'
+    Resource: !Sub '${AssetBucket.Arn}/*/origin.json'
   ```
 
   Read-only, and no `s3:PutObject` — the consumer never writes to the store.
+
+  The `/origin.json` suffix is load-bearing and must not be relaxed to `/*`.
+  IAM's `*` spans `/`, so requiring the key to *end* in `/origin.json` is what
+  403s the suffix-truncation vector at the IAM layer even if the parser above
+  regresses: every key the edge can write ends in `.cache.json`
+  (`workers/nextjs/src/cache-entrypoint.ts`, `fetchObjectKey`), so no key the
+  edge can plant is a key this role can read. That disjointness is the reason
+  `origin.json` does **not** need to move to a prefix of its own; moving it
+  would not help, because `*/fetch-cache/*` matches under any leading prefix,
+  and the suffix is what separates the two grants.
 - **Env**, `OCEL_ASSET_BUCKET: !Ref AssetBucket`, exactly as `publisher.go`
   renders it for the tag publisher.
 - **A deploy-side write** (`cloud/aws/deploy`), which does not exist yet: after
@@ -92,15 +123,40 @@ moves.
   the asset bucket with the `{v, functionUrls}` document above. The map is the
   one `buildDeploymentRecord` already computes via `appFunctionURLsByRoute`; the
   Function URL is only knowable after `up`, which is why bootstrap cannot render
-  it and the deploy must write it. A deploy predating this write answers 404 and
-  its routes fail to resolve — visible in the logs as `origin-unusable`, never
-  as a silent success.
+  it and the deploy must write it.
+
+  Two hard requirements on that write, both of them about the epic's own
+  signature failure mode:
+
+  1. **It must land before the build is cut over to serving.** A build that is
+     live and has no record has routes that enqueue and never revalidate.
+  2. **A `PutObject` failure must fail the deploy, loudly.** Swallowing it
+     reproduces the epic's signature exactly: the edge enqueues, the thunk
+     returns "landed", the sentinel re-arms, the consumer answers
+     `origin-unusable` for every route of that build, and the deploy output said
+     nothing. There is no partial success here — a record that is absent is a
+     build that does not revalidate.
+
+  A deploy predating this write answers 404 and its routes fail to resolve —
+  visible in the logs as `origin-unusable`, never as a silent success.
+
+  **Expect the DLQ alarm on the first rollout.** Every build already live when
+  `.24` lands has no `origin.json`; each of its enqueued routes fails
+  `origin-unusable` through five receives and reaches the DLQ, so the new alarm
+  fires. It clears once the 300s `MessageRetentionPeriod` drains and every live
+  build has been redeployed. This is written down so the alarm's first real
+  signal is not dismissed as rollout noise.
 
 ## Handler contract
 
 Per record, in the batch's order:
 
-- Parse the message; an unknown `v` or a malformed body is an item failure.
+- Parse the message; an unknown `v` or a malformed body is an item failure. The
+  shape checks are part of parsing, not of a later stage: `routePath` is a path,
+  `isrPrefix` is a key prefix, and every header name is an RFC 9110 token — a
+  name that is not would otherwise throw inside `new Headers` at signing time
+  and be classified `handler-error`, spending five redeliveries on a permanent
+  condition.
 - Resolve the origin from `<isrPrefix>/origin.json` and compose the trigger URL
   from it and `routePath`. An unreadable record is `origin-unavailable`
   (transient — redelivery is worth something); a record that does not answer for
