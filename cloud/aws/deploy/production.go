@@ -38,7 +38,19 @@ import (
 // ReconcileRootStack is a no-op once a project's root stack already carries it;
 // bump it only when the frozen generic/store worker bundles change shape in a
 // way that needs re-deploying.
-const rootStackVersion = "10"
+//
+// A NEW WORKER VAR IS SUCH A CHANGE, and forgetting it is silent. Version 11 is
+// OCEL_REVALIDATE_QUEUE_URL: the var is bound from a bootstrap output, so a
+// substrate that gains a revalidator changes what every already-deployed
+// project's generic worker should carry — but a project whose root stack
+// already stamps this version skips the upload entirely and keeps a worker with
+// no queue binding. It then renders every admitted refresh through
+// originBlocking, which is the designed unpinned degradation rather than a
+// failure, so nothing anywhere reports it. Caught on the live e2e run for
+// ocelhq-wvag.27: the CloudFormation output carried the URL and the deployed
+// worker did not. Version 10 (the ISR writer binding) is the same class of
+// change and did bump; the queue's did not.
+const rootStackVersion = "11"
 
 // appDeployResult is one app's app-deploy-stack outcome, fed into
 // finalizeProductionDeploy after Run has driven that stack (Pulumi) to
