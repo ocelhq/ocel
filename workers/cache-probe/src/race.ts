@@ -30,6 +30,15 @@ export function scopedKey(scope: KeyScope, path: string, origin: string): Reques
   return new Request(url);
 }
 
+// An absent jitter parameter is no jitter; anything else has to parse as a
+// non-negative number or the request is rejected, since a silently-zero jitter
+// would print an un-jittered run under a jittered heading.
+export function parseJitterMs(raw: string | null): number | null {
+  if (raw === null) return 0;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
 // The jittered admission delay ocelhq-wvag.16 proposes for L1: before claiming,
 // wait a uniform draw from [0, J). Production draws it inside refreshOnce, ahead
 // of claimSentinel, on a path that has already served a stale response. Here it
@@ -37,15 +46,14 @@ export function scopedKey(scope: KeyScope, path: string, origin: string): Reques
 // same side of the network as the claim it is meant to spread — a driver-imposed
 // delay would also spread the ARRIVALS, and arrival spread suppresses claims by
 // itself, which is the effect this instrument has to hold constant.
-export function parseJitterMs(raw: string | null): number | null {
-  if (raw === null) return 0;
-  const parsed = Number(raw);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
+//
+// `random` is injected so the draw's bounds are asserted deterministically. The
+// live check that the delay is also SPENT is at the worker's HTTP surface,
+// where the draw cannot be pinned.
 export const drawDelayMs = (jitterMs: number, random: () => number = Math.random) =>
   jitterMs > 0 ? random() * jitterMs : 0;
 
+// The one spelling in this package, imported by the worker and by both scripts.
 export const sleep = (ms: number) =>
   ms > 0 ? new Promise((done) => setTimeout(done, ms)) : Promise.resolve();
 

@@ -345,11 +345,27 @@ describe("summarizeBurst", () => {
   });
 
   it("calls escapes a lower bound when the racers spread wider than the window", () => {
-    const wide = summarizeBurst(2, [counted(2), counted(2)], 10);
-    expect(wide.lowerBound).toBe(false);
+    const spreadAt = (...dispersions: number[]) =>
+      summarizeBurst(
+        2,
+        dispersions.map((dispersionMs) => ({ ...counted(2), dispersionMs })),
+        10,
+      );
 
-    const spread = [counted(2), counted(2)].map((t) => ({ ...t, dispersionMs: 40 }));
-    expect(summarizeBurst(2, spread, 10).lowerBound).toBe(true);
+    expect(spreadAt(1, 1, 1, 1, 1, 1, 1, 1, 1, 1).lowerBound).toBe(false);
+    expect(spreadAt(40, 40, 40, 40, 40, 40, 40, 40, 40, 40).lowerBound).toBe(true);
+
+    // The case a median-only guard cannot see, and the one the J = 2000ms rows
+    // actually hit: concurrent in most trials, wider than the window in a tenth
+    // of them. Those escape counts are an under-count and the row has to say so.
+    expect(spreadAt(1, 1, 1, 1, 1, 1, 1, 1, 40, 40).lowerBound).toBe(true);
+
+    // A single wide trial in twenty is not a systematic loss of concurrency,
+    // and a guard on the max would label every row over that. P90 is where the
+    // line is drawn, deliberately.
+    expect(
+      spreadAt(...Array.from({ length: 19 }, () => 1), 40).lowerBound,
+    ).toBe(false);
   });
 
   it("calls escapes a lower bound when the window is unknown", () => {
@@ -440,8 +456,11 @@ describe("jitterVerdict", () => {
     expect(jitterVerdict(1_000, distribution([10, 20]))).toBe("degenerate");
   });
 
-  it("calls a delay drawn where none was asked for degenerate", () => {
-    expect(jitterVerdict(0, distribution([0, 12]))).toBe("degenerate");
+  // A delay drawn where none was asked for is outcomeOf's abort, not this
+  // verdict's: it voids the run per racer, before any distribution is built.
+  // This function's J = 0 arm therefore says only what J = 0 means.
+  it("calls an un-jittered run none-requested and leaves the drawn-anyway case to outcomeOf", () => {
+    expect(jitterVerdict(0, distribution([0, 12]))).toBe("none-requested");
   });
 });
 
