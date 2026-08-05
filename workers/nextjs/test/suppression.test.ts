@@ -80,6 +80,7 @@ function blogDeps(
     now?: number;
     waitUntil?: (p: Promise<unknown>) => void;
     cache?: RouteDeps["cache"];
+    interception?: RouteDeps["interception"];
   } = {},
 ): RouteDeps {
   return {
@@ -96,13 +97,16 @@ function blogDeps(
     assetStore: noAssets(),
     fetch: origin.fetch,
     cache: "cache" in over ? over.cache : missingCache(over.waitUntil),
-    interception: {
-      config: { isrPrefix },
-      now: () => over.now ?? 2_000,
-      store: storeOf(
-        over.entry ? { [cacheObject("blog")]: over.entry } : {},
-      ),
-    },
+    interception:
+      "interception" in over
+        ? over.interception
+        : {
+            config: { isrPrefix },
+            now: () => over.now ?? 2_000,
+            store: storeOf(
+              over.entry ? { [cacheObject("blog")]: over.entry } : {},
+            ),
+          },
   };
 }
 
@@ -174,6 +178,31 @@ describe("self-revalidation suppression", () => {
     expect(origin.purposes()).toEqual([null]);
   });
 
+  // allowHeader lets `purpose` through, so a client value reaches the header set
+  // the blocking leg is built from too. It matters when bypassToken is absent:
+  // x-prerender-revalidate is then the empty string, which is not on-demand, and
+  // Next's prefetch guard would suppress the very render this leg exists to
+  // force — a refresh the admission already spent its sentinel on.
+  it("never inherits a client-sent purpose on the blocking revalidation forward", async () => {
+    const pending: Promise<unknown>[] = [];
+    const origin = recorder();
+
+    await dispatchBlog(
+      blogDeps(origin, {
+        entry: storedEntry(1_000),
+        now: 1_000 + 61_000,
+        waitUntil: (p) => pending.push(p),
+      }),
+      new Request("https://app.example/blog", {
+        headers: { purpose: "prefetch" },
+      }),
+    );
+    await Promise.all(pending);
+
+    expect(origin.requests).toHaveLength(1);
+    expect(origin.purposes()).toEqual([null]);
+  });
+
   // BYPASS traffic is not ISR-governed and must stay byte-identical.
   it.each([
     [
@@ -222,13 +251,41 @@ describe("self-revalidation suppression", () => {
     expect(origin.purposes()).toEqual([null]);
   });
 
-  // With no colo cache bound there is no admission tier to take the render
-  // over, so suppressing here would leave the route frozen until hard expiry —
-  // the failure mode the suppression exists to make impossible everywhere else.
+  // The stamp asks the Lambda not to start a render, so it may only go out
+  // where something else can: the interception read is what judges this entry
+  // stale and the admission tiers are what refresh it. Each of the three ways
+  // that tier can be absent gets its own test, because none of them fails
+  // loudly — the route just stops revalidating until hard expiry.
   it("never stamps when no colo cache is bound, which leaves no tier to refresh", async () => {
     const origin = recorder();
 
     await dispatchBlog(blogDeps(origin, { cache: undefined }));
+
+    expect(origin.purposes()).toEqual([null]);
+  });
+
+  // The ISR store binding is optional by design (cloud/edge/cloudflare: a
+  // substrate bootstrapped before there was a cache bucket carries no such
+  // value, and the worker still uploads without it), so this is the deploy
+  // shape the suppression is most likely to meet in production.
+  it("never stamps when no ISR store is bound", async () => {
+    const origin = recorder();
+
+    await dispatchBlog(blogDeps(origin, { interception: undefined }));
+
+    expect(origin.purposes()).toEqual([null]);
+  });
+
+  // A pages-router data request resolves to the same prerender target as its
+  // html route, but interception reconstructs only html/RSC — so it takes the
+  // interception-less path even on a fully bound worker.
+  it("never stamps a pages-router data request", async () => {
+    const origin = recorder();
+
+    await dispatchBlog(
+      blogDeps(origin),
+      new Request("https://app.example/_next/data/t/blog.json"),
+    );
 
     expect(origin.purposes()).toEqual([null]);
   });
