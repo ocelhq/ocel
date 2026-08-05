@@ -1,23 +1,9 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { handler } from "../src/index.mjs";
+import { body, bucket, host, originDocument, recordUrl, region } from "./fixture.mjs";
 
-const host = "abc123.lambda-url.us-east-1.on.aws";
-
-const record = {
-  messageId: "m-1",
-  body: JSON.stringify({
-    v: 1,
-    url: `https://${host}/blog/post`,
-    headers: { "x-prerender-revalidate": "token" },
-    expect: null,
-    isrPrefix: "build-1",
-    routePath: "/blog/post",
-    lastModified: 1_700_000_000_000,
-    enqueuedAt: 1_700_000_000_500,
-  }),
-  attributes: { MessageGroupId: "build-1:/blog/post" },
-};
+const record = { messageId: "m-1", body: body({ expect: null }), attributes: { MessageGroupId: "g-1" } };
 
 let fetched: string[];
 
@@ -25,12 +11,15 @@ beforeEach(() => {
   fetched = [];
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.stubGlobal("fetch", async (input: string | Request) => {
-    fetched.push(typeof input === "string" ? input : input.url);
+    const url = typeof input === "string" ? input : input.url;
+    fetched.push(url);
+    if (url === recordUrl) return new Response(originDocument(), { status: 200 });
     return new Response(null, { status: 200 });
   });
   vi.stubEnv("AWS_ACCESS_KEY_ID", "AKIAEXAMPLE");
   vi.stubEnv("AWS_SECRET_ACCESS_KEY", "shhh");
   vi.stubEnv("AWS_SESSION_TOKEN", "session");
+  vi.stubEnv("AWS_REGION", region);
 });
 
 afterEach(() => {
@@ -39,15 +28,15 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("triggers a record whose host the environment permits", async () => {
-  vi.stubEnv("OCEL_REVALIDATE_ALLOWED_HOSTS", host);
+it("resolves the origin from the deploy's own record and triggers it", async () => {
+  vi.stubEnv("OCEL_ASSET_BUCKET", bucket);
 
   await expect(handler({ Records: [record] })).resolves.toEqual({ batchItemFailures: [] });
-  expect(fetched).toEqual([`https://${host}/blog/post`]);
+  expect(fetched).toEqual([recordUrl, `https://${host}/blog/post`]);
 });
 
-it("permits nothing, and fetches nothing, when no host is configured", async () => {
-  vi.stubEnv("OCEL_REVALIDATE_ALLOWED_HOSTS", "");
+it("triggers nothing when it was never told where the deploy records live", async () => {
+  vi.stubEnv("OCEL_ASSET_BUCKET", "");
 
   await expect(handler({ Records: [record] })).resolves.toEqual({
     batchItemFailures: [{ itemIdentifier: "m-1" }],
@@ -56,9 +45,10 @@ it("permits nothing, and fetches nothing, when no host is configured", async () 
 });
 
 it("reads the environment per invocation, so rotated credentials are the ones it signs with", async () => {
-  vi.stubEnv("OCEL_REVALIDATE_ALLOWED_HOSTS", host);
+  vi.stubEnv("OCEL_ASSET_BUCKET", bucket);
   const signatures: string[] = [];
-  vi.stubGlobal("fetch", async (_input: string, init: RequestInit) => {
+  vi.stubGlobal("fetch", async (input: string, init: RequestInit) => {
+    if (input === recordUrl) return new Response(originDocument(), { status: 200 });
     signatures.push(new Headers(init.headers).get("authorization") ?? "");
     return new Response(null, { status: 200 });
   });
@@ -69,4 +59,15 @@ it("reads the environment per invocation, so rotated credentials are the ones it
 
   expect(signatures[0]).toContain("Credential=AKIAEXAMPLE/");
   expect(signatures[1]).toContain("Credential=AKIAROTATED/");
+});
+
+// The memo is per invocation. A container that outlived a redeploy must not
+// keep triggering the origin the previous build recorded.
+it("re-reads the deploy record on the next invocation rather than remembering it", async () => {
+  vi.stubEnv("OCEL_ASSET_BUCKET", bucket);
+
+  await handler({ Records: [record] });
+  await handler({ Records: [record] });
+
+  expect(fetched.filter((url) => url === recordUrl)).toHaveLength(2);
 });

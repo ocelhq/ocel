@@ -1,45 +1,32 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
 import { handle, type HandlerDeps, type SqsRecord } from "../src/handle.mjs";
-import { permittedHosts } from "../src/message.mjs";
+import { body, bucket, credentials, host, originDocument, recordUrl, region } from "./fixture.mjs";
 
-const host = "abc123.lambda-url.us-east-1.on.aws";
 const bypassToken = "s3cr3t-preview-mode-id";
-
-const credentials = { accessKeyId: "AKIAEXAMPLE", secretAccessKey: "shhh" };
-
-function body(overrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    v: 1,
-    url: `https://${host}/blog/post`,
-    headers: { "x-prerender-revalidate": bypassToken },
-    expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
-    isrPrefix: "build-1",
-    routePath: "/blog/post",
-    lastModified: 1_700_000_000_000,
-    enqueuedAt: 1_700_000_000_500,
-    ...overrides,
-  });
-}
 
 function record(messageId: string, group: string, overrides: Record<string, unknown> = {}): SqsRecord {
   return { messageId, body: body(overrides), attributes: { MessageGroupId: group } };
 }
 
-// The origin, keyed by the path each record asks for: a Response to answer
-// with, or an Error to throw.
-function origin(answers: Record<string, Response | Error>): {
+// The substrate: S3 answering the deploy record, and the origin answering by
+// the path each trigger asks for — a Response, or an Error to throw.
+function substrate(answers: Record<string, Response | Error> = {}): {
   deps: HandlerDeps;
   requested: string[];
 } {
   const requested: string[] = [];
   const deps: HandlerDeps = {
     credentials,
-    hosts: permittedHosts(host),
+    bucket,
+    region,
+    origins: new Map(),
     fetch: (async (input: string | Request) => {
       const url = typeof input === "string" ? input : input.url;
-      requested.push(new URL(url).pathname);
-      const answer = answers[new URL(url).pathname] ?? new Response(null, { status: 200 });
+      if (url === recordUrl) return new Response(originDocument(), { status: 200 });
+      const path = new URL(url).pathname;
+      requested.push(path);
+      const answer = answers[path] ?? new Response(null, { status: 200 });
       if (answer instanceof Error) throw answer;
       return answer;
     }) as typeof fetch,
@@ -51,6 +38,10 @@ const revalidated = new Response(null, { status: 200, headers: { "x-nextjs-cache
 
 function failures(response: { batchItemFailures: { itemIdentifier: string }[] }): string[] {
   return response.batchItemFailures.map(({ itemIdentifier }) => itemIdentifier);
+}
+
+function events(lines: string[]): string[] {
+  return lines.map((line) => JSON.parse(line).event as string);
 }
 
 // Every test runs with the log captured: these lines are the audit trail the
@@ -66,14 +57,14 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 it("answers an empty batch without reaching the origin", async () => {
-  const { deps, requested } = origin({});
+  const { deps, requested } = substrate();
 
   await expect(handle(deps, { Records: [] })).resolves.toEqual({ batchItemFailures: [] });
   expect(requested).toEqual([]);
 });
 
 it("stops a group at its first failure and reports the rest of that group, unprocessed", async () => {
-  const { deps, requested } = origin({
+  const { deps, requested } = substrate({
     "/a/1": new Response(null, { status: 500 }),
     "/a/2": revalidated,
     "/b/1": revalidated,
@@ -82,10 +73,10 @@ it("stops a group at its first failure and reports the rest of that group, unpro
 
   const response = await handle(deps, {
     Records: [
-      record("a-1", "group-a", { url: `https://${host}/a/1`, routePath: "/a/1" }),
-      record("b-1", "group-b", { url: `https://${host}/b/1`, routePath: "/b/1" }),
-      record("a-2", "group-a", { url: `https://${host}/a/2`, routePath: "/a/2" }),
-      record("b-2", "group-b", { url: `https://${host}/b/2`, routePath: "/b/2" }),
+      record("a-1", "group-a", { routePath: "/a/1" }),
+      record("b-1", "group-b", { routePath: "/b/1" }),
+      record("a-2", "group-a", { routePath: "/a/2" }),
+      record("b-2", "group-b", { routePath: "/b/2" }),
     ],
   });
 
@@ -94,19 +85,8 @@ it("stops a group at its first failure and reports the rest of that group, unpro
   expect(requested).toEqual(["/a/1", "/b/1", "/b/2"]);
 });
 
-it("rejects a host outside the permitted set without fetching", async () => {
-  const { deps, requested } = origin({});
-
-  const response = await handle(deps, {
-    Records: [record("m-1", "group-a", { url: "https://attacker.lambda-url.us-east-1.on.aws/blog/post" })],
-  });
-
-  expect(failures(response)).toEqual(["m-1"]);
-  expect(requested).toEqual([]);
-});
-
 it("rejects an unknown message version as an item failure", async () => {
-  const { deps, requested } = origin({});
+  const { deps, requested } = substrate();
 
   const response = await handle(deps, { Records: [record("m-1", "group-a", { v: 2 })] });
 
@@ -114,22 +94,36 @@ it("rejects an unknown message version as an item failure", async () => {
   expect(requested).toEqual([]);
 });
 
+// Nothing the message says can name a host, so the failure the old allowlist
+// caught now cannot arise: a route the deploy did not record simply has no
+// origin to trigger.
+it("fails a record whose route the deploy never recorded, without triggering", async () => {
+  const { deps, requested } = substrate();
+
+  const response = await handle(deps, { Records: [record("m-1", "group-a", { routeId: "/not-a-route" })] });
+
+  expect(failures(response)).toEqual(["m-1"]);
+  expect(requested).toEqual([]);
+  expect(JSON.parse(lines[0]!).reason).toBe("origin-unusable");
+});
+
 it("keeps a record whose expectation missed out of the failures, and logs it", async () => {
-  const { deps } = origin({ "/blog/post": new Response(null, { status: 200 }) });
+  const { deps } = substrate({ "/blog/post": new Response(null, { status: 200 }) });
 
   const response = await handle(deps, { Records: [record("m-1", "group-a")] });
 
   expect(failures(response)).toEqual([]);
-  expect(lines.map((line) => JSON.parse(line).event)).toEqual(["RevalidateExpectMiss"]);
+  expect(events(lines)).toEqual(["RevalidateExpectMiss"]);
 });
 
 it("fails the item, never the batch, when signing itself throws", async () => {
-  const { deps } = origin({});
+  const { deps } = substrate();
   // A role whose credentials arrived half-formed: the signer throws where
   // nothing expects it to, and a thrown handler would fail every group in the
-  // batch rather than this one record.
+  // batch rather than these records.
   const broken: HandlerDeps = {
     ...deps,
+    origins: new Map(),
     credentials: { accessKeyId: "AKIAEXAMPLE" } as HandlerDeps["credentials"],
   };
 
@@ -141,7 +135,7 @@ it("fails the item, never the batch, when signing itself throws", async () => {
 });
 
 it("never emits the bypass token, on the success path or any failure path", async () => {
-  const { deps } = origin({
+  const { deps } = substrate({
     "/ok": revalidated,
     "/miss": new Response(null, { status: 200 }),
     "/down": new Response(null, { status: 503 }),
@@ -150,10 +144,10 @@ it("never emits the bypass token, on the success path or any failure path", asyn
 
   await handle(deps, {
     Records: [
-      record("ok", "g-ok", { url: `https://${host}/ok`, routePath: "/ok" }),
-      record("miss", "g-miss", { url: `https://${host}/miss`, routePath: "/miss" }),
-      record("down", "g-down", { url: `https://${host}/down`, routePath: "/down" }),
-      record("throws", "g-throws", { url: `https://${host}/throws`, routePath: "/throws" }),
+      record("ok", "g-ok", { routePath: "/ok" }),
+      record("miss", "g-miss", { routePath: "/miss" }),
+      record("down", "g-down", { routePath: "/down" }),
+      record("throws", "g-throws", { routePath: "/throws" }),
       {
         messageId: "junk",
         body: `{"v":1,"headers":{"x-prerender-revalidate":"${bypassToken}"`,
@@ -164,4 +158,5 @@ it("never emits the bypass token, on the success path or any failure path", asyn
 
   expect(lines).toHaveLength(5);
   expect(lines.join("\n")).not.toContain(bypassToken);
+  expect(lines.join("\n")).not.toContain(host);
 });

@@ -1,5 +1,6 @@
 import { context, report, type Outcome } from "./log.mjs";
 import { parseMessage } from "./message.mjs";
+import { resolve, type OriginDeps } from "./origin.mjs";
 import { trigger, type TriggerDeps } from "./trigger.mjs";
 
 // A batch of SQS FIFO records, in the shape the event source mapping sends and
@@ -16,17 +17,23 @@ export interface BatchResponse {
   batchItemFailures: { itemIdentifier: string }[];
 }
 
-export interface HandlerDeps extends TriggerDeps {
-  hosts: ReadonlySet<string>;
-}
+export interface HandlerDeps extends TriggerDeps, OriginDeps {}
 
 async function once(deps: HandlerDeps, record: SqsRecord): Promise<Outcome> {
-  const parsed = parseMessage(record.body, deps.hosts);
+  const parsed = parseMessage(record.body);
   if (!parsed.ok) {
     report(context(record.messageId, null), { event: "RevalidateFailed", reason: parsed.reason });
     return { event: "RevalidateFailed", reason: parsed.reason };
   }
-  const outcome = await trigger(deps, parsed.message);
+
+  const resolution = await resolve(deps, parsed.message);
+  if (!resolution.ok) {
+    const outcome: Outcome = { event: "RevalidateFailed", reason: resolution.reason };
+    report(context(record.messageId, parsed.message), outcome);
+    return outcome;
+  }
+
+  const outcome = await trigger(deps, resolution.target, parsed.message);
   report(context(record.messageId, parsed.message), outcome);
   return outcome;
 }
