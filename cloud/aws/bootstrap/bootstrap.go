@@ -109,6 +109,15 @@ type Deployed struct {
 	// provider build pinning no artifact — which leaves image requests at the 502
 	// they answered before the optimizer existed.
 	ImageOptimizerURL string
+	// RevalidateQueueURL is the ISR revalidation queue's URL, bound into every
+	// worker so an admitted refresh can be deduplicated fleet-wide instead of
+	// rendered per colo. Empty on a substrate whose bootstrap rendered no
+	// revalidator — an older bootstrap, or a provider build pinning no artifact
+	// — because a queue nothing drains must never be enqueued into: the send
+	// succeeds, the refresh reports landed, and the route stops revalidating
+	// until it hard-expires. Empty leaves the edge rendering through the origin
+	// exactly as it does today.
+	RevalidateQueueURL string
 	// Class is the class the substrate was stamped with at bootstrap
 	// (ClassProduction or ClassPreview), or "" for an older bootstrap predating
 	// the marker.
@@ -179,6 +188,8 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 			d.VarsKeyARN = aws.ToString(o.OutputValue)
 		case outputImageOptimizerURL:
 			d.ImageOptimizerURL = aws.ToString(o.OutputValue)
+		case outputRevalidateQueueURL:
+			d.RevalidateQueueURL = aws.ToString(o.OutputValue)
 		case outputInfraClass:
 			d.Class = aws.ToString(o.OutputValue)
 		case outputVersion:
@@ -199,23 +210,29 @@ func checkStack(ctx context.Context, api CFNDescriber, stackName string) (Deploy
 // not the other renders one function and not the other, and each missing one
 // degrades on its own terms.
 type stackArtifacts struct {
-	optimizer artifactCode
-	publisher artifactCode
+	optimizer   artifactCode
+	publisher   artifactCode
+	revalidator artifactCode
 }
 
-func (a stackArtifacts) present() bool { return a.optimizer.present() || a.publisher.present() }
+func (a stackArtifacts) present() bool {
+	return a.optimizer.present() || a.publisher.present() || a.revalidator.present()
+}
 
 // stackPins is what this provider build ships for those Lambdas. One pinned and
-// the other not is a normal state: each is cut and pinned on its own release.
+// the others not is a normal state: each is cut and pinned on its own release.
 type stackPins struct {
-	optimizer artifactPin
-	publisher artifactPin
+	optimizer   artifactPin
+	publisher   artifactPin
+	revalidator artifactPin
 }
 
-func (p stackPins) pinned() bool { return p.optimizer.pinned() || p.publisher.pinned() }
+func (p stackPins) pinned() bool {
+	return p.optimizer.pinned() || p.publisher.pinned() || p.revalidator.pinned()
+}
 
 func pinnedArtifacts() stackPins {
-	return stackPins{optimizer: pinnedOptimizer(), publisher: pinnedTagPublisher()}
+	return stackPins{optimizer: pinnedOptimizer(), publisher: pinnedTagPublisher(), revalidator: pinnedRevalidator()}
 }
 
 // substrate is the per-class difference between the two bootstrap paths: which
@@ -369,8 +386,14 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 			return err
 		}
 	}
+	if code.revalidator, err = ensureRevalidatorArtifact(ctx, artifact, deployed.ArtifactBucket, pins.revalidator); err != nil {
+		return err
+	}
 	if !code.optimizer.present() {
 		report(log, "no image optimizer artifact is pinned in this provider build; none is created, and /_next/image answers 502 as it did before")
+	}
+	if !code.revalidator.present() {
+		report(log, "no revalidator artifact is pinned in this provider build; the revalidation queue is created but nothing drains it, so the edge is not told its URL and every admitted refresh renders through the origin as it does today")
 	}
 	if !isrWriterAdopted {
 		report(log, "this substrate adopted no ISR writer, so no tag publisher is created; there is no edge replica for it to publish into")
@@ -532,17 +555,17 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state.
     Value: !Ref StateBucket
-%s%s%s%s%s  %s:
+%s%s%s%s%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), edgeUserResource(EdgeUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), outputVersion, version, outputInfraClass, ClassProduction)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassProduction), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassProduction), revalidateQueueResources(ClassProduction), revalidatorResources(code.revalidator), edgeUserResource(EdgeUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassProduction)
 }
 
 // previewStackTemplate renders the preview infrastructure CloudFormation
@@ -574,17 +597,17 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-%s%s%s%s%s%s%sOutputs:
+%s%s%s%s%s%s%s%s%sOutputs:
   %s:
     Description: S3 bucket holding Pulumi state for preview stacks.
     Value: !Ref StateBucket
-%s%s%s%s%s  %s:
+%s%s%s%s%s%s  %s:
     Description: Ocel bootstrap schema version.
     Value: '%d'
   %s:
     Description: Class this substrate is stamped with, verified before an action runs.
     Value: '%s'
-`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), edgeUserResource(EdgePreviewUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), outputVersion, version, outputInfraClass, ClassPreview)
+`, stateTableResource(), artifactBucketResource(), assetBucketResource(), varsResources(ClassPreview), imageOptimizerResources(code.optimizer), tagPublisherResources(code.publisher, ClassPreview), revalidateQueueResources(ClassPreview), revalidatorResources(code.revalidator), edgeUserResource(EdgePreviewUserName, trust, code.optimizer), outputStateBucket, stateTableOutput(), artifactBucketOutput(), assetBucketOutput(), varsOutputs(), imageOptimizerOutput(code.optimizer), revalidateQueueOutput(code.revalidator), outputVersion, version, outputInfraClass, ClassPreview)
 }
 
 // stateTableResource renders the StateTable resource block shared by both
@@ -765,6 +788,13 @@ func assetBucketOutput() string {
 // gets a statement of its own naming just that function — see
 // imageOptimizerInvokeStatement for why not the two shortcuts.
 //
+// The revalidation queue grant is send-only, on that one queue's ARN: the edge
+// asks for a render and never drains, and a receive or delete on this key would
+// let a compromised edge swallow the fleet's revalidations without anything
+// noticing. The KMS pair beside it is not a second capability but the cost of
+// the queue's SSE-KMS envelope — a producer cannot encrypt a message without it
+// — and the ViaService condition confines it to calls SQS itself makes.
+//
 // userName is the deterministic name the imperative access-key step
 // (ensureEdgeCredentials, which also carries the credential rotation runbook)
 // looks the user up by. The block is a Resources child, so it is emitted before
@@ -816,6 +846,17 @@ func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer artif
                 Condition:
                   'Null':
                     'aws:ResourceTag/ocel:app': 'false'
+              - Effect: Allow
+                Action: sqs:SendMessage
+                Resource: !GetAtt RevalidateQueue.Arn
+              - Effect: Allow
+                Action:
+                  - kms:GenerateDataKey
+                  - kms:Decrypt
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    kms:ViaService: !Sub 'sqs.${AWS::Region}.amazonaws.com'
 %s`, userName, StateTableIndexName, imageOptimizerInvokeStatement(optimizer))
 }
 
