@@ -427,12 +427,17 @@ function inFlightFill(
   return inFlight.get(deps.cache)?.get(key);
 }
 
-// How long one colo's admission of a route suppresses the next. The spike
-// (docs/research/cloudflare-cache-api-spike.md) measured a sentinel becoming
-// readable from sibling isolates at ~200ms, and TTLs honored exactly from 1s
-// with no floor, so seconds is far above what the record needs to be useful;
-// the cost of going higher is that a sibling variant of an already-refreshed
-// route keeps serving stale for the rest of the window.
+// How long one colo's admission of a route suppresses the next. The spike's
+// follow-up (docs/research/cloudflare-cache-api-spike.md, "Follow-up: the L1
+// write-visibility window") measured a sentinel becoming readable from sibling
+// isolates at 8ms, and TTLs honored exactly from 1s with no floor, so seconds is
+// far above what the record needs to be useful; the cost of going higher is that
+// a sibling variant of an already-refreshed route keeps serving stale for the
+// rest of the window.
+//
+// The dependency runs BOTH WAYS. That 8ms was measured against a claim shaped
+// exactly like claimSentinel below — match, then put on a miss, with no
+// compare-and-set — and against this constant. Changing either voids it.
 export const refreshSentinelTtlSeconds = 5;
 
 // The Cache API keys on a URL and an admission key is not one, so synthesize
