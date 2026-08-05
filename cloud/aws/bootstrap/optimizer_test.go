@@ -138,20 +138,37 @@ func fixtureArtifactDeps(body []byte) (Artifacts, *fakeArtifactStore, *fakeArtif
 	return Artifacts{Source: source, Store: store}, store, source
 }
 
-// preloadedArtifact is an account that already holds whatever artifact this build
-// pins, under the checksum S3 would have verified for it. Tests of the bootstrap
-// steps *around* the optimizer use it so they neither download nor verify
-// anything and behave identically before and after a release is cut. The recorded
-// checksum is the pin's rather than the fixture's, because what the skip turns on
-// is the stored checksum matching the pin — the bytes stand in for a release
-// nobody has cut.
+// preloadedArtifact is an account that already holds every artifact this build
+// pins, under the checksum S3 would have verified for each. Tests of the
+// bootstrap steps *around* those artifacts use it so they neither download nor
+// verify anything and behave identically before and after any one release is
+// cut. The recorded checksum is the pin's rather than the fixture's, because
+// what the skip turns on is the stored checksum matching the pin — the bytes
+// stand in for the released asset.
+//
+// It covers all three pins rather than only the optimizer's: a build that pins a
+// second artifact would otherwise send every one of these tests down the
+// download-and-verify path against a source serving no bytes, and fail them all
+// on a digest mismatch that has nothing to do with what they assert.
 func preloadedArtifact() Artifacts {
 	store := newFakeArtifactStore()
-	pin := pinnedOptimizer()
-	key := optimizerArtifactKey(pin)
-	store.put(key, fixtureArtifact)
-	if sum, err := pin.checksum(optimizerLabel); err == nil {
-		store.checksums[key] = sum
+	for _, a := range []struct {
+		pin   artifactPin
+		key   func(artifactPin) string
+		label string
+	}{
+		{pinnedOptimizer(), optimizerArtifactKey, optimizerLabel},
+		{pinnedTagPublisher(), tagPublisherArtifactKey, tagPublisherLabel},
+		{pinnedRevalidator(), revalidatorArtifactKey, revalidatorLabel},
+	} {
+		if !a.pin.pinned() {
+			continue
+		}
+		key := a.key(a.pin)
+		store.put(key, fixtureArtifact)
+		if sum, err := a.pin.checksum(a.label); err == nil {
+			store.checksums[key] = sum
+		}
 	}
 	return Artifacts{Source: &fakeArtifactSource{}, Store: store}
 }
