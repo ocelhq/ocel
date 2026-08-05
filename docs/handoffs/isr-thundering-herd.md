@@ -32,8 +32,10 @@ main
                      └─ 6a isr-herd/06a-publisher-alarms  3fb0c73  ocelhq-wvag.13 ✅ CLOSED
                          └─ 6  isr-herd/06-get-drops-batchget 162660a ocelhq-wvag.6 ⛔ on yo9b
                              └─ 7  isr-herd/07-edge-l0-l1  d9cc24b  ocelhq-wvag.7  ✅ CLOSED
-                                 ├─ 9  isr-herd/09-write-visibility 85f73da+ ocelhq-wvag.9 ✅ CLOSED (measured, then re-measured)
-                                 └─ 8  edge L2 lease       (unstarted) ocelhq-wvag.8  ← unblocked
+                                 └─ 9  isr-herd/09-write-visibility db25a0f ocelhq-wvag.9 ✅ CLOSED (measured, then re-measured)
+                                     ├─ 10 isr-herd/10-admission-jitter 0e15817 ocelhq-wvag.16 ✅ CLOSED (measured, then built)
+                                     │   └─ 8  edge L2 lease   (unstarted) ocelhq-wvag.8  ← unblocked
+                                     └─ 17 multi-region herd harness (unstarted) ocelhq-wvag.17  ⛔ on .8
 ```
 
 **The stack was restacked into dependency order on 2026-08-04, and every commit sha on branch
@@ -121,8 +123,81 @@ worded as though retirement takes effect everywhere at once, and it does not.
 and the deploy that proved it uncovered `ocelhq-yo9b`, which is now the single gate on `.6`.**
 Read `ocelhq-yo9b` first; it is the most consequential thing on this page.
 
-**`ocelhq-wvag.9` is measured and closed, so `.8` is unblocked** — see below; it changes two
-numbers `.8` was going to be built on, and one of them is not comfortable.
+**`ocelhq-wvag.9` is measured and closed, and `ocelhq-wvag.16` — filed, measured and built since
+— has made the uncomfortable number comfortable.** `.8` was going to be built against a
+synchronized fan-in of 17 000-19 000 requests per stale event. It is now 425-440. Read `.16`
+below before `.8`.
+
+### `ocelhq-wvag.16` — the herd was self-inflicted, and jitter removes it — **DONE**
+
+Branch `isr-herd/10-admission-jitter`, rooted on `db25a0f` (tip of 09). Four commits, last
+`0e15817`. Nothing pushed. Findings in `docs/research/cloudflare-cache-api-spike.md`, section
+"Follow-up: the admission-jitter sweep"; the code is `admissionJitterMs` in
+`workers/nextjs/src/cache.ts`. A third `ocel-cache-probe` deploy was taken and **is torn down**,
+verified via the API: the script is absent from the account's script list and
+`probe.ocel.dev/*` / `probe.ocel.site/*` are absent from both zones' routes.
+
+**`.8` was sized against the wrong constraint, and this is the thing to carry forward.** The
+`.9` section below reasons about a *sustained* rate. The binding constraint is the **burst**: a
+route goes stale at one wall-clock instant, every colo sees it simultaneously, and
+`F = C·E ≈ 17 000-19 000` requests arrive within a few hundred milliseconds against an object
+Cloudflare rates at ~500-1 000 rps. That is ~20 s of queueing — overload, not slow success.
+
+**And the synchronization is the system's own doing.** `claimSentinel` fires the instant a
+request observes staleness and `settleSentinel` re-arms exactly one TTL later, colo-wide.
+Nothing requires the attempts to be simultaneous. So the fix is neither to shard (splitting `k`
+ways yields `k` origin renders, restoring the herd) nor to raise the TTL (which moves the
+sustained rate and leaves the burst): it is to wait a uniform draw from `[0, 1000 ms)` before
+claiming.
+
+Measured before a line of `workers/nextjs` was written, because falsifying it would have
+changed `.8`'s shape to a hierarchical per-`(route,colo)` tier. Two runs, 600 trials each, zero
+discarded: **`E(128)` mean 1.41 and 1.46 at `J = 1000 ms`, against 54.79 and 61.98 at `J = 0`**.
+The gate was 3.
+
+- **The sweep was a sweep, not a single point, and that was the whole design.** `.9` found
+  cross-isolate visibility is not uniform inside a colo, so `E` could have floored at
+  `p · I_colo` however wide `J` grew. Means across `J = 0, 100, 250, 500, 1000, 2000`:
+  54.79/61.98, 3.81/3.79, 2.52/2.31, 1.69/2.05, 1.41/1.46, 1.21/1.26. **No plateau** — still
+  falling at 2 000. `.8` needs no hierarchical fallback.
+- **The floor is bounded, not waved away.** `lateEscapes` counts escapes whose draw put them
+  more than `W` after the trial's *first* claim, which is the claim that has had longest to
+  propagate. At `J = 2000` it means 0.03 and 0.07, so any mutually-blind population sits below
+  0.07 escapes per colo per stale event. Its zero at `J = 0` is structurally unreachable and is
+  labelled in the doc rather than cited.
+- **The constant is λ-free by construction.** `J ≥ I_colo·W`, because L0 already collapses each
+  isolate to one in-flight admission and *holds that entry across the wait*, so the claimant
+  pool inside one window cannot exceed the isolate count. `λ_colo` never enters. The bound
+  over-predicts at every `J` (1.8× at 100 ms, 1.05× at 2 000 ms), so choosing from it is
+  choosing conservatively.
+- **What `.8` should now size against:** `F = C·E ≈ 425-440` per stale event spread over 1 s, and
+  `R ≈ 85-88 rps` sustained. Both under the conservative 500 rps figure. **One DO per route
+  holds, conditional on the jitter staying in place** — `.8`'s description says so and names
+  `.16` as the condition.
+- **The wait is on `admitRefresh` only.** The miss-path fill runs `refreshOnce` directly, on the
+  serving path with joiners awaiting it; a wait there is up to a second of user-visible latency
+  on every cold miss. The test that catches it has to *join* a second request to the leader's
+  fill — a single request never awaits the fill and passes either way.
+- **The production default lives in `cache.ts`, not at `src/index.ts`'s deps construction.**
+  Deliberate: nothing wires it, so there is no site at which a test double *can* be left behind.
+  `CacheDeps.admissionDelay` exists only as the test seam, and one test leaves the default in
+  place and asserts it is drawn, non-zero and bounded.
+- **`inFlight` is keyed on `deps.cache`, not on the deps object.** Non-obvious and load-bearing
+  for `.8`'s wiring: spreading `CacheDeps` to add a delay does not fragment L0. Asserted by a
+  test, and the assertion was confirmed to fail against a `WeakMap` keyed on `deps`.
+
+Every test above was mutation-checked — the production line broken, the named test confirmed
+failing, the line restored. Probe-side likewise: a worker that ignores `--jitter` and one that
+reports a delay it never slept are both caught by live checks, confirmed against a deliberately
+broken worker before the runs were taken.
+
+**`.8` was split three ways** (decisions recorded as comments on the epic): this issue took the
+jitter and blocks `.8`; `ocelhq-wvag.17` took the load/herd harness that epic decision 15 had
+put in `.8`, because it measures the whole stack rather than the lease and needs a multi-region
+driver; `.8` keeps the lease DO, wire protocol, Go provisioning and edge wiring. `.8`'s
+description has been corrected: it previously concluded the smooth-traffic case holds and asked
+the implementer to show why the synchronized regime cannot arise. It does arise, and the burst
+figure it omitted entirely is the constraint.
 
 ### `ocelhq-wvag.9` — the write-visibility window is 8 ms, and PR 1's 201 ms never contained it — **DONE**
 
@@ -154,8 +229,9 @@ Four things to carry forward:
   that clock started, and the old `10 + 65 + 125` decomposition double-counted it. Cold sockets
   and 64-way queueing are the most likely explanation for the residual and that is **untested**.
   The comment in `workers/nextjs/src/cache.ts` justifying `refreshSentinelTtlSeconds = 5` by
-  citing "~200 ms" is wrong by a factor of twenty-five; the constant is not, and the edit
-  belongs to PR 8.
+  citing "~200 ms" is wrong by a factor of twenty-five; the constant is not. **That edit was
+  made under `.16`, not PR 8**, since `.16` is where the same file gained `admissionJitterMs`,
+  which is derived from the 8 ms and carries the same staleness clause.
 - **`.8`'s sizing arithmetic was wrong twice and its description is corrected.** "300 colos /
   sentinel TTL ≈ 30 rps" assumed a TTL of 10 (PR 7 shipped 5) and one escape per colo. Real
   smooth-traffic sizing is `R = 60 + 0.48·λ_colo`, holding one DO per route to λ ≈ 917 rps per
@@ -913,7 +989,12 @@ Standing constraints PR 7 hands to PR 8, which builds L2 on top of L1:
   exact 1–60 s TTLs. `ocelhq-wvag.9` has since measured the write-visibility window at **8 ms**,
   which is what tells you how much L1 leaks into L2 — do not size L2 off the epic's original
   `1 − crossIsolateHitRate` formula, which degenerates to zero. The 5 s constant is unaffected;
-  the comment justifying it is wrong by a factor of twenty-five.
+  its comment has been corrected under `.16`.
+- **L1 now jitters its admission, and L2's sizing depends on it.** `admissionJitterMs = 1000`
+  takes the per-colo escape count from ~55-62 to ~1.4 (`ocelhq-wvag.16`). Size L2 against
+  `F ≈ 425-440` per stale event, not against the 17 000-19 000 the un-jittered path produced —
+  and if the jitter is ever removed or moved off the pre-claim path, that sizing is void along
+  with `W` itself.
 
 Live threads to carry forward:
 
