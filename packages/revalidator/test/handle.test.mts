@@ -154,7 +154,11 @@ it("never emits the bypass token, on the success path or any failure path", asyn
       record("miss", "g-miss", { url: `https://${host}/miss`, routePath: "/miss" }),
       record("down", "g-down", { url: `https://${host}/down`, routePath: "/down" }),
       record("throws", "g-throws", { url: `https://${host}/throws`, routePath: "/throws" }),
-      { messageId: "junk", body: `{"v":1,"headers":{"x-prerender-revalidate":"${bypassToken}"`, attributes: { MessageGroupId: "g-junk" } },
+      {
+        messageId: "junk",
+        body: `{"v":1,"headers":{"x-prerender-revalidate":"${bypassToken}"`,
+        attributes: { MessageGroupId: "g-junk" },
+      },
     ],
   });
 
