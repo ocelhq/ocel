@@ -141,7 +141,7 @@ async function serveStale(
 describe("the colo tier's admitted refresh", () => {
   it("hands an accepted refresh to the queue instead of rendering it", async () => {
     const sender = queue(true);
-    const { stale, blocking, cache } = await serveStale("accepted", {
+    const { stale, blocking } = await serveStale("accepted", {
       deps: { enqueueRevalidation: sender.enqueueRevalidation },
     });
 
