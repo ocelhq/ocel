@@ -285,11 +285,31 @@ interface ColoPolicy {
   forServe(response: Response, status: CacheStatus): Response;
 }
 
+// A stale serve Next itself reported: the Lambda answered from a stale entry
+// and — under the edge's prefetch suppression — started no render to replace
+// it. Storing those bytes would launder them into a colo entry that reads fresh
+// for a whole window, the trap OpenNext's rejected "fake lastModified" option
+// creates. They are still served; only the put is skipped.
+//
+// Provenance, not the header alone. servedFromStore stamps STALE on Ocel's own
+// R2 serves too, and declining those would delete the colo tier for every stale
+// route for the whole duration of a tag invalidation. CACHE_STATUS is the
+// worker's own namespace — stripped from every inbound request, written
+// nowhere but here — so a value of PRERENDER on a response means this worker
+// reconstructed it from the store, and no Lambda response can claim it.
+function suppressedStaleServe(response: Response): boolean {
+  return (
+    response.headers.get(NEXT_CACHE_STATUS) === "STALE" &&
+    response.headers.get(CACHE_STATUS) !== "PRERENDER"
+  );
+}
+
 const prerenderPolicy: ColoPolicy = {
-  // Only a storability gate: refuse no-store/private/no s-maxage responses. The
-  // retention window itself comes from the target.
+  // Refuse no-store/private/no s-maxage responses, and the Lambda's suppressed
+  // stale serves. The retention window itself comes from the target.
   storable: (response) =>
-    storagePolicy(response.headers.get("cache-control")) !== null,
+    storagePolicy(response.headers.get("cache-control")) !== null &&
+    !suppressedStaleServe(response),
   window: entryWindow,
   forServe: (response, status) => {
     const served = withStatus(response, status);

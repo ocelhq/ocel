@@ -726,6 +726,90 @@ describe("serveCached", () => {
     await deps.flush();
   });
 
+  // The other half of self-revalidation suppression (bd ocelhq-wvag.26): with
+  // `purpose: prefetch` on the user-path forward, a Lambda answering on a stale
+  // entry serves it and starts no render. Those bytes are stale by construction
+  // and must not become a colo entry that looks fresh for a whole window.
+  describe("a STALE serve", () => {
+    // Stamped like the Lambda's: Next's own header, and no x-ocel-* at all —
+    // the control namespace is stripped inbound and only this worker writes it.
+    const lambdaStale = (cacheControl = "s-maxage=60"): CountingOrigin => {
+      const fn = (async () => {
+        fn.calls++;
+        return new Response("stale bytes", {
+          headers: { "cache-control": cacheControl, "x-nextjs-cache": "STALE" },
+        });
+      }) as CountingOrigin;
+      fn.calls = 0;
+      return fn;
+    };
+
+    it("from the Lambda is served but not stored", async () => {
+      const clock = { ms: 0 };
+      const cache = countingCache();
+      const deps = testDeps(clock, cache);
+      const origin = lambdaStale();
+      const t = target("lambda-stale");
+
+      const res = await serveCached(req(), t, deps, origin, origin);
+      await deps.flush();
+
+      expect(await res.text()).toBe("stale bytes");
+      expect(cache.puts).toBe(0);
+
+      // And so the next request reaches the origin again rather than being
+      // answered from a colo entry that would have read as fresh.
+      await serveCached(req(), t, deps, origin, origin);
+      expect(origin.calls).toBe(2);
+    });
+
+    // The narrowing that keeps the colo tier alive during a tag invalidation:
+    // servedFromStore stamps STALE on Ocel's own R2 serves too, and gating on
+    // the header alone would send every stale route back to R2 on every colo
+    // miss for the whole duration of the invalidation.
+    it("Ocel made from the R2 store is stored, because its provenance is not the Lambda", async () => {
+      const clock = { ms: 0 };
+      const cache = countingCache();
+      const deps = testDeps(clock, cache);
+      const origin = lambdaStale();
+      const fromStore = (async () => {
+        const response = await origin();
+        response.headers.set("x-ocel-cache", "PRERENDER");
+        return response;
+      }) as CountingOrigin;
+      const t = target("prerender-stale", { revalidate: 60, expiration: 600 });
+
+      await serveCached(req(), t, deps, fromStore, fromStore);
+      await deps.flush();
+
+      expect(cache.puts).toBe(1);
+      const hit = await serveCached(req(), t, deps, fromStore, fromStore);
+      expect(hit.headers.get("x-ocel-cache")).toBe("HIT");
+      expect(origin.calls).toBe(1);
+    });
+
+    it.each(["HIT", "REVALIDATED"])(
+      "is not what a %s response is, so it stores as before",
+      async (status) => {
+        const clock = { ms: 0 };
+        const cache = countingCache();
+        const deps = testDeps(clock, cache);
+        const origin = countingOrigin("s-maxage=60");
+        const stamped = (async () => {
+          const response = await origin();
+          response.headers.set("x-nextjs-cache", status);
+          return response;
+        }) as CountingOrigin;
+        const t = target(`lambda-${status}`);
+
+        await serveCached(req(), t, deps, stamped, stamped);
+        await deps.flush();
+
+        expect(cache.puts).toBe(1);
+      },
+    );
+  });
+
   it("leaves a dynamic response unstamped: Next never sets x-nextjs-cache on one", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock);
