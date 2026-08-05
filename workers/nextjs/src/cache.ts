@@ -38,6 +38,10 @@ export interface CacheDeps {
   waitUntil: (promise: Promise<unknown>) => void;
   // Injected so freshness never depends on wall-clock time. Milliseconds.
   now?: () => number;
+  // The wait a background refresh takes before it tries to claim the colo's
+  // admission. Absent means the real jittered one; tests inject a deterministic
+  // delay so they are not sleeping a second apiece. See admissionJitterMs.
+  admissionDelay?: () => Promise<void>;
 }
 
 export interface CacheTarget {
@@ -437,8 +441,29 @@ function inFlightFill(
 //
 // The dependency runs BOTH WAYS. That 8ms was measured against a claim shaped
 // exactly like claimSentinel below — match, then put on a miss, with no
-// compare-and-set — and against this constant. Changing either voids it.
+// compare-and-set — and against this constant. Changing either voids it, and the
+// jitter derived from it in admissionJitterMs with it.
 export const refreshSentinelTtlSeconds = 5;
+
+// How long a background refresh waits before trying to claim, drawn uniformly.
+// Without it every colo re-admits on a shared schedule — settleSentinel re-arms
+// exactly one TTL after claimSentinel fired — so a route going stale puts C·E
+// requests on the tier above within a few hundred milliseconds.
+//
+// J >= I_colo · W, from the spike's follow-up: the claimant pool inside one
+// jitter window cannot exceed the colo's isolate count, because refreshOnce
+// above already collapses each isolate to one in-flight admission and holds that
+// entry across this wait. So claims per colo are about 1 + I_colo·W/J. At
+// I_colo >= 99 and W = 8ms that bound is 0.8s, rounded up here.
+//
+// The bound is deliberately free of the arrival rate: λ is a property of the
+// operator's traffic, and a constant derived from a guess at it would be a guess
+// wearing a measurement's clothes. Measured at 1.41 claims per colo mean (median
+// 1, p90 2) against 54.8 without the wait — see the follow-up's jitter sweep.
+export const admissionJitterMs = 1_000;
+
+const jitteredAdmissionDelay = (): Promise<void> =>
+  new Promise((done) => setTimeout(done, Math.random() * admissionJitterMs));
 
 // The Cache API keys on a URL and an admission key is not one, so synthesize
 // it: its own hostname, so a sentinel can never collide with an entry key, and
@@ -493,6 +518,10 @@ async function settleSentinel(
 // isolates can both miss it and both proceed; the goal is N to a few, not to
 // one. On a deploy whose cache is inert this degrades to exactly refreshOnce.
 //
+// What makes it a few rather than most of the colo is the wait before the claim:
+// without it, every isolate that observes the same stale entry claims inside the
+// same 8ms window and none of them sees the others. See admissionJitterMs.
+//
 // `run` reports whether the refresh landed: the origin answered ok, which is
 // what the admission was taken for. Storing the bytes is not the test — on the
 // interception path the render's real effect is the Lambda rewriting R2, and a
@@ -504,6 +533,10 @@ export function admitRefresh(
 ): void {
   const sentinel = new Request(sentinelUrl(key));
   refreshOnce(deps, key, async () => {
+    // Ahead of the claim, and only here. The miss-path fill runs refreshOnce
+    // directly, on the serving path with joiners awaiting it, and a wait there
+    // would be up to a second of user-visible latency on every cold miss.
+    await (deps.admissionDelay ?? jitteredAdmissionDelay)();
     if (!(await claimSentinel(deps.cache, sentinel))) return;
     let landed = false;
     try {
