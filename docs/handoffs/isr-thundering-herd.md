@@ -15,9 +15,19 @@ source, Cloudflare docs and AWS docs, and several of them invert the plan's orig
 instincts — most importantly that the build manifest fixes the *write* path, not the read
 path, and that a shared coordinator DO is Cloudflare's named anti-pattern.
 
+**There is now a SECOND design of record, and it amends the epic:**
+`docs/research/isr-queue-revalidation-design.md` (queue-deduplicated revalidation), with the
+comparison work behind it in `docs/research/isr-herd-prior-art-opennext-vercel.md`. It adds
+epic decisions **16–19** and is itself amended by **seven human decisions A–G**, indexed in
+its **§0a** and recorded verbatim as an epic comment dated 2026-08-05 13:20. **Read §0a first
+— where the amendment and the body disagree, the amendment wins.** Four of the seven were the
+human's calls: §6.2 narrowed to **Lambda provenance** (A); `.28` **deferred** behind `.17` (B);
+`MessageRetentionPeriod` **300, not 3600** (C); trigger-secret hardening (D). E, F and G
+correct the document's own stack order and three CloudFormation/sizing errors.
+
 ## Stack shape
 
-Thirteen PRs, each rooted on the previous, first rooted at `main`. Dependency-derived order —
+Eighteen branches, each rooted on the previous, first rooted at `main`. Dependency-derived order —
 note this deliberately inverts the original 1a→1b→2a→2b sequencing, because PR 6 removes the
 DynamoDB fallback and therefore cannot land before the publisher that becomes the sole
 guarantor of invalidation.
@@ -40,13 +50,23 @@ main
                                      └─ 10 isr-herd/10-admission-jitter 6eddd0e ocelhq-wvag.16 ✅ CLOSED (measured, built, reviewed ×2, fixed)
                                          └─ 11 isr-herd/11-refresh-reads-r2 4bcfec1 ocelhq-wvag.18 ✅ CLOSED, reviewed, one silent defect fixed
                                              └─ 12 isr-herd/12-edge-snapshot-join be644ef ocelhq-wvag.19 ✅ CLOSED, reviewed, three defects fixed
-                                                 └─ 13 isr-herd/13-deploy-concurrency-cap 9833239+ ocelhq-5me0 ✅ CLOSED, reviewed (no defects)
+                                                 └─ 13 isr-herd/13-deploy-concurrency-cap 63e35a1 ocelhq-5me0 ✅ CLOSED, reviewed (no defects)
+                                                     └─ 14 isr-herd/14-revalidator-package 275411c ocelhq-wvag.23 ✅ CLOSED, reviewed ×2, second round found a live exfiltration path
+                                                         └─ 15 isr-herd/15-revalidate-queue-resources a2b19a2 ocelhq-wvag.24 ✅ CLOSED, reviewed, same class found again
+                                                             └─ 16 isr-herd/16-selfrevalidation-suppression 62bde01 ocelhq-wvag.26 ✅ CLOSED, reviewed, composition bug + dead golden gate
+                                                                 └─ 17 isr-herd/17-edge-enqueue b128276 ocelhq-wvag.25 ✅ CLOSED, reviewed, .29 filed out of it
+                                                                     └─ 18 isr-herd/18-revalidator-pin-live-e2e 1f4ff55+ ocelhq-wvag.27 ◐ OPEN, offline half done, BLOCKED on authorization
 
-  17 multi-region herd harness (unstarted) ocelhq-wvag.17  ← unblocked, and now the next thing
-   └─ 8  edge L2 lease  ocelhq-wvag.8  ⛔ DEFERRED, now blocked ON .17 (edge inverted)
+  17 multi-region herd harness  ocelhq-wvag.17  ⛔ now blocked ON .27 — NOT the next thing
+   ├─ 8  edge L2 lease  ocelhq-wvag.8   ⛔ DEFERRED, blocked ON .17
+   └─ 28 blocking-miss collapse ocelhq-wvag.28 ⛔ DEFERRED, blocked ON .17 (new)
 ```
 
-`+` means "plus this handoff's own commit", which is the tip of 13 as you read this.
+`+` means "plus this handoff's own commit", which is the tip of 18 as you read this.
+
+**Every parent edge above was re-verified with `git merge-base --is-ancestor` on 2026-08-05**,
+all eighteen, and every tip read off `git rev-parse`. The stack order matches `gh stack view`
+exactly.
 
 **The stack was restacked into dependency order on 2026-08-04, and every commit sha on branch
 07 changed.** Any note elsewhere in this document that cites a sha on 07 was written before the
@@ -59,8 +79,12 @@ between-PR work piled on top of 07. Each tip above was verified green after the 
 - **`.12` and `.14`'s commits stay on 07** as between-PR commits, as they always were. Note
   `d9cc24b` (the fix to `.14`'s own stale comment) **must stay behind `fdf045c`** — it rewrites
   the comment block that commit introduces.
-- **Nothing is pushed and `gh stack` reports these branches are NOT tracked.** The stack is still
-  managed by hand; do not assume a `gt`/`gh stack` restack will do the right thing with it.
+- **THE STACK IS NOW TRACKED BY `gh stack`, and the old note here said the opposite.** It used to
+  read "nothing is pushed and `gh stack` reports these branches are NOT tracked … managed by hand".
+  That is superseded: `gh stack init --base main` adopted the thirteen pre-existing branches on
+  2026-08-05, and 14 → 18 were created with `gh stack add`. `gh stack view` lists all eighteen in
+  the order above. **Nothing is pushed and no PR exists** — tracking is local state only, and
+  `submit`/`push` remain human-authorized like everything else here.
 
 Filed out of band: `ocelhq-wvag.9` (measure the L1 write-visibility window; **blocks `.8`**),
 `ocelhq-wvag.10` (live e2e for the writer), `ocelhq-wvag.11` (destroy leaves per-build writer
@@ -136,9 +160,315 @@ worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
 
-**Nothing in this stack is gated any more, and `.8` is no longer the next thing.** `.16`, `.18`,
-`.19` and `ocelhq-5me0` are built and reviewed. **`ocelhq-wvag.17` is the next thing to build**;
-`ocelhq-wvag.8` is deferred behind it.
+**`ocelhq-wvag.27` is prepared and BLOCKED on authorization; nothing else in the stack is
+gated.** `.23`, `.24`, `.26` and `.25` are built, reviewed and closed — the queue path exists
+end to end in code and is inert until the pin is set. **`.17` is no longer "the next thing"**:
+the 2026-08-05 13:20 epic amendment moved it behind `.27`, because with decision 16 landed the
+queue is the dominant term in the number `.17` measures, so measuring first would measure a
+stack that no longer exists. `.8` and now `.28` are both deferred behind `.17`.
+
+### `ocelhq-wvag.27` — the artifact is built, the digest is established, the pin is UNSET
+
+Branch `isr-herd/18-revalidator-pin-live-e2e`, rooted on `b128276` (tip of 17). Nothing pushed.
+The offline half is done; **everything remaining needs an action outside this repo and was not
+taken.**
+
+- **The artifact is deterministic.** `pnpm --filter @ocel/revalidator zip` from a clean `dist/`
+  three times produced a byte-identical archive, confirmed with `cmp` and not merely by
+  comparing hashes: **sha256 `2f830a670b3fbc9f313018375cb2f1d88f6b5950e986373079d212548ca8a0dd`,
+  5843 bytes**. Re-derived from a clean rebuild while writing this handoff and unchanged.
+- **The pin is deliberately empty, and that is the correct state.** `revalidator-v0.0.1` does
+  not exist (`gh release list` holds only `tag-publisher-v0.0.1` and two image-optimizer tags).
+  Pinning a digest whose release asset is absent turns **every bootstrap into a 404 download**
+  rather than the documented unpinned skip — which is a strictly worse failure, because the
+  unpinned path is designed: no consumer is rendered, the edge is never handed
+  `OCEL_REVALIDATE_QUEUE_URL` (human decision F), and every refresh falls back to
+  `originBlocking` exactly as today.
+- **The diff that sets it is recorded verbatim in `cloud/aws/bootstrap/revalidatorversion.go`'s
+  own comment block** — two constants, `RevalidatorArtifactVersion = "0.0.1"` and
+  `RevalidatorArtifactSHA256 = "<digest above>"` — so applying it later is mechanical. The
+  comment also carries the instruction that matters more than the diff: **re-hash the
+  PUBLISHED asset, not the local build.** That download is the only thing proving the release
+  carries the reviewed bytes.
+- **Fail-closed digest verification is now proven and permanently regression-tested, both
+  directions** (`1f4ff55`). It had never been made to refuse anything on this path: the
+  optimizer's tests covered the shared helper, nothing covered `ensureRevalidatorArtifact`, and
+  with the pin empty the function returns early and proves nothing either way. Mismatched bytes
+  are refused naming both digests with **zero PutObjects**; matching bytes upload verbatim under
+  a key content-addressed on the digest. Mutation-checked — deleting the comparison in
+  `artifact.go` fails the first test, because S3's own `BadDigest` would still reject the body
+  but the *upload is attempted*, which is the thing the test watches.
+- **The executable half is `docs/runbooks/isr-revalidator-live-e2e.md`** — preconditions, the §9
+  acceptance list, the four review items the bead records, the false alarm the first rollout
+  produces and how to tell it from a real one, and an API-verified teardown. It leads with
+  `make provider && make cli lib`, for the reason `ocelhq-yo9b` established the hard way.
+
+**Blocked actions, all needing human authorization, none taken:** `gh release create
+revalidator-v0.0.1`; applying the pin; `ocel bootstrap` on 363236815301; an app deploy plus
+**two new smoke-app routes** the runbook's §5 requires (one header-varying, one query-string —
+without them two of the review items are not falsifiable); Cloudflare API writes; a store-less
+deploy for `.26`'s review item; and teardown of both, verified through the API rather than
+assumed. **`make publish-layer` is NOT needed** — the membrane layer is untouched by this
+stack segment (`git diff 63e35a1..HEAD -- cloud/aws/deploy/function.go` is empty), so the
+`.14`-class shared-runtime gate is not in play here.
+
+### Three issues moved, and one is new
+
+- **`.28` (blocking-miss collapse) is DEFERRED behind `.17`** by human decision B, at the same
+  evidence bar that deferred `.8`. `missWaitBudgetMs = 3000` sits on the **serving path** — a
+  user's request held up to three seconds — and is asserted, not measured. **Reversal
+  condition:** a *measured* hard-expiry fan-in per colo showing the collapse is worth a
+  serving-path component, **plus** a *measured* p95 render+store to size the budget from. Both
+  are things `.17` already measures. Decision 19 is not withdrawn — its acceptance that
+  coordination stops at the colo boundary stands; only the build is sequenced behind the
+  measurement.
+- **`.17` is blocked on `.27`** and is not pickable. See above.
+- **`.10` is absorbed into `.27`'s run** — same live session, same account, same seeded route;
+  running them separately means standing the substrate up twice. `.10`'s acceptance items are
+  item 4 of `.27`'s list, including its open question about whether the script-settings endpoint
+  reports a migration tag for a script migrated with the older single-tag form.
+- **`.29` is newly filed** out of `.25`'s review, and it is **not a regression**. A pages-router
+  `/_next/data/<build>/route.json` request resolves to the same `pathname` as its html variant,
+  so it shares `refreshKey = ${buildId}:${routePath}` — but it cannot build a queue descriptor,
+  so whichever variant wins the admission slot decides whether the route's refresh reaches the
+  queue at all. When the data variant wins, decision 16's "L0/L1/jitter are send-rate bounds,
+  no longer the render bound" stops holding: the admission is the render bound again. It
+  dilutes the queue's benefit for pages-router apps rather than breaking anything.
+
+### Verified offline at the tip of 18, 2026-08-05
+
+Re-run while writing this handoff, not transcribed: `@ocel/revalidator` **70**,
+`@ocel/worker-nextjs` **639**, `@ocel/isr-writer` **70**, `@ocel/next-cache` **42**,
+`@ocel/tag-publisher` **15**, `@ocel-scripts/e2e-next` **43**. `cloud/aws` and `cloud/edge` both
+build, test and `gofmt` clean — the single `gofmt -l cloud/edge` hit,
+`cloud/edge/cloudflare/cloudflare_test.go`, is still the pre-existing drift from `b17467f` and is
+still untouched. `pnpm -r --no-bail typecheck`: **15 pass / 1 fail**, the known
+`examples/next-cache-lab` (see "Standing notes"). The revalidator zip rebuilt from a clean
+`dist/` to the same 5843 bytes and the same digest. All eighteen parent edges re-derived with
+`git merge-base --is-ancestor`.
+
+### The design doc landing verbatim was itself a defect — **fixed in `c8a4ca8`**
+
+`docs/research/isr-queue-revalidation-design.md` landed in `321c6e5` exactly as written,
+carrying **none** of the decisions the human had taken on it the same day. That is not a
+documentation nit: it was the declared **spec of record for four unstarted issues**, and it
+prescribed six values the human had already overridden — a blanket `x-nextjs-cache: STALE`
+rule that would have deleted the colo tier for every stale route, `MessageRetentionPeriod`
+3600, `VisibilityTimeout` 60, a host-validation regex admitting any AWS customer's Function
+URL, `MaximumConcurrency` at the wrong nesting level, and the `.25`/`.26` stack order
+inverted. Four implementers were about to read it as authoritative.
+
+Fixed **twice over, deliberately**: each amendment is applied **inline at its own site**, so a
+reader who arrives at a section directly is not misled, **and** indexed in a §0a table at the
+top, so a reader who starts at the top sees the whole delta at once. The general rule this
+leaves behind: **a document that is named as a spec of record is code, and it lands with its
+amendments or it does not land.**
+
+### `ocelhq-wvag.23` — the revalidator package, and round two found a working exfiltration — **DONE**
+
+Branch `isr-herd/14-revalidator-package`, rooted on `63e35a1` (tip of 13). Twelve commits,
+`db7cef2` … `275411c`. Nothing pushed. A new account-level Lambda that turns one FIFO message
+into one SigV4-signed HEAD trigger at the origin, mirroring tag-publisher's packaging/pin/
+release pattern with a disjoint artifact, IAM, alarms and DLQ.
+
+#### Round two built and executed a token-exfiltration path against the shipped code
+
+This is the finding to carry forward, because every part of it was already "reviewed".
+
+**The message named a host** (`url`), and `isrPrefix` beside it was interpolated **straight into
+the record's S3 read URL** and validated only as `typeof === "string"` — while `routePath`, one
+field away, got a real shape check. A `#` or a `?` truncates the `/origin.json` suffix the
+consumer appends, so the message chose the whole key. That composed with two things nobody had
+composed before: the edge holds `s3:PutObject` on `*/fetch-cache/*`, and it writes **fully
+controlled JSON bodies** under that prefix. So the compromised-edge principal **plants the very
+record it was trusted to read** — `{"v":1,"functionUrls":{"/":"https://<attacker>/"}}` — points
+`isrPrefix` at it, and the consumer signs and delivers the app's `x-prerender-revalidate` bypass
+token to an attacker-controlled Function URL. A fragment never reaches the wire and `aws4fetch`
+signs `url.pathname`, so **the signature matches what S3 actually served**, and `compose`'s
+`url.origin !== base.origin` check agrees with the *planted* origin rather than the real one.
+
+Closed **three independent ways**, none of which is the other's backstop:
+
+- `isKeyPrefix` validation at parse time — dot-free key segments over exactly the characters
+  `cloud/aws/deploy` composes the prefix from. No separator, no traversal, no absolute key,
+  nothing empty (`7f5aad5`).
+- `regionOf` anchored on the whole host ending `.on.aws` (`d3b27f2`). It had scanned the labels
+  for one equal to `lambda-url` and read the next as the region, so
+  `attacker.lambda-url.us-east-1.evil.example` was accepted **and signed against `us-east-1`**.
+- The IAM read scope, narrowed to `${AssetBucket.Arn}/*/origin.json` rather than the bucket
+  (`.24`, below).
+
+Two earlier round-one findings on the same branch are worth keeping for their shape:
+
+- **`OCEL_REVALIDATE_ALLOWED_HOSTS` could never be filled** (`2d00fc2`) — unbuildable, not
+  merely awkward. The consumer is rendered by `cloud/aws/bootstrap`, one CloudFormation stack
+  per account at provider-install time; the Function URLs it would permit are minted by a
+  separate Pulumi stack on **every app deploy**, with ids nobody can know at bootstrap. The list
+  renders empty, nothing refreshes it, every record is rejected, DLQs — **and the edge's
+  sentinel re-arms as though the refresh landed.** Even with an updater: CFN drift reverted by
+  the next bootstrap, lost writes on concurrent deploys, and Lambda's 4KB env cap at ~100 hosts.
+  So the message stopped naming a host at all.
+- **The branded type claimed a guarantee the compiler does not give** (`9ed0090`). `Target`'s
+  comment said "the request goes to this deploy's own origin" was a property of the type. `tsc`
+  rejected a bare literal and **nothing else** — `as`, `JSON.parse`, spread, `Object.assign` and
+  in-place mutation all compiled, and `origin.mts`'s own `compose` used `as Target`. It is an
+  unexported class with a private field now, constructed in one place, which additionally closes
+  copying a real target and replacing its url (the brand admitted that, because the unique-symbol
+  key spread along with it). `as` stays open, as it does for every TypeScript type, and **the
+  test says so rather than the comment claiming otherwise.**
+
+### `ocelhq-wvag.24` — the queue's resources, and the same class reachable by a different key — **DONE**
+
+Branch `isr-herd/15-revalidate-queue-resources`, rooted on `275411c` (tip of 14). Five commits,
+`f212251` … `a2b19a2`. Nothing pushed. Both substrate classes grow the SQS FIFO revalidation
+queue, its FIFO DLQ and redrive, and — only when this build pins the artifact — the revalidator
+Lambda, its role, its ESM and three alarms. The edge user is granted exactly `sqs:SendMessage`
+on that one queue ARN. It also adds the deploy-side write of `<isrPrefix>/origin.json`
+(`0810137`) and the `OCEL_REVALIDATE_QUEUE_URL` plumbing (`c1de5b9`).
+
+Three places the spec was wrong and the code is not, all per human decisions C/F/G:
+`MaximumConcurrency` is a **`ScalingConfig` sub-property** — at the top level CloudFormation
+silently drops it and the render-drain bound disappears; `VisibilityTimeout` is 300 and
+`MessageRetentionPeriod` 300; and there is **no `DestinationConfig.OnFailure`**, which is a
+stream-source property — an SQS source's failure path is the queue's own redrive policy.
+
+**The queue URL Output is gated on the CONSUMER, not on the queue** (decision F), and the
+reason is this epic's signature failure in miniature: a queue the edge knows about but nothing
+drains means the send succeeds, the thunk reports "landed", the colo sentinel re-arms, and the
+route **stops revalidating until hard expiry with nothing reporting a fault.** The deploy-side
+origin record carries the same discipline — it must land **before** the build is cut over
+(a live build with no record has routes that enqueue and never revalidate), and a failed write
+**fails the deploy loudly**, naming the key and the app, because swallowing it reproduces
+exactly that shape.
+
+#### The review found `.23`'s vector reachable again through a different key shape
+
+`env/proj/web/B1/fetch-cache/origin.json` satisfies **BOTH** `*/fetch-cache/*` and
+`*/origin.json`, because IAM's `*` spans `/`. No truncation trick needed; the appended suffix
+lands inside the edge's write region on its own. **The reasoning error is the thing to record:**
+the comment asserting the two grants were disjoint rested on "every edge-writable key ends
+`.cache.json`" — which is a property of `workers/nextjs`'s `fetchObjectKey`, i.e. of the
+worker's **CODE**, while the threat modelled is a stolen **CREDENTIAL**, which that code does
+not bind.
+
+Fixed by making the mechanism say what the comment claimed: the write grant is anchored on
+`*.cache.json` (`418258b`), so no key can end in both `/origin.json` and `.cache.json`; plus a
+second independent layer in the parser, which rejects a `fetch-cache` segment anywhere in
+`isrPrefix` (`82b44ce`). Verified nothing narrowed: `fetchObjectKey` is the edge's only S3
+write, and the deploy-side fetch-cache upload runs under the operator's own credentials.
+**The test now asserts the general property** — that neither trailing literal is a suffix of
+the other, so no key can satisfy both patterns — **rather than a list of known-bad keys**,
+which is what would have let round three through.
+
+#### Three rounds running, the security claim was true of the code but not of the mechanism asserting it
+
+The allowlist that could never be filled; the branded type that `as` walks through; the IAM pair
+called disjoint on the strength of what the worker happens to write. In all three the *behaviour*
+was fine on the day and the *thing asserting it* did not enforce it, so the property survived
+only as long as nobody changed anything nearby. Each fix did the same two things: **made the
+mechanism enforce the claim, and added a second independent layer** — so the record is
+parse-time validation *and* IAM anchoring, a class *and* a test that names `as`, an anchored
+grant *and* a parser rejection.
+
+### `ocelhq-wvag.26` — self-revalidation suppression, and a bug neither half had alone — **DONE**
+
+Branch `isr-herd/16-selfrevalidation-suppression`, rooted on `a2b19a2` (tip of 15). Five commits,
+`942383a` … `62bde01`. Nothing pushed. The edge stamps `purpose: prefetch` on prerender-capable
+user-path forwards, so Next's in-process detached revalidating render stops firing and the
+edge/queue become the only revalidation authority; the colo store correspondingly declines to
+cache a STALE serve **of Lambda provenance** (human decision A — gating on the header alone
+would delete the colo tier for every stale route for the whole duration of a tag invalidation,
+i.e. exactly when it matters most).
+
+#### The review found a COMPOSITION bug that neither half had on its own
+
+The exemption that decides when it is safe to ask the Lambda not to render was guarded on
+`!deps.cache` — **which never fires**, because `caches.default` is bound unconditionally in
+production. The binding that is actually optional is `deps.interception` (`OCEL_CACHE_STORE`):
+the Cloudflare upload ships without it when the substrate predates the cache bucket, and
+**`cloud/aws/deploy/production_test.go` records `ocelhq-f0e` shipping exactly that
+configuration.** On such a deploy the two halves compose into a route that has **neither
+revalidation authority nor a colo tier** — the Lambda is asked not to render, nothing else can
+observe the entry's staleness, and the route serves stale bytes with no render anywhere, up to
+Next's one-year `expireTime`. **Either half alone was survivable; only together are they
+fatal**, which is why neither PR's own review saw it. `_next/data` on a pages-router app has the
+same shape on an entirely normal deploy.
+
+Fixed by gating on a named `admissionTier` value that the admission sites are themselves built
+under, **not on where the stamp happens to sit in the function** — so it cannot drift.
+`SUPPRESS_SELF_REVALIDATION` moved to `cache.ts` and now gates **both** halves; it had claimed
+to be the whole revert while the colo's refusal to store ran ungated, so reverting it would have
+left the Lambda self-revalidating **and** the colo declining every stale serve — more origin
+load than before the epic started.
+
+#### The golden gate was a dead detector — the sixth in this stack
+
+`purpose` is read at exactly one place, `if (!entry.isStale || context.isPrefetch) return
+entry;`, and the **first** operand short-circuits on a fresh entry. The probe page declared
+`revalidate = 60` and the harness settled it and probed within seconds, so both legs were fresh
+serves and `isPrefetch` **was never evaluated**. What it proved was that `purpose: prefetch`
+does not change a FRESH serve — while the stale state is the only one where it can change
+anything, and the one that suppression puts every governed route into permanently.
+
+Fixed with a real stale window (`GOLDEN_REVALIDATE_SECONDS`, each pair waiting past it) **and**
+a hard failure if neither leg reports `x-nextjs-cache: STALE`, so a later edit to the timing
+cannot silently revert it to proving nothing. Two limits are recorded in the script rather than
+papered over: Next emits `x-nextjs-cache` only when `isSSG && !isDynamicRSCRequest &&
+(!didPostpone || isPrefetchRSCRequest)`, so the staleness check cannot fire for a PPR route that
+postpones; and the rsc variant sends `RSC: 1` without `Next-Router-Prefetch`, so it compares
+full flight payloads.
+
+### `ocelhq-wvag.25` — the admitted refresh hands the render to the queue — **DONE**
+
+Branch `isr-herd/17-edge-enqueue`, rooted on `62bde01` (tip of 16). Three commits, `413b170`,
+`cbb739b`, `b128276`. Nothing pushed. All three admission sites — the colo tier's
+serve-or-refresh, and the PPR and `cachingOrigin` stale paths — offer the render to the queue
+first. `admitRefresh` itself is untouched, so `askBelow` still runs ahead of the thunk and a
+colo answerable from R2 sends nothing. **An accepted enqueue is a LANDING**: it re-arms the L1
+sentinel for its TTL, the colo re-admits ~5 s later, and by then the consumer has normally
+rendered and the tier below answers.
+
+- **The message names no host** — `isrPrefix` plus `routeId` — and both FIFO ids derive from one
+  pure function, which is what collapses the same stale entry seen from every colo to one render.
+- **The signing seam is a separate `sqsFetch`, not a third entry in the `awsServiceFetch` map**,
+  for two reasons specific to this call. Region: the landed contract is that the worker derives
+  the queue's region from the URL's own host, while the map is built from `OCEL_AWS_REGION` — a
+  var outside this path's three-var gate, so sharing it would make the enqueue path silently
+  absent, or silently wrongly-regioned, on a substrate binding one and not the other. Retries:
+  the map retries once; **the fallback to `originBlocking` IS the retry here**, and strictly
+  better than a second attempt inside the same 1 s budget.
+
+#### A "secret is absent" assertion is only as good as its serializer
+
+The log test's assertion helper renders the **whole call list with `JSON.stringify`**, and the
+comment in `workers/nextjs/test/revalidation.test.ts` says why: a record logged as an *argument*
+is `[object Object]` to `String`, which is precisely the leak being asserted against — so the
+mutation that leaks the bypass token passes a `String(arg)`-based check and fails this one. Any
+future "this secret never appears in a log" test in this repo has to serialize structurally, not
+stringify.
+
+The same commit added the refusal log itself (`b128276`), for a related reason: **an empty queue
+is the documented healthy state**, so a send answering `false` on a 403, a wrong region or a
+timeout left a misconfiguration completely invisible — the edge falls back to `originBlocking`
+on every refresh, every test passes, and nothing distinguishes "the sends are going out and
+being refused" from "the sends aren't going out at all". The **status** is logged, never the
+body and never the record, which carries the bypass token.
+
+### Two settled questions worth not re-opening
+
+- **The SQS query protocol is not being retired.** The edge's send is the AWS *query* protocol
+  (`content-type: application/x-www-form-urlencoded`, `workers/nextjs/src/revalidation.ts`),
+  which periodically prompts a "isn't that deprecated?" reflex. Settled from primary sources:
+  AWS's own FAQ states it **"will continue to be supported"**, and the JSON protocol is a
+  **client-side SDK upgrade, not a server migration** — nothing on the queue changes. The send
+  is in any case protocol-agnostic on the *response* side: it cancels the body and returns
+  `response.ok`, so it never parses a response document at all.
+- **There is no AWS-side store keyed by `isrPrefix` that carries a Function URL**, and `.23`
+  established this by looking rather than assuming. They exist only as Pulumi stack outputs
+  inside S3 state, and in a Cloudflare Durable Object keyed by app+buildId — neither readable by
+  an account-level Lambda in the customer's own account. That absence is the entire reason for
+  the new deploy-written `<isrPrefix>/origin.json`, and the reason it **must land before cutover
+  and fail the deploy loudly** if it does not.
 
 ### Epic decision 10 was amended — `.8` is deferred and the `.8`↔`.17` edge is INVERTED
 
@@ -298,7 +628,7 @@ stagger by last-beat time and are correct by construction; the `isr-writer` regi
 `IsrSnapshot` and `TagClock`; `ppr.ts`'s per-visitor resume POST; genesis seeding; prune and
 destroy; and every upload fan-out.
 
-### Verified across the whole stack this session
+### Verified across the whole stack at the tip of 13 (superseded by the block above)
 
 `workers/nextjs` **583 passing / 19 files** at the tip of 12 and unchanged at the tip of 13.
 `cloud/aws` builds and tests clean; `gofmt -l cloud/aws` empty. `pnpm typecheck` and `pnpm build`
@@ -1177,11 +1507,16 @@ Remaining state:
 - `ocelhq-wvag.17` — filed, blocked on `.8`.
 
 (The paragraphs immediately above are the standing record as written at the time and are left
-intact; the list here is the current state.)
+intact; **the current state is in "Current position" at the top of this document** — this list
+is now itself historical. `.6`, `.8`, `.10` and `.17` have all moved since it was written:
+`.8` and `.28` are deferred behind `.17`, `.17` is blocked on `.27`, and `.10` is absorbed
+into `.27`'s run.)
 
-**Open and ungated, so pickable right now:** `ocelhq-wvag.11` (destroy leaves per-build writer DO
-instances behind) and `ocelhq-heo2` (`packages/next-runtime/tsconfig.json` never typechecks its
-tests), which came out of `.12`'s review.
+**Open and ungated, so pickable right now:** `ocelhq-wvag.29` (the pages-router `_next/data`
+admission-slot dilution, filed out of `.25`'s review), `ocelhq-wvag.11` (destroy leaves
+per-build writer DO instances behind) and `ocelhq-heo2`
+(`packages/next-runtime/tsconfig.json` never typechecks its tests), which came out of `.12`'s
+review. `.20`, `.21` and `.22` from the herd sweep are also open and ungated.
 
 Five review rounds have now landed twelve real defects rather than polish, and **in every
 single case the failure was silent**: a write dropped with no log, a herd at the auth boundary,
@@ -1291,6 +1626,11 @@ Live threads to carry forward:
   `.15` are all closed. See the stack shape above.
 
 ## The decisions waiting on a human
+
+**Superseded for `.10`, which is now absorbed into `ocelhq-wvag.27`'s live run** — same
+session, same account, same seeded route, and the human authorized that release and run
+explicitly on 2026-08-05. `.10`'s items are item 4 of `.27`'s acceptance list. The section
+below is the standing record of why it needed a decision at all.
 
 `ocelhq-wvag.10` — live e2e for the writer — needs authorization, not just scheduling.
 Running a throwaway probe on a zone route (PR 1) and standing up **account-level
