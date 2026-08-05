@@ -55,7 +55,7 @@ main
                                                          └─ 15 isr-herd/15-revalidate-queue-resources a2b19a2 ocelhq-wvag.24 ✅ CLOSED, reviewed, same class found again
                                                              └─ 16 isr-herd/16-selfrevalidation-suppression 62bde01 ocelhq-wvag.26 ✅ CLOSED, reviewed, composition bug + dead golden gate
                                                                  └─ 17 isr-herd/17-edge-enqueue b128276 ocelhq-wvag.25 ✅ CLOSED, reviewed, .29 filed out of it
-                                                                     └─ 18 isr-herd/18-revalidator-pin-live-e2e 1f4ff55+ ocelhq-wvag.27 ◐ OPEN, offline half done, BLOCKED on authorization
+                                                                     └─ 18 isr-herd/18-revalidator-pin-live-e2e 54e23f6+ ocelhq-wvag.27 ◐ OPEN, released and pinned, BLOCKED on the live run
 
   17 multi-region herd harness  ocelhq-wvag.17  ⛔ now blocked ON .27 — NOT the next thing
    ├─ 8  edge L2 lease  ocelhq-wvag.8   ⛔ DEFERRED, blocked ON .17
@@ -160,40 +160,55 @@ worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
 
-**`ocelhq-wvag.27` is prepared and BLOCKED on authorization; nothing else in the stack is
-gated.** `.23`, `.24`, `.26` and `.25` are built, reviewed and closed — the queue path exists
-end to end in code and is inert until the pin is set. **`.17` is no longer "the next thing"**:
+**`ocelhq-wvag.27`'s release is cut and its pin is applied; what remains is the live run, and
+nothing else in the stack is gated.** `.23`, `.24`, `.26` and `.25` are built, reviewed and
+closed, and with the pin set the queue path is no longer inert in code: every substrate now
+renders the consumer and publishes `RevalidateQueueUrl`, so the edge enqueues. Only the live
+half of `.27` is still blocked. **`.17` is no longer "the next thing"**:
 the 2026-08-05 13:20 epic amendment moved it behind `.27`, because with decision 16 landed the
 queue is the dominant term in the number `.17` measures, so measuring first would measure a
 stack that no longer exists. `.8` and now `.28` are both deferred behind `.17`.
 
-### `ocelhq-wvag.27` — the artifact is built, the digest is established, the pin is UNSET
+### `ocelhq-wvag.27` — the release is cut and the pin is APPLIED; the live run is what remains
 
 Branch `isr-herd/18-revalidator-pin-live-e2e`, rooted on `b128276` (tip of 17). Nothing pushed.
-The offline half is done; **everything remaining needs an action outside this repo and was not
-taken.**
+The offline half is done and the release is published; **everything remaining needs an action
+outside this repo and was not taken.**
 
 - **The artifact is deterministic.** `pnpm --filter @ocel/revalidator zip` from a clean `dist/`
   three times produced a byte-identical archive, confirmed with `cmp` and not merely by
   comparing hashes: **sha256 `2f830a670b3fbc9f313018375cb2f1d88f6b5950e986373079d212548ca8a0dd`,
   5843 bytes**. Re-derived from a clean rebuild while writing this handoff and unchanged.
-- **The pin is deliberately empty, and that is the correct state.** `revalidator-v0.0.1` does
-  not exist (`gh release list` holds only `tag-publisher-v0.0.1` and two image-optimizer tags).
-  Pinning a digest whose release asset is absent turns **every bootstrap into a 404 download**
-  rather than the documented unpinned skip — which is a strictly worse failure, because the
-  unpinned path is designed: no consumer is rendered, the edge is never handed
-  `OCEL_REVALIDATE_QUEUE_URL` (human decision F), and every refresh falls back to
-  `originBlocking` exactly as today.
-- **The diff that sets it is recorded verbatim in `cloud/aws/bootstrap/revalidatorversion.go`'s
-  own comment block** — two constants, `RevalidatorArtifactVersion = "0.0.1"` and
-  `RevalidatorArtifactSHA256 = "<digest above>"` — so applying it later is mechanical. The
-  comment also carries the instruction that matters more than the diff: **re-hash the
-  PUBLISHED asset, not the local build.** That download is the only thing proving the release
-  carries the reviewed bytes.
+- **`revalidator-v0.0.1` is published on `ocelhq/ocel`** — target `main`, not a draft and not a
+  prerelease, one asset `revalidator.zip`. The published asset was **downloaded and hashed**
+  rather than trusted: byte-identical to the clean local build, same digest, same 5843 bytes.
+  That download, not the local build, is what proves the release carries the reviewed bytes,
+  and it is the step the pin's own comment insists on.
+- **The pin is applied** in `cloud/aws/bootstrap/revalidatorversion.go`, both constants, commit
+  `54e23f6`. Its comment block is now in the PINNED form that mirrors `publisherversion.go`:
+  it records what an empty pin would have meant rather than prescribing a diff to apply. The
+  unpinned path is still the designed degradation — no consumer, no `OCEL_REVALIDATE_QUEUE_URL`
+  (human decision F), every refresh through `originBlocking` — and this build is simply no
+  longer on it.
+- **Applying the pin exposed a latent bug in the tests' own scaffolding, and its shape is the
+  point.** `preloadedArtifact()`'s doc comment claimed it preloaded "whatever artifact this
+  build pins"; it only ever handled the optimizer's key. With a second pin live, **15
+  `Run`/`RunPreview` tests** fell through to download-and-verify against a source serving no
+  bytes and failed on the empty-string digest `e3b0c442…` — a mismatch with nothing to do with
+  what any of them assert. Fixed **at the helper**, which now loops all three shipped pins and
+  skips the unpinned ones, rather than at 15 call sites. **The lesson: a helper whose comment
+  describes a general behaviour it does not implement stays invisible until a second instance
+  appears** — the comment was the only thing generalising, and nothing tested the claim.
+- **The shipped constants are now themselves under test.** `TestRun_ThisBuildBootstrapsAConsumer`
+  asserts what *this build's* pin puts a customer's account on, for both production and preview:
+  the consumer, its role, its event source mapping, its three alarms, and the published queue
+  URL. The unpinned path stays covered independently through fixture `stackArtifacts` with the
+  revalidator field empty. Mutation-checked: blanking both constants fails **exactly** that one
+  test and leaves every unpinned-path test green.
 - **Fail-closed digest verification is now proven and permanently regression-tested, both
   directions** (`1f4ff55`). It had never been made to refuse anything on this path: the
   optimizer's tests covered the shared helper, nothing covered `ensureRevalidatorArtifact`, and
-  with the pin empty the function returns early and proves nothing either way. Mismatched bytes
+  with the pin then still empty the function returned early and proved nothing either way. Mismatched bytes
   are refused naming both digests with **zero PutObjects**; matching bytes upload verbatim under
   a key content-addressed on the digest. Mutation-checked — deleting the comparison in
   `artifact.go` fails the first test, because S3's own `BadDigest` would still reject the body
@@ -203,12 +218,12 @@ taken.**
   produces and how to tell it from a real one, and an API-verified teardown. It leads with
   `make provider && make cli lib`, for the reason `ocelhq-yo9b` established the hard way.
 
-**Blocked actions, all needing human authorization, none taken:** `gh release create
-revalidator-v0.0.1`; applying the pin; `ocel bootstrap` on 363236815301; an app deploy plus
+**Blocked actions, all needing human authorization, none taken** (the release and the pin are
+done; this is what is left): `ocel bootstrap` on 363236815301; an app deploy plus
 **two new smoke-app routes** the runbook's §5 requires (one header-varying, one query-string —
 without them two of the review items are not falsifiable); Cloudflare API writes; a store-less
-deploy for `.26`'s review item; and teardown of both, verified through the API rather than
-assumed. **`make publish-layer` is NOT needed** — the membrane layer is untouched by this
+(`OCEL_CACHE_STORE` unbound) deploy for `.26`'s review item; teardown of both, verified through
+the API rather than assumed; and `gh stack submit`. **`make publish-layer` is NOT needed** — the membrane layer is untouched by this
 stack segment (`git diff 63e35a1..HEAD -- cloud/aws/deploy/function.go` is empty), so the
 `.14`-class shared-runtime gate is not in play here.
 
