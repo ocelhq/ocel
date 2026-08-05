@@ -178,6 +178,24 @@ pnpm store; `packages/lambda-entrypoints` has no `next` dependency).
 9. **Render-failure clamp:** when a revalidating render throws over a previous entry,
    Next rewrites it with `revalidate` clamped to [3,30]s (`response-cache/index.js:290-307`)
    — the origin has its own retry damping; the consumer's retry policy (§5) sits above it.
+10. **The AWS query protocol the edge sends over is not being retired, and nothing about
+    the send can fail silently.** The edge speaks the query protocol
+    (`Action=SendMessage&Version=2012-11-05`, `content-type:
+    application/x-www-form-urlencoded`) rather than the JSON protocol, because it hand-builds
+    the request instead of carrying an SDK. AWS's own FAQ answers "Will AWS query protocol be
+    deprecated?" with "AWS query protocol will continue to be supported," and the JSON
+    protocol is a *client-side SDK* upgrade (`X-Amz-Target: AmazonSQS.SendMessage`,
+    `application/x-amz-json-1.0`) — the FAQ's own downgrade instruction is to pin a previous
+    SDK version, so there is no server-side migration to be caught by. The query POST is
+    documented as exactly what `queueSender` builds, with `Content-Type` the only required
+    HTTP header; `MessageGroupId`/`MessageDeduplicationId` are top-level parameters, which is
+    where the code puts them. A FIFO send missing either id fails — every documented
+    `SendMessage` error, and the common `MissingParameter`, is HTTP 400 — so `response.ok` is
+    false and the caller renders through `originBlocking`. aws4fetch lists `content-type` in
+    `UNSIGNABLE_HEADERS`, so the explicit header cannot cause a signature mismatch (SigV4
+    needs only `host` + `x-amz-date`). This matters because an empty queue is the documented
+    healthy state: a protocol the server refused would be indistinguishable from a queue with
+    no work in it, which is why `queueSender` logs the refusing status.
 
 ---
 
@@ -717,7 +735,22 @@ throughput quotas (SQSDeveloperGuide/quotas-messages.html); FIFO DLQ must be FIF
 (lambda/latest/dg/services-sqs-scaling.html); ReportBatchItemFailures FIFO handler
 contract (lambda/latest/dg/services-sqs-errorhandling.html); Function URL HEAD support
 (lambda/latest/dg/urls-invocation.html); SigV4 SendMessage over plain HTTPS
-(API_SendMessage.html). **Cloudflare Queues has no dedup** (developers.cloudflare.com/
+(API_SendMessage.html); query protocol "will continue to be supported" + JSON protocol as a
+client-side SDK upgrade with a pin-the-previous-version downgrade
+(SQSDeveloperGuide/sqs-json-faqs.html, sections "Will AWS query protocol be deprecated?",
+"How do I get started with AWS JSON protocols for Amazon SQS?", "What if I am already on the
+latest AWS SDK version, but my open sourced solution does not support JSON?"); query POST
+shape + "Only the `Content-Type` HTTP header is required"
+(SQSDeveloperGuide/sqs-making-api-requests.html); JSON protocol headers `X-Amz-Target:
+AmazonSQS.SendMessage` / `application/x-amz-json-1.0`
+(SQSDeveloperGuide/sqs-making-api-requests-json.html); `MessageGroupId` /
+`MessageDeduplicationId` as top-level parameters and "If you do not provide a
+`MessageGroupId` when sending a message to a FIFO queue, the action fails"
+(API_SendMessage.html — note the page names no error *code* for the omission; `MissingParameter`
+is HTTP 400 in APIReference/CommonErrors.html, and every error listed on API_SendMessage is
+400). `content-type` in aws4fetch's `UNSIGNABLE_HEADERS`:
+`workers/nextjs/node_modules/aws4fetch/dist/aws4fetch.esm.mjs:18-28`.
+**Cloudflare Queues has no dedup** (developers.cloudflare.com/
 queues/reference/delivery-guarantees/ — application-layer idempotency recommended;
 /queues/platform/limits/).
 
