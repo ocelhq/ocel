@@ -12,6 +12,7 @@ import {
   cacheKey,
   hasDraftCookie,
   refreshOutcome,
+  SUPPRESS_SELF_REVALIDATION,
   serveCached,
   servedFromStore,
   storeInColo,
@@ -68,21 +69,9 @@ const RSC_FORWARD_HEADERS = new Set([
 // it draws is presence, not truthiness.
 const ENTRY_HEADER = "x-ocel-entry";
 
-// The single revert point for self-revalidation suppression (bd
-// ocelhq-wvag.26). Next's response cache serves a stale entry and starts NO
-// revalidating render when the request carries `purpose: prefetch`
-// (`if (!entry.isStale || context.isPrefetch) return entry;`,
-// next@16.2.10 response-cache/index.js:201, with isPrefetch =
-// `req.headers.purpose === 'prefetch'` at route-module.js:634 — the only place
-// `purpose` is read anywhere in next/dist/server). Without it, every
-// Lambda-reaching request on a stale entry starts its own undeduped in-Lambda
-// render, outside the edge's admission tiers and the queue they feed.
-//
-// OpenNext ships the same workaround at scale and carries the caveat that a
-// change to Next's prefetch handling would break it; that caveat is now ours,
-// and this constant plus the golden comparison in scripts/e2e-next are the
-// tripwire. Setting it to false is the whole revert.
-const SUPPRESS_SELF_REVALIDATION = true;
+// The header Next reads to decide a request is speculative, and so to serve a
+// stale entry without starting a render. SUPPRESS_SELF_REVALIDATION (cache.ts)
+// is the revert point for both halves of that suppression.
 const PREFETCH_PURPOSE = "purpose";
 
 // x-ocel-* is the control plane's own namespace — x-ocel-entry selects which code
@@ -753,13 +742,33 @@ async function dispatchPrerender(
     }
   }
 
-  // The user-path forward, and the only leg suppression applies to: everything
-  // above has already been answered (BYPASS traffic is not ISR-governed, and a
-  // worker with no colo cache has no admission tier to take the render over),
-  // and the method here is GET by the gate above. Whatever purpose the client
-  // sent is overwritten; the inbound request is untouched.
+  // A pages-router data request (/_next/data/<build>/route.json) resolves to
+  // the same prerender target as its html route, but must be answered with
+  // JSON pageData, not html. Interception reconstructs only the html/RSC
+  // variants, so those requests fall open to the Lambda exactly as today.
+  const isNextData =
+    url.pathname.startsWith((deps.manifest.basePath ?? "") + "/_next/data/") &&
+    url.pathname.endsWith(".json");
+
+  // The tier that can observe this entry's staleness and refresh it: the
+  // interception read judges the R2 entry, the tag clock makes a raised tag
+  // visible, and every admission site below is built inside it. Its absence is
+  // ordinary — the ISR store binding is optional by design, and a data request
+  // takes this path on a fully bound worker — which is exactly why suppression
+  // reads it rather than standing on where it sits in the function.
+  const admissionTier =
+    deps.interception && !isNextData ? deps.interception : undefined;
+
+  // The user-path forward, and the only leg suppression applies to. Asking the
+  // Lambda not to render is only safe where something else will: with no
+  // admission tier, a raised tag or a cold colo leaves the route serving the
+  // Lambda's stale entry with nothing anywhere able to replace it, until hard
+  // expiry. Inheriting the client's headers is safe here because the bypass
+  // gate above has already answered everything that is not an ISR-governed GET;
+  // whatever purpose the client sent is overwritten, and the inbound request is
+  // untouched.
   const originHeaders = new Headers(safeHeaders);
-  if (SUPPRESS_SELF_REVALIDATION) {
+  if (SUPPRESS_SELF_REVALIDATION && admissionTier) {
     originHeaders.set(PREFETCH_PURPOSE, "prefetch");
   }
   const origin = () => render(forward(forwardUrl, request, originHeaders));
@@ -767,7 +776,12 @@ async function dispatchPrerender(
   // Built from safeHeaders, never from originHeaders: x-prerender-revalidate's
   // guard sits above the prefetch one in Next's response cache, so the header
   // here would be dead weight that reads as though this leg were suppressed too.
+  // A client-sent value is dropped for the same reason it is overwritten above,
+  // and it is not merely cosmetic: with no bypassToken configured the
+  // revalidate header is empty, the request is not on-demand, and a client's
+  // `purpose: prefetch` would suppress the very render this leg forces.
   const blockingHeaders = new Headers(safeHeaders);
+  blockingHeaders.delete(PREFETCH_PURPOSE);
   blockingHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
   const originBlocking = () =>
     render(forward(forwardUrl, request, blockingHeaders));
@@ -776,14 +790,6 @@ async function dispatchPrerender(
   // never rewrite the ISR entry it was asked to refresh — scheduling one would
   // only burn an invocation. Edge ISR is bd ocelhq-b7l.
   const revalidates = !edgeEntryKey;
-
-  // A pages-router data request (/_next/data/<build>/route.json) resolves to
-  // the same prerender target as its html route, but must be answered with
-  // JSON pageData, not html. Interception reconstructs only the html/RSC
-  // variants, so those requests fall open to the Lambda exactly as today.
-  const isNextData =
-    url.pathname.startsWith((deps.manifest.basePath ?? "") + "/_next/data/") &&
-    url.pathname.endsWith(".json");
 
   const routePath = result.invocationTarget?.pathname ?? url.pathname;
   const keyResult = cacheKey(
@@ -821,8 +827,8 @@ async function dispatchPrerender(
   // deps.cache — the Cache object — not on the deps object, so adding the
   // tier-below read cannot fragment it.
   let cacheDeps = cache;
-  if (deps.interception && !isNextData) {
-    const { config, ...interceptDeps } = deps.interception;
+  if (admissionTier) {
+    const { config, ...interceptDeps } = admissionTier;
     tagClock = createTagClock(config, interceptDeps);
     const interceptTarget = {
       routePath,
@@ -874,6 +880,13 @@ async function dispatchPrerender(
         answered.body?.cancel();
         return false;
       }
+      // This put lands because a response reconstructed from the store carries
+      // no x-nextjs-cache: Next stamps that at serve time and never writes it
+      // into the entry, so the colo's refusal to store a Lambda's suppressed
+      // stale serve cannot fire here. An entry format that ever captured
+      // serve-time headers would break that silently: the put would be skipped,
+      // this would still return true, and the admission would class itself
+      // "landed" and hold the route's colo-wide sentinel over an empty colo.
       await storeInColo(cacheTarget, cache, below.response);
       return true;
     };

@@ -27,6 +27,28 @@ export const CACHE_STATUS = "x-ocel-cache";
 export const NEXT_CACHE_STATUS = "x-nextjs-cache";
 const DRAFT_COOKIE = "__prerender_bypass";
 
+// The single revert point for self-revalidation suppression (bd
+// ocelhq-wvag.26), and it gates BOTH halves: the edge's `purpose: prefetch`
+// stamp in index.ts, and this tier's refusal to store the stale serve that
+// stamp produces. Half two alone would be a regression — every Lambda STALE
+// serve declined by the colo while the Lambda still self-revalidates — so the
+// two revert together or not at all.
+//
+// Next's response cache serves a stale entry and starts NO revalidating render
+// when the request carries `purpose: prefetch`
+// (`if (!entry.isStale || context.isPrefetch) return entry;`,
+// next@16.2.10 response-cache/index.js:201, with isPrefetch =
+// `req.headers.purpose === 'prefetch'` at route-module.js:634 — the only place
+// `purpose` is read anywhere in next/dist/server). Without it, every
+// Lambda-reaching request on a stale entry starts its own undeduped in-Lambda
+// render, outside the edge's admission tiers and the queue they feed.
+//
+// OpenNext ships the same workaround at scale and carries the caveat that a
+// change to Next's prefetch handling would break it; that caveat is now ours,
+// and this constant plus the golden comparison in scripts/e2e-next are the
+// tripwire. Setting it to false is the whole revert.
+export const SUPPRESS_SELF_REVALIDATION = true;
+
 export type CacheStatus = "HIT" | "PRERENDER" | "MISS" | "STALE" | "BYPASS";
 type NextCacheStatus = "HIT" | "STALE";
 
@@ -294,11 +316,15 @@ interface ColoPolicy {
 // Provenance, not the header alone. servedFromStore stamps STALE on Ocel's own
 // R2 serves too, and declining those would delete the colo tier for every stale
 // route for the whole duration of a tag invalidation. CACHE_STATUS is the
-// worker's own namespace — stripped from every inbound request, written
-// nowhere but here — so a value of PRERENDER on a response means this worker
-// reconstructed it from the store, and no Lambda response can claim it.
+// worker's own namespace, written nowhere but here, so PRERENDER on a response
+// is by convention this worker's own reconstruction from the store. It is
+// convention and not enforcement: nothing strips x-ocel-* from an origin
+// RESPONSE, so an app that sets it from next.config headers(), middleware or a
+// route handler would launder its own stale bytes into a fresh-looking colo
+// entry. It can only cost that app its own colo freshness, so the read stays.
 function suppressedStaleServe(response: Response): boolean {
   return (
+    SUPPRESS_SELF_REVALIDATION &&
     response.headers.get(NEXT_CACHE_STATUS) === "STALE" &&
     response.headers.get(CACHE_STATUS) !== "PRERENDER"
   );
