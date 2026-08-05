@@ -719,9 +719,17 @@ Status: **MEASURED** on 2026-08-05 against a third zone-routed deploy of the sam
 The section above sizes L2 against a *sustained* rate and finds one Durable Object per route
 survives smooth traffic. That was the wrong constraint. A route goes stale at one wall-clock
 instant and every colo sees it simultaneously, so the fan-in per stale event is
-`F = C · E ≈ 300 × 55…62 ≈ 17 000–19 000` requests arriving within a few hundred milliseconds —
-against an object Cloudflare rates at "approximately 500-1,000 requests per second for simple
+`F = C · E ≈ 20 000–23 000` requests arriving within a few hundred milliseconds — against an
+object Cloudflare rates at "approximately 500-1,000 requests per second for simple
 operations". That is ~20 s of queueing: overload, not slow success.
+
+**Which `E` that `F` is built from is a choice, and it is made here explicitly.** `300 ×` the
+directly measured `E(128)` is `300 × 54.79…61.98 = 16 437–18 594`. That figure is the **floor**,
+not the estimate: this burst reached 77–86 distinct isolates and `I_colo ≥ 99` (§7, §12, and it
+has never plateaued), so 128 racers did not saturate a colo. Extrapolating the measured ratio
+`E/I ≈ 0.69–0.78` to `I_colo ≥ 99` gives `E ≈ 68–77` and `F ≈ 20 000–23 000`. **The extrapolated
+figure is the one `ocelhq-wvag.8` sizes against**, because every input to it is a lower bound and
+the direct product silently assumes the colo is only as large as this instrument reached.
 
 **And the synchronization is self-inflicted.** `claimSentinel` fires the instant a request
 observes staleness and `settleSentinel` re-arms exactly one `refreshSentinelTtlSeconds` later,
@@ -768,8 +776,9 @@ term this instrument has to hold constant while the claim times move.
 
 ### 10. `E(128)` against `J` — the sweep
 
-100 trials per cell, `N = 128` racers drawn as a rotating window over a pool of 144 sockets,
-escapes collapsed by isolate as in §3.
+100 trials per cell, `N = 128` racers drawn as a window over a pool of 144 sockets, escapes
+collapsed by isolate as in §3. That window rotated over only nine distinct offsets and the pool
+was drawn once per cell — see §12, which states the limitation and the change made since.
 
 | `J` (ms) | run | counted | escapes min / p10 / median / p90 / max | **mean** | late escapes mean / max | raw claims median | isolates median / max | dispersion median / p90 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -799,23 +808,35 @@ of 0.03–0.14 and maxima of 1–6. That non-zero is what demonstrates it is not
 to two seconds, and the p90 spread jumps from ~2.3 ms to ~115 ms. That is the instrument, not
 the cache, and it exceeds `W` in a minority of trials — so the `J = 2000` escape counts are a
 slight **under**-count. It does not touch the `J = 1000` row, whose dispersion max is 6.1 ms.
+**These two rows printed without a `[LOWER BOUND]` label**, because that guard read dispersion's
+median (1.51 ms, well under `W`) and nothing on screen showed the tail; it was found by reading
+raw JSON. The guard is now on the p90 and the console prints it, so a re-run labels these rows.
 
 ### 11. What the sweep says
 
 **P1 held, and by a wide margin.** The gate was `E ≤ 3` at `N = 128` with `J = 1000 ms`, against
-the 50–63 measured without jitter. Measured: **mean 1.41 and 1.46, median 1, p90 2, max 3–4 over
-200 trials**, on two independent runs. `E` fell by a factor of 39–42.
+the 50–63 measured without jitter. Measured: **mean 1.41 and 1.46, median 1, p90 2, max 3 and 4
+over 200 trials**, on two independent runs. `E` fell by a factor of 39–42. **The gate is read on
+the mean**, which is what its 50–63 comparator was — those were the means of the `J = 0` rows —
+so a worst trial of 4 does not falsify a gate of 3. Said plainly rather than left as a max
+sitting next to a threshold it exceeds.
 
-**No plateau above 1, and no blind-pair floor is visible.** `E` is still falling at `J = 2000`
-(1.21, 1.26), and the mean is approaching 1 from above rather than stalling. §7 recorded that
-cross-isolate visibility is *not* uniform inside a colo — one socket pair had both racers
-claiming 31 of 40 times at zero separation while another had one socket winning 79 of 80
-regardless of dispatch order — and if a persistent mutually-blind population existed at rate
-`p`, `E` would floor at `p · I_colo` however wide `J` grew. `lateEscapes` is what tests for it:
-escapes whose draw put them more than `W` after the trial's **first** claim, which is the claim
-that has had the longest to propagate. At `J = 2000` it means 0.03 and 0.07, so any such floor
-is **below 0.07 escapes per colo per stale event**, i.e. `p ≲ 0.001` against `I ≈ 81`. Whatever
-the pairwise non-uniformity is, it does not survive being averaged over a rotating pool.
+**No plateau above 1, and no blind-pair floor is visible.** §7 recorded that cross-isolate
+visibility is *not* uniform inside a colo — one socket pair had both racers claiming 31 of 40
+times at zero separation while another had one socket winning 79 of 80 regardless of dispatch
+order — and if a persistent mutually-blind population existed at rate `p`, `E` would floor at
+`p · I_colo` however wide `J` grew. `lateEscapes` is what tests for it: escapes whose draw put
+them more than `W` after the trial's **first** claim, which is the claim that has had the longest
+to propagate. **At `J = 1000` — the row the decision rests on — it means 0.07 and 0.05, with a
+maximum of 1**, so any such floor is below 0.07 escapes per colo per stale event, i.e.
+`p ≲ 0.001` against `I ≈ 81`. Whatever the pairwise non-uniformity is, it does not survive being
+averaged over a rotating pool.
+
+`E` also continues to fall at `J = 2000` (1.21, 1.26), which corroborates the same conclusion —
+but only corroborates it, and cannot carry it: ‡ records that row's own send dispersion exceeding
+`W` in a minority of trials, so its escape counts are a slight **under**-count. A row known to
+under-count escapes is not evidence that escapes are still falling. The `J = 1000` `lateEscapes`
+bound above does not depend on it.
 
 **The λ-free bound is conservative at every `J`, and converges.** Taking `I` as each cell's
 median distinct isolates:
@@ -828,7 +849,8 @@ median distinct isolates:
 | 1000 | 1.60 / 1.66 | 1.41 / 1.46 |
 | 2000 | 1.29 / 1.32 | 1.21 / 1.26 |
 
-It over-predicts everywhere, by 1.8× at `J = 100` narrowing to 1.05× at `J = 2000` — as it
+It over-predicts everywhere, by **1.77–1.91×** at `J = 100` narrowing to **1.05–1.07×** at
+`J = 2000` (ranges over the two runs, not whichever run flatters the bound at each end) — as it
 should, since it assumes every isolate whose draw lands inside the leader's window escapes,
 while in practice some of them are suppressed by a *different* isolate's earlier claim. **A
 constant chosen from this bound is chosen conservatively.**
@@ -836,15 +858,36 @@ constant chosen from this bound is chosen conservatively.**
 **What that does to `ocelhq-wvag.8`.** At `E = 1.41–1.46` and `C ≈ 300`:
 
 ```
-F = C · E ≈ 425–440 requests per stale event, spread over J = 1 s
+F = C · E ≈ 423–438 requests per stale event, spread over J = 1 s
+      i.e. an instantaneous 423–438 rps at the route's single Durable Object
 R = C · E / refreshSentinelTtlSeconds ≈ 85–88 rps sustained
 ```
 
-against 17 000–19 000 in a few hundred milliseconds before. Both are under the conservative
-500 rps figure, so **one Durable Object per route holds — conditional on the jitter.** The
-sizing table of §4 is not printed on a jittered sweep and the runner refuses to: `E = 1 + λ·W`
-models the un-jittered path, and attaching it to jittered rows would be exactly the kind of
-green number this document keeps having to retract.
+against `F ≈ 20 000–23 000` in a few hundred milliseconds before — a factor of ~50.
+
+**Read `F` as a rate, and note the margin is ~1.2×, not ~6×.** Spread over exactly `J = 1 s`,
+`F` *is* the burst rate, so the number to compare against Cloudflare's "approximately 500-1,000
+requests per second" is 423–438 rps and not the 85–88 sustained figure beside it. That is 12–15%
+under the conservative end of the rating. And `C ≈ 300` is an assumption, not a measurement (§7,
+§12): Cloudflare publicly cites 330+ cities, and colos per city are not one.
+
+| `C` | burst `C · E` (rps) | against the rating |
+| --- | --- | --- |
+| 300 | 423–438 | 1.14–1.18× under 500 |
+| **340–355** | ~500 | **crosses the conservative ceiling** |
+| 500 | 705–730 | inside the 500–1 000 band |
+| **685–710** | ~1 000 | **crosses the optimistic ceiling** |
+| 700 | 987–1 022 | at or over it |
+
+So the jitter takes the burst from ~40× the ceiling to just inside it, and `.8` should be built
+knowing that. Cloudflare's rating is also for "simple operations", and a lease DO that persists
+state per claim is not obviously one. `.8`'s lease must fail open under overload for decision
+10's reasons regardless; this is why that requirement is load-bearing rather than defensive, and
+it is carried into `.8` as an acceptance criterion.
+
+The sizing table of §4 is not printed on a jittered sweep and the runner refuses to:
+`E = 1 + λ·W` models the un-jittered path, and attaching it to jittered rows would be exactly the
+kind of green number this document keeps having to retract.
 
 ### 12. What these numbers do not cover
 
@@ -869,6 +912,20 @@ green number this document keeps having to retract.
 - **Send-side dispersion only, and at `J = 2000` it is no longer small.** See ‡ above.
 - **`I_colo` is still a lower bound.** This pass's highest was **90**, above `.9`'s 81 and still
   below the spike's 99, and still not plateaued.
+- **`C ≈ 300` is an assumption, and the burst rate is linear in it.** See the sensitivity table
+  in §11. Nothing in this document measures `C`.
+- **A cell's isolate population is ONE DRAW, and the rotation was weaker than "rotating window"
+  implies.** `openRacers` was called once per `(size, jitter)` cell, so all 100 trials in a cell
+  ran over one pool of 144 isolate-pinned connections. Worse, the window advanced by
+  `(trial · size) % poolSize`: `gcd(128, 144) = 16`, so the offset took only **nine** distinct
+  values and any two 128-socket windows overlapped in at least 112 sockets. This is materially
+  better than the fixed pool that produced §8's defect — the jitter draws are fresh per racer per
+  trial, and that is what carries the sweep — but the 13% gap between the two runs at `J = 0`
+  (54.79 against 61.98, same nominal experiment) is the size of a pool-level draw, and it is the
+  term this design leaves unaveraged. `scripts/race.ts` now steps by one and re-opens the pool
+  every 25 trials, four independent draws per cell. **The numbers in §10 were NOT re-taken
+  against that change**: they are what the nine-offset single-draw pool produced, and a re-run
+  would produce different ones. Nothing above depends on a difference smaller than that 13%.
 - **The delay is measured on the claim path, not on the serving path.** That the wait costs no
   user-visible latency is a property of *where* production puts it — inside `waitUntil`, behind
   an already-served stale response — and is asserted by `workers/nextjs`' tests, not by this.
@@ -882,11 +939,19 @@ no compare-and-set, `refreshSentinelTtlSeconds = 5`
 place the delay is taken voids these numbers, and voids `W` with them.** The dependency runs
 both ways and `workers/nextjs/src/cache.ts` now says so at both constants.
 
+One deliberate difference between production and this instrument: production draws from
+`[0, min(J, remaining stale window))`, because a route whose stale window is shorter than `J`
+would otherwise spend the tail of the wait past expiration, where the colo tier declines to
+serve and L1 is bypassed entirely. On any route with a stale window wider than a second the
+minimum is `J` and these numbers apply unchanged; on a route with a shorter one they do not, and
+that route degrades towards the un-jittered `E` — which is the intended trade, and the reason
+the cap is on the draw rather than on the constant.
+
 ### 14. Prediction
 
 | # | prediction | outcome |
 | --- | --- | --- |
-| P1 (jitter) | with `J = 1000 ms`, `E` at `N = 128` simultaneous racers in one colo is ≤ 3, against the 50–63 measured without jitter | **held** — mean 1.41 and 1.46, median 1, p90 2, max 4, on two independent runs of 100 trials. `E` approaches 1 rather than plateauing, and no mutually-blind floor is detectable above 0.07 escapes per stale event |
+| P1 (jitter) | with `J = 1000 ms`, mean `E` at `N = 128` simultaneous racers in one colo is ≤ 3, against the 50–63 measured without jitter (both are means) | **held** — mean 1.41 and 1.46, median 1, p90 2, worst trial 3 and 4, on two independent runs of 100 trials. `E` approaches 1 rather than plateauing, and no mutually-blind floor is detectable above 0.07 escapes per stale event |
 
 ## Cleanup
 

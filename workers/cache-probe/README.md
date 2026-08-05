@@ -124,11 +124,14 @@ claiming at the widest Δ; raise `--deltas`) · `inconclusive` (some Δ had too 
 trials to be ordered against the others; raise `--trials` or `--sockets`).
 
 **Phase 2, `--phase burst`, yields `E(N)`.** `N` racers on `N` pre-warmed sockets at one cold
-key, 100 trials per `N`, drawn as a **rotating window over a pool of `N + --sockets`**. The
-rotation is load-bearing, not tidiness: a socket pins to an isolate for the pool's whole life,
-so a pool of exactly `N` makes 100 trials into 100 repeats of one isolate combination — and
-combinations differ enormously, some seeing each other's claim at once and some not until `W`.
-A fixed pool reports one draw with no spread and calls it `E(N)`. Escapes are **collapsed by isolate**, because production runs
+key, 100 trials per `N`, drawn as a **rotating window over a pool of `N + --sockets`**, with the
+pool itself **re-opened every 25 trials**. Both are load-bearing, not tidiness: a socket pins to
+an isolate for the pool's whole life, so a pool of exactly `N` makes 100 trials into 100 repeats
+of one isolate combination — and combinations differ enormously, some seeing each other's claim
+at once and some not until `W`. A fixed pool reports one draw with no spread and calls it `E(N)`.
+Rotating a window over one pool is still one draw of ISOLATES, which is why the pool is redrawn
+as well; the window steps by one socket, since a stride of `N` shares a factor with `N + 16` and
+visits only a handful of the offsets. Escapes are **collapsed by isolate**, because production runs
 `refreshOnce` (L0) inside `admitRefresh`, so two concurrent requests on one isolate never both
 reach the sentinel; `rawClaims` is reported alongside only to show the collapse happened.
 Trials that spanned colos are discarded and counted; trials that never left one isolate go in
