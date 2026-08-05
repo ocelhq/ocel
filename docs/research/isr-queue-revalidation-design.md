@@ -29,7 +29,7 @@ is not misled; this table is the index.
 | D | Trigger-secret hardening: SSE-KMS on the queue **and** the DLQ; an explicit no-log-the-raw-record rule in the handler; and **the host is not validated, it is resolved** — see the note below, which supersedes §5.2's regex and §4.2's `url` field. | §3.1, §4.2, §5.2, §5.3 |
 | E | `.26` (suppression) lands **BELOW** `.25` (enqueue) in the stack. §10 asserts suppression must precede enqueue being live and then orders them the other way. Edges: `.24 → .23`, `.26 → .24`, `.25 → .26`, `.27 → .25`. | §10 |
 | F | `OCEL_REVALIDATE_QUEUE_URL` is rendered **only when the revalidator function is rendered** — i.e. only when the artifact pin is present — not merely when the queue exists. Otherwise a deploy landing between `.25` and `.27` enqueues into a consumer-less queue, the thunk returns "landed", the sentinel re-arms, and the route silently stops revalidating until hard expiry. | §3.2, §5.3 |
-| G | `VisibilityTimeout` is **300**, not 60: a batch of 10 at 10s per record is up to 100s of work, and at 60s the consumer DLQs records it already processed successfully. Also: `MaximumConcurrency` is a **`ScalingConfig` sub-property** in CloudFormation, not a top-level event-source-mapping property, and the document gives the Lambda **no function timeout at all** — it needs an explicit one. | §3.1, §5.3 |
+| G | `VisibilityTimeout` is **300**, not 60: a batch of 10 at 10s per record is up to 120s of work (10 records × a 10s trigger budget plus, in the worst case of ten distinct deploys, a 2s record read; `packages/revalidator/src/limits.mts` sizes it and `test/limits.test.mts` asserts it), and at 60s the consumer DLQs records it already processed successfully. Also: `MaximumConcurrency` is a **`ScalingConfig` sub-property** in CloudFormation, not a top-level event-source-mapping property, and the document gives the Lambda **no function timeout at all** — it needs an explicit one. | §3.1, §5.3 |
 
 ### Amendment D in full: the message names no host
 
@@ -59,12 +59,19 @@ s3://<OCEL_ASSET_BUCKET>/<isrPrefix>/origin.json
 `appFunctionURLsByRoute`, written to the one place keyed by `isrPrefix` that the
 consumer's own account can read. `routePath` is joined onto the recorded origin and the
 result's origin compared back to it, so a route path that tries to be a URL cannot become
-one. This makes the exfiltration class impossible rather than validated, and there is no
-list to keep current.
+one, and there is no list to keep current.
+
+This removes the *host* from the message; it does not remove the *key*. `isrPrefix` still
+chooses which record is read, and round-two review of `.23` showed that a lie there is a
+working exfiltration primitive on its own. `isrPrefix` is therefore validated as a key
+prefix at parse time, and `.24` scopes the read grant to `*/origin.json`. See §5.3a — the
+claim "the exfiltration class is impossible rather than validated" was too strong as first
+written, and this section is the corrected version.
 
 What this obliges, beyond `.23`:
 
-- **`.24`**: `s3:GetObject` on `!Sub '${AssetBucket.Arn}/*'` on the revalidator role, and
+- **`.24`**: `s3:GetObject` on `!Sub '${AssetBucket.Arn}/*/origin.json'` — scoped to the
+  record's own name, NOT to the bucket — on the revalidator role, and
   `OCEL_ASSET_BUCKET: !Ref AssetBucket` in its environment (exactly as `publisher.go`
   renders it for the tag publisher).
 - **`.24` (`cloud/aws/deploy`)**: a new write. After the app stack's outputs are read,
@@ -131,7 +138,7 @@ pnpm store; `packages/lambda-entrypoints` has no `next` dependency).
    entry is stale-but-servable, Next early-resolves the stale entry and continues the
    revalidating render in-process as a detached batcher promise, handed to `waitUntil`
    (`response-cache/index.js:188-207, 174-175`). Ocel's membrane implements `waitUntil`
-   and drains it before invocation-complete (`membrane.mts:80-123`,
+   and drains it before invocation-complete (`membrane.mts:80-93`,
    `forward.go:48-61`), so these renders run to completion. Nothing in lambda-entrypoints
    or next-runtime fakes `lastModified` or a prefetch purpose; `get()` returns the stored
    `lastModified` verbatim (`cache-handler.mts:186-205`). The trigger header on the
@@ -213,7 +220,7 @@ Provision account-globally beside the tag-publisher block (wired where
   default dedup scope (queue) and throughput (normal — do NOT enable high-throughput mode;
   it forces messageGroup-scoped dedup we don't need and our volumes are ~hundreds per
   stale event against 300 tps/partition), **`VisibilityTimeout: 300`** (amendment G — a
-  batch of 10 at the handler's 10s per-record budget is up to 100s of work, and it must
+  batch of 10 at the handler's 10s per-record budget is up to 120s of work (see amendment G), and it must
   also outlast the function timeout below; at 60 the consumer DLQs records it already
   processed successfully), **`MessageRetentionPeriod: 300`** (amendment C — a revalidation
   older than the dedup window is worthless, and at 1h a wedged consumer accumulates ~12
@@ -349,7 +356,11 @@ function, exactly as the publisher did pre-`.14`.
 
 ### 5.2 Handler contract
 
-Per SQS record: parse `RevalidationMessage` (reject unknown `v` → item failure);
+Per SQS record: parse `RevalidationMessage` (reject unknown `v` → item failure; `routePath` must be a path, `isrPrefix` must be a key
+prefix — dot-free segments, no separator, no traversal, no absolute key, nothing empty,
+per §5.3a — and every header name must be an RFC 9110 token, since one that is not throws
+inside `new Headers` at signing time and would be classified as a transient handler
+error);
 **resolve the origin** from `s3://<OCEL_ASSET_BUCKET>/<isrPrefix>/origin.json` and
 `routeId`, memoized per `isrPrefix` for the invocation, and compose the trigger URL from
 the resolved origin and `routePath` (amendment D — this REPLACES the host-validation regex
@@ -382,8 +393,9 @@ Mirror `tagPublisherResources` (`publisher.go:181-347`): artifact via `ensureArt
 on `RevalidateQueue`; `lambda:InvokeFunctionUrl` + `lambda:InvokeFunction` scoped by
 the `ocel:app` resource tag **copied exactly from `edgeUserResource`'s condition block**
 (note that block is account-wide over every Ocel-tagged function, not app-scoped — `.24`
-either tightens it or records the acceptance); `s3:GetObject` on `${AssetBucket.Arn}/*`
-and `OCEL_ASSET_BUCKET: !Ref AssetBucket`, for the origin resolution of amendment D; and
+either tightens it or records the acceptance); `s3:GetObject` on `${AssetBucket.Arn}/*/origin.json`
+(scoped to the record's own name — see §5.3a) and `OCEL_ASSET_BUCKET: !Ref AssetBucket`,
+for the origin resolution of amendment D; and
 **an explicit function `Timeout`** (amendment G — the document sets none; the package
 documents 150s in `packages/revalidator/README.md`, sized in `src/limits.mts` and
 asserted there, and it must stay below the queue's 300s `VisibilityTimeout`).
@@ -393,9 +405,8 @@ CloudFormation, not a top-level event-source-mapping property; rendered at the t
 it is silently ignored or rejected) — the global render-drain bound, deliberately small;
 a mass tag invalidation drains at 10 concurrent renders, which is the epic's first-ever
 cap on total origin pressure — plus OnFailure → DLQ. Alarms, one block, same style as the
-alarm resources **inside** `tagPublisherResources` (`publisher.go:181-347`; the
-`40-101` cited in §12 is the const block, which is where the periods and thresholds live,
-not the resources):
+alarm resources **inside** `tagPublisherResources` (`publisher.go:181-347`; the const block
+`publisher.go:22-102` is where the periods and thresholds live, not the resources):
 
 - `ApproximateNumberOfMessagesVisible` on the DLQ > 0 (5 min) — poison revalidations.
 - `ApproximateAgeOfOldestMessage` on the queue > 300s — consumer wedged or origin down.
@@ -404,6 +415,44 @@ not the resources):
 No `PolledEventCount`-style absence alarm: an empty revalidation queue is the healthy
 steady state (unlike the publisher's stream, silence here is not a signal).
 
+**Expect the DLQ alarm on the first rollout, once.** Every build already live when `.24`
+lands has no `origin.json`. Each of its enqueued routes resolves `origin-unusable` through
+five receives and reaches the DLQ, so the alarm fires immediately and stays lit until the
+300s `MessageRetentionPeriod` drains and every live build has been redeployed. Written
+down here so that the alarm's first *real* signal is not dismissed as rollout noise.
+
+### 5.3a `origin.json`: the read scope and the write
+
+Added after round-two review of `.23`, which demonstrated working token exfiltration
+against the shipped code. Three facts composed: the edge holds `s3:PutObject` on
+`!Sub '${AssetBucket.Arn}/*/fetch-cache/*'` (`bootstrap.go`, edge-user policy block) and
+writes fully-controlled JSON bodies there (`cache-entrypoint.ts`, `fetchObjectKey`); the
+consumer interpolated `isrPrefix` straight into the record's read URL; and `isrPrefix` was
+validated only as a string. A `#` or `?` truncates the appended `/origin.json`, so the
+message named an arbitrary key — a fragment never reaches the wire and `aws4fetch` signs
+`url.pathname`, so the signature matched what S3 served, and the consumer's
+`url.origin !== base.origin` check agreed with the *planted* origin.
+
+`.23` closed two layers (parse-time `isrPrefix` validation; an anchored `.on.aws` Function
+URL host check). `.24` owns the third, and it is the one that holds even if the parser
+regresses:
+
+- **`s3:GetObject` on `!Sub '${AssetBucket.Arn}/*/origin.json'`, never `/*`.** IAM's `*`
+  spans `/`, so requiring the key to *end* in `/origin.json` makes the read grant and the
+  edge's write grant disjoint: every key the edge can write ends in `.cache.json`. This is
+  also why `origin.json` does not move to a prefix of its own — `*/fetch-cache/*` matches
+  under any leading prefix, so a relocation buys nothing the suffix does not already buy.
+
+And on the deploy-side write, two hard requirements, both about the epic's own signature
+failure mode:
+
+1. **The record must land before the build is cut over to serving.** A live build with no
+   record has routes that enqueue and never revalidate.
+2. **A `PutObject` failure must fail the deploy, loudly.** Swallowing it reproduces the
+   epic's signature exactly: the edge enqueues, the thunk returns "landed", the sentinel
+   re-arms, the consumer answers `origin-unusable` for every route of that build, and the
+   deploy output said nothing.
+
 ---
 
 ## 6. Component: self-revalidation suppression (workers/nextjs + tests only)
@@ -411,7 +460,7 @@ steady state (unlike the publisher's stream, silence here is not a signal).
 Two halves, both required (Decision 18):
 
 1. **`purpose: prefetch` on user-path forwards.** In the `forward(...)` construction
-   (`index.ts:694-698` is the `render` thunk; the `forward`/`safeHeaders` seam is
+   (`index.ts:694-699` is the `render` thunk; the `forward`/`safeHeaders` seam is
    `723-739`): when the target
    is prerender-capable (the same condition that attaches `x-ocel-entry`) and the method
    is GET/HEAD, set `purpose: prefetch` on the outgoing origin request — overwriting any
@@ -563,7 +612,11 @@ production line, watch the named test fail, restore). All `CacheDeps` built thro
    (dedup: drive requests from two clients, still one), consumer renders, R2 entry's
    `lastModified` advances, next edge admission refills without a render.
 2. The §6 golden byte-comparison.
-3. Poison message (bad host) reaches the FIFO DLQ after 5 receives; DLQ alarm fires.
+3. Poison message reaches the FIFO DLQ after 5 receives; DLQ alarm fires. No message can
+   name a host, so drive it with a permanently unresolvable record instead: enqueue a
+   `routeId` this build never recorded (or point `isrPrefix` at a retired build, whose
+   `origin.json` is gone), confirm each receive logs `origin-unusable` and fetches no
+   origin, and confirm the message lands in the DLQ.
 
 ---
 
@@ -620,7 +673,7 @@ explicit authorization; `.27` is explicitly a human gate.
 **Installed Next** (`node_modules/.pnpm/next@16.2.10_.../node_modules/next/dist`):
 on-demand guard `server/response-cache/index.js:198-204`; `checkIsOnDemandRevalidate`
 `server/api-utils/index.js:103-112`; header const `lib/constants.js:265-266`; previewModeId
-generation `build/preview-key-utils.js:43-55` (random per build, 14-day build-cache reuse);
+generation `build/preview-key-utils.js:43-49` (random per build, 14-day build-cache reuse);
 self-revalidation detached-batcher + waitUntil `server/response-cache/index.js:174-175,
 188-207`, `lib/batcher.js:46-60`; prefetch guard `server/response-cache/index.js:201` with
 `server/route-modules/route-module.js:634`; `x-nextjs-cache` emission
@@ -632,15 +685,15 @@ HEAD full-pipeline `server/send-payload.js:76-79`, `server/base-server.js:1310-1
 error clamp `server/response-cache/index.js:290-307`.
 
 **Ocel** (at `63e35a1`): membrane waitUntil `packages/lambda-entrypoints/src/shared/
-membrane.mts:80-123`, `cloud/aws/cmd/lambdanode/bootstrap/forward.go:48-61`; cache
+membrane.mts:80-93`, `cloud/aws/cmd/lambdanode/bootstrap/forward.go:48-61`; cache
 handler real lastModified `packages/lambda-entrypoints/src/next/cache-handler.mts:186-205`;
 originBlocking + signing `workers/nextjs/src/index.ts:741-744`, `workers/nextjs/src/
-signing.ts:11,50-92`; forward/safeHeaders seam `workers/nextjs/src/index.ts:694-698` (the `render` thunk),
+signing.ts:11,50-92`; forward/safeHeaders seam `workers/nextjs/src/index.ts:694-699` (the `render` thunk),
 `723-739`; admission machinery `workers/nextjs/src/cache.ts:471,489,525-533,
-549-557,569,576-596,601-607,623-646`; three sites `cache.ts:698`, `index.ts:866-875,
+549,551-557,569,576-596,601-607,623-646`; three sites `cache.ts:698`, `index.ts:866-875,
 902-912`; miss path `cache.ts:707-755`; publisher pattern `cloud/aws/bootstrap/
-publisher.go:40-101,118,120-140,181-347`, `publisherversion.go:35-44`, `artifact.go:105-181`;
-EdgeUser `bootstrap.go:44-48,739-820`, `edge.go:161-237`; env plumbing
+publisher.go:22-102,118,120-140,181-347`, `publisherversion.go:35-44`, `artifact.go:105-181`;
+EdgeUser `bootstrap.go:44-49,739-820`, `edge.go:161-235`; env plumbing
 `cloud/aws/deploy/production.go:566-577`, `cloud/edge/resolver.go:33-56`.
 
 **AWS docs**: FIFO dedup interval + MessageDeduplicationId semantics
