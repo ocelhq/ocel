@@ -648,6 +648,51 @@ func TestRevalidator_PinnedPublishesTheQueueURL(t *testing.T) {
 	}
 }
 
+// TestRun_ThisBuildBootstrapsAConsumer is the shipped pin under test rather than
+// a fixture one. The two tests above prove the template renders a consumer when
+// an artifact is available and skips it when none is; this proves which of those
+// paths revalidatorversion.go's constants actually put a customer's account on —
+// the consumer, its role, its event source mapping, its three alarms, and the
+// queue URL the edge is told to send to. It fails the moment either constant is
+// blanked, which is what makes the pin a tested state and not a comment.
+func TestRun_ThisBuildBootstrapsAConsumer(t *testing.T) {
+	if !pinnedRevalidator().pinned() {
+		t.Fatal("this build pins no revalidator; the queue it provisions has nothing to drain")
+	}
+	for _, tc := range []struct {
+		name      string
+		run       func(context.Context, CFNAPI, SSMAPI, IAMAPI, edge.Provider, Artifacts, func(string), func(string)) error
+		stackName string
+	}{
+		{"production", Run, StackName},
+		{"preview", RunPreview, PreviewStackName},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfn, ssmc, iamc := newFakeCFN(), newFakeSSM(), &fakeIAM{}
+			ed := &fakeEdge{out: edge.BootstrapOutput{Trust: edge.TrustExternal}}
+
+			if err := tc.run(context.Background(), cfn, ssmc, iamc, ed, preloadedArtifact(), nil, nil); err != nil {
+				t.Fatalf("run: %v", err)
+			}
+			template := cfn.templates[tc.stackName]
+			for _, name := range []string{
+				"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
+				"RevalidatorDeadLetterAlarm", "RevalidatorBacklogAlarm", "RevalidatorErrorAlarm",
+			} {
+				if !strings.Contains(template, "  "+name+":") {
+					t.Errorf("this build's bootstrap rendered no %s", name)
+				}
+			}
+			if want := revalidatorArtifactKey(pinnedRevalidator()); !strings.Contains(template, want) {
+				t.Errorf("the consumer does not read its code from %s", want)
+			}
+			if _, ok := parseRevalidatorTemplate(t, template).Outputs[outputRevalidateQueueURL]; !ok {
+				t.Errorf("this build's bootstrap published no %s, so the edge keeps rendering through the origin", outputRevalidateQueueURL)
+			}
+		})
+	}
+}
+
 // revalidatorPolicy is the consumer role's single inline policy document.
 func revalidatorPolicy(t *testing.T, template string) []policyStatement {
 	t.Helper()
