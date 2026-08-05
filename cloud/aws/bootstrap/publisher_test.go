@@ -15,10 +15,14 @@ func fixturePublisherPin() artifactPin {
 	return artifactPin{version: "4.5.6", sha256: fixtureDigest()}
 }
 
-// fixtureArtifacts is a stack with both account-global Lambdas already placed,
+// fixtureArtifacts is a stack with every account-global Lambda already placed,
 // which is what the template tests render against.
 func fixtureArtifacts() stackArtifacts {
-	return stackArtifacts{optimizer: fixtureOptimizerCode(), publisher: fixturePublisherCode()}
+	return stackArtifacts{
+		optimizer:   fixtureOptimizerCode(),
+		publisher:   fixturePublisherCode(),
+		revalidator: fixtureRevalidatorCode(),
+	}
 }
 
 func fixturePublisherCode() artifactCode {
