@@ -64,14 +64,26 @@ export interface InterceptTarget {
 // exactly when `stale` is true: it caps the caller's admission draw, so a
 // background refresh is never deferred past the moment its own entry stops
 // being servable. See admissionJitterMs in cache.ts.
+//
+// `lastModified` is the entry generation this verdict was taken on. It rides
+// out because an admitted refresh names it to the revalidation queue, and
+// re-reading the entry to learn it would name a different generation than the
+// one that admitted.
 export type Interception =
-  | { kind: "complete"; response: Response; stale: boolean; staleForMs?: number }
+  | {
+      kind: "complete";
+      response: Response;
+      stale: boolean;
+      staleForMs?: number;
+      lastModified: number;
+    }
   | {
       kind: "ppr";
       shell: Response;
       postponed: string;
       stale: boolean;
       staleForMs?: number;
+      lastModified: number;
     };
 
 export interface InterceptDeps {
@@ -196,7 +208,12 @@ export async function intercept(
       if (!response) return null;
       response.headers.set("cache-control", `s-maxage=${window}`);
       response.headers.set("x-ocel-entry-modified", String(entry.lastModified));
-      return { kind: "complete", response, ...ungatedStaleness() };
+      return {
+        kind: "complete",
+        response,
+        lastModified: entry.lastModified,
+        ...ungatedStaleness(),
+      };
     }
 
     // A full-route prefetch (Next's router prefetch, distinct from the segment
@@ -220,7 +237,12 @@ export async function intercept(
       if (!response) return null;
       response.headers.set("cache-control", `s-maxage=${window}`);
       response.headers.set("x-ocel-entry-modified", String(entry.lastModified));
-      return { kind: "complete", response, ...ungatedStaleness() };
+      return {
+        kind: "complete",
+        response,
+        lastModified: entry.lastModified,
+        ...ungatedStaleness(),
+      };
     }
 
     // Runtime prefetch (2/3) intentionally requests a dynamic response; never
@@ -260,6 +282,7 @@ export async function intercept(
           postponed: value.postponed,
           stale: isStale,
           staleForMs,
+          lastModified: entry.lastModified,
         }
       );
     }
@@ -272,7 +295,13 @@ export async function intercept(
     // only a tag invalidated it) remaining window — one second forces the next
     // request to re-read the by-then-refreshed entry.
     response.headers.set("cache-control", `s-maxage=${isStale ? 1 : window}`);
-    return { kind: "complete", response, stale: isStale, staleForMs };
+    return {
+      kind: "complete",
+      response,
+      stale: isStale,
+      staleForMs,
+      lastModified: entry.lastModified,
+    };
   } catch {
     return null;
   }
