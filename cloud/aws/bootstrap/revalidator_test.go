@@ -220,11 +220,21 @@ func TestRevalidateQueue_IsEncryptedUnderAManagedKey(t *testing.T) {
 // target and the thing the edge user is granted against, so it exists in every
 // substrate — a build that pins no consumer still renders it.
 func TestRevalidateQueue_RendersWithoutAConsumer(t *testing.T) {
-	tmpl := stackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode()}, RequiredBootstrapVersion)
-	for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
-		if !strings.Contains(tmpl, "  "+name+":") {
-			t.Errorf("an unpinned build rendered no %s", name)
-		}
+	unpinned := stackArtifacts{optimizer: fixtureOptimizerCode()}
+	for _, tc := range []struct {
+		name     string
+		template string
+	}{
+		{"production", stackTemplate(edge.TrustExternal, unpinned, RequiredBootstrapVersion)},
+		{"preview", previewStackTemplate(edge.TrustExternal, unpinned, RequiredBootstrapVersion)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, name := range []string{"RevalidateQueue", "RevalidateDeadLetterQueue"} {
+				if !strings.Contains(tc.template, "  "+name+":") {
+					t.Errorf("an unpinned build rendered no %s", name)
+				}
+			}
+		})
 	}
 }
 
@@ -402,6 +412,69 @@ func soleResource(t *testing.T, statements []policyStatement, action string) str
 		t.Fatalf("%s is granted on %v, want exactly one resource", action, found)
 	}
 	return found[0]
+}
+
+// TestRevalidateQueue_BothEndsCanUseTheEnvelope covers the grants that the
+// queue's SSE-KMS envelope makes mandatory rather than optional. AWS requires a
+// producer against an SSE-KMS queue to hold kms:GenerateDataKey* AND kms:Decrypt
+// in its own policy, and a consumer to hold kms:Decrypt; without them every
+// SendMessage fails with KMS.AccessDeniedException.
+//
+// That failure is silent in exactly the epic's signature shape: the edge fails
+// open to originBlocking, the queue never receives anything, and an empty queue
+// is the documented healthy state, so no alarm fires. Nothing else in the suite
+// notices — TestEdgeUser_SendsToTheQueueAndNothingElse filters to sqs: actions,
+// so the whole statement could be deleted and pass.
+//
+// Resource is '*' on both ends and that is the only workable form: the AWS-
+// managed alias/aws/sqs key's ARN is not knowable in the template. The
+// kms:ViaService condition is what bounds it instead — it confines the grant to
+// calls SQS itself makes on the principal's behalf — so the condition is
+// asserted as tightly as the actions are. Widening it is what widens the grant.
+func TestRevalidateQueue_BothEndsCanUseTheEnvelope(t *testing.T) {
+	for _, tc := range revalidatorTemplates() {
+		t.Run(tc.name, func(t *testing.T) {
+			user, ok := parseRevalidatorTemplate(t, tc.template).Resources["EdgeUser"]
+			if !ok {
+				t.Fatal("template is missing the EdgeUser")
+			}
+			for _, end := range []struct {
+				who        string
+				statements []policyStatement
+				want       []string
+			}{
+				{"the edge producer", user.Properties.Policies[0].PolicyDocument.Statement, []string{"kms:GenerateDataKey", "kms:Decrypt"}},
+				{"the consumer", revalidatorPolicy(t, tc.template), []string{"kms:Decrypt"}},
+			} {
+				var kms []policyStatement
+				for _, st := range end.statements {
+					if slices.ContainsFunc(st.actions(), func(a string) bool { return strings.HasPrefix(a, "kms:") }) {
+						kms = append(kms, st)
+					}
+				}
+				if len(kms) != 1 {
+					t.Fatalf("%s holds %d KMS statements, want exactly one; without it every message against the SSE-KMS queue fails KMS.AccessDeniedException and the queue silently stays empty", end.who, len(kms))
+				}
+				st := kms[0]
+				if !slices.Equal(st.actions(), end.want) {
+					t.Errorf("%s KMS actions = %v, want exactly %v", end.who, st.actions(), end.want)
+				}
+				if got := st.resources(); !slices.Equal(got, []string{"*"}) {
+					t.Errorf("%s KMS resource = %v, want '*' — the managed alias/aws/sqs key's ARN is not knowable in the template, so the condition is what bounds this", end.who, got)
+				}
+				equals, ok := st.Condition["StringEquals"].(map[string]any)
+				if !ok {
+					t.Fatalf("%s KMS condition = %+v, want a StringEquals on kms:ViaService; unconditioned, this is an account-wide KMS grant", end.who, st.Condition)
+				}
+				if want := "sqs.${AWS::Region}.amazonaws.com"; equals["kms:ViaService"] != want {
+					t.Errorf("%s kms:ViaService = %v, want %q — anything wider lets this key decrypt outside SQS", end.who, equals["kms:ViaService"], want)
+				}
+				if len(equals) != 1 || len(st.Condition) != 1 {
+					t.Errorf("%s KMS condition = %+v, want kms:ViaService alone", end.who, st.Condition)
+				}
+			}
+		})
+	}
 }
 
 // TestRevalidator_ReachesOnlyWhatItTriggersWith. The function holds every app's
