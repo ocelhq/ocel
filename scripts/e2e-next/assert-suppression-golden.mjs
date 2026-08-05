@@ -10,7 +10,8 @@
 // response-cache/index.js:201). OpenNext ships the same workaround at scale and
 // carries the caveat that a change to Next's prefetch handling would break it.
 // That caveat is ours now, and this — plus SUPPRESS_SELF_REVALIDATION in
-// workers/nextjs/src/index.ts, the one-line revert — is the tripwire.
+// workers/nextjs/src/cache.ts, the one-line revert for both halves — is the
+// tripwire.
 //
 // HOW THE TWO LEGS ARE MADE COMPARABLE. The edge stamps the header itself, so
 // there is no request that reaches the Lambda without it on the cached path.
@@ -129,7 +130,7 @@ if (failures > 0) {
   fail(
     `${failures} of ${VARIANTS.length} variants differ. purpose: prefetch is meant to change only ` +
       `whether Next starts a revalidating render. If Next's prefetch handling has changed, the revert ` +
-      `is SUPPRESS_SELF_REVALIDATION = false in workers/nextjs/src/index.ts`,
+      `is SUPPRESS_SELF_REVALIDATION = false in workers/nextjs/src/cache.ts`,
   );
 }
 log(`${target}: no side effect from purpose: prefetch in ${VARIANTS.length} variants`);
