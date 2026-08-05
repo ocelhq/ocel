@@ -1,10 +1,13 @@
 import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   createTagClock,
   dropSnapshotMemo,
   invalidateSnapshot,
+  snapshotJitterSeconds,
+  snapshotMaxAgeSeconds,
+  snapshotTtlSeconds,
 } from "../src/tag-clock";
 
 const cfg = { isrPrefix: "prod/proj/app/build" };
@@ -340,3 +343,61 @@ describe("readers arriving together on a cold memo", () => {
     expect(gets).toHaveLength(2);
   });
 });
+
+// A flat max-age lapses colo-wide at one instant: every cache shard holding the
+// copy expires in lockstep, every one of them reads R2, and every one of them
+// writes the copy back — continuously, on any tagged traffic at all, with no
+// stale event anywhere near it. Drawing the TTL breaks that phase lock. Same
+// argument admissionJitterMs makes for claims, applied to an expiry.
+describe("the PoP copy's drawn lifetime", () => {
+  function recordingCache() {
+    const maxAges: number[] = [];
+    return {
+      maxAges,
+      async match() {
+        return undefined;
+      },
+      async put(_request: Request, response: Response) {
+        const directive = response.headers.get("cache-control") ?? "";
+        maxAges.push(Number(/max-age=(\d+)/.exec(directive)?.[1]));
+      },
+    };
+  }
+
+  it("is drawn below the ceiling, never above it and never to nothing", () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0);
+    try {
+      // The ceiling is the worst case and the draw only ever shortens it, so
+      // this jitter costs no staleness at all: 10s remains the bound an
+      // invalidation waits out, and the mean falls to 8.5s.
+      expect(snapshotMaxAgeSeconds()).toBe(snapshotTtlSeconds);
+      random.mockReturnValue(0.999);
+      expect(snapshotMaxAgeSeconds()).toBe(snapshotTtlSeconds - (snapshotJitterSeconds - 1));
+      expect(snapshotMaxAgeSeconds()).toBeGreaterThan(0);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it("is drawn by the production path itself, not only by an injected one", async () => {
+    // The silent failure this exists for: a flat constant, or a seam left
+    // unwired, puts the whole colo back in lockstep invisibly.
+    const snapshotCache = recordingCache();
+    for (let i = 0; i < 40; i++) {
+      const clock = createTagClock(cfg, {
+        store: storeWith(JSON.stringify(snapshot())),
+        snapshotCache,
+      });
+      await clock.prime(3_000);
+    }
+
+    expect(snapshotCache.maxAges).toHaveLength(40);
+    for (const maxAge of snapshotCache.maxAges) {
+      expect(Number.isInteger(maxAge)).toBe(true);
+      expect(maxAge).toBeGreaterThan(0);
+      expect(maxAge).toBeLessThanOrEqual(snapshotTtlSeconds);
+    }
+    expect(new Set(snapshotCache.maxAges).size).toBeGreaterThan(1);
+  });
+});
+
