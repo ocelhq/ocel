@@ -435,13 +435,26 @@ message named an arbitrary key — a fragment never reaches the wire and `aws4fe
 
 `.23` closed two layers (parse-time `isrPrefix` validation; an anchored `.on.aws` Function
 URL host check). `.24` owns the third, and it is the one that holds even if the parser
-regresses:
+regresses. It takes **both** grants, not one:
 
-- **`s3:GetObject` on `!Sub '${AssetBucket.Arn}/*/origin.json'`, never `/*`.** IAM's `*`
-  spans `/`, so requiring the key to *end* in `/origin.json` makes the read grant and the
-  edge's write grant disjoint: every key the edge can write ends in `.cache.json`. This is
-  also why `origin.json` does not move to a prefix of its own — `*/fetch-cache/*` matches
-  under any leading prefix, so a relocation buys nothing the suffix does not already buy.
+- **`s3:GetObject` on `!Sub '${AssetBucket.Arn}/*/origin.json'`, never `/*`**, and
+  **`s3:PutObject` on `!Sub '${AssetBucket.Arn}/*/fetch-cache/*.cache.json'`**, never the
+  unanchored `*/fetch-cache/*` the edge user originally carried. IAM's `*` spans `/`, so
+  the read pattern alone admits `<prefix>/fetch-cache/origin.json` — which the unanchored
+  write pattern also admits. Anchoring both on a trailing literal is what makes them
+  disjoint: no key can end in `/origin.json` and `.cache.json` at once. Relaxing either
+  suffix re-opens the vector.
+
+  That every key the edge *worker* writes already ends `.cache.json` is a property of
+  `fetchObjectKey`, not of the grant, and the threat modelled here is a stolen edge
+  *credential*. The IAM patterns are the mechanism; the worker's code is not.
+
+  Because the separation is by suffix, `origin.json` does not move to a prefix of its own —
+  `*/fetch-cache/*` matches under any leading prefix, so a relocation buys nothing.
+
+- **The parser rejects a `fetch-cache` segment in `isrPrefix`** (`message.mts`), the second
+  independent layer. A prefix ending `.../fetch-cache` needs no truncation trick at all:
+  the appended `/origin.json` lands inside the edge's write region on its own.
 
 And on the deploy-side write, two hard requirements, both about the epic's own signature
 failure mode:

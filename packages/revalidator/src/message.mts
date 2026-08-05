@@ -44,17 +44,30 @@ function headerMap(value: unknown): Record<string, string> | undefined {
 // `isrPrefix` is the only variable part of the S3 key the deploy record is read
 // from, and it is interpolated ahead of the `/origin.json` the consumer appends
 // (origin.mts). A `#` or a `?` truncates that suffix, so the message would
-// choose the whole key — and the edge holds PutObject under `*/fetch-cache/*`,
-// which is enough to plant a record naming any host it likes. So the prefix is
-// checked for what it is: dot-free key segments over the characters
-// cloud/aws/deploy composes it from (env / slug / sanitized app / build id),
-// which admits no separator, no traversal, no absolute key and nothing empty.
+// choose the whole key — and the edge holds PutObject under the bucket's
+// fetch-cache segment, which is enough to plant a record naming any host it
+// likes. So the prefix is checked for what it is: dot-free key segments over the
+// characters cloud/aws/deploy composes it from (env / slug / sanitized app /
+// build id), which admits no separator, no traversal, no absolute key and
+// nothing empty.
+//
+// A `fetch-cache` segment is rejected on top of that. The deploy never composes
+// one, and it is the single segment that would steer this read into the region
+// of the bucket a stolen edge credential can write: a prefix ending
+// `.../fetch-cache` turns the appended `/origin.json` into an edge-writable key.
+// IAM closes that too — the edge's write grant is anchored on `*.cache.json`, so
+// no key satisfies both grants — and this is the second, independent layer, kept
+// deliberately: the earlier round of this same vector was closed in one place
+// and reappeared through another.
 const keySegment = /^[A-Za-z0-9._-]+$/;
 
 function isKeyPrefix(value: string): boolean {
   return value
     .split("/")
-    .every((segment) => segment !== "." && segment !== ".." && keySegment.test(segment));
+    .every(
+      (segment) =>
+        segment !== "." && segment !== ".." && segment !== "fetch-cache" && keySegment.test(segment),
+    );
 }
 
 function expectation(value: unknown): RevalidationMessage["expect"] | undefined {
