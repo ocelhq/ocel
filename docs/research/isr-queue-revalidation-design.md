@@ -14,6 +14,67 @@ architecture that replaces the need for it on the background path.
 
 ---
 
+## 0a. AMENDMENTS — READ BEFORE ANY SECTION BELOW
+
+This document landed verbatim in `321c6e5`, carrying none of the decisions the human took
+on it the same day. Where an amendment and the body disagree, **the amendment wins**. Each
+one is also applied inline at its own site, so a reader who arrives at a section directly
+is not misled; this table is the index.
+
+| # | Amendment | Sites |
+| --- | --- | --- |
+| A | The colo store's STALE skip is narrowed to **Lambda provenance**, not the header alone. `servedFromStore` stamps `x-nextjs-cache: STALE` on PRERENDER serves too, so the blanket rule deletes the colo tier for every stale route for the whole duration of a tag invalidation. Gate on `CACHE_STATUS !== "PRERENDER"`. | §2 (decision 18), §6.2 |
+| B | The blocking-miss collapse (§7, `.28`) is **DEFERRED behind `.17`**. `missWaitBudgetMs = 3000` sits on the serving path and is asserted, not measured; `.17` measures the two numbers it must be sized from. Reversal: a measured hard-expiry fan-in per colo, plus a measured p95 render+store. | §7, §10 |
+| C | `MessageRetentionPeriod` is **300**, not 3600. At 1h a wedged consumer accumulates ~12 stale echoes per route per hour, each with a distinct `lastModified` and therefore a distinct dedup id, and every one renders sequentially on recovery. | §3.1 |
+| D | Trigger-secret hardening: SSE-KMS on the queue **and** the DLQ; an explicit no-log-the-raw-record rule in the handler; and **the host is not validated, it is resolved** — see the note below, which supersedes §5.2's regex and §4.2's `url` field. | §3.1, §4.2, §5.2, §5.3 |
+| E | `.26` (suppression) lands **BELOW** `.25` (enqueue) in the stack. §10 asserts suppression must precede enqueue being live and then orders them the other way. Edges: `.24 → .23`, `.26 → .24`, `.25 → .26`, `.27 → .25`. | §10 |
+| F | `OCEL_REVALIDATE_QUEUE_URL` is rendered **only when the revalidator function is rendered** — i.e. only when the artifact pin is present — not merely when the queue exists. Otherwise a deploy landing between `.25` and `.27` enqueues into a consumer-less queue, the thunk returns "landed", the sentinel re-arms, and the route silently stops revalidating until hard expiry. | §3.2, §5.3 |
+| G | `VisibilityTimeout` is **300**, not 60: a batch of 10 at 10s per record is up to 100s of work, and at 60s the consumer DLQs records it already processed successfully. Also: `MaximumConcurrency` is a **`ScalingConfig` sub-property** in CloudFormation, not a top-level event-source-mapping property, and the document gives the Lambda **no function timeout at all** — it needs an explicit one. | §3.1, §5.3 |
+
+### Amendment D in full: the message names no host
+
+§4.2 gives the message a `url`, and §5.2 validates its host against
+`^[a-z0-9-]+\.lambda-url\.[a-z0-9-]+\.on\.aws$`. Both are superseded.
+
+The regex admits **any** AWS customer's Function URL, so a compromised edge key could
+enqueue a message that exfiltrates the app's `bypassToken` plus a valid SigV4 signature to
+an attacker's endpoint. An allowlist of exact hosts was the first replacement and is also
+rejected — structurally, not stylistically. The consumer is rendered by
+`cloud/aws/bootstrap` (one CloudFormation stack per account, at provider-install time);
+the Function URLs it would have to permit are created by `cloud/aws/deploy/function.go`
+(one `lambda.NewFunctionUrl` per `ManifestFunction`) on every app deploy, with ids nobody
+can know at bootstrap time. The list renders empty and nothing refreshes it. Even with an
+updater: CFN drift reverted by the next bootstrap, lost writes on concurrent deploys, and
+Lambda's 4KB env cap at ~100 hosts.
+
+So the message names no host at all. It carries `isrPrefix` and `routeId`, and the
+consumer **resolves** the origin from the record the deploy itself writes:
+
+```
+s3://<OCEL_ASSET_BUCKET>/<isrPrefix>/origin.json
+{ "v": 1, "functionUrls": { "<routeId>": "https://<id>.lambda-url.<region>.on.aws/" } }
+```
+
+— the same `routeId → Function URL` map `buildDeploymentRecord` already computes via
+`appFunctionURLsByRoute`, written to the one place keyed by `isrPrefix` that the
+consumer's own account can read. `routePath` is joined onto the recorded origin and the
+result's origin compared back to it, so a route path that tries to be a URL cannot become
+one. This makes the exfiltration class impossible rather than validated, and there is no
+list to keep current.
+
+What this obliges, beyond `.23`:
+
+- **`.24`**: `s3:GetObject` on `!Sub '${AssetBucket.Arn}/*'` on the revalidator role, and
+  `OCEL_ASSET_BUCKET: !Ref AssetBucket` in its environment (exactly as `publisher.go`
+  renders it for the tag publisher).
+- **`.24` (`cloud/aws/deploy`)**: a new write. After the app stack's outputs are read,
+  `PutObject` `<isrPrefix>/origin.json` into the asset bucket with the document above. The
+  Function URL is only knowable after `up`, which is why bootstrap cannot render it and
+  the deploy must write it.
+- **`.25`**: build the message shape in §4.2 as amended — no `url`, plus `routeId`.
+
+---
+
 ## 0. What is settled and not re-litigated
 
 - **L0 (per-isolate), L1 (colo sentinel), the admission jitter, and the below-tier seam
@@ -129,7 +190,10 @@ pnpm store; `packages/lambda-entrypoints` has no `next` dependency).
   IAM, alarms, DLQ.
 - **Decision 18 — self-revalidation suppression.** The edge adds `purpose: prefetch` to
   prerender-capable user-path forwards, making the edge/queue the only revalidation
-  authority. The colo store declines to cache responses stamped `x-nextjs-cache: STALE`.
+  authority. The colo store declines to cache a STALE response **that came from the
+  Lambda** — narrowed by amendment A; the blanket "any response stamped
+  `x-nextjs-cache: STALE`" would delete the colo tier for every stale route, because
+  Ocel's own `servedFromStore` stamps STALE on PRERENDER serves too.
 - **Decision 19 — blocking-miss collapse is colo-scoped.** The miss path gains a per-colo,
   per-variant sentinel + bounded poll-wait (Vercel's held-requests model at colo
   granularity). Cross-colo blocking coordination stays out of scope pending `.17`
@@ -148,11 +212,17 @@ Provision account-globally beside the tag-publisher block (wired where
   `FifoQueue: true`, `ContentBasedDeduplication: false` (we always send an explicit id),
   default dedup scope (queue) and throughput (normal — do NOT enable high-throughput mode;
   it forces messageGroup-scoped dedup we don't need and our volumes are ~hundreds per
-  stale event against 300 tps/partition), `VisibilityTimeout: 60`,
-  `MessageRetentionPeriod: 3600` (1h — a revalidation message older than an hour is
-  worthless; dedup makes replays harmless anyway), `RedrivePolicy: maxReceiveCount 5` →
-  `RevalidateDLQ`.
+  stale event against 300 tps/partition), **`VisibilityTimeout: 300`** (amendment G — a
+  batch of 10 at the handler's 10s per-record budget is up to 100s of work, and it must
+  also outlast the function timeout below; at 60 the consumer DLQs records it already
+  processed successfully), **`MessageRetentionPeriod: 300`** (amendment C — a revalidation
+  older than the dedup window is worthless, and at 1h a wedged consumer accumulates ~12
+  stale echoes per route per hour, each with its own `lastModified` and therefore its own
+  dedup id, every one of which renders sequentially on recovery),
+  `RedrivePolicy: maxReceiveCount 5` → `RevalidateDLQ`.
 - `RevalidateDLQ`: SQS FIFO (mandatory for a FIFO source), 14-day retention.
+- **SSE-KMS on both** (amendment D): every message carries the app's `bypassToken` in
+  `x-prerender-revalidate`, so the queue and the DLQ are secret-bearing stores.
 - Stack Output for the queue URL, following the `assetBucketOutput` pattern
   (`bootstrap.go:732-737`).
 - **EdgeUser grant**: add `sqs:SendMessage` on `RevalidateQueue`'s ARN to
@@ -166,6 +236,11 @@ Provision account-globally beside the tag-publisher block (wired where
   `withRevalidateQueue(...)` helper mirroring `withCacheCoordinates`
   (`cloud/aws/deploy/production.go:566-577`). Value = the queue URL Output. The region is
   derived in TS from the URL host (`sqs.<region>.amazonaws.com`) — no second var.
+- **Amendment F**: render the var only when the revalidator FUNCTION is rendered — i.e.
+  only when the artifact pin is present — not merely when the queue exists. A deploy
+  landing between `.25` and `.27` would otherwise enqueue successfully into a
+  consumer-less queue, the thunk returns "landed", the L1 sentinel re-arms, and the route
+  silently stops revalidating until hard expiry. This is a correctness requirement.
 - Absent var ⇒ the edge behaves exactly as today (no enqueue path constructed). This is
   the wiring-seam rule from `.16`: a test must pin that the dep is constructed when the
   var is present (§9).
@@ -196,22 +271,32 @@ from the queue URL — the existing signing client is `service: "lambda"`
 
 ### 4.2 The message
 
+AMENDED by amendment D: the message names no host, and gains `routeId`. This is the
+shape `.25` builds and `packages/revalidator` parses (`src/message.mts`).
+
 ```ts
 interface RevalidationMessage {
   v: 1;
-  // The deferred originBlocking, prepared by the edge which knows the route:
-  url: string;               // https://<fnUrlHost><path> — the exact originBlocking URL
   headers: Record<string, string>; // x-prerender-revalidate, x-ocel-entry,
                                    // x-forwarded-host, x-forwarded-proto ONLY
   // Success contract, framework-declared by the edge (§8):
   expect: { header: string; value: string } | null; // Next: {header:"x-nextjs-cache", value:"REVALIDATED"}
-  // Dedup ingredients, also used for logging:
+  // What the consumer resolves the origin from — the deploy, and which of its
+  // functions serves this route. `routeId` is the key the worker already
+  // dispatches by (`functionUrls[target.id]`).
   isrPrefix: string;
-  routePath: string;
+  routeId: string;
+  // Dedup ingredients, also used for logging:
+  routePath: string;         // a path, never a URL; joined onto the resolved origin
   lastModified: number;      // ENTRY_MODIFIED of the stale entry that admitted
   enqueuedAt: number;
 }
 ```
+
+`x-forwarded-host` STAYS in the headers even though the consumer now knows the origin.
+The consumer resolves the *origin* — the Function URL — while the app's *public* hostname
+is route knowledge only the edge has, and the rendered entry's absolute URLs depend on it.
+It names no destination, so it carries no part of the trust decision above.
 
 `MessageDeduplicationId = hex(sha256(`${isrPrefix}:${routePath}:${lastModified}`))`,
 `MessageGroupId = `${isrPrefix}:${routePath}`` (≤128 chars — truncate the routePath tail
@@ -222,7 +307,8 @@ to a hash if longer; one pure exported function derives both, tested directly li
 
 `admitRefresh` (`cache.ts:623-646`) is untouched. The change is inside the `refresh`
 thunks passed to it at the three sites (`cache.ts:698`, `index.ts:866-875`,
-`index.ts:901-913`): each thunk becomes
+`index.ts:902-912` — the last was cited as 901-913, which is the enclosing `if` block, not
+the call): each thunk becomes
 
 ```
 run = async () => {
@@ -257,18 +343,22 @@ byte-for-byte in build shape: single-file esbuild ESM bundle via the same
 `scripts/build-zip.mjs` pattern (fixed timestamps, sorted entries, reproducible
 `dist/revalidator.zip`), released as GitHub asset `revalidator-v<version>`, pinned by
 version + sha256 in a new `cloud/aws/bootstrap/revalidatorversion.go` (copy the runbook
-comment from `publisherversion.go:35-44`). Unpinned placeholder ⇒ bootstrap skips
-rendering the function, exactly as the publisher did pre-`.14`.
+comment from `publisherversion.go:29-34` — read the file, the range cited in §12 is the
+const block, not the comment). Unpinned placeholder ⇒ bootstrap skips rendering the
+function, exactly as the publisher did pre-`.14`.
 
 ### 5.2 Handler contract
 
 Per SQS record: parse `RevalidationMessage` (reject unknown `v` → item failure);
-**validate `url` host** against `^[a-z0-9-]+\.lambda-url\.[a-z0-9-]+\.on\.aws$` (the
-queue is writable only by EdgeUser, but the consumer must not be an open proxy — defense
-in depth, mirrored from `entryObjectKey`'s validate-at-the-boundary rule); SigV4-sign
-(`service: "lambda"`, region from the host, credentials from the function role — the
-message carries NO credentials) and send **HEAD** `url` with exactly the message's
-headers. Success:
+**resolve the origin** from `s3://<OCEL_ASSET_BUCKET>/<isrPrefix>/origin.json` and
+`routeId`, memoized per `isrPrefix` for the invocation, and compose the trigger URL from
+the resolved origin and `routePath` (amendment D — this REPLACES the host-validation regex
+this section originally carried; do not ship a pattern, and do not ship an allowlist);
+SigV4-sign (`service: "lambda"`, region from the resolved host, credentials from the
+function role — the message carries NO credentials) and send **HEAD** with the message's
+headers, signed along with `host`. An unreadable record is a transient item failure
+(`origin-unavailable`); a record that does not answer for this route, or a `routePath`
+that would leave the resolved origin, is a permanent one (`origin-unusable`). Success:
 
 - `response.ok && message.expect === null` ⇒ success.
 - `response.ok && header(expect.header) === expect.value` ⇒ success.
@@ -281,7 +371,7 @@ headers. Success:
 FIRST failure in a message group, stop processing that group and include that record AND
 every unprocessed record of the same group in `batchItemFailures`. Records of other
 groups in the batch continue. A thrown handler ⇒ whole batch fails (avoid; catch
-per-record). Retries are SQS redelivery (visibility 60s × maxReceiveCount 5) → FIFO DLQ.
+per-record). Retries are SQS redelivery (visibility 300s × maxReceiveCount 5) → FIFO DLQ.
 This is the bounded backoff `.18` required, now centralized: an origin shedding 429s
 pushes retries out on the visibility-timeout schedule instead of any tight loop.
 
@@ -289,12 +379,23 @@ pushes retries out on the visibility-timeout schedule instead of any tight loop.
 
 Mirror `tagPublisherResources` (`publisher.go:181-347`): artifact via `ensureArtifact`
 (fail-closed digest verify); IAM role with `sqs:ReceiveMessage/DeleteMessage/GetQueueAttributes`
-on `RevalidateQueue`, and `lambda:InvokeFunctionUrl` + `lambda:InvokeFunction` scoped by
-the `ocel:app` resource tag **copied exactly from `edgeUserResource`'s condition block**;
+on `RevalidateQueue`; `lambda:InvokeFunctionUrl` + `lambda:InvokeFunction` scoped by
+the `ocel:app` resource tag **copied exactly from `edgeUserResource`'s condition block**
+(note that block is account-wide over every Ocel-tagged function, not app-scoped — `.24`
+either tightens it or records the acceptance); `s3:GetObject` on `${AssetBucket.Arn}/*`
+and `OCEL_ASSET_BUCKET: !Ref AssetBucket`, for the origin resolution of amendment D; and
+**an explicit function `Timeout`** (amendment G — the document sets none; the package
+documents 150s in `packages/revalidator/README.md`, sized in `src/limits.mts` and
+asserted there, and it must stay below the queue's 300s `VisibilityTimeout`).
 ESM on the queue: batch size 10, `ReportBatchItemFailures`, `MaximumConcurrency: 10`
-(the global render-drain bound — deliberately small; a mass tag invalidation drains at 10
-concurrent renders, which is the epic's first-ever cap on total origin pressure), OnFailure
-→ DLQ. Alarms, one block, same style as `publisher.go:40-101`:
+**nested under `ScalingConfig`** (amendment G — it is a `ScalingConfig` sub-property in
+CloudFormation, not a top-level event-source-mapping property; rendered at the top level
+it is silently ignored or rejected) — the global render-drain bound, deliberately small;
+a mass tag invalidation drains at 10 concurrent renders, which is the epic's first-ever
+cap on total origin pressure — plus OnFailure → DLQ. Alarms, one block, same style as the
+alarm resources **inside** `tagPublisherResources` (`publisher.go:181-347`; the
+`40-101` cited in §12 is the const block, which is where the periods and thresholds live,
+not the resources):
 
 - `ApproximateNumberOfMessagesVisible` on the DLQ > 0 (5 min) — poison revalidations.
 - `ApproximateAgeOfOldestMessage` on the queue > 300s — consumer wedged or origin down.
@@ -310,7 +411,8 @@ steady state (unlike the publisher's stream, silence here is not a signal).
 Two halves, both required (Decision 18):
 
 1. **`purpose: prefetch` on user-path forwards.** In the `forward(...)` construction
-   (`index.ts:694-698` / where `safeHeaders` is assembled at `723-737`): when the target
+   (`index.ts:694-698` is the `render` thunk; the `forward`/`safeHeaders` seam is
+   `723-739`): when the target
    is prerender-capable (the same condition that attaches `x-ocel-entry`) and the method
    is GET/HEAD, set `purpose: prefetch` on the outgoing origin request — overwriting any
    client-sent value (the inbound request is untouched; this is the edge→Lambda leg
@@ -318,12 +420,17 @@ Two halves, both required (Decision 18):
    sits above the prefetch guard — adding it there is dead weight and muddies intent).
    Never on BYPASS traffic (draft cookie, bypass token, middleware set-cookie, non-GET):
    those paths are not ISR-governed and must stay byte-identical.
-2. **Colo store declines `x-nextjs-cache: STALE`.** In `store()`'s storability check
-   (`cache.ts:407-414`): a response stamped `STALE` is a stale serve the Lambda made
-   under suppression — caching it would launder stale bytes into a fresh-looking colo
-   entry for a full window (the exact trap OpenNext's rejected "fake lastModified"
-   option creates). Skip the put; still serve the response. `HIT`/`REVALIDATED`/absent
-   store as today.
+2. **Colo store declines a STALE serve *from the Lambda*.** AMENDED by amendment A: the
+   original wording — decline any response stamped `x-nextjs-cache: STALE` — is wrong and
+   must not be built. `servedFromStore` (`cache.ts`) stamps `STALE` on Ocel's own
+   PRERENDER serves out of R2 too, so the blanket rule deletes the colo tier for every
+   stale route for the whole duration of a tag invalidation. Gate on **provenance**, e.g.
+   `CACHE_STATUS !== "PRERENDER"`, not on the header alone. In `store()`'s storability
+   check (`cache.ts:407-414`): a Lambda-provenance `STALE` is a stale serve the Lambda
+   made under suppression — caching it would launder stale bytes into a fresh-looking
+   colo entry for a full window (the exact trap OpenNext's rejected "fake lastModified"
+   option creates). Skip the put; still serve the response. `HIT`/`REVALIDATED`/absent,
+   and anything Ocel served from the store itself, store as today.
 
 Why suppression at all: without it, every Lambda-reaching request on a stale-servable
 entry (R2-incomplete entries, uncacheable variants, pages `_next/data`) spawns an
@@ -340,7 +447,17 @@ suppression must be one boolean constant that can be reverted alone.
 
 ---
 
-## 7. Component: blocking-miss collapse (workers/nextjs)
+## 7. Component: blocking-miss collapse (workers/nextjs) — DEFERRED
+
+**Do not build this section yet** (amendment B). `.28` is filed deferred with a dep edge
+on `.17`. `missWaitBudgetMs = 3000` below sits on the SERVING path and is asserted, not
+measured; `.17` already measures hard-expiry fan-in per colo and p95 render, which are
+exactly the two numbers the budget must be sized from, and the same evidence bar deferred
+`.8`. Decision 19 is not withdrawn — its acceptance of per-colo-only scope still stands;
+only the build is sequenced behind the measurement. REVERSAL: a measured hard-expiry
+fan-in per colo showing the collapse is worth a serving-path component, plus a measured
+p95 render+store to size the budget from. The design below is preserved as-is for that
+day; every constant in it is a placeholder until then.
 
 In `colo()` (`cache.ts:707-755`), between the failed `inFlightFill` join and
 `const pending = origin()` (line 739):
@@ -409,7 +526,8 @@ production line, watch the named test fail, restore). All `CacheDeps` built thro
   either is a runtime error (verified §1.8).
 - Suppression: **[M]** `purpose: prefetch` present on the prerender-capable GET forward;
   **[M]** absent on BYPASS and on `originBlocking`; **[M]** `store()` skips a response
-  carrying `x-nextjs-cache: STALE` and stores `HIT`/absent.
+  carrying `x-nextjs-cache: STALE` **of Lambda provenance** (amendment A) and stores
+`HIT`/absent, and anything Ocel served from the store itself.
 - Miss collapse: **[M]** two concurrent misses in one colo (distinct isolates simulated
   via distinct deps sharing one cache) yield one `origin()` call, follower served the
   leader's entry through the verdict path; **[M]** follower past `missWaitBudgetMs`
@@ -421,8 +539,13 @@ production line, watch the named test fail, restore). All `CacheDeps` built thro
 
 - Handler: **[M]** per-group stop-at-first-failure (batch with groups A,B where A's
   first record fails: A's failed + unprocessed records reported, B fully processed);
-  **[M]** host-validation rejects a non-Function-URL host as an item failure without
-  fetching; **[M]** success requires `expect` match when declared; **[M]** ok-with-
+  **[M]** origin resolution: a `routeId` the deploy never recorded, and a `routePath`
+  that would leave the recorded origin, are item failures that never fetch the origin
+  (amendment D — there is no host to validate); **[M]** the record is read once per
+  `isrPrefix` per invocation and re-read on the next; **[M]** a record with no
+  `MessageGroupId` does not stop the records after it; **[M]** a skipped record is
+  logged, not only reported; **[M]** the default trigger and record-read budgets;
+  **[M]** success requires `expect` match when declared; **[M]** ok-with-
   mismatched-expect logs and succeeds; **[M]** HEAD method and header passthrough
   (captured request); **[M]** unknown `v` → item failure.
 
@@ -454,17 +577,21 @@ decision (§2) it serves, per the epic-filing rule.
 2. **`.24` — cloud/aws queue + consumer resources + EdgeUser grant + worker env
    plumbing.** Depends on `.23` (artifact name/env contract). Renders inert until the pin
    lands (`.27`).
-3. **`.25` — edge enqueue path** (deps seam, SQS signing, three thunks, fallback).
-   Depends on `.24` (env contract). Behind the env var: absent ⇒ no behavior change.
-4. **`.26` — suppression + STALE-store-skip + golden e2e.** No dependency on the queue —
-   safe standalone (the edge admission tiers remain the refresh source either way); land
-   it before `.25` is *enabled* on any live substrate so `.17` never measures the
-   self-revalidation leak.
+3. **`.26` — suppression + Lambda-provenance STALE-store-skip + golden e2e.** AMENDED by
+   amendment E: this lands **BELOW** `.25`, not above it. The original ordering asserted
+   in the same sentence that suppression must precede enqueue being live and then put it
+   second; landing it first is what keeps any live substrate from ever running the queue
+   with the in-Lambda self-revalidation leak open. Depends on `.24`. Build the STALE skip
+   as amendment A narrows it, not as §6.2 originally worded it.
+4. **`.25` — edge enqueue path** (deps seam, SQS signing, three thunks, fallback, the
+   §4.2 message as amended). Depends on `.26`. Behind the env var: absent ⇒ no behavior
+   change.
 5. **`.27` — human gate: cut `revalidator-v0.0.1`, pin version+digest, live e2e** (the
    §9 e2e list; extends the still-open `.10` run). `.14`-class release decision — an
    agent prepares, a human authorizes.
-6. **`.28` — blocking-miss collapse** (§7). Independent of the queue; can proceed in
-   parallel with `.25`+.
+6. **`.28` — blocking-miss collapse** (§7). **DEFERRED behind `.17`** (amendment B): it is
+   not parallel with `.25`, and `missWaitBudgetMs` may not be sized from anything other
+   than a measurement. Edge: `.28 → .17`.
 7. **`.17` (existing)** then measures the whole stack: renders per stale event (target:
    ~1 with the queue live), hard-expiry fan-in per colo (target: ~variants, not
    ~isolates×variants), measured `C`, and enqueue volume vs L1's predicted `C·E`.
@@ -508,12 +635,13 @@ error clamp `server/response-cache/index.js:290-307`.
 membrane.mts:80-123`, `cloud/aws/cmd/lambdanode/bootstrap/forward.go:48-61`; cache
 handler real lastModified `packages/lambda-entrypoints/src/next/cache-handler.mts:186-205`;
 originBlocking + signing `workers/nextjs/src/index.ts:741-744`, `workers/nextjs/src/
-signing.ts:11,50-92`; admission machinery `workers/nextjs/src/cache.ts:471,489,525-533,
+signing.ts:11,50-92`; forward/safeHeaders seam `workers/nextjs/src/index.ts:694-698` (the `render` thunk),
+`723-739`; admission machinery `workers/nextjs/src/cache.ts:471,489,525-533,
 549-557,569,576-596,601-607,623-646`; three sites `cache.ts:698`, `index.ts:866-875,
-901-913`; miss path `cache.ts:707-755`; publisher pattern `cloud/aws/bootstrap/
+902-912`; miss path `cache.ts:707-755`; publisher pattern `cloud/aws/bootstrap/
 publisher.go:40-101,118,120-140,181-347`, `publisherversion.go:35-44`, `artifact.go:105-181`;
 EdgeUser `bootstrap.go:44-48,739-820`, `edge.go:161-237`; env plumbing
-`cloud/aws/deploy/production.go:546-577`, `cloud/edge/resolver.go:33-56`.
+`cloud/aws/deploy/production.go:566-577`, `cloud/edge/resolver.go:33-56`.
 
 **AWS docs**: FIFO dedup interval + MessageDeduplicationId semantics
 (SQSDeveloperGuide/FIFO-queues-exactly-once-processing.html, APIReference/API_SendMessage.html);
