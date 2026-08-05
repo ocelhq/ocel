@@ -146,8 +146,7 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	apps := manifestApps(manifest)
 	results := make([]appDeployResult, len(apps))
 	appOutputs := make([][]*deploymentsv1.ResourceOutput, len(apps))
-	runAppStacks(len(apps), func(i int) {
-		app := apps[i]
+	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
 		outs, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], log)
 		appOutputs[i] = outs
