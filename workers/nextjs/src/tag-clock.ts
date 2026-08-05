@@ -84,6 +84,11 @@ const snapshotReads = new WeakMap<ObjectStoreReader, Promise<TagSnapshot | null>
 
 export function dropSnapshotMemo(store: ObjectStoreReader): void {
   snapshotMemo.delete(store);
+  // A read already in flight is a read of the replica as it was BEFORE the
+  // write that prompted this drop, so it is exactly what the drop exists to
+  // stop answering with. Abandoned rather than awaited: the caller that started
+  // it still gets its own answer, only nobody new joins it.
+  snapshotReads.delete(store);
 }
 
 // An invalidation raised through this worker was already published by the origin
@@ -172,7 +177,11 @@ async function readSnapshot(
   const inFlight = snapshotReads.get(deps.store);
   if (inFlight !== undefined) return inFlight;
 
-  const read = fillSnapshot(cfg, deps, now).finally(() => snapshotReads.delete(deps.store));
+  const read: Promise<TagSnapshot | null> = fillSnapshot(cfg, deps, now).finally(() => {
+    // Only ever its own entry: a read abandoned by dropSnapshotMemo still
+    // settles, and must not take its replacement out of the map with it.
+    if (snapshotReads.get(deps.store) === read) snapshotReads.delete(deps.store);
+  });
   snapshotReads.set(deps.store, read);
   return read;
 }

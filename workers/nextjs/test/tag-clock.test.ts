@@ -243,4 +243,100 @@ describe("readers arriving together on a cold memo", () => {
     expect(await verdicts).toEqual([true, true, true]);
     expect(store.gets).toHaveLength(1);
   });
+
+  it("all get the failure a solo caller would have got, and it is not left behind", async () => {
+    const failing = gatedStore(null, { fail: true });
+    const clock = createTagClock(cfg, { store: failing });
+
+    const verdicts = Promise.all([
+      clock.expired(["posts"], 1_000, 3_000),
+      clock.expired(["posts"], 1_000, 3_000),
+    ]);
+    failing.release();
+    // Fail open, exactly as a lone reader does: unknown staleness never serves.
+    expect(await verdicts).toEqual(["untrusted", "untrusted"]);
+    expect(failing.gets).toHaveLength(1);
+
+    // And the rejection is not parked in the join map: the very next caller,
+    // still inside the memo window, starts a read of its own.
+    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe("untrusted");
+    expect(failing.gets).toHaveLength(2);
+  });
+
+  // invalidateSnapshot exists so a raiser is never answered from before its own
+  // write. A read already in flight when the raise lands IS such an answer, so
+  // the join must be abandoned by the same call that drops the memo — otherwise
+  // the join quietly re-opens the window the purge just closed.
+  it("are not joined to a read that started before an invalidation", async () => {
+    const bodies = [
+      JSON.stringify(snapshot()),
+      JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } })),
+    ];
+    let n = 0;
+    let release!: () => void;
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    const gets: string[] = [];
+    const store = {
+      async get(key: string) {
+        const body = bodies[Math.min(n++, bodies.length - 1)]!;
+        gets.push(key);
+        await gate;
+        return { etag: `"${key}"`, text: async () => body };
+      },
+    };
+    const clock = createTagClock(cfg, { store });
+
+    const before = clock.expired(["posts"], 1_000, 3_000);
+    await invalidateSnapshot(cfg, { store });
+    const after = clock.expired(["posts"], 1_000, 3_000);
+    release();
+
+    expect(await before).toBe(false);
+    expect(await after).toBe(true);
+    expect(gets).toHaveLength(2);
+  });
+
+  // The abandoned read still settles, and its cleanup must not evict the read
+  // that replaced it. A rejecting one is the reachable case: it leaves no memo
+  // behind, so the next caller really does consult the join map, and a stale
+  // finalizer deleting a live entry would silently un-join every caller after
+  // it with the whole suite still green.
+  it("join the read that replaced an abandoned one, not a third of their own", async () => {
+    const gets: string[] = [];
+    const releases: Array<() => void> = [];
+    let fail = true;
+    const store = {
+      async get(key: string) {
+        gets.push(key);
+        const doomed = fail;
+        fail = false;
+        await new Promise<void>((done) => releases.push(done));
+        if (doomed) throw new Error("store down");
+        return { etag: `"${key}"`, text: async () => JSON.stringify(snapshot()) };
+      },
+    };
+    const clock = createTagClock(cfg, { store });
+
+    const abandoned = clock.expired(["posts"], 1_000, 3_000);
+    await invalidateSnapshot(cfg, { store });
+    const successor = clock.expired(["posts"], 1_000, 3_000);
+
+    // The abandoned read fails first, so its cleanup runs — and leaves no memo —
+    // while the successor is still in flight.
+    releases[0]!();
+    expect(await abandoned).toBe("untrusted");
+
+    const joiner = clock.expired(["posts"], 1_000, 3_000);
+    // Release everything outstanding, so a caller that failed to join settles
+    // as a third read rather than as a hang.
+    for (let i = 0; i < 5; i++) {
+      releases.forEach((done) => done());
+      await Promise.resolve();
+    }
+    expect(await successor).toBe(false);
+    expect(await joiner).toBe(false);
+    expect(gets).toHaveLength(2);
+  });
 });
