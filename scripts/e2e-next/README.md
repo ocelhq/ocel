@@ -12,6 +12,8 @@ isolated app per test suite and calls three scripts per app; these are ours:
 
 `assert-isr.mjs` is a smoke-job assertion rather than a harness script: it takes
 the deployment URL and proves a revalidating route's cache entry is rewritten.
+`assert-tag-publisher.mjs` and `assert-suppression-golden.mjs` are the same kind
+of thing, run against a deployment URL by hand (see "Golden gate" below).
 `lib.mjs` holds the shared pure logic (unit tested: `pnpm --filter
 @ocel-scripts/e2e-next test`). `merge-baseline.mjs` records the known-failure
 baseline. `stage-smoke-app.mjs` stages the smoke job's app. `guard-accounts.sh`
@@ -58,6 +60,33 @@ The tradeoff: the smoke job does **not** exercise `run-tests.js`,
 `NEXT_TEST_MODE=deploy`, or the `NEXT_TEST_*_SCRIPT_PATH` indirection. That
 wiring is first exercised by the matrix itself, so a break in it costs one
 matrix start rather than being caught by the gate.
+
+## Golden gate: `purpose: prefetch` has no side effect
+
+The edge stamps `purpose: prefetch` on the user-path forward to the Lambda so
+Next serves a stale entry without starting its own render (bd ocelhq-wvag.26) —
+the edge's admission tiers are then the only thing that can start one. That rests
+on one line of `next@16.2.10`, and OpenNext's caveat about it comes with it: a
+change to Next's prefetch handling would break it. `SUPPRESS_SELF_REVALIDATION`
+in `workers/nextjs/src/index.ts` is the one-line revert;
+`assert-suppression-golden.mjs` is the tripwire.
+
+It fetches `smoke-app/app/golden/page.tsx` — a prerender whose body carries
+nothing per-render — twice per variant (html and RSC), both down the BYPASS path
+so the edge handles them identically and the only difference reaching the Lambda
+is the header. Status, body bytes and headers must match, modulo the set in
+`GOLDEN_VOLATILE_HEADERS` (`date`/`age`, `x-nextjs-cache`, `x-ocel-cache`, and
+the Cloudflare/transport headers), each excluded for a reason named at the
+constant.
+
+```bash
+node scripts/e2e-next/assert-suppression-golden.mjs "$SMOKE_URL"
+```
+
+Not wired into the workflow: like `assert-tag-publisher.mjs`, it is run by hand
+against a deployment URL. Its pure half is covered by
+`pnpm --filter @ocel-scripts/e2e-next test`, which proves the comparison, not the
+Lambda — only a run against a real deployment does that.
 
 ## One-time setup (out of band, by a human)
 
