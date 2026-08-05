@@ -36,10 +36,13 @@ real boundary is this, and it is two things, not one:
 - **`isrPrefix` is validated as a key prefix** (`src/message.mts`), to the same
   standard `routePath` is: dot-free segments of the characters
   `cloud/aws/deploy` composes it from, no separator, no traversal, no absolute
-  key, nothing empty. Without that check a `#` or a `?` truncates the
-  `/origin.json` the consumer appends, and the message names an arbitrary
-  object — including one under `*/fetch-cache/*`, the prefix the edge holds
-  `s3:PutObject` on and writes fully-controlled JSON bodies to. A fragment
+  key, nothing empty, and no `fetch-cache` segment. Without that check a `#` or
+  a `?` truncates the `/origin.json` the consumer appends, and the message names
+  an arbitrary object — including one under the fetch-cache segment the edge
+  holds `s3:PutObject` on and writes fully-controlled JSON bodies to. And a
+  prefix ending `.../fetch-cache` needs no truncation at all: the appended
+  `/origin.json` lands it in that same region, which is why the segment is
+  rejected outright rather than merely well-formed. A fragment
   never reaches the wire and `aws4fetch` signs `url.pathname`, so the signature
   would have matched the planted document exactly, and the origin comparison
   below would have agreed with the planted origin. It also stops
@@ -107,15 +110,24 @@ moves.
 
   Read-only, and no `s3:PutObject` — the consumer never writes to the store.
 
-  The `/origin.json` suffix is load-bearing and must not be relaxed to `/*`.
-  IAM's `*` spans `/`, so requiring the key to *end* in `/origin.json` is what
-  403s the suffix-truncation vector at the IAM layer even if the parser above
-  regresses: every key the edge can write ends in `.cache.json`
-  (`workers/nextjs/src/cache-entrypoint.ts`, `fetchObjectKey`), so no key the
-  edge can plant is a key this role can read. That disjointness is the reason
-  `origin.json` does **not** need to move to a prefix of its own; moving it
-  would not help, because `*/fetch-cache/*` matches under any leading prefix,
-  and the suffix is what separates the two grants.
+  The `/origin.json` suffix is load-bearing and must not be relaxed to `/*` —
+  and it is only half of the mechanism. IAM's `*` spans `/`, so this pattern
+  alone admits `<prefix>/fetch-cache/origin.json`, which an edge write grant of
+  `*/fetch-cache/*` also admits. The disjointness holds because **both** grants
+  are anchored on a trailing literal and the two literals cannot coexist in one
+  key: this one admits only keys ending `/origin.json`, and the edge's write
+  grant is written `!Sub '${AssetBucket.Arn}/*/fetch-cache/*.cache.json'`, which
+  admits only keys ending `.cache.json`. Relaxing *either* suffix re-opens the
+  vector.
+
+  That the edge worker only ever writes `.cache.json` keys is true
+  (`workers/nextjs/src/cache-entrypoint.ts`, `fetchObjectKey`) but is **not**
+  what makes this safe: the threat modelled here is a stolen edge *credential*,
+  which the worker's code does not constrain. Only the grant does.
+
+  Because the separation is by suffix, `origin.json` does **not** need to move
+  to a prefix of its own; moving it would not help, since `*/fetch-cache/*`
+  matches under any leading prefix.
 - **Env**, `OCEL_ASSET_BUCKET: !Ref AssetBucket`, exactly as `publisher.go`
   renders it for the tag publisher.
 - **A deploy-side write** (`cloud/aws/deploy`), which does not exist yet: after

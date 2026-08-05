@@ -72,14 +72,23 @@ it("rejects a route path that is not a path", () => {
 // `isrPrefix` is interpolated into the record's S3 URL, ahead of the
 // `/origin.json` the consumer means to read. A `#` or a `?` in it truncates
 // that suffix, so the message — not the deploy — would choose the key, and the
-// edge holds PutObject under `*/fetch-cache/*`: it could plant a document
-// naming its own host and then point the consumer at it. aws4fetch signs
-// `url.pathname`, and a fragment never reaches the wire, so the signature would
-// have matched what S3 served. These are the exact inputs, rejected before
+// edge holds PutObject under the bucket's fetch-cache segment: it could plant a
+// document naming its own host and then point the consumer at it. aws4fetch
+// signs `url.pathname`, and a fragment never reaches the wire, so the signature
+// would have matched what S3 served. These are the exact inputs, rejected before
 // anything is read.
+//
+// The bare `fetch-cache` prefix is the second shape of the same attack and needs
+// no truncation at all: `prod/proj/web/BID/fetch-cache` + `/origin.json` is a
+// key inside the edge's write region. Every character in it passes the segment
+// pattern, so only the segment rejection stops it here. IAM stops it too — the
+// edge's write grant is anchored on `*.cache.json` — and both layers are meant
+// to hold on their own.
 it.each([
   ["a fragment truncating the record name", "prod/proj/web/BID/fetch-cache/x.cache.json#"],
   ["a query truncating the record name", "prod/proj/web/BID/fetch-cache/x.cache.json?"],
+  ["a prefix landing the record inside the edge's write region", "prod/proj/web/BID/fetch-cache"],
+  ["a fetch-cache segment anywhere in the prefix", "prod/fetch-cache/web/BID"],
   ["a traversal out of the deploy's own prefix", "prod/proj/web/BID/../../../other-app/BID2"],
   ["a single-dot segment", "prod/./web/BID"],
   ["an absolute key", "/prod/proj/web/BID"],
