@@ -6,9 +6,11 @@
 // never show one.
 //
 // `revalidate` is what makes it a prerender at all, which is the class the
-// suppression applies to. Keep the marker in sync with GOLDEN_MARKER in
-// ../../lib.mjs.
-export const revalidate = 60;
+// suppression applies to, and it is short so the assertion can wait the entry
+// into the STALE state — the only state where `purpose: prefetch` changes
+// anything. Keep the marker and this number in sync with GOLDEN_MARKER and
+// GOLDEN_REVALIDATE_SECONDS in ../../lib.mjs; lib.test.mjs asserts both.
+export const revalidate = 3;
 
 export default function Page() {
   return (

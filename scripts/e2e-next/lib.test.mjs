@@ -5,6 +5,7 @@ import {
   APP_NAME,
   DNS_LABEL,
   GOLDEN_MARKER,
+  GOLDEN_REVALIDATE_SECONDS,
   GOLDEN_ROUTE,
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
@@ -218,6 +219,16 @@ describe("goldenDifferences", () => {
     // Nothing per-render, or the comparison can never be byte-exact.
     expect(page).not.toContain("Date.now");
     expect(page).not.toContain("Math.random");
+  });
+
+  // The assertion waits GOLDEN_REVALIDATE_SECONDS out to get both legs answered
+  // from a stale entry. A page whose own window is longer than that number puts
+  // the comparison back on a fresh entry, where the operand under test is
+  // short-circuited and the gate silently proves nothing.
+  it("waits out the window the probe page actually declares", () => {
+    const page = readFileSync(new URL("./smoke-app/app/golden/page.tsx", import.meta.url), "utf8");
+
+    expect(page).toContain(`export const revalidate = ${GOLDEN_REVALIDATE_SECONDS};`);
   });
 });
 
