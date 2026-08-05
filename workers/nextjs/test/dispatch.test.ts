@@ -655,6 +655,70 @@ describe("dispatchResult", () => {
     expect(lambda).toBe(1);
   });
 
+  // The colo tier caps its own draw on the entry it holds; these two sites
+  // refresh an entry the tier BELOW holds, so the bound has to travel out of
+  // intercept and into admitRefresh. Uncapped, a route whose stale window is
+  // shorter than the jitter spends the tail of the wait past expiration, where
+  // nothing dedupes and every isolate renders for itself.
+  it.each([
+    ["a complete entry", "/blog", { kind: "APP_PAGE", html: "<html>edge</html>", status: 200, headers: {} }],
+    ["a PPR shell", "/ppr", { kind: "APP_PAGE", html: "[shell]", postponed: "POSTPONED", status: 200, headers: {} }],
+  ])("caps the R2 tier's admission wait on %s's remaining stale window", async (_name, path, value) => {
+    const bounds: number[] = [];
+    const pending: Promise<unknown>[] = [];
+    const id = path.slice(1);
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          [path]: {
+            kind: "prerender",
+            id: path,
+            config: "postponed" in value ? { renderingMode: "PARTIALLY_STATIC" } : {},
+            fallback: { initialRevalidate: 60, initialExpiration: 3600 },
+          },
+        },
+      },
+      functionUrls: { [path]: "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("regenerated", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        })) as unknown as typeof fetch,
+      cache: coloDeps({
+        cache: {
+          match: async () => undefined,
+          put: async () => {},
+        } as unknown as Cache,
+        waitUntil: (p: Promise<unknown>) => {
+          pending.push(p);
+        },
+        admissionDelay: (staleForMs: number) => {
+          bounds.push(staleForMs);
+          return Promise.resolve();
+        },
+      }),
+      interception: {
+        config: interceptionConfig,
+        // 500ms short of expiration=3600s, so the draw may span 500ms, not 1s.
+        now: () => 1_000 + 3_599_500,
+        store: storeOf({ [entryKey(id)]: { lastModified: 1_000, value } }),
+      },
+    });
+
+    await dispatchResult(
+      { resolvedPathname: path, invocationTarget: { pathname: path } },
+      new Request(`https://app.example${path}`),
+      deps,
+    );
+    await Promise.all(pending);
+
+    expect(bounds).toEqual([500]);
+  });
+
   // A Cache whose only content is the sentinel for `refreshKey`: this colo has
   // already admitted a refresh of the route, and no entry is stored, so the
   // request is answered exactly as it would be otherwise.

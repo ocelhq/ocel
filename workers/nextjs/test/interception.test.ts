@@ -187,6 +187,29 @@ describe("intercept, complete entries", () => {
     expect(outcome).toMatchObject({ kind: "complete", stale: true });
   });
 
+  // The caller caps its jittered admission draw on this, so a refresh is never
+  // deferred past the moment the entry it refreshes stops being servable — see
+  // admissionJitterMs in cache.ts. A stale hit that omitted it would leave the
+  // draw unbounded and the entry expired mid-wait, with no dedupe left below.
+  it("reports how much stale window a stale hit has left, and nothing when fresh", async () => {
+    const store = stored({ [entryKey("/blog")]: appPage({ lastModified: 1_000 }) });
+    const t = target({ revalidate: 60, expiration: 3600 });
+
+    expect(
+      await intercept(req(), t, cfg, {
+        ...storeDeps(store),
+        now: () => 1_000 + 3_599_500,
+      }),
+    ).toMatchObject({ stale: true, staleForMs: 500 });
+
+    expect(
+      await intercept(req(), t, cfg, {
+        ...storeDeps(store),
+        now: () => 1_000 + 1_000,
+      }),
+    ).toMatchObject({ stale: false, staleForMs: undefined });
+  });
+
   // A path generated on demand is named by no manifest entry, so the only
   // window it has is the one the render recorded on the entry itself. Without
   // it the entry would sit fresh forever and the route would never revalidate.

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  admissionDrawMs,
   admissionJitterMs,
   admitRefresh,
   cacheKey,
@@ -574,6 +575,61 @@ describe("serveCached", () => {
     expect(stale.headers.get("x-ocel-cache")).toBe("STALE");
     await deps.flush();
     expect(refresh.calls).toBe(1);
+  });
+
+  it("hands the refresh the entry's remaining stale window, so the wait cannot outlive it", async () => {
+    // A route whose stale window is shorter than the jitter would otherwise
+    // spend the tail of the wait EXPIRED — and past expiration this tier
+    // declines to serve at all, so L1 is bypassed and every isolate in the colo
+    // renders for itself. The bound is what the draw is capped by; that it is
+    // the remaining window and not the whole one is the whole of the fix.
+    const clock = { ms: 0 };
+    const bounds: number[] = [];
+    const deps = {
+      ...testDeps(clock),
+      admissionDelay: (staleForMs: number) => {
+        bounds.push(staleForMs);
+        return Promise.resolve();
+      },
+    };
+    const origin = countingOrigin("s-maxage=1, stale-while-revalidate=1");
+    const refresh = countingOrigin("s-maxage=1, stale-while-revalidate=1");
+    const t = target("short-stale", { refreshKey: "build:/short-stale" });
+
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 1_500; // past revalidate=1, 500ms left of expiration=2.
+    expect((await serveCached(req(), t, deps, origin, refresh)).headers.get("x-ocel-cache")).toBe(
+      "STALE",
+    );
+    await deps.flush();
+
+    expect(bounds).toEqual([500]);
+  });
+
+  it("leaves the wait unbounded when the entry declares no expiry", async () => {
+    const clock = { ms: 0 };
+    const bounds: number[] = [];
+    const deps = {
+      ...testDeps(clock),
+      admissionDelay: (staleForMs: number) => {
+        bounds.push(staleForMs);
+        return Promise.resolve();
+      },
+    };
+    const origin = countingOrigin("s-maxage=1");
+    const refresh = countingOrigin("s-maxage=1");
+    const t = target("no-expiry", { refreshKey: "build:/no-expiry" });
+
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000;
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    expect(bounds).toEqual([Infinity]);
   });
 
   // An on-demand ISR path — one generateStaticParams never named — has no
@@ -1212,6 +1268,22 @@ describe("admitRefresh", () => {
     await other.flush();
 
     expect(run.calls).toBe(1);
+  });
+
+  it("draws inside the jitter, and inside the remaining stale window when that is shorter", () => {
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.9);
+    try {
+      expect(admissionDrawMs(Infinity)).toBe(0.9 * admissionJitterMs);
+      expect(admissionDrawMs(10 * admissionJitterMs)).toBe(0.9 * admissionJitterMs);
+      // The pathological route: 500ms of stale window left, so the draw is
+      // 450ms rather than 900ms, and the refresh lands before the entry expires.
+      expect(admissionDrawMs(500)).toBe(450);
+      // A window already gone negative (a clock that moved under the read) must
+      // draw zero, never a negative delay a timer would silently floor.
+      expect(admissionDrawMs(-100)).toBe(0);
+    } finally {
+      random.mockRestore();
+    }
   });
 
   it("draws its own delay when none is injected, neither zero nor unbounded", async () => {
