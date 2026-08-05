@@ -786,23 +786,55 @@ async function dispatchPrerender(
   // Lambda's response.
   let cachingOrigin = origin;
   let tagClock: TagClock | undefined;
+  // The CacheDeps every admission site here uses. It is a spread of deps.cache,
+  // which is safe on purpose: the per-isolate in-flight set is a WeakMap on
+  // deps.cache — the Cache object — not on the deps object, so adding the
+  // tier-below read cannot fragment it.
+  let cacheDeps = cache;
   if (deps.interception && !isNextData) {
     const { config, ...interceptDeps } = deps.interception;
     tagClock = createTagClock(config, interceptDeps);
+    const interceptTarget = {
+      routePath,
+      fallbackPath: result.resolvedPathname ?? undefined,
+      revalidate: target.fallback?.initialRevalidate,
+      expiration: target.fallback?.initialExpiration,
+      tags: target.tags,
+    };
     const read = once(() =>
-      intercept(
-        request,
-        {
-          routePath,
-          fallbackPath: result.resolvedPathname ?? undefined,
-          revalidate: target.fallback?.initialRevalidate,
-          expiration: target.fallback?.initialExpiration,
-          tags: target.tags,
-        },
-        config,
-        { ...interceptDeps, tagClock },
-      ),
+      intercept(request, interceptTarget, config, {
+        ...interceptDeps,
+        tagClock,
+      }),
     );
+
+    // What an admitted refresh consults before it renders. It re-reads R2 past
+    // the entry memo — the memo is what declared the entry stale, and it
+    // outlives the admission wait — and a fresh entry there means some other
+    // colo has already regenerated this route: mirror it into the colo and
+    // skip the render. Anything else (a miss, a still-stale entry, an
+    // unreadable store) returns false and the render proceeds, so this can
+    // only ever cost a redundant R2 GET, never a suppressed refresh.
+    cacheDeps = {
+      ...cache,
+      refreshedFromBelow: async () => {
+        const below = await intercept(request, interceptTarget, config, {
+          ...interceptDeps,
+          tagClock,
+          freshRead: true,
+        });
+        if (!below) return false;
+        const answered = below.kind === "complete" ? below.response : below.shell;
+        if (below.stale) {
+          answered.body?.cancel();
+          return false;
+        }
+        if (below.kind === "complete" && keyResult.cacheable) {
+          await storeInColo(cacheTarget, cache, below.response);
+        } else answered.body?.cancel();
+        return true;
+      },
+    };
 
     // A composed PPR response is rendered for one visitor and must not reach
     // serveCached, so a route that might postpone is read before the colo cache
@@ -818,7 +850,7 @@ async function dispatchPrerender(
       if (hit?.kind === "ppr") {
         if (hit.stale && revalidates) {
           admitRefresh(
-            deps.cache,
+            cacheDeps,
             refreshKey,
             async () => {
               const response = await originBlocking();
@@ -854,7 +886,7 @@ async function dispatchPrerender(
       // so the next request is a colo HIT instead of another R2 round-trip.
       if (hit.stale && revalidates) {
         admitRefresh(
-          cache,
+          cacheDeps,
           refreshKey,
           async () => {
             const response = await originBlocking();
@@ -879,7 +911,7 @@ async function dispatchPrerender(
   return serveCached(
     request,
     cacheTarget,
-    deps.cache,
+    cacheDeps,
     cachingOrigin,
     originBlocking,
     tagClock,
