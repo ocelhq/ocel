@@ -108,7 +108,7 @@ it("re-reads inside the memo window once the memo is dropped", async () => {
   // A writer that republished the snapshot must see its own write, and the memo
   // window would otherwise answer from before it.
   body = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
-  dropSnapshotMemo(store);
+  dropSnapshotMemo(cfg, store);
   expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
   expect(gets).toHaveLength(2);
 });
@@ -341,6 +341,122 @@ describe("readers arriving together on a cold memo", () => {
     expect(await successor).toBe(false);
     expect(await joiner).toBe(false);
     expect(gets).toHaveLength(2);
+  });
+
+  // Un-joining the abandoned read is only half of it. The read still SETTLES,
+  // and both of its effects — the memo it fills and the PoP copy it writes back
+  // — are effects on the layers invalidateSnapshot exists to clear. Resolving
+  // last, it would answer the isolate from before the write for a whole memo
+  // window, and re-put colo-wide the copy the purge just deleted.
+  it("do not have an abandoned read fill the memo or re-put the purged copy behind them", async () => {
+    const stale = JSON.stringify(snapshot());
+    const fresh = JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } }));
+    const bodies = [stale, fresh];
+    const gets: string[] = [];
+    const releases: Array<() => void> = [];
+    const store = {
+      async get(key: string) {
+        const body = bodies[Math.min(gets.length, bodies.length - 1)]!;
+        gets.push(key);
+        await new Promise<void>((done) => releases.push(done));
+        return { etag: `"${key}"`, text: async () => body };
+      },
+    };
+    // Always a miss, so every read that is willing to write the copy does.
+    const puts: string[] = [];
+    let purged = 0;
+    const snapshotCache = {
+      async match() {
+        return undefined;
+      },
+      async put(_request: Request, response: Response) {
+        puts.push(await response.text());
+      },
+      async delete() {
+        purged++;
+        return true;
+      },
+    };
+    const clock = createTagClock(cfg, { store, snapshotCache });
+
+    const abandoned = clock.expired(["posts"], 1_000, 3_000);
+    await invalidateSnapshot(cfg, { store, snapshotCache });
+    expect(purged).toBe(1);
+    const successor = clock.expired(["posts"], 1_000, 3_000);
+
+    // Both reads are past the cache miss and parked in the store by now.
+    for (let i = 0; releases.length < 2 && i < 20; i++) {
+      await new Promise((done) => setTimeout(done, 0));
+    }
+    expect(releases).toHaveLength(2);
+
+    // The successor settles FIRST and the abandoned read last, which is the
+    // ordering in which the abandoned one gets to overwrite what it left.
+    releases[1]!();
+    expect(await successor).toBe(true);
+    releases[0]!();
+    expect(await abandoned).toBe(false);
+
+    // Same millisecond, so this is answered from the memo and nothing else —
+    // and the memo has to be the successor's.
+    expect(await clock.expired(["posts"], 1_000, 3_000)).toBe(true);
+    expect(gets).toHaveLength(2);
+    // And the body the purge deleted is not back in the colo's cache.
+    expect(puts).toEqual([fresh]);
+  });
+});
+
+// One R2 binding is one object for the life of an isolate; one BUILD is not. A
+// deploy rollover resolves a different isrPrefix per request over that same
+// binding, so state keyed on the binding alone lets build N+1's reader join or
+// memo-hit build N's replica and answer with the wrong clock entirely.
+describe("two builds sharing one binding", () => {
+  const older = { isrPrefix: "prod/proj/app/build-n" };
+  const newer = { isrPrefix: "prod/proj/app/build-n1" };
+
+  function perPrefixStore() {
+    const gets: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    return {
+      gets,
+      release: () => release(),
+      async get(key: string) {
+        gets.push(key);
+        await gate;
+        // Only the newer build's replica records the invalidation.
+        const body =
+          key === tagSnapshotKey(newer.isrPrefix)
+            ? snapshot({ records: { posts: { expired: 2_000 } } })
+            : snapshot();
+        return { etag: `"${key}"`, text: async () => JSON.stringify(body) };
+      },
+    };
+  }
+
+  it("do not join each other's read", async () => {
+    const store = perPrefixStore();
+    const verdicts = Promise.all([
+      createTagClock(older, { store }).expired(["posts"], 1_000, 3_000),
+      createTagClock(newer, { store }).expired(["posts"], 1_000, 3_000),
+    ]);
+    store.release();
+
+    expect(await verdicts).toEqual([false, true]);
+    expect(store.gets).toEqual([tagSnapshotKey(older.isrPrefix), tagSnapshotKey(newer.isrPrefix)]);
+  });
+
+  it("do not answer from each other's memo", async () => {
+    const store = perPrefixStore();
+    store.release();
+
+    expect(await createTagClock(older, { store }).expired(["posts"], 1_000, 3_000)).toBe(false);
+    // Same millisecond, so the older build's memo is live and would answer this
+    // one too if the memo were keyed on the binding alone.
+    expect(await createTagClock(newer, { store }).expired(["posts"], 1_000, 3_000)).toBe(true);
+    expect(store.gets).toHaveLength(2);
   });
 });
 

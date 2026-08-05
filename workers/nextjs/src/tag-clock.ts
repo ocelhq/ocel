@@ -83,40 +83,55 @@ export function snapshotMaxAgeSeconds(): number {
   return Math.max(1, drawn);
 }
 
-// Keyed by the binding itself, which is one stable object for the life of an
-// isolate. Keying on the binding rather than on module state is also what keeps
-// the memo from leaking between tests.
+// One cell per replica, holding both the answer this isolate last read and the
+// read it currently has in flight. The memo dedupes across time; the in-flight
+// read dedupes across concurrency, which is the axis a colo's traffic actually
+// arrives on.
 //
 // A null snapshot is memoized like any other: an unreadable replica is the case
 // that costs the most — every tagged route on the isolate falls open to the
 // origin — so it is exactly the one that must not also pay a store read per
-// call. The memo window bounds how long the isolate waits to notice a repair.
-const snapshotMemo = new WeakMap<
-  ObjectStoreReader,
-  { at: number; snapshot: TagSnapshot | null }
->();
+// call. A read that rejects reaches neither field, so a joiner gets exactly
+// what a solo caller would have got and a store blip costs one round trip's
+// worth of callers rather than a memo window's.
+interface SnapshotCell {
+  memo?: { at: number; snapshot: TagSnapshot | null };
+  read?: Promise<TagSnapshot | null>;
+}
 
-// Only a writer that has just republished the replica needs this: the memo
-// window is what would otherwise answer that writer's own next read from the
-// snapshot it just replaced.
-// Reads in flight, so a burst of tagged requests arriving on one isolate before
-// its memo is filled shares a single round trip instead of issuing one store
-// read apiece. The memo above dedupes across time; this dedupes across
-// concurrency, which is the axis a colo's traffic actually arrives on.
-//
-// A read that rejects is not left here: the next caller starts a new one. It is
-// also not memoized — only the read's own answer is, and a throw never reaches
-// that line — so a joiner gets exactly what a solo caller would have got, and a
-// store blip costs one round trip's worth of callers, not a memo window's.
-const snapshotReads = new WeakMap<ObjectStoreReader, Promise<TagSnapshot | null>>();
+// Keyed by the binding, then by the build prefix. The binding is one stable
+// object for the life of an isolate — and keying on it rather than on module
+// state is what keeps the state from leaking between tests — but it is NOT one
+// per build: a deploy rollover puts two prefixes through the same binding on
+// one isolate, and build N+1's reader must never be answered from build N's
+// replica.
+const snapshotCells = new WeakMap<ObjectStoreReader, Map<string, SnapshotCell>>();
 
-export function dropSnapshotMemo(store: ObjectStoreReader): void {
-  snapshotMemo.delete(store);
-  // A read already in flight is a read of the replica as it was BEFORE the
-  // write that prompted this drop, so it is exactly what the drop exists to
-  // stop answering with. Abandoned rather than awaited: the caller that started
-  // it still gets its own answer, only nobody new joins it.
-  snapshotReads.delete(store);
+function snapshotCell(cfg: { isrPrefix: string }, store: ObjectStoreReader): SnapshotCell {
+  let byPrefix = snapshotCells.get(store);
+  if (!byPrefix) snapshotCells.set(store, (byPrefix = new Map()));
+  let cell = byPrefix.get(cfg.isrPrefix);
+  if (!cell) byPrefix.set(cfg.isrPrefix, (cell = {}));
+  return cell;
+}
+
+function current(
+  cfg: { isrPrefix: string },
+  store: ObjectStoreReader,
+): SnapshotCell | undefined {
+  return snapshotCells.get(store)?.get(cfg.isrPrefix);
+}
+
+// Dropping the whole cell is what abandons a read in flight, and the two are
+// one act rather than two: an in-flight read is a read of the replica as it was
+// BEFORE the write that prompted the drop, so its answer must not become this
+// isolate's memo either. It still settles, and the caller that started it still
+// gets its own answer — it just writes into a cell nothing can reach any more.
+export function dropSnapshotMemo(
+  cfg: { isrPrefix: string },
+  store: ObjectStoreReader,
+): void {
+  snapshotCells.get(store)?.delete(cfg.isrPrefix);
 }
 
 // An invalidation raised through this worker was already published by the origin
@@ -133,7 +148,7 @@ export async function invalidateSnapshot(
   cfg: { isrPrefix: string },
   deps: TagClockDeps,
 ): Promise<void> {
-  dropSnapshotMemo(deps.store);
+  dropSnapshotMemo(cfg, deps.store);
   try {
     const key = tagSnapshotKey(cfg.isrPrefix);
     await deps.snapshotCache?.delete?.(new Request(snapshotCacheUrl(key)));
@@ -199,18 +214,14 @@ async function readSnapshot(
   deps: TagClockDeps,
   now: number,
 ): Promise<TagSnapshot | null> {
-  const memoized = snapshotMemo.get(deps.store);
-  if (memoized && now - memoized.at < snapshotMemoMs) return memoized.snapshot;
+  const cell = snapshotCell(cfg, deps.store);
+  if (cell.memo && now - cell.memo.at < snapshotMemoMs) return cell.memo.snapshot;
+  if (cell.read) return cell.read;
 
-  const inFlight = snapshotReads.get(deps.store);
-  if (inFlight !== undefined) return inFlight;
-
-  const read: Promise<TagSnapshot | null> = fillSnapshot(cfg, deps, now).finally(() => {
-    // Only ever its own entry: a read abandoned by dropSnapshotMemo still
-    // settles, and must not take its replacement out of the map with it.
-    if (snapshotReads.get(deps.store) === read) snapshotReads.delete(deps.store);
+  const read = fillSnapshot(cfg, deps, now, cell).finally(() => {
+    cell.read = undefined;
   });
-  snapshotReads.set(deps.store, read);
+  cell.read = read;
   return read;
 }
 
@@ -218,6 +229,7 @@ async function fillSnapshot(
   cfg: { isrPrefix: string },
   deps: TagClockDeps,
   now: number,
+  cell: SnapshotCell,
 ): Promise<TagSnapshot | null> {
   const key = tagSnapshotKey(cfg.isrPrefix);
   const cacheRequest = new Request(snapshotCacheUrl(key));
@@ -226,7 +238,12 @@ async function fillSnapshot(
   const body = cached ?? (await storeText(deps.store, key));
   const snapshot = body === null ? null : readableSnapshot(parseJson<TagSnapshot>(body));
 
-  if (snapshot && cached === null && deps.snapshotCache) {
+  // The PoP copy is the one effect of this read that outlives an abandonment,
+  // so it is the one that has to ask whether it was abandoned: re-putting a
+  // body a purge has already deleted resurrects it colo-wide, for every isolate
+  // in the colo, for a whole TTL. The memo needs no such check — it is written
+  // into this read's own cell, which the drop has already made unreachable.
+  if (snapshot && cached === null && deps.snapshotCache && current(cfg, deps.store) === cell) {
     await deps.snapshotCache.put(
       cacheRequest,
       new Response(body!, {
@@ -234,7 +251,7 @@ async function fillSnapshot(
       }),
     );
   }
-  snapshotMemo.set(deps.store, { at: now, snapshot });
+  cell.memo = { at: now, snapshot };
   return snapshot;
 }
 

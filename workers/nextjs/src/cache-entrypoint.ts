@@ -203,7 +203,7 @@ export function createEdgeCache(deps: EdgeCacheDeps): EdgeCacheRpc {
         // This isolate has just replaced the document its memo holds, so the memo
         // is known-stale — and without the drop an edge route that invalidates
         // and immediately re-reads would be answered from before its own write.
-        dropSnapshotMemo(deps.snapshots);
+        dropSnapshotMemo({ isrPrefix: scope }, deps.snapshots);
       }
     },
   };
