@@ -2,7 +2,7 @@ import { tagSnapshotKey } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, type RouteDeps } from "../src/index";
-import { sentinelUrl } from "../src/cache";
+import { refreshBackoffSeconds, sentinelUrl } from "../src/cache";
 import { coloDeps } from "./cache-deps";
 import type { AssetBucket } from "../src/assets";
 
@@ -729,10 +729,11 @@ describe("dispatchResult", () => {
     // Another colo's refresh landing in R2 while this colo's admission is still
     // waiting out its jitter, which is the window the whole read exists for.
     landsDuringWait?: string,
+    lambdaStatus = 200,
   ) {
     let lambda = 0;
     const pending: Promise<unknown>[] = [];
-    const puts: { url: string; body: string }[] = [];
+    const puts: { url: string; body: string; cacheControl: string | null }[] = [];
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -752,7 +753,7 @@ describe("dispatchResult", () => {
       fetch: (async () => {
         lambda++;
         return new Response("regenerated", {
-          status: 200,
+          status: lambdaStatus,
           headers: { "cache-control": "s-maxage=60" },
         });
       }) as unknown as typeof fetch,
@@ -762,6 +763,7 @@ describe("dispatchResult", () => {
           put: async (request: Request, response: Response) => {
             puts.push({
               url: new Request(request).url,
+              cacheControl: response.headers.get("cache-control"),
               body: await response.text(),
             });
           },
@@ -827,6 +829,25 @@ describe("dispatchResult", () => {
     await Promise.all(pending);
 
     expect(puts.map((put) => put.body)).toContain("<html>fresher</html>");
+  });
+
+  it("backs the R2 tier's refresh off when the Lambda refuses it", async () => {
+    // A 429 from an origin that is already shedding load used to DELETE the
+    // colo's claim, so the next request re-admitted at once and the failure fed
+    // the herd. The claim is re-armed for the backoff instead.
+    const { deps, pending, puts } = refreshOverStore(staleBelow(), undefined, 429);
+
+    await dispatchBlog(deps);
+    await Promise.all(pending);
+
+    // The claim itself is the first write under this key; the settlement — the
+    // one that says how long the colo stays away — is the last.
+    const sentinelWrites = puts.filter(
+      (put) => put.url === sentinelUrl("t:/blog"),
+    );
+    expect(sentinelWrites.at(-1)?.cacheControl).toBe(
+      `max-age=${refreshBackoffSeconds}`,
+    );
   });
 
   it("renders when R2 is still stale by the time the refresh is admitted", async () => {

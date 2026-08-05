@@ -510,9 +510,9 @@ export function sentinelUrl(key: string): string {
   return `https://refresh.ocel/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-function sentinelRecord(): Response {
+function sentinelRecord(seconds = refreshSentinelTtlSeconds): Response {
   return new Response(null, {
-    headers: { "cache-control": `max-age=${refreshSentinelTtlSeconds}` },
+    headers: { "cache-control": `max-age=${seconds}` },
   });
 }
 
@@ -529,6 +529,42 @@ async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> 
   return true;
 }
 
+// How an admitted refresh ended, which is what decides whether the claim is
+// released or held:
+//
+// • "landed"  — the route is fresh again, either because the origin answered ok
+//               or because the tier below had already answered for it.
+// • "failed"  — the refresh never got an answer out of the origin at all (it
+//               threw). It put no load on the origin, so the claim is released
+//               and the next request retries rather than waiting out a TTL.
+// • "refused" — the origin answered, and its answer was a refusal: a 429 or a
+//               5xx (it is shedding load) or any other non-ok status (a
+//               permanent failure this route will keep hitting). Releasing the
+//               claim here is what made failure FEED the herd: the colo
+//               re-admitted on the very next request, aiming its whole arrival
+//               rate at an origin that had just said it could not cope.
+export type RefreshOutcome = "landed" | "failed" | "refused";
+
+// The classification every admission site shares, so a second spelling of it
+// cannot drift. Every non-ok status is a refusal: a 429/5xx origin needs to be
+// left alone, and a 4xx will answer the next render exactly as it answered this
+// one, so retrying either on a tight loop only burns invocations.
+export function refreshOutcome(response: Response): RefreshOutcome {
+  return response.ok ? "landed" : "refused";
+}
+
+// How long a refusal holds the claim. Deliberately longer than a landing's TTL:
+// a landing means "someone has this covered for a while", a refusal means "the
+// origin cannot take this right now", and only the second is a reason to stay
+// away for longer than the route's own refresh cadence.
+//
+// It is NOT capped by the entry's remaining stale window, unlike the admission
+// draw. Past expiration no tier consults the sentinel at all — every request
+// falls open to a blocking render — so a longer backoff suppresses nothing
+// extra there, while a capped one would only re-admit sooner against an origin
+// that is still refusing.
+export const refreshBackoffSeconds = 30;
+
 // A refresh that did not land must not suppress its own retry for a whole TTL.
 // One that did must — and its window is re-based on completion, because the
 // claim was taken before the render and a slow render would otherwise spend the
@@ -537,11 +573,20 @@ async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> 
 async function settleSentinel(
   cache: Cache,
   sentinel: Request,
-  landed: boolean,
+  outcome: RefreshOutcome,
 ): Promise<void> {
   try {
-    if (landed) await cache.put(sentinel, sentinelRecord());
-    else await cache.delete(sentinel);
+    if (outcome === "failed") await cache.delete(sentinel);
+    else {
+      await cache.put(
+        sentinel,
+        sentinelRecord(
+          outcome === "refused"
+            ? refreshBackoffSeconds
+            : refreshSentinelTtlSeconds,
+        ),
+      );
+    }
   } catch {
     // Nothing to fall back to; the claim stands until its TTL lapses.
   }
@@ -569,14 +614,14 @@ async function refreshedFromBelow(deps: CacheDeps): Promise<boolean> {
 // without it, every isolate that observes the same stale entry claims inside the
 // same 8ms window and none of them sees the others. See admissionJitterMs.
 //
-// `run` reports whether the refresh landed: the origin answered ok, which is
-// what the admission was taken for. Storing the bytes is not the test — on the
-// interception path the render's real effect is the Lambda rewriting R2, and a
-// 200 this colo happens not to be able to store still did that work.
+// `run` reports how the refresh ended — see RefreshOutcome. Storing the bytes
+// is not the test of a landing: on the interception path the render's real
+// effect is the Lambda rewriting R2, and a 200 this colo happens not to be able
+// to store still did that work.
 export function admitRefresh(
   deps: CacheDeps,
   key: string,
-  run: () => Promise<boolean>,
+  run: () => Promise<RefreshOutcome>,
   staleForMs = Infinity,
 ): void {
   const sentinel = new Request(sentinelUrl(key));
@@ -586,11 +631,14 @@ export function admitRefresh(
     // would be up to a second of user-visible latency on every cold miss.
     await (deps.admissionDelay ?? jitteredAdmissionDelay)(staleForMs);
     if (!(await claimSentinel(deps.cache, sentinel))) return;
-    let landed = false;
+    // "failed" until something says otherwise: a `run` that throws never
+    // reaches an assignment, and a claim held by a refresh that produced
+    // nothing would suppress the retry it needs.
+    let outcome: RefreshOutcome = "failed";
     try {
-      landed = (await refreshedFromBelow(deps)) || (await run());
+      outcome = (await refreshedFromBelow(deps)) ? "landed" : await run();
     } finally {
-      await settleSentinel(deps.cache, sentinel, landed);
+      await settleSentinel(deps.cache, sentinel, outcome);
     }
   });
 }
@@ -637,9 +685,9 @@ async function serveOrAdmitRefresh(
     // request. The serve itself does not wait on it.
     const refresh = async () => {
       const response = await originBlocking();
-      const landed = response.ok;
+      const outcome = refreshOutcome(response);
       await store(keyRequest, target, deps, policy, response);
-      return landed;
+      return outcome;
     };
     // Only a caller that named a route takes the colo-wide decision. An image
     // names none: it is invalidated by its content hash changing rather than by
