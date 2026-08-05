@@ -331,7 +331,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	// AWS_IAM-gated) with the edge reader's key, and addresses the ISR stores
 	// directly under the same key. The bundle is the same bytes for every app, so
 	// both are bound once here.
-	generic = withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg)
+	generic = withRevalidateQueue(withImageOptimizer(withCacheCoordinates(withEdgeSigningCreds(generic, cfg), cfg), cfg), cfg)
 
 	base := edge.RootStackSpec{
 		Version:         version,
@@ -587,6 +587,24 @@ func withImageOptimizer(worker edge.Worker, cfg Config) edge.Worker {
 		return worker
 	}
 	return withVar(worker, edge.ImageOptimizerURLVar, cfg.ImageOptimizerURL)
+}
+
+// withRevalidateQueue binds the substrate's ISR revalidation queue onto the
+// worker, which sends an admitted background refresh to it rather than rendering
+// through the origin.
+//
+// Empty binds nothing, and empty is what a substrate whose bootstrap rendered no
+// consumer reports: bootstrap publishes the queue URL only alongside the
+// revalidator, so this var tracks the drain rather than the queue. That is a
+// correctness requirement rather than tidiness — an edge that enqueues into a
+// queue nothing drains gets a successful send, reports the refresh landed,
+// re-arms its colo sentinel, and stops revalidating the route until it hard-
+// expires, with nothing anywhere reporting a failure.
+func withRevalidateQueue(worker edge.Worker, cfg Config) edge.Worker {
+	if cfg.RevalidateQueueURL == "" {
+		return worker
+	}
+	return withVar(worker, edge.RevalidateQueueURLVar, cfg.RevalidateQueueURL)
 }
 
 // genericWorkerBundle reads the frozen generic worker's compiled bundle: the

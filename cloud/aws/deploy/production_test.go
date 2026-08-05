@@ -704,6 +704,48 @@ func TestRootStackSpecs_BindsImageOptimizerURL(t *testing.T) {
 	})
 }
 
+// TestRootStackSpecs_BindsRevalidateQueueOnlyWithAConsumer is human decision F's
+// deploy half, and it is a silent-failure guard rather than a tidiness one.
+//
+// Bootstrap publishes the queue URL only alongside a rendered revalidator, so an
+// empty Config value means "this substrate has a queue that nothing drains".
+// Binding it anyway is the epic's signature failure in miniature: the worker
+// enqueues, SQS accepts, the refresh thunk reports landed, the colo sentinel
+// re-arms as though the entry were fresh, and the route stops revalidating until
+// it hard-expires — with nothing in the deploy, the logs or the alarms saying so.
+func TestRootStackSpecs_BindsRevalidateQueueOnlyWithAConsumer(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	manifest := &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+	}
+
+	t.Run("bound when the substrate published a queue URL", func(t *testing.T) {
+		url := "https://sqs.eu-west-1.amazonaws.com/1234/ocel-revalidate.fifo"
+		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1", RevalidateQueueURL: url}
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		if got := specs[0].Generic.Vars[edge.RevalidateQueueURLVar]; got != url {
+			t.Errorf("Vars[%s] = %q, want %q", edge.RevalidateQueueURLVar, got, url)
+		}
+	})
+
+	t.Run("absent where nothing drains the queue", func(t *testing.T) {
+		cfg := Config{Edge: &recordingEdge{}, Region: "eu-west-1"}
+		specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+		if err != nil {
+			t.Fatalf("rootStackSpecs: %v", err)
+		}
+		if _, ok := specs[0].Generic.Vars[edge.RevalidateQueueURLVar]; ok {
+			t.Errorf("Vars[%s] must be unset, not bound empty: the edge would enqueue into a queue with no consumer and report the refresh landed", edge.RevalidateQueueURLVar)
+		}
+	})
+}
+
 func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testing.T) {
 	fake := &recordingRootStack{}
 	ctx := context.Background()
