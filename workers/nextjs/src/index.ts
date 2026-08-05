@@ -68,6 +68,23 @@ const RSC_FORWARD_HEADERS = new Set([
 // it draws is presence, not truthiness.
 const ENTRY_HEADER = "x-ocel-entry";
 
+// The single revert point for self-revalidation suppression (bd
+// ocelhq-wvag.26). Next's response cache serves a stale entry and starts NO
+// revalidating render when the request carries `purpose: prefetch`
+// (`if (!entry.isStale || context.isPrefetch) return entry;`,
+// next@16.2.10 response-cache/index.js:201, with isPrefetch =
+// `req.headers.purpose === 'prefetch'` at route-module.js:634 — the only place
+// `purpose` is read anywhere in next/dist/server). Without it, every
+// Lambda-reaching request on a stale entry starts its own undeduped in-Lambda
+// render, outside the edge's admission tiers and the queue they feed.
+//
+// OpenNext ships the same workaround at scale and carries the caveat that a
+// change to Next's prefetch handling would break it; that caveat is now ours,
+// and this constant plus the golden comparison in scripts/e2e-next are the
+// tripwire. Setting it to false is the whole revert.
+const SUPPRESS_SELF_REVALIDATION = true;
+const PREFETCH_PURPOSE = "purpose";
+
 // x-ocel-* is the control plane's own namespace — x-ocel-entry selects which code
 // the origin runs — so no value in it may ever come from a client. The whole
 // namespace is dropped from every inbound request before anything is built from
@@ -736,8 +753,20 @@ async function dispatchPrerender(
     }
   }
 
-  const origin = () => render(forward(forwardUrl, request, safeHeaders));
+  // The user-path forward, and the only leg suppression applies to: everything
+  // above has already been answered (BYPASS traffic is not ISR-governed, and a
+  // worker with no colo cache has no admission tier to take the render over),
+  // and the method here is GET by the gate above. Whatever purpose the client
+  // sent is overwritten; the inbound request is untouched.
+  const originHeaders = new Headers(safeHeaders);
+  if (SUPPRESS_SELF_REVALIDATION) {
+    originHeaders.set(PREFETCH_PURPOSE, "prefetch");
+  }
+  const origin = () => render(forward(forwardUrl, request, originHeaders));
 
+  // Built from safeHeaders, never from originHeaders: x-prerender-revalidate's
+  // guard sits above the prefetch one in Next's response cache, so the header
+  // here would be dead weight that reads as though this leg were suppressed too.
   const blockingHeaders = new Headers(safeHeaders);
   blockingHeaders.set("x-prerender-revalidate", target.config.bypassToken ?? "");
   const originBlocking = () =>
