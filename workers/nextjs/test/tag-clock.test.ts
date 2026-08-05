@@ -5,7 +5,6 @@ import {
   createTagClock,
   dropSnapshotMemo,
   invalidateSnapshot,
-  snapshotJitterSeconds,
   snapshotMaxAgeSeconds,
   snapshotTtlSeconds,
 } from "../src/tag-clock";
@@ -460,11 +459,6 @@ describe("two builds sharing one binding", () => {
   });
 });
 
-// A flat max-age lapses colo-wide at one instant: every cache shard holding the
-// copy expires in lockstep, every one of them reads R2, and every one of them
-// writes the copy back — continuously, on any tagged traffic at all, with no
-// stale event anywhere near it. Drawing the TTL breaks that phase lock. Same
-// argument admissionJitterMs makes for claims, applied to an expiry.
 describe("the PoP copy's drawn lifetime", () => {
   function recordingCache() {
     const maxAges: number[] = [];
@@ -480,16 +474,20 @@ describe("the PoP copy's drawn lifetime", () => {
     };
   }
 
-  it("is drawn below the ceiling, never above it and never to nothing", () => {
+  // Both ends as literals, deliberately. Spelling them from the constants makes
+  // the assertion true of whatever the constants happen to say, so the WIDTH of
+  // the draw — the only property that de-synchronizes anything — goes untested
+  // and a jitter narrowed to 2, or widened past the ceiling, stays green.
+  it("is drawn over 7..10 seconds: never above the ceiling, never to nothing", () => {
     const random = vi.spyOn(Math, "random").mockReturnValue(0);
     try {
       // The ceiling is the worst case and the draw only ever shortens it, so
       // this jitter costs no staleness at all: 10s remains the bound an
       // invalidation waits out, and the mean falls to 8.5s.
-      expect(snapshotMaxAgeSeconds()).toBe(snapshotTtlSeconds);
+      expect(snapshotTtlSeconds).toBe(10);
+      expect(snapshotMaxAgeSeconds()).toBe(10);
       random.mockReturnValue(0.999);
-      expect(snapshotMaxAgeSeconds()).toBe(snapshotTtlSeconds - (snapshotJitterSeconds - 1));
-      expect(snapshotMaxAgeSeconds()).toBeGreaterThan(0);
+      expect(snapshotMaxAgeSeconds()).toBe(7);
     } finally {
       random.mockRestore();
     }
@@ -509,11 +507,12 @@ describe("the PoP copy's drawn lifetime", () => {
 
     expect(snapshotCache.maxAges).toHaveLength(40);
     for (const maxAge of snapshotCache.maxAges) {
-      expect(Number.isInteger(maxAge)).toBe(true);
-      expect(maxAge).toBeGreaterThan(0);
-      expect(maxAge).toBeLessThanOrEqual(snapshotTtlSeconds);
+      expect([7, 8, 9, 10]).toContain(maxAge);
     }
-    expect(new Set(snapshotCache.maxAges).size).toBeGreaterThan(1);
+    // 40 draws over 4 phases: seeing fewer than 3 of them is a 1-in-10^9 event,
+    // so this is the assertion that the header carries a DRAW and not a value
+    // that merely happens to be in range.
+    expect(new Set(snapshotCache.maxAges).size).toBeGreaterThanOrEqual(3);
   });
 });
 
