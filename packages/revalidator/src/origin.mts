@@ -3,21 +3,32 @@ import { AwsClient } from "aws4fetch";
 import { originTimeoutMs } from "./limits.mjs";
 import type { RevalidationMessage } from "./message.mjs";
 
-declare const resolved: unique symbol;
-
 // Where a trigger may be sent.
 //
-// Only `resolve` produces one, and `trigger` accepts nothing else, so "the
-// request goes to this deploy's own origin" is a property of the type rather
-// than of a check somebody has to remember. The message carries the app's
-// bypass token, and the token is safe here for a structural reason: nothing on
-// the wire names a host, so the only host the consumer will ever sign for is
-// the one the deploy recorded for that isrPrefix.
-export interface Target {
-  readonly url: string;
-  readonly region: string;
-  readonly [resolved]: true;
+// An unexported class with a private field, constructed at exactly one place —
+// the end of `compose`, below, after the deploy's own record has been read.
+// Being unexported is what the class buys over the brand it replaced: outside
+// this module a Target cannot be constructed, assigned from a literal, or built
+// by copying a real one, because the private field survives none of those. It
+// is a seam, not a theorem — `as Target` still compiles, as it does for any
+// TypeScript type, and origin.test.mts says so out loud rather than leaving a
+// comment here to overstate it.
+//
+// The property that actually keeps the app's bypass token off a host of the
+// edge's choosing lives elsewhere: nothing on the wire names a host, and
+// `isrPrefix` — the one field that steers where the record is read from — is
+// validated in message.mts as the key prefix a deploy builds. So the only host
+// this consumer signs for is the one that deploy recorded.
+class ResolvedTarget {
+  readonly #resolved = true;
+
+  constructor(
+    readonly url: string,
+    readonly region: string,
+  ) {}
 }
+
+export type Target = ResolvedTarget;
 
 export type ResolveFailure =
   // No asset bucket in the environment: the consumer was never told where the
@@ -86,7 +97,7 @@ function compose(origin: string, routePath: string): Resolution {
   }
   const region = regionOf(base.host);
   if (region === undefined) return { ok: false, reason: "origin-unusable" };
-  return { ok: true, target: { url: url.toString(), region } as Target };
+  return { ok: true, target: new ResolvedTarget(url.toString(), region) };
 }
 
 function document(body: string): RouteUrls {
