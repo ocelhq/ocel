@@ -22,21 +22,27 @@ note this deliberately inverts the original 1a→1b→2a→2b sequencing, becaus
 DynamoDB fallback and therefore cannot land before the publisher that becomes the sole
 guarantor of invalidation.
 
+Every tip below was read off `git log --oneline` per branch and every parent edge verified with
+`git merge-base --is-ancestor` on 2026-08-05. A prior handoff carried stale shas through a
+restack; transcribing this diagram instead of re-deriving it is how that happens.
+
 ```
 main
- └─ 1  isr-herd/01-cache-api-spike        ocelhq-wvag.1   ✅ CLOSED (measured)
-     └─ 2  isr-herd/02-isr-writer          ocelhq-wvag.2  ✅ CLOSED, reviewed ×2, not pushed
-         └─ 3  isr-herd/03-manifest-projection ocelhq-wvag.3 ✅ CLOSED, reviewed, not pushed
-             └─ 4  isr-herd/04-streams-publisher ocelhq-wvag.4 ✅ CLOSED, reviewed, not pushed
+ └─ 1  isr-herd/01-cache-api-spike        6dd5313  ocelhq-wvag.1  ✅ CLOSED (measured)
+     └─ 2  isr-herd/02-isr-writer          39c5668  ocelhq-wvag.2  ✅ CLOSED, reviewed ×2, not pushed
+         └─ 3  isr-herd/03-manifest-projection aef588a ocelhq-wvag.3 ✅ CLOSED, reviewed, not pushed
+             └─ 4  isr-herd/04-streams-publisher c887a83 ocelhq-wvag.4 ✅ CLOSED, reviewed, not pushed
                  └─ 5  isr-herd/05-origin-reads-snapshot  dcd4815  ocelhq-wvag.5  ✅ CLOSED
                      └─ 6a isr-herd/06a-publisher-alarms  3fb0c73  ocelhq-wvag.13 ✅ CLOSED
-                         └─ 6  isr-herd/06-get-drops-batchget 162660a ocelhq-wvag.6 ⛔ on yo9b
-                             └─ 7  isr-herd/07-edge-l0-l1  d9cc24b  ocelhq-wvag.7  ✅ CLOSED
+                         └─ 6  isr-herd/06-get-drops-batchget 776d806 ocelhq-wvag.6 ✅ CLOSED (gate cleared)
+                             └─ 7  isr-herd/07-edge-l0-l1  faac969  ocelhq-wvag.7  ✅ CLOSED
                                  └─ 9  isr-herd/09-write-visibility db25a0f ocelhq-wvag.9 ✅ CLOSED (measured, then re-measured)
-                                     ├─ 10 isr-herd/10-admission-jitter 0e15817 ocelhq-wvag.16 ✅ CLOSED (measured, then built)
+                                     ├─ 10 isr-herd/10-admission-jitter 063ce84+ ocelhq-wvag.16 ✅ CLOSED (measured, built, reviewed ×2, fixed)
                                      │   └─ 8  edge L2 lease   (unstarted) ocelhq-wvag.8  ← unblocked
                                      └─ 17 multi-region herd harness (unstarted) ocelhq-wvag.17  ⛔ on .8
 ```
+
+`+` means "plus this handoff's own commit", which is the tip of 10 as you read this.
 
 **The stack was restacked into dependency order on 2026-08-04, and every commit sha on branch
 07 changed.** Any note elsewhere in this document that cites a sha on 07 was written before the
@@ -60,10 +66,10 @@ position"). Outside the epic,
 `ocelhq-uroj` (the edge user's account-global `Query`/`BatchGetItem` grants, dead before this
 stack began; see PR 5).
 
-**`.6`'s gates were `.13`, `.14` and `.15`. All three are now closed** — `.13`'s alarms ship on
-`06a`, `.14`'s pin on 07, and `.15` proved the publisher live. **One gate replaced them:
-`ocelhq-yo9b`**, a P1 bug `.15` uncovered, which is now the only thing between `.6` and landing.
-See "Current position".
+**`.6`'s gates were `.13`, `.14` and `.15`, then `ocelhq-yo9b` replaced them, and every one of
+them is now closed** — `.13`'s alarms ship on `06a`, `.14`'s pin on 07, `.15` proved the
+publisher live, and `yo9b`'s membrane pin (`776d806`) is the tip of `06` itself. `.6` has no
+open gate left. See "Current position".
 
 ## Working method
 
@@ -119,19 +125,22 @@ worded as though retirement takes effect everywhere at once, and it does not.
 
 ## Current position
 
-**The deploy happened. `.13`, `.14` and `.15` are all closed and the publisher is proven live —
-and the deploy that proved it uncovered `ocelhq-yo9b`, which is now the single gate on `.6`.**
-Read `ocelhq-yo9b` first; it is the most consequential thing on this page.
+**Nothing in this stack is gated any more.** `ocelhq-yo9b` is closed and proven live, so `.6`
+closed with it; `.9` and `.16` are measured, built and reviewed. `ocelhq-wvag.8` is the next
+thing to build, and `ocelhq-wvag.17` after it.
 
-**`ocelhq-wvag.9` is measured and closed, and `ocelhq-wvag.16` — filed, measured and built since
-— has made the uncomfortable number comfortable.** `.8` was going to be built against a
-synchronized fan-in of 17 000-19 000 requests per stale event. It is now 425-440. Read `.16`
-below before `.8`.
+**Read the margin before designing `.8`.** The jitter took the synchronized fan-in from
+`F ≈ 20 000-23 000` requests per stale event to **423-438 — and that is a RATE**, an
+instantaneous 423-438 rps at the route's single Durable Object, because it is spread over
+exactly `J = 1 s`. Against Cloudflare's conservative 500 rps that is a margin of **~1.2×, not
+the ~6× the 85-88 rps sustained figure beside it suggests**, and `C ≈ 300` is an assumption:
+the burst crosses 500 rps at `C ≈ 340-355` and 1 000 rps at `C ≈ 685-710`. `.8` carries this as
+an acceptance criterion. See "`ocelhq-wvag.16`" below.
 
 ### `ocelhq-wvag.16` — the herd was self-inflicted, and jitter removes it — **DONE**
 
-Branch `isr-herd/10-admission-jitter`, rooted on `db25a0f` (tip of 09). Four commits, last
-`0e15817`. Nothing pushed. Findings in `docs/research/cloudflare-cache-api-spike.md`, section
+Branch `isr-herd/10-admission-jitter`, rooted on `db25a0f` (tip of 09). **Nine commits**, the
+ninth being this handoff edit; last content commit `063ce84`. Nothing pushed. Findings in `docs/research/cloudflare-cache-api-spike.md`, section
 "Follow-up: the admission-jitter sweep"; the code is `admissionJitterMs` in
 `workers/nextjs/src/cache.ts`. A third `ocel-cache-probe` deploy was taken and **is torn down**,
 verified via the API: the script is absent from the account's script list and
@@ -140,7 +149,7 @@ verified via the API: the script is absent from the account's script list and
 **`.8` was sized against the wrong constraint, and this is the thing to carry forward.** The
 `.9` section below reasons about a *sustained* rate. The binding constraint is the **burst**: a
 route goes stale at one wall-clock instant, every colo sees it simultaneously, and
-`F = C·E ≈ 17 000-19 000` requests arrive within a few hundred milliseconds against an object
+`F = C·E ≈ 20 000-23 000` requests arrive within a few hundred milliseconds against an object
 Cloudflare rates at ~500-1 000 rps. That is ~20 s of queueing — overload, not slow success.
 
 **And the synchronization is the system's own doing.** `claimSentinel` fires the instant a
@@ -170,18 +179,30 @@ The gate was 3.
   pool inside one window cannot exceed the isolate count. `λ_colo` never enters. The bound
   over-predicts at every `J` (1.8× at 100 ms, 1.05× at 2 000 ms), so choosing from it is
   choosing conservatively.
-- **What `.8` should now size against:** `F = C·E ≈ 425-440` per stale event spread over 1 s, and
-  `R ≈ 85-88 rps` sustained. Both under the conservative 500 rps figure. **One DO per route
-  holds, conditional on the jitter staying in place** — `.8`'s description says so and names
-  `.16` as the condition.
+- **What `.8` should now size against, stated as a rate.** `F = C·E ≈ 423-438` per stale event
+  spread over `J = 1 s` **is 423-438 rps** at one Durable Object; `R ≈ 85-88 rps` is the
+  sustained figure and is not the constraint. The margin against Cloudflare's conservative
+  500 rps is ~1.2×, and the rating is for "simple operations" — a lease persisting state per
+  claim is not obviously one. `C ≈ 300` is an assumption: 500 rps at `C ≈ 340-355`, 1 000 rps at
+  `C ≈ 685-710`. **One DO per route holds, conditional on the jitter staying in place and on
+  the lease failing open under overload** — `.8` names `.16` as the condition and now carries
+  the margin as an acceptance criterion.
+- **Which `F` the "before" figure is, decided rather than drifted into.** `300 ×` the directly
+  measured `E(128)` is `16 437-18 594`; the doc had rounded that outward to "17 000-19 000" and
+  quietly substituted it for the extrapolated `20 000-23 000` bd already held. The extrapolated
+  one is the defensible one and it is what stands everywhere now: this burst reached 77-86
+  isolates against `I_colo ≥ 99`, which has never plateaued, so `300 × E(128)` is a **floor**,
+  not an estimate. The propagation therefore ran doc → bd's number, not bd → the doc's.
 - **The wait is on `admitRefresh` only.** The miss-path fill runs `refreshOnce` directly, on the
   serving path with joiners awaiting it; a wait there is up to a second of user-visible latency
   on every cold miss. The test that catches it has to *join* a second request to the leader's
   fill — a single request never awaits the fill and passes either way.
 - **The production default lives in `cache.ts`, not at `src/index.ts`'s deps construction.**
-  Deliberate: nothing wires it, so there is no site at which a test double *can* be left behind.
-  `CacheDeps.admissionDelay` exists only as the test seam, and one test leaves the default in
-  place and asserts it is drawn, non-zero and bounded.
+  Deliberate, and it survived review: nothing wires it, so there is no site at which a test
+  double *can* be left behind. `CacheDeps.admissionDelay` exists only as the test seam, and one
+  test leaves the default in place and asserts it is drawn, non-zero and bounded. The cost of
+  that choice is that the suite gets the real wait unless it says otherwise — see the review
+  section below, and `test/cache-deps.ts`, which is now the only place a `CacheDeps` is built.
 - **`inFlight` is keyed on `deps.cache`, not on the deps object.** Non-obvious and load-bearing
   for `.8`'s wiring: spreading `CacheDeps` to add a delay does not fragment L0. Asserted by a
   test, and the assertion was confirmed to fail against a `WeakMap` keyed on `deps`.
@@ -190,6 +211,42 @@ Every test above was mutation-checked — the production line broken, the named 
 failing, the line restored. Probe-side likewise: a worker that ignores `--jitter` and one that
 reports a delay it never slept are both caught by live checks, confirmed against a deliberately
 broken worker before the runs were taken.
+
+#### Two reviews ran on this branch, and what they moved
+
+- **The draw is now capped by the entry's remaining stale window** (`9568777`). A route whose
+  stale window is shorter than `J` lost L1 *entirely* for the tail of the wait: past
+  `expiration` the colo tier returns null before it ever reaches `admitRefresh`, and the request
+  falls to the miss path, whose only dedupe is the per-isolate `refreshOnce`. On
+  `cacheLife({ revalidate: 1, expire: 2 })` a 700 ms draw plus a 400 ms render leaves 100 ms in
+  which every isolate in the colo renders for itself — the herd, reintroduced at exactly the
+  boundary the wait pushed the refresh across, and silently. The draw is now uniform over
+  `[0, min(J, remaining stale window))`, which is `J` on any normal route and degrades the
+  pathological one to un-jittered rather than to worse. The bound travels to all three admission
+  sites; `intercept` reports `staleForMs` beside `stale` for the two the R2 tier owns.
+- **The burst rate was understated by presentation** and is now a rate, with a `C`-sensitivity
+  table. Above, and in the doc's §11.
+- **The probe's `lowerBound` guard read dispersion's MEDIAN**, so the `J = 2000` rows — median
+  1.51 ms, p90 115 ms, fourteen times `W` in at least a tenth of trials — printed clean, and the
+  console line only ever showed the median. Found by reading raw JSON. Now on the p90, with the
+  p90 printed. **This is the same shape as the dead `dispersionMs` it replaced.**
+- **The burst's "rotating window" had period nine.** `gcd(128, 144) = 16`, so
+  `(trial · size) % poolSize` took nine distinct offsets and any two windows overlapped in ≥112
+  of 144 sockets — and the pool was opened once per cell, so a cell's isolate population was one
+  draw. Materially better than the fixed pool that caused `.9`'s defect (the jitter draws are
+  fresh per racer per trial, which is what carries the sweep), but not what the word implies.
+  The stride is one now and the pool is redrawn every 25 trials. **The recorded numbers were NOT
+  re-taken against that**, and §12 says so: nothing above depends on a difference smaller than
+  the 13% the two runs already differ by at `J = 0`.
+- **The suite was sleeping the real jitter.** Eighteen inline `CacheDeps` meant every background
+  refresh a test drove slept a real `U[0, 1000)` draw — ~2.5 s expected, up to ~5 s worst case,
+  redrawn every run, with five tests inside 4× of vitest's default timeout. One constructor
+  (`test/cache-deps.ts`) now builds them all; `workers/nextjs` test time fell from 6.71 s to
+  2.84 s and stopped varying.
+- **Not disputed but worth recording as corrected:** the review placed "wrong by a factor of
+  twenty" in `.16`'s description. It is not there — it is in `.8`'s 2026-08-04 19:58 comment,
+  in the same sentence as the stale "10 ms". bd comments cannot be edited, so both are corrected
+  by a later comment on `.8` rather than in place.
 
 **`.8` was split three ways** (decisions recorded as comments on the epic): this issue took the
 jitter and blocks `.8`; `ocelhq-wvag.17` took the load/herd harness that epic decision 15 had
@@ -265,9 +322,30 @@ Verified: `workers/cache-probe` 95/95 tests, `pnpm typecheck` and `pnpm build` c
 package; `pnpm -r --no-bail typecheck` clean except `examples/next-cache-lab` (see "Standing
 notes"). Fourteen mutations applied, each caught by the named test.
 
-### `ocelhq-yo9b` — the fleet's membrane layer predates PR 2, so the origin's tag raise throws
+### `ocelhq-yo9b` — the fleet's membrane layer predated PR 2 — **CLOSED, PROVEN LIVE**
 
-**NEW P1 BUG, `ready-for-human`, blocks `ocelhq-wvag.6` and `ocelhq-wvag.10`.** Deployed
+**The pin is bumped to `ocel-membrane:22` and the whole chain was re-driven on a real deploy.**
+A deployed function's `revalidateTag` wrote a `TAG#` record, which drove a **fresh** publisher
+invocation (a cold start two seconds after the raise, in the publisher's own log group) into
+**both** stores. The pin is commit `776d806`, which is the tip of `isr-herd/06-get-drops-batchget`
+— it has to sit at or below what it gates, and what it gates is PRs 2-5's Lambda-side work.
+
+**R2 was read directly through the Cloudflare API, not inferred from a status code, and that is
+the trap.** `workers/isr-writer/src/index.ts` returns **204 for the `"absent"` outcome as well as
+for a real publish**, so a 204 cannot distinguish "landed" from "there was no snapshot to land
+in". The R2 object was fetched and its records compared byte for byte against the S3 copy.
+
+**The trap that nearly produced a false negative, and the rule that comes out of it:
+`make provider` before any deploy that is meant to verify a pin bump.** The prebuilt provider
+binary at `packages/native-lib/provider-aws-linux-x64/bin/deploy` predated the pin commit and
+still had `:21` baked in, so the first verification deploy attached the old layer *from a tree
+that contained the fix*. Editing `cloud/aws/deploy/function.go` does not change what `ocel
+deploy` runs. Rebuild (`make provider`, then `make cli lib`) or the deploy is testing the last
+build, silently.
+
+The original report, kept as the standing record:
+
+**P1 BUG, blocked `ocelhq-wvag.6` and `ocelhq-wvag.10`.** Deployed
 functions attach `ocel-membrane` **v21**, pinned as `defaultMembraneLayerARN` in
 `cloud/aws/deploy/function.go`, and that layer predates `ocelhq-wvag.2`. So a route handler's
 `revalidateTag` throws `OCEL_ISR_STORE_REGION is not set` — **after** the response is piped, so
@@ -287,7 +365,7 @@ the shared runtime.
 
 `OCEL_MEMBRANE_LAYER_ARN` overrides the pin, and that is how `.15` was proven: a throwaway layer
 published under a **different name**, deleted afterwards. The shared layer and its pin were never
-touched.
+touched. `yo9b` itself is the one that took the human gate and republished the shared layer.
 
 ### `ocelhq-wvag.15` — VERIFIED LIVE on account 363236815301. CLOSED
 
@@ -342,9 +420,10 @@ infrastructure, no change to the artifact:
 **`MetricsConfig` is load-bearing, not decorative.** Without it the first two metrics are never
 emitted, and the breaching alarm would be lit permanently rather than merely weakened.
 
-### `ocelhq-wvag.6` — IMPLEMENTED, still OPEN, on `isr-herd/06-get-drops-batchget` (`162660a`)
+### `ocelhq-wvag.6` — **CLOSED**, on `isr-herd/06-get-drops-batchget` (`776d806`)
 
-Blocked by `ocelhq-yo9b` alone. `get()` no longer reads DynamoDB: `readTags` and its
+Its last gate, `ocelhq-yo9b`, is closed; the branch tip is that gate's own membrane pin, one
+commit above `.6`'s implementation (`162660a`). `get()` no longer reads DynamoDB: `readTags` and its
 BatchGetItem loop are deleted, and tag expiry comes from the shared tag clock through a new
 `tagsExpireEntry(tags, lastModified)` in `tag-clock.mts`.
 
@@ -456,7 +535,7 @@ Two things came out of the review and were **filed rather than fixed**:
 
 **PR 7 (`ocelhq-wvag.7`) — code complete and reviewed, NOT pushed. Issue CLOSED.**
 
-Branch `isr-herd/07-edge-l0-l1`, now rooted on **PR 6** (`162660a`) after the restack; it was
+Branch `isr-herd/07-edge-l0-l1`, now rooted on **PR 6** (whose tip is now `776d806`; it was `162660a` when this was written) after the restack; it was
 originally branched off PR 5, jumping the then-gated `.6`, and its issue was closed with
 `--force` past that dependency edge. The rebase was mechanical, as predicted — `.6` is the origin
 Lambda, `.7` is the edge worker. Serves decisions 9 and 12. Two commits (`80deb26`, `e826284`),
@@ -909,12 +988,16 @@ until then *no deployed function anywhere can raise a tag*.
 
 Remaining state:
 
-- `ocelhq-wvag.6` — implemented, open, blocked on `ocelhq-yo9b` alone.
-- `ocelhq-wvag.8` — blocked on `.9`. `.7` is closed.
+- `ocelhq-wvag.6` — **closed**; `ocelhq-yo9b` cleared and its membrane pin is the branch tip.
+- `ocelhq-wvag.8` — **unblocked**. `.7`, `.9` and `.16` are all closed.
 - `ocelhq-wvag.9` — **done and closed**, measured live on a zone route across two deploys, both
   torn down.
-- `ocelhq-wvag.10` — blocked on `ocelhq-yo9b`. Its infrastructure now exists; its assertion cannot
-  be driven.
+- `ocelhq-wvag.10` — **unblocked** by `ocelhq-yo9b` closing; its assertion can now be driven.
+- `ocelhq-wvag.16` — **done and closed**: measured on a third deploy, built, reviewed twice, fixed.
+- `ocelhq-wvag.17` — filed, blocked on `.8`.
+
+(The paragraphs immediately above are the standing record as written at the time and are left
+intact; the list here is the current state.)
 
 **Open and ungated, so pickable right now:** `ocelhq-wvag.11` (destroy leaves per-build writer DO
 instances behind) and `ocelhq-heo2` (`packages/next-runtime/tsconfig.json` never typechecks its
@@ -947,6 +1030,24 @@ with nothing comparing them. The failure then hid behind a 200 because the throw
 the response is piped. **Where a component's version is a pinned constant, "the code is correct"
 and "the deployed thing runs the code" are separate claims, and only a live run distinguishes
 them.** That is the argument for driving a real deploy earlier in a stack rather than at its end.
+
+**The fifteenth and sixteenth defects were in the INSTRUMENT, not the product, and that is the
+lesson.** `.16`'s reviews found `zero-claims` reported as an empirical result when it is a
+theorem — the globally first `match` on a fresh key must miss, so the detector cannot fire —
+and `lowerBound` guarding on dispersion's *median* when the failure it exists for lives in the
+tail: at `J = 2000` the median was 1.51 ms and the p90 was 115 ms, fourteen times `W`, and those
+rows printed clean over an instrument that had stopped holding the arrivals concurrent. Neither
+is a bug in `workers/nextjs`. Both would have put a green number in a document that `.8` sizes
+against, which is worse: a product defect gets caught by the next test, and a measurement defect
+gets *quoted*.
+
+This is now the fourth and fifth time a detector in this stack was true by construction or blind
+to its own failure — `invariantViolations`, `dispersionMs` measuring a JS loop, and the fixed
+socket pool came before them. **Where a measurement is the deliverable, the instrument needs the
+same adversarial review the product code gets**, and specifically: for every detector, name the
+input that makes it fire, and check that the driver can actually produce that input. A detector
+that reads zero and cannot be shown to fire is not evidence; label it in the write-up rather
+than citing it.
 
 A third method earned its keep on PR 7: **make the review clear the hard things explicitly
 before it hunts**. The spec brief named the four properties most likely to be quietly wrong
@@ -992,9 +1093,15 @@ Standing constraints PR 7 hands to PR 8, which builds L2 on top of L1:
   its comment has been corrected under `.16`.
 - **L1 now jitters its admission, and L2's sizing depends on it.** `admissionJitterMs = 1000`
   takes the per-colo escape count from ~55-62 to ~1.4 (`ocelhq-wvag.16`). Size L2 against
-  `F ≈ 425-440` per stale event, not against the 17 000-19 000 the un-jittered path produced —
-  and if the jitter is ever removed or moved off the pre-claim path, that sizing is void along
-  with `W` itself.
+  `F ≈ 423-438` per stale event — **which is 423-438 rps**, since it lands inside `J = 1 s` —
+  not against the 20 000-23 000 the un-jittered path produced. The margin against Cloudflare's
+  conservative 500 rps is ~1.2×, and `C ≈ 300` is an assumption; see "`ocelhq-wvag.16`". If the
+  jitter is ever removed or moved off the pre-claim path, that sizing is void along with `W`
+  itself.
+- **The draw is capped by the entry's remaining stale window, and L2 needs the same discipline.**
+  Deferring a refresh past the point its own entry stops being servable does not delay the herd,
+  it *uncovers* it: past expiration the tier declines to serve and there is no dedupe left below.
+  Any wait L2 introduces has to be bounded by the same window.
 
 Live threads to carry forward:
 
