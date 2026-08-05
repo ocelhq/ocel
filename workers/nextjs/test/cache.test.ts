@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import {
+  admissionJitterMs,
   admitRefresh,
   cacheKey,
   deltaSeconds,
@@ -32,6 +33,11 @@ function testDeps(
   return {
     cache,
     now: () => clock.ms,
+    // Zero, so every test below reads as it did before the admission wait
+    // existed. The wait's own behaviour — that it happens at all, that it
+    // precedes the claim, and that the default is neither zero nor unbounded —
+    // is asserted in "admission jitter" with the default left in place.
+    admissionDelay: () => Promise.resolve(),
     waitUntil: (promise) => {
       pending.push(promise);
     },
@@ -93,6 +99,31 @@ function ttlCache(clock: { ms: number }): Cache {
     put: async (request: Request, response: Response) => {
       const ttl = deltaSeconds(response.headers.get("cache-control"), "max-age");
       stored.set(request.url, clock.ms + (ttl ?? 0) * 1_000);
+    },
+    delete: async (request: Request) => stored.delete(request.url),
+  } as unknown as Cache;
+}
+
+// A Cache double that also models the colo's WRITE-VISIBILITY LAG: a record is
+// stored at once but does not read back for `lagMs`, which is the property the
+// admission wait exists to outrun. ttlCache above is instantly consistent and so
+// cannot show the herd at all.
+function lagCache(clock: { ms: number }, lagMs: number): Cache {
+  const stored = new Map<string, { visibleAt: number; until: number }>();
+  return {
+    match: async (request: Request) => {
+      const record = stored.get(request.url);
+      if (!record || clock.ms < record.visibleAt || clock.ms >= record.until) {
+        return undefined;
+      }
+      return new Response(null);
+    },
+    put: async (request: Request, response: Response) => {
+      const ttl = deltaSeconds(response.headers.get("cache-control"), "max-age");
+      stored.set(request.url, {
+        visibleAt: clock.ms + lagMs,
+        until: clock.ms + (ttl ?? 0) * 1_000,
+      });
     },
     delete: async (request: Request) => stored.delete(request.url),
   } as unknown as Cache;
@@ -318,6 +349,36 @@ describe("serveCached", () => {
   ): CacheTarget => ({
     key: `https://cache.ocel/build/${name}`,
     ...over,
+  });
+
+  it("never puts the admission wait on the miss path, which the request is waiting on", async () => {
+    // The wait belongs to a background refresh behind an already-served stale
+    // response. The miss-path fill is on the serving path with joiners awaiting
+    // it, so a wait there is up to a second of user-visible latency on every
+    // cold miss — and a joiner cannot even be answered until it elapses, which
+    // is what a wait that never elapses makes visible.
+    const clock = { ms: 0 };
+    const deps = { ...testDeps(clock), admissionDelay: () => new Promise<void>(() => {}) };
+    const t = target("miss-undelayed", {
+      refreshKey: "build:/miss-undelayed",
+      revalidate: 60,
+      expiration: 600,
+    });
+    const origin = gatedOrigin(async () =>
+      new Response("rendered", { headers: { "cache-control": "s-maxage=60" } }),
+    );
+
+    const burst = Promise.all([
+      serveCached(req(), t, deps, origin, origin),
+      serveCached(req(), t, deps, origin, origin),
+    ]);
+    await untilLeaderIsFilling(origin);
+    origin.release();
+    const [leader, joiner] = await burst;
+
+    expect(origin.calls).toBe(1);
+    expect(leader!.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(joiner!.headers.get("x-ocel-cache")).toBe("HIT");
   });
 
   it("misses, stores, then serves the second GET from cache without a re-fetch", async () => {
@@ -1082,6 +1143,94 @@ describe("admitRefresh", () => {
     admitRefresh(deps, "build:/throwing-failure", failing);
     await deps.flush();
     expect(failing.calls).toBe(1);
+  });
+
+  it("waits before it claims, not after — an isolate evicted mid-wait leaves no sentinel", async () => {
+    const clock = { ms: 0 };
+    const cache = recordingCache();
+    // A wait that never resolves stands in for the isolate going away while
+    // holding the admission. Nothing may have been written by then, or the
+    // route is suppressed for a whole TTL by a refresh that never ran.
+    const deps = { ...testDeps(clock, cache), admissionDelay: () => new Promise<void>(() => {}) };
+    const run = countingRun();
+
+    admitRefresh(deps, "build:/evicted", run);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(cache.urls).toEqual([]);
+    expect(run.calls).toBe(0);
+  });
+
+  it("collapses two admissions to one claim once they are more than a window apart", async () => {
+    // The whole point of the wait. Against a cache that only becomes readable
+    // W after the write — which is what the colo actually does — two claims
+    // inside W do not see each other and both admit; drawn far enough apart,
+    // the second sees the first. The spike measured W = 8ms.
+    const admitAt = async (cache: Cache, clock: { ms: number }, draws: number[]) => {
+      const run = countingRun();
+      for (const draw of draws) {
+        const deps = {
+          ...testDeps(clock, cache),
+          admissionDelay: async () => {
+            clock.ms = draw;
+          },
+        };
+        admitRefresh(deps, "build:/spread", run);
+        await deps.flush();
+      }
+      return run.calls;
+    };
+
+    const together = { ms: 0 };
+    expect(await admitAt(lagCache(together, 8), together, [0, 4])).toBe(2);
+
+    const apart = { ms: 0 };
+    expect(await admitAt(lagCache(apart, 8), apart, [0, 900])).toBe(1);
+  });
+
+  it("keeps the per-isolate collapse across the wait, since it is keyed on the cache", async () => {
+    // Load-bearing and non-obvious: inFlight is a WeakMap on deps.cache, not on
+    // the deps object, so spreading CacheDeps to add a delay does not fragment
+    // L0 — and L0 holding its entry across the wait is exactly what bounds the
+    // claimant pool to the isolate count rather than to the arrival rate.
+    const clock = { ms: 0 };
+    const cache = ttlCache(clock);
+    const run = countingRun();
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const waiting = { ...testDeps(clock, cache), admissionDelay: () => held };
+    const other = { ...testDeps(clock, cache), admissionDelay: () => Promise.resolve() };
+
+    admitRefresh(waiting, "build:/shared", run);
+    admitRefresh(other, "build:/shared", run);
+    release();
+    await waiting.flush();
+    await other.flush();
+
+    expect(run.calls).toBe(1);
+  });
+
+  it("draws its own delay when none is injected, neither zero nor unbounded", async () => {
+    // Silent failure #4: a test double left wired in production would take the
+    // whole colo's claims back inside one 8ms window, invisibly.
+    const clock = { ms: 0 };
+    const deps = testDeps(clock, ttlCache(clock));
+    delete (deps as CacheDeps).admissionDelay;
+    const run = countingRun();
+    const random = vi.spyOn(Math, "random").mockReturnValue(0.5);
+
+    const started = Date.now();
+    admitRefresh(deps, "build:/default", run);
+    expect(run.calls).toBe(0);
+    await deps.flush();
+    const elapsed = Date.now() - started;
+
+    expect(random).toHaveBeenCalled();
+    expect(run.calls).toBe(1);
+    expect(elapsed).toBeGreaterThanOrEqual(admissionJitterMs / 2 - 20);
+    expect(elapsed).toBeLessThan(admissionJitterMs);
+    random.mockRestore();
   });
 
   it("admits when only put throws, having already seen the sentinel miss", async () => {
