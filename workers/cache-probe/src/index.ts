@@ -2,10 +2,13 @@ import { isolateId } from "./isolate";
 import {
   claim,
   controlPath,
+  drawDelayMs,
+  parseJitterMs,
   parseScope,
   racePath,
   record,
   scopedKey,
+  sleep,
 } from "./race";
 
 // Every judgement is left to the runner. This worker reports what it saw and
@@ -104,12 +107,30 @@ export default {
         return new Response("ttl must be a positive number", { status: 400 });
       }
 
+      const jitterMs = parseJitterMs(url.searchParams.get("jitter"));
+      if (jitterMs === null) {
+        return new Response("jitter must be a non-negative number", { status: 400 });
+      }
+
+      // Drawn before the sleep and echoed, so the runner can check both that the
+      // draw covered the window it asked for and that the worker actually spent
+      // it — a delay that is reported but not slept would print a collapsed herd
+      // for a system that never jittered.
+      const delayMs = drawDelayMs(jitterMs);
+      await sleep(delayMs);
       const claimed = await claim(
         caches.default,
         scopedKey(scope, racePath(key), url.origin),
         ttlSeconds,
       );
-      return racing({ ...base, claimed, key, scope, seq: url.searchParams.get("seq") });
+      return racing({
+        ...base,
+        claimed,
+        key,
+        scope,
+        seq: url.searchParams.get("seq"),
+        delayMs,
+      });
     }
 
     if (url.pathname === "/control") {

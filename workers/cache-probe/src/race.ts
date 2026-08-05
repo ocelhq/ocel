@@ -30,6 +30,25 @@ export function scopedKey(scope: KeyScope, path: string, origin: string): Reques
   return new Request(url);
 }
 
+// The jittered admission delay ocelhq-wvag.16 proposes for L1: before claiming,
+// wait a uniform draw from [0, J). Production draws it inside refreshOnce, ahead
+// of claimSentinel, on a path that has already served a stale response. Here it
+// is drawn inside the worker rather than by the driver, so the delay sits on the
+// same side of the network as the claim it is meant to spread — a driver-imposed
+// delay would also spread the ARRIVALS, and arrival spread suppresses claims by
+// itself, which is the effect this instrument has to hold constant.
+export function parseJitterMs(raw: string | null): number | null {
+  if (raw === null) return 0;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+export const drawDelayMs = (jitterMs: number, random: () => number = Math.random) =>
+  jitterMs > 0 ? random() * jitterMs : 0;
+
+export const sleep = (ms: number) =>
+  ms > 0 ? new Promise((done) => setTimeout(done, ms)) : Promise.resolve();
+
 export const racePath = (key: string) => `/__race/${encodeURIComponent(key)}`;
 export const controlPath = (run: string) => `/__control/${encodeURIComponent(run)}`;
 

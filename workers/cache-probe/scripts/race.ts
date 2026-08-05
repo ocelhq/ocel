@@ -24,6 +24,7 @@ import { parseRaceOptions, type RaceOptions } from "../src/race-options.ts";
 import {
   chooseWindow,
   distribution,
+  jitterVerdict,
   outcomeOf,
   sizingTable,
   summarizeBurst,
@@ -82,6 +83,16 @@ function dispersionOf(paths: string[]): number {
     );
   }
   return Math.max(...(sent as number[])) - Math.min(...(sent as number[]));
+}
+
+// One racer's whole request, timed from before it is queued. That start point is
+// deliberately early: the elapsed time is used as a CEILING on the delay the
+// worker says it slept, and a ceiling that started late could reject an honest
+// worker.
+async function raceCall(client: Client, path: string) {
+  const started = performance.now();
+  const response = await call<RaceResponse>(client, "POST", path);
+  return { response, elapsedMs: performance.now() - started };
 }
 
 interface Identity {
@@ -310,8 +321,9 @@ function assertSomebodyClaimed(zeroClaimTrials: number, where: string) {
 // ---------------------------------------------------------------------------
 // Phase 1 — the gap sweep.
 
-const raceRoute = (options: RaceOptions, key: string, seq: number) =>
-  `/race?key=${key}&seq=${seq}&scope=${options.scope}&ttl=${options.sentinelTtlSeconds}`;
+const raceRoute = (options: RaceOptions, key: string, seq: number, jitterMs = 0) =>
+  `/race?key=${key}&seq=${seq}&scope=${options.scope}&ttl=${options.sentinelTtlSeconds}` +
+  `&jitter=${jitterMs}`;
 
 async function gapSweep(options: RaceOptions, origin: string) {
   const summaries: GapSummary[] = [];
@@ -337,17 +349,20 @@ async function gapSweep(options: RaceOptions, origin: string) {
 
       try {
         const sentA = performance.now();
-        const a = call<RaceResponse>(racers[first]!, "POST", raceRoute(options, key, 0));
+        const a = raceCall(racers[first]!, raceRoute(options, key, 0));
         await sleep(Math.max(0, deltaMs - (performance.now() - sentA)));
         const sentB = performance.now();
-        const b = call<RaceResponse>(racers[second]!, "POST", raceRoute(options, key, 1));
+        const b = raceCall(racers[second]!, raceRoute(options, key, 1));
         const [first_, second_] = await Promise.all([a, b]);
 
+        // The gap sweep imposes its own separation and never jitters: a worker
+        // that slept here would be adding an unmeasured term to Δ, which the
+        // zero window passed through makes fatal rather than invisible.
         trials.push({
           deltaMs,
           achievedDeltaMs: sentB - sentA,
-          a: outcomeOf(first_, key, 0),
-          b: outcomeOf(second_, key, 1),
+          a: outcomeOf(first_.response, key, 0, { jitterMs: 0, elapsedMs: first_.elapsedMs }),
+          b: outcomeOf(second_.response, key, 1, { jitterMs: 0, elapsedMs: second_.elapsedMs }),
         });
       } catch (error) {
         if (error instanceof Abort) throw error;
@@ -380,77 +395,100 @@ async function gapSweep(options: RaceOptions, origin: string) {
 // ---------------------------------------------------------------------------
 // Phase 2 — the burst.
 
+// The parameter reaching the worker is not evidence the worker used it, and a
+// run whose "jittered" racers all drew zero would print a collapsed herd for a
+// system that never jittered — the same shape of dead detector as the fixed
+// socket pool. Read off the draws the worker echoed.
+function assertJitterDrawn(summary: BurstSummary) {
+  const verdict = jitterVerdict(summary.jitterMs, summary.delayMs);
+  if (verdict !== "degenerate") return;
+  throw new Abort(
+    `at N=${summary.size}, J=${summary.jitterMs}ms the racers' drawn delays were ` +
+      `${JSON.stringify(summary.delayMs)}, which does not cover the window. The worker is ` +
+      "not jittering; every escape count in this run is about an un-jittered burst.",
+  );
+}
+
 async function burstSweep(options: RaceOptions, origin: string) {
   const summaries: BurstSummary[] = [];
-  const trialsBySize: Record<number, BurstTrial[]> = {};
+  const trialsByCell: Record<string, BurstTrial[]> = {};
   let discarded = 0;
   let attempted = 0;
 
   for (const size of options.sizes) {
-    // Wider than the burst, so consecutive trials draw a different window of
-    // sockets. A fixed pool of exactly N does not measure the colo: sockets pin
-    // to isolates for the pool's whole life, so 100 trials are 100 repeats of
-    // one isolate combination rather than 100 draws over the colo — and pairs
-    // differ enormously, some seeing each other's claim at once and some not
-    // until W. The gap sweep rotates its pairs for the same reason.
-    const poolSize = size + options.sockets;
-    let racers = await openRacers(origin, poolSize);
-    const trials: BurstTrial[] = [];
-    let attemptedHere = 0;
+    for (const jitterMs of options.jitters) {
+      // Wider than the burst, so consecutive trials draw a different window of
+      // sockets. A fixed pool of exactly N does not measure the colo: sockets
+      // pin to isolates for the pool's whole life, so 100 trials are 100 repeats
+      // of one isolate combination rather than 100 draws over the colo — and
+      // pairs differ enormously, some seeing each other's claim at once and some
+      // not until W. The gap sweep rotates its pairs for the same reason.
+      const poolSize = size + options.sockets;
+      let racers = await openRacers(origin, poolSize);
+      const trials: BurstTrial[] = [];
+      let attemptedHere = 0;
 
-    for (let trial = 0; trial < options.trials; trial += 1) {
-      const key = `race-${randomUUID()}`;
-      const offset = (trial * size) % poolSize;
-      const burst = Array.from(
-        { length: size },
-        (_, i) => racers[(offset + i) % poolSize]!,
-      );
-      const paths = burst.map((_, seq) => raceRoute(options, key, seq));
-      attemptedHere += 1;
-      sentAtByPath.clear();
-      try {
-        const responses = await Promise.all(
-          burst.map((client, seq) => call<RaceResponse>(client, "POST", paths[seq]!)),
+      for (let trial = 0; trial < options.trials; trial += 1) {
+        const key = `race-${randomUUID()}`;
+        const offset = (trial * size) % poolSize;
+        const burst = Array.from(
+          { length: size },
+          (_, i) => racers[(offset + i) % poolSize]!,
         );
-        trials.push({
-          size,
-          dispersionMs: dispersionOf(paths),
-          outcomes: responses.map((response, seq) => outcomeOf(response, key, seq)),
-        });
-      } catch (error) {
-        if (error instanceof Abort) throw error;
-        discarded += 1;
-        await closeRacers(racers).catch(() => {});
-        racers = await openRacers(origin, poolSize);
+        const paths = burst.map((_, seq) => raceRoute(options, key, seq, jitterMs));
+        attemptedHere += 1;
+        sentAtByPath.clear();
+        try {
+          const timed = await Promise.all(burst.map((client, seq) => raceCall(client, paths[seq]!)));
+          trials.push({
+            size,
+            jitterMs,
+            // Still the SEND spread, not the claim spread. Jitter disperses the
+            // claims; this stays the guard on whether the arrivals were
+            // concurrent, which is what the escape count assumes.
+            dispersionMs: dispersionOf(paths),
+            outcomes: timed.map(({ response, elapsedMs }, seq) =>
+              outcomeOf(response, key, seq, { jitterMs, elapsedMs }),
+            ),
+          });
+        } catch (error) {
+          if (error instanceof Abort) throw error;
+          discarded += 1;
+          await closeRacers(racers).catch(() => {});
+          racers = await openRacers(origin, poolSize);
+        }
       }
-    }
 
-    await closeRacers(racers);
-    attempted += attemptedHere;
-    assertDiscardsTolerable(options, discarded, attempted);
-    const summary = summarizeBurst(size, trials, options.windowMs, attemptedHere);
-    assertSomebodyClaimed(summary.discarded["zero-claims"], `N=${size}`);
-    summaries.push(summary);
-    trialsBySize[size] = trials;
-    console.log(
-      `  N=${String(size).padStart(4)}  counted ${String(summary.counted).padStart(4)}` +
-        `  escapes median ${summary.escapes?.median ?? "n/a"}` +
-        ` (p10 ${summary.escapes?.p10 ?? "n/a"}, p90 ${summary.escapes?.p90 ?? "n/a"},` +
-        ` max ${summary.escapes?.max ?? "n/a"})` +
-        `  isolates median ${summary.distinctIsolates?.median ?? "n/a"}` +
-        `  dispersion median ${summary.dispersionMs?.median.toFixed(2) ?? "n/a"}ms` +
-        (summary.trials === summary.attempted ? "" : `  (${summary.attempted} attempted)`) +
-        (summary.lowerBound ? "  [LOWER BOUND]" : ""),
-    );
-    if ((summary.singleIsolateRate ?? 0) > 0.1) {
+      await closeRacers(racers);
+      attempted += attemptedHere;
+      assertDiscardsTolerable(options, discarded, attempted);
+      const summary = summarizeBurst(size, trials, options.windowMs, attemptedHere, jitterMs);
+      assertSomebodyClaimed(summary.discarded["zero-claims"], `N=${size}, J=${jitterMs}ms`);
+      assertJitterDrawn(summary);
+      summaries.push(summary);
+      trialsByCell[`${size}@${jitterMs}`] = trials;
       console.log(
-        `        ${summary.singleIsolateTrials}/${summary.trials} trials landed on ONE isolate: ` +
-          "that fraction measured L0, not L1.",
+        `  N=${String(size).padStart(4)} J=${String(jitterMs).padStart(5)}ms` +
+          `  counted ${String(summary.counted).padStart(4)}` +
+          `  escapes median ${summary.escapes?.median ?? "n/a"}` +
+          ` (p10 ${summary.escapes?.p10 ?? "n/a"}, p90 ${summary.escapes?.p90 ?? "n/a"},` +
+          ` max ${summary.escapes?.max ?? "n/a"}, mean ${summary.escapes?.mean.toFixed(2) ?? "n/a"})` +
+          `  late median ${summary.lateEscapes?.median ?? "n/a"}` +
+          `  isolates median ${summary.distinctIsolates?.median ?? "n/a"}` +
+          `  dispersion median ${summary.dispersionMs?.median.toFixed(2) ?? "n/a"}ms` +
+          (summary.trials === summary.attempted ? "" : `  (${summary.attempted} attempted)`) +
+          (summary.lowerBound ? "  [LOWER BOUND]" : ""),
       );
+      if ((summary.singleIsolateRate ?? 0) > 0.1) {
+        console.log(
+          `        ${summary.singleIsolateTrials}/${summary.trials} trials landed on ONE ` +
+            "isolate: that fraction measured L0, not L1.",
+        );
+      }
     }
   }
 
-  return { summaries, trialsBySize, attempted, discarded };
+  return { summaries, trialsByCell, attempted, discarded };
 }
 
 // ---------------------------------------------------------------------------
@@ -524,7 +562,18 @@ async function main() {
       // it is passed in rather than assumed.
       const touched = Math.max(0, ...sweep.summaries.map((s) => s.distinctIsolates?.max ?? 0));
       const isolatesPerColo = Math.max(touched, options.isolatesPerColo ?? 0);
-      if (options.windowMs !== null) {
+      const jittered = options.jitters.some((jitterMs) => jitterMs > 0);
+      if (jittered) {
+        // E = 1 + λ·W is the un-jittered escape count: it assumes every arrival
+        // inside the window claims. Under jitter the claimant pool inside one
+        // window is bounded by the isolate count instead of by λ, so printing
+        // this table over a jittered sweep would attach an un-jittered model to
+        // jittered measurements.
+        console.log(
+          "\nno sizing table: this sweep jittered, and E = 1 + lambda*W models the\n" +
+            "un-jittered path. The jittered bound is 1 + I_colo*W/J and takes no lambda.",
+        );
+      } else if (options.windowMs !== null) {
         const table = sizingTable(
           {
             windowSeconds: options.windowMs / 1_000,
