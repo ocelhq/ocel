@@ -766,11 +766,24 @@ func assetBucketOutput() string {
 // deploy, a separate Go module) narrowed to what the edge itself calls.
 //
 // Reads are bucket-wide (s3:GetObject) but writes are not: the edge's fetch-cache
-// writes are confined to the fetch-cache path segment of any prefix, because this
-// key is long-lived and lives in Cloudflare's environment, where a bucket-wide
-// write would let a compromise overwrite static assets, ISR entries and edge
-// bundles. The prefix itself varies per app and build (<env>/<project>/<app>/
-// <build>), so the wildcard admits any prefix and pins only the segment.
+// writes are confined to a `.cache.json` object under the fetch-cache path segment
+// of any prefix, because this key is long-lived and lives in Cloudflare's
+// environment, where a bucket-wide write would let a compromise overwrite static
+// assets, ISR entries and edge bundles. The prefix itself varies per app and build
+// (<env>/<project>/<app>/<build>), so the wildcard admits any prefix and pins only
+// the segment.
+//
+// The `.cache.json` suffix is a second, independent thing the wildcard pins, and
+// it is what the revalidator's read grant rests on. IAM's `*` spans `/`, so
+// `*/fetch-cache/*` alone admits `<prefix>/fetch-cache/origin.json` — a key the
+// consumer's `*/origin.json` read grant also admits, which would let a stolen edge
+// credential plant a deploy record naming an attacker's origin and collect the
+// app's bypass token. Anchoring this grant on a suffix that cannot coexist with
+// `/origin.json` is what makes the two grants disjoint at the IAM layer, whatever
+// the worker's code or the consumer's parser happen to do. Every key the edge
+// worker writes already ends `.cache.json` (fetchObjectKey, its only write path),
+// so this costs the edge nothing; the deploy-side fetch-cache upload runs under
+// the operator's own credentials, not this user, and is unaffected.
 //
 // The DynamoDB grants are bounded to the TAG# tag partitions so the edge key can
 // never read or write the upload-session items (which carry HMAC secrets) sharing
@@ -821,7 +834,7 @@ func edgeUserResource(userName string, trust edge.TrustBoundary, optimizer artif
                 Resource: !Sub '${AssetBucket.Arn}/*'
               - Effect: Allow
                 Action: s3:PutObject
-                Resource: !Sub '${AssetBucket.Arn}/*/fetch-cache/*'
+                Resource: !Sub '${AssetBucket.Arn}/*/fetch-cache/*.cache.json'
               - Effect: Allow
                 Action:
                   - dynamodb:BatchGetItem
