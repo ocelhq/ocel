@@ -277,10 +277,14 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		// Empty on a substrate that bootstrapped no optimizer, which leaves the
 		// worker's image origin unbound rather than bound to nothing.
 		ImageOptimizerURL: deployed.ImageOptimizerURL,
-		Env:               envSegment(env),
-		EdgeAccessKeyID:   edgeCreds.AccessKeyID,
-		EdgeSecretKey:     edgeCreds.SecretAccessKey,
-		EdgeValues:        edgeValues,
+		// Empty on a substrate whose bootstrap rendered no revalidator: the
+		// queue exists but nothing drains it, and an edge told about one
+		// enqueues successfully and never revalidates again.
+		RevalidateQueueURL: deployed.RevalidateQueueURL,
+		Env:                envSegment(env),
+		EdgeAccessKeyID:    edgeCreds.AccessKeyID,
+		EdgeSecretKey:      edgeCreds.SecretAccessKey,
+		EdgeValues:         edgeValues,
 
 		Slug:               manifest.GetSlug(),
 		StoreScriptName:    deploymentsStore.ScriptName,

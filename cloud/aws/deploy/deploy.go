@@ -134,6 +134,13 @@ type Config struct {
 	// entirely and every valid image request a 502.
 	ImageOptimizerURL string
 
+	// RevalidateQueueURL is the substrate's ISR revalidation queue (from
+	// bootstrap), bound onto every worker so an admitted background refresh is
+	// deduplicated fleet-wide instead of rendered per colo. Empty on a substrate
+	// whose bootstrap rendered no consumer for it, which leaves the binding off
+	// entirely and every refresh rendering through the origin as before.
+	RevalidateQueueURL string
+
 	// CacheStoreBucket and CacheStoreUploader address the substrate's adopted
 	// cache store — the edge-provisioned bucket the singular ISR entry path now
 	// lives in, seeded here and read back by both the origin's cache handler and

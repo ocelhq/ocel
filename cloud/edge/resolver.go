@@ -66,3 +66,22 @@ const (
 // uploaded. Left unbound where a substrate has no optimizer, which is what keeps
 // every valid image request the 502 it was before one existed.
 const ImageOptimizerURLVar = "OCEL_IMAGE_OPTIMIZER_URL"
+
+// RevalidateQueueURLVar names the substrate's ISR revalidation queue, which the
+// worker sends an admitted background refresh to instead of rendering it
+// through the origin. The queue deduplicates the same render across every colo
+// that asked for it, and its consumer drains them at a bounded concurrency.
+//
+// A substrate-level var for the same reason as the stores above: one queue
+// serves every project, app and deployment in the account, and the ISR prefix
+// the Deployment record already carries is what scopes a message to one build.
+// The region is derived in the worker from the URL's own host rather than bound
+// separately.
+//
+// Bound only where the substrate has a consumer to drain the queue — bootstrap
+// publishes the URL only then, which is the whole of the gate. Unbound, the
+// worker constructs no enqueue path and every admitted refresh renders through
+// the origin exactly as it did before this queue existed. Bound against a queue
+// nothing drains, the send succeeds, the refresh reports landed, the colo
+// sentinel re-arms, and the route stops revalidating until it hard-expires.
+const RevalidateQueueURLVar = "OCEL_REVALIDATE_QUEUE_URL"
