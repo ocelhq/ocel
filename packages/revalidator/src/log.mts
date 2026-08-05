@@ -28,6 +28,11 @@ export type FailureReason =
 export type Outcome =
   | { event: "RevalidateOk" }
   | { event: "RevalidateExpectMiss"; expected: string; got: string | null }
+  // A record the handler declined to run, reported as a failure so the queue
+  // redelivers it. It is logged rather than dropped silently, so a record that
+  // reaches the DLQ has a history that says which of "tried and failed" and
+  // "never tried" happened to it.
+  | { event: "RevalidateSkipped"; reason: "group-stopped" }
   | { event: "RevalidateFailed"; reason: FailureReason; status?: number };
 
 export function context(messageId: string, message: RevalidationMessage | null): LogContext {
