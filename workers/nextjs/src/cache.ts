@@ -39,9 +39,10 @@ export interface CacheDeps {
   // Injected so freshness never depends on wall-clock time. Milliseconds.
   now?: () => number;
   // The wait a background refresh takes before it tries to claim the colo's
-  // admission. Absent means the real jittered one; tests inject a deterministic
-  // delay so they are not sleeping a second apiece. See admissionJitterMs.
-  admissionDelay?: () => Promise<void>;
+  // admission, given how long the entry it refreshes may still be served stale.
+  // Absent means the real jittered one; tests inject a deterministic delay so
+  // they are not sleeping a second apiece. See admissionJitterMs.
+  admissionDelay?: (staleForMs: number) => Promise<void>;
 }
 
 export interface CacheTarget {
@@ -127,6 +128,15 @@ export function evaluate(meta: EntryMeta, now: number, tagStale: boolean): Fresh
   if (!timeStale && !tagStale) return "fresh";
   if (meta.expiration !== undefined && age >= meta.expiration) return "expired";
   return "stale";
+}
+
+// How much longer this entry may be served stale. Infinite when the entry
+// declares no expiry, which is the common case. It caps the admission draw —
+// see admissionJitterMs — so a refresh is never deferred past the moment its
+// own entry stops being servable.
+export function staleWindowMs(meta: EntryMeta, now: number): number {
+  if (meta.expiration === undefined) return Infinity;
+  return meta.expiration * 1000 - (now - meta.lastModified);
 }
 
 export type CacheKeyResult =
@@ -453,17 +463,30 @@ export const refreshSentinelTtlSeconds = 5;
 // J >= I_colo · W, from the spike's follow-up: the claimant pool inside one
 // jitter window cannot exceed the colo's isolate count, because refreshOnce
 // above already collapses each isolate to one in-flight admission and holds that
-// entry across this wait. So claims per colo are about 1 + I_colo·W/J. At
-// I_colo >= 99 and W = 8ms that bound is 0.8s, rounded up here.
+// entry across this wait. At I_colo >= 99 and W = 8ms that lower bound on J is
+// 0.8s, rounded up here, and it puts claims per colo at about 1 + I_colo·W/J.
 //
-// The bound is deliberately free of the arrival rate: λ is a property of the
-// operator's traffic, and a constant derived from a guess at it would be a guess
-// wearing a measurement's clothes. Measured at 1.41 claims per colo mean (median
-// 1, p90 2) against 54.8 without the wait — see the follow-up's jitter sweep.
+// J is deliberately free of the arrival rate: λ is a property of the operator's
+// traffic, and a constant derived from a guess at it would be a guess wearing a
+// measurement's clothes. Measured over two runs at 1.41 and 1.46 claims per colo
+// mean (median 1, p90 2) against 54.79 and 61.98 without the wait — see the
+// follow-up's jitter sweep.
 export const admissionJitterMs = 1_000;
 
-const jitteredAdmissionDelay = (): Promise<void> =>
-  new Promise((done) => setTimeout(done, Math.random() * admissionJitterMs));
+// The draw, capped by how long the entry may still be served stale. Uncapped, a
+// route whose remaining stale window is shorter than J would spend the tail of
+// the wait EXPIRED: past expiration the colo tier declines to serve at all, so
+// L1 is bypassed and every isolate renders for itself — the herd this wait
+// exists to remove, reintroduced at the boundary the wait pushed the refresh
+// across. Capped, such a route degrades to the un-jittered behaviour instead of
+// to something worse. Exported so the cap is asserted directly rather than
+// through a timer.
+export function admissionDrawMs(staleForMs: number): number {
+  return Math.random() * Math.min(admissionJitterMs, Math.max(0, staleForMs));
+}
+
+const jitteredAdmissionDelay = (staleForMs: number): Promise<void> =>
+  new Promise((done) => setTimeout(done, admissionDrawMs(staleForMs)));
 
 // The Cache API keys on a URL and an admission key is not one, so synthesize
 // it: its own hostname, so a sentinel can never collide with an entry key, and
@@ -530,13 +553,14 @@ export function admitRefresh(
   deps: CacheDeps,
   key: string,
   run: () => Promise<boolean>,
+  staleForMs = Infinity,
 ): void {
   const sentinel = new Request(sentinelUrl(key));
   refreshOnce(deps, key, async () => {
     // Ahead of the claim, and only here. The miss-path fill runs refreshOnce
     // directly, on the serving path with joiners awaiting it, and a wait there
     // would be up to a second of user-visible latency on every cold miss.
-    await (deps.admissionDelay ?? jitteredAdmissionDelay)();
+    await (deps.admissionDelay ?? jitteredAdmissionDelay)(staleForMs);
     if (!(await claimSentinel(deps.cache, sentinel))) return;
     let landed = false;
     try {
@@ -575,14 +599,11 @@ async function serveOrAdmitRefresh(
     // down, falls open on "untrusted" instead.)
     tagStale = verdict !== false;
   }
-  const state = evaluate(
-    {
-      lastModified: modified,
-      ...policy.window(cached.headers.get(ENTRY_WINDOW), target),
-    },
-    now(),
-    tagStale,
-  );
+  const meta: EntryMeta = {
+    lastModified: modified,
+    ...policy.window(cached.headers.get(ENTRY_WINDOW), target),
+  };
+  const state = evaluate(meta, now(), tagStale);
   if (state === "fresh") {
     return policy.forServe(fromStorage(cached, false), "HIT");
   }
@@ -599,8 +620,9 @@ async function serveOrAdmitRefresh(
     // Only a caller that named a route takes the colo-wide decision. An image
     // names none: it is invalidated by its content hash changing rather than by
     // a stale route, so it keeps the per-isolate dedupe on its own entry.
-    if (target.refreshKey) admitRefresh(deps, target.refreshKey, refresh);
-    else refreshOnce(deps, target.key, refresh);
+    if (target.refreshKey) {
+      admitRefresh(deps, target.refreshKey, refresh, staleWindowMs(meta, now()));
+    } else refreshOnce(deps, target.key, refresh);
     return policy.forServe(fromStorage(cached, true), "STALE");
   }
   return null; // "expired" — R2 may already hold a fresher entry.

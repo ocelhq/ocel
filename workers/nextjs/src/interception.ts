@@ -21,7 +21,7 @@ import {
   type CacheEntryFile,
 } from "@ocel/next-cache";
 
-import { evaluate } from "./cache";
+import { evaluate, staleWindowMs } from "./cache";
 import { lruSet } from "./lru";
 import {
   createTagClock,
@@ -60,9 +60,19 @@ export interface InterceptTarget {
 // What a read of the ISR cache produced. A complete entry answers the request on
 // its own; a PPR entry answers only its static half, and its shell has to be
 // composed with a resumed render before it is a response.
+// `staleForMs` is how much longer the entry may be served stale, and is present
+// exactly when `stale` is true: it caps the caller's admission draw, so a
+// background refresh is never deferred past the moment its own entry stops
+// being servable. See admissionJitterMs in cache.ts.
 export type Interception =
-  | { kind: "complete"; response: Response; stale: boolean }
-  | { kind: "ppr"; shell: Response; postponed: string; stale: boolean };
+  | { kind: "complete"; response: Response; stale: boolean; staleForMs?: number }
+  | {
+      kind: "ppr";
+      shell: Response;
+      postponed: string;
+      stale: boolean;
+      staleForMs?: number;
+    };
 
 export interface InterceptDeps {
   // The bound cache store entries and tag state are read from (the Cloudflare R2
@@ -213,18 +223,22 @@ export async function intercept(
     // The single stale-while-revalidate verdict: a fresh entry serves as-is; a
     // stale one still serves stale-while-revalidate; past expiration is too
     // old to serve even stale, so the request falls open to the Lambda.
-    const verdict = evaluate(
-      { lastModified: entry.lastModified, revalidate, expiration },
-      now,
-      tagStale,
-    );
+    const meta = { lastModified: entry.lastModified, revalidate, expiration };
+    const verdict = evaluate(meta, now, tagStale);
     if (verdict === "expired") return null;
     const isStale = verdict === "stale";
+    const staleForMs = isStale ? staleWindowMs(meta, now) : undefined;
 
     if (value.kind === "APP_PAGE" && value.postponed !== undefined) {
       const shell = reconstruct(request, value);
       return (
-        shell && { kind: "ppr", shell, postponed: value.postponed, stale: isStale }
+        shell && {
+          kind: "ppr",
+          shell,
+          postponed: value.postponed,
+          stale: isStale,
+          staleForMs,
+        }
       );
     }
 
@@ -236,7 +250,7 @@ export async function intercept(
     // only a tag invalidated it) remaining window — one second forces the next
     // request to re-read the by-then-refreshed entry.
     response.headers.set("cache-control", `s-maxage=${isStale ? 1 : window}`);
-    return { kind: "complete", response, stale: isStale };
+    return { kind: "complete", response, stale: isStale, staleForMs };
   } catch {
     return null;
   }
