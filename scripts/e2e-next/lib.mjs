@@ -195,6 +195,12 @@ export const PREFETCH_PURPOSE_VALUE = "prefetch";
  *   there means the legs were never comparable, not that the render differed.
  * - the Cloudflare and connection-level set: stamped per response by the edge
  *   and the transport, never by the render.
+ * - the `x-amzn-*` set: the Lambda Function URL stamps a fresh request id, trace
+ *   id and receive date on every invocation and the edge forwards them, so they
+ *   differ between any two responses by construction. They reached this
+ *   comparison for the first time on the live run for ocelhq-wvag.27 — a local
+ *   run has no Function URL in front of it — and failed both variants on nothing
+ *   but per-invocation ids while the bodies were byte-identical.
  *
  * Everything else — status, body bytes, content-type, etag, x-matched-path,
  * x-nextjs-postponed, Next's own vary — is compared, which is the point: the
@@ -208,6 +214,9 @@ export const GOLDEN_VOLATILE_HEADERS = new Set([
   "x-ocel-cache",
   "cf-ray",
   "cf-cache-status",
+  "x-amzn-requestid",
+  "x-amzn-trace-id",
+  "x-amzn-remapped-date",
   "server-timing",
   "report-to",
   "nel",
