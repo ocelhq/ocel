@@ -106,6 +106,24 @@ it("keeps a record carrying no group from stopping the records after it", async 
 // A record reported without ever being tried is still a record on its way to
 // the DLQ. CloudWatch cannot tell "tried and failed" from "never tried" unless
 // the skip says so itself.
+// `?? messageId` covers a missing attribute and not an empty one, and an empty
+// group id is indistinguishable in a Set from every other empty one — so two
+// such records would share a group and the first failure would suppress the
+// second. SQS FIFO does not send one; the guard costs a character.
+it("treats an empty group id the same as a missing one", async () => {
+  const { deps, requested } = substrate({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
+
+  const response = await handle(deps, {
+    Records: [
+      { messageId: "m-1", body: body({ routePath: "/a" }), attributes: { MessageGroupId: "" } },
+      { messageId: "m-2", body: body({ routePath: "/b" }), attributes: { MessageGroupId: "" } },
+    ],
+  });
+
+  expect(failures(response)).toEqual(["m-1"]);
+  expect(requested).toEqual(["/a", "/b"]);
+});
+
 it("logs the record it skipped for a stopped group, as well as reporting it", async () => {
   const { deps } = substrate({ "/a/1": new Response(null, { status: 500 }) });
 
