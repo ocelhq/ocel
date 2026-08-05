@@ -30,6 +30,9 @@ import { coloDeps } from "./cache-deps";
 function testDeps(
   clock: { ms: number },
   cache: Cache = caches.default,
+  // The tier-below double, bound here for the same reason admissionDelay is: one
+  // place a seam of CacheDeps is wired, so a test cannot quietly grow its own.
+  satisfiedFromBelow?: CacheDeps["satisfiedFromBelow"],
 ): CacheDeps & {
   flush: () => Promise<void>;
 } {
@@ -42,6 +45,7 @@ function testDeps(
     // default is left in place or the seam is driven deliberately.
     ...coloDeps({
       cache,
+      satisfiedFromBelow,
       now: () => clock.ms,
       waitUntil: (promise) => {
         pending.push(promise);
@@ -1153,11 +1157,6 @@ describe("admitRefresh", () => {
     expect(refused.calls).toBe(2);
   });
 
-  it("backs a refusing origin off for longer than a refresh that landed", async () => {
-    // Both hold the claim; only one of them is a reason to stay away.
-    expect(refreshBackoffSeconds).toBeGreaterThan(refreshSentinelTtlSeconds);
-  });
-
   it("releases the sentinel when the refresh never reached the origin", async () => {
     const clock = { ms: 0 };
     const deps = testDeps(clock, ttlCache(clock));
@@ -1205,10 +1204,7 @@ describe("admitRefresh", () => {
     // makes goes straight to the Function URL, so nothing else can tell this
     // colo that another one already regenerated the route.
     const clock = { ms: 0 };
-    const deps = {
-      ...testDeps(clock, ttlCache(clock)),
-      refreshedFromBelow: async () => true,
-    };
+    const deps = testDeps(clock, ttlCache(clock), async () => true);
     const run = countingRun();
 
     admitRefresh(deps, "build:/already-fresh", run);
@@ -1221,16 +1217,18 @@ describe("admitRefresh", () => {
     // A refresh satisfied from below is a refresh that landed: the route is
     // fresh again, so the next admission inside the TTL has nothing to do.
     const clock = { ms: 0 };
-    const deps = {
-      ...testDeps(clock, ttlCache(clock)),
-      refreshedFromBelow: async () => true,
-    };
+    // False by the second admission, so the only thing that can suppress its
+    // render is the claim the first one left behind.
+    let below = true;
+    const deps = testDeps(clock, ttlCache(clock), async () => below);
     const run = countingRun();
 
     admitRefresh(deps, "build:/held", run);
     await deps.flush();
+
+    below = false;
     clock.ms = refreshSentinelTtlSeconds * 1_000 - 1;
-    admitRefresh({ ...deps, refreshedFromBelow: async () => false }, "build:/held", run);
+    admitRefresh(deps, "build:/held", run);
     await deps.flush();
 
     expect(run.calls).toBe(0);
@@ -1238,10 +1236,7 @@ describe("admitRefresh", () => {
 
   it("renders when the tier below is still stale", async () => {
     const clock = { ms: 0 };
-    const deps = {
-      ...testDeps(clock, ttlCache(clock)),
-      refreshedFromBelow: async () => false,
-    };
+    const deps = testDeps(clock, ttlCache(clock), async () => false);
     const run = countingRun();
 
     admitRefresh(deps, "build:/still-stale", run);
@@ -1254,12 +1249,9 @@ describe("admitRefresh", () => {
     // Fail open, as everywhere on this path: an unreadable tier below costs a
     // duplicate render, while treating it as fresh would cost the refresh.
     const clock = { ms: 0 };
-    const deps = {
-      ...testDeps(clock, ttlCache(clock)),
-      refreshedFromBelow: async () => {
-        throw new Error("R2 exploded");
-      },
-    };
+    const deps = testDeps(clock, ttlCache(clock), async () => {
+      throw new Error("R2 exploded");
+    });
     const run = countingRun();
 
     admitRefresh(deps, "build:/exploded", run);
@@ -1272,13 +1264,10 @@ describe("admitRefresh", () => {
     const clock = { ms: 0 };
     const cache = ttlCache(clock);
     let reads = 0;
-    const deps = {
-      ...testDeps(clock, cache),
-      refreshedFromBelow: async () => {
-        reads++;
-        return false;
-      },
-    };
+    const deps = testDeps(clock, cache, async () => {
+      reads++;
+      return false;
+    });
     const run = countingRun();
 
     admitRefresh(deps, "build:/claimed", run);

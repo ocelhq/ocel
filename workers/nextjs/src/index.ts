@@ -812,44 +812,43 @@ async function dispatchPrerender(
     // What an admitted refresh consults before it renders. It re-reads R2 past
     // the entry memo — the memo is what declared the entry stale, and it
     // outlives the admission wait — and a fresh entry there means some other
-    // colo has already regenerated this route: mirror it into the colo and
-    // skip the render. Anything else (a miss, a still-stale entry, an
-    // unreadable store) returns false and the render proceeds, so this can
-    // only ever cost a redundant R2 GET, never a suppressed refresh.
-    cacheDeps = {
-      ...cache,
-      refreshedFromBelow: async () => {
-        const below = await intercept(request, interceptTarget, config, {
-          ...interceptDeps,
-          tagClock,
-          freshRead: true,
-        });
-        if (!below) return false;
-        const answered = below.kind === "complete" ? below.response : below.shell;
-        if (below.stale) {
-          answered.body?.cancel();
-          return false;
-        }
-        // Fresh below — but that only settles the render when this tier ends up
-        // reflecting it. A variant with no colo entry (the PPR admission site)
-        // has nothing to refill: the render's whole effect would have been
-        // regenerating what R2 already holds, so it is genuinely redundant.
-        // A shell answering a colo-cached complete variant is neither: it
-        // cannot refill that variant, so suppressing here would hold the route's
-        // colo-wide claim while leaving the colo serving the entry it wanted
-        // refreshed — and re-suppressing every TTL after.
-        if (!keyResult.cacheable) {
-          answered.body?.cancel();
-          return true;
-        }
-        if (below.kind !== "complete") {
-          answered.body?.cancel();
-          return false;
-        }
-        await storeInColo(cacheTarget, cache, below.response);
+    // colo has already regenerated this route: take it into the colo and skip
+    // the render. Anything the colo cannot take (a miss, a still-stale entry, a
+    // shell that cannot refill a complete variant, an unreadable store) returns
+    // false and the render proceeds, so this can only ever cost a redundant R2
+    // GET, never a suppressed refresh.
+    const satisfiedFromBelow = async () => {
+      const below = await intercept(request, interceptTarget, config, {
+        ...interceptDeps,
+        tagClock,
+        freshRead: true,
+      });
+      if (!below) return false;
+      const answered = below.kind === "complete" ? below.response : below.shell;
+      if (below.stale) {
+        answered.body?.cancel();
+        return false;
+      }
+      // Fresh below — but that only settles the render when this tier ends up
+      // reflecting it. A variant with no colo entry (the PPR admission site) has
+      // nothing to refill: the render's whole effect would have been
+      // regenerating what R2 already holds, so it is genuinely redundant.
+      // A shell answering a colo-cached complete variant is neither: it cannot
+      // refill that variant, so suppressing here would hold the route's
+      // colo-wide claim while leaving the colo serving the entry it wanted
+      // refreshed — and re-suppressing every TTL after.
+      if (!keyResult.cacheable) {
+        answered.body?.cancel();
         return true;
-      },
+      }
+      if (below.kind !== "complete") {
+        answered.body?.cancel();
+        return false;
+      }
+      await storeInColo(cacheTarget, cache, below.response);
+      return true;
     };
+    cacheDeps = { ...cache, satisfiedFromBelow };
 
     // A composed PPR response is rendered for one visitor and must not reach
     // serveCached, so a route that might postpone is read before the colo cache

@@ -44,17 +44,20 @@ export interface CacheDeps {
   // they are not sleeping a second apiece. See admissionJitterMs.
   admissionDelay?: (staleForMs: number) => Promise<void>;
   // The tier below this one, consulted by an admitted background refresh after
-  // it takes the claim and before it renders. True means that tier already
-  // holds a fresher entry — and has mirrored it into this one — so the render
-  // would regenerate what is already there. Absent (no tier below is bound, or
-  // this is the image class, which has none) renders, as before.
+  // it takes the claim and before it renders. True means the refresh is already
+  // satisfied: that tier holds a fresher entry, and this tier now reflects it —
+  // either because the entry was mirrored up, or because this variant keeps no
+  // entry here to mirror into. A fresher entry that this tier cannot take is
+  // NOT satisfaction and answers false, or the claim would be held while the
+  // stale entry it was taken for went on being served. Absent (no tier below is
+  // bound, or this is the image class, which has none) renders, as before.
   //
   // It exists because a background refresh reaches the origin through
   // originBlocking, which carries x-prerender-revalidate straight to the
   // Function URL: that call is never absorbed by the tier below, so without
   // this read every colo that admits renders, whatever another colo wrote to
   // the tier below half a second earlier.
-  refreshedFromBelow?: () => Promise<boolean>;
+  satisfiedFromBelow?: () => Promise<boolean>;
 }
 
 export interface CacheTarget {
@@ -510,7 +513,7 @@ export function sentinelUrl(key: string): string {
   return `https://refresh.ocel/${key.split("/").map(encodeURIComponent).join("/")}`;
 }
 
-function sentinelRecord(seconds = refreshSentinelTtlSeconds): Response {
+function sentinelRecord(seconds: number): Response {
   return new Response(null, {
     headers: { "cache-control": `max-age=${seconds}` },
   });
@@ -522,7 +525,7 @@ function sentinelRecord(seconds = refreshSentinelTtlSeconds): Response {
 async function claimSentinel(cache: Cache, sentinel: Request): Promise<boolean> {
   try {
     if (await cache.match(sentinel)) return false;
-    await cache.put(sentinel, sentinelRecord());
+    await cache.put(sentinel, sentinelRecord(refreshSentinelTtlSeconds));
   } catch {
     // Fail open, as above.
   }
@@ -592,13 +595,12 @@ async function settleSentinel(
   }
 }
 
-// True when the tier below answered the refresh on its own. Fails open on any
-// error — an unreadable tier below costs a duplicate render, while reading it
-// as fresh would cost the refresh entirely and leave the entry stale until the
-// claim lapsed. See CacheDeps.refreshedFromBelow.
-async function refreshedFromBelow(deps: CacheDeps): Promise<boolean> {
+// Fails open on any error — an unreadable tier below costs a duplicate render,
+// while reading it as satisfied would cost the refresh entirely and leave the
+// entry stale until the claim lapsed. See CacheDeps.satisfiedFromBelow.
+async function askBelow(deps: CacheDeps): Promise<boolean> {
   try {
-    return (await deps.refreshedFromBelow?.()) === true;
+    return (await deps.satisfiedFromBelow?.()) === true;
   } catch {
     return false;
   }
@@ -636,7 +638,7 @@ export function admitRefresh(
     // nothing would suppress the retry it needs.
     let outcome: RefreshOutcome = "failed";
     try {
-      outcome = (await refreshedFromBelow(deps)) ? "landed" : await run();
+      outcome = (await askBelow(deps)) ? "landed" : await run();
     } finally {
       await settleSentinel(deps.cache, sentinel, outcome);
     }
