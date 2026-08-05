@@ -16,7 +16,12 @@ export interface LogContext {
   enqueuedAt?: number;
 }
 
-export type FailureReason = Rejection | "timeout" | "fetch-failed" | "status-not-ok";
+export type FailureReason =
+  | Rejection
+  | "unsignable-host"
+  | "timeout"
+  | "fetch-failed"
+  | "status-not-ok";
 
 export type Outcome =
   | { event: "RevalidateOk" }
