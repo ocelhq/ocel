@@ -23,8 +23,8 @@ import {
   type TtlObservation,
 } from "../src/analysis.ts";
 import { parseArgs, type Options } from "../src/options.ts";
+import { sleep } from "../src/race.ts";
 
-const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 async function getJson<T>(url: string, init?: RequestInit & { dispatcher?: Dispatcher }) {
   const response = await fetch(url, init);

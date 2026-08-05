@@ -1,6 +1,8 @@
 import { SELF } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 
+import { drawDelayMs } from "../src/race";
+
 // These assert the HTTP contract the race driver parses, and nothing about
 // Cloudflare's cache. Miniflare's cache is a local in-process store with one
 // isolate and no colo, and it stores any hostname happily — so a hit on an
@@ -19,6 +21,23 @@ interface RaceResponse {
   seq: string | null;
   delayMs: number;
 }
+
+describe("drawDelayMs", () => {
+  it("draws over [0, J) and collapses to no delay at all when J is zero", () => {
+    expect(drawDelayMs(1_000, () => 0)).toBe(0);
+    expect(drawDelayMs(1_000, () => 0.5)).toBe(500);
+    // Open at the top: a draw is strictly under J, so no racer's wait can reach
+    // the next window.
+    expect(drawDelayMs(1_000, () => 0.999)).toBeLessThan(1_000);
+    // Not `random() * 0`: the un-jittered baseline must not consume a draw at
+    // all, or "no jitter was asked for and none was drawn" stops being checkable.
+    expect(
+      drawDelayMs(0, () => {
+        throw new Error("drew for an un-jittered racer");
+      }),
+    ).toBe(0);
+  });
+});
 
 describe("/race", () => {
   it("requires a key", async () => {
@@ -77,13 +96,29 @@ describe("/race", () => {
     expect(explicit.delayMs).toBe(0);
   });
 
-  it("draws and reports a delay inside the window it was given, and spends it", async () => {
-    const started = Date.now();
+  it("draws and reports a delay inside the window it was given", async () => {
     const body = await (await post("/race?key=jittered&seq=0&jitter=40")).json<RaceResponse>();
 
     expect(body.delayMs).toBeGreaterThan(0);
     expect(body.delayMs).toBeLessThan(40);
-    expect(Date.now() - started).toBeGreaterThanOrEqual(Math.floor(body.delayMs));
+  });
+
+  it("spends the delay it reports, rather than only reporting it", async () => {
+    // Over five sequential draws, not one. Against the mutation that echoes
+    // delayMs and skips the sleep, a single draw under a millisecond floors the
+    // elapsed comparison to zero and passes — the failure this is here to catch
+    // slipping through one trial in forty. Five draws from [0, 100) sum to
+    // ~250ms against a few ms of request overhead.
+    let reported = 0;
+    const started = Date.now();
+    for (let i = 0; i < 5; i += 1) {
+      const body = await (
+        await post(`/race?key=spent-${i}&seq=0&jitter=100`)
+      ).json<RaceResponse>();
+      reported += body.delayMs;
+    }
+
+    expect(Date.now() - started).toBeGreaterThanOrEqual(Math.floor(reported));
   });
 
   it("marks every racing response no-store, so the zone cannot serve one body twice", async () => {

@@ -434,7 +434,14 @@ export function summarizeBurst(
     // Send dispersion still biases escapes downward when it approaches the
     // window, jitter or no jitter: a racer that arrives late enough sees the
     // claim for reasons that have nothing to do with its draw.
-    lowerBound: windowMs === null || (dispersion !== null && dispersion.median > windowMs),
+    //
+    // Read off the P90, not the median. Dispersion's tail is where this breaks:
+    // at J = 2000ms the median was 1.51ms and the p90 was 115ms — fourteen times
+    // W in at least a tenth of the trials — and a median-only guard printed
+    // those rows clean. A guard whose statistic cannot see its own failure is
+    // the defect this instrument keeps producing; the median stays reported
+    // beside it as the secondary signal.
+    lowerBound: windowMs === null || (dispersion !== null && dispersion.p90 > windowMs),
   };
 }
 
@@ -452,7 +459,11 @@ export type JitterVerdict =
 // Read off the drawn delays rather than off the request that asked for them,
 // because the parameter being accepted is not evidence that it was used.
 export function jitterVerdict(jitterMs: number, delayMs: Distribution | null): JitterVerdict {
-  if (jitterMs === 0) return delayMs === null || delayMs.max === 0 ? "none-requested" : "degenerate";
+  // An un-jittered run has nothing left to check here: outcomeOf already aborts
+  // any racer reporting a delay outside [0, jitterMs], so a worker that jittered
+  // when none was asked for has voided the run long before this reads a
+  // distribution it could only ever find at zero.
+  if (jitterMs === 0) return "none-requested";
   if (delayMs === null) return "degenerate";
   const midpoint = jitterMs / 2;
   return delayMs.max >= midpoint && delayMs.min <= midpoint ? "spread" : "degenerate";

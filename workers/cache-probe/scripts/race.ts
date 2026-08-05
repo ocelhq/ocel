@@ -6,6 +6,12 @@
 //   node scripts/race.ts --base https://probe.example.com --phase burst --trials 100 \
 //     --sizes 2,8,32,128 --window <the gap phase's W in ms>
 //
+// The jitter sweep is the burst phase with --jitters, and --isolates is what the
+// λ-free bound J >= I_colo·W is read against:
+//
+//   node scripts/race.ts --base https://probe.example.com --phase burst --trials 100 \
+//     --sizes 128 --window 8 --isolates 99 --jitters 0,100,250,500,1000,2000
+//
 // See README.md for the phases, for why the base URL must not be workers.dev,
 // and for the three rules the gates below enforce. They are stated there once
 // rather than restated here; each gate carries its own reason at the line that
@@ -20,6 +26,7 @@ import { fileURLToPath } from "node:url";
 import { Client } from "undici";
 
 import { Abort } from "../src/abort.ts";
+import { sleep } from "../src/race.ts";
 import { parseRaceOptions, type RaceOptions } from "../src/race-options.ts";
 import {
   chooseWindow,
@@ -39,7 +46,6 @@ import {
   type WindowResult,
 } from "../src/race-analysis.ts";
 
-const sleep = (ms: number) => new Promise((done) => setTimeout(done, ms));
 
 // ---------------------------------------------------------------------------
 // Transport. One Client is one socket. A bare Client neither retries nor
@@ -409,6 +415,11 @@ function assertJitterDrawn(summary: BurstSummary) {
   );
 }
 
+// How many trials a burst cell runs against one pool of connections before it
+// re-opens them. Four independent draws over a 100-trial cell, at the cost of
+// three extra pool warm-ups per cell.
+const poolRedrawTrials = 25;
+
 async function burstSweep(options: RaceOptions, origin: string) {
   const summaries: BurstSummary[] = [];
   const trialsByCell: Record<string, BurstTrial[]> = {};
@@ -423,14 +434,27 @@ async function burstSweep(options: RaceOptions, origin: string) {
       // of one isolate combination rather than 100 draws over the colo — and
       // pairs differ enormously, some seeing each other's claim at once and some
       // not until W. The gap sweep rotates its pairs for the same reason.
+      //
+      // A window over one pool is still ONE DRAW of isolates, however it
+      // rotates, so the pool is re-opened periodically too. That is the term
+      // that moves: two runs of the same nominal experiment differed by 13% at
+      // J = 0 (54.79 against 61.98), which is the size of a pool-level draw.
       const poolSize = size + options.sockets;
       let racers = await openRacers(origin, poolSize);
       const trials: BurstTrial[] = [];
       let attemptedHere = 0;
 
       for (let trial = 0; trial < options.trials; trial += 1) {
+        if (trial > 0 && trial % poolRedrawTrials === 0) {
+          await closeRacers(racers).catch(() => {});
+          racers = await openRacers(origin, poolSize);
+        }
         const key = `race-${randomUUID()}`;
-        const offset = (trial * size) % poolSize;
+        // Step by one, not by `size`: gcd(size, poolSize) is 16 at N = 128 and
+        // --sockets 16, so a stride of `size` visits only nine of the 144
+        // offsets and any two windows overlap in at least 112 sockets. A stride
+        // of one is coprime with every pool and visits them all.
+        const offset = trial % poolSize;
         const burst = Array.from(
           { length: size },
           (_, i) => racers[(offset + i) % poolSize]!,
@@ -476,6 +500,7 @@ async function burstSweep(options: RaceOptions, origin: string) {
           `  late median ${summary.lateEscapes?.median ?? "n/a"}` +
           `  isolates median ${summary.distinctIsolates?.median ?? "n/a"}` +
           `  dispersion median ${summary.dispersionMs?.median.toFixed(2) ?? "n/a"}ms` +
+          ` p90 ${summary.dispersionMs?.p90.toFixed(2) ?? "n/a"}ms` +
           (summary.trials === summary.attempted ? "" : `  (${summary.attempted} attempted)`) +
           (summary.lowerBound ? "  [LOWER BOUND]" : ""),
       );
