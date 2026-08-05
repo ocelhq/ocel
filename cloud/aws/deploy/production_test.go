@@ -755,7 +755,7 @@ func TestFinalizeProductionDeploy_ReconcileThenStageThenPromoteInOrder(t *testin
 		{App: "api", Identity: buildOnly("b2"), Record: edge.DeploymentRecord{App: "api", Identity: "b2"}},
 	}
 
-	state, err := finalizeDeploy(ctx, fake, specs, nil, "promo1", "", "", 100, results)
+	state, err := finalizeDeploy(ctx, Config{}, fake, specs, nil, "promo1", "", "", 100, results)
 	if err != nil {
 		t.Fatalf("finalizeDeploy: %v", err)
 	}
@@ -793,7 +793,7 @@ func TestFinalizeProductionDeploy_StampsTheTagOntoThePromotion(t *testing.T) {
 		{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 	}
 
-	if _, err := finalizeDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", "", 100, results); err != nil {
+	if _, err := finalizeDeploy(ctx, Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "v1.2.3", "", 100, results); err != nil {
 		t.Fatalf("finalizeDeploy: %v", err)
 	}
 
@@ -809,7 +809,7 @@ func TestFinalizeDeploy_PromotesTheGivenPointer(t *testing.T) {
 	}
 
 	prod := &recordingRootStack{}
-	if _, err := finalizeDeploy(ctx, prod, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+	if _, err := finalizeDeploy(ctx, Config{}, prod, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
 		t.Fatalf("finalizeDeploy(production): %v", err)
 	}
 	if len(prod.promotePointers) != 1 || prod.promotePointers[0] != "" {
@@ -817,7 +817,7 @@ func TestFinalizeDeploy_PromotesTheGivenPointer(t *testing.T) {
 	}
 
 	preview := &recordingRootStack{}
-	if _, err := finalizeDeploy(ctx, preview, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "pr-42", 100, results); err != nil {
+	if _, err := finalizeDeploy(ctx, Config{}, preview, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "pr-42", 100, results); err != nil {
 		t.Fatalf("finalizeDeploy(preview): %v", err)
 	}
 	if len(preview.promotePointers) != 1 || preview.promotePointers[0] != "pr-42" {
@@ -934,7 +934,7 @@ func TestFinalizeProductionDeploy_StagesBeforeAnyPromote(t *testing.T) {
 		{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}},
 	}
 
-	if _, err := finalizeDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+	if _, err := finalizeDeploy(ctx, Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
 		t.Fatalf("finalizeDeploy: %v", err)
 	}
 
@@ -957,7 +957,7 @@ func TestFinalizeProductionDeploy_AppFailureAbortsPromote(t *testing.T) {
 		{App: "api", Err: errors.New("app-deploy stack failed")},
 	}
 
-	_, err := finalizeDeploy(ctx, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results)
+	_, err := finalizeDeploy(ctx, Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results)
 	if err == nil {
 		t.Fatal("expected an error when one app's deploy failed")
 	}
@@ -976,13 +976,13 @@ func TestFinalizeProductionDeploy_SecondDeployProducesNewPromotionRetainingPrior
 	specs := []edge.RootStackSpec{{Version: "v1"}}
 	results := []appDeployResult{{App: "web", Identity: buildOnly("b1"), Record: edge.DeploymentRecord{App: "web", Identity: "b1"}}}
 
-	state, err := finalizeDeploy(ctx, fake, specs, nil, "promo1", "", "", 100, results)
+	state, err := finalizeDeploy(ctx, Config{}, fake, specs, nil, "promo1", "", "", 100, results)
 	if err != nil {
 		t.Fatalf("first finalizeDeploy: %v", err)
 	}
 
 	results2 := []appDeployResult{{App: "web", Identity: buildOnly("b2"), Record: edge.DeploymentRecord{App: "web", Identity: "b2"}}}
-	if _, err := finalizeDeploy(ctx, fake, specs, state, "promo2", "", "", 200, results2); err != nil {
+	if _, err := finalizeDeploy(ctx, Config{}, fake, specs, state, "promo2", "", "", 200, results2); err != nil {
 		t.Fatalf("second finalizeDeploy: %v", err)
 	}
 
@@ -1012,11 +1012,11 @@ func TestFinalizeDeploy_RotationOfOneBuildIsANewDeploymentAndPromotion(t *testin
 		}}
 	}
 
-	state, err := finalizeDeploy(ctx, fake, specs, nil, "promo1", "", "", 100, result(before))
+	state, err := finalizeDeploy(ctx, Config{}, fake, specs, nil, "promo1", "", "", 100, result(before))
 	if err != nil {
 		t.Fatalf("first finalizeDeploy: %v", err)
 	}
-	if _, err := finalizeDeploy(ctx, fake, specs, state, "promo2", "", "", 200, result(after)); err != nil {
+	if _, err := finalizeDeploy(ctx, Config{}, fake, specs, state, "promo2", "", "", 200, result(after)); err != nil {
 		t.Fatalf("rotation finalizeDeploy: %v", err)
 	}
 
@@ -1058,7 +1058,7 @@ func TestFinalizeDeploy_TwoRotationsOfOneBuildAreThreeDistinctDeployments(t *tes
 		if err != nil {
 			t.Fatalf("buildDeploymentRecord: %v", err)
 		}
-		next, err := finalizeDeploy(ctx, fake, specs, state, fmt.Sprintf("promo%d", i+1), "", "", int64(100*(i+1)), []appDeployResult{{App: "web", Identity: id, Record: record}})
+		next, err := finalizeDeploy(ctx, originStore(cfg), fake, specs, state, fmt.Sprintf("promo%d", i+1), "", "", int64(100*(i+1)), []appDeployResult{{App: "web", Identity: id, Record: record}})
 		if err != nil {
 			t.Fatalf("finalizeDeploy %d: %v", i+1, err)
 		}
@@ -1300,7 +1300,7 @@ func TestFinalizeDeploy_PromotionCarriesRenderedIdentities(t *testing.T) {
 		{App: "web", Identity: id, Record: edge.DeploymentRecord{App: "web", Identity: id.String()}},
 	}
 
-	if _, err := finalizeDeploy(context.Background(), fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
+	if _, err := finalizeDeploy(context.Background(), Config{}, fake, []edge.RootStackSpec{{Version: "v1"}}, nil, "promo1", "", "", 100, results); err != nil {
 		t.Fatalf("finalizeDeploy: %v", err)
 	}
 	if len(fake.promotions) != 1 {
