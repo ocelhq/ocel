@@ -830,9 +830,23 @@ async function dispatchPrerender(
           answered.body?.cancel();
           return false;
         }
-        if (below.kind === "complete" && keyResult.cacheable) {
-          await storeInColo(cacheTarget, cache, below.response);
-        } else answered.body?.cancel();
+        // Fresh below — but that only settles the render when this tier ends up
+        // reflecting it. A variant with no colo entry (the PPR admission site)
+        // has nothing to refill: the render's whole effect would have been
+        // regenerating what R2 already holds, so it is genuinely redundant.
+        // A shell answering a colo-cached complete variant is neither: it
+        // cannot refill that variant, so suppressing here would hold the route's
+        // colo-wide claim while leaving the colo serving the entry it wanted
+        // refreshed — and re-suppressing every TTL after.
+        if (!keyResult.cacheable) {
+          answered.body?.cancel();
+          return true;
+        }
+        if (below.kind !== "complete") {
+          answered.body?.cancel();
+          return false;
+        }
+        await storeInColo(cacheTarget, cache, below.response);
         return true;
       },
     };

@@ -156,6 +156,20 @@ export async function intercept(
       revalidate !== undefined
         ? Math.max(1, revalidate - Math.floor(ageSeconds))
         : STATIC_WINDOW;
+    const meta = { lastModified: entry.lastModified, revalidate, expiration };
+
+    // `stale` says one thing on every branch below: this entry's window has
+    // lapsed, so whoever serves it must refresh it behind the serve. It is NOT
+    // the serving gate — the prefetch branches serve regardless, which is what
+    // the comment below is about — and conflating the two is what let a stale
+    // prefetch report itself fresh, so nothing ever regenerated the entry and
+    // an admitted refresh could be "answered" by the very entry it was refreshing.
+    // Prefetches skip the tag check, so theirs is the time-based half of the
+    // same verdict; past expiration they still serve, with no window left to wait in.
+    const ungatedStaleness = (): { stale: boolean; staleForMs?: number } =>
+      evaluate(meta, now, false) === "fresh"
+        ? { stale: false }
+        : { stale: true, staleForMs: Math.max(0, staleWindowMs(meta, now)) };
 
     // Prefetches are answered before the tag check, and independently of it. A
     // prefetch is speculative: its result is revealed only on a later
@@ -181,7 +195,8 @@ export async function intercept(
       const response = reconstructSegment(value, segmentPath);
       if (!response) return null;
       response.headers.set("cache-control", `s-maxage=${window}`);
-      return { kind: "complete", response, stale: false };
+      response.headers.set("x-ocel-entry-modified", String(entry.lastModified));
+      return { kind: "complete", response, ...ungatedStaleness() };
     }
 
     // A full-route prefetch (Next's router prefetch, distinct from the segment
@@ -204,7 +219,8 @@ export async function intercept(
       const response = reconstruct(request, value);
       if (!response) return null;
       response.headers.set("cache-control", `s-maxage=${window}`);
-      return { kind: "complete", response, stale: false };
+      response.headers.set("x-ocel-entry-modified", String(entry.lastModified));
+      return { kind: "complete", response, ...ungatedStaleness() };
     }
 
     // Runtime prefetch (2/3) intentionally requests a dynamic response; never
@@ -230,7 +246,6 @@ export async function intercept(
     // The single stale-while-revalidate verdict: a fresh entry serves as-is; a
     // stale one still serves stale-while-revalidate; past expiration is too
     // old to serve even stale, so the request falls open to the Lambda.
-    const meta = { lastModified: entry.lastModified, revalidate, expiration };
     const verdict = evaluate(meta, now, tagStale);
     if (verdict === "expired") return null;
     const isStale = verdict === "stale";

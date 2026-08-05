@@ -550,10 +550,13 @@ describe("dispatchResult", () => {
     return { deps, lambdaCalls: () => lambda };
   }
 
-  const dispatchBlog = (deps: RouteDeps) =>
+  const dispatchBlog = (
+    deps: RouteDeps,
+    request = new Request("https://app.example/blog"),
+  ) =>
     dispatchResult(
       { resolvedPathname: "/blog", invocationTarget: { pathname: "/blog" } },
-      new Request("https://app.example/blog"),
+      request,
       deps,
     );
 
@@ -728,12 +731,20 @@ describe("dispatchResult", () => {
     entries: Record<string, unknown>,
     // Another colo's refresh landing in R2 while this colo's admission is still
     // waiting out its jitter, which is the window the whole read exists for.
-    landsDuringWait?: string,
+    // It is the whole entry value, not just its bytes, because a landing can
+    // change the entry's shape — a redeploy that turns the route PPR lands a
+    // postponed entry the colo's own variant cannot be refilled from.
+    landsDuringWait?: Record<string, unknown>,
     lambdaStatus = 200,
   ) {
     let lambda = 0;
     const pending: Promise<unknown>[] = [];
-    const puts: { url: string; body: string; cacheControl: string | null }[] = [];
+    const puts: {
+      url: string;
+      body: string;
+      cacheControl: string | null;
+      entryModified: string | null;
+    }[] = [];
     const deps = baseDeps({
       manifest: {
         buildId: "t",
@@ -764,6 +775,7 @@ describe("dispatchResult", () => {
             puts.push({
               url: new Request(request).url,
               cacheControl: response.headers.get("cache-control"),
+              entryModified: response.headers.get("x-ocel-entry-modified"),
               body: await response.text(),
             });
           },
@@ -776,12 +788,7 @@ describe("dispatchResult", () => {
           if (landsDuringWait === undefined) return;
           entries[entryKey("blog")] = {
             lastModified: 1_000 + 61_000,
-            value: {
-              kind: "APP_PAGE",
-              html: landsDuringWait,
-              status: 200,
-              headers: {},
-            },
+            value: landsDuringWait,
           };
         },
       }),
@@ -795,22 +802,39 @@ describe("dispatchResult", () => {
     return { deps, pending, puts, lambdaCalls: () => lambda };
   }
 
+  const pageValue = (html: string, extra: Record<string, unknown> = {}) => ({
+    kind: "APP_PAGE",
+    html,
+    status: 200,
+    headers: {},
+    ...extra,
+  });
+
   const staleBelow = () => ({
+    [entryKey("blog")]: { lastModified: 1_000, value: pageValue("<html>edge</html>") },
+  });
+
+  // A route whose entry carries a prerendered shell, which is what a full-route
+  // prefetch is answered from.
+  const stalePrefetchableBelow = () => ({
     [entryKey("blog")]: {
       lastModified: 1_000,
-      value: {
-        kind: "APP_PAGE",
-        html: "<html>edge</html>",
-        status: 200,
-        headers: {},
-      },
+      value: pageValue("[shell]", {
+        postponed: "POSTPONED",
+        rscData: btoa("[shell-rsc]"),
+      }),
     },
   });
+
+  const prefetchRequest = () =>
+    new Request("https://app.example/blog", {
+      headers: { RSC: "1", "next-router-prefetch": "1" },
+    });
 
   it("does not render when R2 already holds a fresher entry by the time the refresh is admitted", async () => {
     const { deps, pending, lambdaCalls } = refreshOverStore(
       staleBelow(),
-      "<html>fresher</html>",
+      pageValue("<html>fresher</html>"),
     );
 
     await dispatchBlog(deps);
@@ -822,7 +846,7 @@ describe("dispatchResult", () => {
   it("refills the colo entry from R2 rather than from a render it skipped", async () => {
     const { deps, pending, puts } = refreshOverStore(
       staleBelow(),
-      "<html>fresher</html>",
+      pageValue("<html>fresher</html>"),
     );
 
     await dispatchBlog(deps);
@@ -857,6 +881,147 @@ describe("dispatchResult", () => {
     await Promise.all(pending);
 
     expect(lambdaCalls()).toBe(1);
+  });
+
+  // A prefetch is answered without a staleness gate — it serves whatever the
+  // entry holds — and that ungated serve used to be reported as `stale: false`,
+  // which is a different claim entirely. Next prefetches links aggressively, and
+  // both prefetch variants are colo-cacheable, so reading that flag as "the
+  // entry is fresh" strands the route: the refresh is never admitted, and where
+  // it is, the tier-below read answers it with the same ancient entry.
+  it("regenerates the stale entry a prefetch was served from", async () => {
+    const { deps, pending, lambdaCalls } = refreshOverStore(stalePrefetchableBelow());
+
+    await dispatchBlog(deps, prefetchRequest());
+    await Promise.all(pending);
+
+    expect(lambdaCalls()).toBe(1);
+  });
+
+  it("still skips the render when a prefetch's entry was refreshed below during the wait", async () => {
+    const { deps, pending, lambdaCalls } = refreshOverStore(
+      stalePrefetchableBelow(),
+      pageValue("[fresher shell]", {
+        postponed: "POSTPONED",
+        rscData: btoa("[fresher-shell-rsc]"),
+      }),
+    );
+
+    await dispatchBlog(deps, prefetchRequest());
+    await Promise.all(pending);
+
+    expect(lambdaCalls()).toBe(0);
+  });
+
+  // The colo dates an entry by the x-ocel-entry-modified the tier below stamps
+  // on it; unstamped, it is dated "now" instead, and a prefetch variant mirrored
+  // into the colo would be served for a fresh full window past the age it
+  // actually has — stale bytes, restamped as fresh, once per mirror.
+  it("dates a mirrored prefetch by the entry's own modified time, not by the mirror", async () => {
+    const { deps, pending, puts } = refreshOverStore(
+      stalePrefetchableBelow(),
+      pageValue("[fresher shell]", {
+        postponed: "POSTPONED",
+        rscData: btoa("[fresher-shell-rsc]"),
+      }),
+    );
+
+    await dispatchBlog(deps, prefetchRequest());
+    await Promise.all(pending);
+
+    // Two puts of the prefetch variant: the serve memoizing the stale entry it
+    // answered from, and the refresh mirroring the fresher one. Each carries the
+    // time of the entry it came from, and neither the wall clock.
+    const mirrored = puts.filter((put) => put.url.endsWith(".prefetch.rsc"));
+    expect(mirrored.map((put) => put.entryModified).sort()).toEqual([
+      String(1_000),
+      String(1_000 + 61_000),
+    ]);
+  });
+
+  // The colo holds a complete variant; the entry below turns PPR under it (a
+  // redeploy). The below read is fresh, but a shell cannot refill this colo's
+  // variant — so claiming the refresh landed would hold the colo's route-wide
+  // claim while leaving it serving the stale entry it already had.
+  it("renders when the fresher entry below cannot refill the colo's variant", async () => {
+    const { deps, pending, lambdaCalls } = refreshOverStore(
+      staleBelow(),
+      pageValue("[shell]", { postponed: "POSTPONED" }),
+    );
+
+    await dispatchBlog(deps);
+    await Promise.all(pending);
+
+    expect(lambdaCalls()).toBe(1);
+  });
+
+  // The other half of that rule. A PPR navigation is per-visitor and never
+  // colo-cached, so this colo holds no variant for the entry below to refill:
+  // when that entry is fresh by the time the admission wakes, the render's only
+  // effect would have been regenerating what R2 already holds, and skipping it
+  // is exactly what the tier-below read exists for.
+  it("skips the render when a variant with no colo entry is fresh below", async () => {
+    const pprEntry = (html: string) => ({
+      lastModified: html === "[shell]" ? 1_000 : 1_000 + 61_000,
+      value: pageValue(html, {
+        postponed: "POSTPONED",
+        rscData: btoa(`${html}-rsc`),
+      }),
+    });
+    const entries: Record<string, unknown> = { [entryKey("ppr")]: pprEntry("[shell]") };
+    // Only the background revalidation carries x-prerender-revalidate; the PPR
+    // resume the serve itself performs is a different call to the same origin.
+    let revalidations = 0;
+    const pending: Promise<unknown>[] = [];
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/ppr": {
+            kind: "prerender",
+            id: "/ppr",
+            config: { renderingMode: "PARTIALLY_STATIC" },
+            fallback: { initialRevalidate: 60 },
+            pprChain: { headers: {} },
+          },
+        },
+      },
+      functionUrls: { "/ppr": "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        if (req.headers.has("x-prerender-revalidate")) revalidations++;
+        return new Response("[dynamic]", { status: 200 });
+      }) as unknown as typeof fetch,
+      cache: coloDeps({
+        cache: {
+          match: async () => undefined,
+          put: async () => {},
+        } as unknown as Cache,
+        waitUntil: (p: Promise<unknown>) => {
+          pending.push(p);
+        },
+        admissionDelay: async () => {
+          entries[entryKey("ppr")] = pprEntry("[fresher shell]");
+        },
+      }),
+      interception: {
+        config: interceptionConfig,
+        now: () => 1_000 + 61_000,
+        store: storeOf(entries),
+      },
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/ppr", invocationTarget: { pathname: "/ppr" } },
+      new Request("https://app.example/ppr", { headers: { RSC: "1" } }),
+      deps,
+    );
+    await res.text();
+    await Promise.all(pending);
+
+    expect(revalidations).toBe(0);
   });
 
   // A Cache whose only content is the sentinel for `refreshKey`: this colo has
