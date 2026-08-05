@@ -156,6 +156,105 @@ export function tagProbeTag(stamp) {
 }
 
 /**
+ * The golden comparison's probe route and the marker its body carries. Mirrors
+ * smoke-app/app/golden/page.tsx — assert-suppression-golden.mjs reads them from
+ * here so the page and its assertion cannot drift apart.
+ */
+export const GOLDEN_ROUTE = "/golden";
+export const GOLDEN_MARKER = "golden-body:v1";
+
+/**
+ * The header the edge stamps on a user-path forward to suppress Next's own
+ * self-revalidation (bd ocelhq-wvag.26, workers/nextjs/src/index.ts).
+ */
+export const PREFETCH_PURPOSE_HEADER = "purpose";
+export const PREFETCH_PURPOSE_VALUE = "prefetch";
+
+/**
+ * Headers a golden comparison must ignore, because they differ between any two
+ * responses whatever the request carried:
+ *
+ * - `date`/`age`: the responses are seconds apart.
+ * - `x-nextjs-cache`: the freshness of the entry each render was answered from,
+ *   which is what the suppression legitimately changes.
+ * - `x-ocel-cache`: the tier that answered. Compared separately by the
+ *   assertion, which requires both legs to report the same one — a difference
+ *   there means the legs were never comparable, not that the render differed.
+ * - the Cloudflare and connection-level set: stamped per response by the edge
+ *   and the transport, never by the render.
+ *
+ * Everything else — status, body bytes, content-type, etag, x-matched-path,
+ * x-nextjs-postponed, Next's own vary — is compared, which is the point: the
+ * caveat this gate exists for is that a future Next could make `purpose`
+ * change what is rendered.
+ */
+export const GOLDEN_VOLATILE_HEADERS = new Set([
+  "date",
+  "age",
+  "x-nextjs-cache",
+  "x-ocel-cache",
+  "cf-ray",
+  "cf-cache-status",
+  "server-timing",
+  "report-to",
+  "nel",
+  "alt-svc",
+  "connection",
+  "keep-alive",
+  "transfer-encoding",
+  "content-encoding",
+  "content-length",
+]);
+
+function headerMap(headers) {
+  const entries =
+    typeof headers?.entries === "function" ? [...headers.entries()] : Object.entries(headers ?? {});
+  const map = new Map();
+  for (const [name, value] of entries) {
+    const lower = String(name).toLowerCase();
+    if (GOLDEN_VOLATILE_HEADERS.has(lower)) continue;
+    map.set(lower, String(value));
+  }
+  return map;
+}
+
+/**
+ * goldenDifferences compares two fetches of the same route that differ only in
+ * whether the origin leg carried `purpose: prefetch`, and returns one line per
+ * difference — empty when the header had no observable side effect.
+ *
+ * A leg is `{ status, headers, body }`. Bodies are compared as exact strings:
+ * the probe page renders no clock and no request data, so any difference at all
+ * is the header's.
+ */
+export function goldenDifferences(withHeader, without) {
+  const differences = [];
+  if (withHeader?.status !== without?.status) {
+    differences.push(`status: with=${withHeader?.status} without=${without?.status}`);
+  }
+  if (withHeader?.body !== without?.body) {
+    differences.push(
+      `body: ${byteDiff(String(withHeader?.body ?? ""), String(without?.body ?? ""))}`,
+    );
+  }
+  const a = headerMap(withHeader?.headers);
+  const b = headerMap(without?.headers);
+  for (const name of [...new Set([...a.keys(), ...b.keys()])].sort()) {
+    if (a.get(name) !== b.get(name)) {
+      differences.push(`header ${name}: with=${a.get(name) ?? "(absent)"} without=${b.get(name) ?? "(absent)"}`);
+    }
+  }
+  return differences;
+}
+
+/** Where two bodies first diverge, and by how much — enough to act on. */
+function byteDiff(a, b) {
+  if (a.length !== b.length) return `lengths ${a.length} vs ${b.length}`;
+  const at = [...a].findIndex((char, index) => char !== b[index]);
+  return `differs at offset ${at}: ${JSON.stringify(a.slice(at, at + 40))} vs ${JSON.stringify(b.slice(at, at + 40))}`;
+}
+
+/**
  * deployURL is the URL the harness reads from the deploy script's stdout, taken
  * from the CLI's deploy result. A successful deploy that featured no app URL is
  * a failure for our purposes: the harness has nothing to test.

@@ -4,11 +4,14 @@ import { describe, expect, it, vi } from "vitest";
 import {
   APP_NAME,
   DNS_LABEL,
+  GOLDEN_MARKER,
+  GOLDEN_ROUTE,
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
   MAX_SLUG_LEN,
   buildBaselineManifest,
   deployURL,
+  goldenDifferences,
   isrToken,
   lambdaLogGroups,
   markerLines,
@@ -143,6 +146,78 @@ describe("isrToken", () => {
     expect(page).toContain("isr-token:");
     expect(page).toContain(`export const revalidate = ${ISR_REVALIDATE_SECONDS};`);
     expect(ISR_ROUTE).toBe("/isr");
+  });
+});
+
+describe("goldenDifferences", () => {
+  const leg = (over = {}) => ({
+    status: 200,
+    headers: { "content-type": "text/html; charset=utf-8", etag: '"abc"' },
+    body: `<p id="golden-body">${GOLDEN_MARKER}</p>`,
+    ...over,
+  });
+
+  it("finds nothing when the header changed nothing", () => {
+    expect(goldenDifferences(leg(), leg())).toEqual([]);
+  });
+
+  it("ignores the headers that differ between any two responses", () => {
+    const withHeader = leg({
+      headers: { ...leg().headers, date: "Mon, 01 Jan 2035 00:00:00 GMT", "x-nextjs-cache": "STALE", "x-ocel-cache": "BYPASS" },
+    });
+    const without = leg({
+      headers: { ...leg().headers, date: "Mon, 01 Jan 2035 00:00:07 GMT", "x-nextjs-cache": "HIT", "x-ocel-cache": "MISS" },
+    });
+
+    expect(goldenDifferences(withHeader, without)).toEqual([]);
+  });
+
+  // The caveat this gate exists for: OpenNext's, now ours — a future Next could
+  // make `purpose` change what is rendered rather than only whether a
+  // revalidation is started. A shell where a full page was is what that looks
+  // like.
+  it("reports a body the header changed, and where", () => {
+    const [difference, ...rest] = goldenDifferences(leg({ body: "<p>shell</p>" }), leg());
+
+    expect(rest).toEqual([]);
+    expect(difference).toContain("body:");
+    expect(difference).toContain("lengths");
+  });
+
+  it("reports a body of the same length that diverges mid-string", () => {
+    expect(goldenDifferences(leg({ body: "abcdef" }), leg({ body: "abcXef" }))[0]).toContain(
+      "differs at offset 3",
+    );
+  });
+
+  it("reports a differing status", () => {
+    expect(goldenDifferences(leg({ status: 404 }), leg())[0]).toBe("status: with=404 without=200");
+  });
+
+  it("reports a header present on one leg only, and one whose value changed", () => {
+    const withHeader = leg({
+      headers: { ...leg().headers, etag: '"zzz"', "x-nextjs-postponed": "1" },
+    });
+
+    expect(goldenDifferences(withHeader, leg())).toEqual([
+      'header etag: with="zzz" without="abc"',
+      "header x-nextjs-postponed: with=1 without=(absent)",
+    ]);
+  });
+
+  it("reads a real Headers object, which is what the live assertion passes", () => {
+    const headers = new Headers({ "content-type": "text/html; charset=utf-8", etag: '"abc"' });
+
+    expect(goldenDifferences(leg({ headers }), leg())).toEqual([]);
+  });
+
+  it("matches the marker the smoke app's probe page emits", () => {
+    const page = readFileSync(new URL("./smoke-app/app/golden/page.tsx", import.meta.url), "utf8");
+    expect(page).toContain(GOLDEN_MARKER);
+    expect(GOLDEN_ROUTE).toBe("/golden");
+    // Nothing per-render, or the comparison can never be byte-exact.
+    expect(page).not.toContain("Date.now");
+    expect(page).not.toContain("Math.random");
   });
 });
 
