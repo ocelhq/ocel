@@ -91,6 +91,52 @@ export function edgeOriginFetch(
   }) as typeof fetch;
 }
 
+// sqsRegion extracts the AWS region from a queue URL of the form
+// `https://sqs.<region>.amazonaws.com/<account>/<name>.fifo`. Undefined for
+// anything else; the caller then builds no sender at all rather than signing
+// against a guessed region, which would 403 every send opaquely.
+export function sqsRegion(queueUrl: string): string | undefined {
+  let host: string;
+  try {
+    host = new URL(queueUrl).host;
+  } catch {
+    return undefined;
+  }
+  const labels = host.split(".");
+  return labels[0] === "sqs" && labels.length > 2 ? labels[1] : undefined;
+}
+
+// sqsFetch signs the edge's SendMessage calls, and is deliberately its own
+// client rather than a third entry in the awsServiceFetch map below, for two
+// reasons that are both about this call and not about SQS:
+//
+//   - Region. The queue is substrate-global and its URL names its own region
+//     (cloud/edge/resolver.go states that contract: "the region is derived in
+//     the worker from the URL's own host rather than bound separately"), while
+//     the map is built from OCEL_AWS_REGION — a var that is not part of this
+//     path's three-var gate, so folding them together would make an enqueue
+//     path silently absent, or silently wrongly-regioned, on a substrate that
+//     binds one and not the other.
+//   - Retries. The map retries once because a cache read is worth one retry.
+//     This send is not: the fallback to originBlocking IS the retry, and it is
+//     strictly better than a second attempt inside the same one-second budget.
+export function sqsFetch(
+  accessKeyId: string | undefined,
+  secretAccessKey: string | undefined,
+  region: string | undefined,
+): typeof fetch | undefined {
+  if (!accessKeyId || !secretAccessKey || !region) return undefined;
+  const client = new AwsClient({
+    accessKeyId,
+    secretAccessKey,
+    region,
+    service: "sqs",
+    retries: 0,
+  });
+  return ((input, init) =>
+    client.fetch(input as RequestInfo, init)) as typeof fetch;
+}
+
 // The AWS services the cache entrypoint addresses under the same edge
 // credentials. Named rather than inferred: aws4fetch's guesser only reads
 // `*.amazonaws.com` hosts, and a wrong guess is a 403 with nothing to point at.
