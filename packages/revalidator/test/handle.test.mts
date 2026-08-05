@@ -85,6 +85,42 @@ it("stops a group at its first failure and reports the rest of that group, unpro
   expect(requested).toEqual(["/a/1", "/b/1", "/b/2"]);
 });
 
+// A record with no group attribute belongs to no group but its own. Keying it
+// by its message id and keying it by a shared constant are both green against
+// every other test here, and they mean opposite things: the second lets one
+// failure suppress every later ungrouped record in the batch.
+it("keeps a record carrying no group from stopping the records after it", async () => {
+  const { deps, requested } = substrate({ "/a": new Response(null, { status: 500 }), "/b": revalidated });
+
+  const response = await handle(deps, {
+    Records: [
+      { messageId: "m-1", body: body({ routePath: "/a" }) },
+      { messageId: "m-2", body: body({ routePath: "/b" }) },
+    ],
+  });
+
+  expect(failures(response)).toEqual(["m-1"]);
+  expect(requested).toEqual(["/a", "/b"]);
+});
+
+// A record reported without ever being tried is still a record on its way to
+// the DLQ. CloudWatch cannot tell "tried and failed" from "never tried" unless
+// the skip says so itself.
+it("logs the record it skipped for a stopped group, as well as reporting it", async () => {
+  const { deps } = substrate({ "/a/1": new Response(null, { status: 500 }) });
+
+  await handle(deps, {
+    Records: [record("a-1", "group-a", { routePath: "/a/1" }), record("a-2", "group-a", { routePath: "/a/2" })],
+  });
+
+  expect(events(lines)).toEqual(["RevalidateFailed", "RevalidateSkipped"]);
+  expect(JSON.parse(lines[1]!)).toEqual({
+    event: "RevalidateSkipped",
+    reason: "group-stopped",
+    messageId: "a-2",
+  });
+});
+
 it("rejects an unknown message version as an item failure", async () => {
   const { deps, requested } = substrate();
 
@@ -132,6 +168,7 @@ it("fails the item, never the batch, when signing itself throws", async () => {
   });
 
   expect(failures(response)).toEqual(["m-1", "m-2"]);
+  expect(events(lines)).toEqual(["RevalidateFailed", "RevalidateFailed"]);
 });
 
 it("never emits the bypass token, on the success path or any failure path", async () => {
