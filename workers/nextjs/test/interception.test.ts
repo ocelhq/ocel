@@ -584,6 +584,38 @@ describe("intercept, PPR entries", () => {
     expect(await res.text()).toBe("TREE-SEG");
   });
 
+  // A prefetch serves whatever the entry holds — no staleness gate — but it must
+  // still SAY the entry lapsed, or nothing behind the serve ever regenerates it
+  // and an admitted refresh can be "answered" by the entry it was refreshing.
+  it.each([
+    ["fresh", 2_000, false],
+    ["stale", 1_000 + 61_000, true],
+  ])("reports a %s entry's staleness on a segment prefetch", async (_name, now, stale) => {
+    const outcome = await intercept(
+      req({
+        headers: {
+          RSC: "1",
+          "next-router-prefetch": "1",
+          "next-router-segment-prefetch": "/_tree",
+        },
+      }),
+      pprTarget(),
+      cfg,
+      storeDeps(
+        stored({
+          [entryKey("/blog")]: pprEntry({
+            segmentData: { "/_tree": btoa("TREE-SEG") },
+          }),
+        }),
+        { now: () => now },
+      ),
+    );
+
+    expect(outcome?.kind).toBe("complete");
+    expect(outcome?.stale).toBe(stale);
+    expect(await (outcome as { response: Response }).response.text()).toBe("TREE-SEG");
+  });
+
   it("strips the internal tag header from a segment response", async () => {
     const outcome = await intercept(
       req({ headers: { "next-router-segment-prefetch": "/_tree" } }),
