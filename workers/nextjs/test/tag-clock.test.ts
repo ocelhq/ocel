@@ -204,3 +204,43 @@ describe("the PoP copy fronting the replica", () => {
     expect(gets).toHaveLength(2);
   });
 });
+
+// The memo above dedupes across TIME. Nothing deduped across CONCURRENCY: the
+// memo is filled only once the read has returned, so every tagged request that
+// arrives on a cold memo used to issue its own store read. Same defect, and
+// same shape of fix, as registryReads in workers/isr-writer.
+describe("readers arriving together on a cold memo", () => {
+  function gatedStore(body: string | null, opts: { fail?: boolean } = {}) {
+    const gets: string[] = [];
+    let release!: () => void;
+    const gate = new Promise<void>((done) => {
+      release = done;
+    });
+    return {
+      gets,
+      release: () => release(),
+      async get(key: string) {
+        gets.push(key);
+        await gate;
+        if (opts.fail) throw new Error("store down");
+        return body === null ? null : { etag: `"${key}"`, text: async () => body };
+      },
+    };
+  }
+
+  it("share one store read rather than one apiece", async () => {
+    const store = gatedStore(JSON.stringify(snapshot({ records: { posts: { expired: 2_000 } } })));
+    const clock = createTagClock(cfg, { store });
+
+    const verdicts = Promise.all([
+      clock.expired(["posts"], 1_000, 3_000),
+      clock.expired(["posts"], 1_000, 3_000),
+      clock.expired(["posts"], 1_000, 3_000),
+    ]);
+    // Every caller is now parked inside the same read; releasing it answers all.
+    store.release();
+
+    expect(await verdicts).toEqual([true, true, true]);
+    expect(store.gets).toHaveLength(1);
+  });
+});
