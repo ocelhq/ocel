@@ -641,8 +641,9 @@ carries the same warning at the mirror itself.
 One comment in `workers/nextjs/src/cache.ts` — the one justifying
 `refreshSentinelTtlSeconds = 5` by citing "a sentinel becoming readable from sibling isolates
 at ~200 ms" — is now **wrong by a factor of twenty-five**. The constant it justifies is
-unaffected (5 s is still far above 8 ms), only the reasoning is. That edit belongs to
-`ocelhq-wvag.8`, not to the probe.
+unaffected (5 s is still far above 8 ms), only the reasoning is. That edit was made under
+`ocelhq-wvag.16` rather than `.8`, since `.16` is where the same file gained
+`admissionJitterMs`, which is derived from this number and carries the same clause.
 
 ### 7. What these numbers do not cover
 
@@ -709,9 +710,188 @@ Three smaller corrections to the first pass's arithmetic and framing: the gap sw
 **5 600** (4 800 + 800), not 7 200; and `leader-did-not-claim` totalled 16, not 15. The
 re-measurement adds 4 500 gap trials and 1 600 burst trials on top.
 
+## Follow-up: the admission-jitter sweep (`ocelhq-wvag.16`)
+
+Status: **MEASURED** on 2026-08-05 against a third zone-routed deploy of the same package, at
+`probe.ocel.site`, all runs reaching colo `JNB`. Headline: **a jittered admission delay takes
+`E(128)` from 54.8–62.0 to 1.41–1.46, and it does not plateau above 1.**
+
+The section above sizes L2 against a *sustained* rate and finds one Durable Object per route
+survives smooth traffic. That was the wrong constraint. A route goes stale at one wall-clock
+instant and every colo sees it simultaneously, so the fan-in per stale event is
+`F = C · E ≈ 300 × 55…62 ≈ 17 000–19 000` requests arriving within a few hundred milliseconds —
+against an object Cloudflare rates at "approximately 500-1,000 requests per second for simple
+operations". That is ~20 s of queueing: overload, not slow success.
+
+**And the synchronization is self-inflicted.** `claimSentinel` fires the instant a request
+observes staleness and `settleSentinel` re-arms exactly one `refreshSentinelTtlSeconds` later,
+colo-wide. Nothing in the design requires the admission attempts to be simultaneous. So the
+proposal `ocelhq-wvag.16` puts to this measurement is not to size for the burst but to stop
+producing it: wait a uniform draw from `[0, J)` before claiming.
+
+The derivation is deliberately **λ-free**, because §4 established `λ_colo` is an operator
+parameter and a constant derived from a guess at it would be a guess wearing a measurement's
+clothes. L0 (`refreshOnce`) already collapses each isolate to one in-flight admission and holds
+that entry across the wait, so the claimant pool inside one jitter window cannot exceed
+`I_colo`:
+
+```
+claims_per_colo ≈ 1 + I_colo · W / J        J ≥ I_colo · W
+```
+
+At `I_colo ≥ 99` and `W = 8 ms` that is `J ≥ 0.79 s`, rounded to **`J = 1000 ms`**, predicting
+1.79 claims per colo whatever λ is.
+
+### 9. Run metadata
+
+| | |
+| --- | --- |
+| date | 2026-08-05, ~11:0x–11:3x UTC+3 |
+| probe host | `probe.ocel.site` (zone route `probe.ocel.site/*`); no DNS record was created — the zone already carries a proxied `*` AAAA record |
+| deploy | the same `ocel-cache-probe` script and the same two committed zone routes as the passes above. Torn down afterwards, verified by listing the account's scripts and both zones' routes |
+| runner location | one host outside Cloudflare; every request in every run landed in colo `JNB` |
+| raw run files | `workers/cache-probe/runs/race3-*.json`, gitignored, on the machine that ran them |
+
+Route propagation behaved as before: 34/60, 15/60, 2/60, 1/60 non-200 in successive preflight
+bursts of 60, then four consecutive clean bursts before any run was taken. The runner's own
+preflight repeats that check with 200 requests and aborts on any non-200; both runs passed it.
+
+The key-scope control was re-taken on this deploy first: **`both-scopes-visible`**, on-zone
+40/40 and off-zone 34/34 cross-isolate hits over 16 and 13 reader isolates, `verified: true` on
+both writes. Everything below is conditional on that, as §0 is.
+
+Both runs are `node scripts/race.ts --base https://probe.ocel.site --phase burst --trials 100
+--sizes 128 --window 8 --isolates 99 --jitters 0,100,250,500,1000,2000`. Each racer's **worker**
+draws `U[0, J)` and sleeps it before claiming — not the driver, because a driver-imposed delay
+would also spread the *arrivals*, and arrival spread suppresses claims by itself, which is the
+term this instrument has to hold constant while the claim times move.
+
+### 10. `E(128)` against `J` — the sweep
+
+100 trials per cell, `N = 128` racers drawn as a rotating window over a pool of 144 sockets,
+escapes collapsed by isolate as in §3.
+
+| `J` (ms) | run | counted | escapes min / p10 / median / p90 / max | **mean** | late escapes mean / max | raw claims median | isolates median / max | dispersion median / p90 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 1 | 100 | 17 / 47 / **54** / 63 / 72 | **54.79** | 0 / 0 † | 81 | 77 / 84 | 1.21 / 2.50 ms |
+| 0 | 2 | 100 | 26 / 53 / **63** / 74 / 79 | **61.98** | 0 / 0 † | 83 | 86 / 89 | 1.39 / 2.39 ms |
+| 100 | 1 | 100 | 1 / 2 / **4** / 6 / 16 | **3.81** | 0.14 / 6 | 4 | 72 / 78 | 1.25 / 2.23 ms |
+| 100 | 2 | 100 | 1 / 2 / **3** / 6 / 12 | **3.79** | 0.05 / 1 | 3 | 78 / 81 | 1.22 / 2.34 ms |
+| 250 | 1 | 100 | 1 / 1 / **2** / 4 / 5 | **2.52** | 0.11 / 1 | 2 | 76 / 80 | 1.25 / 2.31 ms |
+| 250 | 2 | 100 | 1 / 1 / **2** / 4 / 7 | **2.31** | 0.05 / 1 | 2 | 83 / 90 | 1.22 / 2.25 ms |
+| 500 | 1 | 100 | 1 / 1 / **1** / 3 / 4 | **1.69** | 0.06 / 2 | 1 | 79 / 81 | 1.22 / 2.19 ms |
+| 500 | 2 | 100 | 1 / 1 / **2** / 4 / 7 | **2.05** | 0.12 / 4 | 2 | 88 / 90 | 1.24 / 2.16 ms |
+| **1000** | 1 | 100 | 1 / 1 / **1** / 2 / 4 | **1.41** | 0.07 / 1 | 1 | 75 / 80 | 1.33 / 2.13 ms |
+| **1000** | 2 | 100 | 1 / 1 / **1** / 2 / 3 | **1.46** | 0.05 / 1 | 1 | 82 / 84 | 1.24 / 2.27 ms |
+| 2000 | 1 | 100 | 1 / 1 / **1** / 2 / 3 | **1.21** | 0.03 / 1 | 1 | 73 / 79 | 1.52 / 116.6 ms ‡ |
+| 2000 | 2 | 100 | 1 / 1 / **1** / 2 / 3 | **1.26** | 0.07 / 1 | 1 | 81 / 86 | 1.51 / 114.5 ms ‡ |
+
+**Zero trials discarded, 600 attempted per run, 1 200 in total.** `single-isolate` was 0 and
+`mixed-colo` was 0 in every cell — see §12, neither is evidence. `zero-claims` was 0, which is a
+theorem, not a result.
+
+† **The `late escapes` zero at `J = 0` is structurally unreachable and is not a finding.** Every
+racer draws exactly 0, so no draw can exceed the first claim's draw by more than `W`; the
+detector cannot fire in that row. It is live in every `J > 0` row and does fire there, at means
+of 0.03–0.14 and maxima of 1–6. That non-zero is what demonstrates it is not inert.
+
+‡ At `J = 2000` the driver's own send dispersion breaks down: 144 sockets each held open for up
+to two seconds, and the p90 spread jumps from ~2.3 ms to ~115 ms. That is the instrument, not
+the cache, and it exceeds `W` in a minority of trials — so the `J = 2000` escape counts are a
+slight **under**-count. It does not touch the `J = 1000` row, whose dispersion max is 6.1 ms.
+
+### 11. What the sweep says
+
+**P1 held, and by a wide margin.** The gate was `E ≤ 3` at `N = 128` with `J = 1000 ms`, against
+the 50–63 measured without jitter. Measured: **mean 1.41 and 1.46, median 1, p90 2, max 3–4 over
+200 trials**, on two independent runs. `E` fell by a factor of 39–42.
+
+**No plateau above 1, and no blind-pair floor is visible.** `E` is still falling at `J = 2000`
+(1.21, 1.26), and the mean is approaching 1 from above rather than stalling. §7 recorded that
+cross-isolate visibility is *not* uniform inside a colo — one socket pair had both racers
+claiming 31 of 40 times at zero separation while another had one socket winning 79 of 80
+regardless of dispatch order — and if a persistent mutually-blind population existed at rate
+`p`, `E` would floor at `p · I_colo` however wide `J` grew. `lateEscapes` is what tests for it:
+escapes whose draw put them more than `W` after the trial's **first** claim, which is the claim
+that has had the longest to propagate. At `J = 2000` it means 0.03 and 0.07, so any such floor
+is **below 0.07 escapes per colo per stale event**, i.e. `p ≲ 0.001` against `I ≈ 81`. Whatever
+the pairwise non-uniformity is, it does not survive being averaged over a rotating pool.
+
+**The λ-free bound is conservative at every `J`, and converges.** Taking `I` as each cell's
+median distinct isolates:
+
+| `J` (ms) | `1 + I·W/J` predicted (run 1 / run 2) | measured mean (run 1 / run 2) |
+| --- | --- | --- |
+| 100 | 6.76 / 7.24 | 3.81 / 3.79 |
+| 250 | 3.43 / 3.66 | 2.52 / 2.31 |
+| 500 | 2.26 / 2.41 | 1.69 / 2.05 |
+| 1000 | 1.60 / 1.66 | 1.41 / 1.46 |
+| 2000 | 1.29 / 1.32 | 1.21 / 1.26 |
+
+It over-predicts everywhere, by 1.8× at `J = 100` narrowing to 1.05× at `J = 2000` — as it
+should, since it assumes every isolate whose draw lands inside the leader's window escapes,
+while in practice some of them are suppressed by a *different* isolate's earlier claim. **A
+constant chosen from this bound is chosen conservatively.**
+
+**What that does to `ocelhq-wvag.8`.** At `E = 1.41–1.46` and `C ≈ 300`:
+
+```
+F = C · E ≈ 425–440 requests per stale event, spread over J = 1 s
+R = C · E / refreshSentinelTtlSeconds ≈ 85–88 rps sustained
+```
+
+against 17 000–19 000 in a few hundred milliseconds before. Both are under the conservative
+500 rps figure, so **one Durable Object per route holds — conditional on the jitter.** The
+sizing table of §4 is not printed on a jittered sweep and the runner refuses to: `E = 1 + λ·W`
+models the un-jittered path, and attaching it to jittered rows would be exactly the kind of
+green number this document keeps having to retract.
+
+### 12. What these numbers do not cover
+
+- **One colo, one runner, `N = 128`.** As §7. `J` was swept; `N` was not.
+- **The probe has no L0, and that biases `E` upward — conservatively.** 128 racers reached 72–90
+  isolates, so ~1.5 requests per isolate, each drawing its **own** delay; production's
+  `refreshOnce` collapses an isolate to one draw and holds it across the wait. The minimum of
+  several draws is stochastically earlier than a single draw, so more of the probe's isolates
+  land near the front of the window than production's would. `E_probe ≥ E_production`. (Raw
+  claims track escapes almost exactly at every `J > 0` — 3.85 vs 3.79, 1.47 vs 1.46 — so an
+  isolate that claimed twice was rare: the second request usually found its own isolate's claim.)
+- **`single-isolate` and `mixed-colo` are structurally unreachable here and their zeros are not
+  evidence**, exactly as in §7. `zero-claims` likewise: the globally first `match` on a fresh key
+  must miss. The detectors that demonstrably fire in this pass are `lateEscapes` at `J > 0` and
+  the two new jitter guards below.
+- **The jitter guards are live and were mutation-checked, not assumed.** Each racer echoes the
+  delay it drew; the run aborts if the draws do not straddle `J/2` (a worker that ignored the
+  parameter) or if a reported delay exceeds the request the driver timed around it (a delay
+  reported but not slept). Both were confirmed to fail against a deliberately broken worker
+  before the runs were taken. Neither fired in either run: draws were uniform over `[0, J)` to
+  three digits (`J = 1000`: min 0.12, p10 98–102, median 499–506, p90 899–901, max 999.9 ms).
+- **Send-side dispersion only, and at `J = 2000` it is no longer small.** See ‡ above.
+- **`I_colo` is still a lower bound.** This pass's highest was **90**, above `.9`'s 81 and still
+  below the spike's 99, and still not plateaued.
+- **The delay is measured on the claim path, not on the serving path.** That the wait costs no
+  user-visible latency is a property of *where* production puts it — inside `waitUntil`, behind
+  an already-served stale response — and is asserted by `workers/nextjs`' tests, not by this.
+
+### 13. Staleness clause
+
+`E(J)` was measured against **the same claim primitive `W` was**: `match` then `put` on a miss,
+no compare-and-set, `refreshSentinelTtlSeconds = 5`
+(`workers/nextjs/src/cache.ts`, `claimSentinel`) — and against a delay drawn uniformly in
+`[0, J)` immediately before that `match`. **Changing the claim's shape, the sentinel TTL, or the
+place the delay is taken voids these numbers, and voids `W` with them.** The dependency runs
+both ways and `workers/nextjs/src/cache.ts` now says so at both constants.
+
+### 14. Prediction
+
+| # | prediction | outcome |
+| --- | --- | --- |
+| P1 (jitter) | with `J = 1000 ms`, `E` at `N = 128` simultaneous racers in one colo is ≤ 3, against the 50–63 measured without jitter | **held** — mean 1.41 and 1.46, median 1, p90 2, max 4, on two independent runs of 100 trials. `E` approaches 1 rather than plateauing, and no mutually-blind floor is detectable above 0.07 escapes per stale event |
+
 ## Cleanup
 
-This package is a spike. Once the findings above are recorded and children 8 and 9 have
+This package is a spike. Once the findings above are recorded and children 8 and 16 have
 landed against them, `workers/cache-probe` should be deleted; this document is the artefact
 that survives. It was `7 and 8` until `ocelhq-wvag.9` re-used the package for the
-write-visibility measurement below, which the write-then-read runner above could not take.
+write-visibility measurement above, which the write-then-read runner could not take, and
+`ocelhq-wvag.16` re-used it again for the admission-jitter sweep.
