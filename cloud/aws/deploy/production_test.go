@@ -712,7 +712,7 @@ func TestRootStackSpecs_BindsImageOptimizerURL(t *testing.T) {
 // Binding it anyway is the epic's signature failure in miniature: the worker
 // enqueues, SQS accepts, the refresh thunk reports landed, the colo sentinel
 // re-arms as though the entry were fresh, and the route stops revalidating until
-// it hard-expires — with nothing in the deploy, the logs or the alarms saying so.
+// it hard-expires — with nothing in the deploy or the logs saying so.
 func TestRootStackSpecs_BindsRevalidateQueueOnlyWithAConsumer(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)

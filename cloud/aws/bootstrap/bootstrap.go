@@ -379,8 +379,8 @@ func run(ctx context.Context, cfn CFNAPI, ssmClient SSMAPI, iamClient IAMAPI, ed
 	// The publisher raises through the writer's endpoint under a secret derived
 	// from the substrate's seed, and a substrate that adopted no writer has
 	// neither. Placed there anyway it would refuse to start on every invocation,
-	// retire every batch to the dead-letter queue, and hold the alarm lit from
-	// the moment of bootstrap.
+	// and retire every batch to the dead-letter queue from the moment of
+	// bootstrap.
 	if isrWriterAdopted {
 		if code.publisher, err = ensureTagPublisherArtifact(ctx, artifact, deployed.ArtifactBucket, pins.publisher); err != nil {
 			return err

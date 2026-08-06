@@ -42,8 +42,8 @@ import "fmt"
 //
 // Version 9 turned on the state table's DynamoDB stream (NEW_IMAGE) and hung
 // the account-global tag-snapshot publisher off it: a Lambda, its event source
-// mapping, the SQS queue failed batches land in, and the alarm on that queue's
-// depth. Turning a stream on is an in-place table update — no replacement, no
+// mapping, and the SQS queue failed batches land in. Turning a stream on is an
+// in-place table update — no replacement, no
 // data loss — but an account that never re-runs bootstrap has no stream at all,
 // and after this every tag invalidation reaches the edge's replica only through
 // that stream. So the gate is hard, like every bump before it: an out-of-date
