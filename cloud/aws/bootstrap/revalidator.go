@@ -88,21 +88,9 @@ const (
 
 	// revalidateDLQRetentionSeconds keeps a retired revalidation for the full 14
 	// days SQS allows. What lands there is a diagnosis, not a work item — the
-	// route it names has long since hard-expired — so the only cost of keeping
-	// it is that the alarm stays lit until someone acknowledges it.
+	// route it names has long since hard-expired — so keeping it costs nothing
+	// and throwing it away costs the diagnosis.
 	revalidateDLQRetentionSeconds = 1209600
-
-	// The alarms all evaluate one five-minute period. A message on the DLQ or an
-	// erroring handler has no healthy rate to tolerate, and the backlog age
-	// threshold is already a duration.
-	revalidatorAlarmPeriodSeconds = 300
-	revalidatorAlarmPeriods       = 1
-
-	// revalidatorOldestMessageThresholdSeconds is how stale the head of the
-	// queue may get before the consumer counts as wedged or the origin as down.
-	// It matches the retention period: a message older than that is about to be
-	// dropped, so alarming later than this would alarm on nothing.
-	revalidatorOldestMessageThresholdSeconds = 300
 
 	// revalidatorAssetBucketEnvVar names the bucket holding each deploy's
 	// <isrPrefix>/origin.json — the record the consumer resolves an origin from,
@@ -188,8 +176,8 @@ func revalidateQueueResources(class string) string {
 		revalidateVisibilityTimeoutSeconds, revalidateRetentionSeconds, revalidateMaxReceiveCount)
 }
 
-// revalidatorResources renders the consumer's execution role, function, event
-// source mapping and alarms — or nothing when no artifact is available, which
+// revalidatorResources renders the consumer's execution role, function and
+// event source mapping — or nothing when no artifact is available, which
 // leaves the queue rendered and undrained and the edge unaware of it (see
 // revalidateQueueOutput).
 //
@@ -223,16 +211,11 @@ func revalidateQueueResources(class string) string {
 // doc calls this condition "scoped by the ocel:app resource tag", which reads
 // narrower than it is; it means "carries one at all".
 //
-// Three alarms, covering the ways revalidation stops. There is deliberately no
-// absence alarm on the poller: unlike the publisher's stream, an empty
-// revalidation queue is the healthy steady state.
-//
-// EXPECT THE DEAD-LETTER ALARM ON THE FIRST ROLLOUT. Every build already live
-// when this lands has no origin.json, so each of its enqueued routes fails to
-// resolve an origin through five receives and reaches the dead-letter queue.
-// It clears once the retention period drains and every live build has been
-// redeployed. Written down so the alarm's first real signal is not dismissed as
-// rollout noise.
+// Nothing here alarms, for the reason recorded at tagPublisherResources: the
+// bootstrap stack must stay free to leave idle, and a standing CloudWatch alarm
+// is billed per month whether or not it ever fires. The dead-letter queue, the
+// backlog age and the handler's error count are all still emitted; what was
+// removed was the standing evaluation of them.
 //
 // The mapping has no OnFailure destination: DestinationConfig is a stream-source
 // property, and an SQS source's failure path is the queue's own redrive policy,
@@ -313,58 +296,10 @@ func revalidatorResources(code artifactCode) string {
         - ReportBatchItemFailures
       ScalingConfig:
         MaximumConcurrency: %d
-  RevalidatorDeadLetterAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmDescription: A revalidation exhausted its receives; that route will not refresh until it hard-expires. Expect this on the first rollout, for every build deployed before the origin record existed.
-      Namespace: AWS/SQS
-      MetricName: ApproximateNumberOfMessagesVisible
-      Dimensions:
-        - Name: QueueName
-          Value: !GetAtt RevalidateDeadLetterQueue.QueueName
-      Statistic: Maximum
-      Period: %d
-      EvaluationPeriods: %d
-      Threshold: 0
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-  RevalidatorBacklogAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmDescription: The head of the revalidation queue is older than its own retention; the consumer is wedged or the origin is down, and stale routes are serving until they hard-expire.
-      Namespace: AWS/SQS
-      MetricName: ApproximateAgeOfOldestMessage
-      Dimensions:
-        - Name: QueueName
-          Value: !GetAtt RevalidateQueue.QueueName
-      Statistic: Maximum
-      Period: %d
-      EvaluationPeriods: %d
-      Threshold: %d
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
-  RevalidatorErrorAlarm:
-    Type: AWS::CloudWatch::Alarm
-    Properties:
-      AlarmDescription: The ISR revalidator is throwing; the handler reports per-record failures rather than throwing, so an error here is a defect rather than an unrenderable route.
-      Namespace: AWS/Lambda
-      MetricName: Errors
-      Dimensions:
-        - Name: FunctionName
-          Value: !Ref Revalidator
-      Statistic: Sum
-      Period: %d
-      EvaluationPeriods: %d
-      Threshold: 0
-      ComparisonOperator: GreaterThanThreshold
-      TreatMissingData: notBreaching
 `, revalidatorRuntime, revalidatorArchitecture, revalidatorHandler, revalidatorMemoryMB, revalidatorTimeoutSeconds,
 		code.bucket, code.key,
 		revalidatorAssetBucketEnvVar,
-		revalidatorBatchSize, revalidatorMaxConcurrency,
-		revalidatorAlarmPeriodSeconds, revalidatorAlarmPeriods,
-		revalidatorAlarmPeriodSeconds, revalidatorAlarmPeriods, revalidatorOldestMessageThresholdSeconds,
-		revalidatorAlarmPeriodSeconds, revalidatorAlarmPeriods)
+		revalidatorBatchSize, revalidatorMaxConcurrency)
 }
 
 // revalidateQueueOutput publishes the queue URL — but only when a consumer was

@@ -524,8 +524,7 @@ func TestRun_EdgeBootstrapFailureStopsProvisioning(t *testing.T) {
 // every build's write secret from the substrate's seed and raises through the
 // writer's endpoint; neither exists on a substrate that adopted no writer, so
 // rendering it there would refuse to start on every invocation, retry every
-// batch into the dead-letter queue, and light the alarm from the moment of
-// bootstrap.
+// batch into the dead-letter queue from the moment of bootstrap.
 func TestRun_PublisherFollowsTheISRWriterAdoption(t *testing.T) {
 	for _, tc := range []struct {
 		name   string
@@ -546,7 +545,7 @@ func TestRun_PublisherFollowsTheISRWriterAdoption(t *testing.T) {
 			}
 			for _, name := range []string{
 				"TagPublisher", "TagPublisherStream", "TagPublisherRole",
-				"TagPublisherDeadLetterQueue", "TagPublisherDeadLetterAlarm",
+				"TagPublisherDeadLetterQueue",
 			} {
 				if got := strings.Contains(cfn.templates[StackName], name+":"); got != tc.want {
 					t.Errorf("template declares %s = %v, want %v", name, got, tc.want)

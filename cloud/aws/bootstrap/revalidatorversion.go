@@ -14,7 +14,7 @@ package bootstrap
 //
 // Both constants are pinned (ocelhq-wvag.27, 2026-08-05). A build that left them
 // empty creates no consumer at all: bootstrap says so and skips it, and the
-// stack renders no Lambda, no event source mapping, no DLQ and no alarms.
+// stack renders no Lambda, no event source mapping and no DLQ.
 //
 // Nothing would then drain the revalidation queue — which is why the edge is
 // told the queue URL only when this pin is present (ocelhq-wvag.24). Without

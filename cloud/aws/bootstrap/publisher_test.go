@@ -64,21 +64,6 @@ type parsedPublisher struct {
 					Pattern string `yaml:"Pattern"`
 				} `yaml:"Filters"`
 			} `yaml:"FilterCriteria"`
-			MetricsConfig struct {
-				Metrics []string `yaml:"Metrics"`
-			} `yaml:"MetricsConfig"`
-			Namespace          string `yaml:"Namespace"`
-			MetricName         string `yaml:"MetricName"`
-			Statistic          string `yaml:"Statistic"`
-			Threshold          int    `yaml:"Threshold"`
-			Period             int    `yaml:"Period"`
-			EvaluationPeriods  int    `yaml:"EvaluationPeriods"`
-			ComparisonOperator string `yaml:"ComparisonOperator"`
-			TreatMissingData   string `yaml:"TreatMissingData"`
-			Dimensions         []struct {
-				Name  string `yaml:"Name"`
-				Value string `yaml:"Value"`
-			} `yaml:"Dimensions"`
 			Policies []struct {
 				PolicyName     string `yaml:"PolicyName"`
 				PolicyDocument struct {
@@ -204,39 +189,12 @@ func TestTagPublisher_FilterConfinesItToTagRecords(t *testing.T) {
 	}
 }
 
-// TestTagPublisher_AlarmsOnTheFirstDroppedBatch. A message on that queue means
-// invalidations were dropped for the builds in it, so there is no healthy rate
-// to tolerate — and an empty queue publishes no datapoints, which must not read
-// as breaching.
-func TestTagPublisher_AlarmsOnTheFirstDroppedBatch(t *testing.T) {
-	tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion))
-	alarm, ok := tmpl.Resources["TagPublisherDeadLetterAlarm"]
-	if !ok {
-		t.Fatal("template is missing the TagPublisherDeadLetterAlarm")
-	}
-	if alarm.Type != "AWS::CloudWatch::Alarm" {
-		t.Errorf("alarm Type = %q, want AWS::CloudWatch::Alarm", alarm.Type)
-	}
-	p := alarm.Properties
-	if p.Namespace != "AWS/SQS" || p.MetricName != "ApproximateNumberOfMessagesVisible" {
-		t.Errorf("alarm metric = %s/%s, want AWS/SQS ApproximateNumberOfMessagesVisible", p.Namespace, p.MetricName)
-	}
-	if p.Threshold != 0 || p.ComparisonOperator != "GreaterThanThreshold" {
-		t.Errorf("alarm fires at %s %d, want > 0", p.ComparisonOperator, p.Threshold)
-	}
-	if p.TreatMissingData != "notBreaching" {
-		t.Errorf("TreatMissingData = %q, want notBreaching — an empty queue reports nothing at all", p.TreatMissingData)
-	}
-	if len(p.Dimensions) != 1 || p.Dimensions[0].Name != "QueueName" {
-		t.Errorf("alarm Dimensions = %+v, want the publisher's own queue", p.Dimensions)
-	}
-}
-
-// TestTagPublisher_OptsIntoTheEventCountMetrics. The two liveness alarms below
-// sit on metrics that do not exist unless the mapping asks for them, and one of
-// them treats missing data as breaching — so dropping this property does not
-// weaken the alarm, it lights it permanently from the moment of bootstrap.
-func TestTagPublisher_OptsIntoTheEventCountMetrics(t *testing.T) {
+// TestTagPublisher_RendersNoAlarms. The bootstrap stack is provisioned into
+// every account whether or not it has traffic, and it must cost nothing to
+// leave idle; a CloudWatch alarm is billed per month per alarm whether or not
+// it ever fires. Neither is the mapping opted into the event-source-mapping
+// metric group, which is billed the same way and existed only to feed an alarm.
+func TestTagPublisher_RendersNoAlarms(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
 		template string
@@ -245,123 +203,15 @@ func TestTagPublisher_OptsIntoTheEventCountMetrics(t *testing.T) {
 		{"preview", previewStackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion)},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			esm, ok := parsePublisherTemplate(t, tc.template).Resources["TagPublisherStream"]
-			if !ok {
-				t.Fatal("template is missing the TagPublisherStream")
+			for name, res := range parsePublisherTemplate(t, tc.template).Resources {
+				if res.Type == "AWS::CloudWatch::Alarm" {
+					t.Errorf("%s is a billed standing alarm in a stack that must be free to leave idle", name)
+				}
 			}
-			if !slices.Contains(esm.Properties.MetricsConfig.Metrics, tagPublisherMetricGroup) {
-				t.Errorf("MetricsConfig.Metrics = %v, want %q; without it PolledEventCount is never emitted and the silent-poller alarm is lit forever",
-					esm.Properties.MetricsConfig.Metrics, tagPublisherMetricGroup)
+			if strings.Contains(tc.template, "MetricsConfig") {
+				t.Error("the event source mapping is opted into billed mapping metrics that nothing reads")
 			}
 		})
-	}
-}
-
-// TestTagPublisher_AlarmsWhenThePollerGoesSilent is the one that catches a
-// publisher that died outright, and it is the whole reason this alarm can exist
-// without a probe: Lambda emits PolledEventCount as a 0 on every empty poll, so
-// a healthy substrate with no invalidations at all still reports. Datapoints
-// stop only when the mapping stops polling — disabled, deleted, or broken.
-//
-// The condition is therefore absence, not value. A `< 0` threshold is
-// unsatisfiable by any datapoint Lambda can emit, so the alarm turns purely on
-// TreatMissingData, and an idle substrate reporting 0 reads as healthy.
-func TestTagPublisher_AlarmsWhenThePollerGoesSilent(t *testing.T) {
-	tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion))
-	alarm, ok := tmpl.Resources["TagPublisherSilentPollerAlarm"]
-	if !ok {
-		t.Fatal("template is missing the TagPublisherSilentPollerAlarm")
-	}
-	if alarm.Type != "AWS::CloudWatch::Alarm" {
-		t.Errorf("alarm Type = %q, want AWS::CloudWatch::Alarm", alarm.Type)
-	}
-	p := alarm.Properties
-	if p.Namespace != "AWS/Lambda" || p.MetricName != "PolledEventCount" {
-		t.Errorf("alarm metric = %s/%s, want AWS/Lambda PolledEventCount", p.Namespace, p.MetricName)
-	}
-	if p.TreatMissingData != "breaching" {
-		t.Fatalf("TreatMissingData = %q, want breaching — missing data IS the failure here, and nothing else in this alarm detects it", p.TreatMissingData)
-	}
-	if p.Threshold != 0 || p.ComparisonOperator != "LessThanThreshold" {
-		t.Errorf("alarm fires at %s %d, want < 0 so an idle poller's 0 reads as healthy and only absence breaches", p.ComparisonOperator, p.Threshold)
-	}
-	if len(p.Dimensions) != 1 || p.Dimensions[0].Name != "EventSourceMappingUUID" {
-		t.Errorf("alarm Dimensions = %+v, want EventSourceMappingUUID; the event-source-mapping metrics are not published under FunctionName", p.Dimensions)
-	}
-}
-
-// TestTagPublisher_AlarmsWhenItRunsButCannotPublish is the wedged case: the
-// function is alive and polling, so the alarm above stays OK, but every build in
-// the batch fails to publish. publishAll reports those per record rather than
-// throwing, and FailedInvokeEventCount counts a response carrying a non-empty
-// BatchItemFailures — so this lights on the first failed batch, five retries
-// before anything reaches the dead-letter queue the other alarm watches.
-func TestTagPublisher_AlarmsWhenItRunsButCannotPublish(t *testing.T) {
-	tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion))
-	alarm, ok := tmpl.Resources["TagPublisherFailedPublishAlarm"]
-	if !ok {
-		t.Fatal("template is missing the TagPublisherFailedPublishAlarm")
-	}
-	p := alarm.Properties
-	if p.Namespace != "AWS/Lambda" || p.MetricName != "FailedInvokeEventCount" {
-		t.Errorf("alarm metric = %s/%s, want AWS/Lambda FailedInvokeEventCount", p.Namespace, p.MetricName)
-	}
-	if p.Threshold != 0 || p.ComparisonOperator != "GreaterThanThreshold" {
-		t.Errorf("alarm fires at %s %d, want > 0", p.ComparisonOperator, p.Threshold)
-	}
-	if p.TreatMissingData != "notBreaching" {
-		t.Errorf("TreatMissingData = %q, want notBreaching — a publisher failing nothing emits nothing", p.TreatMissingData)
-	}
-	if len(p.Dimensions) != 1 || p.Dimensions[0].Name != "EventSourceMappingUUID" {
-		t.Errorf("alarm Dimensions = %+v, want EventSourceMappingUUID", p.Dimensions)
-	}
-}
-
-// TestTagPublisher_AlarmsWhenTheStreamFallsBehind covers the third shape:
-// records are arriving and being processed, but not promptly. IteratorAge is a
-// function metric rather than a mapping one, so it is dimensioned by
-// FunctionName.
-//
-// The threshold is set against the snapshot Durable Object's own heartbeat
-// (HEARTBEAT_MS, 60s): five beats, so a beat's worth of jitter cannot flap it,
-// and an invalidation more than five minutes from the edge is unambiguously
-// late.
-func TestTagPublisher_AlarmsWhenTheStreamFallsBehind(t *testing.T) {
-	tmpl := parsePublisherTemplate(t, stackTemplate(edge.TrustExternal, fixtureArtifacts(), RequiredBootstrapVersion))
-	alarm, ok := tmpl.Resources["TagPublisherIteratorAgeAlarm"]
-	if !ok {
-		t.Fatal("template is missing the TagPublisherIteratorAgeAlarm")
-	}
-	p := alarm.Properties
-	if p.Namespace != "AWS/Lambda" || p.MetricName != "IteratorAge" {
-		t.Errorf("alarm metric = %s/%s, want AWS/Lambda IteratorAge", p.Namespace, p.MetricName)
-	}
-	if p.Statistic != "Maximum" {
-		t.Errorf("Statistic = %q, want Maximum — an average hides the one shard that is stuck", p.Statistic)
-	}
-	if p.Threshold != tagPublisherIteratorAgeThresholdMs || p.ComparisonOperator != "GreaterThanThreshold" {
-		t.Errorf("alarm fires at %s %d, want > %d ms", p.ComparisonOperator, p.Threshold, tagPublisherIteratorAgeThresholdMs)
-	}
-	if p.TreatMissingData != "notBreaching" {
-		t.Errorf("TreatMissingData = %q, want notBreaching — no records means no age, which the silent-poller alarm covers instead", p.TreatMissingData)
-	}
-	if len(p.Dimensions) != 1 || p.Dimensions[0].Name != "FunctionName" {
-		t.Errorf("alarm Dimensions = %+v, want FunctionName", p.Dimensions)
-	}
-}
-
-// TestTagPublisher_LivenessThresholdsClearTheHeartbeat. The issue this serves
-// asks for the staleness threshold to be decided against the Durable Object's
-// heartbeat interval, because an alarm tighter than the beat it observes is
-// noise rather than signal.
-func TestTagPublisher_LivenessThresholdsClearTheHeartbeat(t *testing.T) {
-	const heartbeatMs = 60_000 // HEARTBEAT_MS in workers/isr-writer/src/isr-snapshot.ts
-	if tagPublisherIteratorAgeThresholdMs <= heartbeatMs {
-		t.Errorf("IteratorAge threshold %d ms does not clear the %d ms heartbeat", tagPublisherIteratorAgeThresholdMs, heartbeatMs)
-	}
-	silentWindowMs := tagPublisherAlarmPeriodSeconds * tagPublisherSilentPollerPeriods * 1000
-	if silentWindowMs <= heartbeatMs {
-		t.Errorf("silent-poller window %d ms does not clear the %d ms heartbeat", silentWindowMs, heartbeatMs)
 	}
 }
 
@@ -434,8 +284,7 @@ func TestTagPublisher_UnpinnedRendersNothing(t *testing.T) {
 	tmpl := stackTemplate(edge.TrustExternal, stackArtifacts{optimizer: fixtureOptimizerCode()}, RequiredBootstrapVersion)
 	for _, name := range []string{
 		"TagPublisher", "TagPublisherStream", "TagPublisherRole",
-		"TagPublisherDeadLetterQueue", "TagPublisherDeadLetterAlarm",
-		"TagPublisherSilentPollerAlarm", "TagPublisherFailedPublishAlarm", "TagPublisherIteratorAgeAlarm",
+		"TagPublisherDeadLetterQueue",
 	} {
 		if strings.Contains(tmpl, name+":") {
 			t.Errorf("an unpinned build still rendered %s", name)

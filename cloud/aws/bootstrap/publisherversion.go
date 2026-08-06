@@ -14,7 +14,7 @@ package bootstrap
 //
 // Both constants are pinned (ocelhq-wvag.14, 2026-08-04). A build that left them
 // empty creates no publisher at all: bootstrap says so and skips it, and the
-// stack renders no Lambda, no stream consumer, no DLQ and no alarms.
+// stack renders no Lambda, no stream consumer and no DLQ.
 //
 // Nothing would then carry an origin-raised invalidation to a build's edge
 // replica. The Lambda tier's own publisher was deleted when the durable tag

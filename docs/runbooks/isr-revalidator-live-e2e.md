@@ -145,8 +145,8 @@ aws cloudformation describe-stack-resources --stack-name "$STACK" \
 ```
 
 Expected new logical resources: `Revalidator`, `RevalidatorRole`,
-`RevalidatorQueueConsumer`, `RevalidatorDeadLetterAlarm`, `RevalidatorBacklogAlarm`,
-`RevalidatorErrorAlarm`. The Lambda has no `FunctionName` property, so CloudFormation
+`RevalidatorQueueConsumer`. There are deliberately no CloudWatch alarms — the bootstrap
+stack must cost nothing to leave idle. The Lambda has no `FunctionName` property, so CloudFormation
 generates its physical name — read it from the table above and use it everywhere below;
 do not guess it.
 
@@ -289,24 +289,23 @@ Assert:
   URL invocation in the app's Lambda log group);
 - the message reaches `ocel-revalidate-dlq.fifo` after **5** receives
   (`maxReceiveCount: 5`);
-- `RevalidatorDeadLetterAlarm` goes to `ALARM`:
+- the DLQ's depth rises (there is no alarm to watch; read the queue directly):
   ```bash
-  aws cloudwatch describe-alarms --alarm-name-prefix Revalidator \
-    --query 'MetricAlarms[].[AlarmName,StateValue,StateReason]' --output table
+  aws sqs get-queue-attributes --queue-url "$DLQ_URL" \
+    --attribute-names ApproximateNumberOfMessages
   ```
 - **no log line anywhere contains the record, its headers, or an error's text.** The
   record carries the app's `bypassToken` (amendment D, `.23`'s no-log-the-raw-record
   rule). Grep the log group for a fragment of the bypass token and require zero hits.
 
-### The expected FALSE ALARM, and how to tell it apart
+### The expected first-rollout DLQ traffic, and how to tell it apart
 
-**`RevalidatorDeadLetterAlarm` will fire on the first rollout regardless of the poison
-test.** Every build already live when `.24` landed has no `origin.json`; each of its
+**The DLQ fills on the first rollout regardless of the poison test.** Every build already live when `.24` landed has no `origin.json`; each of its
 enqueued routes fails `origin-unusable` through five receives and reaches the DLQ. It
 clears once the 300s `MessageRetentionPeriod` drains and every live build has been
 redeployed.
 
-Distinguish them by reading the DLQ's messages rather than the alarm state:
+Distinguish them by reading the DLQ's messages:
 
 ```bash
 aws sqs receive-message --queue-url "$DLQ_URL" --max-number-of-messages 10 \
@@ -406,13 +405,13 @@ r2_get "$ISR_PREFIX/cache/isr.cache.json"                            # expect a 
 ```
 
 **What is NOT torn down**, deliberately: the account-level substrate (the revalidator
-Lambda, its queues, its alarms, `ocel-isr-writer*`). Those are the thing being proven, not
+Lambda, its queues, `ocel-isr-writer*`). Those are the thing being proven, not
 scaffolding for the proof. `ocelhq-wvag.11` already records that destroy leaves per-build
 writer DO instances behind — check for and record any left by this run rather than
 treating an absence of cleanup as a new finding.
 
-Drain the DLQ once the poison test is recorded, or the alarm stays lit and the next
-session inherits a false signal:
+Drain the DLQ once the poison test is recorded, or the next session inherits its
+messages and reads them as its own failures:
 
 ```bash
 aws sqs purge-queue --queue-url "$DLQ_URL"

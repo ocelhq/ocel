@@ -59,19 +59,6 @@ type parsedRevalidator struct {
 				MaximumConcurrency *int `yaml:"MaximumConcurrency"`
 			} `yaml:"ScalingConfig"`
 
-			Namespace          string `yaml:"Namespace"`
-			MetricName         string `yaml:"MetricName"`
-			Statistic          string `yaml:"Statistic"`
-			Threshold          int    `yaml:"Threshold"`
-			Period             int    `yaml:"Period"`
-			EvaluationPeriods  int    `yaml:"EvaluationPeriods"`
-			ComparisonOperator string `yaml:"ComparisonOperator"`
-			TreatMissingData   string `yaml:"TreatMissingData"`
-			Dimensions         []struct {
-				Name  string `yaml:"Name"`
-				Value string `yaml:"Value"`
-			} `yaml:"Dimensions"`
-
 			Policies []struct {
 				PolicyName     string `yaml:"PolicyName"`
 				PolicyDocument struct {
@@ -423,7 +410,7 @@ func soleResource(t *testing.T, statements []policyStatement, action string) str
 //
 // That failure is silent in exactly the epic's signature shape: the edge fails
 // open to originBlocking, the queue never receives anything, and an empty queue
-// is the documented healthy state, so no alarm fires. Nothing else in the suite
+// is the documented healthy state. Nothing else in the suite
 // notices — TestEdgeUser_SendsToTheQueueAndNothingElse filters to sqs: actions,
 // so the whole statement could be deleted and pass.
 //
@@ -544,57 +531,16 @@ func TestRevalidator_InvokeGrantIsAccountWideOverOcelTaggedFunctions(t *testing.
 	}
 }
 
-// TestRevalidator_Alarms covers the three ways revalidation stops. There is
-// deliberately no absence alarm on the poller: unlike the publisher's stream, an
-// empty revalidation queue is the healthy steady state, so silence here is not a
-// signal and an idle substrate must not alarm.
-func TestRevalidator_Alarms(t *testing.T) {
+// TestRevalidator_RendersNoAlarms. Same reason as the publisher's: the
+// bootstrap stack is provisioned into every account and must cost nothing to
+// leave idle, and a CloudWatch alarm is billed per month per alarm whether or
+// not it ever fires.
+func TestRevalidator_RendersNoAlarms(t *testing.T) {
 	for _, tc := range revalidatorTemplates() {
 		t.Run(tc.name, func(t *testing.T) {
-			tmpl := parseRevalidatorTemplate(t, tc.template)
-			for _, want := range []struct {
-				resource   string
-				namespace  string
-				metric     string
-				dimension  string
-				threshold  int
-				comparison string
-			}{
-				{"RevalidatorDeadLetterAlarm", "AWS/SQS", "ApproximateNumberOfMessagesVisible", "QueueName", 0, "GreaterThanThreshold"},
-				{"RevalidatorBacklogAlarm", "AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", revalidatorOldestMessageThresholdSeconds, "GreaterThanThreshold"},
-				{"RevalidatorErrorAlarm", "AWS/Lambda", "Errors", "FunctionName", 0, "GreaterThanThreshold"},
-			} {
-				alarm, ok := tmpl.Resources[want.resource]
-				if !ok {
-					t.Errorf("template is missing the %s", want.resource)
-					continue
-				}
-				p := alarm.Properties
-				if alarm.Type != "AWS::CloudWatch::Alarm" {
-					t.Errorf("%s Type = %q, want AWS::CloudWatch::Alarm", want.resource, alarm.Type)
-				}
-				if p.Namespace != want.namespace || p.MetricName != want.metric {
-					t.Errorf("%s metric = %s/%s, want %s/%s", want.resource, p.Namespace, p.MetricName, want.namespace, want.metric)
-				}
-				if p.Threshold != want.threshold || p.ComparisonOperator != want.comparison {
-					t.Errorf("%s fires at %s %d, want %s %d", want.resource, p.ComparisonOperator, p.Threshold, want.comparison, want.threshold)
-				}
-				if p.Period != revalidatorAlarmPeriodSeconds || p.EvaluationPeriods != revalidatorAlarmPeriods {
-					t.Errorf("%s evaluates %d x %ds, want %d x %ds", want.resource, p.EvaluationPeriods, p.Period, revalidatorAlarmPeriods, revalidatorAlarmPeriodSeconds)
-				}
-				if p.TreatMissingData != "notBreaching" {
-					t.Errorf("%s TreatMissingData = %q, want notBreaching — an idle substrate publishes no datapoints and is healthy", want.resource, p.TreatMissingData)
-				}
-				if len(p.Dimensions) != 1 || p.Dimensions[0].Name != want.dimension {
-					t.Errorf("%s Dimensions = %+v, want %s", want.resource, p.Dimensions, want.dimension)
-				}
-			}
-			// Against this block alone: the tag publisher renders both metrics
-			// in the same template, and its stream is the case where silence
-			// really is the signal.
-			for _, absent := range []string{"PolledEventCount", "FailedInvokeEventCount"} {
-				if strings.Contains(revalidatorResources(fixtureRevalidatorCode()), absent) {
-					t.Errorf("the revalidator alarms on %s; an empty revalidation queue is the healthy steady state", absent)
+			for name, res := range parseRevalidatorTemplate(t, tc.template).Resources {
+				if res.Type == "AWS::CloudWatch::Alarm" {
+					t.Errorf("%s is a billed standing alarm in a stack that must be free to leave idle", name)
 				}
 			}
 		})
@@ -619,7 +565,6 @@ func TestRevalidator_UnpinnedRendersNoConsumerAndNoQueueURL(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, name := range []string{
 				"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
-				"RevalidatorDeadLetterAlarm", "RevalidatorBacklogAlarm", "RevalidatorErrorAlarm",
 			} {
 				if strings.Contains(tc.template, "  "+name+":") {
 					t.Errorf("an unpinned build still rendered %s", name)
@@ -652,8 +597,8 @@ func TestRevalidator_PinnedPublishesTheQueueURL(t *testing.T) {
 // a fixture one. The two tests above prove the template renders a consumer when
 // an artifact is available and skips it when none is; this proves which of those
 // paths revalidatorversion.go's constants actually put a customer's account on —
-// the consumer, its role, its event source mapping, its three alarms, and the
-// queue URL the edge is told to send to. It fails the moment either constant is
+// the consumer, its role, its event source mapping, and the queue URL the edge
+// is told to send to. It fails the moment either constant is
 // blanked, which is what makes the pin a tested state and not a comment.
 func TestRun_ThisBuildBootstrapsAConsumer(t *testing.T) {
 	if !pinnedRevalidator().pinned() {
@@ -677,7 +622,6 @@ func TestRun_ThisBuildBootstrapsAConsumer(t *testing.T) {
 			template := cfn.templates[tc.stackName]
 			for _, name := range []string{
 				"Revalidator", "RevalidatorRole", "RevalidatorQueueConsumer",
-				"RevalidatorDeadLetterAlarm", "RevalidatorBacklogAlarm", "RevalidatorErrorAlarm",
 			} {
 				if !strings.Contains(template, "  "+name+":") {
 					t.Errorf("this build's bootstrap rendered no %s", name)
