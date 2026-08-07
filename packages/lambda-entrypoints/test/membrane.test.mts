@@ -103,6 +103,63 @@ describe("drainWaitUntil", () => {
   });
 });
 
+describe("the loopback header boundary", () => {
+  // Serves one request, captures the headers the app saw, and returns them.
+  async function observe(headers: Record<string, string>): Promise<http.IncomingHttpHeaders> {
+    let seen: http.IncomingHttpHeaders | undefined;
+    const port = await start((req, res) => {
+      seen = { ...req.headers };
+      res.end("ok");
+    });
+    await new Promise<void>((resolve, reject) => {
+      const req = http.request({ host: "127.0.0.1", port, path: "/", headers }, (res) => {
+        res.on("data", () => {});
+        res.on("end", () => resolve());
+      });
+      req.on("error", reject);
+      req.end();
+    });
+    return seen!;
+  }
+
+  // undici drops a caller-supplied host, so the app's own self-fetch arrives
+  // claiming the loopback authority — the original ocelhq-7og signature, scoped
+  // to that path. x-forwarded-host survives and is what the client addressed.
+  test("the app reads the public authority off Host, not the loopback one", async () => {
+    const seen = await observe({ "x-forwarded-host": "app.ocel.site" });
+
+    expect(seen.host).toBe("app.ocel.site");
+  });
+
+  test("a comma-joined x-forwarded-host uses its leftmost authority", async () => {
+    const seen = await observe({ "x-forwarded-host": "app.ocel.site, edge.internal" });
+
+    expect(seen.host).toBe("app.ocel.site");
+  });
+
+  test("without x-forwarded-host the authority is left alone", async () => {
+    const seen = await observe({});
+
+    expect(seen.host).toMatch(/^127\.0\.0\.1:\d+$/);
+  });
+
+  // x-ocel-entry names which route of the bundle to run. A self-fetch copies it
+  // from the request that caused it, where it names the *originating* route, so
+  // it must not survive; the request the bootstrap forwarded must keep it.
+  test("a self-fetch loses the entry key it inherited", async () => {
+    const seen = await observe({ "x-ocel-entry": "/server" });
+
+    expect(seen["x-ocel-entry"]).toBeUndefined();
+  });
+
+  test("a request the bootstrap forwarded keeps its entry key", async () => {
+    const seen = await observe({ "x-ocel-entry": "/server", "x-ocel-request-id": "abc" });
+
+    expect(seen["x-ocel-entry"]).toBe("/server");
+    expect(seen["x-ocel-request-id"]).toBeUndefined();
+  });
+});
+
 describe("onListening", () => {
   // Callers configure the process from the bound port here — the Next
   // entrypoint's self-fetch origin among them — so it is handed the port the
