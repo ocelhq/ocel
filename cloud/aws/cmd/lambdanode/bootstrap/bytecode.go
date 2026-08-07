@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net/http"
 	"os"
 	"os/exec"
 	"path"
@@ -18,6 +19,7 @@ import (
 	"strings"
 	"time"
 
+	awshttp "github.com/aws/aws-sdk-go-v2/aws/transport/http"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
@@ -209,16 +211,36 @@ var errBytecodeCacheMiss = errors.New("bytecode cache: no object at that key")
 
 type s3BytecodeStore struct{ client *s3.Client }
 
+// objectExists answers the probe that decides whether this instance has to pay
+// for an upload at all. Absence has two spellings here, not one: S3 only
+// answers 404 for a missing key when the caller may also list the bucket, and
+// this function's role deliberately holds s3:GetObject and s3:PutObject on its
+// own prefix and nothing else (isrPolicy). With no s3:ListBucket, an absent key
+// comes back 403 — so reading 403 as a fault made the first cold start of every
+// fresh deployment fail its warm pass and publish nothing, which is the one
+// state the whole feature exists to leave behind.
+//
+// Reading 403 as absent is safe in the direction that matters: the only thing
+// downstream of a false "absent" is an upload, and a PUT the role is genuinely
+// not allowed to make fails on its own and is reported there.
 func (s s3BytecodeStore) objectExists(ctx context.Context, bucket, key string) (bool, error) {
 	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &bucket, Key: &key})
 	if err != nil {
 		var notFound *s3types.NotFound
-		if errors.As(err, &notFound) {
+		if errors.As(err, &notFound) || isS3Forbidden(err) {
 			return false, nil
 		}
 		return false, err
 	}
 	return true, nil
+}
+
+// isS3Forbidden reports whether err is S3 answering 403. HeadObject has no
+// modelled error shape for it — the SDK surfaces a bare
+// smithyhttp.ResponseError — so the status code is what there is to match on.
+func isS3Forbidden(err error) bool {
+	var resp *awshttp.ResponseError
+	return errors.As(err, &resp) && resp.HTTPStatusCode() == http.StatusForbidden
 }
 
 func (s s3BytecodeStore) putObject(ctx context.Context, bucket, key string, body []byte) error {
