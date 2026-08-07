@@ -89,6 +89,66 @@ export function installCompileCacheFlush(): void {
   });
 }
 
+export interface WarmBounds {
+  deadlineMs: number;
+  ceilingBytes: number;
+}
+
+export interface WarmReport {
+  ok: boolean;
+  state: "warmed" | "unsupported";
+  entries: number;
+  loaded: number;
+  failures: { entry: string; message: string }[];
+  stoppedBy: "complete" | "deadline" | "ceiling";
+  bytes: number;
+  dir: string | null;
+}
+
+// A function whose launcher predates warming — or is not a Next bundle at all —
+// has nothing to warm, and neither does one on a Node without the compile cache
+// APIs. Both are the same answer to the membrane: nothing was warmed, and the
+// deploy should publish whatever the run itself produced.
+const UNSUPPORTED_WARM: WarmReport = {
+  ok: false,
+  state: "unsupported",
+  entries: 0,
+  loaded: 0,
+  failures: [],
+  stoppedBy: "complete",
+  bytes: 0,
+  dir: null,
+};
+
+function warmNow(warm: unknown, payload: unknown): WarmReport {
+  if (typeof warm !== "function") return UNSUPPORTED_WARM;
+  const { deadlineMs, ceilingBytes } = (payload ?? {}) as Partial<WarmBounds>;
+  try {
+    const run = warm as (bounds: Partial<WarmBounds>) => WarmReport | undefined;
+    return run({ deadlineMs, ceilingBytes }) ?? UNSUPPORTED_WARM;
+  } catch (err) {
+    sendControl("log", {
+      level: "error",
+      message: `compile cache warm failed: ${String(err)}`,
+    });
+    return UNSUPPORTED_WARM;
+  }
+}
+
+// The membrane blocks the deploy on this reply, so the handler answers whatever
+// the warm walk did — including having done nothing at all. A throw here would
+// leave the deploy waiting on a message that never comes.
+export function installCompileCacheWarm(warm: unknown): void {
+  onControlMessage((message) => {
+    if (!message || typeof message !== "object") return;
+    if ((message as { type?: unknown }).type !== "warm-compile-cache") return;
+    sendControl(
+      "compile-cache-warmed",
+      warmNow(warm, (message as { payload?: unknown }).payload),
+    );
+  });
+}
+
 export interface OcelContext {
   waitUntil: (p: Promise<unknown>) => void;
 }

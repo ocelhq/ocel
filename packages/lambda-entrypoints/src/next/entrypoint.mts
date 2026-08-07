@@ -5,6 +5,7 @@ import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { awaitLiveValues } from "../shared/live-values.mjs";
 import {
   installCompileCacheFlush,
+  installCompileCacheWarm,
   reportFatalBoot,
   serveInvoke,
   type Invoke,
@@ -40,6 +41,8 @@ async function boot(): Promise<void> {
   if (typeof handler !== "function") {
     throw new Error(`Next launcher ${handlerPath} does not export a handler function`);
   }
+
+  installCompileCacheWarm(mod?.warm);
 
   const newIncrementalCache = await loadIncrementalCacheFactory(dirname(handlerPath));
 

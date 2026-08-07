@@ -1,4 +1,7 @@
-import { createRequire } from "node:module";
+import Module, { createRequire } from "node:module";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, test, vi } from "vitest";
 
@@ -36,8 +39,75 @@ function silenceErrors() {
   return vi.spyOn(console, "error").mockImplementation(() => {});
 }
 
+// The compile-cache APIs live on the node:module default export, which the
+// dispatcher reads at call time; patching it there is what the CJS require of
+// the source under test sees. Deleting a key (rather than assigning undefined)
+// is what makes a case a genuinely absent API, as on older Node.
+const moduleApis = Module as unknown as Record<string, unknown>;
+const savedModuleApis = new Map<string, unknown>();
+
+function patchModule(patch: Record<string, unknown>): void {
+  for (const [key, value] of Object.entries(patch)) {
+    if (!savedModuleApis.has(key)) savedModuleApis.set(key, moduleApis[key]);
+    if (value === undefined) delete moduleApis[key];
+    else moduleApis[key] = value;
+  }
+}
+
+let cacheDir: string | null = null;
+let flushes = 0;
+let pending: { name: string; size: number }[] = [];
+
+// V8 buffers compile-cache writes in memory until a flush, so the stub only
+// materializes a load's bytes when flushCompileCache runs — a measurement taken
+// without flushing first reads the stale directory, exactly as in production.
+function stubCompileCache(patch: Record<string, unknown> = {}): string {
+  cacheDir = mkdtempSync(join(tmpdir(), "ocel-warm-"));
+  patchModule({
+    getCompileCacheDir: () => cacheDir,
+    flushCompileCache: () => {
+      flushes += 1;
+      for (const file of pending.splice(0)) {
+        const target = join(cacheDir!, file.name);
+        mkdirSync(dirname(target), { recursive: true });
+        writeFileSync(target, Buffer.alloc(file.size));
+      }
+    },
+    ...patch,
+  });
+  return cacheDir;
+}
+
+function cachingLoader(sizes: Record<string, number>, broken: string[] = []) {
+  const loads: string[] = [];
+  const load = (path: string) => {
+    loads.push(path);
+    pending.push({ name: `blobs/${loads.length}.blob`, size: sizes[path] ?? 0 });
+    if (broken.includes(path)) throw new Error(`boom ${path}`);
+    return { handler: () => path };
+  };
+  return { loads, load };
+}
+
+const WARM_ENTRIES = {
+  "app/page": "./.next/server/app/page.js",
+  "app/a/page": "./.next/server/app/a/page.js",
+  "app/b/page": "./.next/server/app/b/page.js",
+};
+
+const NO_LIMITS = { deadlineMs: Date.now() + 600_000, ceilingBytes: 64 << 20 };
+
 afterEach(() => {
   vi.restoreAllMocks();
+  for (const [key, value] of savedModuleApis) {
+    if (value === undefined) delete moduleApis[key];
+    else moduleApis[key] = value;
+  }
+  savedModuleApis.clear();
+  if (cacheDir) rmSync(cacheDir, { recursive: true, force: true });
+  cacheDir = null;
+  flushes = 0;
+  pending = [];
 });
 
 function fakeReq(entry?: string, url = "/") {
@@ -339,4 +409,210 @@ test("memoizes a failed prime so the broken primary is required only at init", a
   await dispatch.handler(fakeReq("app/page"), fakeRes(), {});
 
   expect(loads).toEqual([ENTRIES["app/page"]]);
+});
+
+test("warms every entry, primary first and then in table order", () => {
+  const dir = stubCompileCache();
+  const { loads, load } = cachingLoader({});
+  const dispatch = createDispatch({
+    entries: WARM_ENTRIES,
+    primary: "app/a/page",
+    load,
+  });
+
+  const report = dispatch.warm(NO_LIMITS);
+
+  expect(loads).toEqual([
+    WARM_ENTRIES["app/a/page"],
+    WARM_ENTRIES["app/page"],
+    WARM_ENTRIES["app/b/page"],
+  ]);
+  expect(report).toMatchObject({
+    ok: true,
+    state: "warmed",
+    entries: 3,
+    loaded: 3,
+    failures: [],
+    stoppedBy: "complete",
+    dir,
+  });
+});
+
+test("reuses the primary's init load rather than requiring it twice", () => {
+  stubCompileCache();
+  const { loads, load } = cachingLoader({});
+  const dispatch = createDispatch({
+    entries: WARM_ENTRIES,
+    primary: "app/page",
+    load,
+  });
+
+  dispatch.warm(NO_LIMITS);
+
+  expect(loads.filter((p) => p === WARM_ENTRIES["app/page"])).toHaveLength(1);
+});
+
+test("serves a warmed entry without requiring it again", async () => {
+  stubCompileCache();
+  const { loads, load } = cachingLoader({});
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+
+  dispatch.warm(NO_LIMITS);
+  await dispatch.handler(fakeReq("app/b/page"), fakeRes(), {});
+
+  expect(loads.filter((p) => p === WARM_ENTRIES["app/b/page"])).toHaveLength(1);
+});
+
+test("reports a warm-time failure without abandoning the rest of the bundle", () => {
+  stubCompileCache();
+  const { load } = cachingLoader({}, [WARM_ENTRIES["app/a/page"]]);
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+
+  const report = dispatch.warm(NO_LIMITS);
+
+  expect(report.failures).toEqual([
+    { entry: "app/a/page", message: `boom ${WARM_ENTRIES["app/a/page"]}` },
+  ]);
+  expect(report.loaded).toBe(2);
+  expect(report.stoppedBy).toBe("complete");
+});
+
+test("does not memoize a warm-time failure, so the request path retries it", async () => {
+  stubCompileCache();
+  const loads: string[] = [];
+  let attempts = 0;
+  const load = (path: string) => {
+    loads.push(path);
+    if (path === WARM_ENTRIES["app/a/page"] && attempts++ === 0) {
+      throw new Error("boom");
+    }
+    return { handler: () => path };
+  };
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+
+  dispatch.warm(NO_LIMITS);
+  const res = fakeRes();
+  const result = await dispatch.handler(fakeReq("app/a/page"), res, {});
+
+  expect(res.statusCode).toBe(200);
+  expect(result).toBe(WARM_ENTRIES["app/a/page"]);
+  expect(loads.filter((p) => p === WARM_ENTRIES["app/a/page"])).toHaveLength(2);
+});
+
+test("stops between entries once the deadline has passed", () => {
+  stubCompileCache();
+  let now = 1000;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const { loads, load } = cachingLoader({});
+  const dispatch = createDispatch({
+    entries: WARM_ENTRIES,
+    primary: "app/page",
+    load: (path: string) => {
+      now += 10;
+      return load(path);
+    },
+  });
+
+  const report = dispatch.warm({ deadlineMs: 1015, ceilingBytes: 64 << 20 });
+
+  expect(loads).toEqual([
+    WARM_ENTRIES["app/page"],
+    WARM_ENTRIES["app/a/page"],
+  ]);
+  expect(report).toMatchObject({ loaded: 2, stoppedBy: "deadline" });
+});
+
+test("stops before the ceiling, predicting the next entry by the largest growth so far", () => {
+  stubCompileCache();
+  const { loads, load } = cachingLoader({
+    [WARM_ENTRIES["app/page"]]: 1000,
+    [WARM_ENTRIES["app/a/page"]]: 1000,
+    [WARM_ENTRIES["app/b/page"]]: 1000,
+  });
+  const dispatch = createDispatch({
+    entries: WARM_ENTRIES,
+    primary: "app/page",
+    load,
+  });
+
+  const report = dispatch.warm({ deadlineMs: Date.now() + 600_000, ceilingBytes: 4096 });
+
+  expect(loads).toEqual([
+    WARM_ENTRIES["app/page"],
+    WARM_ENTRIES["app/a/page"],
+  ]);
+  expect(report).toMatchObject({ loaded: 2, stoppedBy: "ceiling", bytes: 3024 });
+});
+
+test("charges 512 bytes per cached file, matching what the uploader charges", () => {
+  stubCompileCache();
+  const { load } = cachingLoader({
+    [WARM_ENTRIES["app/page"]]: 100,
+    [WARM_ENTRIES["app/a/page"]]: 250,
+    [WARM_ENTRIES["app/b/page"]]: 30,
+  });
+  const dispatch = createDispatch({
+    entries: WARM_ENTRIES,
+    primary: "app/page",
+    load,
+  });
+
+  const report = dispatch.warm(NO_LIMITS);
+
+  expect(report.bytes).toBe(100 + 250 + 30 + 3 * 512);
+});
+
+test("flushes before every measurement, including the last entry's", () => {
+  stubCompileCache();
+  const { load } = cachingLoader({});
+  const dispatch = createDispatch({
+    entries: WARM_ENTRIES,
+    primary: "app/page",
+    load,
+  });
+
+  dispatch.warm(NO_LIMITS);
+
+  expect(flushes).toBe(3);
+});
+
+test("reports unsupported when flushCompileCache is genuinely absent (old Node)", () => {
+  stubCompileCache({ flushCompileCache: undefined });
+  const { loads, load } = cachingLoader({});
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+
+  expect(dispatch.warm(NO_LIMITS)).toEqual({
+    ok: false,
+    state: "unsupported",
+    entries: 3,
+    loaded: 0,
+    failures: [],
+    stoppedBy: "complete",
+    bytes: 0,
+    dir: null,
+  });
+  expect(loads).toEqual([]);
+});
+
+test("reports unsupported when getCompileCacheDir is genuinely absent (old Node)", () => {
+  stubCompileCache({ getCompileCacheDir: undefined });
+  const { load } = cachingLoader({});
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+
+  expect(dispatch.warm(NO_LIMITS)).toMatchObject({
+    ok: false,
+    state: "unsupported",
+    dir: null,
+  });
+});
+
+test("reports unsupported when the compile cache is off, leaving no dir", () => {
+  stubCompileCache({ getCompileCacheDir: () => "" });
+  const { load } = cachingLoader({});
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+
+  expect(dispatch.warm(NO_LIMITS)).toMatchObject({
+    ok: false,
+    state: "unsupported",
+  });
 });
