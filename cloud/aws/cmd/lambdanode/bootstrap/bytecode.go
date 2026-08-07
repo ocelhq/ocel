@@ -30,10 +30,12 @@ const bytecodeCacheCeiling = 64 << 20 // 64 MiB
 
 // bytecodeCacheKey composes the S3 key the membrane uploads a function's
 // compile cache under and downloads it back from. prefix, functionName and
-// nodeMajor are the caller's to supply — nothing here reads the environment,
-// which is what keeps it callable from a test with no AWS client in sight.
-func bytecodeCacheKey(prefix, functionName string, nodeMajor int, goArch string) string {
-	return fmt.Sprintf("%s/bytecode/%s/node%d-%s.tar.gz", prefix, functionName, nodeMajor, s3Arch(goArch))
+// nodeVersion are the caller's to supply — nothing here reads the
+// environment, which is what keeps it callable from a test with no AWS
+// client in sight. nodeVersion is expected already canonical; this function
+// does not clean it.
+func bytecodeCacheKey(prefix, functionName, nodeVersion, goArch string) string {
+	return fmt.Sprintf("%s/bytecode/%s/node%s-%s.tar.gz", prefix, functionName, nodeVersion, s3Arch(goArch))
 }
 
 // s3Arch renders a Go GOARCH value the way AWS spells it in its own naming
@@ -46,23 +48,20 @@ func s3Arch(goArch string) string {
 	return goArch
 }
 
-var nodeMajorPattern = regexp.MustCompile(`^v?(\d+)\.`)
+var nodeVersionPattern = regexp.MustCompile(`^v?(\d+\.\d+\.\d+)$`)
 
-// nodeMajor extracts the major version number out of a Node version string
-// such as "v24.3.1" or "24.3.1". The membrane cannot reliably learn the
-// child's version from the flush ack, so this only ever parses a version the
-// caller obtained some other way; an unparseable string returns an error
-// rather than a guess.
-func nodeMajor(version string) (int, error) {
-	m := nodeMajorPattern.FindStringSubmatch(version)
+// canonicalNodeVersion cleans and validates a Node version string such as
+// "v24.3.1" or "24.3.1", returning it without a leading "v". The membrane
+// cannot reliably learn the child's version from the flush ack, so this only
+// ever parses a version the caller obtained some other way; anything that is
+// not three dot-separated numbers returns an error rather than a guess, since
+// a garbled version must never compose a junk S3 key.
+func canonicalNodeVersion(version string) (string, error) {
+	m := nodeVersionPattern.FindStringSubmatch(version)
 	if m == nil {
-		return 0, fmt.Errorf("not a node version: %q", version)
+		return "", fmt.Errorf("not a node version: %q", version)
 	}
-	var major int
-	if _, err := fmt.Sscanf(m[1], "%d", &major); err != nil {
-		return 0, fmt.Errorf("not a node version: %q", version)
-	}
-	return major, nil
+	return m[1], nil
 }
 
 // exceedsBytecodeCacheCeiling reports whether an archive is too large to
@@ -245,7 +244,7 @@ func (u bytecodeUpload) run(ctx context.Context) {
 		fmt.Fprintf(os.Stderr, "ocel: could not read node's version, skipping compile cache upload: %v\n", err)
 		return
 	}
-	major, err := nodeMajor(version)
+	nodeVersion, err := canonicalNodeVersion(version)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: %v, skipping compile cache upload\n", err)
 		return
@@ -278,7 +277,7 @@ func (u bytecodeUpload) run(ctx context.Context) {
 		return
 	}
 
-	key := bytecodeCacheKey(u.prefix, u.function, major, u.arch)
+	key := bytecodeCacheKey(u.prefix, u.function, nodeVersion, u.arch)
 	exists, err := u.store.objectExists(ctx, u.bucket, key)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not check for an existing compile cache at %s: %v\n", key, err)
