@@ -158,16 +158,27 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	apps := manifestApps(manifest)
 	results := make([]appDeployResult, len(apps))
 	appOutputs := make([][]*deploymentsv1.ResourceOutput, len(apps))
+	appFunctionNames := make([]map[string]string, len(apps))
 	runAppStacks(apps, func(i int, app *deploymentsv1.ManifestApp) {
 		id := identities[app.GetName()]
-		outs, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], log)
+		outs, names, err := runAppStack(ctx, cfg, manifest, plan, app, resourceEnv, artifacts, baked[app.GetName()], log)
 		appOutputs[i] = outs
+		appFunctionNames[i] = names
 		record, recErr := buildDeploymentRecord(cfg, manifest, app, id, outs)
 		if err == nil {
 			err = recErr
 		}
 		results[i] = appDeployResult{App: app.GetName(), Identity: id, Record: record, Err: err}
 	})
+
+	// Warming runs here — after every app's stack, before the promote — and the
+	// ordering is load-bearing. A function is invokable as soon as its stack
+	// succeeds, but no traffic reaches it until Promote, so the first real
+	// request already finds a full cache. It is also the only ordering that is
+	// safe against the upload leg's create-if-absent semantics: an organic cold
+	// start that wins that race publishes whatever fraction of the app it
+	// happened to compile, permanently, for the life of the build.
+	warmDeployedFunctions(ctx, cfg, manifest, appFunctionNames, log)
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
 	if err := stageAndPromote(ctx, cfg, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {
@@ -891,17 +902,17 @@ func runInfraStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Mani
 // resource outputs, reduced to plain strings) into each function's env as a
 // concrete value rather than a cross-stack Pulumi reference — the two stacks
 // never share a Pulumi program. Opt-in-e2e only.
-func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, log func(string)) ([]*deploymentsv1.ResourceOutput, error) {
+func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, plan Plan, app *deploymentsv1.ManifestApp, resourceEnv map[string]string, artifacts map[string]artifactRef, baked appBundle, log func(string)) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
 	name := app.GetName()
 	functions := appFunctions(manifest, name)
 
 	caches, err := appCaches(cfg, manifest)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	if err := checkRuntimeOwnedNames(app); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	env := make(map[string]string, len(resourceEnv))
@@ -913,7 +924,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	// that cannot succeed, and it must not cost any provisioning first.
 	for _, fn := range functions {
 		if err := checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name])); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
 
@@ -933,7 +944,7 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	stackName := plan.AppStacks[name]
 	res, err := upStack(ctx, cfg, stackName, program, log)
 	if err != nil {
-		return nil, fmt.Errorf("provision app-deploy stack %s: %w", stackName, err)
+		return nil, nil, fmt.Errorf("provision app-deploy stack %s: %w", stackName, err)
 	}
 	return collectAppFunctionOutputs(functions, res.Outputs)
 }
@@ -1044,24 +1055,33 @@ func collectResourceOutputs(ctx context.Context, secrets SecretsReader, manifest
 }
 
 // collectAppFunctionOutputs is collectOutputs' function-only half, scoped to
-// one app-deploy stack's own functions.
-func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, error) {
+// one app-deploy stack's own functions, plus each function's realized physical
+// Lambda name keyed by logical name.
+//
+// A missing URL fails the deploy and a missing name does not: the URL is how
+// the app is served, while the name only feeds the warm pass, which is an
+// optimization no deploy may fail for.
+func collectAppFunctionOutputs(functions []*deploymentsv1.ManifestFunction, outputs auto.OutputMap) ([]*deploymentsv1.ResourceOutput, map[string]string, error) {
 	var result []*deploymentsv1.ResourceOutput
+	names := make(map[string]string, len(functions))
 	for _, fn := range functions {
 		name := fn.GetLogicalName()
 		raw, ok := outputs[name]
 		if !ok {
-			return nil, fmt.Errorf("stack produced no output for %s", name)
+			return nil, nil, fmt.Errorf("stack produced no output for %s", name)
 		}
 		fields, ok := raw.Value.(map[string]interface{})
 		if !ok {
-			return nil, fmt.Errorf("output for %s is not a map", name)
+			return nil, nil, fmt.Errorf("output for %s is not a map", name)
 		}
 		url, err := requireStringField(fields, name, outputKeyFunctionURL)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
+		}
+		if physical, ok := fields[outputKeyFunctionName].(string); ok && physical != "" {
+			names[name] = physical
 		}
 		result = append(result, collectFunctionOutput(name, url))
 	}
-	return result, nil
+	return result, names, nil
 }

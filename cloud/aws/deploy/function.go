@@ -96,6 +96,14 @@ const (
 	// outputKeyFunctionURL is the key registerFunction exports the Function URL
 	// under, read back by collectFunctionOutput.
 	outputKeyFunctionURL = "url"
+
+	// outputKeyFunctionName is the key the realized Lambda's physical name is
+	// exported under. The name is Pulumi-autonamed (a random suffix), so the
+	// stack output is the only thing that can tell the deploy which function to
+	// address for an Invoke — the warm pass reads it back here. It stays inside
+	// this package: the CLI-facing FunctionOutput carries a URL and nothing
+	// else, and a physical resource name is not a user-facing fact.
+	outputKeyFunctionName = "functionName"
 )
 
 // membraneLayerARN is the membrane layer version deployed functions attach,
@@ -448,7 +456,8 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[
 // changes when the code changes, so Pulumi redeploys exactly the changed
 // functions. isr is the app's cache, nil when it keeps none; it injects the
 // cache handler's env, and the grant backing it lives on that same app's role.
-// The Function URL is exported under logicalName for collectFunctionOutput,
+// The Function URL and the realized Lambda's physical name are exported under
+// logicalName for collectAppFunctionOutputs,
 // which is the identity everything downstream uses; the Pulumi resource name is
 // the clamped lambdaResourceName, so a long route still fits AWS's name limit.
 func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, roleArn pulumi.StringInput) error {
@@ -496,7 +505,10 @@ func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.Strin
 		return err
 	}
 
-	ctx.Export(logicalName, pulumi.Map{outputKeyFunctionURL: url.FunctionUrl})
+	ctx.Export(logicalName, pulumi.Map{
+		outputKeyFunctionURL:  url.FunctionUrl,
+		outputKeyFunctionName: fn.Name,
+	})
 	return nil
 }
 

@@ -123,6 +123,13 @@ type Config struct {
 	// client satisfies it.
 	Uploader ArtifactUploader
 
+	// Invoker invokes this deploy's own functions once each, so the membrane
+	// publishes a compile cache covering the whole app before any traffic
+	// arrives (see warm.go). Nil leaves the warm pass off entirely, which costs
+	// nothing but the cold start the first organic request would have paid
+	// anyway — so a caller that wires none deploys exactly as before.
+	Invoker FunctionInvoker
+
 	// AssetBucket is the account-global S3 bucket (from bootstrap) prerender
 	// configs + fallbacks are uploaded to, keyed by build id. Empty when the
 	// bootstrap predates it.
