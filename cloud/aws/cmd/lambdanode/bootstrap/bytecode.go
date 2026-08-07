@@ -235,7 +235,11 @@ func (u bytecodeUpload) run(ctx context.Context) {
 	defer cancel()
 
 	ack, ok := u.flush(ctx)
-	if !ok || !ack.OK {
+	if !ok {
+		return // flushCompileCache already said why
+	}
+	if !ack.OK {
+		fmt.Fprintln(os.Stderr, "ocel: node reported no compile cache to flush; skipping upload")
 		return
 	}
 
@@ -250,17 +254,24 @@ func (u bytecodeUpload) run(ctx context.Context) {
 		return
 	}
 
-	archive, err := buildBytecodeArchive(ack.Dir)
+	size, err := compileCacheSize(ack.Dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not measure the compile cache: %v\n", err)
+		return
+	}
+	if size == 0 {
+		fmt.Fprintf(os.Stderr, "ocel: node flushed an empty compile cache at %s; nothing to upload\n", ack.Dir)
+		return
+	}
+	if exceedsBytecodeCacheCeiling(size) {
+		fmt.Fprintf(os.Stderr, "ocel: compile cache is %d bytes, over the %d byte ceiling; skipping upload\n",
+			size, bytecodeCacheCeiling)
+		return
+	}
+
+	archive, err := buildArchiveWithin(ctx, ack.Dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not archive the compile cache: %v\n", err)
-		return
-	}
-	if archive.UncompressedSize == 0 {
-		return
-	}
-	if exceedsBytecodeCacheCeiling(archive.UncompressedSize) {
-		fmt.Fprintf(os.Stderr, "ocel: compile cache is %d bytes, over the %d byte ceiling; skipping upload\n",
-			archive.UncompressedSize, bytecodeCacheCeiling)
 		return
 	}
 
@@ -275,6 +286,68 @@ func (u bytecodeUpload) run(ctx context.Context) {
 	}
 	if err := u.store.putObject(ctx, u.bucket, key, archive.Data); err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not upload the compile cache to %s: %v\n", key, err)
+	}
+}
+
+// compileCacheSize sums what a compile cache directory holds without reading a
+// byte of it, so the ceiling can be enforced before the walk-read-gzip that
+// would otherwise do all that work only to throw it away. A directory that does
+// not exist sums to zero, matching how buildBytecodeArchive treats it.
+func compileCacheSize(dir string) (int64, error) {
+	var total int64
+	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if path == dir {
+				return nil
+			}
+			return err
+		}
+		if !d.Type().IsRegular() {
+			return nil
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		total += info.Size()
+		return nil
+	})
+	if err != nil {
+		return 0, fmt.Errorf("measure compile cache at %s: %w", dir, err)
+	}
+	return total, nil
+}
+
+// buildArchiveWithin abandons the archive if the budget runs out mid-build. The
+// read and gzip are the most expensive leg and cannot be interrupted, so on a
+// memory-starved sandbox they can outlast the deadline — and a runtime loop
+// still waiting on them is an invocation Lambda records as a timeout after it
+// was already answered.
+//
+// The abandoned goroutine runs to completion and is then collected; there is
+// nothing to cancel inside it, and it holds only the buffer it was filling.
+func buildArchiveWithin(ctx context.Context, dir string) (bytecodeArchive, error) {
+	// Checked before the goroutine rather than left to the select below, which
+	// picks at random when both cases are ready: a budget already spent must
+	// never start a build whose result has nowhere to go.
+	if err := ctx.Err(); err != nil {
+		return bytecodeArchive{}, fmt.Errorf("no budget left to archive %s: %w", dir, err)
+	}
+
+	type result struct {
+		archive bytecodeArchive
+		err     error
+	}
+	done := make(chan result, 1)
+	go func() {
+		archive, err := buildBytecodeArchive(dir)
+		done <- result{archive: archive, err: err}
+	}()
+	select {
+	case r := <-done:
+		return r.archive, r.err
+	case <-ctx.Done():
+		return bytecodeArchive{}, fmt.Errorf("archiving %s outlasted the upload budget: %w", dir, ctx.Err())
 	}
 }
 

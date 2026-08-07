@@ -6,16 +6,22 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 )
 
 func TestBytecodeCacheKey(t *testing.T) {
@@ -442,23 +448,31 @@ func TestBytecodeUpload_SkipsAnEmptyCacheDirectory(t *testing.T) {
 	}
 }
 
-func TestBytecodeUpload_SkipsWhenTheArchiveIsOverTheCeiling(t *testing.T) {
+// An oversized cache is rejected off the stat pass, so nothing is read or
+// compressed on the way to the decision — which is why a sparse file the size of
+// the ceiling costs this test nothing.
+func TestBytecodeUpload_SkipsWhenTheCacheIsOverTheCeiling(t *testing.T) {
 	dir := t.TempDir()
-	// Incompressible, so the archive is genuinely over the uncompressed ceiling.
-	big := make([]byte, bytecodeCacheCeiling+1)
-	if _, err := rand.Read(big); err != nil {
+	f, err := os.Create(filepath.Join(dir, "big.blob"))
+	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "big.blob"), big, 0o644); err != nil {
+	if err := f.Truncate(bytecodeCacheCeiling + 1); err != nil {
 		t.Fatal(err)
 	}
+	f.Close()
+
 	store := &fakeBytecodeStore{}
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
 
+	start := time.Now()
 	u.run(context.Background())
 
-	if len(store.puts) != 0 {
-		t.Errorf("puts = %v, want none over the ceiling", store.puts)
+	if len(store.heads) != 0 || len(store.puts) != 0 {
+		t.Errorf("touched S3 (heads=%v puts=%v), want nothing over the ceiling", store.heads, store.puts)
+	}
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("took %s, want the ceiling decided before anything was read or compressed", elapsed)
 	}
 }
 
@@ -480,34 +494,129 @@ func TestBytecodeUpload_SwallowsStoreErrors(t *testing.T) {
 	}
 }
 
-// The same context bounds the flush, the HEAD and the PUT, so an S3 call that
-// hangs is cancelled at the budget rather than running past the deadline the
-// platform is about to enforce.
-func TestBytecodeUpload_BoundsTheStoreCallsByTheBudget(t *testing.T) {
-	store := &blockingBytecodeStore{}
-	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
+// The same context bounds the HEAD and the PUT, so whichever one S3 hangs on is
+// cancelled at the budget rather than running past the deadline the platform is
+// about to enforce.
+func TestBytecodeUpload_BoundsBothStoreCallsByTheBudget(t *testing.T) {
+	for _, blockOn := range []string{"head", "put"} {
+		t.Run(blockOn, func(t *testing.T) {
+			store := &blockingBytecodeStore{blockOn: blockOn}
+			u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
 
-	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin+50*time.Millisecond))
+			ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin+50*time.Millisecond))
+			defer cancel()
+
+			start := time.Now()
+			u.run(ctx)
+			if elapsed := time.Since(start); elapsed > time.Second {
+				t.Errorf("took %s, want the %s cancelled at the budget", elapsed, blockOn)
+			}
+			if !store.reached {
+				t.Errorf("the %s was never reached, so the test proves nothing", blockOn)
+			}
+		})
+	}
+}
+
+// blockingBytecodeStore hangs on one of the two calls until the context ends it,
+// and passes the other through, so each leg's bounding can be proven on its own.
+type blockingBytecodeStore struct {
+	blockOn string
+	reached bool
+}
+
+func (b *blockingBytecodeStore) objectExists(ctx context.Context, _, _ string) (bool, error) {
+	if b.blockOn != "head" {
+		return false, nil
+	}
+	b.reached = true
+	<-ctx.Done()
+	return false, ctx.Err()
+}
+
+func (b *blockingBytecodeStore) putObject(ctx context.Context, _, _ string, _ []byte) error {
+	if b.blockOn != "put" {
+		return nil
+	}
+	b.reached = true
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+// A gzip that outlasts the budget must be abandoned: the runtime loop is not at
+// /next yet, so a build that runs on is an already-answered invocation that
+// Lambda records as a timeout.
+func TestBytecodeUpload_AbandonsAnArchiveBuildThatOutlastsTheBudget(t *testing.T) {
+	dir := cacheDirWith(t, "compiled bytes")
+	store := &fakeBytecodeStore{}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
+
+	// Spend the whole budget before the build starts, so the build's own select
+	// is the only thing left that can end the attempt.
+	u.nodeVersion = func(ctx context.Context) (string, error) {
+		<-ctx.Done()
+		return "v24.3.1", nil
+	}
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin+100*time.Millisecond))
 	defer cancel()
 
 	start := time.Now()
 	u.run(ctx)
 	if elapsed := time.Since(start); elapsed > time.Second {
-		t.Errorf("took %s, want the store call cancelled at the budget", elapsed)
+		t.Errorf("took %s, want the attempt abandoned at the budget", elapsed)
+	}
+	if len(store.puts) != 0 {
+		t.Errorf("puts = %v, want none once the budget is spent", store.puts)
 	}
 }
 
-// blockingBytecodeStore never answers, so only the context can end the call.
-type blockingBytecodeStore struct{}
+func TestBuildArchiveWithin_AbandonsOnAnExpiredContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-func (blockingBytecodeStore) objectExists(ctx context.Context, _, _ string) (bool, error) {
-	<-ctx.Done()
-	return false, ctx.Err()
+	if _, err := buildArchiveWithin(ctx, cacheDirWith(t, "compiled bytes")); err == nil {
+		t.Fatal("buildArchiveWithin() error = nil, want the budget reported")
+	}
 }
 
-func (blockingBytecodeStore) putObject(ctx context.Context, _, _ string, _ []byte) error {
-	<-ctx.Done()
-	return ctx.Err()
+func TestBuildArchiveWithin_ReturnsTheArchiveWithinBudget(t *testing.T) {
+	archive, err := buildArchiveWithin(context.Background(), cacheDirWith(t, "compiled bytes"))
+	if err != nil {
+		t.Fatalf("buildArchiveWithin: %v", err)
+	}
+	if got := readArchive(t, archive.Data); got["cached.blob"] != "compiled bytes" {
+		t.Errorf("archive = %v, want the cache directory's contents", got)
+	}
+}
+
+func TestCompileCacheSize(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "nested"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "a.blob"), []byte("12345"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "nested", "b.blob"), []byte("678"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := compileCacheSize(dir)
+	if err != nil {
+		t.Fatalf("compileCacheSize: %v", err)
+	}
+	if got != 8 {
+		t.Errorf("compileCacheSize() = %d, want 8", got)
+	}
+
+	missing, err := compileCacheSize(filepath.Join(dir, "does-not-exist"))
+	if err != nil {
+		t.Fatalf("compileCacheSize on a missing dir: %v", err)
+	}
+	if missing != 0 {
+		t.Errorf("compileCacheSize(missing) = %d, want 0", missing)
+	}
 }
 
 func TestUploadBytecodeCacheOnce_RunsAtMostOncePerInstance(t *testing.T) {
@@ -591,35 +700,54 @@ func TestResolveBytecodeUpload_NilWhenNotFullyConfigured(t *testing.T) {
 }
 
 // controlConnPair wires a Membrane to a stand-in for the node child over a real
-// connection, with the drain loop running exactly as startNode runs it.
+// connection, with the drain loop running exactly as startNode runs it. The
+// membrane is fully built before the drain starts, since the loop reads the
+// fields it was given.
 func controlConnPair(t *testing.T) (*Membrane, *bufio.Reader, net.Conn) {
 	t.Helper()
 	membraneSide, nodeSide := net.Pipe()
 	t.Cleanup(func() { membraneSide.Close(); nodeSide.Close() })
-	m := &Membrane{control: membraneSide}
+	m := &Membrane{control: membraneSide, pending: map[string]chan struct{}{}}
 	go m.drainControl(bufio.NewReader(membraneSide))
 	return m, bufio.NewReader(nodeSide), nodeSide
 }
 
+type flushOutcome struct {
+	ack compileCacheFlushedPayload
+	ok  bool
+}
+
+// startFlush runs the flush off the test goroutine so the test itself can play
+// node — reading the request and answering it — with every assertion staying
+// where t.Fatal and t.Errorf are legal.
+func startFlush(m *Membrane, ctx context.Context) <-chan flushOutcome {
+	done := make(chan flushOutcome, 1)
+	go func() {
+		ack, ok := m.flushCompileCache(ctx)
+		done <- flushOutcome{ack: ack, ok: ok}
+	}()
+	return done
+}
+
 func TestFlushCompileCache_DeliversTheAckToTheWaiter(t *testing.T) {
 	m, nodeReader, nodeConn := controlConnPair(t)
-	go func() {
-		line, err := nodeReader.ReadString('\n')
-		if err != nil {
-			return
-		}
-		if line != flushCompileCacheLine {
-			t.Errorf("node received %q, want %q", line, flushCompileCacheLine)
-		}
-		fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":"/tmp/.ocel/compile-cache","ok":true}}`)
-	}()
+	done := startFlush(m, context.Background())
 
-	ack, ok := m.flushCompileCache(context.Background())
-	if !ok {
+	line, err := nodeReader.ReadString('\n')
+	if err != nil {
+		t.Fatalf("node never received the flush request: %v", err)
+	}
+	if line != flushCompileCacheLine {
+		t.Errorf("node received %q, want %q", line, flushCompileCacheLine)
+	}
+	fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":"/tmp/.ocel/compile-cache","ok":true}}`)
+
+	got := <-done
+	if !got.ok {
 		t.Fatal("flushCompileCache() ok = false, want the ack delivered")
 	}
-	if ack.Dir != "/tmp/.ocel/compile-cache" || !ack.OK {
-		t.Errorf("ack = %+v, want the dir and ok node reported", ack)
+	if got.ack.Dir != "/tmp/.ocel/compile-cache" || !got.ack.OK {
+		t.Errorf("ack = %+v, want the dir and ok node reported", got.ack)
 	}
 }
 
@@ -627,19 +755,19 @@ func TestFlushCompileCache_DeliversTheAckToTheWaiter(t *testing.T) {
 // read as not-ok rather than as a directory named "null".
 func TestFlushCompileCache_CarriesANullDirAsNotOK(t *testing.T) {
 	m, nodeReader, nodeConn := controlConnPair(t)
-	go func() {
-		if _, err := nodeReader.ReadString('\n'); err != nil {
-			return
-		}
-		fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":null,"ok":false}}`)
-	}()
+	done := startFlush(m, context.Background())
 
-	ack, ok := m.flushCompileCache(context.Background())
-	if !ok {
+	if _, err := nodeReader.ReadString('\n'); err != nil {
+		t.Fatalf("node never received the flush request: %v", err)
+	}
+	fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":null,"ok":false}}`)
+
+	got := <-done
+	if !got.ok {
 		t.Fatal("flushCompileCache() ok = false, want the ack delivered")
 	}
-	if ack.Dir != "" || ack.OK {
-		t.Errorf("ack = %+v, want an empty dir and ok=false", ack)
+	if got.ack.Dir != "" || got.ack.OK {
+		t.Errorf("ack = %+v, want an empty dir and ok=false", got.ack)
 	}
 }
 
@@ -647,8 +775,27 @@ func TestFlushCompileCache_CarriesANullDirAsNotOK(t *testing.T) {
 // the caller's context even before the flush cap would fire.
 func TestFlushCompileCache_GivesUpWhenTheChildNeverAnswers(t *testing.T) {
 	m, nodeReader, _ := controlConnPair(t)
-	go nodeReader.ReadString('\n') // read the request, answer nothing
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
 
+	start := time.Now()
+	done := startFlush(m, ctx)
+	if _, err := nodeReader.ReadString('\n'); err != nil {
+		t.Fatalf("node never received the flush request: %v", err)
+	}
+
+	if got := <-done; got.ok {
+		t.Error("flushCompileCache() ok = true, want a give-up")
+	}
+	if elapsed := time.Since(start); elapsed > compileCacheFlushTimeout {
+		t.Errorf("took %s, want the context to end the wait early", elapsed)
+	}
+}
+
+// A child that never drains its receive buffer must not block the write either.
+// Nothing reads the node side here, so only the write deadline can end it.
+func TestFlushCompileCache_GivesUpWhenTheChildNeverReadsTheRequest(t *testing.T) {
+	m, _, _ := controlConnPair(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 
@@ -657,7 +804,35 @@ func TestFlushCompileCache_GivesUpWhenTheChildNeverAnswers(t *testing.T) {
 		t.Error("flushCompileCache() ok = true, want a give-up")
 	}
 	if elapsed := time.Since(start); elapsed > compileCacheFlushTimeout {
-		t.Errorf("took %s, want the context to end the wait early", elapsed)
+		t.Errorf("took %s, want the write deadline to end the attempt", elapsed)
+	}
+}
+
+// The deadline is the flush's alone: live values are pushed down this same
+// connection, and a deadline left behind would fail those writes forever.
+func TestFlushCompileCache_ClearsTheWriteDeadlineAfterwards(t *testing.T) {
+	m, nodeReader, _ := controlConnPair(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	done := startFlush(m, ctx)
+	if _, err := nodeReader.ReadString('\n'); err != nil {
+		t.Fatalf("node never received the flush request: %v", err)
+	}
+	<-done
+
+	// Well past the flush's expired deadline, a later write must still go out.
+	time.Sleep(100 * time.Millisecond)
+	written := make(chan error, 1)
+	go func() {
+		_, err := m.control.Write([]byte("{\"type\":\"liveValues\"}\n"))
+		written <- err
+	}()
+	if _, err := nodeReader.ReadString('\n'); err != nil {
+		t.Fatalf("a later push never arrived: %v", err)
+	}
+	if err := <-written; err != nil {
+		t.Errorf("a later push failed on the flush's stale deadline: %v", err)
 	}
 }
 
@@ -672,7 +847,6 @@ func TestFlushCompileCache_NoOpsWithoutAControlConnection(t *testing.T) {
 // must not wedge the drain loop, which also carries invocation-complete.
 func TestDrainControl_DropsAnUnawaitedFlushAck(t *testing.T) {
 	m, _, nodeConn := controlConnPair(t)
-	m.pending = map[string]chan struct{}{}
 	waiter := m.registerWaiter("req-1")
 
 	fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":"/tmp/x","ok":true}}`)
@@ -713,4 +887,120 @@ func TestBytecodeBudget(t *testing.T) {
 			t.Errorf("bytecodeBudget() = %s, want a non-positive budget", got)
 		}
 	})
+}
+
+// The gate has to reach the child, not just compute the right string.
+func TestNodeChildEnv_CarriesTheCompileCacheOnlyWhenGated(t *testing.T) {
+	const want = "NODE_COMPILE_CACHE=/tmp/.ocel/compile-cache"
+
+	t.Run("gate open", func(t *testing.T) {
+		t.Setenv(bytecodePrefixEnvVar, "ocel")
+		env := nodeChildEnv("/tmp/ocel-control.sock", []string{"OCEL_BAKED_X=1"})
+		if !slices.Contains(env, want) {
+			t.Errorf("child env has no %q: %v", want, env)
+		}
+		if !slices.Contains(env, "OCEL_CONTROL_SOCKET=/tmp/ocel-control.sock") {
+			t.Error("child env lost the control socket")
+		}
+		if !slices.Contains(env, "OCEL_BAKED_X=1") {
+			t.Error("child env lost the caller's extra entries")
+		}
+	})
+
+	t.Run("gate closed", func(t *testing.T) {
+		t.Setenv(bytecodePrefixEnvVar, "")
+		for _, e := range nodeChildEnv("/tmp/ocel-control.sock", nil) {
+			if strings.HasPrefix(e, "NODE_COMPILE_CACHE=") {
+				t.Errorf("child env has %q with the gate closed", e)
+			}
+		}
+	})
+}
+
+// s3Store drives the real s3BytecodeStore against a loopback stand-in for S3, so
+// the SDK's own error shapes reach the mapping under test. Static credentials
+// keep it away from the environment, and the endpoint keeps it off the network.
+func s3Store(t *testing.T, handler http.HandlerFunc) (bytecodeStore, *httptest.Server) {
+	t.Helper()
+	srv := httptest.NewServer(handler)
+	t.Cleanup(srv.Close)
+	client := s3.New(s3.Options{
+		Region:           "us-east-1",
+		BaseEndpoint:     &srv.URL,
+		UsePathStyle:     true,
+		Credentials:      credentials.NewStaticCredentialsProvider("AKID", "SECRET", ""),
+		RetryMaxAttempts: 1, // the budget bounds retries in production; here they are only latency
+	})
+	return s3BytecodeStore{client: client}, srv
+}
+
+// A 404 from HEAD is the answer "upload it", not a failure. Getting this wrong
+// in either direction silently disables the feature for good: an error reads as
+// "skip", and a false "exists" skips every PUT forever.
+func TestS3BytecodeStore_ObjectExists(t *testing.T) {
+	cases := []struct {
+		name       string
+		status     int
+		wantExists bool
+		wantErr    bool
+	}{
+		{name: "404 means the object is absent", status: http.StatusNotFound, wantExists: false},
+		{name: "200 means it is already there", status: http.StatusOK, wantExists: true},
+		{name: "403 is a real error, not an absence", status: http.StatusForbidden, wantErr: true},
+		{name: "500 is a real error", status: http.StatusInternalServerError, wantErr: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, _ := s3Store(t, func(w http.ResponseWriter, r *http.Request) {
+				if r.Method != http.MethodHead {
+					t.Errorf("method = %s, want HEAD", r.Method)
+				}
+				w.WriteHeader(tc.status)
+			})
+
+			exists, err := store.objectExists(context.Background(), "assets-xyz", "ocel/bytecode/my-app/node24-arm64.tar.gz")
+			if tc.wantErr {
+				if err == nil {
+					t.Fatalf("objectExists() = %v, nil, want an error", exists)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("objectExists() unexpected error: %v", err)
+			}
+			if exists != tc.wantExists {
+				t.Errorf("objectExists() = %v, want %v", exists, tc.wantExists)
+			}
+		})
+	}
+}
+
+func TestS3BytecodeStore_PutObject(t *testing.T) {
+	var gotPath string
+	var gotBody []byte
+	store, _ := s3Store(t, func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+	})
+
+	if err := store.putObject(context.Background(), "assets-xyz", "ocel/bytecode/my-app/node24-arm64.tar.gz", []byte("archive bytes")); err != nil {
+		t.Fatalf("putObject: %v", err)
+	}
+	if want := "/assets-xyz/ocel/bytecode/my-app/node24-arm64.tar.gz"; gotPath != want {
+		t.Errorf("put path = %q, want %q", gotPath, want)
+	}
+	if string(gotBody) != "archive bytes" {
+		t.Errorf("put body = %q, want %q", gotBody, "archive bytes")
+	}
+}
+
+func TestS3BytecodeStore_PutObjectReportsAFailure(t *testing.T) {
+	store, _ := s3Store(t, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+	})
+
+	if err := store.putObject(context.Background(), "assets-xyz", "some/key", []byte("x")); err == nil {
+		t.Error("putObject() error = nil, want the failure reported")
+	}
 }

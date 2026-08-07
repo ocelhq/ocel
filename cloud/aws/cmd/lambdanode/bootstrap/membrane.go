@@ -28,8 +28,6 @@ const completionMargin = 500 * time.Millisecond
 // the sandbox and says nothing useful in its place.
 const startupBudget = 8 * time.Second
 
-// nodeBinaryPath is the runtime the child is exec'd from, and the same binary
-// anything asking what node this is has to ask.
 const nodeBinaryPath = "/var/lang/bin/node"
 
 type Membrane struct {
@@ -144,7 +142,7 @@ func (m *Membrane) flushCompileCache(ctx context.Context) (compileCacheFlushedPa
 		m.mu.Unlock()
 	}()
 
-	if _, err := m.control.Write([]byte(flushCompileCacheLine)); err != nil {
+	if err := m.writeFlushRequest(ctx); err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not ask node to flush its compile cache: %v\n", err)
 		return compileCacheFlushedPayload{}, false
 	}
@@ -159,6 +157,28 @@ func (m *Membrane) flushCompileCache(ctx context.Context) (compileCacheFlushedPa
 	}
 	fmt.Fprintln(os.Stderr, "ocel: node did not acknowledge the compile-cache flush; skipping upload")
 	return compileCacheFlushedPayload{}, false
+}
+
+// writeFlushRequest sends the request under a deadline. A child wedged with a
+// full receive buffer would otherwise block this write indefinitely — past the
+// budget and past the invocation deadline — which is the one way this path
+// could still cost an already-answered invocation a recorded timeout.
+//
+// The deadline is cleared immediately after, because live values are pushed
+// down this same connection and must not inherit it. The window where one could
+// is a single syscall wide, and a live push caught in it fails, logs and is
+// retried by the next refresh.
+func (m *Membrane) writeFlushRequest(ctx context.Context) error {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		deadline = time.Now().Add(compileCacheFlushTimeout)
+	}
+	if err := m.control.SetWriteDeadline(deadline); err != nil {
+		return err
+	}
+	_, err := m.control.Write([]byte(flushCompileCacheLine))
+	m.control.SetWriteDeadline(time.Time{})
+	return err
 }
 
 // deliverCompileCacheFlush hands the ack to whoever asked for it, and drops it
@@ -333,6 +353,17 @@ func handshake(ln net.Listener, log *lastLog, onControl func(io.Writer)) (*nodeR
 	}
 }
 
+// nodeChildEnv is the environment the child is exec'd with, split out from the
+// spawn so what node is told can be asserted without a node binary.
+func nodeChildEnv(sockPath string, extraEnv []string) []string {
+	env := append(os.Environ(),
+		"OCEL_CONTROL_SOCKET="+sockPath,
+		"OCEL_HANDLER="+os.Getenv("OCEL_HANDLER"), // user's compiled entry
+	)
+	env = append(env, compileCacheEnv()...)
+	return append(env, extraEnv...)
+}
+
 func entrypointPath() string {
 	const nodeEntry = "/opt/ocel/node/entrypoint.mjs"
 	data, err := os.ReadFile(filepath.Join(taskRoot(), "config.json"))
@@ -373,12 +404,7 @@ func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer
 	}
 
 	cmd := exec.Command(nodeBinaryPath, entrypointPath())
-	cmd.Env = append(os.Environ(),
-		"OCEL_CONTROL_SOCKET="+sockPath,
-		"OCEL_HANDLER="+os.Getenv("OCEL_HANDLER"), // user's compiled entry
-	)
-	cmd.Env = append(cmd.Env, compileCacheEnv()...)
-	cmd.Env = append(cmd.Env, extraEnv...)
+	cmd.Env = nodeChildEnv(sockPath, extraEnv)
 	cmd.Stdout = os.Stdout // Node stdout → CloudWatch
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {

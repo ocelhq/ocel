@@ -60,9 +60,7 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error
 	m.awaitCompletion(ctx, inv.lc.AwsRequestID, waiter)
 
 	// The user has been served and the background tasks have settled, so what
-	// this costs is billed duration rather than anyone's latency. It happens on
-	// the first invocation only — that is when the compile cache is at its
-	// fullest relative to what it cost to produce.
+	// this costs is billed duration rather than anyone's latency.
 	m.uploadBytecodeCacheOnce(ctx)
 	return nil
 }
