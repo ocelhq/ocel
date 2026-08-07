@@ -384,13 +384,24 @@ export function bytecodeCacheKeyName(name) {
 }
 
 /**
- * bytecodeRehydrateOutcome classifies one CloudWatch log message against the
- * three lines rehydrateBytecodeCache / rehydrateCompileCache
- * (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go) can emit for `key`, or
- * null when the message is unrelated. assert-bytecode.mjs uses this to tell
- * a proven hit from a miss or fetch failure it can only report as a symptom
- * — matched by exact substring rather than parsed, since these are the
- * literal lines the membrane emits.
+ * bytecodeRehydrateOutcome classifies one CloudWatch log message against
+ * every read-leg line rehydrateCompileCache, rehydrateBytecodeCache and
+ * resolveBytecodeResolution (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go)
+ * can emit, or null when the message is unrelated. That file is the source
+ * of truth for the literal strings matched below — a wording change there
+ * must be mirrored here, or a message that used to classify silently starts
+ * returning null. assert-bytecode.mjs uses this to tell a proven hit from
+ * every failure mode it can only report as a symptom: matched by exact
+ * substring rather than parsed, since these are the literal lines the
+ * membrane emits, not a format to decode.
+ *
+ * `dir`-clear failures (the one read-leg line that names neither `key` nor
+ * anything else this function is given) are not classified here — nothing
+ * to match them against reaches this call. The two off-switch lines in
+ * resolveBytecodeResolution (a version probe or AWS config load that failed
+ * before a key was ever composed) also name no key; they are still
+ * classified, under "disabled", because a caller polling by key would
+ * otherwise never learn the feature turned itself off on some instances.
  */
 export function bytecodeRehydrateOutcome(message, key) {
   const text = String(message ?? "");
@@ -402,6 +413,18 @@ export function bytecodeRehydrateOutcome(message, key) {
   }
   if (text.includes(`could not fetch the compile cache at ${key}:`)) {
     return { kind: "fetch-error", message: text };
+  }
+  if (text.includes(`compile cache at ${key} is`) && text.includes("skipping rehydration")) {
+    return { kind: "over-ceiling", message: text };
+  }
+  if (text.includes(`could not rehydrate the compile cache from ${key}:`)) {
+    return { kind: "extract-error", message: text };
+  }
+  if (text.includes(`rehydrating the compile cache from ${key} ran out of time:`)) {
+    return { kind: "timeout", message: text };
+  }
+  if (text.includes("compile cache disabled") || text.includes("no aws config for the compile cache:")) {
+    return { kind: "disabled", message: text };
   }
   return null;
 }

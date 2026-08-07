@@ -380,6 +380,40 @@ describe("bytecodeRehydrateOutcome", () => {
     expect(bytecodeRehydrateOutcome("START RequestId: abc", key)).toBeNull();
     expect(bytecodeRehydrateOutcome(`ocel: rehydrated compile cache from some/other/key.tar.gz: 10 bytes in 1ms`, key)).toBeNull();
   });
+
+  it("recognizes a cache over the ceiling", () => {
+    expect(
+      bytecodeRehydrateOutcome(
+        `ocel: compile cache at ${key} is 100000000 bytes, over the 67108864 byte ceiling; skipping rehydration`,
+        key,
+      ).kind,
+    ).toBe("over-ceiling");
+  });
+
+  it("recognizes an extraction failure, and does not confuse it with a hit", () => {
+    const message = `ocel: could not rehydrate the compile cache from ${key}: unexpected EOF`;
+    expect(bytecodeRehydrateOutcome(message, key)).toEqual({ kind: "extract-error", message });
+    // "could not rehydrate the compile cache from" vs "rehydrated compile
+    // cache from" — one wrong word here would fold a real failure into a hit.
+    expect(bytecodeRehydrateOutcome(message, key).kind).not.toBe("hit");
+  });
+
+  it("recognizes a rehydration timeout", () => {
+    expect(
+      bytecodeRehydrateOutcome(`ocel: rehydrating the compile cache from ${key} ran out of time: context deadline exceeded`, key)
+        .kind,
+    ).toBe("timeout");
+  });
+
+  it("recognizes the feature disabling itself before a key could ever be composed", () => {
+    expect(bytecodeRehydrateOutcome("ocel: could not read node's version, compile cache disabled: exit status 1", key).kind).toBe(
+      "disabled",
+    );
+    expect(bytecodeRehydrateOutcome('ocel: not a node version: "garbage", compile cache disabled', key).kind).toBe("disabled");
+    expect(bytecodeRehydrateOutcome("ocel: no aws config for the compile cache: no EC2 IMDS role found", key).kind).toBe(
+      "disabled",
+    );
+  });
 });
 
 describe("tarEntryNames", () => {
