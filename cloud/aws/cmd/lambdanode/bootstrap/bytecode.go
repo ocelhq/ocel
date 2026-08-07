@@ -281,7 +281,12 @@ type bytecodeUpload struct {
 	store  bytecodeStore
 	bucket string
 	key    string
-	flush  func(ctx context.Context) (compileCacheFlushedPayload, bool)
+	// root is NODE_COMPILE_CACHE itself, which is what the read leg extracts
+	// into and therefore what the archive must be rooted at. It is not what
+	// node's flush ack names: getCompileCacheDir reports a subdirectory of
+	// this one, keyed by node version, architecture, V8 flag hash and uid.
+	root  string
+	flush func(ctx context.Context) (compileCacheFlushedPayload, bool)
 }
 
 // bytecodeUploadOutcome is what an attempt has to say for itself. The
@@ -339,7 +344,15 @@ func (u bytecodeUpload) run(ctx context.Context) bytecodeUploadOutcome {
 		return abandonUpload("node reported no compile cache to flush; skipping upload")
 	}
 
-	size, err := compileCacheSize(ctx, ack.Dir)
+	// Measured and archived at the root, never at what node reported: the two
+	// differ by the version-and-flags subdirectory node keeps its entries
+	// under, and that level has to survive the round trip or the read leg
+	// restores a cache node never looks at.
+	if !within(u.root, ack.Dir) {
+		return abandonUpload("node reported a compile cache at %s, outside %s; skipping upload", ack.Dir, u.root)
+	}
+
+	size, err := compileCacheSize(ctx, u.root)
 	if err != nil {
 		return abandonUpload("could not measure the compile cache: %v", err)
 	}
@@ -357,7 +370,7 @@ func (u bytecodeUpload) run(ctx context.Context) bytecodeUploadOutcome {
 		return over
 	}
 
-	archive, err := buildArchiveWithin(ctx, ack.Dir)
+	archive, err := buildArchiveWithin(ctx, u.root)
 	if err != nil {
 		return abandonUpload("could not archive the compile cache: %v", err)
 	}
@@ -366,6 +379,18 @@ func (u bytecodeUpload) run(ctx context.Context) bytecodeUploadOutcome {
 		return abandonUpload("could not upload the compile cache to %s: %v", u.key, err)
 	}
 	return bytecodeUploadOutcome{uploaded: true, bytes: size}
+}
+
+// within reports whether path is root or sits beneath it, which is the one
+// thing the upload leg needs to know about the directory node hands back: an
+// ack from somewhere else means node was told a different NODE_COMPILE_CACHE
+// than the read leg will restore into, and no archive can bridge that.
+func within(root, path string) bool {
+	rel, err := filepath.Rel(filepath.Clean(root), filepath.Clean(path))
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
 }
 
 // compileCacheSize sums what a compile cache directory holds without reading a
@@ -766,7 +791,7 @@ type bytecodeResolution struct {
 // function, which needs a live Membrane that does not exist until after
 // bringUp returns.
 func (r *bytecodeResolution) upload(flush func(context.Context) (compileCacheFlushedPayload, bool)) *bytecodeUpload {
-	return &bytecodeUpload{store: r.store, bucket: r.bucket, key: r.key, flush: flush}
+	return &bytecodeUpload{store: r.store, bucket: r.bucket, key: r.key, root: compileCacheDir, flush: flush}
 }
 
 // resolveBytecodeResolution builds the bytecode cache identity this

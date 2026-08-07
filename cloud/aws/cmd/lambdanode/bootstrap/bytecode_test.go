@@ -331,12 +331,45 @@ func uploadFixture(store bytecodeStore, ack compileCacheFlushedPayload, ackOK bo
 		store:  store,
 		bucket: "assets-xyz",
 		key:    "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz",
+		root:   ack.Dir,
 		flush: func(context.Context) (compileCacheFlushedPayload, bool) {
 			flushes++
 			return ack, ackOK
 		},
 	}
 	return u, &flushes
+}
+
+// What node reports from getCompileCacheDir is not NODE_COMPILE_CACHE but a
+// subdirectory of it, named for the node version, architecture, a hash of the
+// V8 flags in force and the uid. The read leg extracts into the root, so an
+// archive rooted at what node reported arrives one directory above where node
+// looks for it and every entry misses — the whole cache delivered, none of it
+// read.
+func TestBytecodeUpload_ArchiveKeepsTheSubdirectoryNodeReports(t *testing.T) {
+	root := t.TempDir()
+	nodeDir := filepath.Join(root, "v24.3.1-arm64-9ac5647c-993")
+	if err := os.MkdirAll(nodeDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nodeDir, "cached.blob"), []byte("compiled bytes"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	store := &fakeBytecodeStore{}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: nodeDir, OK: true}, true)
+	u.root = root
+
+	u.run(context.Background())
+
+	if len(store.puts) != 1 {
+		t.Fatalf("puts = %d, want 1", len(store.puts))
+	}
+	got := readArchive(t, store.puts[0].body)
+	const want = "v24.3.1-arm64-9ac5647c-993/cached.blob"
+	if got[want] != "compiled bytes" {
+		t.Errorf("uploaded archive = %v, want an entry at %s", got, want)
+	}
 }
 
 func TestBytecodeUpload_PutsToTheGivenBucketAndKey(t *testing.T) {
@@ -2059,6 +2092,28 @@ func TestBytecodeRehydrate_TargetsTheDirCompileCacheEnvDeclares(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(dir, "cached.blob"))
 	if err != nil || string(got) != "compiled" {
 		t.Errorf("file at compileCacheEnv's dir = %q, %v, want %q, nil: bytecodeRehydrate wrote somewhere else", got, err, "compiled")
+	}
+}
+
+// The upload leg needs the mirror of what the test above pins for the read
+// leg, and for the same reason: the archive is rooted at NODE_COMPILE_CACHE
+// itself, so a resolution that handed the upload anything else — node's own
+// reported subdirectory, most temptingly — publishes an archive the read leg
+// restores one level too high.
+func TestBytecodeUpload_IsRootedAtTheDirCompileCacheEnvDeclares(t *testing.T) {
+	t.Setenv(bytecodePrefixEnvVar, "ocel")
+	env := compileCacheEnv()
+	if len(env) != 1 || !strings.HasPrefix(env[0], "NODE_COMPILE_CACHE=") {
+		t.Fatalf("compileCacheEnv() = %v, want exactly one NODE_COMPILE_CACHE entry", env)
+	}
+	dir := strings.TrimPrefix(env[0], "NODE_COMPILE_CACHE=")
+
+	r := &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
+	u := r.upload(func(context.Context) (compileCacheFlushedPayload, bool) {
+		return compileCacheFlushedPayload{}, false
+	})
+	if u.root != dir {
+		t.Errorf("upload root = %q, want %q: the two legs disagree on where the cache lives", u.root, dir)
 	}
 }
 
