@@ -1,5 +1,6 @@
 import net from "node:net";
 import http from "node:http";
+import { flushCompileCache, getCompileCacheDir } from "node:module";
 
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
@@ -61,6 +62,30 @@ function receive(socket: net.Socket): void {
 export function reportFatalBoot(err: unknown): void {
   const detail = err instanceof Error ? (err.stack ?? err.message) : String(err);
   console.error(`ocel: fatal boot error: ${detail}`);
+}
+
+// The compile cache itself is enabled by the Go side via NODE_COMPILE_CACHE;
+// this only answers the membrane's request to flush it before the sandbox is
+// frozen. `flushCompileCache`/`getCompileCacheDir` are absent on older Node,
+// which degrades to an ok:false reply rather than a version check.
+function flushCompileCacheNow(): { dir: string | null; ok: boolean } {
+  let dir: string | null = null;
+  try {
+    dir = typeof getCompileCacheDir === "function" ? (getCompileCacheDir() ?? null) : null;
+    if (typeof flushCompileCache !== "function") return { dir, ok: false };
+    flushCompileCache();
+    return { dir, ok: typeof dir === "string" && dir.length > 0 };
+  } catch {
+    return { dir, ok: false };
+  }
+}
+
+export function installCompileCacheFlush(): void {
+  onControlMessage((message) => {
+    if (!message || typeof message !== "object") return;
+    if ((message as { type?: unknown }).type !== "flush-compile-cache") return;
+    sendControl("compile-cache-flushed", flushCompileCacheNow());
+  });
 }
 
 export interface OcelContext {
