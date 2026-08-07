@@ -308,17 +308,138 @@ export function markerLines({ buildId, promotionId }) {
 }
 
 /**
- * lambdaLogGroups maps a resourcegroupstaggingapi get-resources response into
- * the CloudWatch log groups of the Lambdas it found. Function names are
- * Pulumi-autonamed, so the ocel tags (cloud/aws/deploy/function.go) are the only
- * way to find them; the caller filters on `ocel:project`, this app's own slug
- * being what is unique per deploy.
+ * lambdaFunctionNames maps a resourcegroupstaggingapi get-resources response
+ * to the names of the Lambda functions it found. Function names are
+ * Pulumi-autonamed, so the ocel tags (cloud/aws/deploy/function.go) are the
+ * only way to find them.
  */
-export function lambdaLogGroups(response) {
+export function lambdaFunctionNames(response) {
   return (response?.ResourceTagMappingList ?? [])
     .map((entry) => /^arn:aws:lambda:[^:]*:[^:]*:function:([^:]+)/.exec(entry?.ResourceARN ?? ""))
     .filter(Boolean)
-    .map((match) => `/aws/lambda/${match[1]}`);
+    .map((match) => match[1]);
+}
+
+/**
+ * lambdaLogGroups maps a resourcegroupstaggingapi get-resources response into
+ * the CloudWatch log groups of the Lambdas it found; the caller filters on
+ * `ocel:project`, this app's own slug being what is unique per deploy.
+ */
+export function lambdaLogGroups(response) {
+  return lambdaFunctionNames(response).map((name) => `/aws/lambda/${name}`);
+}
+
+/**
+ * envSegment is the environment segment of an app's asset-key prefix. Mirrors
+ * envSegment in cloud/aws/server/server.go: "prod" for a production deploy,
+ * "preview-<identity>" for a preview one — the same token a deploy's Pulumi
+ * stack name also carries.
+ */
+export function envSegment(environment) {
+  if (environment?.class === "preview") {
+    return `preview-${environment?.identity ?? ""}`;
+  }
+  return "prod";
+}
+
+/**
+ * appAssetPrefix is the S3 key prefix one app's assets — and, when it caches,
+ * its bytecode archive — live under. Mirrors appAssetPrefixFor in
+ * cloud/aws/deploy/prerender.go: <env>/<slug>/<app>/<buildId>. `app` is
+ * assumed to already be a valid worker name (sanitizeWorkerName's job on the
+ * Go side) — every app this suite deploys is declared under the constant
+ * APP_NAME, which needs no sanitizing.
+ */
+export function appAssetPrefix({ environment, slug, app, buildId }) {
+  return [envSegment(environment), slug, app, buildId].join("/");
+}
+
+/**
+ * LAMBDA_RUNTIME mirrors defaultFunctionRuntime in cloud/aws/deploy/function.go
+ * — every Ocel Lambda runs this managed Node runtime, which fixes the major
+ * version the compile-cache key's "nodeNN" segment carries.
+ */
+export const LAMBDA_RUNTIME = "nodejs24.x";
+
+/**
+ * nodeMajorFromRuntime reads the major version out of a Lambda runtime name
+ * ("nodejs24.x" -> 24). Mirrors the parse nodeMajor does in
+ * cloud/aws/cmd/lambdanode/bootstrap/bytecode.go against a live `node
+ * --version`, but off the static runtime name instead — nothing here can exec
+ * anything, so it stays callable from a unit test.
+ */
+export function nodeMajorFromRuntime(runtime) {
+  const match = /^nodejs(\d+)\.x$/.exec(runtime ?? "");
+  if (!match) {
+    throw new Error(`not a lambda node runtime: ${JSON.stringify(runtime)}`);
+  }
+  return Number(match[1]);
+}
+
+/**
+ * bytecodeCacheKey composes the S3 key the membrane uploads a function's
+ * compile cache under. Mirrors bytecodeCacheKey in
+ * cloud/aws/cmd/lambdanode/bootstrap/bytecode.go exactly, including its
+ * "nodeNN-ARCH.tar.gz" tail — `arch` is the caller's to already have spelled
+ * the AWS way (x86_64/arm64), matching what s3Arch there does to a GOARCH.
+ */
+export function bytecodeCacheKey({ prefix, functionName, nodeMajor, arch }) {
+  return `${prefix}/bytecode/${functionName}/node${nodeMajor}-${arch}.tar.gz`;
+}
+
+const TAR_BLOCK_SIZE = 512;
+
+function tarString(block, start, length) {
+  const slice = block.subarray(start, start + length);
+  const end = slice.indexOf(0);
+  return Buffer.from(end === -1 ? slice : slice.subarray(0, end)).toString("utf8");
+}
+
+function tarHeaderChecksum(block) {
+  let sum = 0;
+  for (let i = 0; i < block.length; i++) {
+    sum += i >= 148 && i < 156 ? 0x20 : block[i];
+  }
+  return sum;
+}
+
+/**
+ * tarEntryNames walks an uncompressed tar buffer and returns each entry's
+ * name (its ustar `prefix` field joined on, when set). It exists so
+ * assert-bytecode.mjs can prove the membrane's upload is a real archive
+ * rather than truncated or empty bytes, without a dependency: every header's
+ * checksum is verified, and a buffer that runs out mid-header or never
+ * reaches the two-zero-block end-of-archive marker throws rather than
+ * silently returning a partial entry list.
+ */
+export function tarEntryNames(buffer) {
+  const names = [];
+  let offset = 0;
+  let sawEnd = false;
+  while (offset < buffer.length) {
+    if (offset + TAR_BLOCK_SIZE > buffer.length) {
+      throw new Error(`truncated tar header at byte ${offset} of ${buffer.length}`);
+    }
+    const header = buffer.subarray(offset, offset + TAR_BLOCK_SIZE);
+    if (header.every((byte) => byte === 0)) {
+      sawEnd = true;
+      break;
+    }
+    const rawChecksum = tarString(header, 148, 8).trim();
+    const wantChecksum = rawChecksum ? parseInt(rawChecksum, 8) : NaN;
+    if (!Number.isInteger(wantChecksum) || tarHeaderChecksum(header) !== wantChecksum) {
+      throw new Error(`tar header at byte ${offset} fails its checksum`);
+    }
+    const name = tarString(header, 0, 100);
+    const prefix = tarString(header, 345, 155);
+    const size = parseInt(tarString(header, 124, 12).trim() || "0", 8) || 0;
+    names.push(prefix ? `${prefix}/${name}` : name);
+    offset += TAR_BLOCK_SIZE + Math.ceil(size / TAR_BLOCK_SIZE) * TAR_BLOCK_SIZE;
+  }
+  if (!sawEnd) {
+    throw new Error("tar has no end-of-archive marker; the archive is truncated");
+  }
+  return names;
 }
 
 export function tail(text, maxLines) {
