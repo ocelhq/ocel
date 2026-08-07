@@ -1350,6 +1350,92 @@ func buildArchive(t *testing.T, entries []tarEntry) []byte {
 	return buf.Bytes()
 }
 
+// ustarHeader hand-builds a raw 512-byte USTAR header block for a name
+// archive/tar's own Writer refuses to emit (a trailing-slash name, in
+// particular — see ustarArchive). A byte stream a hostile uploader controls
+// is under no obligation to come from that writer, so the regression for
+// "an entry that resolves to dir itself" has to construct bytes the writer
+// cannot produce, or it only ever proves the safe case.
+func ustarHeader(name string, typeflag byte, size int64) []byte {
+	b := make([]byte, 512)
+	copy(b[0:100], name)
+	copy(b[100:108], fmt.Appendf(nil, "%07o\x00", 0o644))
+	copy(b[108:116], fmt.Appendf(nil, "%07o\x00", 0))
+	copy(b[116:124], fmt.Appendf(nil, "%07o\x00", 0))
+	copy(b[124:136], fmt.Appendf(nil, "%011o\x00", size))
+	copy(b[136:148], fmt.Appendf(nil, "%011o\x00", 0))
+	for i := 148; i < 156; i++ {
+		b[i] = ' ' // checksum field reads as spaces while the checksum itself is computed
+	}
+	b[156] = typeflag
+	copy(b[257:263], "ustar\x00")
+	copy(b[263:265], "00")
+
+	var sum int
+	for _, c := range b {
+		sum += int(c)
+	}
+	copy(b[148:156], fmt.Appendf(nil, "%06o\x00 ", sum))
+	return b
+}
+
+// ustarArchive gzip-compresses a hand-built raw tar stream: one entry with
+// the given name, typeflag and content, followed by the two zero blocks that
+// mark end of archive — bypassing archive/tar.Writer entirely, which is the
+// point: it rejects a trailing-slash name outright, but a name of "" or "."
+// it will happily emit and this test suite exercises those through
+// buildArchive already. Only "./" needs this hand-built path.
+func ustarArchive(t *testing.T, name string, typeflag byte, content []byte) []byte {
+	t.Helper()
+	var raw bytes.Buffer
+	raw.Write(ustarHeader(name, typeflag, int64(len(content))))
+	raw.Write(content)
+	if pad := (512 - len(content)%512) % 512; pad > 0 {
+		raw.Write(make([]byte, pad))
+	}
+	raw.Write(make([]byte, 1024)) // two zero blocks mark end of archive
+
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	if _, err := gz.Write(raw.Bytes()); err != nil {
+		t.Fatalf("gzip write: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("gzip close: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// TestUntarInto_RejectsAnEntryThatResolvesToTheCacheDirectoryItself proves an
+// entry named "", "." or "./" — all of which filepath.Clean collapses to "."
+// — is rejected rather than written to dir itself. Without this check,
+// os.OpenFile(dir, O_TRUNC, ...) replaces the just-wiped cache directory with
+// a regular file, and untarInto reports success: node would then find
+// NODE_COMPILE_CACHE pointing at a file instead of a directory.
+func TestUntarInto_RejectsAnEntryThatResolvesToTheCacheDirectoryItself(t *testing.T) {
+	for _, name := range []string{"", ".", "./"} {
+		t.Run(fmt.Sprintf("name=%q", name), func(t *testing.T) {
+			var archive []byte
+			if name == "./" {
+				// archive/tar.Writer refuses a trailing slash outright, so this
+				// one case has to be hand-built to prove the reader still
+				// defends against it.
+				archive = ustarArchive(t, name, tar.TypeReg, []byte("abc"))
+			} else {
+				archive = buildArchive(t, []tarEntry{{name: name, typeflag: tar.TypeReg, content: []byte("abc")}})
+			}
+
+			dest := filepath.Join(t.TempDir(), "cache")
+			if _, err := untarInto(bytes.NewReader(archive), dest, bytecodeCacheCeiling); err == nil {
+				t.Fatalf("untarInto(name=%q) error = nil, want the entry rejected", name)
+			}
+			if info, err := os.Stat(dest); err == nil {
+				t.Fatalf("dest = %v after a rejected entry, want it never created", info.Mode())
+			}
+		})
+	}
+}
+
 // zeroReader streams zero bytes forever, so a test can declare a tar entry of
 // any size without holding that many bytes in memory: gzip compresses a run
 // of zeros to almost nothing, which is what lets the ceiling-during-streaming
@@ -1393,7 +1479,7 @@ func TestUntarInto_RoundTrip(t *testing.T) {
 	}
 	var want int64
 	for _, contents := range files {
-		want += int64(len(contents))
+		want += int64(len(contents)) + tarEntryOverhead
 	}
 	if n != want {
 		t.Errorf("untarInto() = %d bytes, want %d", n, want)
@@ -1425,6 +1511,36 @@ func TestUntarInto_AbortsPastTheCeiling(t *testing.T) {
 
 	if _, err := untarInto(bytes.NewReader(archive), t.TempDir(), 150); err == nil {
 		t.Fatal("untarInto() error = nil, want the ceiling enforced")
+	}
+}
+
+// TestUntarInto_BoundsEntryCountEvenWithZeroSizedEntries proves the ceiling
+// stops a stream of empty entries, not just a stream of large ones: without
+// charging tarEntryOverhead per entry, hdr.Size never advances the running
+// total for a zero-byte file, so an archive of empty entries would never
+// trip the ceiling and would keep creating real inodes under dest until the
+// disk or the context gave out.
+func TestUntarInto_BoundsEntryCountEvenWithZeroSizedEntries(t *testing.T) {
+	entries := make([]tarEntry, 1000)
+	for i := range entries {
+		entries[i] = tarEntry{name: fmt.Sprintf("%04d.bin", i), typeflag: tar.TypeReg}
+	}
+	archive := buildArchive(t, entries)
+
+	const ceilingEntries = 10
+	ceiling := int64(ceilingEntries * tarEntryOverhead)
+	dest := t.TempDir()
+
+	if _, err := untarInto(bytes.NewReader(archive), dest, ceiling); err == nil {
+		t.Fatal("untarInto() error = nil, want the ceiling enforced against entry count alone")
+	}
+
+	created, err := os.ReadDir(dest)
+	if err != nil {
+		t.Fatalf("read dest: %v", err)
+	}
+	if len(created) != ceilingEntries {
+		t.Errorf("created %d entries under a %d-entry ceiling, want exactly %d", len(created), ceilingEntries, ceilingEntries)
 	}
 }
 
@@ -1468,7 +1584,7 @@ func TestRehydrateCompileCache_RoundTrip(t *testing.T) {
 	if !ok {
 		t.Fatal("rehydrateCompileCache() ok = false, want a successful round trip")
 	}
-	if want := int64(len("top") + len("nested")); n != want {
+	if want := int64(len("top")+len("nested")) + 2*tarEntryOverhead; n != want {
 		t.Errorf("rehydrateCompileCache() = %d bytes, want %d", n, want)
 	}
 	if got, err := os.ReadFile(filepath.Join(dest, "index.bin")); err != nil || string(got) != "top" {
@@ -1493,6 +1609,64 @@ func TestRehydrateCompileCache_MissTouchesNothing(t *testing.T) {
 		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) on a miss", n, ok)
 	}
 	assertNoCacheDir(t, dest)
+}
+
+// captureStderr redirects the package-level os.Stderr for the duration of fn
+// and returns what was written to it, so a test can assert on which of two
+// log lines a function chose rather than only on its return value. Tests in
+// this file don't run in parallel, so swapping the global is safe here.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("os.Pipe: %v", err)
+	}
+	orig := os.Stderr
+	os.Stderr = w
+	fn()
+	os.Stderr = orig
+	w.Close()
+
+	out, err := io.ReadAll(r)
+	if err != nil {
+		t.Fatalf("read captured stderr: %v", err)
+	}
+	return string(out)
+}
+
+// A miss and a failure both return (0, false), but the brief requires them to
+// log differently: a miss is the expected state on a deployment's first cold
+// start and must not read as a fault. This is the test that actually pins
+// that down — the (0, false) assertions elsewhere in this file would stay
+// green even if the two Fprintf calls in rehydrateCompileCache were swapped.
+func TestRehydrateCompileCache_LogsAMissDifferentlyFromAFailure(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "cache")
+
+	missOut := captureStderr(t, func() {
+		store := &fakeBytecodeStore{getErr: errBytecodeCacheMiss}
+		rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	})
+	if !strings.Contains(missOut, "nothing to rehydrate") {
+		t.Errorf("miss log = %q, want it to name a miss", missOut)
+	}
+	if strings.Contains(missOut, "could not") {
+		t.Errorf("miss log = %q, want no failure wording for the expected first-cold-start case", missOut)
+	}
+
+	failOut := captureStderr(t, func() {
+		store := &fakeBytecodeStore{getErr: errors.New("access denied")}
+		rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	})
+	if !strings.Contains(failOut, "could not fetch") {
+		t.Errorf("failure log = %q, want it to name a fetch failure", failOut)
+	}
+	if strings.Contains(failOut, "nothing to rehydrate") {
+		t.Errorf("failure log = %q, want it not to read as the expected miss case", failOut)
+	}
+
+	if missOut == failOut {
+		t.Error("miss and failure produced the identical log line")
+	}
 }
 
 func TestRehydrateCompileCache_NonGzipBodyLeavesNoDirectory(t *testing.T) {
@@ -1548,6 +1722,30 @@ func TestRehydrateCompileCache_RejectsSymlink(t *testing.T) {
 		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) for a symlink entry", n, ok)
 	}
 	assertNoCacheDir(t, dest)
+}
+
+// An entry that resolves to dir itself must not be reported as a successful
+// rehydration: os.OpenFile(dir, O_TRUNC, ...) would otherwise replace the
+// just-wiped cache directory with a regular file at dir's own path, which
+// rehydrateCompileCache's ok=true return would then vouch for. This is the
+// full-attempt version of TestUntarInto_RejectsAnEntryThatResolvesToTheCacheDirectoryItself,
+// checking the same attack through the caller that decides success and
+// disables the upload leg on a hit.
+func TestRehydrateCompileCache_RejectsAnEntryThatResolvesToTheCacheDirectoryItself(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "cache")
+	// archive/tar.Writer refuses a trailing-slash name outright, so only the
+	// hand-built path can exercise it; "" and "." are covered directly against
+	// untarInto above.
+	archive := ustarArchive(t, "./", tar.TypeReg, []byte("abc"))
+	store := rehydrateFixture(archive)
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) for an entry targeting dir itself", n, ok)
+	}
+	if info, err := os.Stat(dest); err == nil {
+		t.Fatalf("dest = %v, want it absent rather than replaced by a file", info.Mode())
+	}
 }
 
 // A ContentLength over the ceiling must bail before a single byte of the body
@@ -1621,8 +1819,8 @@ func TestRehydrateCompileCache_WipesStaleContentBeforeExtracting(t *testing.T) {
 	store := rehydrateFixture(archive)
 
 	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
-	if !ok || n != 3 {
-		t.Fatalf("rehydrateCompileCache() = (%d, %v), want (3, true)", n, ok)
+	if want := int64(3 + tarEntryOverhead); !ok || n != want {
+		t.Fatalf("rehydrateCompileCache() = (%d, %v), want (%d, true)", n, ok, want)
 	}
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
 		t.Error("stale content survived rehydration")
