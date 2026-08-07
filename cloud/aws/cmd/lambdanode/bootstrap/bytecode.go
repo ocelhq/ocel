@@ -156,6 +156,14 @@ const bytecodePrefixEnvVar = "OCEL_BYTECODE_PREFIX"
 // invocation deadline shortens it further.
 const bytecodeUploadBudget = 2 * time.Second
 
+// bytecodeRehydrateBudget caps the read leg the same way. It runs before the
+// spawn and inside startupBudget rather than after it, so this is carved out
+// of the 8s node's own boot has to fit in, not added on top of it — 2s is
+// enough for an archive well under the ceiling on a cold network path,
+// without leaving node so little of the budget that a slow S3 GET turns into
+// an init timeout of its own.
+const bytecodeRehydrateBudget = 2 * time.Second
+
 // compileCacheFlushTimeout bounds the wait for node's flush ack. A child that
 // never answers is a child that is wedged, and the loop must not join it there.
 const compileCacheFlushTimeout = time.Second
@@ -227,23 +235,29 @@ func (s s3BytecodeStore) getObject(ctx context.Context, bucket, key string) (io.
 }
 
 // bytecodeUpload is the once-per-instance publish of this function's compile
-// cache. Every dependency it has on the outside world is a field, so the whole
-// sequence is exercisable without a node child, an AWS client or the
-// environment.
+// cache. bucket and key come from the same bytecodeResolution the rehydrate
+// leg reads, never recomposed here — a version drift between the two legs
+// would be a silent, permanent cache miss, and holding one shared value
+// instead of two derivations is what makes that impossible rather than
+// merely correct today. Every other dependency on the outside world is a
+// field too, so the whole sequence is exercisable without a node child, an
+// AWS client or the environment.
 type bytecodeUpload struct {
-	store       bytecodeStore
-	bucket      string
-	prefix      string
-	function    string
-	arch        string
-	flush       func(ctx context.Context) (compileCacheFlushedPayload, bool)
-	nodeVersion func(ctx context.Context) (string, error)
+	store  bytecodeStore
+	bucket string
+	key    string
+	flush  func(ctx context.Context) (compileCacheFlushedPayload, bool)
 }
 
 // run publishes the cache, or gives up. Nothing it does can fail an invocation:
 // every leg that can go wrong ends the attempt with a line on stderr, because a
 // warm start that never gets a cache is strictly better than a request that
 // pays for one.
+//
+// The HEAD runs before the flush and the archive build, not after: an
+// instance that lost the upload race to another instance finds out for the
+// price of a HEAD, rather than paying to flush node's cache and build an
+// archive it is only going to discard.
 func (u bytecodeUpload) run(ctx context.Context) {
 	budget := bytecodeBudget(ctx)
 	if budget <= 0 {
@@ -253,23 +267,21 @@ func (u bytecodeUpload) run(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 
+	exists, err := u.store.objectExists(ctx, u.bucket, u.key)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not check for an existing compile cache at %s: %v\n", u.key, err)
+		return
+	}
+	if exists {
+		return
+	}
+
 	ack, ok := u.flush(ctx)
 	if !ok {
 		return // flushCompileCache already said why
 	}
 	if !ack.OK {
 		fmt.Fprintln(os.Stderr, "ocel: node reported no compile cache to flush; skipping upload")
-		return
-	}
-
-	version, err := u.nodeVersion(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: could not read node's version, skipping compile cache upload: %v\n", err)
-		return
-	}
-	nodeVersion, err := canonicalNodeVersion(version)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: %v, skipping compile cache upload\n", err)
 		return
 	}
 
@@ -300,17 +312,8 @@ func (u bytecodeUpload) run(ctx context.Context) {
 		return
 	}
 
-	key := bytecodeCacheKey(u.prefix, u.function, nodeVersion, u.arch)
-	exists, err := u.store.objectExists(ctx, u.bucket, key)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: could not check for an existing compile cache at %s: %v\n", key, err)
-		return
-	}
-	if exists {
-		return
-	}
-	if err := u.store.putObject(ctx, u.bucket, key, archive); err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: could not upload the compile cache to %s: %v\n", key, err)
+	if err := u.store.putObject(ctx, u.bucket, u.key, archive); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not upload the compile cache to %s: %v\n", u.key, err)
 	}
 }
 
@@ -550,29 +553,84 @@ func nodeVersionFromBinary(ctx context.Context) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// resolveBytecodeUpload builds the upload this deployment is configured for, or
-// nil for one that is configured for none. Nil is the off switch every caller
-// checks, so an unset prefix, a missing bucket or an AWS config that will not
-// load all land in the same place: the membrane simply never tries.
-func resolveBytecodeUpload(ctx context.Context, flush func(context.Context) (compileCacheFlushedPayload, bool)) *bytecodeUpload {
+// bytecodeResolution is this deployment's bytecode cache identity, resolved
+// exactly once and held by both legs from then on: the rehydrate leg reads
+// bucket and key directly, and upload composes the same key back into a
+// bytecodeUpload via the method below. Composing the key a second time
+// anywhere else would risk the one failure this feature cannot recover from
+// on its own — a version drift between the two legs is a silent, permanent
+// cache miss — so this type exists to make that structurally impossible
+// rather than merely correct today.
+type bytecodeResolution struct {
+	store  bytecodeStore
+	bucket string
+	key    string
+}
+
+// upload builds this instance's upload leg from the resolution, wiring in
+// the one dependency the resolution cannot supply for itself: the flush
+// function, which needs a live Membrane that does not exist until after
+// bringUp returns.
+func (r *bytecodeResolution) upload(flush func(context.Context) (compileCacheFlushedPayload, bool)) *bytecodeUpload {
+	return &bytecodeUpload{store: r.store, bucket: r.bucket, key: r.key, flush: flush}
+}
+
+// resolveBytecodeResolution builds the bytecode cache identity this
+// deployment is configured for, or nil for one that is configured for none.
+// Nil is the off switch every caller checks, so an unset prefix, a missing
+// bucket, a missing function name, a node version this process cannot read
+// or that doesn't parse, or an AWS config that will not load all land in the
+// same place: the membrane simply never tries, on either leg.
+//
+// nodeVersion is a field for the same reason it was one on bytecodeUpload
+// before this replaced it there: the whole resolution is exercisable without
+// a node binary, an AWS client or the environment in reach.
+func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Context) (string, error)) *bytecodeResolution {
 	prefix := os.Getenv(bytecodePrefixEnvVar)
 	bucket := os.Getenv("OCEL_ISR_BUCKET")
 	function := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
 	if prefix == "" || bucket == "" || function == "" {
 		return nil
 	}
-	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+
+	version, err := nodeVersion(ctx)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: no aws config for the compile cache upload: %v\n", err)
+		fmt.Fprintf(os.Stderr, "ocel: could not read node's version, compile cache disabled: %v\n", err)
 		return nil
 	}
-	return &bytecodeUpload{
-		store:       s3BytecodeStore{client: s3.NewFromConfig(cfg)},
-		bucket:      bucket,
-		prefix:      prefix,
-		function:    function,
-		arch:        runtime.GOARCH,
-		flush:       flush,
-		nodeVersion: nodeVersionFromBinary,
+	canonical, err := canonicalNodeVersion(version)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: %v, compile cache disabled\n", err)
+		return nil
 	}
+
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: no aws config for the compile cache: %v\n", err)
+		return nil
+	}
+
+	return &bytecodeResolution{
+		store:  s3BytecodeStore{client: s3.NewFromConfig(cfg)},
+		bucket: bucket,
+		key:    bytecodeCacheKey(prefix, function, canonical, runtime.GOARCH),
+	}
+}
+
+// rehydrateBytecodeCache runs the read leg under its own cap and logs the
+// one line the outcome needs. A miss already names the key and the reason —
+// that is rehydrateCompileCache's own log line — so only the hit is logged
+// here, with what a miss's line cannot know yet: the bytes restored and how
+// long it took.
+func rehydrateBytecodeCache(ctx context.Context, r *bytecodeResolution, dir string) bool {
+	ctx, cancel := context.WithTimeout(ctx, bytecodeRehydrateBudget)
+	defer cancel()
+
+	start := time.Now()
+	n, hit := rehydrateCompileCache(ctx, r.store, r.bucket, r.key, dir)
+	if hit {
+		fmt.Fprintf(os.Stderr, "ocel: rehydrated compile cache from %s: %d bytes in %dms\n",
+			r.key, n, time.Since(start).Milliseconds())
+	}
+	return hit
 }

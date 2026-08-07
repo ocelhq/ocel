@@ -40,8 +40,10 @@ type Membrane struct {
 	live *liveValues
 
 	// bytecode is this instance's compile-cache upload, nil for a deployment
-	// that is not configured for one. It is installed before the runtime loop
-	// starts and never reassigned.
+	// that is not configured for one and also nil for one that rehydrated the
+	// object at init — a hit already proves it exists, so there is nothing
+	// left for this instance's upload to do. It is installed before the
+	// runtime loop starts and never reassigned.
 	bytecode *bytecodeUpload
 
 	// pending maps an in-flight request id to the channel closed when the JS

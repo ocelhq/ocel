@@ -22,6 +22,16 @@ func main() {
 	ctx := context.Background()
 	start := time.Now()
 
+	// The bytecode cache's identity depends on node's own version, which this
+	// process cannot know without running node --version — so that probe, and
+	// the AWS config it will need if it succeeds, are kicked off before
+	// anything else in main() touches the clock. Both run on their own
+	// goroutine and are only joined once bringUpWithBytecode needs the result,
+	// which is what lets them overlap the live-values prefetch below and the
+	// baked-var decrypts rather than adding their own time to init.
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	go func() { bytecodeReady <- resolveBytecodeResolution(ctx, nodeVersionFromBinary) }()
+
 	// Live values are the one class not delivered through the child's
 	// environment, so their fetch is the one that need not precede the spawn.
 	// It is started first and joined last: the read and its decrypts run beside
@@ -43,13 +53,11 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}
 
-	membrane, err := bringUp(startNode, live, prefetch, childEnv(bakedEnv, live), startupBudget-time.Since(start))
+	membrane, err := bringUpWithBytecode(ctx, startNode, live, prefetch, childEnv(bakedEnv, live), start, bytecodeReady, bytecodeRehydrate)
 	if err != nil {
 		// Must report init failure BEFORE we start polling the Runtime API.
 		fatalInit(err.Error())
 	}
-
-	membrane.bytecode = resolveBytecodeUpload(ctx, membrane.flushCompileCache)
 
 	rt := newRuntimeClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
 	for {
@@ -93,6 +101,60 @@ func bringUp(spawn spawner, live *liveValues, prefetch <-chan error, env []strin
 
 	if err := live.join(prefetch); err != nil {
 		return nil, fmt.Errorf("failed to resolve this deployment's live variables: %w", err)
+	}
+	return membrane, nil
+}
+
+// bytecodeRehydrate is bringUpWithBytecode's default rehydrate dependency,
+// closing over the one piece rehydrateBytecodeCache cannot know for itself:
+// where node is told to keep its compile cache.
+func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
+	return rehydrateBytecodeCache(ctx, r, compileCacheDir)
+}
+
+// bringUpWithBytecode wraps bringUp with the bytecode cache's two legs,
+// joining and rehydrating before bringUp is called and attaching the upload
+// leg after it returns.
+//
+// The join and the rehydrate attempt both happen before budget is computed,
+// which is what carves rehydration's cost out of startupBudget rather than
+// adding it on top: bringUp's budget argument is startupBudget minus
+// time.Since(start), and start was captured before any of this ran, so
+// whatever rehydration spent is already reflected in that subtraction by the
+// time bringUp sees it.
+//
+// A hit disables the upload leg entirely rather than merely skipping its
+// PUT: it proves the object already exists, so nothing membrane.bytecode
+// would do could ever matter, and leaving it nil is what keeps
+// uploadBytecodeCacheOnce from flushing, walking or archiving for an outcome
+// already decided.
+//
+// bytecodeReady and rehydrate are dependencies for the same reason spawn is:
+// the whole sequence, including its budget arithmetic, is exercisable with
+// fakes and no node binary, AWS client or environment in reach.
+func bringUpWithBytecode(
+	ctx context.Context,
+	spawn spawner,
+	live *liveValues,
+	prefetch <-chan error,
+	env []string,
+	start time.Time,
+	bytecodeReady <-chan *bytecodeResolution,
+	rehydrate func(context.Context, *bytecodeResolution) bool,
+) (*Membrane, error) {
+	bytecode := <-bytecodeReady
+	var hit bool
+	if bytecode != nil {
+		hit = rehydrate(ctx, bytecode)
+	}
+
+	membrane, err := bringUp(spawn, live, prefetch, env, startupBudget-time.Since(start))
+	if err != nil {
+		return nil, err
+	}
+
+	if bytecode != nil && !hit {
+		membrane.bytecode = bytecode.upload(membrane.flushCompileCache)
 	}
 	return membrane, nil
 }
