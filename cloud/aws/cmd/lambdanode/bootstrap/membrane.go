@@ -58,12 +58,20 @@ type Membrane struct {
 	// runtime loop starts and never reassigned.
 	bytecode *bytecodeUpload
 
-	// bytecodeCached records that the nil above is a hit rather than a
-	// deployment with no compile cache at all. The two are the same absence to
-	// every other caller, and only a warm invocation has to tell them apart —
-	// which it cannot do by re-resolving without paying for the resolution a
-	// second time.
-	bytecodeCached bool
+	// bytecodeSource records that the nil above is a hit rather than a
+	// deployment with no compile cache at all, and which leg produced it. The
+	// two are the same absence to every other caller, and only a warm
+	// invocation has to tell them apart — which it cannot do by re-resolving
+	// without paying for the resolution a second time. It is the source rather
+	// than a flag beside one so the two can never disagree; empty means this
+	// instance never ran the legs at all.
+	bytecodeSource bytecodeSource
+
+	// bytecodeKey is the key the resolution composed, kept here because a hit
+	// leaves bytecode nil and a warm invocation still has to report the key: a
+	// deploy cannot compose it, having never learned node's version. Copied
+	// from the resolution, never recomposed.
+	bytecodeKey string
 
 	// pending maps an in-flight request id to the channel closed when the JS
 	// side reports the invocation complete (response finished and every
@@ -73,6 +81,25 @@ type Membrane struct {
 	flushWaiter  chan compileCacheFlushedPayload
 	warmWaiter   chan compileCacheWarmedPayload
 	bytecodeDone bool
+}
+
+// bytecodeCacheSource is bytecodeSource as anything outside init should read
+// it: a Membrane that never ran the legs — every unit test of the data plane
+// builds one — reports none rather than an empty string a deploy would have to
+// interpret.
+func (m *Membrane) bytecodeCacheSource() bytecodeSource {
+	if m.bytecodeSource == "" {
+		return bytecodeSourceNone
+	}
+	return m.bytecodeSource
+}
+
+// bytecodeCached reports whether init found this deployment's cache already
+// published. It is derived from the source rather than tracked beside it,
+// which is what keeps "there was a hit" and "here is where it came from" from
+// ever answering differently.
+func (m *Membrane) bytecodeCached() bool {
+	return m.bytecodeCacheSource() != bytecodeSourceNone
 }
 
 // registerWaiter records interest in an invocation's completion signal and

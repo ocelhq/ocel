@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"runtime"
@@ -432,7 +433,21 @@ func buildArchiveWithin(ctx context.Context, dir string) ([]byte, error) {
 // ceiling, closing that off without a separate counter.
 const tarEntryOverhead = 512
 
-// untarInto gzip-decompresses and untars r into dir, streaming throughout —
+// untarGzipInto gunzips r and hands the plain stream to untarInto. The gzip
+// layer is exactly this much of the read leg: the S3 object is compressed
+// because it crosses the network, and the copy baked into the deployment
+// package is not, because Lambda's own unzip already decompressed it before
+// INIT. Both are the same tar, extracted and validated by the one path below.
+func untarGzipInto(ctx context.Context, r io.Reader, dir string, ceiling int64) (int64, error) {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return 0, fmt.Errorf("bytecode cache is not gzip: %w", err)
+	}
+	defer gz.Close()
+	return untarInto(ctx, gz, dir, ceiling)
+}
+
+// untarInto untars r into dir, streaming throughout —
 // never buffering the archive or an entry in memory — and returns the total
 // bytes written. dir is trusted; every entry is not: a name that is absolute,
 // climbs out via "..", or resolves to dir itself (an empty name, ".", "./")
@@ -442,16 +457,23 @@ const tarEntryOverhead = 512
 // file. ceiling bounds the running total — charged per entry as well as per
 // byte, see tarEntryOverhead — aborting mid-stream rather than after the
 // fact, so a hostile or corrupt archive cannot fill the sandbox's disk.
-func untarInto(r io.Reader, dir string, ceiling int64) (int64, error) {
-	gz, err := gzip.NewReader(r)
-	if err != nil {
-		return 0, fmt.Errorf("bytecode cache is not gzip: %w", err)
-	}
-	defer gz.Close()
-	tr := tar.NewReader(gz)
+//
+// ctx stops the extraction between entries. Both callers share one budget
+// across both rehydration legs, so the cost of running on past it is not just
+// an abandoned goroutine but the leg that comes next: an extraction that spends
+// the whole of bytecodeRehydrateBudget hands the S3 fall-through nothing at
+// all, and a function whose embedded tar turned out to be corrupt is exactly
+// the one that needs S3 most. Per entry is where the check goes because that is
+// where the work is — a ceiling-bounded archive is many small files, not one
+// long read.
+func untarInto(ctx context.Context, r io.Reader, dir string, ceiling int64) (int64, error) {
+	tr := tar.NewReader(r)
 
 	var total int64
 	for {
+		if err := ctx.Err(); err != nil {
+			return total, fmt.Errorf("extracting the bytecode cache ran out of time: %w", err)
+		}
 		hdr, err := tr.Next()
 		if err == io.EOF {
 			return total, nil
@@ -546,7 +568,7 @@ func rehydrateCompileCache(ctx context.Context, store bytecodeStore, bucket, key
 	}
 	done := make(chan result, 1)
 	go func() {
-		n, err := untarInto(body, dir, bytecodeCacheCeiling)
+		n, err := untarGzipInto(ctx, body, dir, bytecodeCacheCeiling)
 		done <- result{n: n, err: err}
 	}()
 
@@ -568,6 +590,109 @@ func rehydrateCompileCache(ctx context.Context, store bytecodeStore, bucket, key
 		os.RemoveAll(dir)
 		return 0, false
 	}
+}
+
+// bytecodeSource is where an instance's compile cache came from. A deploy-time
+// warm invocation is the caller that needs it: the two hits are the same
+// already-cached answer otherwise, and a deploy that just embedded a cache into
+// an artifact has no other way to tell whether the function actually read it.
+//
+// It is a named type rather than a bare string so the three values below are
+// the only things that can be assigned to a field declaring one — the wire
+// spelling is deliberately duplicated on the deploy side (see warm.go), and a
+// duplicated constant is only safe while each side's own uses are checked.
+type bytecodeSource string
+
+const (
+	bytecodeSourceEmbedded bytecodeSource = "embedded"
+	bytecodeSourceS3       bytecodeSource = "s3"
+	bytecodeSourceNone     bytecodeSource = "none"
+)
+
+// embeddedBytecodeDir is where the deploy bakes this deployment's compile
+// cache into the function's own artifact, under the same .ocel/ overlay
+// namespace the variable files travel in. Lambda unpacks the deployment
+// package before INIT — unbilled, and outside the init ceiling — so a tar
+// read from here costs a local read where the object costs a network round
+// trip. It is read-only, which is why the tar is still extracted into
+// compileCacheDir rather than pointed at in place.
+const embeddedBytecodeDir = "/var/task/.ocel/bytecode"
+
+// embeddedBytecodePath is where the deploy would have baked the object at
+// key, or "" for a key that names no cache tarball. It is derived from the
+// key the resolution already composed — never from a version and an arch read
+// again here — because a second derivation is exactly the drift
+// bytecodeResolution exists to rule out: it would surface after a runtime bump
+// as an instance loading a stale embedded cache under a fresh key, which is
+// the one failure this feature cannot recover from on its own.
+func embeddedBytecodePath(key string) string {
+	base := path.Base(key)
+	if !strings.HasSuffix(base, ".tar.gz") {
+		return ""
+	}
+	return filepath.Join(embeddedBytecodeDir, strings.TrimSuffix(base, ".gz"))
+}
+
+// loadEmbeddedBytecodeCache extracts the tar baked into the deployment package
+// at tarPath into dir. It is the S3 leg's local twin, with one difference that
+// matters: an absent tar says nothing at all, because an artifact built
+// without the embed pass is the ordinary case rather than a miss worth a line,
+// and it leaves dir exactly as it found it for the S3 leg to wipe on its own
+// terms.
+//
+// Every other outcome wipes dir and reports a miss. A half-populated cache
+// directory is worse than none — node would trust it — and the caller has to
+// be free to fall through: a corrupt embedded copy may never leave a function
+// permanently cold when S3 holds a good object.
+//
+// ctx bounds the extraction as it proceeds, not only before it starts. That a
+// local read cannot block the way an S3 body read can is beside the point: this
+// leg and the S3 leg share one bytecodeRehydrateBudget, and a tar near the
+// ceiling is tens of thousands of writes into /tmp on a sandbox whose IO is
+// sized by its memory. An extraction that spends the whole budget leaves the
+// fall-through none — which is precisely the case where the fall-through is the
+// only thing that can still save the cold start.
+func loadEmbeddedBytecodeCache(ctx context.Context, tarPath, dir string) (int64, bool) {
+	if ctx.Err() != nil {
+		return 0, false
+	}
+
+	f, err := os.Open(tarPath)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "ocel: could not open the embedded compile cache at %s: %v\n", tarPath, err)
+		}
+		return 0, false
+	}
+	defer f.Close()
+
+	if err := os.RemoveAll(dir); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not clear %s before loading the embedded compile cache at %s: %v\n", dir, tarPath, err)
+		return 0, false
+	}
+
+	n, err := untarInto(ctx, f, dir, bytecodeCacheCeiling)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not load the embedded compile cache at %s: %v\n", tarPath, err)
+		os.RemoveAll(dir)
+		return 0, false
+	}
+	return n, true
+}
+
+// embeddedBytecodeCache runs the local leg and logs the one line a hit needs.
+// It is deliberately worded apart from the S3 leg's "rehydrated compile cache
+// from": an organic cold start is only attributable in CloudWatch if the two
+// paths read differently, and the deploy's verify invoke is not the only place
+// that has to tell them apart.
+func embeddedBytecodeCache(ctx context.Context, tarPath, dir string) bool {
+	start := time.Now()
+	n, hit := loadEmbeddedBytecodeCache(ctx, tarPath, dir)
+	if hit {
+		fmt.Fprintf(os.Stderr, "ocel: loaded embedded compile cache from %s: %d bytes in %dms\n",
+			tarPath, n, time.Since(start).Milliseconds())
+	}
+	return hit
 }
 
 // bytecodeBudget is what the upload may spend: the cap, or whatever is left

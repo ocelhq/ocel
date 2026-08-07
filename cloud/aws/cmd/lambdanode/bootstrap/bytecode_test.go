@@ -1457,8 +1457,8 @@ func TestUntarInto_RejectsAnEntryThatResolvesToTheCacheDirectoryItself(t *testin
 			}
 
 			dest := filepath.Join(t.TempDir(), "cache")
-			if _, err := untarInto(bytes.NewReader(archive), dest, bytecodeCacheCeiling); err == nil {
-				t.Fatalf("untarInto(name=%q) error = nil, want the entry rejected", name)
+			if _, err := untarGzipInto(context.Background(), bytes.NewReader(archive), dest, bytecodeCacheCeiling); err == nil {
+				t.Fatalf("untarGzipInto(name=%q) error = nil, want the entry rejected", name)
 			}
 			if info, err := os.Stat(dest); err == nil {
 				t.Fatalf("dest = %v after a rejected entry, want it never created", info.Mode())
@@ -1504,16 +1504,16 @@ func TestUntarInto_RoundTrip(t *testing.T) {
 	}
 
 	dest := t.TempDir()
-	n, err := untarInto(bytes.NewReader(archive), dest, bytecodeCacheCeiling)
+	n, err := untarGzipInto(context.Background(), bytes.NewReader(archive), dest, bytecodeCacheCeiling)
 	if err != nil {
-		t.Fatalf("untarInto: %v", err)
+		t.Fatalf("untarGzipInto: %v", err)
 	}
 	var want int64
 	for _, contents := range files {
 		want += int64(len(contents)) + tarEntryOverhead
 	}
 	if n != want {
-		t.Errorf("untarInto() = %d bytes, want %d", n, want)
+		t.Errorf("untarGzipInto() = %d bytes, want %d", n, want)
 	}
 	for path, contents := range files {
 		rel, err := filepath.Rel(src, path)
@@ -1560,8 +1560,8 @@ func TestUntarInto_ClampsExtractedFilePermissions(t *testing.T) {
 	}
 
 	dest := t.TempDir()
-	if _, err := untarInto(bytes.NewReader(buf.Bytes()), dest, bytecodeCacheCeiling); err != nil {
-		t.Fatalf("untarInto: %v", err)
+	if _, err := untarGzipInto(context.Background(), bytes.NewReader(buf.Bytes()), dest, bytecodeCacheCeiling); err != nil {
+		t.Fatalf("untarGzipInto: %v", err)
 	}
 
 	info, err := os.Stat(filepath.Join(dest, "unreadable.blob"))
@@ -1583,8 +1583,8 @@ func TestUntarInto_AbortsPastTheCeiling(t *testing.T) {
 		{name: "b.bin", typeflag: tar.TypeReg, content: bytes.Repeat([]byte("y"), 100)},
 	})
 
-	if _, err := untarInto(bytes.NewReader(archive), t.TempDir(), 150); err == nil {
-		t.Fatal("untarInto() error = nil, want the ceiling enforced")
+	if _, err := untarGzipInto(context.Background(), bytes.NewReader(archive), t.TempDir(), 150); err == nil {
+		t.Fatal("untarGzipInto() error = nil, want the ceiling enforced")
 	}
 }
 
@@ -1605,8 +1605,8 @@ func TestUntarInto_BoundsEntryCountEvenWithZeroSizedEntries(t *testing.T) {
 	ceiling := int64(ceilingEntries * tarEntryOverhead)
 	dest := t.TempDir()
 
-	if _, err := untarInto(bytes.NewReader(archive), dest, ceiling); err == nil {
-		t.Fatal("untarInto() error = nil, want the ceiling enforced against entry count alone")
+	if _, err := untarGzipInto(context.Background(), bytes.NewReader(archive), dest, ceiling); err == nil {
+		t.Fatal("untarGzipInto() error = nil, want the ceiling enforced against entry count alone")
 	}
 
 	created, err := os.ReadDir(dest)
@@ -2087,7 +2087,7 @@ func TestBringUpWithBytecode_RehydrationsCostIsCarvedOutOfStartupBudget(t *testi
 
 	var gotBudget time.Duration
 	start := time.Now()
-	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, rehydrate)
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate)
 	if err != nil {
 		t.Fatalf("bringUpWithBytecode: %v", err)
 	}
@@ -2119,7 +2119,7 @@ func TestBringUpWithBytecode_FloorsTheSpawnBudget(t *testing.T) {
 	start := time.Now().Add(-2 * startupBudget)
 
 	var gotBudget time.Duration
-	if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, rehydrate); err != nil {
+	if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate); err != nil {
 		t.Fatalf("bringUpWithBytecode: %v", err)
 	}
 	if gotBudget != minSpawnBudget {
@@ -2139,7 +2139,7 @@ func TestBringUpWithBytecode_NormalCarveOutIsUnaffectedByTheFloor(t *testing.T) 
 
 	start := time.Now()
 	var gotBudget time.Duration
-	if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, rehydrate); err != nil {
+	if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate); err != nil {
 		t.Fatalf("bringUpWithBytecode: %v", err)
 	}
 	if gotBudget <= minSpawnBudget {
@@ -2165,7 +2165,7 @@ func TestBringUpWithBytecode_AHitDisablesTheUploadLeg(t *testing.T) {
 	}
 
 	var gotBudget time.Duration
-	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, rehydrate)
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
 	if err != nil {
 		t.Fatalf("bringUpWithBytecode: %v", err)
 	}
@@ -2189,7 +2189,7 @@ func TestBringUpWithBytecode_AMissAttachesTheUploadLegWithTheSameKey(t *testing.
 	rehydrate := func(context.Context, *bytecodeResolution) bool { return false }
 
 	var gotBudget time.Duration
-	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, rehydrate)
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
 	if err != nil {
 		t.Fatalf("bringUpWithBytecode: %v", err)
 	}
@@ -2216,7 +2216,7 @@ func TestBringUpWithBytecode_NilResolutionSkipsBothLegs(t *testing.T) {
 	}
 
 	var gotBudget time.Duration
-	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, rehydrate)
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
 	if err != nil {
 		t.Fatalf("bringUpWithBytecode: %v", err)
 	}
@@ -2250,7 +2250,7 @@ func TestBringUpWithBytecode_AResolutionThatNeverArrivesDoesNotBlockTheSpawn(t *
 	var membrane *Membrane
 	var err error
 	go func() {
-		membrane, err = bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, rehydrate)
+		membrane, err = bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, neverEmbedded, rehydrate)
 		close(done)
 	}()
 
@@ -2273,5 +2273,467 @@ func TestBringUpWithBytecode_AResolutionThatNeverArrivesDoesNotBlockTheSpawn(t *
 	}
 	if gotBudget >= startupBudget {
 		t.Errorf("budget handed to bringUp = %s, want it reduced by the time spent waiting on the resolution", gotBudget)
+	}
+}
+
+// buildTar is buildArchive without the gzip layer, standing in for what the
+// deploy bakes into the deployment package: a plain tar the zip container
+// deflated, so the membrane never gunzips on the init path.
+func buildTar(t *testing.T, entries []tarEntry) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	tw := tar.NewWriter(&buf)
+	for _, e := range entries {
+		if err := tw.WriteHeader(&tar.Header{
+			Name:     e.name,
+			Typeflag: e.typeflag,
+			Size:     int64(len(e.content)),
+			Mode:     0o644,
+			Linkname: e.linkname,
+		}); err != nil {
+			t.Fatalf("write header for %q: %v", e.name, err)
+		}
+		if len(e.content) > 0 {
+			if _, err := tw.Write(e.content); err != nil {
+				t.Fatalf("write content for %q: %v", e.name, err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// The embedded path is derived from the key the resolution already composed,
+// never recomposed from a version and an arch of its own: the two would drift
+// on a runtime bump and the membrane would read a stale cache under a fresh
+// key. Composing the expectation through bytecodeCacheKey is the point — it
+// fails if either side ever grows its own spelling.
+func TestEmbeddedBytecodePath_FollowsTheResolutionsKey(t *testing.T) {
+	cases := []struct {
+		key  string
+		want string
+	}{
+		{bytecodeCacheKey("ocel", "my-app", "24.3.1", "arm64"), "/var/task/.ocel/bytecode/node24.3.1-arm64.tar"},
+		{bytecodeCacheKey("stg/deploy", "other-fn", "20.11.0", "amd64"), "/var/task/.ocel/bytecode/node20.11.0-x86_64.tar"},
+	}
+	for _, c := range cases {
+		if got := embeddedBytecodePath(c.key); got != c.want {
+			t.Errorf("embeddedBytecodePath(%q) = %q, want %q", c.key, got, c.want)
+		}
+	}
+}
+
+// A key that is not a cache tarball composes no path at all rather than one
+// derived from whatever the basename happened to be: nothing embedded can
+// answer for it, and a junk path is a stat the init path should never make.
+func TestEmbeddedBytecodePath_EmptyForAKeyThatIsNotACacheTarball(t *testing.T) {
+	for _, key := range []string{"", "ocel/bytecode/my-app", "ocel/bytecode/my-app/node24.3.1-arm64.tar", "some/other/object.zip"} {
+		if got := embeddedBytecodePath(key); got != "" {
+			t.Errorf("embeddedBytecodePath(%q) = %q, want no path at all", key, got)
+		}
+	}
+}
+
+func TestLoadEmbeddedBytecodeCache_RoundTrip(t *testing.T) {
+	src := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(src, "v24.3.1-x64-abc123-1000"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		"index.bin":                        "top level",
+		"v24.3.1-x64-abc123-1000/aabbccdd": "nested one",
+		"v24.3.1-x64-abc123-1000/11223344": "nested two",
+	}
+	entries := make([]tarEntry, 0, len(files))
+	for name, contents := range files {
+		entries = append(entries, tarEntry{name: name, typeflag: tar.TypeReg, content: []byte(contents)})
+	}
+	tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
+	if err := os.WriteFile(tarPath, buildTar(t, entries), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "cache")
+	n, hit := loadEmbeddedBytecodeCache(context.Background(), tarPath, dest)
+	if !hit {
+		t.Fatal("loadEmbeddedBytecodeCache() = false, want a hit")
+	}
+	var want int64
+	for _, contents := range files {
+		want += int64(len(contents)) + tarEntryOverhead
+	}
+	if n != want {
+		t.Errorf("loadEmbeddedBytecodeCache() = %d bytes, want %d", n, want)
+	}
+	for name, contents := range files {
+		got, err := os.ReadFile(filepath.Join(dest, name))
+		if err != nil || string(got) != contents {
+			t.Errorf("%s = %q, %v, want %q, nil", name, got, err, contents)
+		}
+	}
+}
+
+// An artifact built without the embed pass is the ordinary case, not a fault:
+// the attempt reports a miss, says nothing, and leaves the cache directory
+// exactly as it found it for the S3 leg to wipe on its own terms.
+func TestLoadEmbeddedBytecodeCache_AbsentTarTouchesNothing(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "cache")
+	if err := os.MkdirAll(dest, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dest, "left.bin"), []byte("untouched"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var hit bool
+	out := captureStderr(t, func() {
+		_, hit = loadEmbeddedBytecodeCache(context.Background(), filepath.Join(t.TempDir(), "nothing-here.tar"), dest)
+	})
+	if hit {
+		t.Fatal("loadEmbeddedBytecodeCache() = true, want a miss")
+	}
+	if out != "" {
+		t.Errorf("log = %q, want nothing said about an artifact built without the embed pass", out)
+	}
+	if got, err := os.ReadFile(filepath.Join(dest, "left.bin")); err != nil || string(got) != "untouched" {
+		t.Errorf("cache dir = %q, %v, want it left alone", got, err)
+	}
+}
+
+// A corrupt embedded tar must leave no half-populated cache behind — node
+// would trust it — and must not be reported as a hit, so the caller still
+// reaches the S3 leg.
+func TestLoadEmbeddedBytecodeCache_CorruptLeavesNoDirectory(t *testing.T) {
+	tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
+	if err := os.WriteFile(tarPath, []byte("this is not a tar stream at all"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "cache")
+	var hit bool
+	out := captureStderr(t, func() {
+		_, hit = loadEmbeddedBytecodeCache(context.Background(), tarPath, dest)
+	})
+	if hit {
+		t.Fatal("loadEmbeddedBytecodeCache() = true, want a corrupt tar reported as a miss")
+	}
+	if !strings.Contains(out, tarPath) {
+		t.Errorf("log = %q, want it to name the embedded tar", out)
+	}
+	if info, err := os.Stat(dest); err == nil {
+		t.Errorf("dest = %v after a corrupt tar, want it wiped", info.Mode())
+	}
+}
+
+// The embedded reader shares untarInto's hostile-input validation rather than
+// forking it: a tar baked into an artifact is no more trusted than an object
+// pulled from S3, and both are checked by the one path.
+func TestLoadEmbeddedBytecodeCache_RejectsHostileEntries(t *testing.T) {
+	cases := map[string]tarEntry{
+		"traversal":     {name: "../escaped.bin", typeflag: tar.TypeReg, content: []byte("nope")},
+		"absolute path": {name: "/etc/passwd", typeflag: tar.TypeReg, content: []byte("nope")},
+		"symlink":       {name: "link.bin", typeflag: tar.TypeSymlink, linkname: "/etc/passwd"},
+	}
+	for name, entry := range cases {
+		t.Run(name, func(t *testing.T) {
+			tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
+			if err := os.WriteFile(tarPath, buildTar(t, []tarEntry{entry}), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			dest := filepath.Join(t.TempDir(), "cache")
+
+			var hit bool
+			captureStderr(t, func() {
+				_, hit = loadEmbeddedBytecodeCache(context.Background(), tarPath, dest)
+			})
+			if hit {
+				t.Fatalf("loadEmbeddedBytecodeCache() = true for a %s entry, want it rejected", name)
+			}
+			if info, err := os.Stat(dest); err == nil {
+				t.Errorf("dest = %v after a rejected entry, want it wiped", info.Mode())
+			}
+		})
+	}
+}
+
+// A spent budget must not start an extraction whose result has nowhere to go,
+// the same way buildArchiveWithin refuses to start a build.
+func TestLoadEmbeddedBytecodeCache_RefusesASpentBudget(t *testing.T) {
+	tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
+	if err := os.WriteFile(tarPath, buildTar(t, []tarEntry{{name: "blob", typeflag: tar.TypeReg, content: []byte("x")}}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	dest := filepath.Join(t.TempDir(), "cache")
+	var hit bool
+	captureStderr(t, func() {
+		_, hit = loadEmbeddedBytecodeCache(ctx, tarPath, dest)
+	})
+	if hit {
+		t.Fatal("loadEmbeddedBytecodeCache() = true, want a spent budget to skip the attempt")
+	}
+	if info, err := os.Stat(dest); err == nil {
+		t.Errorf("dest = %v, want an untouched directory", info.Mode())
+	}
+}
+
+// A budget spent *during* the extraction has to end it too, not only one
+// already spent when it starts. The two legs share one bytecodeRehydrateBudget
+// and this one runs first, so an extraction that runs to completion regardless
+// hands the S3 fall-through nothing — and a slow local leg is exactly the case
+// where the fall-through is what saves the cold start.
+func TestLoadEmbeddedBytecodeCache_StopsWhenTheBudgetRunsOutMidExtraction(t *testing.T) {
+	// Enough entries that the extraction is unambiguously longer than the
+	// budget: each is a MkdirAll+OpenFile+Close, and the charge against the
+	// ceiling (512 B apiece) stays well under it.
+	entries := make([]tarEntry, 0, 20000)
+	for i := range 20000 {
+		entries = append(entries, tarEntry{name: fmt.Sprintf("e/%05d.bin", i), typeflag: tar.TypeReg})
+	}
+	tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
+	if err := os.WriteFile(tarPath, buildTar(t, entries), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "cache")
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+
+	var hit bool
+	out := captureStderr(t, func() {
+		_, hit = loadEmbeddedBytecodeCache(ctx, tarPath, dest)
+	})
+	if hit {
+		t.Fatal("loadEmbeddedBytecodeCache() = true, want the extraction cut off by the shared budget")
+	}
+	if !strings.Contains(out, tarPath) {
+		t.Errorf("log = %q, want it to name the embedded tar", out)
+	}
+	if info, err := os.Stat(dest); err == nil {
+		t.Errorf("dest = %v, want a partial extraction wiped", info.Mode())
+	}
+}
+
+// The two hits have to be told apart in CloudWatch, so an organic cold start
+// says which path it took. The substrings are the contract the e2e assertions
+// read.
+func TestEmbeddedBytecodeCache_LogsALineDistinctFromTheS3Rehydrate(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, ".ocel", "bytecode")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tarPath := filepath.Join(dir, "node24.3.1-arm64.tar")
+	if err := os.WriteFile(tarPath, buildTar(t, []tarEntry{{name: "cached.blob", typeflag: tar.TypeReg, content: []byte("compiled")}}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "cache")
+	var hit bool
+	out := captureStderr(t, func() {
+		hit = embeddedBytecodeCache(context.Background(), tarPath, dest)
+	})
+	if !hit {
+		t.Fatal("embeddedBytecodeCache() = false, want a hit")
+	}
+	if !strings.Contains(out, "ocel: loaded embedded compile cache from "+tarPath+":") {
+		t.Errorf("log = %q, want it to name the embedded tar", out)
+	}
+	if strings.Contains(out, "rehydrated compile cache from") {
+		t.Errorf("log = %q, want it distinguishable from the S3 rehydrate line", out)
+	}
+	if !strings.Contains(out, "bytes in") || !strings.Contains(out, "ms") {
+		t.Errorf("log = %q, want bytes and elapsed ms", out)
+	}
+}
+
+// neverEmbedded stands in for a deployment whose artifact carries no embedded
+// cache: the ordinary case, and the one every pre-existing budget and
+// upload-leg property was written against.
+func neverEmbedded(context.Context, *bytecodeResolution) bool { return false }
+
+// An embedded hit is answered locally: no S3 GET, no upload leg, and a source
+// the deploy can verify the embed pass by.
+func TestBringUpWithBytecode_AnEmbeddedHitSkipsTheS3Leg(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	r := &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "assets-xyz", key: "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"}
+	bytecodeReady <- r
+
+	embedded := func(context.Context, *bytecodeResolution) bool { return true }
+	rehydrateCalls := 0
+	rehydrate := func(context.Context, *bytecodeResolution) bool {
+		rehydrateCalls++
+		return true
+	}
+
+	var gotBudget time.Duration
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded, rehydrate)
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if rehydrateCalls != 0 {
+		t.Errorf("rehydrate calls = %d, want the S3 leg skipped entirely", rehydrateCalls)
+	}
+	if membrane.bytecode != nil {
+		t.Error("bytecode != nil, want the upload leg disabled after an embedded hit")
+	}
+	if !membrane.bytecodeCached() {
+		t.Error("bytecodeCached() = false, want the hit recorded")
+	}
+	if membrane.bytecodeSource != bytecodeSourceEmbedded {
+		t.Errorf("bytecodeSource = %q, want %q", membrane.bytecodeSource, bytecodeSourceEmbedded)
+	}
+	if membrane.bytecodeKey != r.key {
+		t.Errorf("bytecodeKey = %q, want the resolution's %q", membrane.bytecodeKey, r.key)
+	}
+}
+
+// No embedded copy — the artifact was built without the embed pass, or the
+// runtime moved on and the baked tar no longer matches the key — leaves the
+// S3 leg running exactly as it did before this existed.
+func TestBringUpWithBytecode_NoEmbeddedCopyFallsBackToS3(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"}
+
+	rehydrate := func(context.Context, *bytecodeResolution) bool { return true }
+
+	var gotBudget time.Duration
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded, rehydrate)
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if membrane.bytecodeSource != bytecodeSourceS3 {
+		t.Errorf("bytecodeSource = %q, want %q", membrane.bytecodeSource, bytecodeSourceS3)
+	}
+	if membrane.bytecode != nil {
+		t.Error("bytecode != nil, want the upload leg disabled after an S3 hit")
+	}
+}
+
+// A miss on both legs is the pre-existing story: no source to report, and the
+// upload leg armed to publish what this instance compiles.
+func TestBringUpWithBytecode_MissOnBothLegsReportsNoSource(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
+
+	var gotBudget time.Duration
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, neverEmbedded,
+		func(context.Context, *bytecodeResolution) bool { return false })
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if membrane.bytecodeSource != bytecodeSourceNone {
+		t.Errorf("bytecodeSource = %q, want %q", membrane.bytecodeSource, bytecodeSourceNone)
+	}
+	if membrane.bytecodeCached() {
+		t.Error("bytecodeCached() = true, want a miss on both legs")
+	}
+	if membrane.bytecode == nil {
+		t.Fatal("bytecode = nil, want the upload leg armed on a miss")
+	}
+}
+
+// A corrupt embedded tar must not leave a function permanently cold when S3
+// holds a good object — but the S3 leg gets what genuinely remains of the
+// rehydrate budget, not a fresh one on top of what the local attempt already
+// spent.
+func TestBringUpWithBytecode_AFailedEmbeddedAttemptLeavesTheS3LegTheRemainingBudget(t *testing.T) {
+	const embeddedCost = 300 * time.Millisecond
+
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
+
+	embedded := func(ctx context.Context, _ *bytecodeResolution) bool {
+		time.Sleep(embeddedCost)
+		return false
+	}
+	var remaining time.Duration
+	rehydrate := func(ctx context.Context, _ *bytecodeResolution) bool {
+		deadline, ok := ctx.Deadline()
+		if !ok {
+			t.Error("the S3 leg was handed a context with no deadline, want the shared rehydrate budget")
+			return false
+		}
+		remaining = time.Until(deadline)
+		return true
+	}
+
+	var gotBudget time.Duration
+	if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded, rehydrate); err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if remaining > bytecodeRehydrateBudget-embeddedCost/2 {
+		t.Errorf("S3 leg budget = %s, want it short by the %s the embedded attempt spent", remaining, embeddedCost)
+	}
+	if remaining <= 0 {
+		t.Errorf("S3 leg budget = %s, want what remains of the shared budget", remaining)
+	}
+}
+
+// An unconfigured deployment reaches neither leg.
+func TestBringUpWithBytecode_NilResolutionSkipsTheEmbeddedLegToo(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- nil
+
+	embeddedCalls := 0
+	embedded := func(context.Context, *bytecodeResolution) bool {
+		embeddedCalls++
+		return true
+	}
+
+	var gotBudget time.Duration
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, embedded,
+		func(context.Context, *bytecodeResolution) bool { return false })
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if embeddedCalls != 0 {
+		t.Errorf("embedded calls = %d, want 0 for an unconfigured deployment", embeddedCalls)
+	}
+	if membrane.bytecodeSource != bytecodeSourceNone {
+		t.Errorf("bytecodeSource = %q, want %q", membrane.bytecodeSource, bytecodeSourceNone)
+	}
+	if membrane.bytecodeKey != "" {
+		t.Errorf("bytecodeKey = %q, want none for an unconfigured deployment", membrane.bytecodeKey)
+	}
+}
+
+// TestBytecodeEmbedded_TargetsTheDirCompileCacheEnvDeclares pins for the
+// embedded leg what its S3 twin pins for the rehydrate: both write where
+// NODE_COMPILE_CACHE actually points, by reading the same constant rather
+// than a literal of their own.
+func TestBytecodeEmbedded_TargetsTheDirCompileCacheEnvDeclares(t *testing.T) {
+	t.Setenv(bytecodePrefixEnvVar, "ocel")
+	env := compileCacheEnv()
+	if len(env) != 1 || !strings.HasPrefix(env[0], "NODE_COMPILE_CACHE=") {
+		t.Fatalf("compileCacheEnv() = %v, want exactly one NODE_COMPILE_CACHE entry", env)
+	}
+	dir := strings.TrimPrefix(env[0], "NODE_COMPILE_CACHE=")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	// The path bytecodeEmbedded derives is under /var/task, which no test can
+	// write to, so this drives the shared leg directly at the same dir and
+	// asserts where it landed.
+	tarPath := filepath.Join(t.TempDir(), "node24.3.1-arm64.tar")
+	if err := os.WriteFile(tarPath, buildTar(t, []tarEntry{{name: "cached.blob", typeflag: tar.TypeReg, content: []byte("compiled")}}), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	captureStderr(t, func() {
+		if !embeddedBytecodeCache(context.Background(), tarPath, compileCacheDir) {
+			t.Error("embeddedBytecodeCache() = false, want a hit")
+		}
+	})
+	got, err := os.ReadFile(filepath.Join(dir, "cached.blob"))
+	if err != nil || string(got) != "compiled" {
+		t.Errorf("file at compileCacheEnv's dir = %q, %v, want %q, nil", got, err, "compiled")
 	}
 }
