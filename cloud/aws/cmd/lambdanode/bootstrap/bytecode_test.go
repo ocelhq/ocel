@@ -15,6 +15,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -172,15 +173,7 @@ func TestBuildBytecodeArchive_RoundTrip(t *testing.T) {
 		t.Fatalf("buildBytecodeArchive: %v", err)
 	}
 
-	var wantSize int64
-	for _, contents := range files {
-		wantSize += int64(len(contents))
-	}
-	if archive.UncompressedSize != wantSize {
-		t.Errorf("UncompressedSize = %d, want %d", archive.UncompressedSize, wantSize)
-	}
-
-	got := readArchive(t, archive.Data)
+	got := readArchive(t, archive)
 	want := map[string]string{
 		"top-level.bin":            "top level contents",
 		"abc123-hash/nested-a.bin": "nested a contents",
@@ -216,7 +209,7 @@ func TestBuildBytecodeArchive_SkipsNonRegularFiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildBytecodeArchive: %v", err)
 	}
-	got := readArchive(t, archive.Data)
+	got := readArchive(t, archive)
 	if _, ok := got["link.bin"]; ok {
 		t.Errorf("archive contains symlink link.bin, want it skipped")
 	}
@@ -239,10 +232,7 @@ func TestBuildBytecodeArchive_MissingDirectoryIsEmptyNotAnError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildBytecodeArchive: %v", err)
 	}
-	if archive.UncompressedSize != 0 {
-		t.Errorf("UncompressedSize = %d, want 0", archive.UncompressedSize)
-	}
-	got := readArchive(t, archive.Data)
+	got := readArchive(t, archive)
 	if len(got) != 0 {
 		t.Errorf("archive has %d entries, want 0: %v", len(got), got)
 	}
@@ -498,19 +488,26 @@ func TestBytecodeUpload_SwallowsStoreErrors(t *testing.T) {
 // The same context bounds the HEAD and the PUT, so whichever one S3 hangs on is
 // cancelled at the budget rather than running past the deadline the platform is
 // about to enforce.
+//
+// The budget is spent from inside the blocked call rather than by a wall clock
+// the flush, the stat pass and the gzip ahead of it have to beat: the store is
+// reached first and the budget ends second, however slow the box is.
 func TestBytecodeUpload_BoundsBothStoreCallsByTheBudget(t *testing.T) {
 	for _, blockOn := range []string{"head", "put"} {
 		t.Run(blockOn, func(t *testing.T) {
-			store := &blockingBytecodeStore{blockOn: blockOn}
+			ctx, spendBudget := context.WithCancel(context.Background())
+			defer spendBudget()
+
+			store := &blockingBytecodeStore{blockOn: blockOn, spendBudget: spendBudget}
 			u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
 
-			ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin+50*time.Millisecond))
-			defer cancel()
+			done := make(chan struct{})
+			go func() { defer close(done); u.run(ctx) }()
 
-			start := time.Now()
-			u.run(ctx)
-			if elapsed := time.Since(start); elapsed > time.Second {
-				t.Errorf("took %s, want the %s cancelled at the budget", elapsed, blockOn)
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatalf("run never returned, so the %s outlived the budget", blockOn)
 			}
 			if !store.reached {
 				t.Errorf("the %s was never reached, so the test proves nothing", blockOn)
@@ -519,29 +516,36 @@ func TestBytecodeUpload_BoundsBothStoreCallsByTheBudget(t *testing.T) {
 	}
 }
 
-// blockingBytecodeStore hangs on one of the two calls until the context ends it,
-// and passes the other through, so each leg's bounding can be proven on its own.
+// blockingBytecodeStore hangs on one of the two calls until the context it was
+// handed ends it, and passes the other through, so each leg's bounding can be
+// proven on its own. Reaching the blocked call is what spends the budget, so a
+// call handed a context not derived from the caller's never returns — which is
+// exactly the failure the test is looking for.
 type blockingBytecodeStore struct {
-	blockOn string
-	reached bool
+	blockOn     string
+	spendBudget context.CancelFunc
+	reached     bool
+}
+
+func (b *blockingBytecodeStore) block(ctx context.Context) error {
+	b.reached = true
+	b.spendBudget()
+	<-ctx.Done()
+	return ctx.Err()
 }
 
 func (b *blockingBytecodeStore) objectExists(ctx context.Context, _, _ string) (bool, error) {
 	if b.blockOn != "head" {
 		return false, nil
 	}
-	b.reached = true
-	<-ctx.Done()
-	return false, ctx.Err()
+	return false, b.block(ctx)
 }
 
 func (b *blockingBytecodeStore) putObject(ctx context.Context, _, _ string, _ []byte) error {
 	if b.blockOn != "put" {
 		return nil
 	}
-	b.reached = true
-	<-ctx.Done()
-	return ctx.Err()
+	return b.block(ctx)
 }
 
 // A budget spent before the build starts must not start one at all — the select
@@ -681,7 +685,7 @@ func TestBuildArchiveWithin_ReturnsTheArchiveWithinBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("buildArchiveWithin: %v", err)
 	}
-	if got := readArchive(t, archive.Data); got["cached.blob"] != "compiled bytes" {
+	if got := readArchive(t, archive); got["cached.blob"] != "compiled bytes" {
 		t.Errorf("archive = %v, want the cache directory's contents", got)
 	}
 }
@@ -698,7 +702,7 @@ func TestCompileCacheSize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	got, err := compileCacheSize(dir)
+	got, err := compileCacheSize(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("compileCacheSize: %v", err)
 	}
@@ -706,12 +710,25 @@ func TestCompileCacheSize(t *testing.T) {
 		t.Errorf("compileCacheSize() = %d, want 8", got)
 	}
 
-	missing, err := compileCacheSize(filepath.Join(dir, "does-not-exist"))
+	missing, err := compileCacheSize(context.Background(), filepath.Join(dir, "does-not-exist"))
 	if err != nil {
 		t.Fatalf("compileCacheSize on a missing dir: %v", err)
 	}
 	if missing != 0 {
 		t.Errorf("compileCacheSize(missing) = %d, want 0", missing)
+	}
+}
+
+// The stat pass is bounded like every other leg: a budget already spent stops it
+// at the first entry rather than walking a cache directory the attempt can no
+// longer do anything with.
+func TestCompileCacheSize_StopsOnAnExpiredContext(t *testing.T) {
+	dir := cacheDirWith(t, "compiled bytes")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, err := compileCacheSize(ctx, dir); !errors.Is(err, context.Canceled) {
+		t.Errorf("compileCacheSize() error = %v, want the context's", err)
 	}
 }
 
@@ -792,6 +809,111 @@ func TestResolveBytecodeUpload_NilWhenNotFullyConfigured(t *testing.T) {
 				t.Errorf("resolveBytecodeUpload() = %+v, want nil", got)
 			}
 		})
+	}
+}
+
+// A fully configured function gets an upload wired to exactly what the
+// environment named. Landing the prefix, the bucket or the function name in the
+// wrong field would compose a key nothing ever reads back, which no later leg
+// could detect.
+func TestResolveBytecodeUpload_CarriesTheEnvironmentIntoTheUpload(t *testing.T) {
+	t.Setenv(bytecodePrefixEnvVar, "ocel/stg")
+	t.Setenv("OCEL_ISR_BUCKET", "assets-xyz")
+	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
+	t.Setenv("AWS_REGION", "us-east-1")
+
+	flushed := false
+	flush := func(context.Context) (compileCacheFlushedPayload, bool) {
+		flushed = true
+		return compileCacheFlushedPayload{}, false
+	}
+
+	u := resolveBytecodeUpload(context.Background(), flush)
+	if u == nil {
+		t.Fatal("resolveBytecodeUpload() = nil, want an upload for a fully configured function")
+	}
+	if u.prefix != "ocel/stg" {
+		t.Errorf("prefix = %q, want %q", u.prefix, "ocel/stg")
+	}
+	if u.bucket != "assets-xyz" {
+		t.Errorf("bucket = %q, want %q", u.bucket, "assets-xyz")
+	}
+	if u.function != "my-app" {
+		t.Errorf("function = %q, want %q", u.function, "my-app")
+	}
+	if u.arch != runtime.GOARCH {
+		t.Errorf("arch = %q, want %q", u.arch, runtime.GOARCH)
+	}
+	if u.store == nil {
+		t.Error("store = nil, want an S3-backed store")
+	}
+	if u.nodeVersion == nil {
+		t.Error("nodeVersion = nil, want the binary's version reader")
+	}
+	if u.flush == nil {
+		t.Fatal("flush = nil, want the caller's")
+	}
+	u.flush(context.Background())
+	if !flushed {
+		t.Error("flush is not the one the caller passed")
+	}
+
+	if got := bytecodeCacheKey(u.prefix, u.function, 24, u.arch); got != "ocel/stg/bytecode/my-app/node24-"+s3Arch(runtime.GOARCH)+".tar.gz" {
+		t.Errorf("the resolved fields compose %q", got)
+	}
+}
+
+// The upload runs strictly after awaitCompletion returns and strictly before the
+// loop is free to call /next. That ordering is the entire basis for the claim
+// that publishing the cache costs billed duration rather than request latency.
+func TestHandleInvocation_UploadsAfterCompletionAndBeforeTheNextNext(t *testing.T) {
+	node := okNode(t)
+	rt, _ := fakeRuntime(t, []byte(getEvent))
+
+	goSide, jsSide := net.Pipe()
+	t.Cleanup(func() { goSide.Close(); jsSide.Close() })
+
+	store := &fakeBytecodeStore{}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "compiled bytes"), OK: true}, true)
+	m := &Membrane{
+		nodePort: portOf(t, node),
+		client:   &http.Client{},
+		control:  goSide,
+		pending:  map[string]chan struct{}{},
+		bytecode: u,
+	}
+	go m.drainControl(bufio.NewReader(goSide))
+
+	done := make(chan error, 1)
+	go func() { done <- handleInvocation(context.Background(), rt, m) }()
+
+	// The response is delivered by now but completion has not fired, so nothing
+	// may have been published yet: an upload here would be on someone's latency.
+	time.Sleep(75 * time.Millisecond)
+	store.mu.Lock()
+	early := len(store.puts)
+	store.mu.Unlock()
+	if early != 0 {
+		t.Fatalf("puts before invocation-complete = %d, want the upload held until the invocation is done", early)
+	}
+
+	if _, err := jsSide.Write([]byte(`{"type":"invocation-complete","payload":{"requestId":"req-1"}}` + "\n")); err != nil {
+		t.Fatalf("write control message: %v", err)
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("handleInvocation: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("handleInvocation never returned")
+	}
+
+	// Returning is the loop's only licence to call /next, so a put recorded by
+	// now is one that landed before the next invocation could be pulled.
+	if len(store.puts) != 1 {
+		t.Errorf("puts = %d, want the cache published before the loop moved on", len(store.puts))
 	}
 }
 

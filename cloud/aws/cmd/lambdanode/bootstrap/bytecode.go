@@ -65,14 +65,6 @@ func nodeMajor(version string) (int, error) {
 	return major, nil
 }
 
-// bytecodeArchive is a gzip-compressed tar built from a compile-cache
-// directory, along with the uncompressed size of the files it contains so the
-// caller can weigh it against bytecodeCacheCeiling before uploading it.
-type bytecodeArchive struct {
-	Data             []byte
-	UncompressedSize int64
-}
-
 // exceedsBytecodeCacheCeiling reports whether an archive is too large to
 // upload. The ceiling is the caller's decision to act on — this only answers
 // the question; it never trims the archive to fit, because a truncated
@@ -92,12 +84,11 @@ func exceedsBytecodeCacheCeiling(uncompressedSize int64) bool {
 // abandoning the wait while the work ran on would leave a goroutine holding a
 // gzip buffer and burning CPU, which on Lambda resumes when the sandbox thaws
 // and competes with a later request — the opposite of what this feature is for.
-func buildBytecodeArchive(ctx context.Context, dir string) (bytecodeArchive, error) {
+func buildBytecodeArchive(ctx context.Context, dir string) ([]byte, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
 
-	var total int64
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == dir {
@@ -132,23 +123,21 @@ func buildBytecodeArchive(ctx context.Context, dir string) (bytecodeArchive, err
 			return err
 		}
 		defer f.Close()
-		n, err := io.Copy(tw, f)
-		if err != nil {
+		if _, err := io.Copy(tw, f); err != nil {
 			return err
 		}
-		total += n
 		return nil
 	})
 	if err != nil {
-		return bytecodeArchive{}, fmt.Errorf("build bytecode archive from %s: %w", dir, err)
+		return nil, fmt.Errorf("build bytecode archive from %s: %w", dir, err)
 	}
 	if err := tw.Close(); err != nil {
-		return bytecodeArchive{}, fmt.Errorf("close bytecode archive tar: %w", err)
+		return nil, fmt.Errorf("close bytecode archive tar: %w", err)
 	}
 	if err := gz.Close(); err != nil {
-		return bytecodeArchive{}, fmt.Errorf("close bytecode archive gzip: %w", err)
+		return nil, fmt.Errorf("close bytecode archive gzip: %w", err)
 	}
-	return bytecodeArchive{Data: buf.Bytes(), UncompressedSize: total}, nil
+	return buf.Bytes(), nil
 }
 
 // compileCacheDir is where node is told to write its V8 compile cache. It sits
@@ -262,7 +251,7 @@ func (u bytecodeUpload) run(ctx context.Context) {
 		return
 	}
 
-	size, err := compileCacheSize(ack.Dir)
+	size, err := compileCacheSize(ctx, ack.Dir)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not measure the compile cache: %v\n", err)
 		return
@@ -298,7 +287,7 @@ func (u bytecodeUpload) run(ctx context.Context) {
 	if exists {
 		return
 	}
-	if err := u.store.putObject(ctx, u.bucket, key, archive.Data); err != nil {
+	if err := u.store.putObject(ctx, u.bucket, key, archive); err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not upload the compile cache to %s: %v\n", key, err)
 	}
 }
@@ -307,13 +296,19 @@ func (u bytecodeUpload) run(ctx context.Context) {
 // byte of it, so the ceiling can be enforced before the walk-read-gzip that
 // would otherwise do all that work only to throw it away. A directory that does
 // not exist sums to zero, matching how buildBytecodeArchive treats it.
-func compileCacheSize(dir string) (int64, error) {
+//
+// ctx stops the walk between entries, for the same reason the build's does: no
+// leg of the attempt may outlive the budget the caller handed it.
+func compileCacheSize(ctx context.Context, dir string) (int64, error) {
 	var total int64
 	err := filepath.WalkDir(dir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			if path == dir {
 				return nil
 			}
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if !d.Type().IsRegular() {
@@ -340,16 +335,16 @@ func compileCacheSize(dir string) (int64, error) {
 // The build stops on the same context, so this releases the caller and ends the
 // work. The select is what makes the release immediate rather than delayed to
 // the walk's next entry, which matters when a single file is large.
-func buildArchiveWithin(ctx context.Context, dir string) (bytecodeArchive, error) {
+func buildArchiveWithin(ctx context.Context, dir string) ([]byte, error) {
 	// Checked before the goroutine rather than left to the select below, which
 	// picks at random when both cases are ready: a budget already spent must
 	// never start a build whose result has nowhere to go.
 	if err := ctx.Err(); err != nil {
-		return bytecodeArchive{}, fmt.Errorf("no budget left to archive %s: %w", dir, err)
+		return nil, fmt.Errorf("no budget left to archive %s: %w", dir, err)
 	}
 
 	type result struct {
-		archive bytecodeArchive
+		archive []byte
 		err     error
 	}
 	done := make(chan result, 1)
@@ -361,7 +356,7 @@ func buildArchiveWithin(ctx context.Context, dir string) (bytecodeArchive, error
 	case r := <-done:
 		return r.archive, r.err
 	case <-ctx.Done():
-		return bytecodeArchive{}, fmt.Errorf("archiving %s outlasted the upload budget: %w", dir, ctx.Err())
+		return nil, fmt.Errorf("archiving %s outlasted the upload budget: %w", dir, ctx.Err())
 	}
 }
 
