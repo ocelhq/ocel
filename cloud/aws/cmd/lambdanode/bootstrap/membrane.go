@@ -28,6 +28,10 @@ const completionMargin = 500 * time.Millisecond
 // the sandbox and says nothing useful in its place.
 const startupBudget = 8 * time.Second
 
+// nodeBinaryPath is the runtime the child is exec'd from, and the same binary
+// anything asking what node this is has to ask.
+const nodeBinaryPath = "/var/lang/bin/node"
+
 type Membrane struct {
 	nodePort int
 	control  net.Conn
@@ -37,11 +41,18 @@ type Membrane struct {
 	// invocation it serves. Nil for a function that declares none.
 	live *liveValues
 
+	// bytecode is this instance's compile-cache upload, nil for a deployment
+	// that is not configured for one. It is installed before the runtime loop
+	// starts and never reassigned.
+	bytecode *bytecodeUpload
+
 	// pending maps an in-flight request id to the channel closed when the JS
 	// side reports the invocation complete (response finished and every
 	// waitUntil promise settled). Nil in tests that don't exercise completion.
-	mu      sync.Mutex
-	pending map[string]chan struct{}
+	mu           sync.Mutex
+	pending      map[string]chan struct{}
+	flushWaiter  chan compileCacheFlushedPayload
+	bytecodeDone bool
 }
 
 // registerWaiter records interest in an invocation's completion signal and
@@ -107,6 +118,81 @@ func (m *Membrane) awaitCompletion(ctx context.Context, requestID string, waiter
 	}
 }
 
+// flushCompileCacheLine is the request node answers with a
+// compile-cache-flushed message. It is a constant rather than a marshalled
+// struct because it has no fields and never will.
+const flushCompileCacheLine = `{"type":"flush-compile-cache"}` + "\n"
+
+// flushCompileCache asks node to write its compile cache to disk and waits for
+// the ack. A child that does not answer within the cap gets no upload rather
+// than a runtime loop parked on it.
+//
+// The request goes out as a single Write: live values are pushed down this same
+// connection from another goroutine, and Go serializes a net.Conn's writes per
+// call, so one call per line is what stops the two interleaving mid-message.
+func (m *Membrane) flushCompileCache(ctx context.Context) (compileCacheFlushedPayload, bool) {
+	if m.control == nil {
+		return compileCacheFlushedPayload{}, false
+	}
+	ack := make(chan compileCacheFlushedPayload, 1)
+	m.mu.Lock()
+	m.flushWaiter = ack
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		m.flushWaiter = nil
+		m.mu.Unlock()
+	}()
+
+	if _, err := m.control.Write([]byte(flushCompileCacheLine)); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not ask node to flush its compile cache: %v\n", err)
+		return compileCacheFlushedPayload{}, false
+	}
+
+	timer := time.NewTimer(compileCacheFlushTimeout)
+	defer timer.Stop()
+	select {
+	case p := <-ack:
+		return p, true
+	case <-timer.C:
+	case <-ctx.Done():
+	}
+	fmt.Fprintln(os.Stderr, "ocel: node did not acknowledge the compile-cache flush; skipping upload")
+	return compileCacheFlushedPayload{}, false
+}
+
+// deliverCompileCacheFlush hands the ack to whoever asked for it, and drops it
+// when nobody did — an ack that arrives after its waiter gave up has no reader,
+// and the buffered channel keeps this from ever blocking the drain loop.
+func (m *Membrane) deliverCompileCacheFlush(p compileCacheFlushedPayload) {
+	m.mu.Lock()
+	ack := m.flushWaiter
+	m.flushWaiter = nil
+	m.mu.Unlock()
+	if ack != nil {
+		ack <- p
+	}
+}
+
+// uploadBytecodeCacheOnce publishes the compile cache the first time it is
+// called and never again on this instance, whatever the outcome was. A cache is
+// only worth uploading once — every later invocation would rebuild and re-HEAD
+// the same object — and an attempt that failed is evidence this instance cannot
+// do it, not a reason to retry on the next request's billed time.
+func (m *Membrane) uploadBytecodeCacheOnce(ctx context.Context) {
+	if m.bytecode == nil {
+		return
+	}
+	m.mu.Lock()
+	done := m.bytecodeDone
+	m.bytecodeDone = true
+	m.mu.Unlock()
+	if done {
+		return
+	}
+	m.bytecode.run(ctx)
+}
+
 type controlMsg struct {
 	Type    string          `json:"type"`
 	Payload json.RawMessage `json:"payload"`
@@ -116,6 +202,15 @@ type invocationCompletePayload struct {
 }
 type serverReadyPayload struct {
 	HTTPPort int `json:"httpPort"`
+}
+
+// compileCacheFlushedPayload is node's answer to a flush request. Dir is the
+// directory it actually wrote to, and ok is false whenever there is nothing
+// worth uploading — including on a node too old to know the API at all, which
+// is what keeps a version check out of this package.
+type compileCacheFlushedPayload struct {
+	Dir string `json:"dir"`
+	OK  bool   `json:"ok"`
 }
 type logPayload struct {
 	Level   string `json:"level"`
@@ -277,11 +372,12 @@ func startNode(extraEnv []string, budget time.Duration, onControl func(io.Writer
 		return nil, err
 	}
 
-	cmd := exec.Command("/var/lang/bin/node", entrypointPath())
+	cmd := exec.Command(nodeBinaryPath, entrypointPath())
 	cmd.Env = append(os.Environ(),
 		"OCEL_CONTROL_SOCKET="+sockPath,
 		"OCEL_HANDLER="+os.Getenv("OCEL_HANDLER"), // user's compiled entry
 	)
+	cmd.Env = append(cmd.Env, compileCacheEnv()...)
 	cmd.Env = append(cmd.Env, extraEnv...)
 	cmd.Stdout = os.Stdout // Node stdout → CloudWatch
 	cmd.Stderr = os.Stderr
@@ -369,6 +465,11 @@ func (m *Membrane) drainControl(reader *bufio.Reader) {
 			var p invocationCompletePayload
 			if json.Unmarshal(msg.Payload, &p) == nil {
 				m.signalComplete(p.RequestID)
+			}
+		case "compile-cache-flushed":
+			var p compileCacheFlushedPayload
+			if json.Unmarshal(msg.Payload, &p) == nil {
+				m.deliverCompileCacheFlush(p)
 			}
 		}
 	}
