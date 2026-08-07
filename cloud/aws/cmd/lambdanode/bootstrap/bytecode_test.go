@@ -562,9 +562,16 @@ func (b *blockingBytecodeStore) getObject(context.Context, string, string) (io.R
 	return nil, 0, errBytecodeCacheMiss
 }
 
-// A budget spent before the build starts must not start one at all — the select
-// picks at random when both cases are ready, so this is the pre-check's job.
-func TestBytecodeUpload_SkipsTheArchiveWhenTheBudgetIsAlreadySpent(t *testing.T) {
+// A budget already spent by the time flush returns stops the attempt at the
+// very next ctx-aware step: compileCacheSize's walk sees ctx.Err() on its
+// first callback (the root directory entry, visited before any file) and run
+// gives up there, never reaching the archive build. buildArchiveWithin's own
+// pre-check — a budget spent before *it* specifically starts — is pinned
+// directly by TestBuildArchiveWithin_AbandonsOnAnExpiredContext, since
+// compileCacheSize always intercepts an already-expired context first when
+// reached through run: there is no way to spend the budget between the two
+// without a hook this package doesn't have.
+func TestBytecodeUpload_AbandonsBeforeMeasuringTheCacheWhenTheBudgetIsAlreadySpent(t *testing.T) {
 	dir := cacheDirWith(t, "compiled bytes")
 	store := &fakeBytecodeStore{}
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
@@ -1938,6 +1945,39 @@ func TestRehydrateBytecodeCache_MissLogsNothingOfItsOwn(t *testing.T) {
 	}
 }
 
+// blockingGetStore's getObject hangs until its context ends. Without the
+// context.WithTimeout that rehydrateBytecodeCache applies around
+// rehydrateCompileCache, this store's GET would still be blocked when this
+// test's own failsafe deadline arrived — so a passing test here is what
+// proves bytecodeRehydrateBudget is actually wired in, not merely declared.
+type blockingGetStore struct{}
+
+func (blockingGetStore) objectExists(context.Context, string, string) (bool, error) {
+	return false, nil
+}
+func (blockingGetStore) putObject(context.Context, string, string, []byte) error { return nil }
+func (blockingGetStore) getObject(ctx context.Context, _, _ string) (io.ReadCloser, int64, error) {
+	<-ctx.Done()
+	return nil, 0, ctx.Err()
+}
+
+func TestRehydrateBytecodeCache_AppliesItsOwnBudget(t *testing.T) {
+	r := &bytecodeResolution{store: blockingGetStore{}, bucket: "b", key: "k"}
+	dest := filepath.Join(t.TempDir(), "cache")
+
+	done := make(chan bool, 1)
+	go func() { done <- rehydrateBytecodeCache(context.Background(), r, dest) }()
+
+	select {
+	case hit := <-done:
+		if hit {
+			t.Error("rehydrateBytecodeCache() = true, want false once the store hangs past its budget")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("rehydrateBytecodeCache did not return within 3s, want bytecodeRehydrateBudget enforced")
+	}
+}
+
 // fakeSpawn records the budget bringUp handed it and returns an empty
 // Membrane, standing in for startNode the same way live_test.go's spawns do.
 func fakeSpawn(gotBudget *time.Duration) spawner {
@@ -2060,5 +2100,53 @@ func TestBringUpWithBytecode_NilResolutionSkipsBothLegs(t *testing.T) {
 	}
 	if membrane.bytecode != nil {
 		t.Error("bytecode != nil, want no upload leg for an unconfigured deployment")
+	}
+}
+
+// The join must not be a bare receive: a resolution goroutine that never
+// answers — wedged exec, stalled config load, or simply one that ignored its
+// own context entirely — must still let bringUpWithBytecode reach the spawn,
+// and must not drive the budget it hands to bringUp negative. bytecodeReady
+// is unbuffered and never written to here, standing in for a goroutine that
+// hangs forever.
+func TestBringUpWithBytecode_AResolutionThatNeverArrivesDoesNotBlockTheSpawn(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution)
+
+	rehydrateCalls := 0
+	rehydrate := func(context.Context, *bytecodeResolution) bool {
+		rehydrateCalls++
+		return false
+	}
+
+	var gotBudget time.Duration
+	start := time.Now()
+	done := make(chan struct{})
+	var membrane *Membrane
+	var err error
+	go func() {
+		membrane, err = bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, rehydrate)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(startupBudget):
+		t.Fatal("bringUpWithBytecode never returned; a resolution that never arrived blocked the spawn")
+	}
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if rehydrateCalls != 0 {
+		t.Errorf("rehydrate calls = %d, want 0 when the resolution never arrived", rehydrateCalls)
+	}
+	if membrane.bytecode != nil {
+		t.Error("bytecode != nil, want no upload leg when the resolution never arrived")
+	}
+	if gotBudget <= 0 {
+		t.Errorf("budget handed to bringUp = %s, want a positive budget rather than one driven negative", gotBudget)
+	}
+	if gotBudget >= startupBudget {
+		t.Errorf("budget handed to bringUp = %s, want it reduced by the time spent waiting on the resolution", gotBudget)
 	}
 }

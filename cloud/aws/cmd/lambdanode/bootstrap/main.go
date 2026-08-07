@@ -29,8 +29,18 @@ func main() {
 	// goroutine and are only joined once bringUpWithBytecode needs the result,
 	// which is what lets them overlap the live-values prefetch below and the
 	// baked-var decrypts rather than adding their own time to init.
+	//
+	// The goroutine's own context is bounded by bytecodeResolveBudget, so a
+	// wedged exec or a stalled config load actually terminates rather than
+	// lingering for the sandbox's whole lifetime. bringUpWithBytecode's join
+	// is bounded by the same constant independently, so even a probe that
+	// ignored its context entirely could not hold up the spawn.
 	bytecodeReady := make(chan *bytecodeResolution, 1)
-	go func() { bytecodeReady <- resolveBytecodeResolution(ctx, nodeVersionFromBinary) }()
+	go func() {
+		resolveCtx, cancel := context.WithTimeout(ctx, bytecodeResolveBudget)
+		defer cancel()
+		bytecodeReady <- resolveBytecodeResolution(resolveCtx, nodeVersionFromBinary)
+	}()
 
 	// Live values are the one class not delivered through the child's
 	// environment, so their fetch is the one that need not precede the spawn.
@@ -116,6 +126,14 @@ func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
 // joining and rehydrating before bringUp is called and attaching the upload
 // leg after it returns.
 //
+// The join is bounded by bytecodeResolveBudget rather than a bare receive: a
+// resolution that never arrives — a wedged exec or a stalled config load
+// that somehow outran its own context — must still let init proceed, the
+// same as one that resolved to nil. The bytecodeReady channel is always
+// buffered by exactly one, so a goroutine that answers after this gives up
+// on it still completes its send without blocking; there is nothing left to
+// leak.
+//
 // The join and the rehydrate attempt both happen before budget is computed,
 // which is what carves rehydration's cost out of startupBudget rather than
 // adding it on top: bringUp's budget argument is startupBudget minus
@@ -142,7 +160,13 @@ func bringUpWithBytecode(
 	bytecodeReady <-chan *bytecodeResolution,
 	rehydrate func(context.Context, *bytecodeResolution) bool,
 ) (*Membrane, error) {
-	bytecode := <-bytecodeReady
+	var bytecode *bytecodeResolution
+	select {
+	case bytecode = <-bytecodeReady:
+	case <-time.After(bytecodeResolveBudget):
+		fmt.Fprintln(os.Stderr, "ocel: compile cache resolution did not finish in time; compile cache disabled")
+	}
+
 	var hit bool
 	if bytecode != nil {
 		hit = rehydrate(ctx, bytecode)
