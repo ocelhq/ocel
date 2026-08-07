@@ -274,6 +274,11 @@ type fakeBytecodeStore struct {
 	putErr  error
 	heads   []string
 	puts    []fakePut
+
+	getBody io.ReadCloser
+	getSize int64
+	getErr  error
+	gets    []string
 }
 
 type fakePut struct {
@@ -294,6 +299,16 @@ func (f *fakeBytecodeStore) putObject(_ context.Context, bucket, key string, bod
 	defer f.mu.Unlock()
 	f.puts = append(f.puts, fakePut{bucket: bucket, key: key, body: body})
 	return f.putErr
+}
+
+func (f *fakeBytecodeStore) getObject(_ context.Context, bucket, key string) (io.ReadCloser, int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gets = append(f.gets, bucket+"/"+key)
+	if f.getErr != nil {
+		return nil, 0, f.getErr
+	}
+	return f.getBody, f.getSize, nil
 }
 
 // cacheDirWith writes a compile cache directory with one file in it and
@@ -553,6 +568,10 @@ func (b *blockingBytecodeStore) putObject(ctx context.Context, _, _ string, _ []
 		return nil
 	}
 	return b.block(ctx)
+}
+
+func (b *blockingBytecodeStore) getObject(context.Context, string, string) (io.ReadCloser, int64, error) {
+	return nil, 0, errBytecodeCacheMiss
 }
 
 // A budget spent before the build starts must not start one at all — the select
@@ -1228,4 +1247,422 @@ func TestS3BytecodeStore_PutObjectReportsAFailure(t *testing.T) {
 	if err := store.putObject(context.Background(), "assets-xyz", "some/key", []byte("x")); err == nil {
 		t.Error("putObject() error = nil, want the failure reported")
 	}
+}
+
+// A NoSuchKey body is the answer "nothing to rehydrate yet", not a failure.
+// Getting this wrong reads a routine cold start as a fault on every deploy's
+// first instance, which is the miss this store exists to tell apart.
+func TestS3BytecodeStore_GetObject(t *testing.T) {
+	t.Run("200 returns the body and content length", func(t *testing.T) {
+		store, _ := s3Store(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodGet {
+				t.Errorf("method = %s, want GET", r.Method)
+			}
+			w.Header().Set("Content-Length", "13")
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("archive bytes"))
+		})
+
+		body, size, err := store.getObject(context.Background(), "assets-xyz", "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz")
+		if err != nil {
+			t.Fatalf("getObject: %v", err)
+		}
+		defer body.Close()
+		if size != 13 {
+			t.Errorf("size = %d, want 13", size)
+		}
+		got, err := io.ReadAll(body)
+		if err != nil {
+			t.Fatalf("read body: %v", err)
+		}
+		if string(got) != "archive bytes" {
+			t.Errorf("body = %q, want %q", got, "archive bytes")
+		}
+	})
+
+	t.Run("a NoSuchKey error body is a miss, not an error", func(t *testing.T) {
+		store, _ := s3Store(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusNotFound)
+			w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>NoSuchKey</Code><Message>The specified key does not exist.</Message></Error>`))
+		})
+
+		_, _, err := store.getObject(context.Background(), "assets-xyz", "missing/key")
+		if !errors.Is(err, errBytecodeCacheMiss) {
+			t.Errorf("getObject() error = %v, want errBytecodeCacheMiss", err)
+		}
+	})
+
+	t.Run("403 is a real error, not an absence", func(t *testing.T) {
+		store, _ := s3Store(t, func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+			w.Write([]byte(`<?xml version="1.0" encoding="UTF-8"?><Error><Code>AccessDenied</Code><Message>Access Denied</Message></Error>`))
+		})
+
+		_, _, err := store.getObject(context.Background(), "assets-xyz", "some/key")
+		if err == nil {
+			t.Fatal("getObject() error = nil, want the failure reported")
+		}
+		if errors.Is(err, errBytecodeCacheMiss) {
+			t.Error("getObject() reported a miss for an access failure")
+		}
+	})
+}
+
+// tarEntry is a hand-built archive member, for tests that need to plant an
+// entry buildBytecodeArchive would never produce — an absolute path, a
+// traversal, a symlink, an oversized declared size — to prove untarInto
+// rejects it rather than trusting the writer.
+type tarEntry struct {
+	name     string
+	typeflag byte
+	content  []byte
+	linkname string
+}
+
+func buildArchive(t *testing.T, entries []tarEntry) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	for _, e := range entries {
+		hdr := &tar.Header{
+			Name:     e.name,
+			Typeflag: e.typeflag,
+			Size:     int64(len(e.content)),
+			Mode:     0o644,
+			Linkname: e.linkname,
+		}
+		if err := tw.WriteHeader(hdr); err != nil {
+			t.Fatalf("write header for %q: %v", e.name, err)
+		}
+		if len(e.content) > 0 {
+			if _, err := tw.Write(e.content); err != nil {
+				t.Fatalf("write content for %q: %v", e.name, err)
+			}
+		}
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// zeroReader streams zero bytes forever, so a test can declare a tar entry of
+// any size without holding that many bytes in memory: gzip compresses a run
+// of zeros to almost nothing, which is what lets the ceiling-during-streaming
+// test use a realistic 64MiB bound without costing real time or memory.
+type zeroReader struct{}
+
+func (zeroReader) Read(p []byte) (int, error) {
+	clear(p)
+	return len(p), nil
+}
+
+// TestUntarInto_RoundTrip proves untarInto is buildBytecodeArchive's inverse:
+// an archive built from a node-shaped compile cache directory (one version-hash
+// subdirectory, arbitrary file names) extracts back to the same tree.
+func TestUntarInto_RoundTrip(t *testing.T) {
+	src := t.TempDir()
+	versionDir := filepath.Join(src, "v24.3.1-x64-abc123-1000")
+	if err := os.MkdirAll(versionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		filepath.Join(src, "index.bin"):       "top level",
+		filepath.Join(versionDir, "aabbccdd"): "nested one",
+		filepath.Join(versionDir, "11223344"): "nested two",
+	}
+	for path, contents := range files {
+		if err := os.WriteFile(path, []byte(contents), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	archive, err := buildBytecodeArchive(context.Background(), src)
+	if err != nil {
+		t.Fatalf("buildBytecodeArchive: %v", err)
+	}
+
+	dest := t.TempDir()
+	n, err := untarInto(bytes.NewReader(archive), dest, bytecodeCacheCeiling)
+	if err != nil {
+		t.Fatalf("untarInto: %v", err)
+	}
+	var want int64
+	for _, contents := range files {
+		want += int64(len(contents))
+	}
+	if n != want {
+		t.Errorf("untarInto() = %d bytes, want %d", n, want)
+	}
+	for path, contents := range files {
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		got, err := os.ReadFile(filepath.Join(dest, rel))
+		if err != nil {
+			t.Fatalf("read back %s: %v", rel, err)
+		}
+		if string(got) != contents {
+			t.Errorf("%s = %q, want %q", rel, got, contents)
+		}
+	}
+}
+
+// TestUntarInto_AbortsPastTheCeiling proves the running total is checked
+// against the caller's ceiling as entries stream in, not just once at the end,
+// so a hostile or corrupt archive cannot fill the sandbox's disk before the
+// check catches up.
+func TestUntarInto_AbortsPastTheCeiling(t *testing.T) {
+	archive := buildArchive(t, []tarEntry{
+		{name: "a.bin", typeflag: tar.TypeReg, content: bytes.Repeat([]byte("x"), 100)},
+		{name: "b.bin", typeflag: tar.TypeReg, content: bytes.Repeat([]byte("y"), 100)},
+	})
+
+	if _, err := untarInto(bytes.NewReader(archive), t.TempDir(), 150); err == nil {
+		t.Fatal("untarInto() error = nil, want the ceiling enforced")
+	}
+}
+
+// rehydrateFixture builds a fake store whose GET returns the given archive
+// bytes with a declared size, for tests exercising rehydrateCompileCache
+// against a hand-built or hand-corrupted archive.
+func rehydrateFixture(archive []byte) *fakeBytecodeStore {
+	return &fakeBytecodeStore{getBody: io.NopCloser(bytes.NewReader(archive)), getSize: int64(len(archive))}
+}
+
+// assertNoCacheDir fails the test if dir exists, which is how every failed
+// rehydration attempt must leave it: a half-populated cache directory is
+// worse than none, since node would trust whatever is there.
+func assertNoCacheDir(t *testing.T, dir string) {
+	t.Helper()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Errorf("cache dir %s exists after a failed rehydration, want it absent", dir)
+	}
+}
+
+func TestRehydrateCompileCache_RoundTrip(t *testing.T) {
+	src := t.TempDir()
+	versionDir := filepath.Join(src, "v24.3.1-x64-abc123-1000")
+	if err := os.MkdirAll(versionDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(src, "index.bin"), []byte("top"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(versionDir, "aabbccdd"), []byte("nested"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := buildBytecodeArchive(context.Background(), src)
+	if err != nil {
+		t.Fatalf("buildBytecodeArchive: %v", err)
+	}
+	store := rehydrateFixture(archive)
+	dest := filepath.Join(t.TempDir(), "cache")
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "assets-xyz", "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz", dest)
+	if !ok {
+		t.Fatal("rehydrateCompileCache() ok = false, want a successful round trip")
+	}
+	if want := int64(len("top") + len("nested")); n != want {
+		t.Errorf("rehydrateCompileCache() = %d bytes, want %d", n, want)
+	}
+	if got, err := os.ReadFile(filepath.Join(dest, "index.bin")); err != nil || string(got) != "top" {
+		t.Errorf("index.bin = %q, %v, want %q, nil", got, err, "top")
+	}
+	if got, err := os.ReadFile(filepath.Join(dest, "v24.3.1-x64-abc123-1000", "aabbccdd")); err != nil || string(got) != "nested" {
+		t.Errorf("nested file = %q, %v, want %q, nil", got, err, "nested")
+	}
+	if len(store.gets) != 1 || store.gets[0] != "assets-xyz/ocel/bytecode/my-app/node24.3.1-arm64.tar.gz" {
+		t.Errorf("gets = %v, want a single get of the composed key", store.gets)
+	}
+}
+
+// A miss is the expected state on a deployment's first cold start; it must
+// not touch the target directory at all, and must not read as a fault.
+func TestRehydrateCompileCache_MissTouchesNothing(t *testing.T) {
+	store := &fakeBytecodeStore{getErr: errBytecodeCacheMiss}
+	dest := filepath.Join(t.TempDir(), "cache")
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) on a miss", n, ok)
+	}
+	assertNoCacheDir(t, dest)
+}
+
+func TestRehydrateCompileCache_NonGzipBodyLeavesNoDirectory(t *testing.T) {
+	body := []byte("not a gzip stream")
+	store := &fakeBytecodeStore{getBody: io.NopCloser(bytes.NewReader(body)), getSize: int64(len(body))}
+	dest := filepath.Join(t.TempDir(), "cache")
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) on a corrupt body", n, ok)
+	}
+	assertNoCacheDir(t, dest)
+}
+
+// A traversal entry must be rejected before anything is written, and nothing
+// from it may land outside the target directory — checked here by looking in
+// the temp dir's parent, not just at whether the extraction reported success.
+func TestRehydrateCompileCache_RejectsTraversal(t *testing.T) {
+	root := t.TempDir()
+	dest := filepath.Join(root, "cache")
+	archive := buildArchive(t, []tarEntry{{name: "../escape", typeflag: tar.TypeReg, content: []byte("hax")}})
+	store := rehydrateFixture(archive)
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) for a traversal entry", n, ok)
+	}
+	assertNoCacheDir(t, dest)
+	if _, err := os.Stat(filepath.Join(root, "escape")); !os.IsNotExist(err) {
+		t.Error("a traversal entry escaped into the temp dir's parent")
+	}
+}
+
+func TestRehydrateCompileCache_RejectsAbsolutePath(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "cache")
+	archive := buildArchive(t, []tarEntry{{name: "/etc/passwd", typeflag: tar.TypeReg, content: []byte("hax")}})
+	store := rehydrateFixture(archive)
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) for an absolute path", n, ok)
+	}
+	assertNoCacheDir(t, dest)
+}
+
+func TestRehydrateCompileCache_RejectsSymlink(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "cache")
+	archive := buildArchive(t, []tarEntry{{name: "link.bin", typeflag: tar.TypeSymlink, linkname: "/etc/passwd"}})
+	store := rehydrateFixture(archive)
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) for a symlink entry", n, ok)
+	}
+	assertNoCacheDir(t, dest)
+}
+
+// A ContentLength over the ceiling must bail before a single byte of the body
+// is read — proven here by a body that fails the test if Read is ever called,
+// not just by asserting the outcome.
+type poisonReader struct{ t *testing.T }
+
+func (p poisonReader) Read([]byte) (int, error) {
+	p.t.Fatal("read from a body that should have been rejected on ContentLength alone")
+	return 0, io.EOF
+}
+
+func TestRehydrateCompileCache_BailsOnContentLengthBeforeAnyRead(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "cache")
+	store := &fakeBytecodeStore{
+		getBody: io.NopCloser(poisonReader{t}),
+		getSize: bytecodeCacheCeiling + 1,
+	}
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) over the ceiling", n, ok)
+	}
+	assertNoCacheDir(t, dest)
+}
+
+// The ContentLength precheck only catches an oversized compressed archive; a
+// highly compressible one can report a tiny ContentLength while decompressing
+// past the ceiling, so untarInto's running-total check is what actually stops
+// it. zeroReader keeps this fast and cheap despite the size being realistic.
+func TestRehydrateCompileCache_AbortsWhenStreamedContentExceedsTheCeiling(t *testing.T) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	size := int64(bytecodeCacheCeiling) + 1<<20
+	if err := tw.WriteHeader(&tar.Header{Name: "huge.bin", Typeflag: tar.TypeReg, Size: size, Mode: 0o644}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.CopyN(tw, zeroReader{}, size); err != nil {
+		t.Fatal(err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archive := buf.Bytes()
+
+	dest := filepath.Join(t.TempDir(), "cache")
+	store := rehydrateFixture(archive)
+	if store.getSize >= bytecodeCacheCeiling {
+		t.Fatalf("test archive's compressed size %d did not stay under the ceiling", store.getSize)
+	}
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) once streamed content passes the ceiling", n, ok)
+	}
+	assertNoCacheDir(t, dest)
+}
+
+func TestRehydrateCompileCache_WipesStaleContentBeforeExtracting(t *testing.T) {
+	dest := t.TempDir()
+	stale := filepath.Join(dest, "stale.bin")
+	if err := os.WriteFile(stale, []byte("old"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	archive := buildArchive(t, []tarEntry{{name: "fresh.bin", typeflag: tar.TypeReg, content: []byte("new")}})
+	store := rehydrateFixture(archive)
+
+	n, ok := rehydrateCompileCache(context.Background(), store, "bucket", "key", dest)
+	if !ok || n != 3 {
+		t.Fatalf("rehydrateCompileCache() = (%d, %v), want (3, true)", n, ok)
+	}
+	if _, err := os.Stat(stale); !os.IsNotExist(err) {
+		t.Error("stale content survived rehydration")
+	}
+	if got, err := os.ReadFile(filepath.Join(dest, "fresh.bin")); err != nil || string(got) != "new" {
+		t.Errorf("fresh.bin = %q, %v, want %q, nil", got, err, "new")
+	}
+}
+
+// A cancelled context has to stop the extraction mid-stream, not just fail to
+// start one: the body is closed to interrupt whatever Read the goroutine is
+// blocked in, and the caller waits for that goroutine before cleaning up, so
+// no write can race the RemoveAll that follows.
+func TestRehydrateCompileCache_CancelledContextAbortsAndCleansUp(t *testing.T) {
+	dest := filepath.Join(t.TempDir(), "cache")
+	pr, pw := io.Pipe()
+	go func() {
+		gz := gzip.NewWriter(pw)
+		tw := tar.NewWriter(gz)
+		tw.WriteHeader(&tar.Header{Name: "a.bin", Typeflag: tar.TypeReg, Size: 3, Mode: 0o644})
+		tw.Write([]byte("abc"))
+		gz.Flush()
+		// tw, gz and pw are deliberately left open: the reader blocks waiting
+		// for the archive's end, which never arrives until the pipe is closed,
+		// giving the cancellation something to interrupt.
+	}()
+
+	store := &fakeBytecodeStore{getBody: pr, getSize: 1 << 20}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	n, ok := rehydrateCompileCache(ctx, store, "bucket", "key", dest)
+	elapsed := time.Since(start)
+
+	if ok || n != 0 {
+		t.Errorf("rehydrateCompileCache() = (%d, %v), want (0, false) once cancelled", n, ok)
+	}
+	if elapsed > time.Second {
+		t.Errorf("took %s, want the extraction interrupted at the context deadline", elapsed)
+	}
+	assertNoCacheDir(t, dest)
 }

@@ -171,14 +171,20 @@ func compileCacheEnv() []string {
 	return []string{"NODE_COMPILE_CACHE=" + compileCacheDir}
 }
 
-// bytecodeStore is the S3 surface the upload needs, and nothing more: does the
-// object already exist, and write it if not. Narrowing it to two calls is what
-// lets every test here run against a fake with no AWS client, config or
-// credentials in reach.
+// bytecodeStore is the S3 surface the upload and rehydration need, and
+// nothing more: does the object already exist, write it, and read it back.
+// Narrowing it to three calls is what lets every test here run against a
+// fake with no AWS client, config or credentials in reach.
 type bytecodeStore interface {
 	objectExists(ctx context.Context, bucket, key string) (bool, error)
 	putObject(ctx context.Context, bucket, key string, body []byte) error
+	getObject(ctx context.Context, bucket, key string) (io.ReadCloser, int64, error)
 }
+
+// errBytecodeCacheMiss is what getObject returns for an absent key. It is the
+// expected state on a deployment's first cold start, so rehydrateCompileCache
+// tests for it with errors.Is and logs it as a miss rather than a fault.
+var errBytecodeCacheMiss = errors.New("bytecode cache: no object at that key")
 
 type s3BytecodeStore struct{ client *s3.Client }
 
@@ -201,6 +207,23 @@ func (s s3BytecodeStore) putObject(ctx context.Context, bucket, key string, body
 		Body:   bytes.NewReader(body),
 	})
 	return err
+}
+
+func (s s3BytecodeStore) getObject(ctx context.Context, bucket, key string) (io.ReadCloser, int64, error) {
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{Bucket: &bucket, Key: &key})
+	if err != nil {
+		var noSuchKey *s3types.NoSuchKey
+		var notFound *s3types.NotFound
+		if errors.As(err, &noSuchKey) || errors.As(err, &notFound) {
+			return nil, 0, errBytecodeCacheMiss
+		}
+		return nil, 0, err
+	}
+	var size int64
+	if out.ContentLength != nil {
+		size = *out.ContentLength
+	}
+	return out.Body, size, nil
 }
 
 // bytecodeUpload is the once-per-instance publish of this function's compile
@@ -356,6 +379,130 @@ func buildArchiveWithin(ctx context.Context, dir string) ([]byte, error) {
 		return r.archive, r.err
 	case <-ctx.Done():
 		return nil, fmt.Errorf("archiving %s outlasted the upload budget: %w", dir, ctx.Err())
+	}
+}
+
+// untarInto gzip-decompresses and untars r into dir, streaming throughout —
+// never buffering the archive or an entry in memory — and returns the total
+// bytes written. dir is trusted; every entry is not: a name that is absolute
+// or climbs out via ".." is rejected before anything is created, and only
+// regular files are written, so a symlink, hardlink or device planted in the
+// archive cannot land outside dir or as something other than a plain file.
+// ceiling bounds the running total, aborting mid-stream rather than after the
+// fact, so a hostile or corrupt archive cannot fill the sandbox's disk.
+func untarInto(r io.Reader, dir string, ceiling int64) (int64, error) {
+	gz, err := gzip.NewReader(r)
+	if err != nil {
+		return 0, fmt.Errorf("bytecode cache is not gzip: %w", err)
+	}
+	defer gz.Close()
+	tr := tar.NewReader(gz)
+
+	var total int64
+	for {
+		hdr, err := tr.Next()
+		if err == io.EOF {
+			return total, nil
+		}
+		if err != nil {
+			return total, fmt.Errorf("read bytecode cache entry: %w", err)
+		}
+		if hdr.Typeflag != tar.TypeReg {
+			return total, fmt.Errorf("bytecode cache entry %q is not a regular file", hdr.Name)
+		}
+		if filepath.IsAbs(hdr.Name) {
+			return total, fmt.Errorf("bytecode cache entry %q is an absolute path", hdr.Name)
+		}
+		rel := filepath.Clean(hdr.Name)
+		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return total, fmt.Errorf("bytecode cache entry %q escapes the target directory", hdr.Name)
+		}
+
+		total += hdr.Size
+		if total > ceiling {
+			return total, fmt.Errorf("bytecode cache exceeds the %d byte ceiling", ceiling)
+		}
+
+		target := filepath.Join(dir, rel)
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return total, fmt.Errorf("create %s: %w", filepath.Dir(target), err)
+		}
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode).Perm())
+		if err != nil {
+			return total, fmt.Errorf("create %s: %w", target, err)
+		}
+		_, copyErr := io.CopyN(f, tr, hdr.Size)
+		closeErr := f.Close()
+		if copyErr != nil {
+			return total, fmt.Errorf("write %s: %w", target, copyErr)
+		}
+		if closeErr != nil {
+			return total, fmt.Errorf("close %s: %w", target, closeErr)
+		}
+	}
+}
+
+// rehydrateCompileCache is the whole read leg: wipe dir, fetch the archive at
+// bucket/key, and stream-extract it back into dir. It is the upload's mirror
+// image, and every failure mode lands the same way — a log line and dir left
+// absent — because init must boot exactly as it does with the feature off; a
+// half-populated cache directory would be worse than none, since node would
+// trust it.
+//
+// ctx bounds the whole attempt on the caller's terms: rehydration owns no
+// timeout of its own, so a caller that cancels gets the extraction stopped
+// and dir cleaned up rather than a wedged read outliving the deadline it was
+// given.
+func rehydrateCompileCache(ctx context.Context, store bytecodeStore, bucket, key, dir string) (int64, bool) {
+	if err := os.RemoveAll(dir); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not clear %s before rehydrating the compile cache: %v\n", dir, err)
+		return 0, false
+	}
+
+	body, size, err := store.getObject(ctx, bucket, key)
+	if err != nil {
+		if errors.Is(err, errBytecodeCacheMiss) {
+			fmt.Fprintf(os.Stderr, "ocel: no compile cache at %s yet; nothing to rehydrate\n", key)
+		} else {
+			fmt.Fprintf(os.Stderr, "ocel: could not fetch the compile cache at %s: %v\n", key, err)
+		}
+		return 0, false
+	}
+	defer body.Close()
+
+	if exceedsBytecodeCacheCeiling(size) {
+		fmt.Fprintf(os.Stderr, "ocel: compile cache at %s is %d bytes, over the %d byte ceiling; skipping rehydration\n",
+			key, size, bytecodeCacheCeiling)
+		return 0, false
+	}
+
+	type result struct {
+		n   int64
+		err error
+	}
+	done := make(chan result, 1)
+	go func() {
+		n, err := untarInto(body, dir, bytecodeCacheCeiling)
+		done <- result{n: n, err: err}
+	}()
+
+	select {
+	case r := <-done:
+		if r.err != nil {
+			fmt.Fprintf(os.Stderr, "ocel: could not rehydrate the compile cache from %s: %v\n", key, r.err)
+			os.RemoveAll(dir)
+			return 0, false
+		}
+		return r.n, true
+	case <-ctx.Done():
+		// Closing body is what frees the goroutine: it is blocked on a Read
+		// that only the context knows should stop, and only closing the
+		// stream it is reading interrupts that call.
+		body.Close()
+		<-done
+		fmt.Fprintf(os.Stderr, "ocel: rehydrating the compile cache from %s ran out of time: %v\n", key, ctx.Err())
+		os.RemoveAll(dir)
+		return 0, false
 	}
 }
 
