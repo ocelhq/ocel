@@ -322,27 +322,24 @@ func cacheDirWith(t *testing.T, contents string) string {
 	return dir
 }
 
-// uploadFixture assembles an upload whose flush ack, node version and S3 are
-// all under the test's control, and reports how many times the flush was asked
-// for.
+// uploadFixture assembles an upload whose flush ack and S3 are both under the
+// test's control, wired to a fixed bucket and key exactly as the resolution
+// would hand them to it, and reports how many times the flush was asked for.
 func uploadFixture(store bytecodeStore, ack compileCacheFlushedPayload, ackOK bool) (*bytecodeUpload, *int) {
 	flushes := 0
 	u := &bytecodeUpload{
-		store:    store,
-		bucket:   "assets-xyz",
-		prefix:   "ocel",
-		function: "my-app",
-		arch:     "arm64",
+		store:  store,
+		bucket: "assets-xyz",
+		key:    "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz",
 		flush: func(context.Context) (compileCacheFlushedPayload, bool) {
 			flushes++
 			return ack, ackOK
 		},
-		nodeVersion: func(context.Context) (string, error) { return "v24.3.1", nil },
 	}
 	return u, &flushes
 }
 
-func TestBytecodeUpload_PutsToTheComposedBucketAndKey(t *testing.T) {
+func TestBytecodeUpload_PutsToTheGivenBucketAndKey(t *testing.T) {
 	dir := cacheDirWith(t, "compiled bytes")
 	store := &fakeBytecodeStore{}
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
@@ -350,7 +347,7 @@ func TestBytecodeUpload_PutsToTheComposedBucketAndKey(t *testing.T) {
 	u.run(context.Background())
 
 	if len(store.heads) != 1 || store.heads[0] != "assets-xyz/ocel/bytecode/my-app/node24.3.1-arm64.tar.gz" {
-		t.Fatalf("heads = %v, want a single head of the composed key", store.heads)
+		t.Fatalf("heads = %v, want a single head of the given key", store.heads)
 	}
 	if len(store.puts) != 1 {
 		t.Fatalf("puts = %d, want 1", len(store.puts))
@@ -364,10 +361,12 @@ func TestBytecodeUpload_PutsToTheComposedBucketAndKey(t *testing.T) {
 	}
 }
 
+// The HEAD runs before the flush, so an instance that lost the upload race
+// finds out for the price of a HEAD alone: no flush, and so no archive.
 func TestBytecodeUpload_SkipsThePutWhenTheObjectAlreadyExists(t *testing.T) {
 	dir := cacheDirWith(t, "compiled bytes")
 	store := &fakeBytecodeStore{exists: true}
-	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
+	u, flushes := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
 
 	u.run(context.Background())
 
@@ -377,10 +376,14 @@ func TestBytecodeUpload_SkipsThePutWhenTheObjectAlreadyExists(t *testing.T) {
 	if len(store.puts) != 0 {
 		t.Errorf("puts = %v, want none once the object exists", store.puts)
 	}
+	if *flushes != 0 {
+		t.Errorf("flushes = %d, want node never asked to flush once the object exists", *flushes)
+	}
 }
 
 // A flush that node could not honour — an old runtime, or no cache written —
-// means there is nothing on disk worth uploading, so S3 is never touched.
+// means there is nothing on disk worth uploading, so the PUT never happens.
+// The HEAD still runs: it is checked before the flush is even asked for.
 func TestBytecodeUpload_SkipsWhenTheFlushAckIsNotOK(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -397,8 +400,11 @@ func TestBytecodeUpload_SkipsWhenTheFlushAckIsNotOK(t *testing.T) {
 
 			u.run(context.Background())
 
-			if len(store.heads) != 0 || len(store.puts) != 0 {
-				t.Errorf("touched S3 (heads=%v puts=%v), want nothing without a usable flush", store.heads, store.puts)
+			if len(store.heads) != 1 {
+				t.Errorf("heads = %v, want the key checked before the flush was asked for", store.heads)
+			}
+			if len(store.puts) != 0 {
+				t.Errorf("puts = %v, want nothing without a usable flush", store.puts)
 			}
 		})
 	}
@@ -423,30 +429,6 @@ func TestBytecodeUpload_SkipsEntirelyWhenTheBudgetIsNonPositive(t *testing.T) {
 	}
 }
 
-func TestBytecodeUpload_SkipsWhenTheNodeVersionCannotBeRead(t *testing.T) {
-	cases := []struct {
-		name    string
-		version string
-		err     error
-	}{
-		{name: "the binary would not run", err: errors.New("exec format error")},
-		{name: "the output is not a version", version: "not-a-version"},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			store := &fakeBytecodeStore{}
-			u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
-			u.nodeVersion = func(context.Context) (string, error) { return tc.version, tc.err }
-
-			u.run(context.Background())
-
-			if len(store.heads) != 0 || len(store.puts) != 0 {
-				t.Errorf("touched S3 (heads=%v puts=%v), want no upload under an unknown major", store.heads, store.puts)
-			}
-		})
-	}
-}
-
 // An empty cache directory is the shape of a function whose /tmp was wiped or
 // whose flush produced nothing; uploading an empty archive would poison every
 // later instance that rehydrated from it.
@@ -456,8 +438,11 @@ func TestBytecodeUpload_SkipsAnEmptyCacheDirectory(t *testing.T) {
 
 	u.run(context.Background())
 
-	if len(store.heads) != 0 || len(store.puts) != 0 {
-		t.Errorf("touched S3 (heads=%v puts=%v), want nothing to upload", store.heads, store.puts)
+	if len(store.heads) != 1 {
+		t.Errorf("heads = %v, want the key checked before the empty cache was found", store.heads)
+	}
+	if len(store.puts) != 0 {
+		t.Errorf("puts = %v, want nothing to upload", store.puts)
 	}
 }
 
@@ -481,8 +466,11 @@ func TestBytecodeUpload_SkipsWhenTheCacheIsOverTheCeiling(t *testing.T) {
 	start := time.Now()
 	u.run(context.Background())
 
-	if len(store.heads) != 0 || len(store.puts) != 0 {
-		t.Errorf("touched S3 (heads=%v puts=%v), want nothing over the ceiling", store.heads, store.puts)
+	if len(store.heads) != 1 {
+		t.Errorf("heads = %v, want the key checked before the ceiling was decided", store.heads)
+	}
+	if len(store.puts) != 0 {
+		t.Errorf("puts = %v, want nothing over the ceiling", store.puts)
 	}
 	if elapsed := time.Since(start); elapsed > time.Second {
 		t.Errorf("took %s, want the ceiling decided before anything was read or compressed", elapsed)
@@ -581,9 +569,9 @@ func TestBytecodeUpload_SkipsTheArchiveWhenTheBudgetIsAlreadySpent(t *testing.T)
 	store := &fakeBytecodeStore{}
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
 
-	u.nodeVersion = func(ctx context.Context) (string, error) {
+	u.flush = func(ctx context.Context) (compileCacheFlushedPayload, bool) {
 		<-ctx.Done()
-		return "v24.3.1", nil
+		return compileCacheFlushedPayload{Dir: dir, OK: true}, true
 	}
 
 	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin+100*time.Millisecond))
@@ -698,8 +686,8 @@ func TestBytecodeUpload_AbandonsAnArchiveBuildInFlight(t *testing.T) {
 	u.run(ctx)
 	elapsed := time.Since(start)
 
-	if len(store.heads) != 0 || len(store.puts) != 0 {
-		t.Errorf("touched S3 (heads=%v puts=%v), want nothing once the build was abandoned", store.heads, store.puts)
+	if len(store.puts) != 0 {
+		t.Errorf("puts = %v, want nothing once the build was abandoned", store.puts)
 	}
 	if elapsed > baseline {
 		t.Errorf("took %s against a %s full build, want the attempt abandoned partway", elapsed, baseline)
@@ -813,9 +801,10 @@ func TestCompileCacheEnv(t *testing.T) {
 	})
 }
 
-// The gate and its neighbours are read before any AWS config is loaded, so a
-// function missing one of them never constructs a client at all.
-func TestResolveBytecodeUpload_NilWhenNotFullyConfigured(t *testing.T) {
+// The gate and its neighbours are read before the node version is even
+// asked for, so a function missing one of them never execs anything or
+// constructs an AWS client.
+func TestResolveBytecodeResolution_NilWhenNotFullyConfigured(t *testing.T) {
 	cases := []struct {
 		name     string
 		prefix   string
@@ -826,55 +815,94 @@ func TestResolveBytecodeUpload_NilWhenNotFullyConfigured(t *testing.T) {
 		{name: "no bucket", prefix: "ocel", function: "my-app"},
 		{name: "no function name", prefix: "ocel", bucket: "assets"},
 	}
+	nodeVersion := func(context.Context) (string, error) { return "v24.3.1", nil }
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(bytecodePrefixEnvVar, tc.prefix)
 			t.Setenv("OCEL_ISR_BUCKET", tc.bucket)
 			t.Setenv("AWS_LAMBDA_FUNCTION_NAME", tc.function)
-			if got := resolveBytecodeUpload(context.Background(), nil); got != nil {
-				t.Errorf("resolveBytecodeUpload() = %+v, want nil", got)
+			if got := resolveBytecodeResolution(context.Background(), nodeVersion); got != nil {
+				t.Errorf("resolveBytecodeResolution() = %+v, want nil", got)
 			}
 		})
 	}
 }
 
-// A fully configured function gets an upload wired to exactly what the
-// environment named. Landing the prefix, the bucket or the function name in the
-// wrong field would compose a key nothing ever reads back, which no later leg
-// could detect.
-func TestResolveBytecodeUpload_CarriesTheEnvironmentIntoTheUpload(t *testing.T) {
+// A version this process cannot read, or one that doesn't parse, disables
+// the resolution the same way a missing env var does: there is no key to
+// compose without it, so neither leg can be handed one.
+func TestResolveBytecodeResolution_NilWhenTheNodeVersionCannotBeRead(t *testing.T) {
+	t.Setenv(bytecodePrefixEnvVar, "ocel")
+	t.Setenv("OCEL_ISR_BUCKET", "assets")
+	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
+
+	cases := []struct {
+		name    string
+		version string
+		err     error
+	}{
+		{name: "the binary would not run", err: errors.New("exec format error")},
+		{name: "the output is not a version", version: "not-a-version"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			nodeVersion := func(context.Context) (string, error) { return tc.version, tc.err }
+			if got := resolveBytecodeResolution(context.Background(), nodeVersion); got != nil {
+				t.Errorf("resolveBytecodeResolution() = %+v, want nil", got)
+			}
+		})
+	}
+}
+
+// A fully configured function gets a resolution composed from exactly what
+// the environment named and the version prober reported. Landing the
+// prefix, the bucket, the function name or the version in the wrong place
+// would compose a key nothing ever reads back, which no later leg could
+// detect — this is the test that pins the composition down.
+func TestResolveBytecodeResolution_CarriesTheEnvironmentAndVersionIntoTheKey(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel/stg")
 	t.Setenv("OCEL_ISR_BUCKET", "assets-xyz")
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 	t.Setenv("AWS_REGION", "us-east-1")
 
+	nodeVersion := func(context.Context) (string, error) { return "v24.3.1", nil }
+
+	r := resolveBytecodeResolution(context.Background(), nodeVersion)
+	if r == nil {
+		t.Fatal("resolveBytecodeResolution() = nil, want a resolution for a fully configured function")
+	}
+	if r.bucket != "assets-xyz" {
+		t.Errorf("bucket = %q, want %q", r.bucket, "assets-xyz")
+	}
+	if r.store == nil {
+		t.Error("store = nil, want an S3-backed store")
+	}
+	want := "ocel/stg/bytecode/my-app/node24.3.1-" + s3Arch(runtime.GOARCH) + ".tar.gz"
+	if r.key != want {
+		t.Errorf("key = %q, want %q", r.key, want)
+	}
+}
+
+// upload must carry the resolution's own bucket and key rather than
+// recompute them, which is what makes the two legs diverging structurally
+// impossible rather than merely correct today.
+func TestBytecodeResolution_UploadCarriesTheSameBucketAndKey(t *testing.T) {
+	r := &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "assets-xyz", key: "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"}
 	flushed := false
 	flush := func(context.Context) (compileCacheFlushedPayload, bool) {
 		flushed = true
 		return compileCacheFlushedPayload{}, false
 	}
 
-	u := resolveBytecodeUpload(context.Background(), flush)
-	if u == nil {
-		t.Fatal("resolveBytecodeUpload() = nil, want an upload for a fully configured function")
+	u := r.upload(flush)
+	if u.store != r.store {
+		t.Error("store is not the resolution's")
 	}
-	if u.prefix != "ocel/stg" {
-		t.Errorf("prefix = %q, want %q", u.prefix, "ocel/stg")
+	if u.bucket != r.bucket {
+		t.Errorf("bucket = %q, want the resolution's %q", u.bucket, r.bucket)
 	}
-	if u.bucket != "assets-xyz" {
-		t.Errorf("bucket = %q, want %q", u.bucket, "assets-xyz")
-	}
-	if u.function != "my-app" {
-		t.Errorf("function = %q, want %q", u.function, "my-app")
-	}
-	if u.arch != runtime.GOARCH {
-		t.Errorf("arch = %q, want %q", u.arch, runtime.GOARCH)
-	}
-	if u.store == nil {
-		t.Error("store = nil, want an S3-backed store")
-	}
-	if u.nodeVersion == nil {
-		t.Error("nodeVersion = nil, want the binary's version reader")
+	if u.key != r.key {
+		t.Errorf("key = %q, want the resolution's %q", u.key, r.key)
 	}
 	if u.flush == nil {
 		t.Fatal("flush = nil, want the caller's")
@@ -882,10 +910,6 @@ func TestResolveBytecodeUpload_CarriesTheEnvironmentIntoTheUpload(t *testing.T) 
 	u.flush(context.Background())
 	if !flushed {
 		t.Error("flush is not the one the caller passed")
-	}
-
-	if got := bytecodeCacheKey(u.prefix, u.function, "24.3.1", u.arch); got != "ocel/stg/bytecode/my-app/node24.3.1-"+s3Arch(runtime.GOARCH)+".tar.gz" {
-		t.Errorf("the resolved fields compose %q", got)
 	}
 }
 
@@ -1863,4 +1887,178 @@ func TestRehydrateCompileCache_CancelledContextAbortsAndCleansUp(t *testing.T) {
 		t.Errorf("took %s, want the extraction interrupted at the context deadline", elapsed)
 	}
 	assertNoCacheDir(t, dest)
+}
+
+// A miss logs through rehydrateCompileCache itself, so only the hit needs a
+// line here — and that line is what a later grep against CloudWatch will
+// look for, so this pins its exact shape: the key, the bytes restored and
+// the elapsed milliseconds.
+func TestRehydrateBytecodeCache_LogsTheHitWithKeyBytesAndElapsedMS(t *testing.T) {
+	archive, err := buildBytecodeArchive(context.Background(), cacheDirWith(t, "compiled bytes"))
+	if err != nil {
+		t.Fatalf("buildBytecodeArchive: %v", err)
+	}
+	r := &bytecodeResolution{
+		store:  rehydrateFixture(archive),
+		bucket: "assets-xyz",
+		key:    "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz",
+	}
+	dest := filepath.Join(t.TempDir(), "cache")
+
+	var hit bool
+	out := captureStderr(t, func() {
+		hit = rehydrateBytecodeCache(context.Background(), r, dest)
+	})
+	if !hit {
+		t.Fatal("rehydrateBytecodeCache() = false, want a hit")
+	}
+	if !strings.Contains(out, "ocel: rehydrated compile cache from ocel/bytecode/my-app/node24.3.1-arm64.tar.gz:") {
+		t.Errorf("log = %q, want it to name the key", out)
+	}
+	if !strings.Contains(out, "bytes in") || !strings.Contains(out, "ms") {
+		t.Errorf("log = %q, want bytes and elapsed ms", out)
+	}
+}
+
+func TestRehydrateBytecodeCache_MissLogsNothingOfItsOwn(t *testing.T) {
+	r := &bytecodeResolution{store: &fakeBytecodeStore{getErr: errBytecodeCacheMiss}, bucket: "b", key: "k"}
+	dest := filepath.Join(t.TempDir(), "cache")
+
+	var hit bool
+	out := captureStderr(t, func() {
+		hit = rehydrateBytecodeCache(context.Background(), r, dest)
+	})
+	if hit {
+		t.Fatal("rehydrateBytecodeCache() = true, want a miss")
+	}
+	// rehydrateCompileCache already logged the miss with the key and the
+	// reason; rehydrateBytecodeCache must not log a second, redundant line.
+	if strings.Count(out, "\n") != 1 {
+		t.Errorf("log = %q, want exactly the one line rehydrateCompileCache already wrote", out)
+	}
+}
+
+// fakeSpawn records the budget bringUp handed it and returns an empty
+// Membrane, standing in for startNode the same way live_test.go's spawns do.
+func fakeSpawn(gotBudget *time.Duration) spawner {
+	return func(_ []string, budget time.Duration, onControl func(io.Writer), _ <-chan struct{}) (*Membrane, error) {
+		*gotBudget = budget
+		if onControl != nil {
+			onControl(&sink{})
+		}
+		return &Membrane{}, nil
+	}
+}
+
+// TestBringUpWithBytecode_RehydrationsCostIsCarvedOutOfStartupBudget is the
+// property the brief calls out by name: rehydration runs before bringUp's
+// budget argument is computed, so whatever it spends is already reflected in
+// time.Since(start) by the time bringUp sees it — carved out of
+// startupBudget, not added on top of it.
+func TestBringUpWithBytecode_RehydrationsCostIsCarvedOutOfStartupBudget(t *testing.T) {
+	const rehydrateCost = 200 * time.Millisecond
+
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
+
+	rehydrate := func(context.Context, *bytecodeResolution) bool {
+		time.Sleep(rehydrateCost)
+		return false
+	}
+
+	var gotBudget time.Duration
+	start := time.Now()
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, rehydrate)
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if membrane.bytecode == nil {
+		t.Fatal("bytecode = nil, want the upload leg attached on a miss")
+	}
+
+	// The budget bringUp received must already be short by roughly what
+	// rehydration cost — not the full startupBudget, which is what "added on
+	// top" would look like.
+	if gotBudget > startupBudget-rehydrateCost/2 {
+		t.Errorf("budget handed to bringUp = %s, want it reduced by rehydration's %s cost", gotBudget, rehydrateCost)
+	}
+}
+
+// A rehydrate hit disables the whole upload leg, not merely its PUT: the
+// object is proven to exist, so nothing membrane.bytecode would do could
+// ever matter, and it is left nil rather than wired up and never used.
+func TestBringUpWithBytecode_AHitDisablesTheUploadLeg(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
+
+	rehydrateCalls := 0
+	rehydrate := func(context.Context, *bytecodeResolution) bool {
+		rehydrateCalls++
+		return true
+	}
+
+	var gotBudget time.Duration
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, rehydrate)
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if rehydrateCalls != 1 {
+		t.Errorf("rehydrate calls = %d, want 1", rehydrateCalls)
+	}
+	if membrane.bytecode != nil {
+		t.Error("bytecode != nil, want the upload leg disabled after a rehydrate hit")
+	}
+}
+
+// A miss attaches the upload leg, wired to the same key rehydration read
+// from — the two legs sharing bytecode.upload's composition is what this
+// checks, not just that some upload got attached.
+func TestBringUpWithBytecode_AMissAttachesTheUploadLegWithTheSameKey(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	r := &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "assets-xyz", key: "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"}
+	bytecodeReady <- r
+
+	rehydrate := func(context.Context, *bytecodeResolution) bool { return false }
+
+	var gotBudget time.Duration
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, rehydrate)
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if membrane.bytecode == nil {
+		t.Fatal("bytecode = nil, want the upload leg attached on a miss")
+	}
+	if membrane.bytecode.bucket != r.bucket || membrane.bytecode.key != r.key {
+		t.Errorf("upload bucket/key = %s/%s, want the resolution's %s/%s",
+			membrane.bytecode.bucket, membrane.bytecode.key, r.bucket, r.key)
+	}
+}
+
+// An unconfigured deployment's nil resolution never reaches rehydrate at
+// all, and attaches no upload leg either.
+func TestBringUpWithBytecode_NilResolutionSkipsBothLegs(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- nil
+
+	rehydrateCalls := 0
+	rehydrate := func(context.Context, *bytecodeResolution) bool {
+		rehydrateCalls++
+		return false
+	}
+
+	var gotBudget time.Duration
+	membrane, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, time.Now(), bytecodeReady, rehydrate)
+	if err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if rehydrateCalls != 0 {
+		t.Errorf("rehydrate calls = %d, want 0 for an unconfigured deployment", rehydrateCalls)
+	}
+	if membrane.bytecode != nil {
+		t.Error("bytecode != nil, want no upload leg for an unconfigured deployment")
+	}
 }
