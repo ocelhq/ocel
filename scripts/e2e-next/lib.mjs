@@ -396,15 +396,16 @@ export function bytecodeCacheKeyName(name) {
  * membrane emits, not a format to decode.
  *
  * The `dir`-clear failure and the two resolveBytecodeResolution off-switch
- * lines name no key — a version probe or AWS config load can fail before a
- * key is ever composed, and the clear runs before the key is even read back
- * off `r` — so all three are matched on a keyless substring instead, the
- * same technique as "disabled" below: none of the other lines this function
- * matches could ever produce that substring, so it stays unambiguous without
- * `key` to narrow it. Classified anyway, under "disabled" and "clear-error",
- * because a caller polling by key would otherwise never learn the feature
- * turned itself off, or failed before it could even try to read, on some
- * instance.
+ * lines name no key — the off-switch lines because a version probe or AWS
+ * config load can fail before a key is ever composed, the clear failure
+ * because its format string names `dir`, not `key`, even though the key is
+ * already fully composed and in hand by then — so all three are matched on
+ * a keyless substring instead, the same technique as "disabled" below: none
+ * of the other lines this function matches could ever produce that
+ * substring, so it stays unambiguous without `key` to narrow it. Classified
+ * anyway, under "disabled" and "clear-error", because a caller polling by
+ * key would otherwise never learn the feature turned itself off, or failed
+ * before it could even try to read, on some instance.
  */
 export function bytecodeRehydrateOutcome(message, key) {
   const text = String(message ?? "");

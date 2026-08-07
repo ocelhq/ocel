@@ -727,8 +727,8 @@ func TestCompileCacheSize(t *testing.T) {
 	if err != nil {
 		t.Fatalf("compileCacheSize: %v", err)
 	}
-	if got != 8 {
-		t.Errorf("compileCacheSize() = %d, want 8", got)
+	if want := int64(8 + 2*tarEntryOverhead); got != want {
+		t.Errorf("compileCacheSize() = %d, want %d (payload plus tarEntryOverhead per file, matching untarInto's charge)", got, want)
 	}
 
 	missing, err := compileCacheSize(context.Background(), filepath.Join(dir, "does-not-exist"))
@@ -1530,6 +1530,49 @@ func TestUntarInto_RoundTrip(t *testing.T) {
 	}
 }
 
+// TestUntarInto_ClampsExtractedFilePermissions proves an archive's declared
+// mode never reaches disk: mode 0000 is reachable from a corrupt or hostile
+// archive, and honouring it would leave a cache file the runtime user can't
+// even read back — a silent, self-inflicted degradation the upload leg would
+// never itself produce, since it only ever writes something in the 0644
+// family.
+func TestUntarInto_ClampsExtractedFilePermissions(t *testing.T) {
+	var buf bytes.Buffer
+	gz := gzip.NewWriter(&buf)
+	tw := tar.NewWriter(gz)
+	content := []byte("compiled")
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "unreadable.blob",
+		Typeflag: tar.TypeReg,
+		Size:     int64(len(content)),
+		Mode:     0o000,
+	}); err != nil {
+		t.Fatalf("write header: %v", err)
+	}
+	if _, err := tw.Write(content); err != nil {
+		t.Fatalf("write content: %v", err)
+	}
+	if err := tw.Close(); err != nil {
+		t.Fatalf("close tar: %v", err)
+	}
+	if err := gz.Close(); err != nil {
+		t.Fatalf("close gzip: %v", err)
+	}
+
+	dest := t.TempDir()
+	if _, err := untarInto(bytes.NewReader(buf.Bytes()), dest, bytecodeCacheCeiling); err != nil {
+		t.Fatalf("untarInto: %v", err)
+	}
+
+	info, err := os.Stat(filepath.Join(dest, "unreadable.blob"))
+	if err != nil {
+		t.Fatalf("stat extracted file: %v", err)
+	}
+	if got := info.Mode().Perm(); got != 0o644 {
+		t.Errorf("extracted file mode = %o, want 0644 regardless of the archive's declared mode", got)
+	}
+}
+
 // TestUntarInto_AbortsPastTheCeiling proves the running total is checked
 // against the caller's ceiling as entries stream in, not just once at the end,
 // so a hostile or corrupt archive cannot fill the sandbox's disk before the
@@ -1978,6 +2021,41 @@ func TestRehydrateBytecodeCache_AppliesItsOwnBudget(t *testing.T) {
 	}
 }
 
+// TestBytecodeRehydrate_TargetsTheDirCompileCacheEnvDeclares pins the property
+// that makes bytecodeRehydrate (main.go) safe: nothing here checks that the
+// archive lands where NODE_COMPILE_CACHE actually points except that both
+// read the same compileCacheDir constant. This proves it by construction
+// rather than by name — it reads the directory out of compileCacheEnv's own
+// output and asserts bytecodeRehydrate wrote there, so the test still catches
+// a future edit that gave either side its own literal.
+func TestBytecodeRehydrate_TargetsTheDirCompileCacheEnvDeclares(t *testing.T) {
+	t.Setenv(bytecodePrefixEnvVar, "ocel")
+	env := compileCacheEnv()
+	if len(env) != 1 || !strings.HasPrefix(env[0], "NODE_COMPILE_CACHE=") {
+		t.Fatalf("compileCacheEnv() = %v, want exactly one NODE_COMPILE_CACHE entry", env)
+	}
+	dir := strings.TrimPrefix(env[0], "NODE_COMPILE_CACHE=")
+	t.Cleanup(func() { os.RemoveAll(dir) })
+
+	src := t.TempDir()
+	if err := os.WriteFile(filepath.Join(src, "cached.blob"), []byte("compiled"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	archive, err := buildBytecodeArchive(context.Background(), src)
+	if err != nil {
+		t.Fatalf("buildBytecodeArchive: %v", err)
+	}
+	r := &bytecodeResolution{store: rehydrateFixture(archive), bucket: "b", key: "k"}
+
+	if !bytecodeRehydrate(context.Background(), r) {
+		t.Fatal("bytecodeRehydrate() = false, want a hit")
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "cached.blob"))
+	if err != nil || string(got) != "compiled" {
+		t.Errorf("file at compileCacheEnv's dir = %q, %v, want %q, nil: bytecodeRehydrate wrote somewhere else", got, err, "compiled")
+	}
+}
+
 // fakeSpawn records the budget bringUp handed it and returns an empty
 // Membrane, standing in for startNode the same way live_test.go's spawns do.
 func fakeSpawn(gotBudget *time.Duration) spawner {
@@ -2022,6 +2100,53 @@ func TestBringUpWithBytecode_RehydrationsCostIsCarvedOutOfStartupBudget(t *testi
 	// top" would look like.
 	if gotBudget > startupBudget-rehydrateCost/2 {
 		t.Errorf("budget handed to bringUp = %s, want it reduced by rehydration's %s cost", gotBudget, rehydrateCost)
+	}
+}
+
+// TestBringUpWithBytecode_FloorsTheSpawnBudget proves the pathological "slow
+// miss" — pre-spawn work eating past startupBudget with nothing to show for
+// it — hands bringUp minSpawnBudget rather than a non-positive duration. A
+// non-positive budget is what turns into awaitReady's time.After(negative)
+// firing immediately, so this is what keeps that boot from failing spuriously.
+func TestBringUpWithBytecode_FloorsTheSpawnBudget(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
+	rehydrate := func(context.Context, *bytecodeResolution) bool { return false }
+
+	// start set so far in the past that startupBudget - time.Since(start) is
+	// already deep in negative territory before bringUp even runs.
+	start := time.Now().Add(-2 * startupBudget)
+
+	var gotBudget time.Duration
+	if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, rehydrate); err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if gotBudget != minSpawnBudget {
+		t.Errorf("budget handed to bringUp = %s, want the floor of %s", gotBudget, minSpawnBudget)
+	}
+}
+
+// TestBringUpWithBytecode_NormalCarveOutIsUnaffectedByTheFloor proves the
+// floor only ever engages in the pathological case: a start recent enough
+// that startupBudget - time.Since(start) is comfortably above minSpawnBudget
+// must reach bringUp unchanged, not clamped.
+func TestBringUpWithBytecode_NormalCarveOutIsUnaffectedByTheFloor(t *testing.T) {
+	l := newLiveValues(resolves(nil), nil, nil)
+	bytecodeReady := make(chan *bytecodeResolution, 1)
+	bytecodeReady <- &bytecodeResolution{store: &fakeBytecodeStore{}, bucket: "b", key: "k"}
+	rehydrate := func(context.Context, *bytecodeResolution) bool { return false }
+
+	start := time.Now()
+	var gotBudget time.Duration
+	if _, err := bringUpWithBytecode(context.Background(), fakeSpawn(&gotBudget), l, l.start(context.Background()), nil, start, bytecodeReady, rehydrate); err != nil {
+		t.Fatalf("bringUpWithBytecode: %v", err)
+	}
+	if gotBudget <= minSpawnBudget {
+		t.Errorf("budget handed to bringUp = %s, want it well above the floor for a start this recent", gotBudget)
+	}
+	if gotBudget > startupBudget {
+		t.Errorf("budget handed to bringUp = %s, want it at most startupBudget", gotBudget)
 	}
 }
 
