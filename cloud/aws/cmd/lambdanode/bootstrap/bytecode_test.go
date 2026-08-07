@@ -31,7 +31,7 @@ func TestBytecodeCacheKey(t *testing.T) {
 		name         string
 		prefix       string
 		functionName string
-		nodeMajor    int
+		nodeVersion  string
 		goArch       string
 		want         string
 	}{
@@ -39,30 +39,30 @@ func TestBytecodeCacheKey(t *testing.T) {
 			name:         "amd64 maps to the AWS x86_64 spelling",
 			prefix:       "ocel",
 			functionName: "my-app",
-			nodeMajor:    24,
+			nodeVersion:  "24.3.1",
 			goArch:       "amd64",
-			want:         "ocel/bytecode/my-app/node24-x86_64.tar.gz",
+			want:         "ocel/bytecode/my-app/node24.3.1-x86_64.tar.gz",
 		},
 		{
 			name:         "arm64 passes through unchanged",
 			prefix:       "ocel",
 			functionName: "my-app",
-			nodeMajor:    24,
+			nodeVersion:  "24.3.1",
 			goArch:       "arm64",
-			want:         "ocel/bytecode/my-app/node24-arm64.tar.gz",
+			want:         "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz",
 		},
 		{
 			name:         "an unrecognized arch still passes through",
 			prefix:       "stg/deploy",
 			functionName: "other-fn",
-			nodeMajor:    20,
+			nodeVersion:  "20.11.0",
 			goArch:       "riscv64",
-			want:         "stg/deploy/bytecode/other-fn/node20-riscv64.tar.gz",
+			want:         "stg/deploy/bytecode/other-fn/node20.11.0-riscv64.tar.gz",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := bytecodeCacheKey(tc.prefix, tc.functionName, tc.nodeMajor, tc.goArch)
+			got := bytecodeCacheKey(tc.prefix, tc.functionName, tc.nodeVersion, tc.goArch)
 			if got != tc.want {
 				t.Errorf("bytecodeCacheKey() = %q, want %q", got, tc.want)
 			}
@@ -86,33 +86,40 @@ func TestS3Arch(t *testing.T) {
 	}
 }
 
-func TestNodeMajor(t *testing.T) {
+func TestCanonicalNodeVersion(t *testing.T) {
 	cases := []struct {
 		name    string
 		version string
-		want    int
+		want    string
 		wantErr bool
 	}{
-		{name: "v-prefixed semver", version: "v24.3.1", want: 24},
-		{name: "no v prefix", version: "20.11.0", want: 20},
-		{name: "double digit major", version: "v18.19.1", want: 18},
+		{name: "v-prefixed semver", version: "v24.3.1", want: "24.3.1"},
+		{name: "no v prefix", version: "20.11.0", want: "20.11.0"},
+		{name: "double digit major", version: "v18.19.1", want: "18.19.1"},
 		{name: "empty string", version: "", wantErr: true},
-		{name: "not a version at all", version: "latest", wantErr: true},
+		{name: "major only", version: "24", wantErr: true},
+		{name: "major and minor only", version: "24.3", wantErr: true},
+		{name: "trailing prerelease tag", version: "v24.3.1-nightly", wantErr: true},
+		{name: "not a version at all", version: "not-a-version", wantErr: true},
+		{name: "whitespace only", version: "   ", wantErr: true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got, err := nodeMajor(tc.version)
+			got, err := canonicalNodeVersion(tc.version)
 			if tc.wantErr {
 				if err == nil {
-					t.Fatalf("nodeMajor(%q) = %d, nil, want an error", tc.version, got)
+					t.Fatalf("canonicalNodeVersion(%q) = %q, nil, want an error", tc.version, got)
 				}
 				return
 			}
 			if err != nil {
-				t.Fatalf("nodeMajor(%q) unexpected error: %v", tc.version, err)
+				t.Fatalf("canonicalNodeVersion(%q) unexpected error: %v", tc.version, err)
 			}
 			if got != tc.want {
-				t.Errorf("nodeMajor(%q) = %d, want %d", tc.version, got, tc.want)
+				t.Errorf("canonicalNodeVersion(%q) = %q, want %q", tc.version, got, tc.want)
+			}
+			if strings.HasPrefix(got, "v") {
+				t.Errorf("canonicalNodeVersion(%q) = %q, want no leading v", tc.version, got)
 			}
 		})
 	}
@@ -327,15 +334,15 @@ func TestBytecodeUpload_PutsToTheComposedBucketAndKey(t *testing.T) {
 
 	u.run(context.Background())
 
-	if len(store.heads) != 1 || store.heads[0] != "assets-xyz/ocel/bytecode/my-app/node24-arm64.tar.gz" {
+	if len(store.heads) != 1 || store.heads[0] != "assets-xyz/ocel/bytecode/my-app/node24.3.1-arm64.tar.gz" {
 		t.Fatalf("heads = %v, want a single head of the composed key", store.heads)
 	}
 	if len(store.puts) != 1 {
 		t.Fatalf("puts = %d, want 1", len(store.puts))
 	}
 	put := store.puts[0]
-	if put.bucket != "assets-xyz" || put.key != "ocel/bytecode/my-app/node24-arm64.tar.gz" {
-		t.Errorf("put to %s/%s, want assets-xyz/ocel/bytecode/my-app/node24-arm64.tar.gz", put.bucket, put.key)
+	if put.bucket != "assets-xyz" || put.key != "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz" {
+		t.Errorf("put to %s/%s, want assets-xyz/ocel/bytecode/my-app/node24.3.1-arm64.tar.gz", put.bucket, put.key)
 	}
 	if got := readArchive(t, put.body); got["cached.blob"] != "compiled bytes" {
 		t.Errorf("uploaded archive = %v, want it to carry the cache directory's contents", got)
@@ -858,7 +865,7 @@ func TestResolveBytecodeUpload_CarriesTheEnvironmentIntoTheUpload(t *testing.T) 
 		t.Error("flush is not the one the caller passed")
 	}
 
-	if got := bytecodeCacheKey(u.prefix, u.function, 24, u.arch); got != "ocel/stg/bytecode/my-app/node24-"+s3Arch(runtime.GOARCH)+".tar.gz" {
+	if got := bytecodeCacheKey(u.prefix, u.function, "24.3.1", u.arch); got != "ocel/stg/bytecode/my-app/node24.3.1-"+s3Arch(runtime.GOARCH)+".tar.gz" {
 		t.Errorf("the resolved fields compose %q", got)
 	}
 }
