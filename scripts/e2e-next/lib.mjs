@@ -355,36 +355,55 @@ export function appAssetPrefix({ environment, slug, app, buildId }) {
 }
 
 /**
- * LAMBDA_RUNTIME mirrors defaultFunctionRuntime in cloud/aws/deploy/function.go
- * — every Ocel Lambda runs this managed Node runtime, which fixes the major
- * version the compile-cache key's "nodeNN" segment carries.
+ * bytecodeCacheKeyPrefix is the S3 prefix every bytecode cache object for one
+ * function lives under. Mirrors the directory portion of bytecodeCacheKey in
+ * cloud/aws/cmd/lambdanode/bootstrap/bytecode.go — the filename that follows
+ * it carries the live node patch version, which nothing outside a running
+ * instance can know ahead of time, so a caller lists this prefix rather than
+ * composing the full key.
  */
-export const LAMBDA_RUNTIME = "nodejs24.x";
+export function bytecodeCacheKeyPrefix({ prefix, functionName }) {
+  return `${prefix}/bytecode/${functionName}/`;
+}
+
+const BYTECODE_ARCHIVE_NAME = /^node(\d+\.\d+\.\d+)-([a-z0-9_]+)\.tar\.gz$/;
 
 /**
- * nodeMajorFromRuntime reads the major version out of a Lambda runtime name
- * ("nodejs24.x" -> 24). Mirrors the parse nodeMajor does in
- * cloud/aws/cmd/lambdanode/bootstrap/bytecode.go against a live `node
- * --version`, but off the static runtime name instead — nothing here can exec
- * anything, so it stays callable from a unit test.
+ * bytecodeCacheKeyName parses the filename segment of a bytecode cache key —
+ * everything after bytecodeCacheKeyPrefix — into its node version and arch,
+ * or null if it does not have the "node<version>-<arch>.tar.gz" shape
+ * bytecodeCacheKey in bytecode.go composes. A caller lists objects under the
+ * prefix and uses this to tell a real cache archive from anything else that
+ * might land there, and to assert the version is the three-dot-separated-
+ * numbers shape bytecode.go's canonicalNodeVersion requires.
  */
-export function nodeMajorFromRuntime(runtime) {
-  const match = /^nodejs(\d+)\.x$/.exec(runtime ?? "");
-  if (!match) {
-    throw new Error(`not a lambda node runtime: ${JSON.stringify(runtime)}`);
-  }
-  return Number(match[1]);
+export function bytecodeCacheKeyName(name) {
+  const match = BYTECODE_ARCHIVE_NAME.exec(name ?? "");
+  if (!match) return null;
+  return { nodeVersion: match[1], arch: match[2] };
 }
 
 /**
- * bytecodeCacheKey composes the S3 key the membrane uploads a function's
- * compile cache under. Mirrors bytecodeCacheKey in
- * cloud/aws/cmd/lambdanode/bootstrap/bytecode.go exactly, including its
- * "nodeNN-ARCH.tar.gz" tail — `arch` is the caller's to already have spelled
- * the AWS way (x86_64/arm64), matching what s3Arch there does to a GOARCH.
+ * bytecodeRehydrateOutcome classifies one CloudWatch log message against the
+ * three lines rehydrateBytecodeCache / rehydrateCompileCache
+ * (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go) can emit for `key`, or
+ * null when the message is unrelated. assert-bytecode.mjs uses this to tell
+ * a proven hit from a miss or fetch failure it can only report as a symptom
+ * — matched by exact substring rather than parsed, since these are the
+ * literal lines the membrane emits.
  */
-export function bytecodeCacheKey({ prefix, functionName, nodeMajor, arch }) {
-  return `${prefix}/bytecode/${functionName}/node${nodeMajor}-${arch}.tar.gz`;
+export function bytecodeRehydrateOutcome(message, key) {
+  const text = String(message ?? "");
+  if (text.includes(`rehydrated compile cache from ${key}:`)) {
+    return { kind: "hit", message: text };
+  }
+  if (text.includes(`no compile cache at ${key} yet`)) {
+    return { kind: "miss", message: text };
+  }
+  if (text.includes(`could not fetch the compile cache at ${key}:`)) {
+    return { kind: "fetch-error", message: text };
+  }
+  return null;
 }
 
 const TAR_BLOCK_SIZE = 512;

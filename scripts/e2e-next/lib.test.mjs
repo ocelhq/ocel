@@ -9,11 +9,12 @@ import {
   GOLDEN_ROUTE,
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
-  LAMBDA_RUNTIME,
   MAX_SLUG_LEN,
   appAssetPrefix,
   buildBaselineManifest,
-  bytecodeCacheKey,
+  bytecodeCacheKeyName,
+  bytecodeCacheKeyPrefix,
+  bytecodeRehydrateOutcome,
   deployURL,
   envSegment,
   goldenDifferences,
@@ -22,7 +23,6 @@ import {
   lambdaLogGroups,
   markerLines,
   mergeBaselineManifest,
-  nodeMajorFromRuntime,
   projectSlug,
   projectSlugForApp,
   renderOcelConfig,
@@ -329,23 +329,56 @@ describe("appAssetPrefix", () => {
   });
 });
 
-describe("nodeMajorFromRuntime", () => {
-  it("reads the major version off the lambda runtime name", () => {
-    expect(nodeMajorFromRuntime("nodejs24.x")).toBe(24);
-    expect(nodeMajorFromRuntime(LAMBDA_RUNTIME)).toBe(24);
-  });
-
-  it("refuses a string that is not a lambda node runtime", () => {
-    expect(() => nodeMajorFromRuntime("node24")).toThrow(/not a lambda node runtime/);
-    expect(() => nodeMajorFromRuntime(undefined)).toThrow(/not a lambda node runtime/);
+describe("bytecodeCacheKeyPrefix", () => {
+  it("joins prefix/bytecode/functionName with a trailing slash", () => {
+    expect(
+      bytecodeCacheKeyPrefix({ prefix: "preview-e2e-42/e2e-42/app/bld123", functionName: "proj--web-abc123" }),
+    ).toBe("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/");
   });
 });
 
-describe("bytecodeCacheKey", () => {
-  it("composes the key the membrane uploads to, matching bytecode.go's format", () => {
+describe("bytecodeCacheKeyName", () => {
+  it("parses a real archive name into its node version and arch", () => {
+    expect(bytecodeCacheKeyName("node24.3.1-x86_64.tar.gz")).toEqual({ nodeVersion: "24.3.1", arch: "x86_64" });
+  });
+
+  it("rejects a version that is not three dot-separated numbers", () => {
+    expect(bytecodeCacheKeyName("node24-x86_64.tar.gz")).toBeNull();
+    expect(bytecodeCacheKeyName("nodev24.3.1-x86_64.tar.gz")).toBeNull();
+  });
+
+  it("rejects anything that is not the node<version>-<arch>.tar.gz shape", () => {
+    expect(bytecodeCacheKeyName("some-other-object.tar.gz")).toBeNull();
+    expect(bytecodeCacheKeyName("")).toBeNull();
+    expect(bytecodeCacheKeyName(undefined)).toBeNull();
+  });
+});
+
+describe("bytecodeRehydrateOutcome", () => {
+  const key = "preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24.3.1-x86_64.tar.gz";
+
+  it("recognizes a rehydrate hit naming the key", () => {
+    expect(bytecodeRehydrateOutcome(`ocel: rehydrated compile cache from ${key}: 4096 bytes in 312ms`, key)).toEqual({
+      kind: "hit",
+      message: `ocel: rehydrated compile cache from ${key}: 4096 bytes in 312ms`,
+    });
+  });
+
+  it("recognizes the expected first-cold-start miss", () => {
+    expect(bytecodeRehydrateOutcome(`ocel: no compile cache at ${key} yet; nothing to rehydrate`, key).kind).toBe(
+      "miss",
+    );
+  });
+
+  it("recognizes a fetch failure", () => {
     expect(
-      bytecodeCacheKey({ prefix: "preview-e2e-42/e2e-42/app/bld123", functionName: "proj--web-abc123", nodeMajor: 24, arch: "x86_64" }),
-    ).toBe("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24-x86_64.tar.gz");
+      bytecodeRehydrateOutcome(`ocel: could not fetch the compile cache at ${key}: connection reset`, key).kind,
+    ).toBe("fetch-error");
+  });
+
+  it("ignores unrelated log lines, and a line naming a different key", () => {
+    expect(bytecodeRehydrateOutcome("START RequestId: abc", key)).toBeNull();
+    expect(bytecodeRehydrateOutcome(`ocel: rehydrated compile cache from some/other/key.tar.gz: 10 bytes in 1ms`, key)).toBeNull();
   });
 });
 
