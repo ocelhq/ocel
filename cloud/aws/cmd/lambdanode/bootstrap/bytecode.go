@@ -382,13 +382,26 @@ func buildArchiveWithin(ctx context.Context, dir string) ([]byte, error) {
 	}
 }
 
+// tarEntryOverhead is charged against the ceiling for every entry regardless
+// of its declared size. A tar stream costs at least one 512-byte header block
+// per entry no matter how little payload follows it, so without this an
+// archive of empty entries would never advance the running total: the
+// ContentLength precheck admits up to the ceiling compressed, and gzip's
+// ratio on a repetitive stream can turn that into orders of magnitude more
+// tar bytes, each entry a real MkdirAll+OpenFile+Close under dir. Charging
+// the header cost up front makes the entry count itself bounded by the
+// ceiling, closing that off without a separate counter.
+const tarEntryOverhead = 512
+
 // untarInto gzip-decompresses and untars r into dir, streaming throughout —
 // never buffering the archive or an entry in memory — and returns the total
-// bytes written. dir is trusted; every entry is not: a name that is absolute
-// or climbs out via ".." is rejected before anything is created, and only
-// regular files are written, so a symlink, hardlink or device planted in the
-// archive cannot land outside dir or as something other than a plain file.
-// ceiling bounds the running total, aborting mid-stream rather than after the
+// bytes written. dir is trusted; every entry is not: a name that is absolute,
+// climbs out via "..", or resolves to dir itself (an empty name, ".", "./")
+// is rejected before anything is created, and only regular files are
+// written, so a symlink, hardlink or device planted in the archive cannot
+// land outside dir, replace dir, or land as something other than a plain
+// file. ceiling bounds the running total — charged per entry as well as per
+// byte, see tarEntryOverhead — aborting mid-stream rather than after the
 // fact, so a hostile or corrupt archive cannot fill the sandbox's disk.
 func untarInto(r io.Reader, dir string, ceiling int64) (int64, error) {
 	gz, err := gzip.NewReader(r)
@@ -414,11 +427,14 @@ func untarInto(r io.Reader, dir string, ceiling int64) (int64, error) {
 			return total, fmt.Errorf("bytecode cache entry %q is an absolute path", hdr.Name)
 		}
 		rel := filepath.Clean(hdr.Name)
+		if rel == "." {
+			return total, fmt.Errorf("bytecode cache entry %q resolves to the cache directory itself", hdr.Name)
+		}
 		if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 			return total, fmt.Errorf("bytecode cache entry %q escapes the target directory", hdr.Name)
 		}
 
-		total += hdr.Size
+		total += hdr.Size + tarEntryOverhead
 		if total > ceiling {
 			return total, fmt.Errorf("bytecode cache exceeds the %d byte ceiling", ceiling)
 		}
