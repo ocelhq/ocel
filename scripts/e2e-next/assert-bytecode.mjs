@@ -67,10 +67,13 @@ const REHYDRATE_BURST_SIZE = 20;
 const LOG_POLL_INTERVAL_MS = 5_000;
 const LOG_DEADLINE_MS = 60_000;
 
-// Mirrors logs.mjs's own AWS_TIMEOUT_MS: every `aws` call here now runs
-// inside a poll loop, same as that script's, so a wedged CLI call must not
-// be allowed to hang the whole assertion past its own deadline.
-const AWS_TIMEOUT_MS = 60_000;
+// Deliberately well under UPLOAD_DEADLINE_MS/LOG_DEADLINE_MS (60s each,
+// polled every POLL_INTERVAL_MS/LOG_POLL_INTERVAL_MS): a single `aws` call
+// now runs inside a poll loop, and a timeout equal to the loop's own budget
+// would let one wedged call consume the whole window and reduce the loop to
+// a single attempt. This leaves room for several retries inside either
+// deadline instead.
+const AWS_TIMEOUT_MS = 15_000;
 
 const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
 if (!base) {
@@ -113,10 +116,20 @@ if (!response.ok) {
 log(`polling for up to ${UPLOAD_DEADLINE_MS / 1000}s`);
 const deadline = Date.now() + UPLOAD_DEADLINE_MS;
 let key = null;
+let listSucceeded = false;
+let listError = null;
 while (Date.now() < deadline && !key) {
-  const candidates = listBytecodeObjects(bucket, keyPrefix).filter(
-    (name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH,
-  );
+  let names;
+  try {
+    names = listBytecodeObjects(bucket, keyPrefix);
+    listSucceeded = true;
+  } catch (err) {
+    listError = err;
+    log(`could not list s3://${bucket}/${keyPrefix} (${err.message}); will retry`);
+    await sleep(POLL_INTERVAL_MS);
+    continue;
+  }
+  const candidates = names.filter((name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH);
   if (candidates.length > 1) {
     fail(
       `found ${candidates.length} objects under s3://${bucket}/${keyPrefix} matching node<version>-${LAMBDA_ARCH}.tar.gz ` +
@@ -128,6 +141,12 @@ while (Date.now() < deadline && !key) {
     break;
   }
   await sleep(POLL_INTERVAL_MS);
+}
+if (!key && !listSucceeded) {
+  fail(
+    `could not list s3://${bucket}/${keyPrefix} at all within ${UPLOAD_DEADLINE_MS / 1000}s — every attempt failed, ` +
+      `so nothing here says whether the object exists: ${listError?.message}`,
+  );
 }
 if (!key) {
   fail(
@@ -203,8 +222,20 @@ const logDeadline = Date.now() + LOG_DEADLINE_MS;
 let hit = null;
 const observed = [];
 const seenEventIds = new Set();
+let logsSucceeded = false;
+let logsError = null;
 while (Date.now() < logDeadline && !hit) {
-  for (const event of fetchFunctionLogs(functionName, burstStart)) {
+  let events;
+  try {
+    events = fetchFunctionLogs(functionName, burstStart);
+    logsSucceeded = true;
+  } catch (err) {
+    logsError = err;
+    log(`could not read /aws/lambda/${functionName} logs (${err.message}); will retry`);
+    await sleep(LOG_POLL_INTERVAL_MS);
+    continue;
+  }
+  for (const event of events) {
     if (event.eventId) {
       if (seenEventIds.has(event.eventId)) continue;
       seenEventIds.add(event.eventId);
@@ -220,6 +251,12 @@ while (Date.now() < logDeadline && !hit) {
   if (!hit) await sleep(LOG_POLL_INTERVAL_MS);
 }
 
+if (!hit && !logsSucceeded) {
+  fail(
+    `could not read /aws/lambda/${functionName} logs at all within ${LOG_DEADLINE_MS / 1000}s — every attempt ` +
+      `failed, so nothing here says whether a rehydrate hit ever happened: ${logsError?.message}`,
+  );
+}
 if (!hit) {
   const samples = observed.length
     ? `; samples: ${observed.slice(0, 5).map((o) => o.message).join(" | ")}`
@@ -244,23 +281,17 @@ function summarizeOutcomes(outcomes) {
 
 // --- AWS -------------------------------------------------------------------
 
-// Both list/poll helpers below run inside a wait loop and must degrade to
-// "found nothing this pass" on a transient AWS error (a ThrottlingException
-// under repeated polling, in particular) rather than crash the whole
-// assertion and lose every observation collected so far — the same
-// tolerance printLambdaLogs (logs.mjs) and the old objectExists here gave
-// their own AWS calls.
+// Both list/poll helpers below throw on an AWS failure rather than swallow
+// it: their callers are wait loops that need to tell a transient error
+// (worth retrying, and silently) from a permanent one (worth failing on,
+// loudly, once the loop gives up) — a distinction that can only be made at
+// the call site, which is the one place tracking whether any prior attempt
+// ever succeeded.
 
 function listBytecodeObjects(bucket, prefix) {
-  let response;
-  try {
-    response = JSON.parse(
-      aws(["s3api", "list-objects-v2", "--bucket", bucket, "--prefix", prefix, "--output", "json"]),
-    );
-  } catch (err) {
-    log(`could not list s3://${bucket}/${prefix} (${err.message}); will retry`);
-    return [];
-  }
+  const response = JSON.parse(
+    aws(["s3api", "list-objects-v2", "--bucket", bucket, "--prefix", prefix, "--output", "json"]),
+  );
   return (response.Contents ?? []).map((entry) => entry.Key.slice(prefix.length));
 }
 
@@ -269,26 +300,20 @@ function listBytecodeObjects(bucket, prefix) {
 // rather than discovered again by tag — that resolution is already
 // unambiguous to exactly one function.
 function fetchFunctionLogs(functionName, startTime) {
-  let response;
-  try {
-    response = JSON.parse(
-      aws([
-        "logs",
-        "filter-log-events",
-        "--log-group-name",
-        `/aws/lambda/${functionName}`,
-        "--start-time",
-        String(startTime),
-        "--limit",
-        "1000",
-        "--output",
-        "json",
-      ]),
-    );
-  } catch (err) {
-    log(`could not read /aws/lambda/${functionName} logs (${err.message}); will retry`);
-    return [];
-  }
+  const response = JSON.parse(
+    aws([
+      "logs",
+      "filter-log-events",
+      "--log-group-name",
+      `/aws/lambda/${functionName}`,
+      "--start-time",
+      String(startTime),
+      "--limit",
+      "1000",
+      "--output",
+      "json",
+    ]),
+  );
   return response.events ?? [];
 }
 
