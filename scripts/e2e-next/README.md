@@ -15,16 +15,11 @@ the deployment URL and proves a revalidating route's cache entry is rewritten.
 `assert-tag-publisher.mjs`, `assert-suppression-golden.mjs` and
 `assert-bytecode.mjs` are the same kind of thing, run against a deployment URL
 by hand (see "Golden gate" below). `assert-bytecode.mjs` proves both legs of
-the V8 compile cache `cloud/aws/cmd/lambdanode/bootstrap/bytecode.go` builds:
-that the cache a Next app's first invocation warms actually lands in S3 under
-the key that file composes (discovered by listing, since the live node patch
-version in the key is not knowable ahead of a deploy), and that a later cold
-start actually reads it back — bursting concurrent requests to force fresh
-sandboxes, then requiring at least one instance's CloudWatch logs to report a
-rehydrate hit naming the discovered key. It reads slug, environment, app and
-build id from `.ocel/deploy-result.json` in the deployed app's directory, so
-run it from there. `lib.mjs` holds the shared pure logic (unit tested:
-`pnpm --filter @ocel-scripts/e2e-next test`).
+the V8 compile cache `cloud/aws/cmd/lambdanode/bootstrap/bytecode.go` builds —
+see "What `assert-bytecode.mjs` proves" below. It reads slug, environment, app,
+build id and deploy time from `.ocel/deploy-result.json` in the deployed app's
+directory, so run it from there. `lib.mjs` holds the shared pure logic (unit
+tested: `pnpm --filter @ocel-scripts/e2e-next test`).
 `merge-baseline.mjs` records the known-failure baseline. `stage-smoke-app.mjs`
 stages the smoke job's app. `guard-accounts.sh` refuses to deploy anywhere but
 the disposable account. The workflow that drives all of it is
@@ -70,6 +65,48 @@ The tradeoff: the smoke job does **not** exercise `run-tests.js`,
 `NEXT_TEST_MODE=deploy`, or the `NEXT_TEST_*_SCRIPT_PATH` indirection. That
 wiring is first exercised by the matrix itself, so a break in it costs one
 matrix start rather than being caught by the gate.
+
+## What `assert-bytecode.mjs` proves
+
+The claim is not "a request eventually leaves a cache behind" but **the cache is
+whole before the app serves anyone**. The upload is create-if-absent with no
+overwrite and no harvest, and a Next bundle hides many routes behind a
+lazily-required entry table, so whichever cold start publishes first fixes that
+build's cache for its whole life — organic traffic would fix one route's slice
+of it. The deploy therefore invokes each bytecode-gated function once, before
+the promote, to load the whole bundle (`cloud/aws/deploy/warm.go`).
+
+So the script asserts, in this order and **before it issues a single request**:
+
+1. The object already exists under the key `bytecode.go` composes (discovered by
+   listing: the live node patch version in the key is not knowable ahead of a
+   deploy). A successful list that finds nothing is a real miss and fails at
+   once — nothing is waited for, since the deploy does not return until every
+   warm invocation has answered and each uploads inline.
+2. The deploy's own warm summary, read back out of the function's CloudWatch
+   logs (`ocel: warm invocation: {…}`), reports `published` with `uploaded:
+   true` for that key. That is what **attributes** the object: the PUT is
+   create-if-absent, so exactly one writer can create a key and every loser
+   answers `already-cached` instead. A summary the script cannot find, or one
+   that only ever says `already-cached`, fails — an unattributed object could be
+   a one-route cache a stray request got there first with.
+3. That summary's `loaded` accounts for all of `entries`. A walk the 64 MiB
+   ceiling or the invocation deadline cut short is a **warning, not a failure** —
+   it is a real outcome for a bundle too big or too slow to warm whole, and the
+   run re-prints every warning at the end so a half-warmed bundle can't read as
+   a whole one.
+
+Then the read leg, unchanged: a burst of concurrent requests forces fresh
+sandboxes, and at least one instance's CloudWatch logs must report a rehydrate
+hit naming the discovered key.
+
+What it cannot prove: that the object's *contents* cover every route. It takes
+the membrane's own count, gunzips and untars the archive to prove it is a real
+nested compile cache, and stops there — mapping cache files back to bundle
+entries is node's private business. The whole warm leg also needs a **membrane
+layer carrying `warm.go`**; against the pinned `defaultMembraneLayerARN` (see
+"Known limits") an older layer answers the warm payload as an empty request,
+nothing is published before the promote, and step 1 fails.
 
 ## Golden gate: `purpose: prefetch` has no side effect
 

@@ -10,6 +10,7 @@ import {
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
   MAX_SLUG_LEN,
+  WARM_SUMMARY_MARKER,
   appAssetPrefix,
   buildBaselineManifest,
   bytecodeCacheKeyName,
@@ -26,10 +27,13 @@ import {
   projectSlug,
   projectSlugForApp,
   renderOcelConfig,
+  strongestCoverage,
   suiteFromResultsPath,
   suiteResultFromJest,
   tail,
   tarEntryNames,
+  warmCoverage,
+  warmSummaryOutcome,
   withBuildScript,
 } from "./lib.mjs";
 
@@ -420,6 +424,85 @@ describe("bytecodeRehydrateOutcome", () => {
     expect(bytecodeRehydrateOutcome("ocel: no aws config for the compile cache: no EC2 IMDS role found", key).kind).toBe(
       "disabled",
     );
+  });
+});
+
+describe("warmSummaryOutcome", () => {
+  const summary = { state: "published", entries: 12, loaded: 12, stoppedBy: "complete", bytes: 4096, key: "k", uploaded: true };
+
+  it("reads the summary out of the membrane's stderr line", () => {
+    const message = `${WARM_SUMMARY_MARKER} ${JSON.stringify(summary)}`;
+    expect(warmSummaryOutcome(message)).toEqual({ kind: "summary", summary, message });
+  });
+
+  it("ignores every other log line", () => {
+    expect(warmSummaryOutcome("START RequestId: abc")).toBeNull();
+    expect(warmSummaryOutcome("ocel: rehydrated compile cache from k: 10 bytes in 1ms")).toBeNull();
+    expect(warmSummaryOutcome(undefined)).toBeNull();
+  });
+
+  it("reports a marked line whose JSON was truncated rather than dropping it", () => {
+    const outcome = warmSummaryOutcome(`${WARM_SUMMARY_MARKER} {"state":"publis`);
+    expect(outcome.kind).toBe("unreadable");
+    expect(outcome.reason).toBeTruthy();
+  });
+});
+
+describe("warmCoverage", () => {
+  const key = "preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24.3.1-x86_64.tar.gz";
+  const published = { state: "published", entries: 12, loaded: 12, stoppedBy: "complete", bytes: 4096, key, uploaded: true };
+
+  it("proves a whole bundle when this pass's own PUT created the object", () => {
+    expect(warmCoverage(published, key).kind).toBe("complete");
+  });
+
+  it("reports a walk the ceiling or the deadline cut short as partial", () => {
+    expect(warmCoverage({ ...published, loaded: 7, stoppedBy: "ceiling" }, key).kind).toBe("partial");
+    expect(warmCoverage({ ...published, loaded: 7, stoppedBy: "deadline" }, key).kind).toBe("partial");
+  });
+
+  it("reports entries that failed to load as partial even on a complete walk", () => {
+    expect(warmCoverage({ ...published, loaded: 11, failures: [{ entry: "/x", message: "boom" }] }, key).kind).toBe(
+      "partial",
+    );
+  });
+
+  it("refuses to believe a published state that claims no upload", () => {
+    expect(warmCoverage({ ...published, uploaded: false }, key).kind).toBe("failed");
+    expect(warmCoverage({ ...published, uploaded: undefined }, key).kind).toBe("failed");
+  });
+
+  it("refuses to call a bundle with no entries at all covered", () => {
+    expect(warmCoverage({ ...published, entries: 0, loaded: 0 }, key).kind).toBe("failed");
+  });
+
+  it("proves nothing from an already-cached pass, whether or not it walked", () => {
+    expect(warmCoverage({ state: "already-cached" }, key).kind).toBe("unproven");
+    expect(warmCoverage({ ...published, state: "already-cached", uploaded: undefined }, key).kind).toBe("unproven");
+  });
+
+  it("treats disabled, failed and an unknown state as failures", () => {
+    expect(warmCoverage({ state: "disabled", error: "no capability" }, key).kind).toBe("failed");
+    expect(warmCoverage({ state: "failed", entries: 12, loaded: 3, error: "put denied" }, key).kind).toBe("failed");
+    expect(warmCoverage({ state: "somethingelse" }, key).kind).toBe("failed");
+  });
+
+  it("sets a summary naming another build's key aside", () => {
+    expect(warmCoverage({ ...published, key: "other/build/node24.3.1-x86_64.tar.gz" }, key).kind).toBe("other-build");
+  });
+});
+
+describe("strongestCoverage", () => {
+  it("takes the pass that actually wrote the object over one that found it there", () => {
+    const complete = { kind: "complete", detail: "" };
+    expect(strongestCoverage([{ kind: "unproven", detail: "" }, complete])).toBe(complete);
+    expect(strongestCoverage([complete, { kind: "failed", detail: "" }])).toBe(complete);
+  });
+
+  it("prefers a partial pass to none at all, and reports nothing seen as null", () => {
+    const partial = { kind: "partial", detail: "" };
+    expect(strongestCoverage([{ kind: "failed", detail: "" }, partial])).toBe(partial);
+    expect(strongestCoverage([])).toBeNull();
   });
 });
 

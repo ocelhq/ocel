@@ -1,22 +1,32 @@
 #!/usr/bin/env node
-// Asserts that a Next app's V8 compile cache is actually *published* to S3 on
-// a live deployment, and that a later cold start actually reads it back —
-// not merely that the deploy succeeded and a request answers 200.
+// Asserts that a Next app's V8 compile cache is complete in S3 *before the app
+// serves anyone*, and that a later cold start actually reads it back — not
+// merely that the deploy succeeded and a request answers 200.
 //
 // Why this exists as its own assertion: everything between a warm compile
 // cache in /tmp and a reusable object in S3, and everything between that
 // object and a later instance's own /tmp, is machinery no request can see —
-// the flush-compile-cache control message, the membrane's once-per-instance
-// tar+gzip+upload, the HEAD guard that skips a redundant re-upload, and the
-// rehydrate leg that downloads and untars the archive before node ever spawns
+// the flush-compile-cache control message, the tar+gzip+upload, the HEAD guard
+// that skips a redundant re-upload, and the rehydrate leg that downloads and
+// untars the archive before node ever spawns
 // (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go). A 200 from the deployment
-// proves none of it; only an object at the key the membrane actually wrote,
-// plus a later instance's own log line naming that key, does.
+// proves none of it.
+//
+// And the claim is stronger than "an object eventually appears". The upload is
+// create-if-absent with no overwrite and no harvest, so whichever cold start
+// publishes first decides that build's cache for its whole life; a Next bundle
+// hides many routes behind a lazily-required entry table, so an organic first
+// request would fix a cache covering the one route it touched. The deploy
+// therefore invokes each function once, before the promote, to load the whole
+// bundle (cloud/aws/deploy/warm.go). That is what this script asserts: the
+// object is already there before it issues a single request of its own, the
+// deploy's own warm summary attributes the object to that pass, and the
+// summary's loaded/entries account for the whole bundle.
 //
 // Usage: assert-bytecode.mjs [deployment-url]
 //   falls back to $NEXT_TEST_DEPLOY_URL, then $SMOKE_URL.
-//   Run from the deployed app's directory: slug, environment, app name and
-//   build id are read from .ocel/deploy-result.json there — the same
+//   Run from the deployed app's directory: slug, environment, app name, build
+//   id and deploy time are read from .ocel/deploy-result.json there — the same
 //   document logs.mjs reads — rather than asked for by hand.
 //   $OCEL_ASSET_BUCKET names the bucket the membrane uploads to; without it
 //   the script resolves the substrate's from the preview bootstrap stack.
@@ -31,34 +41,40 @@ import { gunzipSync } from "node:zlib";
 import {
   DEPLOY_RESULT_FILE,
   TAG_PROBE_ROUTE,
+  WARM_SUMMARY_MARKER,
   appAssetPrefix,
   bytecodeCacheKeyName,
   bytecodeCacheKeyPrefix,
   bytecodeRehydrateOutcome,
   lambdaFunctionNames,
+  strongestCoverage,
   tagProbeTag,
   tarEntryNames,
+  warmCoverage,
+  warmSummaryOutcome,
 } from "./lib.mjs";
 
-// The membrane's upload runs off the request path after an invocation
-// completes, itself bounded by a 2s budget (bytecodeUploadBudget,
-// cloud/aws/cmd/lambdanode/bootstrap/bytecode.go) — but that budget starts
-// only once the instance gets around to running it, so the wait here is
-// padded well past it for a cold start plus S3 round trips.
+// Nothing is waited *for* here: the warm pass uploads inline, before the
+// invocation it rides on answers, and the deploy does not return until every
+// one of them has (cloud/aws/deploy/warm.go). So the object exists by the time
+// this script starts, and a successful list that does not find it is a real
+// miss to fail on rather than something to poll away. This budget is only for
+// retrying a list that could not be made at all.
 const POLL_INTERVAL_MS = 3_000;
-const UPLOAD_DEADLINE_MS = 60_000;
+const LIST_RETRY_DEADLINE_MS = 30_000;
 
 // The membrane layer builds linux/amd64 only, which s3Arch
 // (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go) renders as x86_64 — the
 // only spelling this suite's deploys can ever produce a key under.
 const LAMBDA_ARCH = "x86_64";
 
-// Lambda reuses a warm instance for a request it can serve sequentially;
-// only concurrency forces it to provision more. Exactly one instance is warm
-// by the time this burst fires (the single invocation above that forced the
-// write leg), so this many concurrent requests reliably lands most of them
-// on fresh sandboxes that have never rehydrated. The account's concurrency
-// ceiling is 1000, so this is a tuning choice, not something bounded by it.
+// Lambda reuses a warm instance for a request it can serve sequentially; only
+// concurrency forces it to provision more. At most the deploy's own warm
+// instance is still alive when this burst fires, and that one rehydrated
+// nothing (it ran when there was nothing to read), so this many concurrent
+// requests reliably lands most of them on fresh sandboxes. The account's
+// concurrency ceiling is 1000, so this is a tuning choice, not something
+// bounded by it.
 const REHYDRATE_BURST_SIZE = 20;
 
 // CloudWatch Logs ingestion trails an invocation by anywhere from under a
@@ -67,13 +83,28 @@ const REHYDRATE_BURST_SIZE = 20;
 const LOG_POLL_INTERVAL_MS = 5_000;
 const LOG_DEADLINE_MS = 60_000;
 
-// Deliberately well under UPLOAD_DEADLINE_MS/LOG_DEADLINE_MS (60s each,
-// polled every POLL_INTERVAL_MS/LOG_POLL_INTERVAL_MS): a single `aws` call
-// now runs inside a poll loop, and a timeout equal to the loop's own budget
-// would let one wedged call consume the whole window and reduce the loop to
-// a single attempt. This leaves room for several retries inside either
+// How far before the deploy's completion the warm summaries are looked for.
+// The pass runs after the last app stack succeeds and before stageAndPromote,
+// so its lines always predate `deployedAt`; the pass itself is capped at three
+// minutes, but the staging and promotion between it and the result document
+// being written are not bounded from out here. Generous on purpose: the window
+// only has to contain the summaries, and each is attributed by the key it
+// names, not by when it landed.
+const WARM_LOG_LOOKBACK_MS = 30 * 60_000;
+
+// The CloudWatch filter that leaves only the summary lines. Without it the
+// window would be every line every instance of this function ever logged, and
+// the 1000-event page below would fill with them before reaching a summary.
+const WARM_LOG_FILTER = `"${WARM_SUMMARY_MARKER}"`;
+
+// Deliberately well under LIST_RETRY_DEADLINE_MS/LOG_DEADLINE_MS: a single
+// `aws` call now runs inside a poll loop, and a timeout equal to the loop's own
+// budget would let one wedged call consume the whole window and reduce the loop
+// to a single attempt. This leaves room for several retries inside either
 // deadline instead.
 const AWS_TIMEOUT_MS = 15_000;
+
+const warnings = [];
 
 const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
 if (!base) {
@@ -89,6 +120,10 @@ const app = result.apps?.[0];
 if (!result.slug || !app?.name || !app?.buildId) {
   fail(`${resultPath} is missing slug/app name/build id: ${JSON.stringify(result)}`);
 }
+const deployedAt = Date.parse(result.deployedAt ?? "");
+if (!Number.isFinite(deployedAt)) {
+  fail(`${resultPath} carries no readable deployedAt (${JSON.stringify(result.deployedAt)}) — nothing here can say when the warm pass ran`);
+}
 
 const bucket = process.env.OCEL_ASSET_BUCKET || resolveAssetBucket();
 const prefix = appAssetPrefix({
@@ -101,63 +136,131 @@ const functionName = resolveFunctionName(result.slug, app.name);
 const keyPrefix = bytecodeCacheKeyPrefix({ prefix, functionName });
 log(`expecting one object under s3://${bucket}/${keyPrefix}`);
 
-// TAG_PROBE_ROUTE is force-dynamic (see its own file), so this is guaranteed
-// to reach the Lambda rather than being answered from an edge- or CDN-cached
-// response — reusing it borrows a route already proven to invoke the
-// function rather than adding a new one just for this.
-const tag = tagProbeTag(`bytecode-${Date.now()}-${process.pid}`);
-const target = new URL(TAG_PROBE_ROUTE + `?tag=${encodeURIComponent(tag)}`, base).toString();
-log(`invoking ${target} to force an instance to run`);
-const response = await fetch(target, { method: "POST" });
-if (!response.ok) {
-  fail(`${target} answered ${response.status}; never invoked the function at all`);
-}
+// --- warm leg: the cache is whole before anyone hits the app ---------------
 
-log(`polling for up to ${UPLOAD_DEADLINE_MS / 1000}s`);
-const deadline = Date.now() + UPLOAD_DEADLINE_MS;
-let key = null;
-let listSucceeded = false;
+// Read before this script sends a single request, which is the whole point:
+// an object here now cannot have been produced by anything this script did.
+// The prefix carries the build id, so it also cannot be an earlier run's
+// leftover — a build's key is only ever writable by that build's deploy.
+let names = null;
 let listError = null;
-while (Date.now() < deadline && !key) {
-  let names;
+const listDeadline = Date.now() + LIST_RETRY_DEADLINE_MS;
+while (names === null) {
   try {
     names = listBytecodeObjects(bucket, keyPrefix);
-    listSucceeded = true;
   } catch (err) {
     listError = err;
+    if (Date.now() >= listDeadline) {
+      fail(
+        `could not list s3://${bucket}/${keyPrefix} at all within ${LIST_RETRY_DEADLINE_MS / 1000}s — every attempt ` +
+          `failed, so nothing here says whether the object exists: ${listError.message}`,
+      );
+    }
     log(`could not list s3://${bucket}/${keyPrefix} (${err.message}); will retry`);
     await sleep(POLL_INTERVAL_MS);
+  }
+}
+
+const candidates = names.filter((name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH);
+if (candidates.length > 1) {
+  fail(
+    `found ${candidates.length} objects under s3://${bucket}/${keyPrefix} matching node<version>-${LAMBDA_ARCH}.tar.gz ` +
+      `(${candidates.map((name) => keyPrefix + name).join(", ")}) — expected exactly one`,
+  );
+}
+if (candidates.length === 0) {
+  fail(
+    `no object matching node<version>-${LAMBDA_ARCH}.tar.gz exists under s3://${bucket}/${keyPrefix}, and this script ` +
+      `has not touched the deployment yet. The deploy warms every bytecode-gated bundle before it promotes and does ` +
+      `not return until each warm invocation has answered, so a missing object means the warm pass never published ` +
+      `one — check the deploy output for its per-bundle lines ("warmed N/M bundles"), and the function's CloudWatch ` +
+      `logs for "ocel: warm invocation:".`,
+  );
+}
+const key = keyPrefix + candidates[0];
+log(`s3://${bucket}/${key} already exists, before this script has issued a request`);
+
+// That the object exists says nothing about *what* published it or how much of
+// the bundle is in it, and both are the claim. Only the membrane's own summary
+// answers either: published/uploaded:true is the create-if-absent PUT that
+// created this key, which no other writer can also have made, and loaded
+// against entries is how much of the bundle that PUT covers.
+const warmLogStart = deployedAt - WARM_LOG_LOOKBACK_MS;
+log(`polling CloudWatch for the deploy's warm summary since ${new Date(warmLogStart).toISOString()}`);
+const warmDeadline = Date.now() + LOG_DEADLINE_MS;
+const verdicts = [];
+const seenWarmEventIds = new Set();
+let coverage = null;
+let warmLogsSucceeded = false;
+let warmLogsError = null;
+// Polled only until a summary for this key turns up: the deploy has already
+// finished, so every summary it produced is in the log group by now and one
+// successful read returns all of them at once. What is being waited out here
+// is CloudWatch's ingestion lag, not a second summary arriving later.
+while (Date.now() < warmDeadline && verdicts.length === 0) {
+  let events;
+  try {
+    events = fetchFunctionLogs(functionName, warmLogStart, WARM_LOG_FILTER);
+    warmLogsSucceeded = true;
+  } catch (err) {
+    warmLogsError = err;
+    log(`could not read /aws/lambda/${functionName} logs (${err.message}); will retry`);
+    await sleep(LOG_POLL_INTERVAL_MS);
     continue;
   }
-  const candidates = names.filter((name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH);
-  if (candidates.length > 1) {
-    fail(
-      `found ${candidates.length} objects under s3://${bucket}/${keyPrefix} matching node<version>-${LAMBDA_ARCH}.tar.gz ` +
-        `(${candidates.map((name) => keyPrefix + name).join(", ")}) — expected exactly one`,
-    );
+  for (const event of events) {
+    if (event.eventId) {
+      if (seenWarmEventIds.has(event.eventId)) continue;
+      seenWarmEventIds.add(event.eventId);
+    }
+    const outcome = warmSummaryOutcome(event.message);
+    if (!outcome) continue;
+    if (outcome.kind === "unreadable") {
+      warn(`a warm summary in /aws/lambda/${functionName} could not be read as JSON (${outcome.reason}): ${outcome.message}`);
+      continue;
+    }
+    const verdict = warmCoverage(outcome.summary, key);
+    if (verdict.kind === "other-build") continue;
+    verdicts.push(verdict);
   }
-  if (candidates.length === 1) {
-    key = keyPrefix + candidates[0];
-    break;
-  }
-  await sleep(POLL_INTERVAL_MS);
+  if (verdicts.length === 0) await sleep(LOG_POLL_INTERVAL_MS);
 }
-if (!key && !listSucceeded) {
+coverage = strongestCoverage(verdicts);
+
+if (!coverage && !warmLogsSucceeded) {
   fail(
-    `could not list s3://${bucket}/${keyPrefix} at all within ${UPLOAD_DEADLINE_MS / 1000}s — every attempt failed, ` +
-      `so nothing here says whether the object exists: ${listError?.message}`,
+    `could not read /aws/lambda/${functionName} logs at all within ${LOG_DEADLINE_MS / 1000}s — every attempt failed, ` +
+      `so nothing here says what published s3://${bucket}/${key}: ${warmLogsError?.message}`,
   );
 }
-if (!key) {
+if (!coverage) {
   fail(
-    `no object matching node<version>-${LAMBDA_ARCH}.tar.gz appeared under s3://${bucket}/${keyPrefix} within ` +
-      `${UPLOAD_DEADLINE_MS / 1000}s of invoking ${target}. The invocation succeeded, so either the instance it ` +
-      `landed on had already uploaded (the HEAD guard means only the first instance to finish ever does, and this ` +
-      `key is meant to be stable across requests) or the upload path is broken — check the function's CloudWatch ` +
-      `logs for "skipping upload" / "skipping compile cache upload".`,
+    `s3://${bucket}/${key} exists but no warm summary naming it appears in /aws/lambda/${functionName} within ` +
+      `${WARM_LOG_LOOKBACK_MS / 60_000} minutes before the deploy completed. The object is then unattributed: it may ` +
+      `be the deploy's warm pass with its logs lost, or it may be a request that reached this build before the ` +
+      `promote and fixed a one-route cache — which is exactly what warming exists to prevent, and what this ` +
+      `assertion cannot tell apart without the summary.`,
   );
 }
-log(`discovered s3://${bucket}/${key}`);
+if (coverage.kind === "failed") {
+  fail(`the deploy's warm pass did not publish this cache: ${coverage.detail}`);
+}
+if (coverage.kind === "unproven") {
+  fail(
+    `s3://${bucket}/${key} exists, but every warm summary for it reports already-cached (${coverage.detail}) — so no ` +
+      `pass in this window both wrote the object and measured it. Either something published this build's cache ` +
+      `before the deploy warmed it, or the pass that did is older than the ${WARM_LOG_LOOKBACK_MS / 60_000}-minute ` +
+      `window (a redeploy of an already-warmed build).`,
+  );
+}
+if (coverage.kind === "partial") {
+  // Loud, but not a failure: a bundle the ceiling or the deadline cuts short
+  // still publishes a real cache, and this is the only place that outcome
+  // surfaces at all. It is a fact about the app's size, not a broken cache.
+  warn(`the warm pass did not cover the whole bundle: ${coverage.detail}`);
+} else {
+  log(`the deploy's warm pass published this object and covered the whole bundle: ${coverage.detail}`);
+}
 
 const body = getObject(bucket, key);
 let archive;
@@ -167,37 +270,45 @@ try {
   fail(`s3://${bucket}/${key} (${body.length} bytes) is not valid gzip: ${err.message}`);
 }
 
-let names;
+let entryNames;
 try {
-  names = tarEntryNames(archive);
+  entryNames = tarEntryNames(archive);
 } catch (err) {
   fail(`s3://${bucket}/${key} decompresses to ${archive.length} bytes that are not a valid tar: ${err.message}`);
 }
-if (names.length === 0) {
+if (entryNames.length === 0) {
   fail(`s3://${bucket}/${key} decompresses to an empty tar — no compile cache was actually archived`);
 }
-if (!names.some((name) => name.includes("/"))) {
+if (!entryNames.some((name) => name.includes("/"))) {
   fail(
-    `s3://${bucket}/${key} has no entry under a subdirectory (${names.join(", ")}) — node nests its ` +
+    `s3://${bucket}/${key} has no entry under a subdirectory (${entryNames.join(", ")}) — node nests its ` +
       `compile cache under a version-hash directory, so a flat archive means nothing real was cached`,
   );
 }
 
 log(
-  `s3://${bucket}/${key}: valid gzip+tar, ${names.length} entr${names.length === 1 ? "y" : "ies"}, ` +
+  `s3://${bucket}/${key}: valid gzip+tar, ${entryNames.length} entr${entryNames.length === 1 ? "y" : "ies"}, ` +
     `nested under a subdirectory`,
 );
-log("bytecode cache published end to end");
+log(
+  coverage.kind === "complete"
+    ? "bytecode cache published, whole, before the first request"
+    : "bytecode cache published before the first request, covering part of the bundle",
+);
 
 // --- read leg ----------------------------------------------------------
 
 // The object above proves the write leg but says nothing about rehydration:
-// the instance that just uploaded it never rehydrates itself (it had nothing
-// to read when it started), so proving the read leg needs a later instance
-// that starts *after* the object exists. Bursting concurrent requests is
-// what forces Lambda to provision those.
+// the instance the deploy warmed never rehydrates itself (it had nothing to
+// read when it started), so proving the read leg needs a later instance that
+// starts *after* the object exists. Bursting concurrent requests is what
+// forces Lambda to provision those.
 const burstStart = Date.now();
 log(`bursting ${REHYDRATE_BURST_SIZE} concurrent requests to force fresh sandboxes`);
+// TAG_PROBE_ROUTE is force-dynamic (see its own file), so these are guaranteed
+// to reach the Lambda rather than being answered from an edge- or CDN-cached
+// response — reusing it borrows a route already proven to invoke the function
+// rather than adding a new one just for this.
 const burstResults = await Promise.all(
   Array.from({ length: REHYDRATE_BURST_SIZE }, (_, i) => {
     const burstTag = tagProbeTag(`bytecode-burst-${Date.now()}-${process.pid}-${i}`);
@@ -211,9 +322,9 @@ const burstSucceeded = burstResults.filter(Boolean).length;
 log(`burst: ${burstSucceeded}/${REHYDRATE_BURST_SIZE} requests succeeded`);
 if (burstSucceeded === 0) {
   fail(
-    `all ${REHYDRATE_BURST_SIZE} burst requests to ${TAG_PROBE_ROUTE} failed — the function was never invoked a ` +
-      `second time, so no rehydrate hit could ever appear in its logs. This is a burst/deployment problem, not ` +
-      `evidence the read leg is broken.`,
+    `all ${REHYDRATE_BURST_SIZE} burst requests to ${TAG_PROBE_ROUTE} failed — the function was never invoked at ` +
+      `all, so no rehydrate hit could ever appear in its logs. This is a burst/deployment problem, not evidence ` +
+      `the read leg is broken.`,
   );
 }
 
@@ -269,6 +380,14 @@ if (!hit) {
 log(`rehydrate hit: ${hit.message}`);
 log("bytecode cache rehydrated end to end");
 
+// Warnings are re-printed at the end because the run that produces one is a
+// passing run: buried a hundred lines up, a bundle that only half warmed would
+// be indistinguishable from one that warmed whole.
+if (warnings.length) {
+  log(`passed with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}:`);
+  for (const warning of warnings) log(`  ${warning}`);
+}
+
 // summarizeOutcomes turns the non-hit outcomes collected while polling into
 // "N kind, M kind" — a caller counting instances covers every failure mode
 // bytecodeRehydrateOutcome classifies without a case list growing here every
@@ -298,8 +417,10 @@ function listBytecodeObjects(bucket, prefix) {
 // Mirrors logs.mjs's printLambdaLogs: same `aws logs filter-log-events`
 // shape, but scoped to the one function resolveFunctionName already found
 // rather than discovered again by tag — that resolution is already
-// unambiguous to exactly one function.
-function fetchFunctionLogs(functionName, startTime) {
+// unambiguous to exactly one function. `filterPattern` narrows a window too
+// wide to page through otherwise; a caller reading a window it has just
+// created leaves it off and reads everything in it.
+function fetchFunctionLogs(functionName, startTime, filterPattern) {
   const response = JSON.parse(
     aws([
       "logs",
@@ -308,6 +429,7 @@ function fetchFunctionLogs(functionName, startTime) {
       `/aws/lambda/${functionName}`,
       "--start-time",
       String(startTime),
+      ...(filterPattern ? ["--filter-pattern", filterPattern] : []),
       "--limit",
       "1000",
       "--output",
@@ -390,6 +512,11 @@ function sleep(ms) {
 
 function log(message) {
   console.error(`[ocel-e2e] bytecode: ${message}`);
+}
+
+function warn(message) {
+  warnings.push(message);
+  console.error(`[ocel-e2e] bytecode WARNING: ${message}`);
 }
 
 function fail(message) {
