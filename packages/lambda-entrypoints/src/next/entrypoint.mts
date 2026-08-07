@@ -57,7 +57,15 @@ async function boot(): Promise<void> {
     );
   };
 
-  await serveInvoke(invoke);
+  // Next forwards a Server Action to itself — to another route, or to follow an
+  // app-relative redirect — with a plain fetch, and derives that fetch's origin
+  // from the request's Host, which is the public one. Left alone the call leaves
+  // the sandbox and comes back through the edge, and the outer streamed response
+  // does not survive the round trip. `next start` pins the same fetch to the
+  // address it bound; this is that, for the address the membrane bound.
+  await serveInvoke(invoke, (port) => {
+    process.env.__NEXT_PRIVATE_ORIGIN = `http://127.0.0.1:${port}`;
+  });
 }
 
 boot().catch((err) => {

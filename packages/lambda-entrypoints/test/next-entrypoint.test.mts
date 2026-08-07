@@ -120,3 +120,13 @@ test("unstable_cache's flow works through the published incremental cache", asyn
   expect(cached.from).toBe("cache");
   expect(cached.random).toBe(rendered.random);
 });
+
+// Next's forwarded-action and redirect-follow self-fetches read
+// __NEXT_PRIVATE_ORIGIN before falling back to the request's Host. Unset, that
+// fallback is the public host and the fetch leaves the sandbox for the edge.
+test("the server-action self-fetch origin is the loopback the app bound", async () => {
+  expect(process.env.__NEXT_PRIVATE_ORIGIN).toBe(`http://127.0.0.1:${port}`);
+
+  const reached = await fetch(`${process.env.__NEXT_PRIVATE_ORIGIN}/api/anything`);
+  expect(reached.status).toBe(200);
+});

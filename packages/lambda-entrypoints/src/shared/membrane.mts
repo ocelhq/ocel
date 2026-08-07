@@ -134,11 +134,15 @@ function wrapWithOcelContext(invoke: Invoke): http.RequestListener {
   };
 }
 
-export function serveInvoke(invoke: Invoke): Promise<void> {
-  return startServer(http.createServer(wrapWithOcelContext(invoke)));
+export function serveInvoke(invoke: Invoke, onListening?: OnListening): Promise<void> {
+  return startServer(http.createServer(wrapWithOcelContext(invoke)), onListening);
 }
 
-export function startServer(server: http.Server): Promise<void> {
+// Runs with the ephemeral port the app bound to, before the port is announced —
+// so anything it configures is in place before the first request can arrive.
+export type OnListening = (port: number) => void;
+
+export function startServer(server: http.Server, onListening?: OnListening): Promise<void> {
   return new Promise((resolve, reject) => {
     server.on("error", reject);
     server.listen({ host: "127.0.0.1", port: 0 }, () => {
@@ -147,6 +151,7 @@ export function startServer(server: http.Server): Promise<void> {
         reject(new Error(`unexpected server.address(): ${JSON.stringify(addr)}`));
         return;
       }
+      onListening?.(addr.port);
       sendControl("server-ready", { httpPort: addr.port });
       resolve();
     });
