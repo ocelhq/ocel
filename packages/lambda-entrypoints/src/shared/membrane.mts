@@ -1,6 +1,6 @@
 import net from "node:net";
 import http from "node:http";
-import { flushCompileCache, getCompileCacheDir } from "node:module";
+import Module from "node:module";
 
 let controlSocket: net.Socket | null = null;
 const controlHandlers = new Set<(message: unknown) => void>();
@@ -71,6 +71,8 @@ export function reportFatalBoot(err: unknown): void {
 function flushCompileCacheNow(): { dir: string | null; ok: boolean } {
   let dir: string | null = null;
   try {
+    const getCompileCacheDir = (Module as any).getCompileCacheDir;
+    const flushCompileCache = (Module as any).flushCompileCache;
     dir = typeof getCompileCacheDir === "function" ? (getCompileCacheDir() ?? null) : null;
     if (typeof flushCompileCache !== "function") return { dir, ok: false };
     flushCompileCache();
