@@ -1221,7 +1221,13 @@ func TestS3BytecodeStore_ObjectExists(t *testing.T) {
 	}{
 		{name: "404 means the object is absent", status: http.StatusNotFound, wantExists: false},
 		{name: "200 means it is already there", status: http.StatusOK, wantExists: true},
-		{name: "403 is a real error, not an absence", status: http.StatusForbidden, wantErr: true},
+		// S3 only answers 404 for a missing key when the caller may also list
+		// the bucket. The deployed function's role holds s3:GetObject and
+		// s3:PutObject on its own prefix and no s3:ListBucket (isrPolicy), so
+		// 403 is how an absent key actually reaches this code in production —
+		// reading it as a fault made every fresh deployment's first cold start
+		// fail its warm pass and publish nothing.
+		{name: "403 is how an absent key reads without s3:ListBucket", status: http.StatusForbidden, wantExists: false},
 		{name: "500 is a real error", status: http.StatusInternalServerError, wantErr: true},
 	}
 	for _, tc := range cases {
