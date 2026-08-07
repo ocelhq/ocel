@@ -53,19 +53,24 @@ const (
 // Uncounted is set, and every count omitted, when the publish happened but
 // nobody could say what went into it. Reporting the counts as zeros would be
 // the same silence dressed as a measurement.
+//
+// Source is the one field that is always reported, never omitted: "none" is a
+// real answer — this instance compiled its own cache — and a missing field
+// would read the same as one this membrane is too old to send.
 type warmSummary struct {
-	State        string        `json:"state"`
-	Entries      int           `json:"entries,omitempty"`
-	Loaded       int           `json:"loaded,omitempty"`
-	Failures     []warmFailure `json:"failures,omitempty"`
-	StoppedBy    string        `json:"stoppedBy,omitempty"`
-	Skipped      []string      `json:"skipped,omitempty"`
-	SkippedCount int           `json:"skippedCount,omitempty"`
-	Uncounted    string        `json:"uncounted,omitempty"`
-	Bytes        int64         `json:"bytes,omitempty"`
-	Key          string        `json:"key,omitempty"`
-	Uploaded     *bool         `json:"uploaded,omitempty"`
-	Error        string        `json:"error,omitempty"`
+	State        string         `json:"state"`
+	Entries      int            `json:"entries,omitempty"`
+	Loaded       int            `json:"loaded,omitempty"`
+	Failures     []warmFailure  `json:"failures,omitempty"`
+	StoppedBy    string         `json:"stoppedBy,omitempty"`
+	Skipped      []string       `json:"skipped,omitempty"`
+	SkippedCount int            `json:"skippedCount,omitempty"`
+	Uncounted    string         `json:"uncounted,omitempty"`
+	Bytes        int64          `json:"bytes,omitempty"`
+	Key          string         `json:"key,omitempty"`
+	Source       bytecodeSource `json:"source"`
+	Uploaded     *bool          `json:"uploaded,omitempty"`
+	Error        string         `json:"error,omitempty"`
 }
 
 // warmInvocationBudget is what the load window is measured against when the
@@ -131,22 +136,26 @@ func (m *Membrane) warmBytecodeCache(ctx context.Context) warmSummary {
 	// left no upload leg behind: loading every entry could not publish
 	// anything, and answering here rather than doing it is what makes a deploy
 	// retry idempotent and near-free.
-	if m.bytecodeCached {
-		return warmSummary{State: warmStateAlreadyCached}
+	source := m.bytecodeCacheSource()
+	if m.bytecodeCached() {
+		// The key comes from the resolution init already held: a deploy cannot
+		// compose it for itself, never having learned node's version, and this
+		// is the only answer that carries one for a hit.
+		return warmSummary{State: warmStateAlreadyCached, Key: m.bytecodeKey, Source: source}
 	}
 	if m.bytecode == nil {
-		return warmSummary{State: warmStateDisabled, Error: "this deployment resolved no bytecode cache identity"}
+		return warmSummary{State: warmStateDisabled, Source: source, Error: "this deployment resolved no bytecode cache identity"}
 	}
 
 	deadline, ok := warmLoadDeadline(ctx)
 	if !ok {
-		return warmSummary{State: warmStateFailed, Error: "no time left to warm the compile cache"}
+		return warmSummary{State: warmStateFailed, Source: source, Error: "no time left to warm the compile cache"}
 	}
 
 	report, waiter, answered := m.warmCompileCache(ctx, deadline)
 	defer m.endWarmExchange()
 
-	summary := warmSummary{Key: m.bytecode.key}
+	summary := warmSummary{Key: m.bytecode.key, Source: source}
 	if !m.claimBytecodeUpload() {
 		summary.State = warmStateFailed
 		summary.Error = "this instance already spent its one compile cache upload"

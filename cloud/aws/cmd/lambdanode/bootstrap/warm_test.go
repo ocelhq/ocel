@@ -187,7 +187,8 @@ func TestWarmBytecodeCache_AlreadyCachedAnswersWithoutTouchingTheChild(t *testin
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), warmedReply)
 	m.bytecode = nil
-	m.bytecodeCached = true
+	m.bytecodeSource = bytecodeSourceS3
+	m.bytecodeKey = "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"
 
 	start := time.Now()
 	got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
@@ -200,6 +201,47 @@ func TestWarmBytecodeCache_AlreadyCachedAnswersWithoutTouchingTheChild(t *testin
 	}
 	if len(store.heads) != 0 || len(store.puts) != 0 {
 		t.Errorf("touched S3 (heads=%v puts=%v), want nothing", store.heads, store.puts)
+	}
+	// The key is the deploy's only way to reach the object it just had
+	// published — it never learns node's version, so it cannot compose one.
+	if got.Key != m.bytecodeKey {
+		t.Errorf("key = %q, want the resolution's %q", got.Key, m.bytecodeKey)
+	}
+	if got.Source != bytecodeSourceS3 {
+		t.Errorf("source = %q, want %q", got.Source, bytecodeSourceS3)
+	}
+}
+
+// An embedded hit and an S3 hit are the same already-cached answer, and the
+// deploy's whole verification of the embed pass is telling them apart.
+func TestWarmBytecodeCache_AlreadyCachedNamesWhichLegServedIt(t *testing.T) {
+	m := warmFixture(t, &fakeBytecodeStore{}, cacheDirWith(t, "compiled bytes"), warmedReply)
+	m.bytecode = nil
+	m.bytecodeSource = bytecodeSourceEmbedded
+	m.bytecodeKey = "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz"
+
+	got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
+
+	if got.State != warmStateAlreadyCached {
+		t.Fatalf("state = %q, want %q", got.State, warmStateAlreadyCached)
+	}
+	if got.Source != bytecodeSourceEmbedded {
+		t.Errorf("source = %q, want %q", got.Source, bytecodeSourceEmbedded)
+	}
+}
+
+// A pass that had to publish for itself read no cache at all, and says so
+// rather than leaving the field empty for the deploy to interpret.
+func TestWarmBytecodeCache_APassThatPublishesReportsNoSource(t *testing.T) {
+	m := warmFixture(t, &fakeBytecodeStore{}, cacheDirWith(t, "compiled bytes"), warmedReply)
+
+	got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
+
+	if got.State != warmStatePublished {
+		t.Fatalf("state = %q, want %q", got.State, warmStatePublished)
+	}
+	if got.Source != bytecodeSourceNone {
+		t.Errorf("source = %q, want %q", got.Source, bytecodeSourceNone)
 	}
 }
 
@@ -605,12 +647,14 @@ func TestHandleInvocation_AWarmFailureStillAnswersTheInvocation(t *testing.T) {
 // reading "loaded":0 on a cache that was already there would be reading a
 // number this pass never measured.
 func TestWarmSummary_OmitsWhatDoesNotApply(t *testing.T) {
-	for _, s := range []warmSummary{{State: warmStateAlreadyCached}, {State: warmStateDisabled}} {
+	for _, s := range []warmSummary{{State: warmStateAlreadyCached, Source: bytecodeSourceNone}, {State: warmStateDisabled, Source: bytecodeSourceNone}} {
 		encoded, err := json.Marshal(s)
 		if err != nil {
 			t.Fatal(err)
 		}
-		want := `{"state":"` + s.State + `"}`
+		// source is the one field that is never omitted: "none" is a real
+		// answer, and an absent field would read as an older membrane.
+		want := `{"state":"` + s.State + `","source":"none"}`
 		if string(encoded) != want {
 			t.Errorf("summary = %s, want %s", encoded, want)
 		}

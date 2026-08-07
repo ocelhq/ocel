@@ -63,7 +63,7 @@ func main() {
 		fatalInit(fmt.Sprintf("failed to open this deployment's encrypted variables: %v", err))
 	}
 
-	membrane, err := bringUpWithBytecode(ctx, startNode, live, prefetch, childEnv(bakedEnv, live), start, bytecodeReady, bytecodeRehydrate)
+	membrane, err := bringUpWithBytecode(ctx, startNode, live, prefetch, childEnv(bakedEnv, live), start, bytecodeReady, bytecodeEmbedded, bytecodeRehydrate)
 	if err != nil {
 		// Must report init failure BEFORE we start polling the Runtime API.
 		fatalInit(err.Error())
@@ -125,6 +125,18 @@ func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
 	return rehydrateBytecodeCache(ctx, r, compileCacheDir)
 }
 
+// bytecodeEmbedded is bringUpWithBytecode's default local-first dependency,
+// the same shape as bytecodeRehydrate and closing over the same directory. A
+// key that names no cache tarball composes no path and skips the attempt
+// rather than stat'ing something derived from a basename that means nothing.
+func bytecodeEmbedded(ctx context.Context, r *bytecodeResolution) bool {
+	tarPath := embeddedBytecodePath(r.key)
+	if tarPath == "" {
+		return false
+	}
+	return embeddedBytecodeCache(ctx, tarPath, compileCacheDir)
+}
+
 // bringUpWithBytecode wraps bringUp with the bytecode cache's two legs,
 // joining and rehydrating before bringUp is called and attaching the upload
 // leg after it returns.
@@ -166,7 +178,16 @@ func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
 // otherwise indistinguishable from a deployment with no compile cache at all,
 // and a warm invocation has to answer the two differently.
 //
-// bytecodeReady and rehydrate are dependencies for the same reason spawn is:
+// The local leg runs first and the S3 leg only answers for what it did not:
+// an artifact the deploy embedded the cache into serves it from /var/task
+// without a network round trip at all, and an artifact without one — or one
+// whose baked tar no longer matches the key, which is what makes a runtime
+// bump self-healing — behaves exactly as it did before this existed. A local
+// attempt that matched and then failed is a miss like any other: it wipes what
+// it wrote and falls through, because a corrupt embedded copy must never leave
+// a function permanently cold when S3 holds a good object.
+//
+// bytecodeReady, embedded and rehydrate are dependencies for the same reason spawn is:
 // the whole sequence, including its budget arithmetic, is exercisable with
 // fakes and no node binary, AWS client or environment in reach.
 func bringUpWithBytecode(
@@ -177,6 +198,7 @@ func bringUpWithBytecode(
 	env []string,
 	start time.Time,
 	bytecodeReady <-chan *bytecodeResolution,
+	embedded func(context.Context, *bytecodeResolution) bool,
 	rehydrate func(context.Context, *bytecodeResolution) bool,
 ) (*Membrane, error) {
 	joinWait := time.Until(start.Add(bytecodeResolveBudget))
@@ -190,9 +212,23 @@ func bringUpWithBytecode(
 		fmt.Fprintln(os.Stderr, "ocel: compile cache resolution did not finish in time; compile cache disabled")
 	}
 
-	var hit bool
+	source := bytecodeSourceNone
 	if bytecode != nil {
-		hit = rehydrate(ctx, bytecode)
+		// One budget across both legs, started here rather than inside either.
+		// The local attempt fails fast — the first bad header ends it — so the
+		// fallthrough is nearly free in practice, but the S3 leg has to be
+		// given whatever genuinely remains rather than a fresh
+		// bytecodeRehydrateBudget on top of what the local attempt already
+		// spent: rehydrate's own timeout nests inside this context, so the
+		// smaller deadline is the one that applies.
+		rehydrateCtx, cancel := context.WithTimeout(ctx, bytecodeRehydrateBudget)
+		switch {
+		case embedded(rehydrateCtx, bytecode):
+			source = bytecodeSourceEmbedded
+		case rehydrate(rehydrateCtx, bytecode):
+			source = bytecodeSourceS3
+		}
+		cancel()
 	}
 
 	spawnBudget := startupBudget - time.Since(start)
@@ -204,9 +240,12 @@ func bringUpWithBytecode(
 		return nil, err
 	}
 
-	membrane.bytecodeCached = hit
-	if bytecode != nil && !hit {
-		membrane.bytecode = bytecode.upload(membrane.flushCompileCache)
+	membrane.bytecodeSource = source
+	if bytecode != nil {
+		membrane.bytecodeKey = bytecode.key
+		if !membrane.bytecodeCached() {
+			membrane.bytecode = bytecode.upload(membrane.flushCompileCache)
+		}
 	}
 	return membrane, nil
 }
