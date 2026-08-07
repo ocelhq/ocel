@@ -1,16 +1,17 @@
 #!/usr/bin/env node
 // Asserts that a Next app's V8 compile cache is actually *published* to S3 on
-// a live deployment — not merely that the deploy succeeded and a request
-// answers 200.
+// a live deployment, and that a later cold start actually reads it back —
+// not merely that the deploy succeeded and a request answers 200.
 //
 // Why this exists as its own assertion: everything between a warm compile
-// cache in /tmp and a reusable object in S3 is machinery no request can see —
+// cache in /tmp and a reusable object in S3, and everything between that
+// object and a later instance's own /tmp, is machinery no request can see —
 // the flush-compile-cache control message, the membrane's once-per-instance
-// tar+gzip+upload, and the HEAD guard that skips a redundant re-upload
+// tar+gzip+upload, the HEAD guard that skips a redundant re-upload, and the
+// rehydrate leg that downloads and untars the archive before node ever spawns
 // (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go). A 200 from the deployment
-// proves none of it; only an object at the exact key the membrane composes
-// does. Nothing reads the archive back yet — rehydration is a later step —
-// so this only proves the write leg.
+// proves none of it; only an object at the key the membrane actually wrote,
+// plus a later instance's own log line naming that key, does.
 //
 // Usage: assert-bytecode.mjs [deployment-url]
 //   falls back to $NEXT_TEST_DEPLOY_URL, then $SMOKE_URL.
@@ -29,12 +30,12 @@ import { gunzipSync } from "node:zlib";
 
 import {
   DEPLOY_RESULT_FILE,
-  LAMBDA_RUNTIME,
   TAG_PROBE_ROUTE,
   appAssetPrefix,
-  bytecodeCacheKey,
+  bytecodeCacheKeyName,
+  bytecodeCacheKeyPrefix,
+  bytecodeRehydrateOutcome,
   lambdaFunctionNames,
-  nodeMajorFromRuntime,
   tagProbeTag,
   tarEntryNames,
 } from "./lib.mjs";
@@ -51,6 +52,20 @@ const UPLOAD_DEADLINE_MS = 60_000;
 // (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go) renders as x86_64 — the
 // only spelling this suite's deploys can ever produce a key under.
 const LAMBDA_ARCH = "x86_64";
+
+// Lambda reuses a warm instance for a request it can serve sequentially;
+// only concurrency forces it to provision more. Exactly one instance is warm
+// by the time this burst fires (the single invocation above that forced the
+// write leg), so this many concurrent requests reliably lands most of them
+// on fresh sandboxes that have never rehydrated. The account's concurrency
+// ceiling is 1000, so this is a tuning choice, not something bounded by it.
+const REHYDRATE_BURST_SIZE = 20;
+
+// CloudWatch Logs ingestion trails an invocation by anywhere from under a
+// second to several — this is padded well past that for filter-log-events
+// to see every burst instance's line.
+const LOG_POLL_INTERVAL_MS = 5_000;
+const LOG_DEADLINE_MS = 60_000;
 
 const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
 if (!base) {
@@ -75,13 +90,8 @@ const prefix = appAssetPrefix({
   buildId: app.buildId,
 });
 const functionName = resolveFunctionName(result.slug, app.name);
-const key = bytecodeCacheKey({
-  prefix,
-  functionName,
-  nodeMajor: nodeMajorFromRuntime(LAMBDA_RUNTIME),
-  arch: LAMBDA_ARCH,
-});
-log(`expecting s3://${bucket}/${key}`);
+const keyPrefix = bytecodeCacheKeyPrefix({ prefix, functionName });
+log(`expecting one object under s3://${bucket}/${keyPrefix}`);
 
 // TAG_PROBE_ROUTE is force-dynamic (see its own file), so this is guaranteed
 // to reach the Lambda rather than being answered from an edge- or CDN-cached
@@ -97,23 +107,33 @@ if (!response.ok) {
 
 log(`polling for up to ${UPLOAD_DEADLINE_MS / 1000}s`);
 const deadline = Date.now() + UPLOAD_DEADLINE_MS;
-let found = false;
-while (Date.now() < deadline) {
-  if (objectExists(bucket, key)) {
-    found = true;
+let key = null;
+while (Date.now() < deadline && !key) {
+  const candidates = listBytecodeObjects(bucket, keyPrefix).filter(
+    (name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH,
+  );
+  if (candidates.length > 1) {
+    fail(
+      `found ${candidates.length} objects under s3://${bucket}/${keyPrefix} matching node<version>-${LAMBDA_ARCH}.tar.gz ` +
+        `(${candidates.map((name) => keyPrefix + name).join(", ")}) — expected exactly one`,
+    );
+  }
+  if (candidates.length === 1) {
+    key = keyPrefix + candidates[0];
     break;
   }
   await sleep(POLL_INTERVAL_MS);
 }
-if (!found) {
+if (!key) {
   fail(
-    `s3://${bucket}/${key} never appeared within ${UPLOAD_DEADLINE_MS / 1000}s of invoking ${target}. ` +
-      `The invocation succeeded, so either the instance it landed on had already uploaded (the HEAD ` +
-      `guard means only the first instance to finish ever does, and this key is meant to be stable ` +
-      `across requests) or the upload path is broken — check the function's CloudWatch logs for ` +
-      `"skipping upload" / "skipping compile cache upload".`,
+    `no object matching node<version>-${LAMBDA_ARCH}.tar.gz appeared under s3://${bucket}/${keyPrefix} within ` +
+      `${UPLOAD_DEADLINE_MS / 1000}s of invoking ${target}. The invocation succeeded, so either the instance it ` +
+      `landed on had already uploaded (the HEAD guard means only the first instance to finish ever does, and this ` +
+      `key is meant to be stable across requests) or the upload path is broken — check the function's CloudWatch ` +
+      `logs for "skipping upload" / "skipping compile cache upload".`,
   );
 }
+log(`discovered s3://${bucket}/${key}`);
 
 const body = getObject(bucket, key);
 let archive;
@@ -145,17 +165,87 @@ log(
 );
 log("bytecode cache published end to end");
 
+// --- read leg ----------------------------------------------------------
+
+// The object above proves the write leg but says nothing about rehydration:
+// the instance that just uploaded it never rehydrates itself (it had nothing
+// to read when it started), so proving the read leg needs a later instance
+// that starts *after* the object exists. Bursting concurrent requests is
+// what forces Lambda to provision those.
+const burstStart = Date.now();
+log(`bursting ${REHYDRATE_BURST_SIZE} concurrent requests to force fresh sandboxes`);
+const burstResults = await Promise.all(
+  Array.from({ length: REHYDRATE_BURST_SIZE }, (_, i) => {
+    const burstTag = tagProbeTag(`bytecode-burst-${Date.now()}-${process.pid}-${i}`);
+    const burstTarget = new URL(TAG_PROBE_ROUTE + `?tag=${encodeURIComponent(burstTag)}`, base).toString();
+    return fetch(burstTarget, { method: "POST" })
+      .then((r) => r.ok)
+      .catch(() => false);
+  }),
+);
+const burstSucceeded = burstResults.filter(Boolean).length;
+log(`burst: ${burstSucceeded}/${REHYDRATE_BURST_SIZE} requests succeeded`);
+
+log(`polling CloudWatch for up to ${LOG_DEADLINE_MS / 1000}s for a rehydrate hit naming ${key}`);
+const logDeadline = Date.now() + LOG_DEADLINE_MS;
+let hit = null;
+const misses = [];
+const fetchErrors = [];
+while (Date.now() < logDeadline && !hit) {
+  for (const event of fetchFunctionLogs(functionName, burstStart)) {
+    const outcome = bytecodeRehydrateOutcome(event.message, key);
+    if (!outcome) continue;
+    if (outcome.kind === "hit") {
+      hit = outcome;
+      break;
+    }
+    if (outcome.kind === "miss") misses.push(outcome.message);
+    if (outcome.kind === "fetch-error") fetchErrors.push(outcome.message);
+  }
+  if (!hit) await sleep(LOG_POLL_INTERVAL_MS);
+}
+
+if (!hit) {
+  const observed = [...misses, ...fetchErrors];
+  const detail = observed.length ? observed.slice(0, 5).join(" | ") : "no related log lines at all";
+  fail(
+    `no instance reported rehydrating the compile cache from ${key} within ${LOG_DEADLINE_MS / 1000}s of the burst ` +
+      `(${misses.length} miss line(s), ${fetchErrors.length} fetch-error line(s) seen in ` +
+      `/aws/lambda/${functionName}): ${detail}`,
+  );
+}
+log(`rehydrate hit: ${hit.message}`);
+log("bytecode cache rehydrated end to end");
+
 // --- AWS -------------------------------------------------------------------
 
-function objectExists(bucket, key) {
-  try {
-    execFileSync("aws", ["s3api", "head-object", "--bucket", bucket, "--key", key], {
-      stdio: ["ignore", "pipe", "pipe"],
-    });
-    return true;
-  } catch {
-    return false;
-  }
+function listBytecodeObjects(bucket, prefix) {
+  const response = JSON.parse(
+    aws(["s3api", "list-objects-v2", "--bucket", bucket, "--prefix", prefix, "--output", "json"]),
+  );
+  return (response.Contents ?? []).map((entry) => entry.Key.slice(prefix.length));
+}
+
+// Mirrors logs.mjs's printLambdaLogs: same `aws logs filter-log-events`
+// shape, but scoped to the one function resolveFunctionName already found
+// rather than discovered again by tag — that resolution is already
+// unambiguous to exactly one function.
+function fetchFunctionLogs(functionName, startTime) {
+  const response = JSON.parse(
+    aws([
+      "logs",
+      "filter-log-events",
+      "--log-group-name",
+      `/aws/lambda/${functionName}`,
+      "--start-time",
+      String(startTime),
+      "--limit",
+      "1000",
+      "--output",
+      "json",
+    ]),
+  );
+  return response.events ?? [];
 }
 
 function getObject(bucket, key) {

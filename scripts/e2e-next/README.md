@@ -14,12 +14,17 @@ isolated app per test suite and calls three scripts per app; these are ours:
 the deployment URL and proves a revalidating route's cache entry is rewritten.
 `assert-tag-publisher.mjs`, `assert-suppression-golden.mjs` and
 `assert-bytecode.mjs` are the same kind of thing, run against a deployment URL
-by hand (see "Golden gate" below). `assert-bytecode.mjs` proves the V8 compile
-cache the membrane builds on a Next app's first invocation actually lands in S3
-at the key `cloud/aws/cmd/lambdanode/bootstrap/bytecode.go` composes — reading
-slug, environment, app and build id from `.ocel/deploy-result.json` in the
-deployed app's directory, so run it from there. `lib.mjs` holds the shared pure
-logic (unit tested: `pnpm --filter @ocel-scripts/e2e-next test`).
+by hand (see "Golden gate" below). `assert-bytecode.mjs` proves both legs of
+the V8 compile cache `cloud/aws/cmd/lambdanode/bootstrap/bytecode.go` builds:
+that the cache a Next app's first invocation warms actually lands in S3 under
+the key that file composes (discovered by listing, since the live node patch
+version in the key is not knowable ahead of a deploy), and that a later cold
+start actually reads it back — bursting concurrent requests to force fresh
+sandboxes, then requiring at least one instance's CloudWatch logs to report a
+rehydrate hit naming the discovered key. It reads slug, environment, app and
+build id from `.ocel/deploy-result.json` in the deployed app's directory, so
+run it from there. `lib.mjs` holds the shared pure logic (unit tested:
+`pnpm --filter @ocel-scripts/e2e-next test`).
 `merge-baseline.mjs` records the known-failure baseline. `stage-smoke-app.mjs`
 stages the smoke job's app. `guard-accounts.sh` refuses to deploy anywhere but
 the disposable account. The workflow that drives all of it is
