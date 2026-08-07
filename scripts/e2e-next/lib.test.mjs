@@ -405,6 +405,13 @@ describe("bytecodeRehydrateOutcome", () => {
     ).toBe("timeout");
   });
 
+  it("recognizes a dir-clear failure that names no key at all", () => {
+    expect(
+      bytecodeRehydrateOutcome("ocel: could not clear /tmp/.ocel/compile-cache before rehydrating the compile cache: permission denied", key)
+        .kind,
+    ).toBe("clear-error");
+  });
+
   it("recognizes the feature disabling itself before a key could ever be composed", () => {
     expect(bytecodeRehydrateOutcome("ocel: could not read node's version, compile cache disabled: exit status 1", key).kind).toBe(
       "disabled",

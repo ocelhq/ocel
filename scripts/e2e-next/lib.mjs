@@ -395,13 +395,16 @@ export function bytecodeCacheKeyName(name) {
  * substring rather than parsed, since these are the literal lines the
  * membrane emits, not a format to decode.
  *
- * `dir`-clear failures (the one read-leg line that names neither `key` nor
- * anything else this function is given) are not classified here — nothing
- * to match them against reaches this call. The two off-switch lines in
- * resolveBytecodeResolution (a version probe or AWS config load that failed
- * before a key was ever composed) also name no key; they are still
- * classified, under "disabled", because a caller polling by key would
- * otherwise never learn the feature turned itself off on some instances.
+ * The `dir`-clear failure and the two resolveBytecodeResolution off-switch
+ * lines name no key — a version probe or AWS config load can fail before a
+ * key is ever composed, and the clear runs before the key is even read back
+ * off `r` — so all three are matched on a keyless substring instead, the
+ * same technique as "disabled" below: none of the other lines this function
+ * matches could ever produce that substring, so it stays unambiguous without
+ * `key` to narrow it. Classified anyway, under "disabled" and "clear-error",
+ * because a caller polling by key would otherwise never learn the feature
+ * turned itself off, or failed before it could even try to read, on some
+ * instance.
  */
 export function bytecodeRehydrateOutcome(message, key) {
   const text = String(message ?? "");
@@ -422,6 +425,9 @@ export function bytecodeRehydrateOutcome(message, key) {
   }
   if (text.includes(`rehydrating the compile cache from ${key} ran out of time:`)) {
     return { kind: "timeout", message: text };
+  }
+  if (text.includes("before rehydrating the compile cache:")) {
+    return { kind: "clear-error", message: text };
   }
   if (text.includes("compile cache disabled") || text.includes("no aws config for the compile cache:")) {
     return { kind: "disabled", message: text };
