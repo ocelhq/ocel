@@ -64,6 +64,12 @@ const (
 	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:24"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
+	// bytecodeCacheEnv is the deploying process's own override for whether the
+	// membrane caches V8 bytecode. Bytecode caching is on for every Next app by
+	// default (nothing about it depends on the app), so the override exists only
+	// to turn it off — the literal "0", mirroring no other spelling.
+	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
+
 	// A Next-fronted function's Function URL is IAM-gated: the edge worker signs
 	// its forwards (SigV4) with the edge reader's key, whose identity-based grant
 	// authorizes invoke on any function tagged ocel:app. This removes the public
@@ -99,6 +105,13 @@ func membraneLayerARN() string {
 		return arn
 	}
 	return defaultMembraneLayerARN
+}
+
+// bytecodeCacheEnabled reports whether a deployed function should have its
+// V8 bytecode cached, read from OCEL_BYTECODE_CACHE on the deploying process.
+// On by default; only the literal "0" turns it off.
+func bytecodeCacheEnabled() bool {
+	return os.Getenv(bytecodeCacheEnv) != "0"
 }
 
 // functionArgs is the fully-resolved set of arguments a ManifestFunction lowers
@@ -179,6 +192,14 @@ func (c isrConfig) env() map[string]string {
 	if c.WriterURL != "" && c.WriterSecret != "" {
 		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
 		env["OCEL_ISR_WRITER_SECRET"] = c.WriterSecret
+	}
+	// The membrane composes its own key under this prefix (bytecode/<function
+	// name>/node<major>-<arch>.tar.gz), which is why the value is the bare
+	// prefix rather than anything bytecode-specific: the same string isrPolicy
+	// already grants {bucket}/{prefix}/* against, so no extra grant is needed.
+	// Left unset when the gate is off, which is what makes the membrane no-op.
+	if bytecodeCacheEnabled() {
+		env["OCEL_BYTECODE_PREFIX"] = c.Prefix
 	}
 	return env
 }
