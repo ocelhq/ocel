@@ -3,6 +3,7 @@ import { isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import { awaitLiveValues } from "../shared/live-values.mjs";
 import { reportFatalBoot, serveInvoke, startServer, type Invoke } from "../shared/membrane.mjs";
+import { fetchToNodeHandler, type FetchHandler } from "./fetch-bridge.mjs";
 
 type Loaded =
   | { kind: "server"; value: http.Server }
@@ -43,7 +44,6 @@ async function loadUserApp(entrypoint: string): Promise<Loaded> {
 }
 
 type NodeHandler = (req: http.IncomingMessage, res: http.ServerResponse) => void;
-type FetchHandler = (request: Request) => Response | Promise<Response>;
 
 type Resolved =
   | { type: "server"; server: http.Server }
@@ -77,30 +77,6 @@ function invokeFor(resolved: Resolved): Invoke {
   if (resolved.type === "node-handler") return resolved.handler;
   if (resolved.type === "web-handler") return fetchToNodeHandler(resolved.fetch);
   throw new Error(`cannot build an invoke for resolved type: ${resolved.type}`);
-}
-
-function fetchToNodeHandler(fetchFn: FetchHandler): Invoke {
-  return async (req, res) => {
-    const url = `http://${req.headers.host || "localhost"}${req.url}`;
-    const body = req.method === "GET" || req.method === "HEAD" ? null : req;
-    const request = new Request(url, {
-      method: req.method,
-      headers: req.headers as any,
-      body: body as any,
-      duplex: "half",
-    } as RequestInit);
-    const response = await fetchFn(request);
-    res.writeHead(response.status, Object.fromEntries(response.headers));
-    if (response.body) {
-      const reader = response.body.getReader();
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-      }
-    }
-    res.end();
-  };
 }
 
 function dispatchByMethod(exported: any): FetchHandler {
