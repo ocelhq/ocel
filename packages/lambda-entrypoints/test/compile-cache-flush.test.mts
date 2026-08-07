@@ -3,9 +3,10 @@ import { EventEmitter } from "node:events";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, expect, test, vi } from "vitest";
 
-type Msg = { type: string; payload: any };
+type Msg = { type: string; payload: unknown };
+type FlushReply = { dir: string | null; ok: boolean };
 
 let sockDir: string;
 let controlServer: net.Server;
@@ -31,12 +32,19 @@ function waitFor(pred: () => boolean, timeoutMs = 3000): Promise<void> {
   });
 }
 
-// Stubs node:module before importing membrane.mts fresh, then boots a real
-// control socket, sends flush-compile-cache down it, and returns the reply.
-async function flushOver(nodeModuleStub: Record<string, unknown>): Promise<any> {
+// Stubs the default export of node:module before importing membrane.mts fresh
+// (the source reads Module.flushCompileCache/getCompileCacheDir off it), then
+// boots a real control socket, sends flush-compile-cache down it, and returns
+// the real compile-cache-flushed reply. `build` gets the real default export
+// and returns what stands in for it — deleting a key (rather than setting it
+// to undefined) is what makes a case a genuinely absent API, not just an
+// undefined-valued one.
+async function flushOver(
+  build: (actualDefault: Record<string, unknown>) => Record<string, unknown>,
+): Promise<FlushReply> {
   vi.doMock("node:module", async (orig) => {
-    const actual = await orig<any>();
-    return { ...actual, ...nodeModuleStub };
+    const actual = await orig<Record<string, unknown>>();
+    return { ...actual, default: build(actual.default as Record<string, unknown>) };
   });
 
   messages = [];
@@ -74,7 +82,7 @@ async function flushOver(nodeModuleStub: Record<string, unknown>): Promise<any> 
   }
   await waitFor(() => messages.some((m) => m.type === "compile-cache-flushed"));
 
-  return messages.find((m) => m.type === "compile-cache-flushed")!.payload;
+  return messages.find((m) => m.type === "compile-cache-flushed")!.payload as FlushReply;
 }
 
 afterEach(async () => {
@@ -88,39 +96,41 @@ afterEach(async () => {
 });
 
 test("replies ok:true with the cache dir when both functions exist and flush succeeds", async () => {
-  const payload = await flushOver({
+  const payload = await flushOver((actual) => ({
+    ...actual,
     getCompileCacheDir: () => "/tmp/v8-compile-cache",
     flushCompileCache: () => {},
-  });
+  }));
 
   expect(payload).toEqual({ dir: "/tmp/v8-compile-cache", ok: true });
 });
 
-test("replies ok:false when flushCompileCache is absent (old Node)", async () => {
-  const payload = await flushOver({
-    getCompileCacheDir: () => "/tmp/v8-compile-cache",
-    flushCompileCache: undefined,
+test("replies ok:false when flushCompileCache is genuinely absent (old Node)", async () => {
+  const payload = await flushOver((actual) => {
+    const { flushCompileCache: _omit, ...rest } = actual;
+    return { ...rest, getCompileCacheDir: () => "/tmp/v8-compile-cache" };
   });
 
   expect(payload).toEqual({ dir: "/tmp/v8-compile-cache", ok: false });
 });
 
-test("replies ok:false with dir:null when getCompileCacheDir is absent (old Node)", async () => {
-  const payload = await flushOver({
-    getCompileCacheDir: undefined,
-    flushCompileCache: () => {},
+test("replies ok:false with dir:null when getCompileCacheDir is genuinely absent (old Node)", async () => {
+  const payload = await flushOver((actual) => {
+    const { getCompileCacheDir: _omit, ...rest } = actual;
+    return { ...rest, flushCompileCache: () => {} };
   });
 
   expect(payload).toEqual({ dir: null, ok: false });
 });
 
 test("replies ok:false without throwing when flushCompileCache throws", async () => {
-  const payload = await flushOver({
+  const payload = await flushOver((actual) => ({
+    ...actual,
     getCompileCacheDir: () => "/tmp/v8-compile-cache",
     flushCompileCache: () => {
       throw new Error("boom");
     },
-  });
+  }));
 
   expect(payload).toEqual({ dir: "/tmp/v8-compile-cache", ok: false });
 });
