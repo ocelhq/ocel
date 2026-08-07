@@ -9,20 +9,27 @@ import {
   GOLDEN_ROUTE,
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
+  LAMBDA_RUNTIME,
   MAX_SLUG_LEN,
+  appAssetPrefix,
   buildBaselineManifest,
+  bytecodeCacheKey,
   deployURL,
+  envSegment,
   goldenDifferences,
   isrToken,
+  lambdaFunctionNames,
   lambdaLogGroups,
   markerLines,
   mergeBaselineManifest,
+  nodeMajorFromRuntime,
   projectSlug,
   projectSlugForApp,
   renderOcelConfig,
   suiteFromResultsPath,
   suiteResultFromJest,
   tail,
+  tarEntryNames,
   withBuildScript,
 } from "./lib.mjs";
 
@@ -266,6 +273,158 @@ describe("lambdaLogGroups", () => {
     expect(lambdaLogGroups({ ResourceTagMappingList: [{ ResourceARN: "arn:aws:s3:::bucket" }] })).toEqual([]);
   });
 });
+
+describe("lambdaFunctionNames", () => {
+  it("extracts bare function names from tagged ARNs", () => {
+    expect(
+      lambdaFunctionNames({
+        ResourceTagMappingList: [{ ResourceARN: "arn:aws:lambda:us-east-1:1:function:proj--web-abc123" }],
+      }),
+    ).toEqual(["proj--web-abc123"]);
+  });
+
+  it("agrees with lambdaLogGroups on the function each names", () => {
+    const response = {
+      ResourceTagMappingList: [
+        { ResourceARN: "arn:aws:lambda:us-east-1:1:function:a" },
+        { ResourceARN: "arn:aws:lambda:us-east-1:1:function:b" },
+      ],
+    };
+    expect(lambdaLogGroups(response)).toEqual(lambdaFunctionNames(response).map((name) => `/aws/lambda/${name}`));
+  });
+});
+
+describe("envSegment", () => {
+  it("names a preview by its identity", () => {
+    expect(envSegment({ class: "preview", identity: "e2e-42-abcd1234" })).toBe("preview-e2e-42-abcd1234");
+  });
+
+  it("names production the fixed token, regardless of identity", () => {
+    expect(envSegment({ class: "production", identity: "" })).toBe("prod");
+    expect(envSegment({ class: "production" })).toBe("prod");
+  });
+
+  it("treats a missing or unrecognized class as production", () => {
+    expect(envSegment(undefined)).toBe("prod");
+    expect(envSegment({ class: "development" })).toBe("prod");
+  });
+});
+
+describe("appAssetPrefix", () => {
+  it("joins env/slug/app/buildId in that order", () => {
+    expect(
+      appAssetPrefix({
+        environment: { class: "preview", identity: "e2e-42-abcd1234" },
+        slug: "e2e-42-abcd1234",
+        app: "app",
+        buildId: "bld123",
+      }),
+    ).toBe("preview-e2e-42-abcd1234/e2e-42-abcd1234/app/bld123");
+  });
+
+  it("uses the fixed prod segment for a production deploy", () => {
+    expect(
+      appAssetPrefix({ environment: { class: "production" }, slug: "s", app: "app", buildId: "b" }),
+    ).toBe("prod/s/app/b");
+  });
+});
+
+describe("nodeMajorFromRuntime", () => {
+  it("reads the major version off the lambda runtime name", () => {
+    expect(nodeMajorFromRuntime("nodejs24.x")).toBe(24);
+    expect(nodeMajorFromRuntime(LAMBDA_RUNTIME)).toBe(24);
+  });
+
+  it("refuses a string that is not a lambda node runtime", () => {
+    expect(() => nodeMajorFromRuntime("node24")).toThrow(/not a lambda node runtime/);
+    expect(() => nodeMajorFromRuntime(undefined)).toThrow(/not a lambda node runtime/);
+  });
+});
+
+describe("bytecodeCacheKey", () => {
+  it("composes the key the membrane uploads to, matching bytecode.go's format", () => {
+    expect(
+      bytecodeCacheKey({ prefix: "preview-e2e-42/e2e-42/app/bld123", functionName: "proj--web-abc123", nodeMajor: 24, arch: "x86_64" }),
+    ).toBe("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24-x86_64.tar.gz");
+  });
+});
+
+describe("tarEntryNames", () => {
+  it("reads the entries of a valid tar, honoring the prefix field", () => {
+    const tar = buildTar([
+      { name: "top.bin", content: "top" },
+      { name: "nested/inner.bin", content: "nested contents" },
+    ]);
+    expect(tarEntryNames(tar)).toEqual(["top.bin", "nested/inner.bin"]);
+  });
+
+  it("returns no entries for an otherwise-valid empty archive", () => {
+    expect(tarEntryNames(buildTar([]))).toEqual([]);
+  });
+
+  it("rejects a buffer with no end-of-archive marker", () => {
+    const tar = buildTar([{ name: "a.bin", content: "a" }]);
+    expect(() => tarEntryNames(tar.subarray(0, 512))).toThrow(/no end-of-archive marker/);
+  });
+
+  it("rejects a header cut off mid-block", () => {
+    const tar = buildTar([{ name: "a.bin", content: "a" }]);
+    expect(() => tarEntryNames(tar.subarray(0, 100))).toThrow(/truncated tar header/);
+  });
+
+  it("rejects a header whose checksum was corrupted", () => {
+    const tar = buildTar([{ name: "a.bin", content: "a" }]);
+    tar[0] ^= 0xff;
+    expect(() => tarEntryNames(tar)).toThrow(/fails its checksum/);
+  });
+
+  it("splits a name longer than the 100-byte field across the ustar prefix", () => {
+    const longDir = "d".repeat(120);
+    const tar = buildTar([{ name: `${longDir}/f.bin`, content: "x" }]);
+    expect(tarEntryNames(tar)).toEqual([`${longDir}/f.bin`]);
+  });
+});
+
+// buildTar is a minimal, from-scratch ustar writer used only to build fixtures
+// for tarEntryNames: real archives always come from Go's archive/tar (via
+// gzip, in production) or from tar(1) in a human's shell, never from here.
+function buildTar(entries) {
+  const blocks = entries.map((entry) => buildTarEntry(entry.name, entry.content));
+  blocks.push(Buffer.alloc(1024));
+  return Buffer.concat(blocks);
+}
+
+function buildTarEntry(name, content) {
+  const data = Buffer.from(content, "utf8");
+  const header = Buffer.alloc(512);
+  let path = name;
+  let prefix = "";
+  if (path.length > 100) {
+    const split = path.lastIndexOf("/", path.length - 1);
+    prefix = path.slice(0, split);
+    path = path.slice(split + 1);
+  }
+  header.write(path, 0, 100, "utf8");
+  header.write("0000644\0", 100, 8, "utf8");
+  header.write("0000000\0", 108, 8, "utf8");
+  header.write("0000000\0", 116, 8, "utf8");
+  header.write(data.length.toString(8).padStart(11, "0") + "\0", 124, 12, "utf8");
+  header.write("00000000000\0", 136, 12, "utf8");
+  header.fill(0x20, 148, 156);
+  header.write("0", 156, 1, "utf8");
+  header.write("ustar\0", 257, 6, "utf8");
+  header.write("00", 263, 2, "utf8");
+  if (prefix) header.write(prefix, 345, 155, "utf8");
+
+  let sum = 0;
+  for (const byte of header) sum += byte;
+  header.write(sum.toString(8).padStart(6, "0") + "\0 ", 148, 8, "utf8");
+
+  const dataBlocks = Math.ceil(data.length / 512) * 512;
+  const padded = Buffer.alloc(dataBlocks);
+  data.copy(padded);
+  return Buffer.concat([header, padded]);
+}
 
 describe("tail", () => {
   it("keeps only the last n lines", () => {

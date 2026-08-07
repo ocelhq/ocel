@@ -12,13 +12,18 @@ isolated app per test suite and calls three scripts per app; these are ours:
 
 `assert-isr.mjs` is a smoke-job assertion rather than a harness script: it takes
 the deployment URL and proves a revalidating route's cache entry is rewritten.
-`assert-tag-publisher.mjs` and `assert-suppression-golden.mjs` are the same kind
-of thing, run against a deployment URL by hand (see "Golden gate" below).
-`lib.mjs` holds the shared pure logic (unit tested: `pnpm --filter
-@ocel-scripts/e2e-next test`). `merge-baseline.mjs` records the known-failure
-baseline. `stage-smoke-app.mjs` stages the smoke job's app. `guard-accounts.sh`
-refuses to deploy anywhere but the disposable account. The workflow that drives
-all of it is `.github/workflows/test-e2e-deploy.yml` — **manual dispatch only**.
+`assert-tag-publisher.mjs`, `assert-suppression-golden.mjs` and
+`assert-bytecode.mjs` are the same kind of thing, run against a deployment URL
+by hand (see "Golden gate" below). `assert-bytecode.mjs` proves the V8 compile
+cache the membrane builds on a Next app's first invocation actually lands in S3
+at the key `cloud/aws/cmd/lambdanode/bootstrap/bytecode.go` composes — reading
+slug, environment, app and build id from `.ocel/deploy-result.json` in the
+deployed app's directory, so run it from there. `lib.mjs` holds the shared pure
+logic (unit tested: `pnpm --filter @ocel-scripts/e2e-next test`).
+`merge-baseline.mjs` records the known-failure baseline. `stage-smoke-app.mjs`
+stages the smoke job's app. `guard-accounts.sh` refuses to deploy anywhere but
+the disposable account. The workflow that drives all of it is
+`.github/workflows/test-e2e-deploy.yml` — **manual dispatch only**.
 
 `logs.mjs`'s `DEPLOYMENT_ID:` marker carries Ocel's **promotion id** (see
 `CONTEXT.md`: an Ocel Deployment is per-app, a Promotion is what one deploy
