@@ -117,7 +117,10 @@ func bringUp(spawn spawner, live *liveValues, prefetch <-chan error, env []strin
 
 // bytecodeRehydrate is bringUpWithBytecode's default rehydrate dependency,
 // closing over the one piece rehydrateBytecodeCache cannot know for itself:
-// where node is told to keep its compile cache.
+// where node is told to keep its compile cache. Nothing checks at runtime
+// that this is the same directory compileCacheEnv puts in NODE_COMPILE_CACHE
+// — it is only true because both read compileCacheDir rather than a literal
+// of their own; see TestBytecodeRehydrate_TargetsTheDirCompileCacheEnvDeclares.
 func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
 	return rehydrateBytecodeCache(ctx, r, compileCacheDir)
 }
@@ -134,12 +137,26 @@ func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
 // on it still completes its send without blocking; there is nothing left to
 // leak.
 //
+// The join's own wait is anchored to start, not restarted from here: the
+// resolution goroutine's context (main's) is already bounded by
+// bytecodeResolveBudget from start, so a fresh bytecodeResolveBudget timer
+// begun at this later point would let a resolution that ignores its context
+// hold the join for up to bytecodeResolveBudget twice — once in the
+// goroutine's own overrun, once again here. Sharing the one deadline is what
+// keeps this a max(work, bytecodeResolveBudget) wait, matching what the
+// resolve budget documents, rather than work-plus-bytecodeResolveBudget in
+// the pathological case.
+//
 // The join and the rehydrate attempt both happen before budget is computed,
 // which is what carves rehydration's cost out of startupBudget rather than
 // adding it on top: bringUp's budget argument is startupBudget minus
 // time.Since(start), and start was captured before any of this ran, so
 // whatever rehydration spent is already reflected in that subtraction by the
-// time bringUp sees it.
+// time bringUp sees it. That subtraction is floored at minSpawnBudget rather
+// than handed to bringUp as-is: a slow miss (the full pre-spawn budget
+// spent, cache dir wiped, nothing to show for it) would otherwise starve the
+// spawn on top of getting it no cache — see minSpawnBudget's own comment for
+// what that trades.
 //
 // A hit disables the upload leg entirely rather than merely skipping its
 // PUT: it proves the object already exists, so nothing membrane.bytecode
@@ -160,10 +177,14 @@ func bringUpWithBytecode(
 	bytecodeReady <-chan *bytecodeResolution,
 	rehydrate func(context.Context, *bytecodeResolution) bool,
 ) (*Membrane, error) {
+	joinWait := time.Until(start.Add(bytecodeResolveBudget))
+	if joinWait < 0 {
+		joinWait = 0
+	}
 	var bytecode *bytecodeResolution
 	select {
 	case bytecode = <-bytecodeReady:
-	case <-time.After(bytecodeResolveBudget):
+	case <-time.After(joinWait):
 		fmt.Fprintln(os.Stderr, "ocel: compile cache resolution did not finish in time; compile cache disabled")
 	}
 
@@ -172,7 +193,11 @@ func bringUpWithBytecode(
 		hit = rehydrate(ctx, bytecode)
 	}
 
-	membrane, err := bringUp(spawn, live, prefetch, env, startupBudget-time.Since(start))
+	spawnBudget := startupBudget - time.Since(start)
+	if spawnBudget < minSpawnBudget {
+		spawnBudget = minSpawnBudget
+	}
+	membrane, err := bringUp(spawn, live, prefetch, env, spawnBudget)
 	if err != nil {
 		return nil, err
 	}

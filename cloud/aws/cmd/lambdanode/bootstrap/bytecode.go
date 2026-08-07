@@ -334,6 +334,14 @@ func (u bytecodeUpload) run(ctx context.Context) {
 // would otherwise do all that work only to throw it away. A directory that does
 // not exist sums to zero, matching how buildBytecodeArchive treats it.
 //
+// Each file is charged tarEntryOverhead in addition to its payload, matching
+// what untarInto charges per entry on the other side of the same ceiling: the
+// upload gate and the rehydrate gate are the same 64 MiB against two different
+// arithmetics otherwise, and an archive that passes this one but fails that
+// one is an object that uploads once and then wipes every cold start that
+// tries to read it back, forever, since the upload leg's HEAD then always
+// finds it already there.
+//
 // ctx stops the walk between entries, for the same reason the build's does: no
 // leg of the attempt may outlive the budget the caller handed it.
 func compileCacheSize(ctx context.Context, dir string) (int64, error) {
@@ -355,7 +363,7 @@ func compileCacheSize(ctx context.Context, dir string) (int64, error) {
 		if err != nil {
 			return err
 		}
-		total += info.Size()
+		total += info.Size() + tarEntryOverhead
 		return nil
 	})
 	if err != nil {
@@ -458,7 +466,12 @@ func untarInto(r io.Reader, dir string, ceiling int64) (int64, error) {
 		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 			return total, fmt.Errorf("create %s: %w", filepath.Dir(target), err)
 		}
-		f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(hdr.Mode).Perm())
+		// The mode is fixed rather than taken from hdr: the upload leg only ever
+		// writes something in the 0644 family, so an archive claiming otherwise
+		// is corrupt or hostile, and honouring it risks nothing worse than a
+		// cache file this runtime user cannot read back — a silent degradation
+		// this avoids by construction instead of validating for it.
+		f, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o644)
 		if err != nil {
 			return total, fmt.Errorf("create %s: %w", target, err)
 		}
@@ -501,6 +514,10 @@ func rehydrateCompileCache(ctx context.Context, store bytecodeStore, bucket, key
 	}
 	defer body.Close()
 
+	// size is compressed, and the ceiling is an uncompressed bound, so this is
+	// a cheap early-out rather than the real check: it is strictly conservative
+	// (compressed bytes never exceed uncompressed), and untarInto's own running
+	// total is what actually enforces the ceiling as entries stream in.
 	if exceedsBytecodeCacheCeiling(size) {
 		fmt.Fprintf(os.Stderr, "ocel: compile cache at %s is %d bytes, over the %d byte ceiling; skipping rehydration\n",
 			key, size, bytecodeCacheCeiling)

@@ -28,6 +28,18 @@ const completionMargin = 500 * time.Millisecond
 // the sandbox and says nothing useful in its place.
 const startupBudget = 8 * time.Second
 
+// minSpawnBudget is the least bringUp will ever hand the spawn, even when
+// pre-spawn work (the resolve join, rehydration) already ate past
+// startupBudget by the time it's subtracted. Without a floor, a non-positive
+// budget turns into awaitReady's time.After(negative) firing immediately — a
+// spurious "node did not signal ready" when node was never given a chance to
+// start. The floor deliberately lets that worst case spill init past
+// startupBudget into the ~2s of headroom below Lambda's ~10s init ceiling: a
+// boot that would otherwise fail outright is worth more than holding every
+// run under 8s, and the normal carve-out (rehydration's cost subtracted from
+// startupBudget) is unaffected outside this pathological, slow-miss case.
+const minSpawnBudget = 4 * time.Second
+
 const nodeBinaryPath = "/var/lang/bin/node"
 
 type Membrane struct {
