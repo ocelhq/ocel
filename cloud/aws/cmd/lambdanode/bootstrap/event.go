@@ -75,5 +75,23 @@ func buildLoopbackRequest(ctx context.Context, nodePort int, ev *funcURLRequest)
 	if len(ev.Cookies) > 0 {
 		req.Header.Set("Cookie", strings.Join(ev.Cookies, "; "))
 	}
+	// Go sends req.Host as the wire Host header and ignores Header["Host"], so
+	// without this the app derives its own origin from the loopback authority and
+	// every absolute URL it builds points at 127.0.0.1:<ephemeral port>.
+	if host := publicHost(req.Header); host != "" {
+		req.Host = host
+	}
 	return req, nil
+}
+
+// publicHost is the authority the client addressed: the reverse proxy in front
+// of the Function URL is authoritative for it and stamps x-forwarded-host; the
+// Function URL's own host header is the next best thing.
+func publicHost(h http.Header) string {
+	for _, name := range []string{"X-Forwarded-Host", "Host"} {
+		if v := strings.TrimSpace(strings.Split(h.Get(name), ",")[0]); v != "" {
+			return v
+		}
+	}
+	return ""
 }
