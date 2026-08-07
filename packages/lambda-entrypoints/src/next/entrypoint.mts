@@ -3,7 +3,12 @@ import { pathToFileURL } from "node:url";
 import { runWithWaitUntil } from "../shared/background.mjs";
 import { loadIncrementalCacheFactory } from "./incremental-cache.mjs";
 import { awaitLiveValues } from "../shared/live-values.mjs";
-import { reportFatalBoot, serveInvoke, type Invoke } from "../shared/membrane.mjs";
+import {
+  installCompileCacheFlush,
+  reportFatalBoot,
+  serveInvoke,
+  type Invoke,
+} from "../shared/membrane.mjs";
 
 // Next deletes the flight headers off the live request object before it
 // constructs the incremental cache for a prerendered route, so by the time the
@@ -17,6 +22,8 @@ import { reportFatalBoot, serveInvoke, type Invoke } from "../shared/membrane.mj
 const RSC_REQUEST = Symbol.for("ocel.rsc-request");
 
 async function boot(): Promise<void> {
+  installCompileCacheFlush();
+
   // OCEL_HANDLER points at the generated launcher beside the app's .next dir,
   // so its dirname is the Next project root and its default export is the
   // compiled route module.
