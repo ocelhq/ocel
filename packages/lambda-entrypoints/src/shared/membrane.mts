@@ -100,7 +100,9 @@ export interface WarmReport {
   entries: number;
   loaded: number;
   failures: { entry: string; message: string }[];
-  stoppedBy: "complete" | "deadline" | "ceiling";
+  stoppedBy: "complete" | "deadline" | "ceiling" | "unmeasured";
+  skipped: string[];
+  skippedCount: number;
   bytes: number;
   dir: string | null;
 }
@@ -109,13 +111,15 @@ export interface WarmReport {
 // has nothing to warm, and neither does one on a Node without the compile cache
 // APIs. Both are the same answer to the membrane: nothing was warmed, and the
 // deploy should publish whatever the run itself produced.
-const UNSUPPORTED_WARM: WarmReport = {
+export const UNSUPPORTED_WARM: WarmReport = {
   ok: false,
   state: "unsupported",
   entries: 0,
   loaded: 0,
   failures: [],
   stoppedBy: "complete",
+  skipped: [],
+  skippedCount: 0,
   bytes: 0,
   dir: null,
 };

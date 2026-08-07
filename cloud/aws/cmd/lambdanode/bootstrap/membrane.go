@@ -216,36 +216,55 @@ func (m *Membrane) writeControlRequest(line []byte, deadline time.Time) error {
 // The wait ends at the load deadline — the request's own is the reply margin
 // earlier, so a node that stops exactly when it was told still has that long
 // for its answer to arrive.
-func (m *Membrane) warmCompileCache(ctx context.Context, deadline time.Time) (compileCacheWarmedPayload, bool) {
+//
+// The waiter comes back alongside the report, still registered, because node
+// checks the deadline only between entries: one overrunning require answers
+// late, and the caller's publish leg is a second window for that answer to
+// arrive in. Whoever asks owns endWarmExchange.
+func (m *Membrane) warmCompileCache(ctx context.Context, deadline time.Time) (compileCacheWarmedPayload, <-chan compileCacheWarmedPayload, bool) {
 	if m.control == nil {
-		return compileCacheWarmedPayload{}, false
+		return compileCacheWarmedPayload{}, nil, false
 	}
 	reply := make(chan compileCacheWarmedPayload, 1)
 	m.mu.Lock()
 	m.warmWaiter = reply
 	m.mu.Unlock()
-	defer func() {
-		m.mu.Lock()
-		m.warmWaiter = nil
-		m.mu.Unlock()
-	}()
 
 	// The write's own bound is about the child draining its socket now, not
 	// about how long the work it is being handed may take.
 	if err := m.writeControlRequest(warmCompileCacheLine(deadline), time.Now().Add(compileCacheFlushTimeout)); err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: could not ask node to warm its compile cache: %v\n", err)
-		return compileCacheWarmedPayload{}, false
+		return compileCacheWarmedPayload{}, nil, false
 	}
 
 	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 	select {
 	case p := <-reply:
-		return p, true
+		return p, reply, true
 	case <-ctx.Done():
 	}
 	fmt.Fprintln(os.Stderr, "ocel: node did not report back on the compile-cache warm")
-	return compileCacheWarmedPayload{}, false
+	return compileCacheWarmedPayload{}, reply, false
+}
+
+// collectWarmReport takes a report that landed after the wait gave up, without
+// blocking for one that still has not.
+func collectWarmReport(waiter <-chan compileCacheWarmedPayload) (compileCacheWarmedPayload, bool) {
+	select {
+	case p := <-waiter:
+		return p, true
+	default:
+		return compileCacheWarmedPayload{}, false
+	}
+}
+
+// endWarmExchange stops the drain loop delivering to a waiter nobody is left to
+// read, which would park it and with it invocation-complete.
+func (m *Membrane) endWarmExchange() {
+	m.mu.Lock()
+	m.warmWaiter = nil
+	m.mu.Unlock()
 }
 
 // warmReplyMargin is held back from the deadline node is told, so a child that
@@ -349,17 +368,25 @@ type compileCacheFlushedPayload struct {
 
 // compileCacheWarmedPayload is node's report on a warm pass. ok is false —
 // with state "unsupported" — on an artifact that has no warm capability at
-// all, which is a deployment that cannot be warmed rather than a failure of
-// the attempt.
+// all, which is a bundle whose walk went unaccounted for rather than one with
+// nothing on disk to publish.
+//
+// Skipped names what the walk never reached and SkippedCount says how many
+// there were, because the list node sends is bounded: an operator reading
+// "38/51" has no way to tell which routes stay cold, which is the one thing
+// this report exists to tell them. node's own "dir" is read by nobody here —
+// the flush ack the upload leg waits on is what names the directory it
+// archives — so it is not a field.
 type compileCacheWarmedPayload struct {
-	OK        bool          `json:"ok"`
-	State     string        `json:"state"`
-	Entries   int           `json:"entries"`
-	Loaded    int           `json:"loaded"`
-	Failures  []warmFailure `json:"failures"`
-	StoppedBy string        `json:"stoppedBy"`
-	Bytes     int64         `json:"bytes"`
-	Dir       string        `json:"dir"`
+	OK           bool          `json:"ok"`
+	State        string        `json:"state"`
+	Entries      int           `json:"entries"`
+	Loaded       int           `json:"loaded"`
+	Failures     []warmFailure `json:"failures"`
+	StoppedBy    string        `json:"stoppedBy"`
+	Skipped      []string      `json:"skipped"`
+	SkippedCount int           `json:"skippedCount"`
+	Bytes        int64         `json:"bytes"`
 }
 
 // warmFailure is one bundle entry that would not load. They travel back rather

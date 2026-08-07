@@ -28,19 +28,37 @@ function compileCache() {
   }
 }
 
+// Null rather than a partial total on anything but an absent directory. The
+// ceiling is enforced against this number, and an undercount is the dangerous
+// direction: it lets the walk sail past the ceiling into an archive the Go
+// uploader then refuses outright, publishing nothing where stopping short would
+// have published something. A directory node has not created yet is the one
+// honest zero, and a file that vanished between the readdir and its stat
+// genuinely contributes nothing.
 function measureCompileCache(dir) {
-  let total = 0;
+  let items;
   try {
-    for (const item of fs.readdirSync(dir, { withFileTypes: true, recursive: true })) {
-      if (!item.isFile()) continue;
-      total += fs.lstatSync(path.join(item.parentPath, item.name)).size;
-      total += TAR_ENTRY_OVERHEAD;
-    }
-    return total;
-  } catch {
-    return total;
+    items = fs.readdirSync(dir, { withFileTypes: true, recursive: true });
+  } catch (error) {
+    return error?.code === "ENOENT" ? 0 : null;
   }
+  let total = 0;
+  for (const item of items) {
+    if (!item.isFile()) continue;
+    try {
+      total += fs.lstatSync(path.join(item.parentPath, item.name)).size + TAR_ENTRY_OVERHEAD;
+    } catch (error) {
+      if (error?.code !== "ENOENT") return null;
+    }
+  }
+  return total;
 }
+
+// How many entry names a stopped walk names, at most. The list travels in the
+// warm reply, through the membrane's summary and into a CloudWatch line and the
+// deploy's output, so a bundle with hundreds of cold routes must not be able to
+// bloat any of them; the count that travels beside it is the whole truth.
+const MAX_REPORTED_SKIPPED = 20;
 
 const unsupportedWarmReport = (entryCount) => ({
   ok: false,
@@ -49,11 +67,28 @@ const unsupportedWarmReport = (entryCount) => ({
   loaded: 0,
   failures: [],
   stoppedBy: "complete",
+  skipped: [],
+  skippedCount: 0,
   bytes: 0,
   dir: null,
 });
 
 const orUnbounded = (value) => (Number.isFinite(value) ? value : Infinity);
+
+const MAX_MEASURE_STRIDE = 8;
+
+// How many entries may be loaded between two measurements. A measurement is a
+// flush plus a full recursive walk of the cache directory, so one per entry is
+// O(entries x files) inside the very deadline the walk exists to respect — and
+// it buys nothing while the total is nowhere near the ceiling, which is where
+// most of a bundle's walk happens. The stride is sized so the largest growth
+// yet seen, repeated across it, still leaves half the headroom spare; with no
+// growth observed yet there is nothing to predict with, so the walk measures
+// every entry until there is.
+function measureStride(headroom, maxDelta) {
+  if (maxDelta <= 0) return 1;
+  return Math.max(1, Math.min(MAX_MEASURE_STRIDE, Math.floor(headroom / (2 * maxDelta))));
+}
 
 module.exports = function createDispatch({
   entries,
@@ -83,19 +118,24 @@ module.exports = function createDispatch({
   // own chunk ordering — a Turbopack chunk evaluated out of order fails with its
   // dependency's factory unavailable, so an entry is only ever required whole.
   //
-  // Failures are memoized alongside successes: a module that throws on import
-  // does so deterministically, so re-requiring it per request would only burn
-  // CPU on a warm container to reach the same 502.
-  const loadEntry = (key) => {
-    if (!loaded.has(key)) {
-      try {
-        loaded.set(key, { module: load(entries[key]) });
-      } catch (error) {
-        console.error(`ocel: entry ${key} failed to load: ${error?.stack ?? error}`);
-        loaded.set(key, { error });
-      }
+  // On the request path failures are memoized alongside successes: a module that
+  // throws on import does so deterministically, so re-requiring it per request
+  // would only burn CPU on a warm container to reach the same 502. The warm walk
+  // passes memoizeFailure: false for the opposite reason — the warmed instance is
+  // promoted into production seconds later, and a memo written by a deploy-time
+  // walk would answer that route with the same 502 for the life of the instance.
+  const loadEntry = (key, { memoizeFailure = true } = {}) => {
+    const already = loaded.get(key);
+    if (already) return already;
+    try {
+      const entry = { module: load(entries[key]) };
+      loaded.set(key, entry);
+      return entry;
+    } catch (error) {
+      console.error(`ocel: entry ${key} failed to load: ${error?.stack ?? error}`);
+      if (memoizeFailure) loaded.set(key, { error });
+      return { error };
     }
-    return loaded.get(key);
   };
 
   // The primary is loaded while the launcher is still being required, which is
@@ -104,23 +144,6 @@ module.exports = function createDispatch({
   // best-effort: one broken entry must not take down every route in the bundle,
   // so the failure is reported here and re-surfaced as that key's own 502.
   if (primary) loadEntry(primary);
-
-  // Warming is a deploy-time walk of the whole bundle, so unlike the request
-  // path it must not memoize what fails: the warmed instance is promoted into
-  // production seconds later, and a memo written here would answer that route
-  // with the same 502 for the life of the instance. Successes are memoized —
-  // the instance genuinely is warm for them.
-  const warmEntry = (key) => {
-    const already = loaded.get(key);
-    if (already) return already;
-    try {
-      const entry = { module: load(entries[key]) };
-      loaded.set(key, entry);
-      return entry;
-    } catch (error) {
-      return { error };
-    }
-  };
 
   const fail = (res, message) => {
     res.statusCode = 502;
@@ -187,42 +210,67 @@ module.exports = function createDispatch({
         });
       };
 
+      let bytes = 0;
+      let maxDelta = 0;
+      let measurable = true;
+
       // Node buffers compile cache writes in memory, so an unflushed directory
-      // measures stale.
-      const measure = () => {
+      // measures stale. A cache that cannot be measured leaves the walk with
+      // nothing to enforce the ceiling against, which is a stop rather than a
+      // zero — see measureCompileCache.
+      const remeasure = ({ isFloor = false } = {}) => {
         cache.flush();
-        return measureCompileCache(cache.dir);
+        const measured = measureCompileCache(cache.dir);
+        if (measured === null) {
+          measurable = false;
+          return;
+        }
+        if (!isFloor) maxDelta = Math.max(maxDelta, measured - bytes);
+        bytes = measured;
       };
 
-      if (primary) record(primary, warmEntry(primary));
+      if (primary) record(primary, loadEntry(primary, { memoizeFailure: false }));
 
       // The primary's graph is already cached from INIT, so this measurement is
-      // the floor the per-entry growths are taken against.
-      let bytes = measure();
-      let maxDelta = 0;
+      // the floor the later growths are taken against rather than one of them.
+      remeasure({ isFloor: true });
+
+      const pending = keys.filter((key) => key !== primary);
       let stoppedBy = "complete";
+      let stoppedAt = pending.length;
+      let sinceMeasure = 0;
 
       // A module cannot be unloaded, so crossing the ceiling is unrecoverable —
       // the Go side would refuse to upload the archive and the deploy would
       // publish nothing, strictly worse than the partial cache an unwarmed one
       // leaves behind. The largest growth seen so far stands in for the next
-      // entry's, which makes the walk stop while the archive still fits.
-      for (const key of keys) {
-        if (key === primary) continue;
+      // stride's, which makes the walk stop while the archive still fits.
+      for (let i = 0; i < pending.length; i++) {
+        if (!measurable) {
+          stoppedBy = "unmeasured";
+          stoppedAt = i;
+          break;
+        }
         if (Date.now() >= deadline) {
           stoppedBy = "deadline";
+          stoppedAt = i;
           break;
         }
         if (bytes + maxDelta > ceiling) {
           stoppedBy = "ceiling";
+          stoppedAt = i;
           break;
         }
-        record(key, warmEntry(key));
-        const measured = measure();
-        maxDelta = Math.max(maxDelta, measured - bytes);
-        bytes = measured;
+        record(pending[i], loadEntry(pending[i], { memoizeFailure: false }));
+        sinceMeasure += 1;
+        if (sinceMeasure >= measureStride(ceiling - bytes, maxDelta)) {
+          remeasure();
+          sinceMeasure = 0;
+        }
       }
+      if (sinceMeasure > 0 && measurable) remeasure();
 
+      const skipped = pending.slice(stoppedAt);
       return {
         ok: true,
         state: "warmed",
@@ -230,6 +278,8 @@ module.exports = function createDispatch({
         loaded: count,
         failures,
         stoppedBy,
+        skipped: skipped.slice(0, MAX_REPORTED_SKIPPED),
+        skippedCount: skipped.length,
         bytes,
         dir: cache.dir,
       };

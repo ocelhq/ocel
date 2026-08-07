@@ -483,7 +483,10 @@ export function warmSummaryOutcome(message) {
  * Coverage is loaded against entries, qualified by where the walk stopped. A
  * ceiling or deadline stop is a real, reportable outcome of a bundle that is
  * too big or too slow to warm whole — "partial", for a caller to surface — not
- * a broken cache and not a proof of a complete one.
+ * a broken cache and not a proof of a complete one. A publish the membrane
+ * could not account for (`uncounted`: node never reported back, or the artifact
+ * has no warm capability) is "partial" for the same reason: the object landed,
+ * and nothing measured what went into it.
  *
  * already-cached is "unproven", never a pass: the object exists, but this pass
  * neither wrote it nor measured what is in it.
@@ -494,9 +497,13 @@ export function warmCoverage(summary, key) {
   const loaded = summary?.loaded ?? 0;
   const failures = summary?.failures ?? [];
   const stoppedBy = summary?.stoppedBy ?? "";
-  const walk =
-    `${loaded}/${entries} entries loaded, ${failures.length} failed, stopped by ` +
-    `${stoppedBy || "(unreported)"}, ${summary?.bytes ?? 0} bytes`;
+  const uncounted = summary?.uncounted ?? "";
+  const skipped = summary?.skipped ?? [];
+  const walk = uncounted
+    ? `entry counts unknown (${uncounted}), ${summary?.bytes ?? 0} bytes`
+    : `${loaded}/${entries} entries loaded, ${failures.length} failed, ` +
+      `${summary?.skippedCount ?? 0} skipped${skipped.length ? ` (${skipped.join(", ")})` : ""}, ` +
+      `stopped by ${stoppedBy || "(unreported)"}, ${summary?.bytes ?? 0} bytes`;
 
   // A summary naming another key is another build's, and says nothing either
   // way about this one — the key carries the build id, so the two can never be
@@ -509,6 +516,9 @@ export function warmCoverage(summary, key) {
     case "published":
       if (summary?.uploaded !== true) {
         return { kind: "failed", detail: `published without uploaded:true (${walk}) — the two cannot both be true` };
+      }
+      if (uncounted) {
+        return { kind: "partial", detail: walk };
       }
       if (entries === 0) {
         return { kind: "failed", detail: `published a cache for a bundle reporting no entries at all (${walk})` };
@@ -525,7 +535,7 @@ export function warmCoverage(summary, key) {
           : "the instance started on a cache that already existed, so nothing was walked or written",
       };
     case "disabled":
-      return { kind: "failed", detail: `bytecode caching is off in this function: ${summary?.error ?? "(no reason given)"}` };
+      return { kind: "failed", detail: `nothing to warm: ${summary?.error ?? "(no reason given)"}` };
     case "failed":
       return { kind: "failed", detail: `${walk}: ${summary?.error ?? "(no reason given)"}` };
     default:
@@ -542,7 +552,6 @@ export function warmCoverage(summary, key) {
  */
 const WARM_COVERAGE_RANK = ["failed", "unproven", "partial", "complete"];
 
-/** strongestCoverage picks the most conclusive verdict seen, or null for none. */
 export function strongestCoverage(verdicts) {
   return (verdicts ?? []).reduce((best, verdict) => {
     if (!best) return verdict;

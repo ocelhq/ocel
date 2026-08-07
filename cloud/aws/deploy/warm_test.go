@@ -136,13 +136,70 @@ func TestWarmTargets_SkippedWhenGateIsOff(t *testing.T) {
 }
 
 func TestWarmPass_ReportsPublished(t *testing.T) {
-	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":47,"bytes":63963136,"uploaded":true}`),
+	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":47,"bytes":63963136,"uploaded":true,"key":"prod/p/web/B1/bytecode/fn/node24.3.1-arm64.tar.gz"}`),
 		warmTestTargets(1), time.Minute)
 
-	for _, want := range []string{"warming 1 bundle", "web_bundle_a", "app=web", "47/51 entries", "61.0 MiB published", "warmed 1/1 bundles"} {
+	for _, want := range []string{
+		"warming 1 bundle (", "web_bundle_a", "app=web", "47/51 entries", "61.0 MiB published",
+		"node24.3.1-arm64.tar.gz", "warmed 1/1 bundles",
+	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("warm log missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// "warming 1 bundles" is the deploy talking to a person about their one Next
+// app.
+func TestWarmPass_CountsBundlesInWords(t *testing.T) {
+	out := runWarm(t, answering(`{"state":"published","uploaded":true}`), warmTestTargets(1), time.Minute)
+
+	if strings.Contains(out, "warming 1 bundles") {
+		t.Errorf("warm log = %s, want a singular bundle", out)
+	}
+}
+
+// The spec asks the pass to report what it skipped: "38/51" tells an operator
+// the cache is partial but not which routes will pay for it.
+func TestWarmPass_NamesTheEntriesThatStayedCold(t *testing.T) {
+	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":38,"uploaded":true,`+
+		`"stoppedBy":"ceiling","skippedCount":13,"skipped":["app/a/page","app/b/page"]}`),
+		warmTestTargets(1), time.Minute)
+
+	for _, want := range []string{"13 entries skipped by ceiling", "app/a/page", "app/b/page", "(+11 not listed)"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("warm log missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// A membrane that published a cache it could not account for still published
+// one: the deploy reports the counts as unknown rather than as zeros it would
+// otherwise read as a measurement.
+func TestWarmPass_ReportsUncountedCoverageAsUnknown(t *testing.T) {
+	out := runWarm(t, answering(`{"state":"published","uploaded":true,"bytes":1048576,`+
+		`"uncounted":"node did not report back on the compile-cache warm"}`),
+		warmTestTargets(1), time.Minute)
+
+	if !strings.Contains(out, "entry counts unknown (node did not report back") {
+		t.Errorf("warm log = %s, want the counts reported as unknown with the reason", out)
+	}
+	if !strings.Contains(out, "warmed 1/1 bundles") {
+		t.Errorf("warm log = %s, want a published cache counted as warmed", out)
+	}
+	if strings.Contains(out, "0/0 entries") {
+		t.Errorf("warm log = %s, want no counts it never measured", out)
+	}
+}
+
+// published and uploaded:false cannot both be true, and believing the state
+// over the field would report a cache nothing wrote as this deploy's.
+func TestWarmPass_PublishedWithoutUploadingIsNotWarmed(t *testing.T) {
+	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":51,"uploaded":false}`),
+		warmTestTargets(1), time.Minute)
+
+	if !strings.Contains(out, "without uploading") || !strings.Contains(out, "warmed 0/1 bundles") {
+		t.Errorf("warm log = %s, want the contradiction reported as not warmed", out)
 	}
 }
 
@@ -163,7 +220,7 @@ func TestWarmPass_ReportsDisabledAndFailed(t *testing.T) {
 		body string
 		want string
 	}{
-		{"disabled", `{"state":"disabled"}`, "bytecode caching is off"},
+		{"disabled", `{"state":"disabled","error":"this deployment resolved no bytecode cache identity"}`, "resolved no bytecode cache identity"},
 		{"failed", `{"state":"failed","error":"put denied","entries":51,"loaded":12}`, "put denied"},
 		{"unknown state", `{"state":"pondering"}`, `"pondering"`},
 	} {
@@ -320,6 +377,54 @@ func TestWarmPass_SilentWithNoTargets(t *testing.T) {
 func TestWarmPass_SkipsWithoutAnInvoker(t *testing.T) {
 	if out := runWarm(t, nil, warmTestTargets(1), time.Minute); out != "" {
 		t.Errorf("warm log = %q, want nothing", out)
+	}
+}
+
+// The membrane writes its summary through the streaming response writer of a
+// RESPONSE_STREAM function, so whether a buffered Invoke hands these bytes back
+// bare or wrapped in the http-integration prelude and its null separator is not
+// something the deploy can settle. Both shapes have to read, or the feature
+// silently does nothing in production while every other test passes.
+func TestParseWarmReply_ReadsBareAndPreludeFramedPayloads(t *testing.T) {
+	summary := `{"state":"published","entries":51,"loaded":51,"uploaded":true}`
+	prelude := `{"statusCode":200,"headers":{"content-type":"application/json"},"cookies":[]}`
+
+	for _, tc := range []struct {
+		name    string
+		payload []byte
+	}{
+		{"bare json", []byte(summary)},
+		{"prelude framed", append(append([]byte(prelude), make([]byte, 8)...), summary...)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reply, err := parseWarmReply(tc.payload)
+			if err != nil {
+				t.Fatalf("parseWarmReply: %v", err)
+			}
+			if reply.State != warmStatePublished || reply.Loaded != 51 || !reply.Uploaded {
+				t.Errorf("reply = %+v, want the membrane's own summary", reply)
+			}
+		})
+	}
+}
+
+// A payload carrying no summary at all must be reported as unreadable rather
+// than parsed into a zero-valued reply that reads as an unrecognized state.
+func TestParseWarmReply_RejectsAPayloadWithNoSummary(t *testing.T) {
+	if _, err := parseWarmReply([]byte("Internal Server Error")); err == nil {
+		t.Error("parseWarmReply() err = nil, want an unreadable payload reported")
+	}
+}
+
+// The whole pass has to survive the framing question too, not just the parser.
+func TestWarmPass_ReadsAPreludeFramedAnswer(t *testing.T) {
+	framed := `{"statusCode":200,"headers":{},"cookies":[]}` + string(make([]byte, 8)) +
+		`{"state":"published","entries":9,"loaded":9,"uploaded":true}`
+
+	out := runWarm(t, answering(framed), warmTestTargets(1), time.Minute)
+
+	if !strings.Contains(out, "9/9 entries") || !strings.Contains(out, "warmed 1/1 bundles") {
+		t.Errorf("warm log = %s, want a prelude-framed answer read as a published cache", out)
 	}
 }
 

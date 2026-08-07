@@ -1,10 +1,12 @@
 package deploy
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -84,8 +86,6 @@ func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deployment
 	}.run(ctx)
 }
 
-// warmTarget is one bundle to warm: the physical Lambda name to invoke, plus
-// the logical name and app the deploy output reports it under.
 type warmTarget struct {
 	App          string
 	LogicalName  string
@@ -139,7 +139,7 @@ func (p warmPass) run(ctx context.Context) {
 	if len(p.targets) == 0 || p.invoker == nil {
 		return
 	}
-	p.log(fmt.Sprintf("ocel: warming %d bundles (%d at a time)", len(p.targets), warmConcurrency))
+	p.log(fmt.Sprintf("ocel: warming %s (%d at a time)", plural(len(p.targets), "bundle", "bundles"), warmConcurrency))
 
 	ctx, cancel := context.WithTimeout(ctx, p.budget)
 	defer cancel()
@@ -158,9 +158,7 @@ func (p warmPass) run(ctx context.Context) {
 			// deadline never admitted has not failed, and reporting it as a
 			// cancelled invoke would hide that the pass simply ran out of time.
 			if ctx.Err() != nil {
-				mu.Lock()
 				skipped[i] = true
-				mu.Unlock()
 				return nil
 			}
 			at := time.Now()
@@ -182,6 +180,13 @@ func (p warmPass) run(ctx context.Context) {
 		}
 	}
 	p.log(fmt.Sprintf("ocel: warmed %d/%d bundles in %.0fs", warmed, len(p.targets), time.Since(start).Seconds()))
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return "1 " + one
+	}
+	return fmt.Sprintf("%d %s", n, many)
 }
 
 // warmOne invokes one bundle and reduces the answer to the line the deploy
@@ -206,60 +211,144 @@ func (p warmPass) warmOne(ctx context.Context, target warmTarget) (string, bool)
 		return fmt.Sprintf("lambda answered %d; not warmed", out.StatusCode), false
 	}
 
-	var reply warmReply
-	if err := json.Unmarshal(out.Payload, &reply); err != nil {
+	reply, err := parseWarmReply(out.Payload)
+	if err != nil {
 		return fmt.Sprintf("unreadable warm response: %v; not warmed", err), false
 	}
 	return reply.report()
+}
+
+// The membrane's four states, spelled here rather than shared with it: these
+// two Go modules are separate by design, and a package invented to hold four
+// strings would couple a deploy to a Lambda binary's dependency graph to save
+// four lines.
+const (
+	warmStatePublished     = "published"
+	warmStateAlreadyCached = "already-cached"
+	warmStateDisabled      = "disabled"
+	warmStateFailed        = "failed"
+)
+
+// parseWarmReply finds the summary in an invoke's response payload.
+//
+// The membrane writes that summary through the same streaming response writer
+// the Function URL path uses, on a function whose invoke mode is RESPONSE_STREAM
+// — and whether Lambda's streaming layer hands a buffered Invoke caller those
+// bytes untouched, or wrapped in the http-integration prelude and its null-byte
+// separator, is not something this side can settle without a live function. So
+// it settles for neither: the summary is the JSON object at the end of the
+// payload, which is what both shapes reduce to. Guessing wrong in the other
+// direction would fail every bundle in production while every test passed.
+func parseWarmReply(payload []byte) (warmReply, error) {
+	var reply warmReply
+	if err := json.Unmarshal(payload, &reply); err == nil {
+		return reply, nil
+	}
+	// A prelude ends in the null bytes that separate it from the body, and the
+	// summary itself can hold none, so the last of them is the body's start.
+	if at := bytes.LastIndexByte(payload, 0); at >= 0 {
+		var framed warmReply
+		if err := json.Unmarshal(bytes.TrimLeft(payload[at:], "\x00"), &framed); err == nil {
+			return framed, nil
+		}
+	}
+	return warmReply{}, fmt.Errorf("no warm summary in %q", tailOf(payload, 200))
+}
+
+// tailOf keeps a diagnosis short: the summary is at the end of the payload, so
+// that is the end worth quoting when it cannot be read.
+func tailOf(payload []byte, n int) []byte {
+	if len(payload) <= n {
+		return payload
+	}
+	return payload[len(payload)-n:]
 }
 
 // warmReply is the membrane's raw JSON answer to a warm invoke. Fields that do
 // not apply to a state are omitted from the response, so every one of these
 // reads as its zero value when it was not sent.
 type warmReply struct {
-	State     string            `json:"state"`
-	Entries   int               `json:"entries"`
-	Loaded    int               `json:"loaded"`
-	Failures  []json.RawMessage `json:"failures"`
-	StoppedBy string            `json:"stoppedBy"`
-	Bytes     int64             `json:"bytes"`
-	Key       string            `json:"key"`
-	Uploaded  bool              `json:"uploaded"`
-	Error     string            `json:"error"`
+	State        string            `json:"state"`
+	Entries      int               `json:"entries"`
+	Loaded       int               `json:"loaded"`
+	Failures     []json.RawMessage `json:"failures"`
+	StoppedBy    string            `json:"stoppedBy"`
+	Skipped      []string          `json:"skipped"`
+	SkippedCount int               `json:"skippedCount"`
+	Uncounted    string            `json:"uncounted"`
+	Bytes        int64             `json:"bytes"`
+	Key          string            `json:"key"`
+	Uploaded     bool              `json:"uploaded"`
+	Error        string            `json:"error"`
 }
 
-// report renders one bundle's outcome and whether it counts as warmed.
-//
-// already-cached counts. The deploy cannot pre-check whether a cache exists —
-// the key embeds node's full version and only the sandbox learns that — so this
-// is the membrane's answer for a build whose cache was already complete, not a
-// failure to publish one.
+// already-cached counts as warmed. The deploy cannot pre-check whether a cache
+// exists — the key embeds node's full version and only the sandbox learns that
+// — so this is the membrane's answer for a build whose cache was already
+// complete, not a failure to publish one.
 func (r warmReply) report() (string, bool) {
 	switch r.State {
-	case "published":
-		return fmt.Sprintf("%d/%d entries, %.1f MiB published", r.Loaded, r.Entries, float64(r.Bytes)/(1<<20)), true
-	case "already-cached":
-		return fmt.Sprintf("%d/%d entries, already cached", r.Loaded, r.Entries), true
-	case "disabled":
-		return "bytecode caching is off in this function; not warmed", false
-	case "failed":
-		return fmt.Sprintf("%d/%d entries, warm failed: %s; not warmed", r.Loaded, r.Entries, r.reason()), false
+	case warmStatePublished:
+		if !r.Uploaded {
+			return fmt.Sprintf("%s, reported published without uploading; not warmed", r.walk()), false
+		}
+		published := fmt.Sprintf("%s, %.1f MiB published", r.walk(), float64(r.Bytes)/(1<<20))
+		if r.Key != "" {
+			published += " to " + r.Key
+		}
+		return published, true
+	case warmStateAlreadyCached:
+		return fmt.Sprintf("%s, already cached", r.walk()), true
+	case warmStateDisabled:
+		// The membrane is the only side that knows why it resolved no cache
+		// identity, so its reason is repeated rather than diagnosed.
+		return fmt.Sprintf("nothing to warm: %s; not warmed", r.reason()), false
+	case warmStateFailed:
+		return fmt.Sprintf("%s, warm failed: %s; not warmed", r.walk(), r.reason()), false
 	default:
 		return fmt.Sprintf("unrecognized warm state %q; not warmed", r.State), false
 	}
 }
 
-// reason is the best account a failed reply carries of why. The membrane sets
-// whichever of the three it knows, so this falls through them rather than
-// picking one and reporting an empty string when that one is absent.
+// walk renders what the bundle's load actually did, naming the routes that
+// stayed cold: "38/51" tells an operator a cache is partial but not which
+// requests will pay for it, and the deploy output is the only place that ever
+// surfaces.
+func (r warmReply) walk() string {
+	if r.Uncounted != "" {
+		return fmt.Sprintf("entry counts unknown (%s)", r.Uncounted)
+	}
+	walk := fmt.Sprintf("%d/%d entries", r.Loaded, r.Entries)
+	if r.SkippedCount == 0 {
+		return walk
+	}
+	walk += fmt.Sprintf(", %s skipped", plural(r.SkippedCount, "entry", "entries"))
+	if r.StoppedBy != "" {
+		walk += " by " + r.StoppedBy
+	}
+	if len(r.Skipped) == 0 {
+		return walk
+	}
+	walk += ": " + strings.Join(r.Skipped, ", ")
+	if unlisted := r.SkippedCount - len(r.Skipped); unlisted > 0 {
+		walk += fmt.Sprintf(" (+%d not listed)", unlisted)
+	}
+	return walk
+}
+
+// reason is the best account a reply carries of why. The membrane sets
+// whichever of these it knows, so this falls through them rather than picking
+// one and reporting an empty string when that one is absent.
 func (r warmReply) reason() string {
 	switch {
 	case r.Error != "":
 		return r.Error
+	case r.Uncounted != "":
+		return r.Uncounted
 	case r.StoppedBy != "":
 		return r.StoppedBy
 	case len(r.Failures) > 0:
-		return fmt.Sprintf("%d entries failed to load", len(r.Failures))
+		return fmt.Sprintf("%s failed to load", plural(len(r.Failures), "entry", "entries"))
 	default:
 		return "no reason given"
 	}
