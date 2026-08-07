@@ -58,6 +58,12 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error
 	// The response is delivered; hold the loop (and the sandbox) open until the
 	// JS side reports every waitUntil promise has settled.
 	m.awaitCompletion(ctx, inv.lc.AwsRequestID, waiter)
+
+	// The user has been served and the background tasks have settled, so what
+	// this costs is billed duration rather than anyone's latency. It happens on
+	// the first invocation only — that is when the compile cache is at its
+	// fullest relative to what it cost to produce.
+	m.uploadBytecodeCacheOnce(ctx)
 	return nil
 }
 

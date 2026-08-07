@@ -2,12 +2,20 @@ package main
 
 import (
 	"archive/tar"
+	"bufio"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"crypto/rand"
+	"errors"
+	"fmt"
 	"io"
+	"net"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 )
 
 func TestBytecodeCacheKey(t *testing.T) {
@@ -250,4 +258,459 @@ func TestExceedsBytecodeCacheCeiling(t *testing.T) {
 			}
 		})
 	}
+}
+
+// fakeBytecodeStore stands in for S3, recording what the upload asked of it so
+// a test can assert on the exact bucket and key rather than on the fact that a
+// method was called.
+type fakeBytecodeStore struct {
+	mu      sync.Mutex
+	exists  bool
+	headErr error
+	putErr  error
+	heads   []string
+	puts    []fakePut
+}
+
+type fakePut struct {
+	bucket string
+	key    string
+	body   []byte
+}
+
+func (f *fakeBytecodeStore) objectExists(_ context.Context, bucket, key string) (bool, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.heads = append(f.heads, bucket+"/"+key)
+	return f.exists, f.headErr
+}
+
+func (f *fakeBytecodeStore) putObject(_ context.Context, bucket, key string, body []byte) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.puts = append(f.puts, fakePut{bucket: bucket, key: key, body: body})
+	return f.putErr
+}
+
+// cacheDirWith writes a compile cache directory with one file in it and
+// returns the path, which is what node's flush ack would name.
+func cacheDirWith(t *testing.T, contents string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "cached.blob"), []byte(contents), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+// uploadFixture assembles an upload whose flush ack, node version and S3 are
+// all under the test's control, and reports how many times the flush was asked
+// for.
+func uploadFixture(store bytecodeStore, ack compileCacheFlushedPayload, ackOK bool) (*bytecodeUpload, *int) {
+	flushes := 0
+	u := &bytecodeUpload{
+		store:    store,
+		bucket:   "assets-xyz",
+		prefix:   "ocel",
+		function: "my-app",
+		arch:     "arm64",
+		flush: func(context.Context) (compileCacheFlushedPayload, bool) {
+			flushes++
+			return ack, ackOK
+		},
+		nodeVersion: func(context.Context) (string, error) { return "v24.3.1", nil },
+	}
+	return u, &flushes
+}
+
+func TestBytecodeUpload_PutsToTheComposedBucketAndKey(t *testing.T) {
+	dir := cacheDirWith(t, "compiled bytes")
+	store := &fakeBytecodeStore{}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
+
+	u.run(context.Background())
+
+	if len(store.heads) != 1 || store.heads[0] != "assets-xyz/ocel/bytecode/my-app/node24-arm64.tar.gz" {
+		t.Fatalf("heads = %v, want a single head of the composed key", store.heads)
+	}
+	if len(store.puts) != 1 {
+		t.Fatalf("puts = %d, want 1", len(store.puts))
+	}
+	put := store.puts[0]
+	if put.bucket != "assets-xyz" || put.key != "ocel/bytecode/my-app/node24-arm64.tar.gz" {
+		t.Errorf("put to %s/%s, want assets-xyz/ocel/bytecode/my-app/node24-arm64.tar.gz", put.bucket, put.key)
+	}
+	if got := readArchive(t, put.body); got["cached.blob"] != "compiled bytes" {
+		t.Errorf("uploaded archive = %v, want it to carry the cache directory's contents", got)
+	}
+}
+
+func TestBytecodeUpload_SkipsThePutWhenTheObjectAlreadyExists(t *testing.T) {
+	dir := cacheDirWith(t, "compiled bytes")
+	store := &fakeBytecodeStore{exists: true}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
+
+	u.run(context.Background())
+
+	if len(store.heads) != 1 {
+		t.Errorf("heads = %v, want the key to have been checked", store.heads)
+	}
+	if len(store.puts) != 0 {
+		t.Errorf("puts = %v, want none once the object exists", store.puts)
+	}
+}
+
+// A flush that node could not honour — an old runtime, or no cache written —
+// means there is nothing on disk worth uploading, so S3 is never touched.
+func TestBytecodeUpload_SkipsWhenTheFlushAckIsNotOK(t *testing.T) {
+	cases := []struct {
+		name  string
+		ack   compileCacheFlushedPayload
+		ackOK bool
+	}{
+		{name: "node answered not-ok", ack: compileCacheFlushedPayload{OK: false}, ackOK: true},
+		{name: "node never answered", ackOK: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakeBytecodeStore{}
+			u, _ := uploadFixture(store, tc.ack, tc.ackOK)
+
+			u.run(context.Background())
+
+			if len(store.heads) != 0 || len(store.puts) != 0 {
+				t.Errorf("touched S3 (heads=%v puts=%v), want nothing without a usable flush", store.heads, store.puts)
+			}
+		})
+	}
+}
+
+// The deadline is already inside the margin the runtime needs to call /next, so
+// there is no time to spend and the attempt never starts — not even the flush,
+// which would hold the loop open on a child that owes the platform an answer.
+func TestBytecodeUpload_SkipsEntirelyWhenTheBudgetIsNonPositive(t *testing.T) {
+	store := &fakeBytecodeStore{}
+	u, flushes := uploadFixture(store, compileCacheFlushedPayload{Dir: t.TempDir(), OK: true}, true)
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin/2))
+	defer cancel()
+	u.run(ctx)
+
+	if *flushes != 0 {
+		t.Errorf("flushes = %d, want the child left alone", *flushes)
+	}
+	if len(store.heads) != 0 || len(store.puts) != 0 {
+		t.Errorf("touched S3 (heads=%v puts=%v), want nothing", store.heads, store.puts)
+	}
+}
+
+func TestBytecodeUpload_SkipsWhenTheNodeVersionCannotBeRead(t *testing.T) {
+	cases := []struct {
+		name    string
+		version string
+		err     error
+	}{
+		{name: "the binary would not run", err: errors.New("exec format error")},
+		{name: "the output is not a version", version: "not-a-version"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store := &fakeBytecodeStore{}
+			u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
+			u.nodeVersion = func(context.Context) (string, error) { return tc.version, tc.err }
+
+			u.run(context.Background())
+
+			if len(store.heads) != 0 || len(store.puts) != 0 {
+				t.Errorf("touched S3 (heads=%v puts=%v), want no upload under an unknown major", store.heads, store.puts)
+			}
+		})
+	}
+}
+
+// An empty cache directory is the shape of a function whose /tmp was wiped or
+// whose flush produced nothing; uploading an empty archive would poison every
+// later instance that rehydrated from it.
+func TestBytecodeUpload_SkipsAnEmptyCacheDirectory(t *testing.T) {
+	store := &fakeBytecodeStore{}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: t.TempDir(), OK: true}, true)
+
+	u.run(context.Background())
+
+	if len(store.heads) != 0 || len(store.puts) != 0 {
+		t.Errorf("touched S3 (heads=%v puts=%v), want nothing to upload", store.heads, store.puts)
+	}
+}
+
+func TestBytecodeUpload_SkipsWhenTheArchiveIsOverTheCeiling(t *testing.T) {
+	dir := t.TempDir()
+	// Incompressible, so the archive is genuinely over the uncompressed ceiling.
+	big := make([]byte, bytecodeCacheCeiling+1)
+	if _, err := rand.Read(big); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "big.blob"), big, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	store := &fakeBytecodeStore{}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
+
+	u.run(context.Background())
+
+	if len(store.puts) != 0 {
+		t.Errorf("puts = %v, want none over the ceiling", store.puts)
+	}
+}
+
+// Nothing S3 says can reach the invocation, which has already been answered by
+// the time this runs. A failure is a log line and the end of the attempt.
+func TestBytecodeUpload_SwallowsStoreErrors(t *testing.T) {
+	cases := []struct {
+		name  string
+		store *fakeBytecodeStore
+	}{
+		{name: "head fails", store: &fakeBytecodeStore{headErr: errors.New("access denied")}},
+		{name: "put fails", store: &fakeBytecodeStore{putErr: errors.New("slow down")}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			u, _ := uploadFixture(tc.store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
+			u.run(context.Background()) // must simply return
+		})
+	}
+}
+
+// The same context bounds the flush, the HEAD and the PUT, so an S3 call that
+// hangs is cancelled at the budget rather than running past the deadline the
+// platform is about to enforce.
+func TestBytecodeUpload_BoundsTheStoreCallsByTheBudget(t *testing.T) {
+	store := &blockingBytecodeStore{}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin+50*time.Millisecond))
+	defer cancel()
+
+	start := time.Now()
+	u.run(ctx)
+	if elapsed := time.Since(start); elapsed > time.Second {
+		t.Errorf("took %s, want the store call cancelled at the budget", elapsed)
+	}
+}
+
+// blockingBytecodeStore never answers, so only the context can end the call.
+type blockingBytecodeStore struct{}
+
+func (blockingBytecodeStore) objectExists(ctx context.Context, _, _ string) (bool, error) {
+	<-ctx.Done()
+	return false, ctx.Err()
+}
+
+func (blockingBytecodeStore) putObject(ctx context.Context, _, _ string, _ []byte) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestUploadBytecodeCacheOnce_RunsAtMostOncePerInstance(t *testing.T) {
+	dir := cacheDirWith(t, "compiled bytes")
+	store := &fakeBytecodeStore{}
+	u, flushes := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
+	m := &Membrane{bytecode: u}
+
+	for range 3 {
+		m.uploadBytecodeCacheOnce(context.Background())
+	}
+
+	if *flushes != 1 {
+		t.Errorf("flushes = %d, want 1", *flushes)
+	}
+	if len(store.puts) != 1 {
+		t.Errorf("puts = %d, want 1", len(store.puts))
+	}
+}
+
+// A failed attempt is still an attempt: the instance has shown it cannot
+// publish, and retrying would spend the next invocation's billed time on it.
+func TestUploadBytecodeCacheOnce_DoesNotRetryAfterAFailure(t *testing.T) {
+	store := &fakeBytecodeStore{putErr: errors.New("access denied")}
+	u, flushes := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
+	m := &Membrane{bytecode: u}
+
+	m.uploadBytecodeCacheOnce(context.Background())
+	m.uploadBytecodeCacheOnce(context.Background())
+
+	if *flushes != 1 {
+		t.Errorf("flushes = %d, want 1", *flushes)
+	}
+}
+
+func TestUploadBytecodeCacheOnce_NoOpsForAnUnconfiguredFunction(t *testing.T) {
+	m := &Membrane{}
+	m.uploadBytecodeCacheOnce(context.Background()) // must not panic
+}
+
+func TestCompileCacheEnv(t *testing.T) {
+	t.Run("gate closed", func(t *testing.T) {
+		t.Setenv(bytecodePrefixEnvVar, "")
+		if got := compileCacheEnv(); got != nil {
+			t.Errorf("compileCacheEnv() = %v, want nil with no prefix configured", got)
+		}
+	})
+	t.Run("gate open", func(t *testing.T) {
+		t.Setenv(bytecodePrefixEnvVar, "ocel")
+		want := []string{"NODE_COMPILE_CACHE=/tmp/.ocel/compile-cache"}
+		got := compileCacheEnv()
+		if len(got) != 1 || got[0] != want[0] {
+			t.Errorf("compileCacheEnv() = %v, want %v", got, want)
+		}
+	})
+}
+
+// The gate and its neighbours are read before any AWS config is loaded, so a
+// function missing one of them never constructs a client at all.
+func TestResolveBytecodeUpload_NilWhenNotFullyConfigured(t *testing.T) {
+	cases := []struct {
+		name     string
+		prefix   string
+		bucket   string
+		function string
+	}{
+		{name: "no prefix", bucket: "assets", function: "my-app"},
+		{name: "no bucket", prefix: "ocel", function: "my-app"},
+		{name: "no function name", prefix: "ocel", bucket: "assets"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv(bytecodePrefixEnvVar, tc.prefix)
+			t.Setenv("OCEL_ISR_BUCKET", tc.bucket)
+			t.Setenv("AWS_LAMBDA_FUNCTION_NAME", tc.function)
+			if got := resolveBytecodeUpload(context.Background(), nil); got != nil {
+				t.Errorf("resolveBytecodeUpload() = %+v, want nil", got)
+			}
+		})
+	}
+}
+
+// controlConnPair wires a Membrane to a stand-in for the node child over a real
+// connection, with the drain loop running exactly as startNode runs it.
+func controlConnPair(t *testing.T) (*Membrane, *bufio.Reader, net.Conn) {
+	t.Helper()
+	membraneSide, nodeSide := net.Pipe()
+	t.Cleanup(func() { membraneSide.Close(); nodeSide.Close() })
+	m := &Membrane{control: membraneSide}
+	go m.drainControl(bufio.NewReader(membraneSide))
+	return m, bufio.NewReader(nodeSide), nodeSide
+}
+
+func TestFlushCompileCache_DeliversTheAckToTheWaiter(t *testing.T) {
+	m, nodeReader, nodeConn := controlConnPair(t)
+	go func() {
+		line, err := nodeReader.ReadString('\n')
+		if err != nil {
+			return
+		}
+		if line != flushCompileCacheLine {
+			t.Errorf("node received %q, want %q", line, flushCompileCacheLine)
+		}
+		fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":"/tmp/.ocel/compile-cache","ok":true}}`)
+	}()
+
+	ack, ok := m.flushCompileCache(context.Background())
+	if !ok {
+		t.Fatal("flushCompileCache() ok = false, want the ack delivered")
+	}
+	if ack.Dir != "/tmp/.ocel/compile-cache" || !ack.OK {
+		t.Errorf("ack = %+v, want the dir and ok node reported", ack)
+	}
+}
+
+// Node reports a null dir when it has no compile cache API at all, which must
+// read as not-ok rather than as a directory named "null".
+func TestFlushCompileCache_CarriesANullDirAsNotOK(t *testing.T) {
+	m, nodeReader, nodeConn := controlConnPair(t)
+	go func() {
+		if _, err := nodeReader.ReadString('\n'); err != nil {
+			return
+		}
+		fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":null,"ok":false}}`)
+	}()
+
+	ack, ok := m.flushCompileCache(context.Background())
+	if !ok {
+		t.Fatal("flushCompileCache() ok = false, want the ack delivered")
+	}
+	if ack.Dir != "" || ack.OK {
+		t.Errorf("ack = %+v, want an empty dir and ok=false", ack)
+	}
+}
+
+// A wedged child must not hold the runtime loop off /next, so the wait ends on
+// the caller's context even before the flush cap would fire.
+func TestFlushCompileCache_GivesUpWhenTheChildNeverAnswers(t *testing.T) {
+	m, nodeReader, _ := controlConnPair(t)
+	go nodeReader.ReadString('\n') // read the request, answer nothing
+
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	start := time.Now()
+	if _, ok := m.flushCompileCache(ctx); ok {
+		t.Error("flushCompileCache() ok = true, want a give-up")
+	}
+	if elapsed := time.Since(start); elapsed > compileCacheFlushTimeout {
+		t.Errorf("took %s, want the context to end the wait early", elapsed)
+	}
+}
+
+func TestFlushCompileCache_NoOpsWithoutAControlConnection(t *testing.T) {
+	m := &Membrane{}
+	if _, ok := m.flushCompileCache(context.Background()); ok {
+		t.Error("flushCompileCache() ok = true, want false with no child attached")
+	}
+}
+
+// An ack nobody is waiting for (the waiter timed out, or node volunteered one)
+// must not wedge the drain loop, which also carries invocation-complete.
+func TestDrainControl_DropsAnUnawaitedFlushAck(t *testing.T) {
+	m, _, nodeConn := controlConnPair(t)
+	m.pending = map[string]chan struct{}{}
+	waiter := m.registerWaiter("req-1")
+
+	fmt.Fprintln(nodeConn, `{"type":"compile-cache-flushed","payload":{"dir":"/tmp/x","ok":true}}`)
+	fmt.Fprintln(nodeConn, `{"type":"invocation-complete","payload":{"requestId":"req-1"}}`)
+
+	select {
+	case <-waiter:
+	case <-time.After(2 * time.Second):
+		t.Fatal("drain loop stalled on an ack with no waiter")
+	}
+}
+
+func TestBytecodeBudget(t *testing.T) {
+	t.Run("no deadline yields the cap", func(t *testing.T) {
+		if got := bytecodeBudget(context.Background()); got != bytecodeUploadBudget {
+			t.Errorf("bytecodeBudget() = %s, want %s", got, bytecodeUploadBudget)
+		}
+	})
+	t.Run("a distant deadline is capped", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(time.Minute))
+		defer cancel()
+		if got := bytecodeBudget(ctx); got != bytecodeUploadBudget {
+			t.Errorf("bytecodeBudget() = %s, want %s", got, bytecodeUploadBudget)
+		}
+	})
+	t.Run("a near deadline leaves the completion margin", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin+time.Second))
+		defer cancel()
+		got := bytecodeBudget(ctx)
+		if got <= 0 || got > time.Second {
+			t.Errorf("bytecodeBudget() = %s, want a positive budget under 1s", got)
+		}
+	})
+	t.Run("a deadline inside the margin yields nothing", func(t *testing.T) {
+		ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin/2))
+		defer cancel()
+		if got := bytecodeBudget(ctx); got > 0 {
+			t.Errorf("bytecodeBudget() = %s, want a non-positive budget", got)
+		}
+	})
 }

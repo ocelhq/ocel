@@ -4,12 +4,22 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
+	"strings"
+	"time"
+
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
 // bytecodeCacheCeiling bounds what the membrane will upload: an S3 PUT that
@@ -131,4 +141,194 @@ func buildBytecodeArchive(dir string) (bytecodeArchive, error) {
 		return bytecodeArchive{}, fmt.Errorf("close bytecode archive gzip: %w", err)
 	}
 	return bytecodeArchive{Data: buf.Bytes(), UncompressedSize: total}, nil
+}
+
+// compileCacheDir is where node is told to write its V8 compile cache. It sits
+// under /tmp because that is the only writable path in the sandbox, and it is
+// namespaced so nothing else the function writes there can be swept into the
+// archive.
+const compileCacheDir = "/tmp/.ocel/compile-cache"
+
+// bytecodePrefixEnvVar is the whole gate. A deployment that does not set it gets
+// no compile cache at all — not the upload, not even NODE_COMPILE_CACHE on the
+// child — so the feature is off until a deploy turns it on.
+const bytecodePrefixEnvVar = "OCEL_BYTECODE_PREFIX"
+
+// bytecodeUploadBudget caps what the upload may spend after an invocation is
+// already served. It is billed duration, not request latency, but the sandbox is
+// still holding the runtime loop off /next, so the cap is short and the
+// invocation deadline shortens it further.
+const bytecodeUploadBudget = 2 * time.Second
+
+// compileCacheFlushTimeout bounds the wait for node's flush ack. A child that
+// never answers is a child that is wedged, and the loop must not join it there.
+const compileCacheFlushTimeout = time.Second
+
+// compileCacheEnv is what node is told at exec, and only when the gate is open.
+// Node reads NODE_COMPILE_CACHE at startup and ignores it on versions that do
+// not know it, which is what makes an old runtime degrade without a version
+// check anywhere.
+func compileCacheEnv() []string {
+	if os.Getenv(bytecodePrefixEnvVar) == "" {
+		return nil
+	}
+	return []string{"NODE_COMPILE_CACHE=" + compileCacheDir}
+}
+
+// bytecodeStore is the S3 surface the upload needs, and nothing more: does the
+// object already exist, and write it if not. Narrowing it to two calls is what
+// lets every test here run against a fake with no AWS client, config or
+// credentials in reach.
+type bytecodeStore interface {
+	objectExists(ctx context.Context, bucket, key string) (bool, error)
+	putObject(ctx context.Context, bucket, key string, body []byte) error
+}
+
+type s3BytecodeStore struct{ client *s3.Client }
+
+func (s s3BytecodeStore) objectExists(ctx context.Context, bucket, key string) (bool, error) {
+	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{Bucket: &bucket, Key: &key})
+	if err != nil {
+		var notFound *s3types.NotFound
+		if errors.As(err, &notFound) {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
+func (s s3BytecodeStore) putObject(ctx context.Context, bucket, key string, body []byte) error {
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket: &bucket,
+		Key:    &key,
+		Body:   bytes.NewReader(body),
+	})
+	return err
+}
+
+// bytecodeUpload is the once-per-instance publish of this function's compile
+// cache. Every dependency it has on the outside world is a field, so the whole
+// sequence is exercisable without a node child, an AWS client or the
+// environment.
+type bytecodeUpload struct {
+	store       bytecodeStore
+	bucket      string
+	prefix      string
+	function    string
+	arch        string
+	flush       func(ctx context.Context) (compileCacheFlushedPayload, bool)
+	nodeVersion func(ctx context.Context) (string, error)
+}
+
+// run publishes the cache, or gives up. Nothing it does can fail an invocation:
+// every leg that can go wrong ends the attempt with a line on stderr, because a
+// warm start that never gets a cache is strictly better than a request that
+// pays for one.
+func (u bytecodeUpload) run(ctx context.Context) {
+	budget := bytecodeBudget(ctx)
+	if budget <= 0 {
+		fmt.Fprintln(os.Stderr, "ocel: no time left to publish the compile cache; skipping")
+		return
+	}
+	ctx, cancel := context.WithTimeout(ctx, budget)
+	defer cancel()
+
+	ack, ok := u.flush(ctx)
+	if !ok || !ack.OK {
+		return
+	}
+
+	version, err := u.nodeVersion(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not read node's version, skipping compile cache upload: %v\n", err)
+		return
+	}
+	major, err := nodeMajor(version)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: %v, skipping compile cache upload\n", err)
+		return
+	}
+
+	archive, err := buildBytecodeArchive(ack.Dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not archive the compile cache: %v\n", err)
+		return
+	}
+	if archive.UncompressedSize == 0 {
+		return
+	}
+	if exceedsBytecodeCacheCeiling(archive.UncompressedSize) {
+		fmt.Fprintf(os.Stderr, "ocel: compile cache is %d bytes, over the %d byte ceiling; skipping upload\n",
+			archive.UncompressedSize, bytecodeCacheCeiling)
+		return
+	}
+
+	key := bytecodeCacheKey(u.prefix, u.function, major, u.arch)
+	exists, err := u.store.objectExists(ctx, u.bucket, key)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not check for an existing compile cache at %s: %v\n", key, err)
+		return
+	}
+	if exists {
+		return
+	}
+	if err := u.store.putObject(ctx, u.bucket, key, archive.Data); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not upload the compile cache to %s: %v\n", key, err)
+	}
+}
+
+// bytecodeBudget is what the upload may spend: the cap, or whatever is left
+// before the invocation deadline minus the margin the runtime needs to call
+// /next, whichever is smaller. A non-positive result means the deadline is
+// already too close to start at all.
+func bytecodeBudget(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return bytecodeUploadBudget
+	}
+	if remaining := time.Until(deadline) - completionMargin; remaining < bytecodeUploadBudget {
+		return remaining
+	}
+	return bytecodeUploadBudget
+}
+
+// nodeVersionFromBinary asks the same binary the child was exec'd from what
+// version it is. It runs off the request path, once per instance at most, so
+// the process it costs is paid by an invocation that has already been answered
+// — and it is bounded by the upload's context, so a wedged exec cannot outlive
+// the budget.
+func nodeVersionFromBinary(ctx context.Context) (string, error) {
+	out, err := exec.CommandContext(ctx, nodeBinaryPath, "--version").Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+// resolveBytecodeUpload builds the upload this deployment is configured for, or
+// nil for one that is configured for none. Nil is the off switch every caller
+// checks, so an unset prefix, a missing bucket or an AWS config that will not
+// load all land in the same place: the membrane simply never tries.
+func resolveBytecodeUpload(ctx context.Context, flush func(context.Context) (compileCacheFlushedPayload, bool)) *bytecodeUpload {
+	prefix := os.Getenv(bytecodePrefixEnvVar)
+	bucket := os.Getenv("OCEL_ISR_BUCKET")
+	function := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
+	if prefix == "" || bucket == "" || function == "" {
+		return nil
+	}
+	cfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: no aws config for the compile cache upload: %v\n", err)
+		return nil
+	}
+	return &bytecodeUpload{
+		store:       s3BytecodeStore{client: s3.NewFromConfig(cfg)},
+		bucket:      bucket,
+		prefix:      prefix,
+		function:    function,
+		arch:        runtime.GOARCH,
+		flush:       flush,
+		nodeVersion: nodeVersionFromBinary,
+	}
 }

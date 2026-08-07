@@ -49,6 +49,8 @@ func main() {
 		fatalInit(err.Error())
 	}
 
+	membrane.bytecode = resolveBytecodeUpload(ctx, membrane.flushCompileCache)
+
 	rt := newRuntimeClient(os.Getenv("AWS_LAMBDA_RUNTIME_API"))
 	for {
 		if err := handleInvocation(ctx, rt, membrane); err != nil {
