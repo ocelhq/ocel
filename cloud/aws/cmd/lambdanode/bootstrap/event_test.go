@@ -92,6 +92,56 @@ func TestBuildLoopbackRequest_PathQueryHeadersCookies(t *testing.T) {
 	}
 }
 
+// The app derives its own origin from the Host it observes, so the request that
+// reaches it must carry the authority the client addressed — not the loopback
+// one. Go takes that from req.Host and ignores Header["Host"].
+func TestBuildLoopbackRequest_HostIsThePublicAuthority(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		want    string
+	}{
+		{
+			name:    "forwarded host wins",
+			headers: map[string]string{"x-forwarded-host": "app.ocel.site", "host": "abc.lambda-url.us-east-1.on.aws"},
+			want:    "app.ocel.site",
+		},
+		{
+			name:    "first forwarded host of a list",
+			headers: map[string]string{"x-forwarded-host": "app.ocel.site, proxy.internal"},
+			want:    "app.ocel.site",
+		},
+		{
+			name:    "falls back to host",
+			headers: map[string]string{"host": "abc.lambda-url.us-east-1.on.aws"},
+			want:    "abc.lambda-url.us-east-1.on.aws",
+		},
+		{
+			name:    "empty forwarded host falls back",
+			headers: map[string]string{"x-forwarded-host": "", "host": "abc.lambda-url.us-east-1.on.aws"},
+			want:    "abc.lambda-url.us-east-1.on.aws",
+		},
+		{
+			name:    "no authority header leaves the loopback host",
+			headers: map[string]string{},
+			want:    "127.0.0.1:4321",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := &funcURLRequest{RawPath: "/", Headers: tc.headers}
+			ev.RequestContext.HTTP.Method = "GET"
+
+			req, err := buildLoopbackRequest(t.Context(), 4321, ev)
+			if err != nil {
+				t.Fatalf("buildLoopbackRequest: %v", err)
+			}
+			if req.Host != tc.want {
+				t.Errorf("req.Host = %q, want %q", req.Host, tc.want)
+			}
+		})
+	}
+}
+
 func TestEncodePrelude_JSONThenEightNullBytes(t *testing.T) {
 	h := http.Header{}
 	h.Set("Content-Type", "text/event-stream")

@@ -114,6 +114,30 @@ func TestHandleInvocation_StreamsPreludeAndBody(t *testing.T) {
 	}
 }
 
+// What the app process behind the loopback actually reads off the wire: the
+// public authority, so nextUrl.origin and headers().get('host') are right and
+// an absolute Location can never name the ephemeral loopback port.
+func TestHandleInvocation_NodeObservesThePublicHost(t *testing.T) {
+	var observed string
+	node := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		observed = r.Host
+		io.WriteString(w, "ok")
+	}))
+	defer node.Close()
+
+	event := `{"version":"2.0","rawPath":"/","requestContext":{"http":{"method":"GET"}},` +
+		`"headers":{"host":"abc.lambda-url.us-east-1.on.aws","x-forwarded-host":"app.ocel.site"}}`
+	rt, _ := fakeRuntime(t, []byte(event))
+	m := &Membrane{nodePort: portOf(t, node), client: newLoopbackClient()}
+
+	if err := handleInvocation(t.Context(), rt, m); err != nil {
+		t.Fatalf("handleInvocation: %v", err)
+	}
+	if observed != "app.ocel.site" {
+		t.Errorf("node observed Host = %q, want app.ocel.site", observed)
+	}
+}
+
 // Every status Go's http.Client would otherwise follow on its own. The app owns
 // its redirects — NextResponse.redirect (307), permanentRedirect (308), a
 // next.config redirect (301/308), an auth guard (302/303) — so each must arrive
