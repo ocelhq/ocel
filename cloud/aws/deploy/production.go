@@ -178,7 +178,15 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	// safe against the upload leg's create-if-absent semantics: an organic cold
 	// start that wins that race publishes whatever fraction of the app it
 	// happened to compile, permanently, for the life of the build.
-	warmDeployedFunctions(ctx, cfg, manifest, appFunctionNames, log)
+	warmed := warmDeployedFunctions(ctx, cfg, manifest, appFunctionNames, log)
+
+	// Embedding follows warming for the obvious reason — it has nothing to embed
+	// until the caches exist, and only the warm summaries carry the keys they
+	// were published under — and stays before the promote for the same reason
+	// warming does: it re-points functions at new code, and no traffic may see a
+	// function mid-update. It is opt-in and cannot fail a deploy; a bundle it
+	// skips keeps the package it was warmed on.
+	embedBytecodeCaches(ctx, cfg, manifest, artifacts, warmed, log)
 
 	progress.report(deploymentsv1.Phase_PHASE_FINALIZING, "Staging and promoting", 0, 0)
 	if err := stageAndPromote(ctx, cfg, stack, state, promotionID, cfg.Tag, promotePointer(cfg), time.Now().Unix(), results); err != nil {

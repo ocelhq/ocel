@@ -57,12 +57,13 @@ type FunctionInvoker interface {
 // names as they came back from it — an app whose stack failed contributes none,
 // so a doomed deploy spends nothing here.
 //
-// It returns nothing and swallows what it cannot do, including a cache
+// It returns no error and swallows what it cannot do, including a cache
 // derivation that fails: warming is an optimization, and the caller is one step
-// from the promote.
-func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, appFunctionNames []map[string]string, log func(string)) {
+// from the promote. What it does return is each bundle's summary, for the embed
+// pass that may follow.
+func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, appFunctionNames []map[string]string, log func(string)) []warmResult {
 	if cfg.Invoker == nil {
-		return
+		return nil
 	}
 	if log == nil {
 		log = func(string) {}
@@ -70,7 +71,7 @@ func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deployment
 	caches, err := appCaches(cfg, manifest)
 	if err != nil {
 		log(fmt.Sprintf("ocel: could not work out which bundles to warm: %v", err))
-		return
+		return nil
 	}
 	names := map[string]string{}
 	for _, app := range appFunctionNames {
@@ -78,7 +79,7 @@ func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deployment
 			names[logical] = physical
 		}
 	}
-	warmPass{
+	return warmPass{
 		invoker: cfg.Invoker,
 		targets: warmTargets(manifest, caches, names),
 		budget:  warmPassDeadline,
@@ -127,17 +128,20 @@ type warmPass struct {
 	log     func(string)
 }
 
-// run warms every target, or says why it did not. It returns nothing on
-// purpose: every leg that can go wrong — a throttle, a timeout, a PUT error, a
-// response that does not parse — ends as a warning line, because a deploy that
-// fails because a cache did not warm is worse than a slow cold start.
+// run warms every target, or says why it did not, and hands back what each
+// bundle answered. It returns no error on purpose: every leg that can go wrong
+// — a throttle, a timeout, a PUT error, a response that does not parse — ends
+// as a warning line, because a deploy that fails because a cache did not warm
+// is worse than a slow cold start. The summaries are returned only because the
+// embed pass that may follow needs the key and version the membrane resolved,
+// which this side has no other way to learn.
 //
 // Bundles the deadline cuts off are named rather than dropped: an unwarmed
 // bundle is a cold start the first real request pays for, and this output is
 // the only place that ever surfaces.
-func (p warmPass) run(ctx context.Context) {
+func (p warmPass) run(ctx context.Context) []warmResult {
 	if len(p.targets) == 0 || p.invoker == nil {
-		return
+		return nil
 	}
 	p.log(fmt.Sprintf("ocel: warming %s (%d at a time)", plural(len(p.targets), "bundle", "bundles"), warmConcurrency))
 
@@ -149,6 +153,7 @@ func (p warmPass) run(ctx context.Context) {
 		mu      sync.Mutex
 		warmed  int
 		skipped = make([]bool, len(p.targets))
+		replies = make([]warmReply, len(p.targets))
 	)
 	var g errgroup.Group
 	g.SetLimit(warmConcurrency)
@@ -162,7 +167,8 @@ func (p warmPass) run(ctx context.Context) {
 				return nil
 			}
 			at := time.Now()
-			outcome, ok := p.warmOne(ctx, target)
+			outcome, reply, ok := p.warmOne(ctx, target)
+			replies[i] = reply
 			mu.Lock()
 			defer mu.Unlock()
 			if ok {
@@ -174,12 +180,23 @@ func (p warmPass) run(ctx context.Context) {
 	}
 	_ = g.Wait() // warmOne returns no error, so Wait cannot.
 
+	var results []warmResult
 	for i, target := range p.targets {
 		if skipped[i] {
 			p.log(fmt.Sprintf("  %s app=%s  the warm pass ran out of time; not warmed", target.LogicalName, target.App))
+			continue
 		}
+		results = append(results, warmResult{Target: target, Reply: replies[i]})
 	}
 	p.log(fmt.Sprintf("ocel: warmed %d/%d bundles in %.0fs", warmed, len(p.targets), time.Since(start).Seconds()))
+	return results
+}
+
+// warmResult pairs a bundle with what its membrane answered, which is the only
+// place the deploy ever learns the cache key node's actual version resolved to.
+type warmResult struct {
+	Target warmTarget
+	Reply  warmReply
 }
 
 func plural(n int, one, many string) string {
@@ -190,32 +207,45 @@ func plural(n int, one, many string) string {
 }
 
 // warmOne invokes one bundle and reduces the answer to the line the deploy
-// reports it under, plus whether the bundle now has a full cache.
-func (p warmPass) warmOne(ctx context.Context, target warmTarget) (string, bool) {
-	out, err := p.invoker.Invoke(ctx, &lambda.InvokeInput{
-		FunctionName:   aws.String(target.FunctionName),
+// reports it under, the summary it answered with, and whether the bundle now
+// has a full cache.
+func (p warmPass) warmOne(ctx context.Context, target warmTarget) (string, warmReply, bool) {
+	reply, failure := invokeWarm(ctx, p.invoker, target.FunctionName)
+	if failure != "" {
+		return failure, warmReply{}, false
+	}
+	outcome, ok := reply.report()
+	return outcome, reply, ok
+}
+
+// invokeWarm sends one warm payload and returns the membrane's summary, or —
+// when the invocation itself did not produce one — the line the deploy reports
+// that failure under. The embed pass verifies itself with the same invoke, so
+// the two share this rather than each spelling out what a throttle looks like.
+func invokeWarm(ctx context.Context, invoker FunctionInvoker, functionName string) (warmReply, string) {
+	out, err := invoker.Invoke(ctx, &lambda.InvokeInput{
+		FunctionName:   aws.String(functionName),
 		InvocationType: lambdatypes.InvocationTypeRequestResponse,
 		Payload:        []byte(warmPayload),
 	})
 	if err != nil {
 		var throttled *lambdatypes.TooManyRequestsException
 		if errors.As(err, &throttled) {
-			return "throttled; not warmed", false
+			return warmReply{}, "throttled; not warmed"
 		}
-		return fmt.Sprintf("invoke failed: %v; not warmed", err), false
+		return warmReply{}, fmt.Sprintf("invoke failed: %v; not warmed", err)
 	}
 	if fnErr := aws.ToString(out.FunctionError); fnErr != "" {
-		return fmt.Sprintf("the function errored (%s); not warmed", fnErr), false
+		return warmReply{}, fmt.Sprintf("the function errored (%s); not warmed", fnErr)
 	}
 	if out.StatusCode < 200 || out.StatusCode >= 300 {
-		return fmt.Sprintf("lambda answered %d; not warmed", out.StatusCode), false
+		return warmReply{}, fmt.Sprintf("lambda answered %d; not warmed", out.StatusCode)
 	}
-
 	reply, err := parseWarmReply(out.Payload)
 	if err != nil {
-		return fmt.Sprintf("unreadable warm response: %v; not warmed", err), false
+		return warmReply{}, fmt.Sprintf("unreadable warm response: %v; not warmed", err)
 	}
-	return reply.report()
+	return reply, ""
 }
 
 // The membrane's four states, spelled here rather than shared with it: these
@@ -228,6 +258,19 @@ const (
 	warmStateDisabled      = "disabled"
 	warmStateFailed        = "failed"
 )
+
+// warmSource is where the membrane says it got this instance's compile cache.
+// warmSourceEmbedded is the one value this side tests for; the membrane's other
+// two ("s3", "none") are reported verbatim rather than matched. A local hit and
+// an S3 hit both report already-cached, so this field is the only thing that
+// can tell an embed that landed from one that silently did not.
+//
+// Named for the same reason the membrane's own bytecodeSource is: the wire
+// spelling is deliberately duplicated across the two modules rather than
+// shared, and the type is what keeps each side's uses of its own copy checked.
+type warmSource string
+
+const warmSourceEmbedded warmSource = "embedded"
 
 // parseWarmReply finds the summary in an invoke's response payload.
 //
@@ -278,6 +321,7 @@ type warmReply struct {
 	Uncounted    string            `json:"uncounted"`
 	Bytes        int64             `json:"bytes"`
 	Key          string            `json:"key"`
+	Source       warmSource        `json:"source"`
 	Uploaded     bool              `json:"uploaded"`
 	Error        string            `json:"error"`
 }

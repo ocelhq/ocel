@@ -299,6 +299,8 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 
 		Uploader:       s3.NewFromConfig(awscfg),
 		Invoker:        lambda.NewFromConfig(awscfg),
+		Getter:         s3.NewFromConfig(awscfg),
+		CodeUpdater:    lambda.NewFromConfig(awscfg),
 		Edge:           cloudflare.New(),
 		Class:          env.GetClass(),
 		Lifecycle:      env.GetLifecycle(),

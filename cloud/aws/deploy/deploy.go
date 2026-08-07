@@ -130,6 +130,14 @@ type Config struct {
 	// anyway — so a caller that wires none deploys exactly as before.
 	Invoker FunctionInvoker
 
+	// Getter and CodeUpdater are what the embed pass (see embed.go) needs on top
+	// of Uploader and Invoker: one reads the published cache and the deployed
+	// package back, the other moves a function onto the repackaged one. Nil
+	// leaves embedding off entirely, which is also what OCEL_BYTECODE_EMBED does
+	// by default — every bundle then fetches its cache from S3 as before.
+	Getter      ObjectGetter
+	CodeUpdater FunctionCodeUpdater
+
 	// AssetBucket is the account-global S3 bucket (from bootstrap) prerender
 	// configs + fallbacks are uploaded to, keyed by build id. Empty when the
 	// bootstrap predates it.

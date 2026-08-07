@@ -70,6 +70,14 @@ const (
 	// to turn it off — the literal "0", mirroring no other spelling.
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
 
+	// bytecodeEmbedEnv opts a deploy into embedding each bundle's compile cache
+	// in its own deployment package (see embed.go), so a cold start reads it
+	// from /var/task instead of S3. The default is inverted from
+	// bytecodeCacheEnv's: embedding trades network for package size, and which
+	// way that trade lands depends on the bundle, so it is off until asked for —
+	// only the literal "1".
+	bytecodeEmbedEnv = "OCEL_BYTECODE_EMBED"
+
 	// A Next-fronted function's Function URL is IAM-gated: the edge worker signs
 	// its forwards (SigV4) with the edge reader's key, whose identity-based grant
 	// authorizes invoke on any function tagged ocel:app. This removes the public
@@ -120,6 +128,26 @@ func membraneLayerARN() string {
 // On by default; only the literal "0" turns it off.
 func bytecodeCacheEnabled() bool {
 	return os.Getenv(bytecodeCacheEnv) != "0"
+}
+
+// bytecodeEmbedRequested reports whether the deploy asked for embedding at all,
+// which is a different question from whether it can have it: a deploy that
+// asked and cannot is owed a line saying why, and only this can tell that from
+// a deploy that never asked. OCEL_BYTECODE_EMBED is read nowhere else.
+func bytecodeEmbedRequested() bool {
+	return os.Getenv(bytecodeEmbedEnv) == "1"
+}
+
+// bytecodeEmbedEnabled reports whether this deploy should embed each bundle's
+// published compile cache in its deployment package. Off by default; only the
+// literal "1" turns it on.
+//
+// Embedding implies caching: there is nothing to embed without a published
+// cache, so the two gates are ANDed here rather than left for a caller to
+// forget. embedBytecodeCaches names the contradiction when a deploy asks for
+// one and forbids the other.
+func bytecodeEmbedEnabled() bool {
+	return bytecodeEmbedRequested() && bytecodeCacheEnabled()
 }
 
 // functionArgs is the fully-resolved set of arguments a ManifestFunction lowers
