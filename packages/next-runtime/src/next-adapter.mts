@@ -255,6 +255,12 @@ const adapter = {
               ]),
             ),
             primaryEntryKey(bundle.members),
+            bundleRoutes(
+              new Set(bundle.members.map(({ member }) => member.id)),
+              entryKeyByPathname,
+              routing.dynamicRoutes ?? [],
+            ),
+            config.basePath || "",
           ),
         );
 
@@ -1016,11 +1022,51 @@ async function emitFetchEntries(
   );
 }
 
+export interface BundleRoutes {
+  exact: Record<string, string>;
+  dynamic: [string, string][];
+}
+
+// The slice of the routing table one bundle can answer for itself. The worker
+// names the entry on every request it forwards, because only it holds the whole
+// table — but Next also fetches this process directly over the loopback, to run
+// a Server Action that lives on another page and to follow an action's
+// redirect, and those requests arrive with no name. They resolve against this.
+function bundleRoutes(
+  entryKeys: ReadonlySet<string>,
+  entryKeyByPathname: ReadonlyMap<string, string>,
+  dynamicRoutes: readonly { sourceRegex: string; destination?: string }[],
+): BundleRoutes {
+  const exact: Record<string, string> = {};
+  for (const [pathname, entryKey] of entryKeyByPathname) {
+    if (entryKeys.has(entryKey)) exact[pathname] = entryKey;
+  }
+
+  const dynamic: [string, string][] = [];
+  for (const route of dynamicRoutes) {
+    // Next emits one pattern per variant of a dynamic route. Only the plain
+    // one names its page outright; the .rsc and segment variants spell theirs
+    // with captures that are substituted per request ($rscSuffix, $d$id), and
+    // a self-fetch asks for the plain pathname regardless — it carries the RSC
+    // header rather than an .rsc URL.
+    const page = route.destination?.split("?")[0];
+    if (!page || page.includes("$")) continue;
+    const entryKey = entryKeyByPathname.get(page);
+    if (entryKey !== undefined && entryKeys.has(entryKey)) {
+      dynamic.push([route.sourceRegex, entryKey]);
+    }
+  }
+
+  return { exact, dynamic };
+}
+
 // The bundle's Lambda handler: the entry table, and the dispatcher wired to the
 // launcher's own `require` so the table's relative specifiers resolve from here.
 function renderLauncher(
   entries: Record<string, string>,
   primary: string | null,
+  routes: BundleRoutes,
+  basePath: string,
 ): string {
   return (
     [
@@ -1029,9 +1075,13 @@ function renderLauncher(
       `process.env.NODE_ENV ||= 'production'`,
       `const ENTRIES = ${JSON.stringify(entries)}`,
       `const PRIMARY = ${JSON.stringify(primary)}`,
+      `const ROUTES = ${JSON.stringify(routes)}`,
+      `const BASE_PATH = ${JSON.stringify(basePath)}`,
       `module.exports = require(${JSON.stringify(`./${dispatchName}`)})({`,
       `  entries: ENTRIES,`,
       `  primary: PRIMARY,`,
+      `  routes: ROUTES,`,
+      `  basePath: BASE_PATH,`,
       `  load: (specifier) => require(specifier),`,
       `})`,
     ].join("\n") + "\n"

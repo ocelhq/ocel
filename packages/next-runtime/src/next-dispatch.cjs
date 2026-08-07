@@ -5,8 +5,34 @@
 // It ships as source rather than as a generated string because it is real logic
 // on the request path — see edge-cache-handler.cjs for the same arrangement.
 
-module.exports = function createDispatch({ entries, primary, load }) {
+module.exports = function createDispatch({
+  entries,
+  primary,
+  routes = { exact: {}, dynamic: [] },
+  basePath = "",
+  load,
+}) {
   const loaded = new Map();
+
+  // Case-insensitive, as the worker's own resolver matches these same patterns.
+  const dynamic = routes.dynamic.map(([source, key]) => [new RegExp(source, "i"), key]);
+
+  // Which entry serves a pathname. Exact first: a static route always beats a
+  // dynamic one that would also match it. The two tables are keyed differently
+  // on purpose — the exact table holds the build's own route pathnames, which
+  // carry no basePath, while the dynamic patterns come from Next already
+  // anchored with it — so each is matched against the form it was built for.
+  const entryForPathname = (pathname) => {
+    const path =
+      basePath && (pathname === basePath || pathname.startsWith(basePath + "/"))
+        ? pathname.slice(basePath.length) || "/"
+        : pathname;
+    if (Object.prototype.hasOwnProperty.call(routes.exact, path)) {
+      return routes.exact[path];
+    }
+    for (const [re, key] of dynamic) if (re.test(pathname)) return key;
+    return undefined;
+  };
 
   // Loading one entry pulls in the chunk graph its routes share, through Next's
   // own chunk ordering — a Turbopack chunk evaluated out of order fails with its
@@ -41,9 +67,19 @@ module.exports = function createDispatch({ entries, primary, load }) {
 
   return {
     handler(req, res, ctx) {
-      const key = req.headers["x-ocel-entry"];
+      // The worker names the entry on every request it forwards, because only
+      // it holds the routing table that resolved the pathname. The app's own
+      // loopback self-fetches carry no name — the membrane strips the one they
+      // inherited from the request that caused them, which named the
+      // originating route — so those resolve here, off the pathname, against
+      // the routes this bundle carries.
+      const pathname = (req.url || "/").split("?")[0];
+      const key =
+        typeof req.headers["x-ocel-entry"] === "string"
+          ? req.headers["x-ocel-entry"]
+          : entryForPathname(pathname);
       if (typeof key !== "string") {
-        return fail(res, "request carries no x-ocel-entry header");
+        return fail(res, `no entry serves ${pathname} in this bundle`);
       }
       // No fallback to a default entry: the Function URL is IAM-gated to the
       // edge reader, so every legitimate caller names its entry and a key this

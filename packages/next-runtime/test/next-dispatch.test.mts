@@ -40,8 +40,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function fakeReq(entry?: string) {
-  return { headers: entry === undefined ? {} : { "x-ocel-entry": entry } };
+function fakeReq(entry?: string, url = "/") {
+  return { url, headers: entry === undefined ? {} : { "x-ocel-entry": entry } };
 }
 
 function fakeRes() {
@@ -112,15 +112,113 @@ test("passes req, res and ctx through to the entry untouched", async () => {
   expect(res.statusCode).toBe(200);
 });
 
-test("fails closed on a request with no entry header", async () => {
+test("fails closed on a request with no entry header and no route for its path", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
   const res = fakeRes();
 
-  await dispatch.handler(fakeReq(), res, {});
+  await dispatch.handler(fakeReq(undefined, "/nowhere"), res, {});
 
   expect(res.statusCode).toBe(502);
-  expect(res.body).toMatch(/x-ocel-entry/);
+  expect(res.body).toMatch(/no entry serves \/nowhere/);
+});
+
+// The app's own loopback self-fetches — Next running a Server Action that lives
+// on another page, and following an action's redirect — reach the dispatcher
+// with no entry header, because the membrane strips the stale one they
+// inherited. Without pathname resolution they would run the originating route.
+const ROUTES = {
+  exact: { "/server": "/server", "/header": "/header" },
+  dynamic: [["^/blog/([^/]+?)(?:\\.rsc)?$", "/blog/[slug]"]] as [string, string][],
+};
+
+const ROUTED = {
+  ...ENTRIES,
+  "/server": "./.next/server/app/server/page.js",
+  "/header": "./.next/server/app/header/page.js",
+  "/blog/[slug]": "./.next/server/app/blog/[slug]/page.js",
+};
+
+// The shape of the regression: an action on /server redirects to /header, Next
+// follows it by fetching this process, and the membrane has stripped the entry
+// key that request inherited — which named /server. It must land on /header.
+test("a self-fetch is served by the route it asks for, not the one it came from", async () => {
+  const { loads, load } = fakeLoader();
+  const dispatch = createDispatch({
+    entries: ROUTED,
+    primary: null,
+    routes: ROUTES,
+    load,
+  });
+
+  const result = await dispatch.handler(
+    fakeReq(undefined, "/header?result=122"),
+    fakeRes(),
+    {},
+  );
+
+  expect(result).toMatchObject({ path: ROUTED["/header"] });
+  expect(loads).not.toContain(ROUTED["/server"]);
+});
+
+test("a dynamic route serves a concrete pathname beneath it", async () => {
+  const { load } = fakeLoader();
+  const dispatch = createDispatch({
+    entries: ROUTED,
+    primary: null,
+    routes: ROUTES,
+    load,
+  });
+
+  const result = await dispatch.handler(fakeReq(undefined, "/blog/hello"), fakeRes(), {});
+
+  expect(result).toMatchObject({ path: ROUTED["/blog/[slug]"] });
+});
+
+test("an exact route wins over a dynamic one that also matches", async () => {
+  const { load } = fakeLoader();
+  const dispatch = createDispatch({
+    entries: ROUTED,
+    primary: null,
+    routes: {
+      exact: { "/blog/featured": "/header" },
+      dynamic: ROUTES.dynamic,
+    },
+    load,
+  });
+
+  const result = await dispatch.handler(fakeReq(undefined, "/blog/featured"), fakeRes(), {});
+
+  expect(result).toMatchObject({ path: ROUTED["/header"] });
+});
+
+test("a named request is served by the name, never by its pathname", async () => {
+  const { load } = fakeLoader();
+  const dispatch = createDispatch({
+    entries: ROUTED,
+    primary: null,
+    routes: ROUTES,
+    load,
+  });
+
+  const result = await dispatch.handler(fakeReq("/server", "/header"), fakeRes(), {});
+
+  expect(result).toMatchObject({ path: ROUTED["/server"] });
+});
+
+test("basePath is stripped before a pathname is resolved", async () => {
+  const { load } = fakeLoader();
+  const dispatch = createDispatch({
+    entries: ROUTED,
+    primary: null,
+    routes: ROUTES,
+    basePath: "/docs",
+    load,
+  });
+
+  const result = await dispatch.handler(fakeReq(undefined, "/docs/header"), fakeRes(), {});
+
+  expect(result).toMatchObject({ path: ROUTED["/header"] });
 });
 
 test("fails closed on a key the bundle does not carry, naming it", async () => {

@@ -92,11 +92,29 @@ export async function drainWaitUntil(pending: Promise<unknown>[]): Promise<void>
   }
 }
 
+// The Go bootstrap stamps x-ocel-request-id on every request it forwards, so a
+// request without one reached this listener some other way: the app fetched
+// itself over the loopback. Next does that to run a Server Action that lives on
+// another page, and to follow an action's redirect.
+//
+// Such a request is built from the headers of the request that caused it, and
+// two of those do not survive the copy intact. x-ocel-entry names which route of
+// the bundle to run and would name the *originating* one. And undici drops a
+// caller-supplied host, so the authority is the loopback again — the very thing
+// the bootstrap sets Host to avoid. x-forwarded-host survives both hops and is
+// the authority the client addressed, on the inner request as on the outer.
+function normalizeLoopbackHeaders(headers: http.IncomingHttpHeaders): void {
+  const forwarded = String(headers["x-forwarded-host"] ?? "").split(",")[0]?.trim();
+  if (forwarded) headers.host = forwarded;
+  if (headers["x-ocel-request-id"] === undefined) delete headers["x-ocel-entry"];
+  delete headers["x-ocel-request-id"];
+  delete headers["x-ocel-trace-id"];
+}
+
 function wrapWithOcelContext(invoke: Invoke): http.RequestListener {
   return (req, res) => {
     const requestId = req.headers["x-ocel-request-id"];
-    delete req.headers["x-ocel-request-id"];
-    delete req.headers["x-ocel-trace-id"];
+    normalizeLoopbackHeaders(req.headers);
     const start = performance.now();
 
     const pending: Promise<unknown>[] = [];

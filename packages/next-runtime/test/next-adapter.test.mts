@@ -391,7 +391,13 @@ async function readLauncher(projectDir: string, bundle = "bundle-0") {
   );
   const table = (name: string) =>
     JSON.parse(source.match(new RegExp(`^const ${name} = (.*)$`, "m"))![1]!);
-  return { source, entries: table("ENTRIES"), primary: table("PRIMARY") };
+  return {
+    source,
+    entries: table("ENTRIES"),
+    primary: table("PRIMARY"),
+    routes: table("ROUTES"),
+    basePath: table("BASE_PATH"),
+  };
 }
 
 // Joins the two halves of the build's output: the manifest names an (id,
@@ -496,6 +502,80 @@ test("declares every entry in the launcher with a POSIX relative specifier", asy
   // AsyncLocalStorage must be a global for Next's runtime, as on the edge.
   expect(source).toContain("globalThis.AsyncLocalStorage = AsyncLocalStorage");
   expect(source).toContain("process.env.NODE_ENV ||= 'production'");
+});
+
+// Only the worker holds the routing table, and it names the entry on every
+// request it forwards. But Next also fetches this Lambda directly over the
+// loopback — to run a Server Action that lives on another page, and to follow
+// an action's redirect — and those requests carry no name, because the one they
+// inherited named the *originating* route. Without this table the bundle would
+// serve them from that route: the wrong page's payload, under the right URL.
+test("the launcher carries the pathnames its own entries serve", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const { routes, basePath } = await readLauncher(projectDir);
+  expect(routes.exact).toEqual({
+    "/": "/",
+    "/index.rsc": "/",
+    "/api/documents": "/api/documents",
+    "/api/documents.rsc": "/api/documents",
+  });
+  expect(basePath).toBe("");
+});
+
+// A redirect after an action names a concrete pathname (`/api/todos/7`), never
+// the bracketed page. Next emits the pattern that spans them; the plain variant
+// is the one that names its page outright, so it is the one that can be joined
+// to an entry at build time.
+test("a dynamic route reaches the launcher as the pattern that spans it", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const handler = join(projectDir, ".next/server/app/api/todos/[id]/route.js");
+  await mkdir(dirname(handler), { recursive: true });
+  await writeFile(handler, "module.exports = () => {}");
+
+  const dynamic = {
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    type: "APP_ROUTE",
+  };
+  args.outputs.appRoutes.push(
+    { pathname: "/api/todos/[id]", id: "/api/todos/[id]", ...dynamic } as never,
+    {
+      pathname: "/api/todos/[id].rsc",
+      id: "/api/todos/[id].rsc",
+      ...dynamic,
+    } as never,
+  );
+  // Verbatim from a real build (examples/next-test/args.json): the .rsc variant
+  // first, then the plain one.
+  args.routing.dynamicRoutes.push(
+    {
+      source: "/api/todos/[id].rsc",
+      sourceRegex:
+        "^[/]?/api/todos/(?<nxtPid>[^/]+?)(?<rscSuffix>\\.rsc|\\.segments/.+\\.segment\\.rsc)(?:/)?$",
+      destination: "/api/todos/[id]$rscSuffix?nxtPid=$nxtPid",
+    } as never,
+    {
+      source: "/api/todos/[id]",
+      sourceRegex: "^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$",
+      destination: "/api/todos/[id]?nxtPid=$nxtPid",
+    } as never,
+  );
+
+  const adapter = await loadAdapterIn(projectDir);
+  await adapter.onBuildComplete(args as never);
+
+  const { routes } = await readLauncher(projectDir);
+  // The .rsc variant spells its page with a capture ($rscSuffix) that only a
+  // request can substitute, so it names no entry at build time and is dropped.
+  expect(routes.dynamic).toEqual([
+    ["^[/]?/api/todos/(?<nxtPid>[^/]+?)(?:/)?$", "/api/todos/[id]"],
+  ]);
+  expect(new RegExp(routes.dynamic[0][0], "i").test("/api/todos/7")).toBe(true);
 });
 
 // Requiring one entry at INIT primes the chunk graph the bundle shares; the
