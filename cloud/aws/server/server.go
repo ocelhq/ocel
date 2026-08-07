@@ -20,6 +20,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
+	"github.com/aws/aws-sdk-go-v2/service/lambda"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
@@ -297,6 +298,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		ISRWriterSeed:          isrWriterSeed,
 
 		Uploader:       s3.NewFromConfig(awscfg),
+		Invoker:        lambda.NewFromConfig(awscfg),
 		Edge:           cloudflare.New(),
 		Class:          env.GetClass(),
 		Lifecycle:      env.GetLifecycle(),
