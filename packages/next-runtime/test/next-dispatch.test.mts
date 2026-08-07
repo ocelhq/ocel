@@ -206,19 +206,49 @@ test("a named request is served by the name, never by its pathname", async () =>
   expect(result).toMatchObject({ path: ROUTED["/server"] });
 });
 
-test("basePath is stripped before a pathname is resolved", async () => {
+// Next prefixes basePath onto every output pathname before the adapter sees one
+// (normalizePathnames, build-complete.ts:537-556), and onto both the dynamic
+// patterns and the URLs the app self-fetches. So a basePath build's table is
+// simply spelled with it, on both sides, and the dispatcher adds and strips
+// nothing. This table is that shape.
+test("a basePath route is served under the path the build gave it", async () => {
   const { load } = fakeLoader();
   const dispatch = createDispatch({
-    entries: ROUTED,
+    entries: { "/docs/header": "./.next/server/app/header/page.js" },
     primary: null,
-    routes: ROUTES,
-    basePath: "/docs",
+    routes: {
+      exact: { "/docs/header": "/docs/header" },
+      dynamic: [["^/docs[/]?/blog/(?<nxtPslug>[^/]+?)(?:/)?$", "/docs/blog/[slug]"]],
+    },
     load,
   });
 
-  const result = await dispatch.handler(fakeReq(undefined, "/docs/header"), fakeRes(), {});
+  const result = await dispatch.handler(fakeReq(undefined, "/docs/header?x=1"), fakeRes(), {});
 
-  expect(result).toMatchObject({ path: ROUTED["/header"] });
+  expect(result).toMatchObject({ path: "./.next/server/app/header/page.js" });
+});
+
+// The table names every route the build has, not just the ones this bundle
+// carries, so a pathname another bundle owns is refused by name instead of
+// being absorbed by a local pattern broad enough to span it.
+test("a pathname another bundle owns fails by name, not by a local catch-all", async () => {
+  const { loads, load } = fakeLoader();
+  const dispatch = createDispatch({
+    entries: { "/files/[...path]": "./.next/server/app/files/[...path]/page.js" },
+    primary: null,
+    routes: {
+      exact: { "/elsewhere": "/elsewhere" },
+      dynamic: [["^[/]?/(?<nxtPpath>.+?)(?:/)?$", "/files/[...path]"]],
+    },
+    load,
+  });
+  const res = fakeRes();
+
+  await dispatch.handler(fakeReq(undefined, "/elsewhere"), res, {});
+
+  expect(res.statusCode).toBe(502);
+  expect(res.body).toMatch(/\/elsewhere/);
+  expect(loads).toEqual([]);
 });
 
 test("fails closed on a key the bundle does not carry, naming it", async () => {

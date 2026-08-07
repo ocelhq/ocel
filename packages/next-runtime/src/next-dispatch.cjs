@@ -9,7 +9,6 @@ module.exports = function createDispatch({
   entries,
   primary,
   routes = { exact: {}, dynamic: [] },
-  basePath = "",
   load,
 }) {
   const loaded = new Map();
@@ -18,17 +17,13 @@ module.exports = function createDispatch({
   const dynamic = routes.dynamic.map(([source, key]) => [new RegExp(source, "i"), key]);
 
   // Which entry serves a pathname. Exact first: a static route always beats a
-  // dynamic one that would also match it. The two tables are keyed differently
-  // on purpose — the exact table holds the build's own route pathnames, which
-  // carry no basePath, while the dynamic patterns come from Next already
-  // anchored with it — so each is matched against the form it was built for.
+  // dynamic one that would also match it, which is the worker's precedence.
+  // Both tables are keyed by the build's own pathnames, which already carry
+  // basePath — Next prefixes it onto every output before the adapter sees one —
+  // and so does every URL the app self-fetches. Nothing to add or strip here.
   const entryForPathname = (pathname) => {
-    const path =
-      basePath && (pathname === basePath || pathname.startsWith(basePath + "/"))
-        ? pathname.slice(basePath.length) || "/"
-        : pathname;
-    if (Object.prototype.hasOwnProperty.call(routes.exact, path)) {
-      return routes.exact[path];
+    if (Object.prototype.hasOwnProperty.call(routes.exact, pathname)) {
+      return routes.exact[pathname];
     }
     for (const [re, key] of dynamic) if (re.test(pathname)) return key;
     return undefined;

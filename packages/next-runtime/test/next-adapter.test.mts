@@ -396,7 +396,6 @@ async function readLauncher(projectDir: string, bundle = "bundle-0") {
     entries: table("ENTRIES"),
     primary: table("PRIMARY"),
     routes: table("ROUTES"),
-    basePath: table("BASE_PATH"),
   };
 }
 
@@ -510,20 +509,51 @@ test("declares every entry in the launcher with a POSIX relative specifier", asy
 // an action's redirect — and those requests carry no name, because the one they
 // inherited named the *originating* route. Without this table the bundle would
 // serve them from that route: the wrong page's payload, under the right URL.
-test("the launcher carries the pathnames its own entries serve", async () => {
+test("the launcher carries the pathname every route is served at", async () => {
   const { projectDir, args } = await synthDedupProject();
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
 
-  const { routes, basePath } = await readLauncher(projectDir);
-  expect(routes.exact).toEqual({
+  expect((await readLauncher(projectDir)).routes.exact).toEqual({
     "/": "/",
     "/index.rsc": "/",
     "/api/documents": "/api/documents",
     "/api/documents.rsc": "/api/documents",
   });
-  expect(basePath).toBe("");
+});
+
+// Next prefixes basePath onto every output pathname before the adapter is
+// called (normalizePathnames, build-complete.ts:537-556), so a basePath build
+// hands over pathnames that already carry it — as this fixture does — and it
+// stamps the same prefix onto the URLs the app self-fetches. The table is
+// therefore spelled with basePath on both sides and needs no adjusting.
+test("a basePath build's table is keyed by the prefixed pathnames Next hands over", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  args.config = { ...args.config, basePath: "/docs" };
+  for (const route of [...args.outputs.appPages, ...args.outputs.appRoutes]) {
+    (route as { pathname: string }).pathname =
+      `/docs${(route as { pathname: string }).pathname}`.replace(/\/$/, "") || "/";
+  }
+  for (const p of args.outputs.prerenders) {
+    (p as { pathname: string }).pathname =
+      `/docs${(p as { pathname: string }).pathname}`.replace(/\/$/, "") || "/";
+  }
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  // Keys carry basePath and values do not: normalizePathnames rewrites an
+  // output's pathname and leaves its id alone, and the id is the entry key the
+  // launcher's own table is written under.
+  const { routes, entries } = await readLauncher(projectDir);
+  expect(routes.exact).toEqual({
+    "/docs": "/",
+    "/docs/index.rsc": "/",
+    "/docs/api/documents": "/api/documents",
+    "/docs/api/documents.rsc": "/api/documents",
+  });
+  for (const key of Object.values(routes.exact)) expect(entries).toHaveProperty(key);
 });
 
 // A redirect after an action names a concrete pathname (`/api/todos/7`), never
@@ -863,6 +893,19 @@ test("splits over the budget and points each route at its own bundle", async () 
   expect(
     Object.keys((await readLauncher(projectDir, "bundle-1")).entries),
   ).toEqual(["/api/documents"]);
+
+  // But both carry the whole build's route table. A bundle that knew only its
+  // own pathnames would answer a self-fetch for a route it does not have from
+  // whichever local pattern happened to span it; knowing the other bundle owns
+  // that pathname is what turns the miss into a named 502.
+  const whole = {
+    "/": "/",
+    "/index.rsc": "/",
+    "/api/documents": "/api/documents",
+    "/api/documents.rsc": "/api/documents",
+  };
+  expect((await readLauncher(projectDir, "bundle-0")).routes.exact).toEqual(whole);
+  expect((await readLauncher(projectDir, "bundle-1")).routes.exact).toEqual(whole);
 });
 
 test("copies public/ files into the static output, recursively", async () => {

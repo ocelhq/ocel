@@ -228,6 +228,8 @@ const adapter = {
       variantHeaderProjection(prerenderGroups),
     );
 
+    const routes = routeTable(entryKeyByPathname, routing.dynamicRoutes ?? []);
+
     await Promise.all(
       bundles.map(async (bundle) => {
         const funcDir = join(outputRoot, "functions", `${bundle.name}.func`);
@@ -255,12 +257,7 @@ const adapter = {
               ]),
             ),
             primaryEntryKey(bundle.members),
-            bundleRoutes(
-              new Set(bundle.members.map(({ member }) => member.id)),
-              entryKeyByPathname,
-              routing.dynamicRoutes ?? [],
-            ),
-            config.basePath || "",
+            routes,
           ),
         );
 
@@ -1022,39 +1019,39 @@ async function emitFetchEntries(
   );
 }
 
-export interface BundleRoutes {
+export interface RouteTable {
   exact: Record<string, string>;
   dynamic: [string, string][];
 }
 
-// The slice of the routing table one bundle can answer for itself. The worker
-// names the entry on every request it forwards, because only it holds the whole
-// table — but Next also fetches this process directly over the loopback, to run
-// a Server Action that lives on another page and to follow an action's
-// redirect, and those requests arrive with no name. They resolve against this.
-function bundleRoutes(
-  entryKeys: ReadonlySet<string>,
+// Which entry serves which pathname, for the requests that reach a bundle
+// without one named. The worker names the entry on everything it forwards,
+// because only it holds the routing table — but Next also fetches the app
+// directly over the loopback, to run a Server Action that lives on another page
+// and to follow an action's redirect, and those requests arrive unnamed.
+//
+// Every bundle carries the whole build's table, not just its own routes. A
+// pathname another bundle owns then resolves to that bundle's key and fails by
+// name, rather than being absorbed by whatever local pattern happens to span it
+// — and the dynamic patterns keep the order Next emitted them in, which is the
+// specificity order the worker matches them in.
+function routeTable(
   entryKeyByPathname: ReadonlyMap<string, string>,
   dynamicRoutes: readonly { sourceRegex: string; destination?: string }[],
-): BundleRoutes {
-  const exact: Record<string, string> = {};
-  for (const [pathname, entryKey] of entryKeyByPathname) {
-    if (entryKeys.has(entryKey)) exact[pathname] = entryKey;
-  }
+): RouteTable {
+  const exact = Object.fromEntries(entryKeyByPathname);
 
   const dynamic: [string, string][] = [];
   for (const route of dynamicRoutes) {
     // Next emits one pattern per variant of a dynamic route. Only the plain
     // one names its page outright; the .rsc and segment variants spell theirs
-    // with captures that are substituted per request ($rscSuffix, $d$id), and
-    // a self-fetch asks for the plain pathname regardless — it carries the RSC
-    // header rather than an .rsc URL.
+    // with captures that are substituted per request ($rscSuffix, $d$id), as
+    // does every route under i18n ($nextLocale). A self-fetch asks for the
+    // plain pathname regardless — it carries the RSC header, not an .rsc URL.
     const page = route.destination?.split("?")[0];
     if (!page || page.includes("$")) continue;
     const entryKey = entryKeyByPathname.get(page);
-    if (entryKey !== undefined && entryKeys.has(entryKey)) {
-      dynamic.push([route.sourceRegex, entryKey]);
-    }
+    if (entryKey !== undefined) dynamic.push([route.sourceRegex, entryKey]);
   }
 
   return { exact, dynamic };
@@ -1065,8 +1062,7 @@ function bundleRoutes(
 function renderLauncher(
   entries: Record<string, string>,
   primary: string | null,
-  routes: BundleRoutes,
-  basePath: string,
+  routes: RouteTable,
 ): string {
   return (
     [
@@ -1076,12 +1072,10 @@ function renderLauncher(
       `const ENTRIES = ${JSON.stringify(entries)}`,
       `const PRIMARY = ${JSON.stringify(primary)}`,
       `const ROUTES = ${JSON.stringify(routes)}`,
-      `const BASE_PATH = ${JSON.stringify(basePath)}`,
       `module.exports = require(${JSON.stringify(`./${dispatchName}`)})({`,
       `  entries: ENTRIES,`,
       `  primary: PRIMARY,`,
       `  routes: ROUTES,`,
-      `  basePath: BASE_PATH,`,
       `  load: (specifier) => require(specifier),`,
       `})`,
     ].join("\n") + "\n"
