@@ -35,7 +35,9 @@ func isWarmInvocation(payload []byte) bool {
 // The four states a warm invocation can answer with. published and failed are
 // the two outcomes of a real pass; already-cached and disabled are the two
 // ways there was nothing to do, and neither is a reason for the deploy to
-// retry.
+// retry. failed is reserved for a pass that could publish nothing at all:
+// anything the instance did manage to load is worth publishing, so a walk
+// nobody could account for still reports the state of the object it produced.
 const (
 	warmStatePublished     = "published"
 	warmStateAlreadyCached = "already-cached"
@@ -47,16 +49,23 @@ const (
 // pass can report false — a cache that was loaded and then refused by the
 // ceiling or by S3 — while the two states that never reached the upload leg
 // omit the field rather than claim a number they never measured.
+//
+// Uncounted is set, and every count omitted, when the publish happened but
+// nobody could say what went into it. Reporting the counts as zeros would be
+// the same silence dressed as a measurement.
 type warmSummary struct {
-	State     string        `json:"state"`
-	Entries   int           `json:"entries,omitempty"`
-	Loaded    int           `json:"loaded,omitempty"`
-	Failures  []warmFailure `json:"failures,omitempty"`
-	StoppedBy string        `json:"stoppedBy,omitempty"`
-	Bytes     int64         `json:"bytes,omitempty"`
-	Key       string        `json:"key,omitempty"`
-	Uploaded  *bool         `json:"uploaded,omitempty"`
-	Error     string        `json:"error,omitempty"`
+	State        string        `json:"state"`
+	Entries      int           `json:"entries,omitempty"`
+	Loaded       int           `json:"loaded,omitempty"`
+	Failures     []warmFailure `json:"failures,omitempty"`
+	StoppedBy    string        `json:"stoppedBy,omitempty"`
+	Skipped      []string      `json:"skipped,omitempty"`
+	SkippedCount int           `json:"skippedCount,omitempty"`
+	Uncounted    string        `json:"uncounted,omitempty"`
+	Bytes        int64         `json:"bytes,omitempty"`
+	Key          string        `json:"key,omitempty"`
+	Uploaded     *bool         `json:"uploaded,omitempty"`
+	Error        string        `json:"error,omitempty"`
 }
 
 // warmInvocationBudget is what the load window is measured against when the
@@ -84,10 +93,15 @@ func warmLoadDeadline(ctx context.Context) (time.Time, bool) {
 	return load, true
 }
 
-// answerWarmInvocation writes the summary back as the whole response payload —
-// no prelude framing, since no Function URL is involved and the deploy reads
-// these bytes as JSON. It also lands the summary on stderr, which is where an
-// invocation whose answer never reached the caller can still be diagnosed.
+// answerWarmInvocation writes the summary back as the whole response payload.
+// It adds no prelude: no Function URL is involved, and a prelude would only be
+// one more layer for the deploy to see through — whether Lambda's streaming
+// layer wraps a buffered Invoke's payload in one regardless is a question this
+// side cannot answer, so the deploy reads the summary out of either shape
+// (parseWarmReply) rather than either side guessing.
+//
+// It also lands the summary on stderr, which is where an invocation whose
+// answer never reached the caller can still be diagnosed.
 func (m *Membrane) answerWarmInvocation(ctx context.Context, rw *responseWriter) error {
 	summary, err := json.Marshal(m.warmBytecodeCache(ctx))
 	if err != nil {
@@ -104,6 +118,14 @@ func (m *Membrane) answerWarmInvocation(ctx context.Context, rw *responseWriter)
 // reached. Nothing it does may fail the invocation or leave the runtime loop:
 // every leg that can go wrong ends as a state in the summary, exactly as the
 // post-invocation upload ends as a line on stderr.
+//
+// The publish leg does not depend on node's report. The compile cache is on
+// disk that both ends share and the flush is the membrane's own call, so a
+// report that never came, came late, or said the artifact has no warm
+// capability at all costs the counts — never the cache. The primary entry was
+// loaded at INIT whatever else happened, so there is always something to
+// publish, and publishing nothing when something is available is the one
+// outcome this whole feature exists to avoid.
 func (m *Membrane) warmBytecodeCache(ctx context.Context) warmSummary {
 	// A rehydrate hit already proved the object exists, which is why bringUp
 	// left no upload leg behind: loading every entry could not publish
@@ -113,29 +135,18 @@ func (m *Membrane) warmBytecodeCache(ctx context.Context) warmSummary {
 		return warmSummary{State: warmStateAlreadyCached}
 	}
 	if m.bytecode == nil {
-		return warmSummary{State: warmStateDisabled}
+		return warmSummary{State: warmStateDisabled, Error: "this deployment resolved no bytecode cache identity"}
 	}
 
 	deadline, ok := warmLoadDeadline(ctx)
 	if !ok {
 		return warmSummary{State: warmStateFailed, Error: "no time left to warm the compile cache"}
 	}
-	reply, answered := m.warmCompileCache(ctx, deadline)
-	if !answered {
-		return warmSummary{State: warmStateFailed, Error: "node did not report back on the compile-cache warm"}
-	}
-	if !reply.OK {
-		return warmSummary{State: warmStateDisabled, Error: "this artifact has no compile-cache warm capability: " + reply.State}
-	}
 
-	summary := warmSummary{
-		Entries:   reply.Entries,
-		Loaded:    reply.Loaded,
-		Failures:  reply.Failures,
-		StoppedBy: reply.StoppedBy,
-		Bytes:     reply.Bytes,
-		Key:       m.bytecode.key,
-	}
+	report, waiter, answered := m.warmCompileCache(ctx, deadline)
+	defer m.endWarmExchange()
+
+	summary := warmSummary{Key: m.bytecode.key}
 	if !m.claimBytecodeUpload() {
 		summary.State = warmStateFailed
 		summary.Error = "this instance already spent its one compile cache upload"
@@ -143,6 +154,16 @@ func (m *Membrane) warmBytecodeCache(ctx context.Context) warmSummary {
 	}
 
 	outcome := m.bytecode.run(ctx)
+
+	// The publish leg gives a report that overran the load deadline a second
+	// chance to land: a single slow require is the whole reason one arrives
+	// late, and the counts it carries are the difference between naming what
+	// stayed cold and reporting nothing at all.
+	if !answered {
+		report, answered = collectWarmReport(waiter)
+	}
+	summary.count(report, answered)
+
 	if outcome.bytes > 0 {
 		summary.Bytes = outcome.bytes
 	}
@@ -161,4 +182,24 @@ func (m *Membrane) warmBytecodeCache(ctx context.Context) warmSummary {
 	summary.State = warmStateFailed
 	summary.Error = outcome.reason
 	return summary
+}
+
+// count folds node's report into the summary, or records why there is none to
+// fold. An artifact with no warm capability is the same story as a report that
+// never arrived: the walk is unaccounted for, and only the counts are lost.
+func (s *warmSummary) count(report compileCacheWarmedPayload, answered bool) {
+	switch {
+	case !answered:
+		s.Uncounted = "node did not report back on the compile-cache warm"
+	case !report.OK:
+		s.Uncounted = "this artifact has no compile-cache warm capability: " + report.State
+	default:
+		s.Entries = report.Entries
+		s.Loaded = report.Loaded
+		s.Failures = report.Failures
+		s.StoppedBy = report.StoppedBy
+		s.Skipped = report.Skipped
+		s.SkippedCount = report.SkippedCount
+		s.Bytes = report.Bytes
+	}
 }

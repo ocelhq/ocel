@@ -1,5 +1,5 @@
 import Module, { createRequire } from "node:module";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import fs, { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -588,6 +588,8 @@ test("reports unsupported when flushCompileCache is genuinely absent (old Node)"
     loaded: 0,
     failures: [],
     stoppedBy: "complete",
+    skipped: [],
+    skippedCount: 0,
     bytes: 0,
     dir: null,
   });
@@ -615,4 +617,121 @@ test("reports unsupported when the compile cache is off, leaving no dir", () => 
     ok: false,
     state: "unsupported",
   });
+});
+
+// A stopped walk that reports only "38/51" leaves an operator with no way to
+// tell which routes stay cold, which is the one thing the report exists for.
+test("names the entries a stopped walk never reached", () => {
+  stubCompileCache();
+  const { load } = cachingLoader({
+    [WARM_ENTRIES["app/page"]]: 1000,
+    [WARM_ENTRIES["app/a/page"]]: 1000,
+    [WARM_ENTRIES["app/b/page"]]: 1000,
+  });
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: "app/page", load });
+
+  const report = dispatch.warm({ deadlineMs: Date.now() + 600_000, ceilingBytes: 4096 });
+
+  expect(report).toMatchObject({
+    stoppedBy: "ceiling",
+    skipped: ["app/b/page"],
+    skippedCount: 1,
+  });
+});
+
+test("a walk that reached every entry skips nothing", () => {
+  stubCompileCache();
+  const { load } = cachingLoader({});
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: "app/page", load });
+
+  expect(dispatch.warm(NO_LIMITS)).toMatchObject({ skipped: [], skippedCount: 0 });
+});
+
+// The list travels through a control message, a CloudWatch line and the
+// deploy's output, so a bundle with hundreds of cold routes must not be able to
+// bloat any of them — while the count still tells the whole truth.
+test("bounds the skipped list but not the skipped count", () => {
+  stubCompileCache();
+  const entries: Record<string, string> = { "app/page": "./.next/server/app/page.js" };
+  for (let i = 0; i < 60; i++) entries[`app/r${i}/page`] = `./.next/server/app/r${i}/page.js`;
+  const { load } = cachingLoader({});
+  const dispatch = createDispatch({ entries, primary: "app/page", load });
+
+  // A deadline already in the past stops the walk before its first entry.
+  const report = dispatch.warm({ deadlineMs: Date.now() - 1, ceilingBytes: 64 << 20 });
+
+  expect(report.skippedCount).toBe(60);
+  expect(report.skipped).toHaveLength(20);
+  expect(report.skipped[0]).toBe("app/r0/page");
+});
+
+// Measuring is a flush plus a full recursive walk of the cache directory, so
+// one per entry is O(entries x files) inside the very deadline the walk exists
+// to respect — and it buys nothing while the total is nowhere near the ceiling.
+test("measures in strides while the ceiling is far away", () => {
+  stubCompileCache();
+  const entries: Record<string, string> = { "app/page": "./.next/server/app/page.js" };
+  for (let i = 0; i < 40; i++) entries[`app/r${i}/page`] = `./.next/server/app/r${i}/page.js`;
+  const { load } = cachingLoader({});
+  const dispatch = createDispatch({ entries, primary: "app/page", load });
+
+  const report = dispatch.warm(NO_LIMITS);
+
+  expect(report.loaded).toBe(41);
+  expect(report.stoppedBy).toBe("complete");
+  expect(flushes).toBeLessThan(15);
+});
+
+// The ceiling guarantee survives the stride: the stride is sized against the
+// largest growth yet seen, and shrinks to a single entry as the headroom does.
+test("still stops before the ceiling when entries are large", () => {
+  stubCompileCache();
+  const entries: Record<string, string> = {};
+  const sizes: Record<string, number> = {};
+  for (let i = 0; i < 20; i++) {
+    entries[`app/r${i}/page`] = `./.next/server/app/r${i}/page.js`;
+    sizes[`./.next/server/app/r${i}/page.js`] = 1000;
+  }
+  const { loads, load } = cachingLoader(sizes);
+  const dispatch = createDispatch({ entries, primary: null, load });
+
+  const report = dispatch.warm({ deadlineMs: Date.now() + 600_000, ceilingBytes: 8192 });
+
+  expect(report.stoppedBy).toBe("ceiling");
+  expect(report.bytes).toBeLessThanOrEqual(8192);
+  expect(loads.length).toBeLessThan(20);
+});
+
+// An unreadable cache directory must not measure as a partial total: the walk
+// would sail past the ceiling into an archive the Go uploader refuses outright,
+// publishing nothing where stopping short would have published something.
+test("stops rather than undercounting when the cache cannot be measured", () => {
+  const dir = stubCompileCache();
+  const { loads, load } = cachingLoader({});
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+  const readdir = vi.spyOn(fs, "readdirSync").mockImplementation(((target: string) => {
+    if (target === dir) throw Object.assign(new Error("EACCES"), { code: "EACCES" });
+    return [];
+  }) as never);
+
+  const report = dispatch.warm(NO_LIMITS);
+
+  readdir.mockRestore();
+  expect(report.stoppedBy).toBe("unmeasured");
+  expect(loads).toEqual([]);
+  expect(report.skippedCount).toBe(3);
+});
+
+// A directory node has not written yet is the one honest zero — the feature's
+// normal state on the first entry of a cold instance.
+test("measures a cache directory that does not exist yet as empty", () => {
+  const dir = stubCompileCache();
+  rmSync(dir, { recursive: true, force: true });
+  const { load } = cachingLoader({});
+  const dispatch = createDispatch({ entries: WARM_ENTRIES, primary: null, load });
+
+  const report = dispatch.warm({ deadlineMs: Date.now() + 600_000, ceilingBytes: 64 << 20 });
+
+  expect(report.stoppedBy).toBe("complete");
+  expect(report.loaded).toBe(3);
 });

@@ -5,6 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 
+// The reply itself, not a copy of it: three spellings of the same literal is
+// how one of them silently drifts.
+import { UNSUPPORTED_WARM as UNSUPPORTED } from "../src/shared/membrane.mjs";
+
 type Msg = { type: string; payload: unknown };
 
 let sockDir: string;
@@ -38,19 +42,10 @@ const REPORT = {
   loaded: 3,
   failures: [],
   stoppedBy: "complete",
+  skipped: [],
+  skippedCount: 0,
   bytes: 4096,
   dir: "/tmp/v8-compile-cache",
-};
-
-const UNSUPPORTED = {
-  ok: false,
-  state: "unsupported",
-  entries: 0,
-  loaded: 0,
-  failures: [],
-  stoppedBy: "complete",
-  bytes: 0,
-  dir: null,
 };
 
 // Boots a real control socket, installs the warm handler over the launcher's

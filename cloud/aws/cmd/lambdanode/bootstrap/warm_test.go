@@ -32,6 +32,13 @@ const warmedReply = `{"type":"compile-cache-warmed","payload":` +
 // existed — or any non-Next one — answers with.
 const unsupportedReply = `{"type":"compile-cache-warmed","payload":{"ok":false,"state":"unsupported","dir":null}}`
 
+// stoppedReply is a walk the ceiling cut short, naming a bounded sample of what
+// it never reached.
+const stoppedReply = `{"type":"compile-cache-warmed","payload":` +
+	`{"ok":true,"state":"warmed","entries":42,"loaded":33,"failures":[],` +
+	`"stoppedBy":"ceiling","skipped":["app/a/page","app/b/page"],"skippedCount":9,` +
+	`"bytes":1234,"dir":"/tmp/.ocel/compile-cache"}}`
+
 // The shape is the whole authorization story: these Function URLs are AWS_IAM
 // and the edge composes the event envelope itself, so public traffic can only
 // ever influence headers and body. Every case below that carries the warm
@@ -101,6 +108,18 @@ func warmFixture(t *testing.T, store bytecodeStore, dir, reply string) *Membrane
 		fmt.Fprintln(nodeConn, reply)
 	}()
 	return m
+}
+
+// slowBytecodeStore gives the publish leg a real duration, which is the window
+// a report node was too slow to make the load deadline has to arrive in.
+type slowBytecodeStore struct {
+	*fakeBytecodeStore
+	delay time.Duration
+}
+
+func (s slowBytecodeStore) putObject(ctx context.Context, bucket, key string, body []byte) error {
+	time.Sleep(s.delay)
+	return s.fakeBytecodeStore.putObject(ctx, bucket, key, body)
 }
 
 // warmCtx stands in for an invocation the platform gave the given time to run.
@@ -196,22 +215,97 @@ func TestWarmBytecodeCache_DisabledForAnUnconfiguredDeployment(t *testing.T) {
 	}
 }
 
-// An artifact with no warm capability — non-Next, or built before this
-// existed — is a deployment that cannot be warmed, not a feature that failed.
-func TestWarmBytecodeCache_UnsupportedArtifactIsNotAFailure(t *testing.T) {
+// An artifact with no warm capability — non-Next, or a launcher built before
+// warming existed — still loaded its primary entry at INIT, so there is a real
+// compile cache on disk. Publishing nothing when something is available is the
+// one outcome this feature exists to avoid.
+func TestWarmBytecodeCache_UnsupportedArtifactStillPublishesWhatInitLoaded(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), unsupportedReply)
 
 	got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
 
-	if got.State != warmStateDisabled {
-		t.Fatalf("state = %q, want %q", got.State, warmStateDisabled)
+	if got.State != warmStatePublished {
+		t.Fatalf("state = %q (%+v), want %q", got.State, got, warmStatePublished)
 	}
-	if got.Error == "" {
-		t.Error("error = empty, want the reason reported back")
+	if len(store.puts) != 1 {
+		t.Fatalf("puts = %d, want the cache INIT produced published anyway", len(store.puts))
 	}
-	if len(store.heads) != 0 || len(store.puts) != 0 {
-		t.Errorf("touched S3 (heads=%v puts=%v), want nothing to publish", store.heads, store.puts)
+	if !strings.Contains(got.Uncounted, "no compile-cache warm capability") {
+		t.Errorf("uncounted = %q, want the counts reported unknown with the reason", got.Uncounted)
+	}
+	if got.Entries != 0 || got.Loaded != 0 {
+		t.Errorf("summary = %+v, want no counts it never measured", got)
+	}
+}
+
+// A single overrunning require pushes node's report past the deadline it only
+// checks between entries. The membrane does not need that report to publish —
+// the cache directory is shared disk and the flush is its own call — so a walk
+// that loaded the whole bundle must not report failure having published
+// nothing, which is strictly worse than never warming at all.
+func TestWarmBytecodeCache_PublishesWhenNodeNeverReportsBack(t *testing.T) {
+	store := &fakeBytecodeStore{}
+	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), "")
+
+	got := m.warmBytecodeCache(warmCtx(t, 3*time.Second))
+
+	if got.State != warmStatePublished {
+		t.Fatalf("state = %q (%+v), want %q", got.State, got, warmStatePublished)
+	}
+	if len(store.puts) != 1 {
+		t.Errorf("puts = %d, want whatever was loaded published anyway", len(store.puts))
+	}
+	if !strings.Contains(got.Uncounted, "did not report back") {
+		t.Errorf("uncounted = %q, want the counts reported unknown with the reason", got.Uncounted)
+	}
+}
+
+// A report that lands while the publish leg runs is the late half of the same
+// story, and its counts are the only account of what stayed cold. Dropping it
+// with the waiter would throw them away for nothing.
+func TestWarmBytecodeCache_CollectsALateReport(t *testing.T) {
+	store := slowBytecodeStore{fakeBytecodeStore: &fakeBytecodeStore{}, delay: 400 * time.Millisecond}
+	m, nodeReader, nodeConn := controlConnPair(t)
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "compiled bytes"), OK: true}, true)
+	m.bytecode = u
+
+	// The reply arrives after the load deadline has passed but while the
+	// publish is still in flight.
+	go func() {
+		if _, err := nodeReader.ReadString('\n'); err != nil {
+			return
+		}
+		time.Sleep(600 * time.Millisecond)
+		fmt.Fprintln(nodeConn, warmedReply)
+	}()
+
+	got := m.warmBytecodeCache(warmCtx(t, bytecodeUploadBudget+completionMargin+500*time.Millisecond))
+
+	if got.State != warmStatePublished {
+		t.Fatalf("state = %q (%+v), want %q", got.State, got, warmStatePublished)
+	}
+	if got.Entries != 42 || got.Loaded != 41 {
+		t.Errorf("summary = %+v, want the late report's own counts", got)
+	}
+	if got.Uncounted != "" {
+		t.Errorf("uncounted = %q, want the counts accounted for after all", got.Uncounted)
+	}
+}
+
+// The one thing an operator cannot work out from "38/51" is which routes stay
+// cold, so the names travel from node's report all the way into the summary.
+func TestWarmBytecodeCache_CarriesTheSkippedEntries(t *testing.T) {
+	store := &fakeBytecodeStore{}
+	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), stoppedReply)
+
+	got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
+
+	if got.StoppedBy != "ceiling" || got.SkippedCount != 9 {
+		t.Fatalf("summary = %+v, want the walk's own stop and skipped count", got)
+	}
+	if len(got.Skipped) != 2 || got.Skipped[0] != "app/a/page" {
+		t.Errorf("skipped = %v, want the names node reported", got.Skipped)
 	}
 }
 
@@ -282,16 +376,16 @@ func TestWarmBytecodeCache_AnObjectAlreadyThereReadsAsAlreadyCached(t *testing.T
 // A child that reads the request and never answers must not hold the pass to
 // the function timeout: the wait ends at the load deadline and the state says
 // so.
-func TestWarmBytecodeCache_ReportsAChildThatNeverAnswers(t *testing.T) {
+// A child that reads the request and never answers must not hold the pass to
+// the function timeout: the wait ends at the load deadline, and the publish leg
+// still gets the budget that was reserved for it.
+func TestWarmBytecodeCache_StopsWaitingAtTheLoadDeadline(t *testing.T) {
 	store := &fakeBytecodeStore{}
 	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), "")
 
 	start := time.Now()
-	got := m.warmBytecodeCache(warmCtx(t, bytecodeUploadBudget+completionMargin+500*time.Millisecond))
+	m.warmBytecodeCache(warmCtx(t, bytecodeUploadBudget+completionMargin+500*time.Millisecond))
 
-	if got.State != warmStateFailed {
-		t.Fatalf("state = %q, want %q", got.State, warmStateFailed)
-	}
 	if elapsed := time.Since(start); elapsed > 2*time.Second {
 		t.Errorf("took %s, want the wait ended at the load deadline", elapsed)
 	}
@@ -363,6 +457,7 @@ func TestWarmCompileCache_RequestCarriesTheDeadlineAndTheCeiling(t *testing.T) {
 	go func() {
 		defer close(done)
 		m.warmCompileCache(context.Background(), deadline)
+		m.endWarmExchange()
 	}()
 
 	line, err := nodeReader.ReadString('\n')
@@ -396,7 +491,7 @@ func TestWarmCompileCache_RequestCarriesTheDeadlineAndTheCeiling(t *testing.T) {
 
 func TestWarmCompileCache_NoOpsWithoutAControlConnection(t *testing.T) {
 	m := &Membrane{}
-	if _, ok := m.warmCompileCache(context.Background(), time.Now().Add(time.Second)); ok {
+	if _, _, ok := m.warmCompileCache(context.Background(), time.Now().Add(time.Second)); ok {
 		t.Error("warmCompileCache() ok = true, want false with no child attached")
 	}
 }
@@ -482,11 +577,12 @@ func TestHandleInvocation_RealEventIsStillForwarded(t *testing.T) {
 }
 
 // A warm invocation must not fail the invocation or leave the runtime loop,
-// however badly it goes — here the child is gone entirely.
+// however badly it goes — here the child is gone entirely and S3 refuses the
+// PUT, so there is genuinely nothing to publish.
 func TestHandleInvocation_AWarmFailureStillAnswersTheInvocation(t *testing.T) {
 	membraneSide, nodeSide := net.Pipe()
 	nodeSide.Close()
-	store := &fakeBytecodeStore{}
+	store := &fakeBytecodeStore{putErr: errors.New("access denied")}
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: cacheDirWith(t, "x"), OK: true}, true)
 	m := &Membrane{control: membraneSide, pending: map[string]chan struct{}{}, bytecode: u}
 	go m.drainControl(bufio.NewReader(membraneSide))

@@ -90,11 +90,14 @@ So the script asserts, in this order and **before it issues a single request**:
    answers `already-cached` instead. A summary the script cannot find, or one
    that only ever says `already-cached`, fails — an unattributed object could be
    a one-route cache a stray request got there first with.
-3. That summary's `loaded` accounts for all of `entries`. A walk the 64 MiB
-   ceiling or the invocation deadline cut short is a **warning, not a failure** —
-   it is a real outcome for a bundle too big or too slow to warm whole, and the
-   run re-prints every warning at the end so a half-warmed bundle can't read as
-   a whole one.
+3. That summary's `loaded` accounts for all of `entries`, and `skipped` names
+   what a stopped walk never reached. A walk the 64 MiB ceiling or the
+   invocation deadline cut short is a **warning, not a failure** — it is a real
+   outcome for a bundle too big or too slow to warm whole, and the run re-prints
+   every warning at the end so a half-warmed bundle can't read as a whole one. A
+   summary carrying `uncounted` is the same warning: the membrane published what
+   the instance had loaded without node reporting what that was, so the object
+   is real and its coverage is unknown.
 
 Then the read leg, unchanged: a burst of concurrent requests forces fresh
 sandboxes, and at least one instance's CloudWatch logs must report a rehydrate

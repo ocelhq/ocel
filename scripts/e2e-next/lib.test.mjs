@@ -476,6 +476,28 @@ describe("warmCoverage", () => {
     expect(warmCoverage({ ...published, entries: 0, loaded: 0 }, key).kind).toBe("failed");
   });
 
+  // The membrane publishes what INIT loaded even when node never reported back,
+  // so an uncounted publish is a real object with unknown coverage — not the
+  // "no entries at all" contradiction it would otherwise be mistaken for.
+  it("reports a publish nobody could account for as partial, with the reason", () => {
+    const verdict = warmCoverage(
+      { state: "published", uploaded: true, bytes: 4096, key, uncounted: "node did not report back" },
+      key,
+    );
+    expect(verdict.kind).toBe("partial");
+    expect(verdict.detail).toContain("node did not report back");
+  });
+
+  it("names the entries a stopped walk skipped", () => {
+    const verdict = warmCoverage(
+      { ...published, loaded: 7, stoppedBy: "ceiling", skippedCount: 5, skipped: ["app/a/page"] },
+      key,
+    );
+    expect(verdict.kind).toBe("partial");
+    expect(verdict.detail).toContain("5 skipped");
+    expect(verdict.detail).toContain("app/a/page");
+  });
+
   it("proves nothing from an already-cached pass, whether or not it walked", () => {
     expect(warmCoverage({ state: "already-cached" }, key).kind).toBe("unproven");
     expect(warmCoverage({ ...published, state: "already-cached", uploaded: undefined }, key).kind).toBe("unproven");
