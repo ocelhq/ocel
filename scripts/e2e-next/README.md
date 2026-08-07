@@ -12,14 +12,19 @@ isolated app per test suite and calls three scripts per app; these are ours:
 
 `assert-isr.mjs` is a smoke-job assertion rather than a harness script: it takes
 the deployment URL and proves a revalidating route's cache entry is rewritten.
-`assert-tag-publisher.mjs`, `assert-suppression-golden.mjs` and
-`assert-bytecode.mjs` are the same kind of thing, run against a deployment URL
-by hand (see "Golden gate" below). `assert-bytecode.mjs` proves both legs of
-the V8 compile cache `cloud/aws/cmd/lambdanode/bootstrap/bytecode.go` builds —
-see "What `assert-bytecode.mjs` proves" below. It reads slug, environment, app,
-build id and deploy time from `.ocel/deploy-result.json` in the deployed app's
-directory, so run it from there. `lib.mjs` holds the shared pure logic (unit
-tested: `pnpm --filter @ocel-scripts/e2e-next test`).
+`assert-tag-publisher.mjs`, `assert-suppression-golden.mjs`,
+`assert-bytecode.mjs` and `assert-embed.mjs` are the same kind of thing, run
+against a deployment URL by hand (see "Golden gate" below).
+`assert-bytecode.mjs` proves both legs of the V8 compile cache
+`cloud/aws/cmd/lambdanode/bootstrap/bytecode.go` builds — see "What
+`assert-bytecode.mjs` proves" below — and `assert-embed.mjs` covers the read leg
+in its place when the deploy embedded that cache in the artifact
+(`OCEL_BYTECODE_EMBED=1`). Both read slug, environment, app, build id and deploy
+time from `.ocel/deploy-result.json` in the deployed app's directory, so run
+them from there. `lib.mjs` holds the shared pure logic (unit tested: `pnpm
+--filter @ocel-scripts/e2e-next test`); `aws.mjs` holds the `aws` CLI calls the
+two assertion scripts share, which is everything that could not be unit tested
+and so is kept out of `lib.mjs` rather than left uncovered inside it.
 `merge-baseline.mjs` records the known-failure baseline. `stage-smoke-app.mjs`
 stages the smoke job's app. `guard-accounts.sh` refuses to deploy anywhere but
 the disposable account. The workflow that drives all of it is
@@ -99,9 +104,9 @@ So the script asserts, in this order and **before it issues a single request**:
    the instance had loaded without node reporting what that was, so the object
    is real and its coverage is unknown.
 
-Then the read leg, unchanged: a burst of concurrent requests forces fresh
-sandboxes, and at least one instance's CloudWatch logs must report a rehydrate
-hit naming the discovered key.
+Then the read leg: a burst of concurrent requests forces fresh sandboxes, and at
+least one instance's CloudWatch logs must report a rehydrate hit naming the
+discovered key.
 
 What it cannot prove: that the object's *contents* cover every route. It takes
 the membrane's own count, gunzips and untars the archive to prove it is a real
@@ -110,6 +115,52 @@ entries is node's private business. The whole warm leg also needs a **membrane
 layer carrying `warm.go`**; against the pinned `defaultMembraneLayerARN` (see
 "Known limits") an older layer answers the warm payload as an empty request,
 nothing is published before the promote, and step 1 fails.
+
+## What `assert-embed.mjs` proves, and what it takes off `assert-bytecode.mjs`
+
+`OCEL_BYTECODE_EMBED=1` on the deploying process adds a pass that bakes the
+published cache into the function's own artifact
+(`.ocel/bytecode/node<ver>-<arch>.tar` inside the `.func` zip,
+`cloud/aws/deploy/embed.go`), so a cold start reads it out of `/var/task`
+instead of paying an S3 GET. **The two scripts split along that flag:**
+
+- With the flag off, `assert-embed.mjs` skips and asserts nothing, loudly.
+- With the flag on, `assert-bytecode.mjs` drops its read leg — the S3 rehydrate
+  line it requires is one embedding makes *false*, not merely unlikely — and
+  says so as an end-of-run warning naming the leg as unproven. Its write leg is
+  unaffected and still runs: the embed pass reads what the warm pass published,
+  so the object and its warm summary have to exist either way.
+
+So under the flag the two are complementary and **both must run** for the read
+leg to be covered at all. `assert-embed.mjs` asserts, in order:
+
+1. The function's `CodeSha256` is not the sha of the artifact the deploy
+   originally uploaded. The pass writes the merged bundle to a new
+   content-addressed key beside the original (`<hash>-bc-<digest>.zip`) rather
+   than over it, so both objects are in the artifact bucket afterwards and the
+   pair is discoverable by listing — the deploy tells nothing outside it either
+   key. Equal shas mean the repackaged bundle was built and uploaded but
+   `UpdateFunctionCode` never moved the function onto it.
+2. The package Lambda actually holds — downloaded from the presigned
+   `Code.Location`, and required to hash to the reported `CodeSha256` before
+   anything is read out of it — carries `.ocel/bytecode/node<ver>-<arch>.tar` at
+   exactly the name derived from the cache key an independent S3 listing found.
+   Deriving it from the key is the point: both the deploy and the membrane
+   derive that path from the key's basename, and a tar under any other name is
+   one no cold start will ever look for. A package carrying some *other* entry
+   under `.ocel/bytecode/` is reported as that distinct failure.
+3. A burst of cold starts logs `loaded embedded compile cache from` and **never**
+   `rehydrated compile cache from`. The poll runs the full window rather than
+   stopping at the first embedded hit: one hit proves an instance read the
+   artifact, but "none fell through to S3" is a claim about every instance the
+   burst started. A window in which no log read ever succeeded fails as
+   *unreadable*, separately and before the absence of the S3 line can be
+   mistaken for proof of it.
+
+Every way the embedded path can fail degrades to the S3 behaviour
+`assert-bytecode.mjs` already proves, so the deployment stays green and nothing
+gets slower — which is exactly why this needs its own assertion rather than
+being visible in a response.
 
 ## Golden gate: `purpose: prefetch` has no side effect
 

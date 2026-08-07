@@ -3,6 +3,9 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   APP_NAME,
+  BYTECODE_EMBEDDED_MARKER,
+  BYTECODE_EMBED_ENV,
+  BYTECODE_S3_REHYDRATE_MARKER,
   DNS_LABEL,
   GOLDEN_MARKER,
   GOLDEN_REVALIDATE_SECONDS,
@@ -15,13 +18,18 @@ import {
   buildBaselineManifest,
   bytecodeCacheKeyName,
   bytecodeCacheKeyPrefix,
+  bytecodeEmbedEnabled,
+  bytecodeEmbeddedOutcome,
   bytecodeRehydrateOutcome,
   deployURL,
+  embeddedArtifactPairs,
+  embeddedBytecodePath,
   envSegment,
   goldenDifferences,
   isrToken,
   lambdaFunctionNames,
   lambdaLogGroups,
+  logWindowVerdict,
   markerLines,
   mergeBaselineManifest,
   projectSlug,
@@ -29,12 +37,14 @@ import {
   renderOcelConfig,
   strongestCoverage,
   suiteFromResultsPath,
+  summarizeOutcomes,
   suiteResultFromJest,
   tail,
   tarEntryNames,
   warmCoverage,
   warmSummaryOutcome,
   withBuildScript,
+  zipEntryNames,
 } from "./lib.mjs";
 
 describe("projectSlug", () => {
@@ -427,6 +437,110 @@ describe("bytecodeRehydrateOutcome", () => {
   });
 });
 
+describe("bytecodeEmbedEnabled", () => {
+  it("is on for exactly the literal 1, mirroring the deploy's own gate", () => {
+    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "1" })).toBe(true);
+  });
+
+  it("is off when unset or set to anything else", () => {
+    expect(bytecodeEmbedEnabled({})).toBe(false);
+    expect(bytecodeEmbedEnabled(undefined)).toBe(false);
+    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "0" })).toBe(false);
+    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "true" })).toBe(false);
+    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "" })).toBe(false);
+  });
+});
+
+describe("embeddedBytecodePath", () => {
+  it("mirrors the key's basename into the artifact, minus the gzip layer", () => {
+    expect(
+      embeddedBytecodePath("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/node24.3.1-arm64.tar.gz"),
+    ).toBe(".ocel/bytecode/node24.3.1-arm64.tar");
+    expect(embeddedBytecodePath("node24.3.1-x86_64.tar.gz")).toBe(".ocel/bytecode/node24.3.1-x86_64.tar");
+  });
+
+  it("refuses a key that names no cache tarball", () => {
+    expect(embeddedBytecodePath("a/b/some-other-object.tar.gz")).toBeNull();
+    expect(embeddedBytecodePath("a/b/node24.3.1-x86_64.tar")).toBeNull();
+    expect(embeddedBytecodePath("")).toBeNull();
+    expect(embeddedBytecodePath(undefined)).toBeNull();
+  });
+});
+
+describe("bytecodeEmbeddedOutcome", () => {
+  const tarPath = "/var/task/.ocel/bytecode/node24.3.1-x86_64.tar";
+
+  it("recognizes a hit naming the tar", () => {
+    const message = `ocel: loaded embedded compile cache from ${tarPath}: 4096 bytes in 7ms`;
+    expect(bytecodeEmbeddedOutcome(message, tarPath)).toEqual({ kind: "hit", message });
+  });
+
+  it("classifies each way the local leg can fail without calling any of them a hit", () => {
+    expect(
+      bytecodeEmbeddedOutcome(`ocel: could not open the embedded compile cache at ${tarPath}: permission denied`, tarPath),
+    ).toEqual({ kind: "open-error", message: expect.any(String) });
+    expect(
+      bytecodeEmbeddedOutcome(
+        `ocel: could not clear /tmp/.ocel/compile-cache before loading the embedded compile cache at ${tarPath}: read-only`,
+        tarPath,
+      ).kind,
+    ).toBe("clear-error");
+    // "could not load the embedded compile cache at" vs "loaded embedded
+    // compile cache from" — one wrong word here folds a fall-through into a hit.
+    expect(
+      bytecodeEmbeddedOutcome(`ocel: could not load the embedded compile cache at ${tarPath}: unexpected EOF`, tarPath).kind,
+    ).toBe("load-error");
+  });
+
+  it("ignores unrelated lines, and a line naming a different tar", () => {
+    expect(bytecodeEmbeddedOutcome("START RequestId: abc", tarPath)).toBeNull();
+    expect(
+      bytecodeEmbeddedOutcome("ocel: loaded embedded compile cache from /var/task/.ocel/bytecode/node22.0.0-x86_64.tar: 1 bytes in 1ms", tarPath),
+    ).toBeNull();
+  });
+
+  it("does not confuse the two read legs in either direction", () => {
+    const key = "preview/app/bld/bytecode/fn/node24.3.1-x86_64.tar.gz";
+    const s3Hit = `ocel: rehydrated compile cache from ${key}: 4096 bytes in 312ms`;
+    const embeddedHit = `ocel: loaded embedded compile cache from ${tarPath}: 4096 bytes in 7ms`;
+    expect(bytecodeEmbeddedOutcome(s3Hit, tarPath)).toBeNull();
+    expect(bytecodeRehydrateOutcome(embeddedHit, key)).toBeNull();
+    // The whole CloudWatch attribution rests on this: a caller looks for one
+    // marker to require and the other to forbid, so either containing the other
+    // would make "read from the artifact" indistinguishable from "read from S3".
+    expect(BYTECODE_EMBEDDED_MARKER).not.toContain(BYTECODE_S3_REHYDRATE_MARKER);
+    expect(BYTECODE_S3_REHYDRATE_MARKER).not.toContain(BYTECODE_EMBEDDED_MARKER);
+    expect(embeddedHit).not.toContain(BYTECODE_S3_REHYDRATE_MARKER);
+    expect(s3Hit).not.toContain(BYTECODE_EMBEDDED_MARKER);
+  });
+});
+
+describe("embeddedArtifactPairs", () => {
+  const original = "e2e-42/web-server/abc123.zip";
+  const embedded = "e2e-42/web-server/abc123-bc-deadbeefdeadb.zip";
+
+  it("pairs a repackaged artifact with the original it extends", () => {
+    expect(embeddedArtifactPairs([original, embedded])).toEqual([
+      { embedded, original, digest: "deadbeefdeadb" },
+    ]);
+  });
+
+  it("reports a repackaged artifact whose original is gone rather than dropping it", () => {
+    expect(embeddedArtifactPairs([embedded])).toEqual([{ embedded, original: null, digest: "deadbeefdeadb" }]);
+  });
+
+  it("finds none when the deploy embedded nothing", () => {
+    expect(embeddedArtifactPairs([original, "e2e-42/other/def456.zip"])).toEqual([]);
+    expect(embeddedArtifactPairs([])).toEqual([]);
+    expect(embeddedArtifactPairs(undefined)).toEqual([]);
+  });
+
+  it("ignores keys that merely look like one", () => {
+    expect(embeddedArtifactPairs(["e2e-42/web-server/abc123-bc-nothex.zip"])).toEqual([]);
+    expect(embeddedArtifactPairs(["e2e-42/web-server/abc123-bc-deadbeef.tar"])).toEqual([]);
+  });
+});
+
 describe("warmSummaryOutcome", () => {
   const summary = { state: "published", entries: 12, loaded: 12, stoppedBy: "complete", bytes: 4096, key: "k", uploaded: true };
 
@@ -528,6 +642,46 @@ describe("strongestCoverage", () => {
   });
 });
 
+describe("summarizeOutcomes", () => {
+  it("counts outcomes by kind", () => {
+    expect(
+      summarizeOutcomes([{ kind: "miss" }, { kind: "fetch-error" }, { kind: "miss" }]),
+    ).toBe("2 miss, 1 fetch-error");
+  });
+
+  it("says so when nothing related was seen at all", () => {
+    expect(summarizeOutcomes([])).toBe("0 related lines");
+  });
+});
+
+describe("logWindowVerdict", () => {
+  const pageLimit = 1000;
+
+  it("reads a window that was polled cleanly to its end", () => {
+    const verdict = logWindowVerdict({ attempts: 5, failures: 0, confirmed: true, events: 12, pageLimit });
+    expect(verdict.kind).toBe("read");
+    expect(verdict.detail).toContain("5/5");
+  });
+
+  it("still reads it when polls failed but the last read succeeded", () => {
+    // The window is re-read from its start every time, so one successful read
+    // at the end covers everything the failed ones missed.
+    expect(logWindowVerdict({ attempts: 5, failures: 4, confirmed: true, events: 12, pageLimit }).kind).toBe("read");
+  });
+
+  it("reports a window never read to its end as unread, however many polls succeeded", () => {
+    const verdict = logWindowVerdict({ attempts: 13, failures: 1, confirmed: false, events: 0, pageLimit });
+    expect(verdict.kind).toBe("unread");
+    expect(verdict.detail).toContain("12/13");
+  });
+
+  it("reports a full page as truncated, because a line could have been dropped off its end", () => {
+    const verdict = logWindowVerdict({ attempts: 2, failures: 0, confirmed: true, events: pageLimit, pageLimit });
+    expect(verdict.kind).toBe("truncated");
+    expect(verdict.detail).toContain(String(pageLimit));
+  });
+});
+
 describe("tarEntryNames", () => {
   it("reads the entries of a valid tar, honoring the prefix field", () => {
     const tar = buildTar([
@@ -603,6 +757,95 @@ function buildTarEntry(name, content) {
   const padded = Buffer.alloc(dataBlocks);
   data.copy(padded);
   return Buffer.concat([header, padded]);
+}
+
+describe("zipEntryNames", () => {
+  it("reads every entry's name out of the central directory", () => {
+    const zip = buildZip([
+      { name: "index.mjs", content: "export default 1" },
+      { name: ".ocel/variables.enc", content: "cipher" },
+      { name: ".ocel/bytecode/node24.3.1-x86_64.tar", content: "tar bytes" },
+    ]);
+    expect(zipEntryNames(zip)).toEqual([
+      "index.mjs",
+      ".ocel/variables.enc",
+      ".ocel/bytecode/node24.3.1-x86_64.tar",
+    ]);
+  });
+
+  it("reads an empty zip", () => {
+    expect(zipEntryNames(buildZip([]))).toEqual([]);
+  });
+
+  it("finds the record past a trailing comment", () => {
+    const zip = buildZip([{ name: "a.txt", content: "a" }], "a comment the scan has to walk back over");
+    expect(zipEntryNames(zip)).toEqual(["a.txt"]);
+  });
+
+  it("takes the last end-of-central-directory record, not one an entry's bytes spell", () => {
+    const decoy = Buffer.alloc(22);
+    decoy.writeUInt32LE(0x06054b50, 0);
+    const zip = buildZip([{ name: "decoy.bin", content: decoy.toString("latin1") }]);
+    expect(zipEntryNames(zip)).toEqual(["decoy.bin"]);
+  });
+
+  it("throws rather than returning a short list for anything malformed", () => {
+    expect(() => zipEntryNames(Buffer.from("not a zip at all"))).toThrow(/not a zip/);
+    const zip = buildZip([{ name: "a.txt", content: "a" }]);
+    // Blow away the central-file-header signature the EOCD still points at.
+    const corrupt = Buffer.from(zip);
+    corrupt.writeUInt32LE(0, corrupt.readUInt32LE(corrupt.length - 6));
+    expect(() => zipEntryNames(corrupt)).toThrow(/no central-file-header signature/);
+  });
+
+  it("throws when the central directory is truncated away", () => {
+    const zip = buildZip([{ name: "a.txt", content: "a" }]);
+    const eocd = Buffer.from(zip.subarray(zip.length - 22));
+    // An EOCD claiming a directory that starts past the end of the buffer.
+    eocd.writeUInt32LE(0xfffffff0, 16);
+    expect(() => zipEntryNames(eocd)).toThrow(/runs past the end of the buffer/);
+  });
+});
+
+// buildZip is a minimal stored-mode zip writer used only to build fixtures for
+// zipEntryNames: real packages always come from Go's archive/zip. CRCs are left
+// zero because nothing under test reads them.
+function buildZip(entries, comment = "") {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const name = Buffer.from(entry.name, "utf8");
+    const data = Buffer.from(entry.content, "latin1");
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(name.length, 26);
+    locals.push(local, name, data);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(name.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(central, name);
+    offset += 30 + name.length + data.length;
+  }
+
+  const directory = Buffer.concat(centrals);
+  const commentBytes = Buffer.from(comment, "utf8");
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(directory.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  eocd.writeUInt16LE(commentBytes.length, 20);
+  return Buffer.concat([...locals, directory, eocd, commentBytes]);
 }
 
 describe("tail", () => {
