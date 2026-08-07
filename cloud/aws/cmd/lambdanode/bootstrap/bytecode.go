@@ -164,6 +164,18 @@ const bytecodeUploadBudget = 2 * time.Second
 // an init timeout of its own.
 const bytecodeRehydrateBudget = 2 * time.Second
 
+// bytecodeResolveBudget bounds the version probe and the AWS config load
+// that precede the key composition, both of which now run before the spawn
+// rather than off the request path. Unlike the rehydrate and upload legs,
+// this is not carved out of startupBudget by subtraction — it typically
+// costs nothing extra, since it overlaps the live-values prefetch and the
+// baked-var decrypts — but a wedged exec or a stalled config load must still
+// land in the same place the off switch does rather than hold up the join,
+// and therefore the spawn, indefinitely. It bounds the context handed to
+// resolveBytecodeResolution and, independently, the join itself: whichever
+// of those two never respects the other still gives up here.
+const bytecodeResolveBudget = 2 * time.Second
+
 // compileCacheFlushTimeout bounds the wait for node's flush ack. A child that
 // never answers is a child that is wedged, and the loop must not join it there.
 const compileCacheFlushTimeout = time.Second
@@ -541,10 +553,12 @@ func bytecodeBudget(ctx context.Context) time.Duration {
 }
 
 // nodeVersionFromBinary asks the same binary the child was exec'd from what
-// version it is. It runs off the request path, once per instance at most, so
-// the process it costs is paid by an invocation that has already been answered
-// — and it is bounded by the upload's context, so a wedged exec cannot outlive
-// the budget.
+// version it is. It now runs on the init critical path, before the spawn, as
+// part of composing the compile cache's key — not off the request path the
+// way the upload's own exec used to be. It is bounded by whatever context the
+// caller hands it: resolveBytecodeResolution's caller derives that context
+// from bytecodeResolveBudget, so a wedged exec cannot hold up the join (and
+// therefore the spawn) past that cap.
 func nodeVersionFromBinary(ctx context.Context) (string, error) {
 	out, err := exec.CommandContext(ctx, nodeBinaryPath, "--version").Output()
 	if err != nil {
