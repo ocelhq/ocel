@@ -103,6 +103,27 @@ describe("drainWaitUntil", () => {
   });
 });
 
+describe("onListening", () => {
+  // Callers configure the process from the bound port here — the Next
+  // entrypoint's self-fetch origin among them — so it is handed the port the
+  // server really bound, not the one it asked for.
+  test("is handed the port the server bound", async () => {
+    const before = messages.filter((m) => m.type === "server-ready").length;
+    let seen: number | undefined;
+
+    await serveInvoke(
+      (_req, res) => res.end("ok"),
+      (port) => {
+        seen = port;
+      },
+    );
+    await waitFor(() => messages.filter((m) => m.type === "server-ready").length > before);
+
+    const ready = messages.filter((m) => m.type === "server-ready").at(-1)!;
+    expect(seen).toBe(ready.payload.httpPort);
+  });
+});
+
 describe("invocation lifecycle", () => {
   test("holds invocation-complete until waitUntil settles, after request-end", async () => {
     const events: string[] = [];
