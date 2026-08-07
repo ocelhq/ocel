@@ -162,7 +162,9 @@ func bytecodeRehydrate(ctx context.Context, r *bytecodeResolution) bool {
 // PUT: it proves the object already exists, so nothing membrane.bytecode
 // would do could ever matter, and leaving it nil is what keeps
 // uploadBytecodeCacheOnce from flushing, walking or archiving for an outcome
-// already decided.
+// already decided. The hit is recorded alongside it because that absence is
+// otherwise indistinguishable from a deployment with no compile cache at all,
+// and a warm invocation has to answer the two differently.
 //
 // bytecodeReady and rehydrate are dependencies for the same reason spawn is:
 // the whole sequence, including its budget arithmetic, is exercisable with
@@ -202,6 +204,7 @@ func bringUpWithBytecode(
 		return nil, err
 	}
 
+	membrane.bytecodeCached = hit
 	if bytecode != nil && !hit {
 		membrane.bytecode = bytecode.upload(membrane.flushCompileCache)
 	}

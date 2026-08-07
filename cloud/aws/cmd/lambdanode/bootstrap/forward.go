@@ -43,6 +43,16 @@ func handleInvocation(ctx context.Context, rt *runtimeClient, m *Membrane) error
 		return nil
 	}
 
+	// A warm invocation is not a request and has no Function URL behind it, so
+	// it never reaches the app, never registers a waiter, and answers with its
+	// own summary rather than a proxied response.
+	if isWarmInvocation(inv.Payload) {
+		if err := m.answerWarmInvocation(ctx, rw); err != nil {
+			fmt.Fprintf(os.Stderr, "ocel: deliver warm response for %s: %v\n", inv.lc.AwsRequestID, err)
+		}
+		return nil
+	}
+
 	// Register before forwarding so a fast completion signal can't race the
 	// waiter into existence.
 	waiter := m.registerWaiter(inv.lc.AwsRequestID)

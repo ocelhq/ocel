@@ -261,6 +261,27 @@ type bytecodeUpload struct {
 	flush  func(ctx context.Context) (compileCacheFlushedPayload, bool)
 }
 
+// bytecodeUploadOutcome is what an attempt has to say for itself. The
+// post-invocation path discards it — the invocation was already served, and a
+// line on stderr is all anyone can act on there — but a deploy-time warm
+// invocation reports it back, where "published" has to be distinguishable from
+// "over the ceiling" and from "the PUT failed": those are the same silence to
+// a caller that only sees whether the invocation succeeded.
+type bytecodeUploadOutcome struct {
+	uploaded bool
+	existed  bool
+	bytes    int64
+	reason   string
+}
+
+// abandonUpload ends an attempt with the one line it needs on stderr and
+// the same words carried back to a caller that reports rather than logs.
+func abandonUpload(format string, args ...any) bytecodeUploadOutcome {
+	reason := fmt.Sprintf(format, args...)
+	fmt.Fprintln(os.Stderr, "ocel: "+reason)
+	return bytecodeUploadOutcome{reason: reason}
+}
+
 // run publishes the cache, or gives up. Nothing it does can fail an invocation:
 // every leg that can go wrong ends the attempt with a line on stderr, because a
 // warm start that never gets a cache is strictly better than a request that
@@ -270,63 +291,58 @@ type bytecodeUpload struct {
 // instance that lost the upload race to another instance finds out for the
 // price of a HEAD, rather than paying to flush node's cache and build an
 // archive it is only going to discard.
-func (u bytecodeUpload) run(ctx context.Context) {
+func (u bytecodeUpload) run(ctx context.Context) bytecodeUploadOutcome {
 	budget := bytecodeBudget(ctx)
 	if budget <= 0 {
-		fmt.Fprintln(os.Stderr, "ocel: no time left to publish the compile cache; skipping")
-		return
+		return abandonUpload("no time left to publish the compile cache; skipping")
 	}
 	ctx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 
 	exists, err := u.store.objectExists(ctx, u.bucket, u.key)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: could not check for an existing compile cache at %s: %v\n", u.key, err)
-		return
+		return abandonUpload("could not check for an existing compile cache at %s: %v", u.key, err)
 	}
 	if exists {
-		return
+		return bytecodeUploadOutcome{existed: true}
 	}
 
 	ack, ok := u.flush(ctx)
 	if !ok {
-		return // flushCompileCache already said why
+		// flushCompileCache already said why on stderr.
+		return bytecodeUploadOutcome{reason: "node did not acknowledge the compile-cache flush"}
 	}
 	if !ack.OK {
-		fmt.Fprintln(os.Stderr, "ocel: node reported no compile cache to flush; skipping upload")
-		return
+		return abandonUpload("node reported no compile cache to flush; skipping upload")
 	}
 
 	size, err := compileCacheSize(ctx, ack.Dir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: could not measure the compile cache: %v\n", err)
-		return
+		return abandonUpload("could not measure the compile cache: %v", err)
 	}
 	if size == 0 {
 		// The two mean different things: a directory node never created points
 		// at the flush, one that exists and holds nothing points at the app.
 		if _, err := os.Stat(ack.Dir); os.IsNotExist(err) {
-			fmt.Fprintf(os.Stderr, "ocel: node reported a compile cache at %s but nothing is there; skipping upload\n", ack.Dir)
-		} else {
-			fmt.Fprintf(os.Stderr, "ocel: the compile cache at %s is empty; nothing to upload\n", ack.Dir)
+			return abandonUpload("node reported a compile cache at %s but nothing is there; skipping upload", ack.Dir)
 		}
-		return
+		return abandonUpload("the compile cache at %s is empty; nothing to upload", ack.Dir)
 	}
 	if exceedsBytecodeCacheCeiling(size) {
-		fmt.Fprintf(os.Stderr, "ocel: compile cache is %d bytes, over the %d byte ceiling; skipping upload\n",
-			size, bytecodeCacheCeiling)
-		return
+		over := abandonUpload("compile cache is %d bytes, over the %d byte ceiling; skipping upload", size, bytecodeCacheCeiling)
+		over.bytes = size
+		return over
 	}
 
 	archive, err := buildArchiveWithin(ctx, ack.Dir)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: could not archive the compile cache: %v\n", err)
-		return
+		return abandonUpload("could not archive the compile cache: %v", err)
 	}
 
 	if err := u.store.putObject(ctx, u.bucket, u.key, archive); err != nil {
-		fmt.Fprintf(os.Stderr, "ocel: could not upload the compile cache to %s: %v\n", u.key, err)
+		return abandonUpload("could not upload the compile cache to %s: %v", u.key, err)
 	}
+	return bytecodeUploadOutcome{uploaded: true, bytes: size}
 }
 
 // compileCacheSize sums what a compile cache directory holds without reading a

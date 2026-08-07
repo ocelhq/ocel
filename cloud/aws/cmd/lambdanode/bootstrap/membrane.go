@@ -58,12 +58,20 @@ type Membrane struct {
 	// runtime loop starts and never reassigned.
 	bytecode *bytecodeUpload
 
+	// bytecodeCached records that the nil above is a hit rather than a
+	// deployment with no compile cache at all. The two are the same absence to
+	// every other caller, and only a warm invocation has to tell them apart —
+	// which it cannot do by re-resolving without paying for the resolution a
+	// second time.
+	bytecodeCached bool
+
 	// pending maps an in-flight request id to the channel closed when the JS
 	// side reports the invocation complete (response finished and every
 	// waitUntil promise settled). Nil in tests that don't exercise completion.
 	mu           sync.Mutex
 	pending      map[string]chan struct{}
 	flushWaiter  chan compileCacheFlushedPayload
+	warmWaiter   chan compileCacheWarmedPayload
 	bytecodeDone bool
 }
 
@@ -173,26 +181,101 @@ func (m *Membrane) flushCompileCache(ctx context.Context) (compileCacheFlushedPa
 	return compileCacheFlushedPayload{}, false
 }
 
-// writeFlushRequest sends the request under a deadline. A child wedged with a
-// full receive buffer would otherwise block this write indefinitely — past the
-// budget and past the invocation deadline — which is the one way this path
-// could still cost an already-answered invocation a recorded timeout.
-//
-// The deadline is cleared immediately after, because live values are pushed
-// down this same connection and must not inherit it. The window where one could
-// is a single syscall wide, and a live push caught in it fails, logs and is
-// retried by the next refresh.
 func (m *Membrane) writeFlushRequest(ctx context.Context) error {
 	deadline, ok := ctx.Deadline()
 	if !ok {
 		deadline = time.Now().Add(compileCacheFlushTimeout)
 	}
+	return m.writeControlRequest([]byte(flushCompileCacheLine), deadline)
+}
+
+// writeControlRequest sends one request line under a deadline. A child wedged
+// with a full receive buffer would otherwise block this write indefinitely —
+// past the budget and past the invocation deadline — which is the one way this
+// path could still cost an already-answered invocation a recorded timeout.
+//
+// The deadline is cleared immediately after, because live values are pushed
+// down this same connection and must not inherit it. The window where one could
+// is a single syscall wide, and a live push caught in it fails, logs and is
+// retried by the next refresh.
+func (m *Membrane) writeControlRequest(line []byte, deadline time.Time) error {
 	if err := m.control.SetWriteDeadline(deadline); err != nil {
 		return err
 	}
-	_, err := m.control.Write([]byte(flushCompileCacheLine))
+	_, err := m.control.Write(line)
 	m.control.SetWriteDeadline(time.Time{})
 	return err
+}
+
+// warmCompileCache asks node to load every entry in the bundle and waits for
+// what that produced. The deadline travels in the request rather than being
+// derived on the node side, because only the membrane knows what the publish
+// leg after it still needs; the ceiling travels with it for the same reason,
+// so the number both legs are judged against has one home.
+//
+// The wait ends at the load deadline — the request's own is the reply margin
+// earlier, so a node that stops exactly when it was told still has that long
+// for its answer to arrive.
+func (m *Membrane) warmCompileCache(ctx context.Context, deadline time.Time) (compileCacheWarmedPayload, bool) {
+	if m.control == nil {
+		return compileCacheWarmedPayload{}, false
+	}
+	reply := make(chan compileCacheWarmedPayload, 1)
+	m.mu.Lock()
+	m.warmWaiter = reply
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		m.warmWaiter = nil
+		m.mu.Unlock()
+	}()
+
+	// The write's own bound is about the child draining its socket now, not
+	// about how long the work it is being handed may take.
+	if err := m.writeControlRequest(warmCompileCacheLine(deadline), time.Now().Add(compileCacheFlushTimeout)); err != nil {
+		fmt.Fprintf(os.Stderr, "ocel: could not ask node to warm its compile cache: %v\n", err)
+		return compileCacheWarmedPayload{}, false
+	}
+
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+	select {
+	case p := <-reply:
+		return p, true
+	case <-ctx.Done():
+	}
+	fmt.Fprintln(os.Stderr, "ocel: node did not report back on the compile-cache warm")
+	return compileCacheWarmedPayload{}, false
+}
+
+// warmReplyMargin is held back from the deadline node is told, so a child that
+// loads right up to its instruction still has time to answer before the
+// membrane stops listening. Without it the two ends race on the same instant,
+// and a pass that loaded the whole bundle could be reported as one node never
+// answered.
+const warmReplyMargin = 250 * time.Millisecond
+
+// warmCompileCacheLine is the request, marshalled rather than written out as a
+// constant the way the flush is: it carries fields, and a hand-composed line
+// would be one more place the ceiling could drift from bytecodeCacheCeiling.
+func warmCompileCacheLine(deadline time.Time) []byte {
+	line, _ := json.Marshal(warmCompileCacheRequest{
+		Type: "warm-compile-cache",
+		Payload: warmCompileCacheParams{
+			DeadlineMs:   deadline.Add(-warmReplyMargin).UnixMilli(),
+			CeilingBytes: bytecodeCacheCeiling,
+		},
+	})
+	return append(line, '\n')
+}
+
+type warmCompileCacheRequest struct {
+	Type    string                 `json:"type"`
+	Payload warmCompileCacheParams `json:"payload"`
+}
+type warmCompileCacheParams struct {
+	DeadlineMs   int64 `json:"deadlineMs"`
+	CeilingBytes int64 `json:"ceilingBytes"`
 }
 
 // deliverCompileCacheFlush hands the ack to whoever asked for it, and drops it
@@ -208,20 +291,37 @@ func (m *Membrane) deliverCompileCacheFlush(p compileCacheFlushedPayload) {
 	}
 }
 
-// uploadBytecodeCacheOnce publishes the compile cache the first time it is
-// called and never again on this instance, whatever the outcome was. A cache is
-// only worth uploading once — every later invocation would rebuild and re-HEAD
-// the same object — and an attempt that failed is evidence this instance cannot
-// do it, not a reason to retry on the next request's billed time.
-func (m *Membrane) uploadBytecodeCacheOnce(ctx context.Context) {
-	if m.bytecode == nil {
-		return
-	}
+// deliverCompileCacheWarm is deliverCompileCacheFlush's twin, and drops an
+// unawaited reply for the same reason: a report that arrives after its waiter
+// gave up has no reader, and the drain loop also carries invocation-complete.
+func (m *Membrane) deliverCompileCacheWarm(p compileCacheWarmedPayload) {
 	m.mu.Lock()
-	done := m.bytecodeDone
-	m.bytecodeDone = true
+	reply := m.warmWaiter
+	m.warmWaiter = nil
 	m.mu.Unlock()
-	if done {
+	if reply != nil {
+		reply <- p
+	}
+}
+
+// claimBytecodeUpload reports whether the caller owns the one upload attempt
+// this instance gets. A cache is only worth uploading once — every later
+// invocation would rebuild and re-HEAD the same object — and an attempt that
+// failed is evidence this instance cannot do it, not a reason to retry on the
+// next request's billed time. A warm invocation claims it too, so the pass it
+// already spent inline is not spent again after the next request.
+func (m *Membrane) claimBytecodeUpload() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	claimed := !m.bytecodeDone
+	m.bytecodeDone = true
+	return claimed
+}
+
+// uploadBytecodeCacheOnce publishes the compile cache the first time it is
+// called and never again on this instance, whatever the outcome was.
+func (m *Membrane) uploadBytecodeCacheOnce(ctx context.Context) {
+	if m.bytecode == nil || !m.claimBytecodeUpload() {
 		return
 	}
 	m.bytecode.run(ctx)
@@ -246,6 +346,30 @@ type compileCacheFlushedPayload struct {
 	Dir string `json:"dir"`
 	OK  bool   `json:"ok"`
 }
+
+// compileCacheWarmedPayload is node's report on a warm pass. ok is false —
+// with state "unsupported" — on an artifact that has no warm capability at
+// all, which is a deployment that cannot be warmed rather than a failure of
+// the attempt.
+type compileCacheWarmedPayload struct {
+	OK        bool          `json:"ok"`
+	State     string        `json:"state"`
+	Entries   int           `json:"entries"`
+	Loaded    int           `json:"loaded"`
+	Failures  []warmFailure `json:"failures"`
+	StoppedBy string        `json:"stoppedBy"`
+	Bytes     int64         `json:"bytes"`
+	Dir       string        `json:"dir"`
+}
+
+// warmFailure is one bundle entry that would not load. They travel back rather
+// than being counted, because a route that throws on import is a bug the
+// deploy's operator wants named, not a number.
+type warmFailure struct {
+	Entry   string `json:"entry"`
+	Message string `json:"message"`
+}
+
 type logPayload struct {
 	Level   string `json:"level"`
 	Message string `json:"message"`
@@ -510,6 +634,11 @@ func (m *Membrane) drainControl(reader *bufio.Reader) {
 			var p compileCacheFlushedPayload
 			if json.Unmarshal(msg.Payload, &p) == nil {
 				m.deliverCompileCacheFlush(p)
+			}
+		case "compile-cache-warmed":
+			var p compileCacheWarmedPayload
+			if json.Unmarshal(msg.Payload, &p) == nil {
+				m.deliverCompileCacheWarm(p)
 			}
 		}
 	}
