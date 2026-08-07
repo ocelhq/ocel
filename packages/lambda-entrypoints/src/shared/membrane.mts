@@ -71,8 +71,7 @@ export function reportFatalBoot(err: unknown): void {
 function flushCompileCacheNow(): { dir: string | null; ok: boolean } {
   let dir: string | null = null;
   try {
-    const getCompileCacheDir = (Module as any).getCompileCacheDir;
-    const flushCompileCache = (Module as any).flushCompileCache;
+    const { getCompileCacheDir, flushCompileCache } = Module;
     dir = typeof getCompileCacheDir === "function" ? (getCompileCacheDir() ?? null) : null;
     if (typeof flushCompileCache !== "function") return { dir, ok: false };
     flushCompileCache();
