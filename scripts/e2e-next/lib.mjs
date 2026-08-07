@@ -436,6 +436,120 @@ export function bytecodeRehydrateOutcome(message, key) {
   return null;
 }
 
+/**
+ * The stderr line a warm invocation lands its whole summary on
+ * (answerWarmInvocation, cloud/aws/cmd/lambdanode/bootstrap/warm.go). The
+ * deploy reads that same summary out of the invoke's response payload, but the
+ * response is gone by the time anything asserts against the deployment —
+ * CloudWatch is the only place it survives, which is what makes the deploy's
+ * warm pass observable from outside at all.
+ */
+export const WARM_SUMMARY_MARKER = "ocel: warm invocation:";
+
+/**
+ * warmSummaryOutcome classifies one CloudWatch message as the warm summary the
+ * membrane logged, or null when it is some other line.
+ *
+ * A line carrying the marker but no readable JSON is returned as "unreadable"
+ * rather than dropped: that is a summary CloudWatch split or truncated, and
+ * treating it as "no warm ever happened" would turn a reporting problem into a
+ * claim about the deployment.
+ */
+export function warmSummaryOutcome(message) {
+  const text = String(message ?? "");
+  const at = text.indexOf(WARM_SUMMARY_MARKER);
+  if (at === -1) return null;
+  try {
+    return { kind: "summary", summary: JSON.parse(text.slice(at + WARM_SUMMARY_MARKER.length)), message: text };
+  } catch (err) {
+    return { kind: "unreadable", message: text, reason: err.message };
+  }
+}
+
+/**
+ * warmCoverage says what one warm summary proves about the cache the build
+ * ended up with. The states are warm.go's four, read for two separate claims:
+ * that *this pass* is what published the object (attribution), and that what it
+ * published covers the whole bundle (coverage).
+ *
+ * Attribution rests on the PUT being create-if-absent: exactly one writer can
+ * ever create a given key, and warm.go reports that writer as
+ * published/uploaded:true and every loser as already-cached. So published with
+ * uploaded:true is the only reply that proves warming — not a request, not an
+ * earlier run — created the object at `key`. published without uploaded:true is
+ * not a weaker version of that claim but a contradiction, and is reported as a
+ * failure rather than believed.
+ *
+ * Coverage is loaded against entries, qualified by where the walk stopped. A
+ * ceiling or deadline stop is a real, reportable outcome of a bundle that is
+ * too big or too slow to warm whole — "partial", for a caller to surface — not
+ * a broken cache and not a proof of a complete one.
+ *
+ * already-cached is "unproven", never a pass: the object exists, but this pass
+ * neither wrote it nor measured what is in it.
+ */
+export function warmCoverage(summary, key) {
+  const state = summary?.state ?? "";
+  const entries = summary?.entries ?? 0;
+  const loaded = summary?.loaded ?? 0;
+  const failures = summary?.failures ?? [];
+  const stoppedBy = summary?.stoppedBy ?? "";
+  const walk =
+    `${loaded}/${entries} entries loaded, ${failures.length} failed, stopped by ` +
+    `${stoppedBy || "(unreported)"}, ${summary?.bytes ?? 0} bytes`;
+
+  // A summary naming another key is another build's, and says nothing either
+  // way about this one — the key carries the build id, so the two can never be
+  // confused for each other.
+  if (summary?.key && key && summary.key !== key) {
+    return { kind: "other-build", detail: `names ${summary.key}, not ${key}` };
+  }
+
+  switch (state) {
+    case "published":
+      if (summary?.uploaded !== true) {
+        return { kind: "failed", detail: `published without uploaded:true (${walk}) — the two cannot both be true` };
+      }
+      if (entries === 0) {
+        return { kind: "failed", detail: `published a cache for a bundle reporting no entries at all (${walk})` };
+      }
+      if (loaded !== entries || (stoppedBy && stoppedBy !== "complete")) {
+        return { kind: "partial", detail: walk };
+      }
+      return { kind: "complete", detail: walk };
+    case "already-cached":
+      return {
+        kind: "unproven",
+        detail: entries
+          ? `the walk ran (${walk}) but another writer had already created the object`
+          : "the instance started on a cache that already existed, so nothing was walked or written",
+      };
+    case "disabled":
+      return { kind: "failed", detail: `bytecode caching is off in this function: ${summary?.error ?? "(no reason given)"}` };
+    case "failed":
+      return { kind: "failed", detail: `${walk}: ${summary?.error ?? "(no reason given)"}` };
+    default:
+      return { kind: "failed", detail: `unrecognized warm state ${JSON.stringify(state)}` };
+  }
+}
+
+/**
+ * How much a coverage verdict proves, weakest first. A window can hold more
+ * than one summary for the same key — a redeployed build warms again, and that
+ * second pass legitimately answers already-cached — so a caller takes the
+ * strongest rather than the first or the last: the object is one object, and
+ * the pass that actually wrote it is the one that says what is in it.
+ */
+const WARM_COVERAGE_RANK = ["failed", "unproven", "partial", "complete"];
+
+/** strongestCoverage picks the most conclusive verdict seen, or null for none. */
+export function strongestCoverage(verdicts) {
+  return (verdicts ?? []).reduce((best, verdict) => {
+    if (!best) return verdict;
+    return WARM_COVERAGE_RANK.indexOf(verdict.kind) > WARM_COVERAGE_RANK.indexOf(best.kind) ? verdict : best;
+  }, null);
+}
+
 const TAR_BLOCK_SIZE = 512;
 
 function tarString(block, start, length) {
