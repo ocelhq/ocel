@@ -87,7 +87,12 @@ func exceedsBytecodeCacheCeiling(uncompressedSize int64) bool {
 // does not exist yields an empty archive rather than an error: no compile
 // cache is not a failure the caller needs to swallow, it is simply nothing to
 // upload yet.
-func buildBytecodeArchive(dir string) (bytecodeArchive, error) {
+//
+// ctx stops the walk between entries. The caller's budget is the whole reason:
+// abandoning the wait while the work ran on would leave a goroutine holding a
+// gzip buffer and burning CPU, which on Lambda resumes when the sandbox thaws
+// and competes with a later request — the opposite of what this feature is for.
+func buildBytecodeArchive(ctx context.Context, dir string) (bytecodeArchive, error) {
 	var buf bytes.Buffer
 	gz := gzip.NewWriter(&buf)
 	tw := tar.NewWriter(gz)
@@ -98,6 +103,9 @@ func buildBytecodeArchive(dir string) (bytecodeArchive, error) {
 			if path == dir {
 				return nil // caller passed a dir that doesn't exist yet
 			}
+			return err
+		}
+		if err := ctx.Err(); err != nil {
 			return err
 		}
 		if !d.Type().IsRegular() {
@@ -260,7 +268,13 @@ func (u bytecodeUpload) run(ctx context.Context) {
 		return
 	}
 	if size == 0 {
-		fmt.Fprintf(os.Stderr, "ocel: node flushed an empty compile cache at %s; nothing to upload\n", ack.Dir)
+		// The two mean different things: a directory node never created points
+		// at the flush, one that exists and holds nothing points at the app.
+		if _, err := os.Stat(ack.Dir); os.IsNotExist(err) {
+			fmt.Fprintf(os.Stderr, "ocel: node reported a compile cache at %s but nothing is there; skipping upload\n", ack.Dir)
+		} else {
+			fmt.Fprintf(os.Stderr, "ocel: the compile cache at %s is empty; nothing to upload\n", ack.Dir)
+		}
 		return
 	}
 	if exceedsBytecodeCacheCeiling(size) {
@@ -319,13 +333,13 @@ func compileCacheSize(dir string) (int64, error) {
 }
 
 // buildArchiveWithin abandons the archive if the budget runs out mid-build. The
-// read and gzip are the most expensive leg and cannot be interrupted, so on a
-// memory-starved sandbox they can outlast the deadline — and a runtime loop
-// still waiting on them is an invocation Lambda records as a timeout after it
-// was already answered.
+// read and gzip are the most expensive leg, so on a memory-starved sandbox they
+// can outlast the deadline — and a runtime loop still waiting on them is an
+// invocation Lambda records as a timeout after it was already answered.
 //
-// The abandoned goroutine runs to completion and is then collected; there is
-// nothing to cancel inside it, and it holds only the buffer it was filling.
+// The build stops on the same context, so this releases the caller and ends the
+// work. The select is what makes the release immediate rather than delayed to
+// the walk's next entry, which matters when a single file is large.
 func buildArchiveWithin(ctx context.Context, dir string) (bytecodeArchive, error) {
 	// Checked before the goroutine rather than left to the select below, which
 	// picks at random when both cases are ready: a budget already spent must
@@ -340,7 +354,7 @@ func buildArchiveWithin(ctx context.Context, dir string) (bytecodeArchive, error
 	}
 	done := make(chan result, 1)
 	go func() {
-		archive, err := buildBytecodeArchive(dir)
+		archive, err := buildBytecodeArchive(ctx, dir)
 		done <- result{archive: archive, err: err}
 	}()
 	select {
