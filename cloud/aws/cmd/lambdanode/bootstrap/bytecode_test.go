@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -166,7 +167,7 @@ func TestBuildBytecodeArchive_RoundTrip(t *testing.T) {
 		}
 	}
 
-	archive, err := buildBytecodeArchive(dir)
+	archive, err := buildBytecodeArchive(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("buildBytecodeArchive: %v", err)
 	}
@@ -211,7 +212,7 @@ func TestBuildBytecodeArchive_SkipsNonRegularFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	archive, err := buildBytecodeArchive(dir)
+	archive, err := buildBytecodeArchive(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("buildBytecodeArchive: %v", err)
 	}
@@ -234,7 +235,7 @@ func TestBuildBytecodeArchive_SkipsNonRegularFiles(t *testing.T) {
 func TestBuildBytecodeArchive_MissingDirectoryIsEmptyNotAnError(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "does-not-exist")
 
-	archive, err := buildBytecodeArchive(dir)
+	archive, err := buildBytecodeArchive(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("buildBytecodeArchive: %v", err)
 	}
@@ -543,16 +544,13 @@ func (b *blockingBytecodeStore) putObject(ctx context.Context, _, _ string, _ []
 	return ctx.Err()
 }
 
-// A gzip that outlasts the budget must be abandoned: the runtime loop is not at
-// /next yet, so a build that runs on is an already-answered invocation that
-// Lambda records as a timeout.
-func TestBytecodeUpload_AbandonsAnArchiveBuildThatOutlastsTheBudget(t *testing.T) {
+// A budget spent before the build starts must not start one at all — the select
+// picks at random when both cases are ready, so this is the pre-check's job.
+func TestBytecodeUpload_SkipsTheArchiveWhenTheBudgetIsAlreadySpent(t *testing.T) {
 	dir := cacheDirWith(t, "compiled bytes")
 	store := &fakeBytecodeStore{}
 	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
 
-	// Spend the whole budget before the build starts, so the build's own select
-	// is the only thing left that can end the attempt.
 	u.nodeVersion = func(ctx context.Context) (string, error) {
 		<-ctx.Done()
 		return "v24.3.1", nil
@@ -571,12 +569,110 @@ func TestBytecodeUpload_AbandonsAnArchiveBuildThatOutlastsTheBudget(t *testing.T
 	}
 }
 
+// bigCacheDir writes a cache directory large enough that archiving it takes long
+// enough to be cancelled partway, with incompressible contents so gzip cannot
+// shortcut the work. It returns the directory and how long a full build of it
+// costs, so a test can cancel at a fraction of that rather than at a wall-clock
+// guess that would differ between machines and between -race and not.
+func bigCacheDir(t *testing.T) (string, time.Duration) {
+	t.Helper()
+	dir := t.TempDir()
+	buf := make([]byte, 8<<10)
+	for i := range 400 {
+		rand.Read(buf)
+		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("%04d.blob", i)), buf, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	start := time.Now()
+	if _, err := buildBytecodeArchive(context.Background(), dir); err != nil {
+		t.Fatal(err)
+	}
+	baseline := time.Since(start)
+	if baseline < 10*time.Millisecond {
+		t.Skipf("archiving is too fast here (%s) to cancel partway reliably", baseline)
+	}
+	return dir, baseline
+}
+
+// The walk has to stop, not just the wait on it. A goroutine left compressing
+// after the loop moved on resumes when Lambda thaws the sandbox and competes
+// with a later request for the CPU this feature exists to save.
+func TestBuildBytecodeArchive_StopsTheWalkWhenTheContextEnds(t *testing.T) {
+	dir, baseline := bigCacheDir(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), baseline/5)
+	defer cancel()
+
+	start := time.Now()
+	_, err := buildBytecodeArchive(ctx, dir)
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("buildBytecodeArchive() error = %v, want the context's", err)
+	}
+	if elapsed > baseline/2 {
+		t.Errorf("took %s against a %s full build, want the walk stopped partway", elapsed, baseline)
+	}
+}
+
 func TestBuildArchiveWithin_AbandonsOnAnExpiredContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	if _, err := buildArchiveWithin(ctx, cacheDirWith(t, "compiled bytes")); err == nil {
+	_, err := buildArchiveWithin(ctx, cacheDirWith(t, "compiled bytes"))
+	if err == nil {
 		t.Fatal("buildArchiveWithin() error = nil, want the budget reported")
+	}
+	if !strings.Contains(err.Error(), "no budget left") {
+		t.Errorf("error = %q, want the pre-check's, since the budget was spent before the call", err)
+	}
+}
+
+// The budget is live on entry and expires during the build, which is the
+// scenario the select exists for — distinct from the pre-check above, and told
+// apart from it by which error comes back.
+func TestBuildArchiveWithin_AbandonsABuildAlreadyInFlight(t *testing.T) {
+	dir, baseline := bigCacheDir(t)
+
+	ctx, cancel := context.WithTimeout(context.Background(), baseline/5)
+	defer cancel()
+
+	start := time.Now()
+	_, err := buildArchiveWithin(ctx, dir)
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatal("buildArchiveWithin() error = nil, want the build abandoned")
+	}
+	if !strings.Contains(err.Error(), "outlasted the upload budget") {
+		t.Errorf("error = %q, want the select's, since the budget was live on entry", err)
+	}
+	if elapsed > baseline/2 {
+		t.Errorf("took %s against a %s full build, want the caller released partway", elapsed, baseline)
+	}
+}
+
+// The same thing through run: the upload reaches the build with budget in hand,
+// loses it mid-build, and gives up rather than uploading or overrunning.
+func TestBytecodeUpload_AbandonsAnArchiveBuildInFlight(t *testing.T) {
+	dir, baseline := bigCacheDir(t)
+	store := &fakeBytecodeStore{}
+	u, _ := uploadFixture(store, compileCacheFlushedPayload{Dir: dir, OK: true}, true)
+
+	ctx, cancel := context.WithDeadline(context.Background(), time.Now().Add(completionMargin+baseline/5))
+	defer cancel()
+
+	start := time.Now()
+	u.run(ctx)
+	elapsed := time.Since(start)
+
+	if len(store.heads) != 0 || len(store.puts) != 0 {
+		t.Errorf("touched S3 (heads=%v puts=%v), want nothing once the build was abandoned", store.heads, store.puts)
+	}
+	if elapsed > baseline {
+		t.Errorf("took %s against a %s full build, want the attempt abandoned partway", elapsed, baseline)
 	}
 }
 
