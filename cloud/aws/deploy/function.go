@@ -61,7 +61,7 @@ const (
 	// layer version. It is a released-artifact version, bumped only when the
 	// layer is republished (`make publish-layer`); override via
 	// OCEL_MEMBRANE_LAYER_ARN for dev/testing.
-	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:22"
+	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:23"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
 	// A Next-fronted function's Function URL is IAM-gated: the edge worker signs
