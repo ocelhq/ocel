@@ -384,6 +384,113 @@ export function bytecodeCacheKeyName(name) {
 }
 
 /**
+ * The stderr line the S3 read leg logs on a hit, up to the key it names
+ * (rehydrateCompileCache, cloud/aws/cmd/lambdanode/bootstrap/bytecode.go).
+ * Exported so a caller that must prove this leg *never* ran — assert-embed.mjs,
+ * where an S3 fetch means the embedded copy was not used — can look for it
+ * without knowing which key an instance would have composed.
+ */
+export const BYTECODE_S3_REHYDRATE_MARKER = "rehydrated compile cache from ";
+
+/**
+ * The stderr line the embedded read leg logs on a hit, up to the path it names
+ * (embeddedBytecodeCache, cloud/aws/cmd/lambdanode/bootstrap/bytecode.go).
+ * Deliberately not a superstring or substring of BYTECODE_S3_REHYDRATE_MARKER:
+ * the two legs are only distinguishable in CloudWatch because these two
+ * wordings share no matchable text, and a change on the Go side that made one
+ * contain the other would silently turn "read from the artifact" into "read
+ * from S3" for every assertion here.
+ */
+export const BYTECODE_EMBEDDED_MARKER = "loaded embedded compile cache from ";
+
+/** The env var gating the deploy-time embed pass (cloud/aws/deploy/embed.go). */
+export const BYTECODE_EMBED_ENV = "OCEL_BYTECODE_EMBED";
+
+/**
+ * bytecodeEmbedEnabled mirrors the deploy's own gate: opt-in, and only the
+ * literal "1". Anything else — unset, "true", "0" — is off, so an assertion
+ * written for the embedded artifact skips rather than failing a deployment
+ * that was never asked to embed.
+ */
+export function bytecodeEmbedEnabled(env) {
+  return (env ?? {})[BYTECODE_EMBED_ENV] === "1";
+}
+
+/**
+ * embeddedBytecodePath is the path, inside the deployed `.func` zip, that the
+ * embed pass bakes the cache at key to — `.ocel/bytecode/node<version>-<arch>.tar`
+ * — or null for a key that names no cache tarball.
+ *
+ * Both sides derive it this way, from the key rather than from a version and an
+ * arch read again: embeddedTarPath (cloud/aws/deploy/embed.go) on the way in and
+ * embeddedBytecodePath (bytecode.go) on the way out. Asserting the same
+ * derivation from the key an independent S3 listing found is what proves the
+ * match rule holds, rather than just that *some* tar was embedded.
+ *
+ * The stored object is gzipped and the embedded one is not — the zip container
+ * compresses it instead — so this is the key's basename minus the `.gz`.
+ */
+export function embeddedBytecodePath(key) {
+  const name = String(key ?? "").split("/").pop();
+  if (!bytecodeCacheKeyName(name)) return null;
+  return `.ocel/bytecode/${name.slice(0, -".gz".length)}`;
+}
+
+/**
+ * bytecodeEmbeddedOutcome classifies one CloudWatch message against every line
+ * the embedded read leg can emit for the tar at tarPath — the absolute
+ * /var/task path the membrane logs, not the zip-relative one. Same contract as
+ * bytecodeRehydrateOutcome: null for an unrelated line, and every failure mode
+ * classified rather than dropped, so "the embedded leg was tried and failed" is
+ * never reported as "the embedded leg never ran".
+ *
+ * An absent tar produces no line at all by design (an artifact built without the
+ * embed pass is the ordinary case), so there is no "miss" kind here: absence is
+ * the caller's to conclude from the whole window, not from any one message.
+ */
+export function bytecodeEmbeddedOutcome(message, tarPath) {
+  const text = String(message ?? "");
+  if (text.includes(`could not open the embedded compile cache at ${tarPath}:`)) {
+    return { kind: "open-error", message: text };
+  }
+  if (text.includes(`before loading the embedded compile cache at ${tarPath}:`)) {
+    return { kind: "clear-error", message: text };
+  }
+  if (text.includes(`could not load the embedded compile cache at ${tarPath}:`)) {
+    return { kind: "load-error", message: text };
+  }
+  if (text.includes(`${BYTECODE_EMBEDDED_MARKER}${tarPath}:`)) {
+    return { kind: "hit", message: text };
+  }
+  return null;
+}
+
+const EMBEDDED_ARTIFACT_KEY = /^(.*)-bc-([0-9a-f]+)\.zip$/;
+
+/**
+ * embeddedArtifactPairs picks the repackaged artifacts out of a listing of
+ * artifact keys and pairs each with the original it extends. The embed pass
+ * writes `<original key minus .zip>-bc-<digest>.zip` beside the original rather
+ * than replacing it (embeddedArtifactKey, cloud/aws/deploy/embed.go), so both
+ * objects are present afterwards and the pair is discoverable from the bucket
+ * alone — nothing outside the deploy is told either key.
+ *
+ * `original` is null when the counterpart is missing from the listing, which is
+ * a fact worth surfacing rather than a pair to drop: it means the artifact the
+ * function was warmed on is gone, and the "the code changed" assertion has
+ * nothing left to compare against.
+ */
+export function embeddedArtifactPairs(keys) {
+  const all = new Set(keys ?? []);
+  return (keys ?? []).flatMap((key) => {
+    const match = EMBEDDED_ARTIFACT_KEY.exec(key);
+    if (!match) return [];
+    const original = `${match[1]}.zip`;
+    return [{ embedded: key, original: all.has(original) ? original : null, digest: match[2] }];
+  });
+}
+
+/**
  * bytecodeRehydrateOutcome classifies one CloudWatch log message against
  * every read-leg line rehydrateCompileCache, rehydrateBytecodeCache and
  * resolveBytecodeResolution (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go)
@@ -409,7 +516,7 @@ export function bytecodeCacheKeyName(name) {
  */
 export function bytecodeRehydrateOutcome(message, key) {
   const text = String(message ?? "");
-  if (text.includes(`rehydrated compile cache from ${key}:`)) {
+  if (text.includes(`${BYTECODE_S3_REHYDRATE_MARKER}${key}:`)) {
     return { kind: "hit", message: text };
   }
   if (text.includes(`no compile cache at ${key} yet`)) {
@@ -434,6 +541,56 @@ export function bytecodeRehydrateOutcome(message, key) {
     return { kind: "disabled", message: text };
   }
   return null;
+}
+
+/**
+ * summarizeOutcomes turns the non-hit outcomes collected while polling into
+ * "N kind, M kind" — a caller counting instances covers every failure mode the
+ * *Outcome classifiers above can produce without a case list growing at the call
+ * site every time one of them learns a new one.
+ */
+export function summarizeOutcomes(outcomes) {
+  const counts = new Map();
+  for (const { kind } of outcomes) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  return [...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(", ") || "0 related lines";
+}
+
+/**
+ * logWindowVerdict decides whether a poll loop read enough of a CloudWatch
+ * window for the *absence* of a line in it to mean anything.
+ *
+ * A presence claim needs no such thing — one successful read that finds the line
+ * settles it, and every failed read only risks a false failure. An absence claim
+ * is the opposite: it is a statement about the whole window, so it is only as
+ * strong as the reading of it, and a poll loop that half failed can produce a
+ * clean-looking result for entirely the wrong reason.
+ *
+ * `filter-log-events` re-reads the window from its start every time, so one
+ * successful call sees everything ingested before it and nothing after. Failures
+ * *inside* the loop are therefore recoverable — a later read covers what they
+ * missed — but the loop has to end on a successful read, or the newest part of
+ * the window was never looked at. Hence `confirmed`: the outcome of a final read
+ * taken after the loop, not of the loop as a whole.
+ *
+ * `events` is how many that final read returned. At `pageLimit` the response is
+ * a truncated view of the window rather than the whole of it, and a line the
+ * caller is claiming never appeared may simply have been paged off the end.
+ */
+export function logWindowVerdict({ attempts, failures, confirmed, events, pageLimit }) {
+  const tried = `${attempts - failures}/${attempts} reads succeeded`;
+  if (!confirmed) {
+    return {
+      kind: "unread",
+      detail: `${tried}, and the last one did not, so the window was never read to its end`,
+    };
+  }
+  if (events >= pageLimit) {
+    return {
+      kind: "truncated",
+      detail: `${tried}, but the final read came back with ${events} events — the ${pageLimit}-event page maximum`,
+    };
+  }
+  return { kind: "read", detail: `${tried}, the last of them returning all ${events} events in the window` };
 }
 
 /**
@@ -612,6 +769,92 @@ export function tarEntryNames(buffer) {
     throw new Error("tar has no end-of-archive marker; the archive is truncated");
   }
   return names;
+}
+
+const ZIP_EOCD_SIGNATURE = 0x06054b50;
+const ZIP_EOCD_MIN_SIZE = 22;
+const ZIP64_LOCATOR_SIGNATURE = 0x07064b50;
+const ZIP64_LOCATOR_SIZE = 20;
+const ZIP64_EOCD_SIGNATURE = 0x06064b50;
+const ZIP_CENTRAL_SIGNATURE = 0x02014b50;
+const ZIP_CENTRAL_MIN_SIZE = 46;
+
+/**
+ * zipEntryNames reads a zip's central directory and returns every entry's
+ * name. It exists so assert-embed.mjs can look inside the package Lambda
+ * actually deployed — fetched from the presigned Code.Location — without a
+ * dependency and without shelling out to unzip(1).
+ *
+ * It reads the central directory rather than scanning for local headers
+ * because only the central directory is authoritative: a local header can be
+ * a leftover from a truncated write, and the embed pass copies existing
+ * entries through zip.Writer.Copy (cloud/aws/deploy/embed.go), which rewrites
+ * the central directory and nothing else.
+ *
+ * Every malformed input throws rather than returning a short list. The one
+ * claim built on this is that a named entry is *absent*, and a parser that
+ * quietly stopped early would make that claim out of its own bug.
+ */
+export function zipEntryNames(buffer) {
+  const eocd = findZipEOCD(buffer);
+  let count = buffer.readUInt16LE(eocd + 10);
+  let start = buffer.readUInt32LE(eocd + 16);
+
+  // A zip past 65535 entries or 4 GiB parks the real values in a zip64 record
+  // and leaves these fields saturated. A pnpm node_modules tree reaches the
+  // entry count long before the size, so this is a real case here, not
+  // defensive padding.
+  if (count === 0xffff || start === 0xffffffff) {
+    const locator = eocd - ZIP64_LOCATOR_SIZE;
+    if (locator < 0 || buffer.readUInt32LE(locator) !== ZIP64_LOCATOR_SIGNATURE) {
+      throw new Error("zip end-of-central-directory is saturated but carries no zip64 locator");
+    }
+    const zip64 = asIndex(buffer.readBigUInt64LE(locator + 8), buffer.length, "zip64 end-of-central-directory offset");
+    if (buffer.readUInt32LE(zip64) !== ZIP64_EOCD_SIGNATURE) {
+      throw new Error(`no zip64 end-of-central-directory record at byte ${zip64}`);
+    }
+    count = asIndex(buffer.readBigUInt64LE(zip64 + 32), Number.MAX_SAFE_INTEGER, "zip64 entry count");
+    start = asIndex(buffer.readBigUInt64LE(zip64 + 48), buffer.length, "zip64 central directory offset");
+  }
+
+  const names = [];
+  let offset = start;
+  for (let i = 0; i < count; i++) {
+    if (offset + ZIP_CENTRAL_MIN_SIZE > buffer.length) {
+      throw new Error(`zip central directory entry ${i} runs past the end of the buffer at byte ${offset}`);
+    }
+    if (buffer.readUInt32LE(offset) !== ZIP_CENTRAL_SIGNATURE) {
+      throw new Error(`zip central directory entry ${i} at byte ${offset} has no central-file-header signature`);
+    }
+    const nameLen = buffer.readUInt16LE(offset + 28);
+    const extraLen = buffer.readUInt16LE(offset + 30);
+    const commentLen = buffer.readUInt16LE(offset + 32);
+    const nameAt = offset + ZIP_CENTRAL_MIN_SIZE;
+    if (nameAt + nameLen > buffer.length) {
+      throw new Error(`zip central directory entry ${i} names ${nameLen} bytes past the end of the buffer`);
+    }
+    names.push(buffer.toString("utf8", nameAt, nameAt + nameLen));
+    offset = nameAt + nameLen + extraLen + commentLen;
+  }
+  return names;
+}
+
+// The end-of-central-directory record is last but variable-length: its trailing
+// comment can be up to 65535 bytes, so it is found by scanning back rather than
+// read at a fixed offset. Scanning from the end takes the *last* candidate,
+// which is the real one even when an entry's contents happen to hold the same
+// four bytes.
+function findZipEOCD(buffer) {
+  const floor = Math.max(0, buffer.length - ZIP_EOCD_MIN_SIZE - 0xffff);
+  for (let at = buffer.length - ZIP_EOCD_MIN_SIZE; at >= floor; at--) {
+    if (buffer.readUInt32LE(at) === ZIP_EOCD_SIGNATURE) return at;
+  }
+  throw new Error(`no zip end-of-central-directory record in ${buffer.length} bytes; this is not a zip`);
+}
+
+function asIndex(value, limit, what) {
+  if (value > BigInt(limit)) throw new Error(`${what} (${value}) is past the end of the buffer`);
+  return Number(value);
 }
 
 export function tail(text, maxLines) {

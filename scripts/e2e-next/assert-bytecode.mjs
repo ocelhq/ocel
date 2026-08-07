@@ -33,11 +33,23 @@
 //
 // Exits non-zero with the observations it collected.
 
-import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gunzipSync } from "node:zlib";
 
+import {
+  LAMBDA_ARCH,
+  LIST_RETRY_DEADLINE_MS,
+  LOG_DEADLINE_MS,
+  LOG_POLL_INTERVAL_MS,
+  POLL_INTERVAL_MS,
+  fetchFunctionLogs,
+  getObject,
+  listObjectKeys,
+  resolveBootstrapBucket,
+  resolveFunctionName,
+  sleep,
+} from "./aws.mjs";
 import {
   DEPLOY_RESULT_FILE,
   TAG_PROBE_ROUTE,
@@ -45,9 +57,10 @@ import {
   appAssetPrefix,
   bytecodeCacheKeyName,
   bytecodeCacheKeyPrefix,
+  bytecodeEmbedEnabled,
   bytecodeRehydrateOutcome,
-  lambdaFunctionNames,
   strongestCoverage,
+  summarizeOutcomes,
   tagProbeTag,
   tarEntryNames,
   warmCoverage,
@@ -58,15 +71,8 @@ import {
 // invocation it rides on answers, and the deploy does not return until every
 // one of them has (cloud/aws/deploy/warm.go). So the object exists by the time
 // this script starts, and a successful list that does not find it is a real
-// miss to fail on rather than something to poll away. This budget is only for
-// retrying a list that could not be made at all.
-const POLL_INTERVAL_MS = 3_000;
-const LIST_RETRY_DEADLINE_MS = 30_000;
-
-// The membrane layer builds linux/amd64 only, which s3Arch
-// (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go) renders as x86_64 — the
-// only spelling this suite's deploys can ever produce a key under.
-const LAMBDA_ARCH = "x86_64";
+// miss to fail on rather than something to poll away. LIST_RETRY_DEADLINE_MS is
+// only for retrying a list that could not be made at all.
 
 // Lambda reuses a warm instance for a request it can serve sequentially; only
 // concurrency forces it to provision more. At most the deploy's own warm
@@ -76,12 +82,6 @@ const LAMBDA_ARCH = "x86_64";
 // concurrency ceiling is 1000, so this is a tuning choice, not something
 // bounded by it.
 const REHYDRATE_BURST_SIZE = 20;
-
-// CloudWatch Logs ingestion trails an invocation by anywhere from under a
-// second to several — this is padded well past that for filter-log-events
-// to see every burst instance's line.
-const LOG_POLL_INTERVAL_MS = 5_000;
-const LOG_DEADLINE_MS = 60_000;
 
 // How far before the deploy's completion the warm summaries are looked for.
 // The pass runs after the last app stack succeeds and before stageAndPromote,
@@ -96,13 +96,6 @@ const WARM_LOG_LOOKBACK_MS = 30 * 60_000;
 // window would be every line every instance of this function ever logged, and
 // the 1000-event page below would fill with them before reaching a summary.
 const WARM_LOG_FILTER = `"${WARM_SUMMARY_MARKER}"`;
-
-// Deliberately well under LIST_RETRY_DEADLINE_MS/LOG_DEADLINE_MS: a single
-// `aws` call now runs inside a poll loop, and a timeout equal to the loop's own
-// budget would let one wedged call consume the whole window and reduce the loop
-// to a single attempt. This leaves room for several retries inside either
-// deadline instead.
-const AWS_TIMEOUT_MS = 15_000;
 
 const warnings = [];
 
@@ -125,14 +118,14 @@ if (!Number.isFinite(deployedAt)) {
   fail(`${resultPath} carries no readable deployedAt (${JSON.stringify(result.deployedAt)}) — nothing here can say when the warm pass ran`);
 }
 
-const bucket = process.env.OCEL_ASSET_BUCKET || resolveAssetBucket();
+const bucket = process.env.OCEL_ASSET_BUCKET || resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
 const prefix = appAssetPrefix({
   environment: result.environment,
   slug: result.slug,
   app: app.name,
   buildId: app.buildId,
 });
-const functionName = resolveFunctionName(result.slug, app.name);
+const functionName = resolveFunctionName(result.slug, app.name, fail);
 const keyPrefix = bytecodeCacheKeyPrefix({ prefix, functionName });
 log(`expecting one object under s3://${bucket}/${keyPrefix}`);
 
@@ -298,6 +291,27 @@ log(
 
 // --- read leg ----------------------------------------------------------
 
+// The read leg below requires the S3 rehydrate line, which embedding makes
+// false rather than merely unlikely: with the embed pass on, the deploy bakes
+// this same cache into the function's own artifact and a cold start loads it
+// from /var/task, never fetching `key` at all. Requiring the line here would
+// fail a deployment that is working exactly as designed, so the leg is dropped
+// — loudly, and named as unproven, because a skipped assertion that reads as a
+// pass is the one failure mode worth more than the assertion itself.
+//
+// The write leg above stays valid under the flag and is deliberately not
+// skipped: the embed pass runs *after* the warm pass and reads what it
+// published, so the object and its warm summary must exist either way.
+if (bytecodeEmbedEnabled(process.env)) {
+  warn(
+    `read leg SKIPPED and UNPROVEN: $OCEL_BYTECODE_EMBED=1, so cold starts load the compile cache from the function's ` +
+      `own artifact and no instance will ever report rehydrating ${key} from S3. Run assert-embed.mjs against this ` +
+      `deployment — it asserts the embedded read leg, and nothing here does.`,
+  );
+  reportWarnings();
+  process.exit(0);
+}
+
 // The object above proves the write leg but says nothing about rehydration:
 // the instance the deploy warmed never rehydrates itself (it had nothing to
 // read when it started), so proving the read leg needs a later instance that
@@ -380,134 +394,25 @@ if (!hit) {
 log(`rehydrate hit: ${hit.message}`);
 log("bytecode cache rehydrated end to end");
 
+reportWarnings();
+
 // Warnings are re-printed at the end because the run that produces one is a
-// passing run: buried a hundred lines up, a bundle that only half warmed would
-// be indistinguishable from one that warmed whole.
-if (warnings.length) {
+// passing run: buried a hundred lines up, a bundle that only half warmed — or
+// a leg that did not run at all — would be indistinguishable from one that
+// warmed whole and proved everything.
+function reportWarnings() {
+  if (!warnings.length) return;
   log(`passed with ${warnings.length} warning${warnings.length === 1 ? "" : "s"}:`);
   for (const warning of warnings) log(`  ${warning}`);
 }
 
-// summarizeOutcomes turns the non-hit outcomes collected while polling into
-// "N kind, M kind" — a caller counting instances covers every failure mode
-// bytecodeRehydrateOutcome classifies without a case list growing here every
-// time that function learns a new one.
-function summarizeOutcomes(outcomes) {
-  const counts = new Map();
-  for (const { kind } of outcomes) counts.set(kind, (counts.get(kind) ?? 0) + 1);
-  return [...counts.entries()].map(([kind, n]) => `${n} ${kind}`).join(", ") || "0 related lines";
-}
-
 // --- AWS -------------------------------------------------------------------
 
-// Both list/poll helpers below throw on an AWS failure rather than swallow
-// it: their callers are wait loops that need to tell a transient error
-// (worth retrying, and silently) from a permanent one (worth failing on,
-// loudly, once the loop gives up) — a distinction that can only be made at
-// the call site, which is the one place tracking whether any prior attempt
-// ever succeeded.
-
+// listBytecodeObjects returns the names under `prefix` rather than whole keys:
+// what varies between the objects here is node<version>-<arch>.tar.gz, and
+// bytecodeCacheKeyName reads that name.
 function listBytecodeObjects(bucket, prefix) {
-  const response = JSON.parse(
-    aws(["s3api", "list-objects-v2", "--bucket", bucket, "--prefix", prefix, "--output", "json"]),
-  );
-  return (response.Contents ?? []).map((entry) => entry.Key.slice(prefix.length));
-}
-
-// Mirrors logs.mjs's printLambdaLogs: same `aws logs filter-log-events`
-// shape, but scoped to the one function resolveFunctionName already found
-// rather than discovered again by tag — that resolution is already
-// unambiguous to exactly one function. `filterPattern` narrows a window too
-// wide to page through otherwise; a caller reading a window it has just
-// created leaves it off and reads everything in it.
-function fetchFunctionLogs(functionName, startTime, filterPattern) {
-  const response = JSON.parse(
-    aws([
-      "logs",
-      "filter-log-events",
-      "--log-group-name",
-      `/aws/lambda/${functionName}`,
-      "--start-time",
-      String(startTime),
-      ...(filterPattern ? ["--filter-pattern", filterPattern] : []),
-      "--limit",
-      "1000",
-      "--output",
-      "json",
-    ]),
-  );
-  return response.events ?? [];
-}
-
-function getObject(bucket, key) {
-  return execFileSync("aws", ["s3", "cp", `s3://${bucket}/${key}`, "-"], {
-    maxBuffer: 128 * 1024 * 1024,
-  });
-}
-
-// resolveFunctionName finds the one Lambda function this app deployed, the
-// same way logs.mjs finds its log groups: by the ocel tags every Ocel
-// function carries (cloud/aws/deploy/function.go). Both `ocel:project` and
-// `ocel:app` are filtered on, unlike logs.mjs's project-only filter, because
-// the key this script composes is one function's — a project with more than
-// one app would otherwise leave which function ambiguous.
-function resolveFunctionName(slug, app) {
-  const names = lambdaFunctionNames(
-    JSON.parse(
-      aws([
-        "resourcegroupstaggingapi",
-        "get-resources",
-        "--tag-filters",
-        `Key=ocel:project,Values=${slug}`,
-        `Key=ocel:app,Values=${app}`,
-        "--resource-type-filters",
-        "lambda:function",
-        "--output",
-        "json",
-      ]),
-    ),
-  );
-  if (names.length !== 1) {
-    fail(
-      `expected exactly one lambda function tagged ocel:project=${slug} ocel:app=${app}, found ` +
-        `${names.length}${names.length ? `: ${names.join(", ")}` : ""}`,
-    );
-  }
-  return names[0];
-}
-
-// resolveAssetBucket finds the substrate's asset bucket the same way the
-// membrane is given it (OCEL_ISR_BUCKET, itself cfg.AssetBucket): from the
-// preview bootstrap stack, rather than by guessing at a name. Mirrors
-// assert-tag-publisher.mjs's helper of the same name — it is the same bucket.
-function resolveAssetBucket() {
-  const found = aws([
-    "cloudformation",
-    "describe-stack-resources",
-    "--stack-name",
-    process.env.OCEL_BOOTSTRAP_STACK || "ocel-bootstrap-preview",
-    "--query",
-    "StackResources[?LogicalResourceId==`AssetBucket`].PhysicalResourceId | [0]",
-    "--output",
-    "text",
-  ]);
-  if (!found || found === "None") {
-    fail("could not resolve the substrate's asset bucket; set $OCEL_ASSET_BUCKET");
-  }
-  return found;
-}
-
-function aws(args) {
-  return execFileSync("aws", args, {
-    encoding: "utf8",
-    timeout: AWS_TIMEOUT_MS,
-    stdio: ["ignore", "pipe", "pipe"],
-    maxBuffer: 64 * 1024 * 1024,
-  }).trim();
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  return listObjectKeys(bucket, prefix).map((key) => key.slice(prefix.length));
 }
 
 function log(message) {
