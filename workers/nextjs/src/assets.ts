@@ -7,6 +7,7 @@
 // active-deployment pointer, simply by reading a different prefix.
 
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
+const REVALIDATE_CACHE_CONTROL = "public, max-age=0, must-revalidate";
 
 // One object as the R2 binding hands it back: a stream and, when present, its
 // etag — exactly the shape serveStaticAsset needs. Nothing the store was
@@ -87,6 +88,31 @@ export function contentTypeFor(pathname: string): string {
   return CONTENT_TYPES[name.slice(dot)] ?? "application/octet-stream";
 }
 
+const NEXT_STATIC_PREFIX = "/_next/static/";
+const SERVICE_WORKER_PREFIX = "service-worker/";
+
+// cacheControlFor mirrors Next.js's own runtime rule for a statically served
+// file (the nextStaticFolder branch of packages/next/src/server/lib/
+// router-server.ts): immutable is its *else* case, earned only by the
+// content-hashed chunks under _next/static. The service worker is exempt even
+// there — it is the one chunk Next publishes at a build-invariant URL, so an
+// immutable response would pin a visitor to one deploy's worker for a year and
+// no later deploy could replace it. Everything else this store serves — public/
+// files, the file-based metadata routes, prerendered documents — answers a
+// stable URL and must be revalidated.
+//
+// The _next/static segment is matched wherever it appears rather than only at
+// the head: a basePath app serves the same files under /<basePath>/_next/
+// static/, and _next is a segment Next reserves, so nothing else can carry it.
+export function cacheControlFor(pathname: string): string {
+  const at = pathname.indexOf(NEXT_STATIC_PREFIX);
+  if (at === -1) return REVALIDATE_CACHE_CONTROL;
+  const itemPath = pathname.slice(at + NEXT_STATIC_PREFIX.length);
+  return itemPath.startsWith(SERVICE_WORKER_PREFIX)
+    ? REVALIDATE_CACHE_CONTROL
+    : IMMUTABLE_CACHE_CONTROL;
+}
+
 // Where an object answering this request may be stored, likeliest first. The
 // build writes a prerendered document under its .html name while the route it
 // answers is spelled as a route — usually with no extension (/some, /404), but
@@ -122,12 +148,10 @@ async function notFound(deps: AssetStoreDeps): Promise<Response> {
 }
 
 // serveStaticAsset answers a static-asset request from the R2 cache store,
-// fronted by the colo Cache API so a hot asset costs no R2 read at all. Every
-// object this build could ever serve was written once, at its own
-// build-id-scoped path — nothing at that key is ever overwritten — so a colo
-// hit never needs revalidation: the response is cached with immutable
-// headers. Always returns a Response (never throws): a miss, or no store
-// bound at all, is the app's 404 page.
+// fronted by the colo Cache API so a hot asset costs no R2 read at all — for
+// as long as the asset's own cache policy (cacheControlFor) lets the colo hold
+// it. Always returns a Response (never throws): a miss, or no store bound at
+// all, is the app's 404 page.
 export async function serveStaticAsset(
   request: Request,
   url: URL,
@@ -156,7 +180,7 @@ export async function serveStaticAsset(
     // the request names a route, and only the stored name says what the bytes
     // are.
     "content-type": contentTypeFor(hit.pathname),
-    "cache-control": IMMUTABLE_CACHE_CONTROL,
+    "cache-control": cacheControlFor(hit.pathname),
   });
   if (object.httpEtag) headers.set("etag", object.httpEtag);
 
