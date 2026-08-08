@@ -41,6 +41,16 @@ func isNodeRuntime(runtime string) bool {
 // be reaped by the very redeploy it exists to speed up. A dedicated root also
 // rules out any collision with an ISR or static-asset key, which share the
 // same bucket.
+//
+// It sits FIRST in bytecodeAppNamespace, not after env/slug, so the asset
+// bucket's lifecycle rule (bootstrap's expire-bytecode) can select every
+// bytecode object with one literal S3 prefix filter. S3 lifecycle filters
+// match a literal prefix, not a path segment in the middle of a key, so
+// "bytecode/" has to lead. The one string this then must never equal is an
+// env segment — env is never a bare user string (envSegment in
+// cloud/aws/server/server.go composes it as exactly "prod" or
+// "preview-<identity>"), so no project can ever cause a collision by naming
+// an environment "bytecode".
 const bytecodeKeyNamespace = "bytecode"
 
 // bytecodeAppNamespace is the app-scoped root every one of an app's bytecode
@@ -52,8 +62,14 @@ const bytecodeKeyNamespace = "bytecode"
 // is per-app (newFunctionRole/appExecutionRole), which is what this shape is
 // chosen to keep true: a single RolePolicy issued once per app, not once per
 // deploy or per function.
+//
+// bytecodeKeyNamespace leads rather than trailing env/slug (see its own doc)
+// so the bucket-wide lifecycle rule can filter on one literal prefix; the
+// per-app IAM grant stays exactly as narrow either way, since it wildcards
+// everything below this whole path regardless of where the fixed segment
+// sits within it.
 func bytecodeAppNamespace(env, slug, app string) string {
-	return path.Join(env, slug, bytecodeKeyNamespace, sanitizeWorkerName(app))
+	return path.Join(bytecodeKeyNamespace, env, slug, sanitizeWorkerName(app))
 }
 
 // bytecodePrefixFor is one function's own bytecode cache prefix: the app's

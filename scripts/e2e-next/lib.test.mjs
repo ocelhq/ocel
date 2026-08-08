@@ -345,15 +345,15 @@ describe("appAssetPrefix", () => {
 });
 
 describe("bytecodeAppNamespace", () => {
-  it("joins env/slug/bytecode/app in that order — mirrors bytecodeAppNamespace in bytecode.go", () => {
+  it("joins bytecode/env/slug/app in that order — mirrors bytecodeAppNamespace in bytecode.go", () => {
     expect(
       bytecodeAppNamespace({ environment: { class: "preview", identity: "e2e-42-abcd1234" }, slug: "e2e-42-abcd1234", app: "app" }),
-    ).toBe("preview-e2e-42-abcd1234/e2e-42-abcd1234/bytecode/app");
+    ).toBe("bytecode/preview-e2e-42-abcd1234/e2e-42-abcd1234/app");
   });
 
   it("uses the fixed prod segment for a production deploy", () => {
     expect(bytecodeAppNamespace({ environment: { class: "production" }, slug: "s", app: "app" })).toBe(
-      "prod/s/bytecode/app",
+      "bytecode/prod/s/app",
     );
   });
 

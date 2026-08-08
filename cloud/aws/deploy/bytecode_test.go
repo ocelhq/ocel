@@ -170,10 +170,11 @@ func TestBytecodeAppNamespace_OneGrantCoversEveryHash(t *testing.T) {
 }
 
 // TestBytecodeAppNamespace_NeverCollidesWithISROrAssetPrefix proves the
-// dedicated root: appAssetPrefixFor (ISR/static assets, build-keyed) and
-// bytecodeAppNamespace (bytecode, content-hash-keyed) can never address the
-// same object even for the same env/slug/app, because they diverge at the
-// first segment after slug.
+// dedicated root: appAssetPrefixFor (ISR/static assets, build-keyed) always
+// leads with an env segment ("prod" or "preview-<identity>", envSegment in
+// cloud/aws/server/server.go), never the literal "bytecode" — so it can never
+// address the same object as bytecodeAppNamespace, which leads with the fixed
+// "bytecode" segment instead.
 func TestBytecodeAppNamespace_NeverCollidesWithISROrAssetPrefix(t *testing.T) {
 	assetPrefix := appAssetPrefixFor("prod", "proj", "web", "BUILD1")
 	bytecodeNS := bytecodeAppNamespace("prod", "proj", "web")
@@ -186,13 +187,16 @@ func TestBytecodeAppNamespace_NeverCollidesWithISROrAssetPrefix(t *testing.T) {
 	if len(bytecodeNS) >= len(assetPrefix) && bytecodeNS[:len(assetPrefix)] == assetPrefix {
 		t.Errorf("bytecode namespace %q sits inside the build-keyed asset prefix %q", bytecodeNS, assetPrefix)
 	}
+	if len(assetPrefix) >= len(bytecodeNS) && assetPrefix[:len(bytecodeNS)] == bytecodeNS {
+		t.Errorf("asset prefix %q sits inside the bytecode namespace %q", assetPrefix, bytecodeNS)
+	}
 }
 
 // TestBytecodePolicy_GrantsExactlyGetAndPutOnTheNamespace proves the grant:
 // scoped to the app's bytecode namespace and nothing else, with the two
 // actions the membrane's warm (Put) and read (Get) legs actually make.
 func TestBytecodePolicy_GrantsExactlyGetAndPutOnTheNamespace(t *testing.T) {
-	raw, err := bytecodePolicy("assets-xyz", "prod/proj/bytecode/web")
+	raw, err := bytecodePolicy("assets-xyz", "bytecode/prod/proj/web")
 	if err != nil {
 		t.Fatalf("bytecodePolicy: %v", err)
 	}
@@ -210,7 +214,7 @@ func TestBytecodePolicy_GrantsExactlyGetAndPutOnTheNamespace(t *testing.T) {
 		t.Fatalf("got %d statements, want 1", len(doc.Statement))
 	}
 	stmt := doc.Statement[0]
-	if want := "arn:aws:s3:::assets-xyz/prod/proj/bytecode/web/*"; stmt.Resource != want {
+	if want := "arn:aws:s3:::assets-xyz/bytecode/prod/proj/web/*"; stmt.Resource != want {
 		t.Errorf("Resource = %q, want %q", stmt.Resource, want)
 	}
 	wantActions := []string{"s3:GetObject", "s3:PutObject"}

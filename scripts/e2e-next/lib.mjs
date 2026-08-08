@@ -358,7 +358,7 @@ export function appAssetPrefix({ environment, slug, app, buildId }) {
  * bytecodeAppNamespace is the S3 prefix every one of an app's bytecode
  * caches lives under, one level above the content-hash segment that picks
  * which one. Mirrors bytecodeAppNamespace in cloud/aws/deploy/bytecode.go:
- * <env>/<slug>/bytecode/<app>. `app` is assumed to already be a valid worker
+ * bytecode/<env>/<slug>/<app>. `app` is assumed to already be a valid worker
  * name — the same assumption appAssetPrefix makes, for the same reason:
  * every app this suite deploys is declared under APP_NAME, which needs no
  * sanitizing.
@@ -366,10 +366,13 @@ export function appAssetPrefix({ environment, slug, app, buildId }) {
  * Deliberately its own namespace, not appAssetPrefix's build-keyed one: that
  * prefix is what prune sweeps on every build (prune.go), and a bytecode
  * cache living under it would be reaped by the very redeploy it exists to
- * speed up — see the Go doc comment on bytecodeKeyNamespace.
+ * speed up — see the Go doc comment on bytecodeKeyNamespace. The fixed
+ * "bytecode" segment leads rather than trailing env/slug so the asset
+ * bucket's expiry lifecycle rule can select every bytecode object with one
+ * literal S3 prefix filter.
  */
 export function bytecodeAppNamespace({ environment, slug, app }) {
-  return [envSegment(environment), slug, "bytecode", app].join("/");
+  return ["bytecode", envSegment(environment), slug, app].join("/");
 }
 
 const BYTECODE_ARCHIVE_NAME = /^node(\d+\.\d+\.\d+)-([a-z0-9_]+)\.tar\.gz$/;
