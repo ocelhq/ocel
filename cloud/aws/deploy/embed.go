@@ -131,7 +131,7 @@ func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *deploymentsv
 		return
 	}
 	if !bytecodeEmbedEnabled() {
-		log(fmt.Sprintf("ocel: %s=1 has nothing to embed while %s=0; not embedding", bytecodeEmbedEnv, bytecodeCacheEnv))
+		log(fmt.Sprintf("ocel: %s=1 has nothing to embed without %s=1; not embedding", bytecodeEmbedEnv, bytecodeCacheEnv))
 		return
 	}
 	// Named rather than silent: a caller that wires no clients is a deploy path

@@ -64,18 +64,15 @@ const (
 	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:24"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
-	// bytecodeCacheEnv is the deploying process's own override for whether the
-	// membrane caches V8 bytecode. Bytecode caching is on for every Next app by
-	// default (nothing about it depends on the app), so the override exists only
-	// to turn it off — the literal "0", mirroring no other spelling.
+	// bytecodeCacheEnv opts a deploy into having the membrane cache V8 bytecode.
+	// It is off until asked for — only the literal "1", mirroring no other
+	// spelling.
 	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
 
 	// bytecodeEmbedEnv opts a deploy into embedding each bundle's compile cache
 	// in its own deployment package (see embed.go), so a cold start reads it
-	// from /var/task instead of S3. The default is inverted from
-	// bytecodeCacheEnv's: embedding trades network for package size, and which
-	// way that trade lands depends on the bundle, so it is off until asked for —
-	// only the literal "1".
+	// from /var/task instead of S3. Like bytecodeCacheEnv it is off until asked
+	// for — only the literal "1".
 	bytecodeEmbedEnv = "OCEL_BYTECODE_EMBED"
 
 	// A Next-fronted function's Function URL is IAM-gated: the edge worker signs
@@ -125,9 +122,9 @@ func membraneLayerARN() string {
 
 // bytecodeCacheEnabled reports whether a deployed function should have its
 // V8 bytecode cached, read from OCEL_BYTECODE_CACHE on the deploying process.
-// On by default; only the literal "0" turns it off.
+// Off by default; only the literal "1" turns it on.
 func bytecodeCacheEnabled() bool {
-	return os.Getenv(bytecodeCacheEnv) != "0"
+	return os.Getenv(bytecodeCacheEnv) == "1"
 }
 
 // bytecodeEmbedRequested reports whether the deploy asked for embedding at all,

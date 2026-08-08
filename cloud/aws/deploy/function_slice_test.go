@@ -93,29 +93,29 @@ func TestMembraneLayerARN_DefaultAndEnvOverride(t *testing.T) {
 	}
 }
 
-// Bytecode caching is on for every Next app unless the deploying process opts
-// out, so the default case (no override) must still see the prefix.
+// Bytecode caching is opt-in, so the default case (no override) must not see
+// the prefix.
 func TestBytecodeCacheEnabled_DefaultAndEnvOverride(t *testing.T) {
 	t.Setenv(bytecodeCacheEnv, "")
-	if !bytecodeCacheEnabled() {
-		t.Error("bytecodeCacheEnabled() = false with no override, want true")
-	}
-	t.Setenv(bytecodeCacheEnv, "0")
 	if bytecodeCacheEnabled() {
-		t.Error("bytecodeCacheEnabled() = true with OCEL_BYTECODE_CACHE=0, want false")
+		t.Error("bytecodeCacheEnabled() = true with no override, want false")
 	}
-	// Only the literal "0" disables, matching the one-spelling precedent the
+	t.Setenv(bytecodeCacheEnv, "1")
+	if !bytecodeCacheEnabled() {
+		t.Error("bytecodeCacheEnabled() = false with OCEL_BYTECODE_CACHE=1, want true")
+	}
+	// Only the literal "1" enables, matching the one-spelling precedent the
 	// other deploy-time overrides in this package follow.
-	for _, v := range []string{"false", "off", "no", "FALSE"} {
+	for _, v := range []string{"true", "on", "yes", "TRUE"} {
 		t.Setenv(bytecodeCacheEnv, v)
-		if !bytecodeCacheEnabled() {
-			t.Errorf("bytecodeCacheEnabled() = false with OCEL_BYTECODE_CACHE=%q, want true (only \"0\" disables)", v)
+		if bytecodeCacheEnabled() {
+			t.Errorf("bytecodeCacheEnabled() = true with OCEL_BYTECODE_CACHE=%q, want false (only \"1\" enables)", v)
 		}
 	}
 }
 
 func TestISREnv_SetsBytecodePrefixToTheAssetPrefix(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
+	t.Setenv(bytecodeCacheEnv, "1")
 	cfg := isrConfig{
 		Bucket:   "assets-xyz",
 		Prefix:   "prod/proj123/marketing/build456",
@@ -129,7 +129,7 @@ func TestISREnv_SetsBytecodePrefixToTheAssetPrefix(t *testing.T) {
 }
 
 func TestISREnv_OmitsBytecodePrefixWhenGateIsOff(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "0")
+	t.Setenv(bytecodeCacheEnv, "")
 	cfg := isrConfig{
 		Bucket:   "assets-xyz",
 		Prefix:   "prod/proj123/marketing/build456",
@@ -138,7 +138,7 @@ func TestISREnv_OmitsBytecodePrefixWhenGateIsOff(t *testing.T) {
 	}
 	env := cfg.env()
 	if _, ok := env["OCEL_BYTECODE_PREFIX"]; ok {
-		t.Errorf("OCEL_BYTECODE_PREFIX = %q, want it unset when OCEL_BYTECODE_CACHE=0", env["OCEL_BYTECODE_PREFIX"])
+		t.Errorf("OCEL_BYTECODE_PREFIX = %q, want it unset without OCEL_BYTECODE_CACHE=1", env["OCEL_BYTECODE_PREFIX"])
 	}
 }
 
@@ -148,7 +148,7 @@ func TestISREnv_OmitsBytecodePrefixWhenGateIsOff(t *testing.T) {
 // wildcard the function's role is issued, not just that the two format strings
 // share a literal prefix.
 func TestISRPolicy_CoversTheComposedBytecodeKey(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
+	t.Setenv(bytecodeCacheEnv, "1")
 	cfg := isrConfig{
 		Bucket:   "assets-xyz",
 		Prefix:   "prod/proj123/marketing/build456",
