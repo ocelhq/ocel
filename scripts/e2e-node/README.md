@@ -31,16 +31,24 @@ the same check `scripts/e2e-next` runs.
 ## What the smoke app is, and why it stays this small
 
 `smoke-app/` is a plain express app: one route (`/health`) the harness polls
-for readiness and bursts against to force fresh sandboxes, one route
-(`/echo`) that proves the app is serving its own correct response rather than
-a cached or default one, and nothing else — no queues, no crons, no other
+for readiness, one route (`/echo`) it bursts against to force fresh sandboxes
+and that proves the app is serving its own correct response rather than a
+cached or default one, and nothing else — no queues, no crons, no other
 `ocel` resource. That matters for one concrete reason: the deploy's warm pass
 fans out against the account's own Lambda concurrency quota
 (`warmConcurrency = appConcurrency`, `cloud/aws/deploy/warm.go`), which on the
 disposable e2e account is **10**. This app realizes exactly one Lambda
-function, so that limit is never in play; an app that grew a second or third
-function here would be throttling its own warm pass long before it proved
-anything.
+function, so that limit is never in play *for the deploy's own warm pass*; an
+app that grew a second or third function here would be throttling its own
+warm pass long before it proved anything.
+
+The same quota is not out of play everywhere, though: the assertions' own
+read-leg burst (`REHYDRATE_BURST_SIZE`/`BURST_SIZE`, both 20, in
+`assert-bytecode.mjs` and `assert-embed.mjs`) is sized to force fresh
+sandboxes, not to stay under the account's concurrency quota, and 20 exceeds
+it. Some of those requests can come back throttled (HTTP 429) — `burstEcho`
+counts and logs that rather than folding it into "failed", and the assertion
+only requires enough requests to have gotten through, not all of them.
 
 `ocel`/`@ocel/provider-aws` are **not** npm dependencies of `smoke-app/` — they
 are symlinked in from the sidecar by `linkSidecar`
@@ -54,12 +62,21 @@ this harness reuses whatever `$OCEL_E2E_SIDECAR_DIR` already points at.
 
 Exactly what `scripts/e2e-next`'s two scripts of the same name prove — see
 that package's README for the full, unabridged reasoning, which this harness's
-copies do not restate: the object is whole in S3 before this script's first
-request, the deploy's own warm summary attributes it to the warm pass and
-covers the whole bundle, a burst of concurrent requests forces fresh sandboxes
-and (without embedding) at least one of them rehydrates from S3, or (with
-`OCEL_BYTECODE_EMBED=1`) every one of them loads the cache from its own
-artifact and none falls through to S3.
+copies do not restate: the object is whole in S3 before `assert-bytecode.mjs`'s
+first request, the deploy's own warm summary attributes it to the warm pass
+and covers the whole bundle, and (`assert-embed.mjs`) a burst of concurrent
+requests forces fresh sandboxes and every one of them loads the cache from its
+own artifact rather than falling through to S3.
+
+Embedding is no longer its own gate (`cloud/aws/deploy/embed.go`): whenever
+`OCEL_BYTECODE_CACHE=1` turns the feature on at all — which `deploy.mjs`
+always does — the deploy also runs the embed pass, unconditionally, on every
+eligible function. One deploy is therefore enough for both scripts: cold
+starts never fetch the S3 object at all, so `assert-bytecode.mjs`'s own
+read-leg burst is unconditionally skipped (loudly, with a warning naming
+`assert-embed.mjs` as the script that actually proves the read leg) in favor
+of a single request standing in for its correctness check, and
+`assert-embed.mjs` needs no flag to decide whether it applies.
 
 Three things are genuinely different for a plain node app, and are each
 called out at the top of the relevant script rather than only here:
@@ -80,12 +97,14 @@ called out at the top of the relevant script rather than only here:
   (`cloud/edge/framework/registry.go`), so a plain node app is served straight
   from its own Lambda Function URL. `scripts/e2e-next`'s burst needs a
   force-dynamic route (`TAG_PROBE_ROUTE`) to guarantee it reaches the Lambda
-  past Next's own response cache; this harness needs no such trick; `/health`
+  past Next's own response cache; this harness needs no such trick — `/echo`
   already reaches the Lambda on every request.
-- **Correctness is folded into the burst.** Rather than a fourth script, each
-  burst response is parsed and checked against `ECHO_MARKER` — the same
-  requests that force fresh sandboxes and prove the read leg also prove the
-  app answers correctly with the cache in place.
+- **Correctness is folded into the burst, where there is one.**
+  `assert-embed.mjs`'s burst response is parsed and checked against
+  `ECHO_MARKER` — the same requests that force fresh sandboxes and prove the
+  read leg also prove the app answers correctly with the cache in place.
+  `assert-bytecode.mjs` has no burst to fold it into (its read leg is always
+  skipped — see above), so it makes a single signed request instead.
 
 ### Why every request here is signed
 
@@ -123,20 +142,19 @@ url=$(node scripts/e2e-node/deploy.mjs)
 echo "deployed: $url"
 
 # From the temp app directory deploy.mjs printed to stderr ("staged smoke app
-# in <dir>") — assert-*.mjs read .ocel/deploy-result.json from there.
+# in <dir>") — assert-*.mjs read .ocel/deploy-result.json from there. One
+# deploy is enough for both: embedding is unconditional whenever bytecode
+# caching is on, so nothing here needs a second flag or a second deploy.
 cd <that temp dir>
 node "$OLDPWD/scripts/e2e-node/assert-bytecode.mjs" "$url"
-
-# Or, to prove the embedded leg instead:
-#   OCEL_BYTECODE_EMBED=1 node scripts/e2e-node/deploy.mjs
-#   OCEL_BYTECODE_EMBED=1 node "$OLDPWD/scripts/e2e-node/assert-embed.mjs" "$url"
+node "$OLDPWD/scripts/e2e-node/assert-embed.mjs" "$url"
 
 node "$OLDPWD/scripts/e2e-node/cleanup.mjs"
 ```
 
 `deploy.mjs` sets `OCEL_BYTECODE_CACHE=1` on the child `ocel` process itself —
 the feature is off by default (`cloud/aws/deploy/bytecode.go`), and this
-harness's whole point is proving the two legs it turns on.
+harness's whole point is proving the legs it turns on.
 
 ## Known limits (accepted, not bugs)
 
