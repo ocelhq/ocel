@@ -71,6 +71,25 @@ const (
 	// artifactAbortMultipartDays bounds how long an aborted/incomplete multipart
 	// upload lingers before S3 reclaims its parts.
 	artifactAbortMultipartDays = 7
+
+	// bytecodeKeyPrefix is the literal S3 key prefix every bytecode cache object
+	// lives under in the asset bucket — it must match bytecodeKeyNamespace in
+	// cloud/aws/deploy/bytecode.go exactly, the two packages' only point of
+	// agreement on this shape (no import runs between them). It is what lets the
+	// expire-bytecode lifecycle rule below select every bytecode object, and
+	// only those, with one literal prefix filter: bytecodeAppNamespace puts this
+	// segment first precisely so a filter here can be this simple.
+	bytecodeKeyPrefix = "bytecode/"
+	// bytecodeExpirationDays is how long a published bytecode cache archive
+	// lives in the asset bucket before the lifecycle rule expires it. Safe to
+	// keep short relative to artifactExpirationDays: the cache key is a content
+	// hash of the function's own code (hashArtifact), not a build id, so an
+	// expired object is regenerated identically — bit-for-bit the same key — by
+	// the next deploy that still ships that code. Embedding (always on when
+	// caching is on) also means S3 is a deploy-time staging area and a fallback,
+	// not the functions' primary store, so an expiring object cannot regress a
+	// function whose cache already rode along in its own deployment package.
+	bytecodeExpirationDays = 60
 )
 
 // Class tags stamped on a bootstrapped substrate, so an invocation can verify
@@ -721,13 +740,18 @@ func artifactBucketOutput() string {
 
 // assetBucketResource renders the AssetBucket resource block shared by both
 // substrate templates: the dedicated bucket prerender configs + fallbacks are
-// uploaded to, keyed by build id. It carries the same public-access lockdown
-// and encryption the other buckets use and no versioning (keys are immutable
-// per build), but — unlike the artifact bucket — NO object-expiration rule: a
-// live build's assets are never re-uploaded by later deploys, so an age rule
-// would delete assets still backing production. Superseded build prefixes are
-// reaped by the deploy path instead. The block is a Resources child, so it is
-// emitted before the template's Outputs: line.
+// uploaded to, keyed by build id, and — since the bytecode-cache feature —
+// V8 compile-cache archives, keyed by content hash under bytecodeKeyPrefix.
+// It carries the same public-access lockdown and encryption the other buckets
+// use and no versioning (keys are immutable per build or per hash), and it
+// carries exactly one object-expiration rule, scoped by prefix filter to the
+// bytecode objects alone: a live build's prerender/ISR assets are never
+// re-uploaded by later deploys, so an age rule reaching them would delete
+// assets still backing production (those are reaped by the deploy path
+// instead). Bytecode objects are the opposite — content-addressed and
+// disposable, see bytecodeExpirationDays — so they can expire on a plain
+// timer with nothing downstream to reap them. The block is a Resources
+// child, so it is emitted before the template's Outputs: line.
 func assetBucketResource() string {
 	return fmt.Sprintf(`  AssetBucket:
     Type: AWS::S3::Bucket
@@ -747,7 +771,11 @@ func assetBucketResource() string {
             Status: Enabled
             AbortIncompleteMultipartUpload:
               DaysAfterInitiation: %d
-`, artifactAbortMultipartDays)
+          - Id: expire-bytecode
+            Status: Enabled
+            Prefix: %s
+            ExpirationInDays: %d
+`, artifactAbortMultipartDays, bytecodeKeyPrefix, bytecodeExpirationDays)
 }
 
 // assetBucketOutput renders the AssetBucket name output shared by both substrate
