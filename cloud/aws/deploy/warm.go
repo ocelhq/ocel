@@ -57,21 +57,15 @@ type FunctionInvoker interface {
 // names as they came back from it — an app whose stack failed contributes none,
 // so a doomed deploy spends nothing here.
 //
-// It returns no error and swallows what it cannot do, including a cache
-// derivation that fails: warming is an optimization, and the caller is one step
-// from the promote. What it does return is each bundle's summary, for the embed
-// pass that may follow.
+// It returns no error and swallows what it cannot do: warming is an
+// optimization, and the caller is one step from the promote. What it does
+// return is each bundle's summary, for the embed pass that may follow.
 func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, appFunctionNames []map[string]string, log func(string)) []warmResult {
 	if cfg.Invoker == nil {
 		return nil
 	}
 	if log == nil {
 		log = func(string) {}
-	}
-	caches, err := appCaches(cfg, manifest)
-	if err != nil {
-		log(fmt.Sprintf("ocel: could not work out which bundles to warm: %v", err))
-		return nil
 	}
 	names := map[string]string{}
 	for _, app := range appFunctionNames {
@@ -81,7 +75,7 @@ func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deployment
 	}
 	return warmPass{
 		invoker: cfg.Invoker,
-		targets: warmTargets(manifest, caches, names),
+		targets: warmTargets(manifest, names),
 		budget:  warmPassDeadline,
 		log:     log,
 	}.run(ctx)
@@ -94,26 +88,30 @@ type warmTarget struct {
 }
 
 // warmTargets are the functions this deploy should warm: exactly those the
-// bytecode feature is on for. That is the deploy-wide gate (bytecodeCacheEnabled)
-// and an app that keeps an ISR cache, which together are what put
-// OCEL_BYTECODE_PREFIX on a function's environment — deriving the set from the
-// same two facts rather than restating them is what keeps a function that
-// publishes nothing from being invoked for it.
+// bytecode feature is on for. That is the deploy-wide gate
+// (bytecodeCacheEnabled) and the function's own resolved runtime being
+// nodejs* — together what put OCEL_BYTECODE_PREFIX on a function's environment
+// (resolveBytecodeFunctionConfig) — deriving the set from the same two facts
+// rather than restating them is what keeps a function that publishes nothing
+// from being invoked for it. Framework plays no part: an express or fastify
+// function is exactly as eligible as a Next one.
 //
 // names maps a logical name to the physical Lambda name its stack realized, so
 // a function whose app-deploy stack failed is simply absent and is not warmed.
-func warmTargets(manifest *deploymentsv1.Manifest, caches map[string]*isrConfig, names map[string]string) []warmTarget {
+func warmTargets(manifest *deploymentsv1.Manifest, names map[string]string) []warmTarget {
 	if !bytecodeCacheEnabled() {
 		return nil
 	}
 	var targets []warmTarget
 	for _, fn := range manifest.GetFunctions() {
-		app := fn.GetApp()
-		physical := names[fn.GetLogicalName()]
-		if caches[app] == nil || physical == "" {
+		if !isNodeRuntime(translateFunction(fn).Runtime) {
 			continue
 		}
-		targets = append(targets, warmTarget{App: app, LogicalName: fn.GetLogicalName(), FunctionName: physical})
+		physical := names[fn.GetLogicalName()]
+		if physical == "" {
+			continue
+		}
+		targets = append(targets, warmTarget{App: fn.GetApp(), LogicalName: fn.GetLogicalName(), FunctionName: physical})
 	}
 	return targets
 }
@@ -311,19 +309,20 @@ func tailOf(payload []byte, n int) []byte {
 // not apply to a state are omitted from the response, so every one of these
 // reads as its zero value when it was not sent.
 type warmReply struct {
-	State        string            `json:"state"`
-	Entries      int               `json:"entries"`
-	Loaded       int               `json:"loaded"`
-	Failures     []json.RawMessage `json:"failures"`
-	StoppedBy    string            `json:"stoppedBy"`
-	Skipped      []string          `json:"skipped"`
-	SkippedCount int               `json:"skippedCount"`
-	Uncounted    string            `json:"uncounted"`
-	Bytes        int64             `json:"bytes"`
-	Key          string            `json:"key"`
-	Source       warmSource        `json:"source"`
-	Uploaded     bool              `json:"uploaded"`
-	Error        string            `json:"error"`
+	State                  string            `json:"state"`
+	Entries                int               `json:"entries"`
+	Loaded                 int               `json:"loaded"`
+	Failures               []json.RawMessage `json:"failures"`
+	StoppedBy              string            `json:"stoppedBy"`
+	Skipped                []string          `json:"skipped"`
+	SkippedCount           int               `json:"skippedCount"`
+	Uncounted              string            `json:"uncounted"`
+	WholeGraphLoadedAtInit bool              `json:"wholeGraphLoadedAtInit"`
+	Bytes                  int64             `json:"bytes"`
+	Key                    string            `json:"key"`
+	Source                 warmSource        `json:"source"`
+	Uploaded               bool              `json:"uploaded"`
+	Error                  string            `json:"error"`
 }
 
 // already-cached counts as warmed. The deploy cannot pre-check whether a cache
@@ -358,7 +357,17 @@ func (r warmReply) report() (string, bool) {
 // stayed cold: "38/51" tells an operator a cache is partial but not which
 // requests will pay for it, and the deploy output is the only place that ever
 // surfaces.
+//
+// wholeGraphLoadedAtInit is checked first and rendered as its own honest
+// line, never folded into the "N/M entries" shape below: a plain node app
+// has no entry table at all (see warmSummary.count,
+// cloud/aws/cmd/lambdanode/bootstrap/warm.go), and "0/0 entries" would read
+// as an empty or failed walk to an operator, not as the full coverage it
+// actually is.
 func (r warmReply) walk() string {
+	if r.WholeGraphLoadedAtInit {
+		return "whole module graph loaded at INIT (no entry table to walk)"
+	}
 	if r.Uncounted != "" {
 		return fmt.Sprintf("entry counts unknown (%s)", r.Uncounted)
 	}

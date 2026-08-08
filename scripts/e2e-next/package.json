@@ -7,6 +7,9 @@
   "scripts": {
     "test": "vitest run"
   },
+  "dependencies": {
+    "@ocel-scripts/e2e-shared": "workspace:*"
+  },
   "devDependencies": {
     "vitest": "^4.1.9"
   }

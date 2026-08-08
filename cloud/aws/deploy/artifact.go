@@ -99,16 +99,31 @@ func overlayPaths(overlay map[string][]byte) []string {
 // reason: skip-if-exists uploads would otherwise leave a rotated value
 // pointing at the object holding the ciphertext it replaced.
 func hashArtifact(dir string, overlay map[string][]byte) (string, error) {
+	_, withOverlay, err := hashArtifactPair(dir, overlay)
+	return withOverlay, err
+}
+
+// hashArtifactPair computes hashArtifact's result and its own bare-tree
+// prefix — the hash of dir alone, with no overlay folded in — in a single
+// walk and a single read of every file. hash.Hash's Sum appends the digest so
+// far without finalizing the underlying state (the same property incremental
+// checksums rely on), so the bare digest is read off mid-stream and hashing
+// continues from there for the overlay-extended one; a second call with
+// overlay set to nil would otherwise re-walk and re-read the entire tree
+// (uploadFunctionArtifacts and resolveBytecodeFunctionConfig used to do
+// exactly that, doubling the read cost of a several-hundred-megabyte
+// node_modules on every deploy).
+func hashArtifactPair(dir string, overlay map[string][]byte) (bare, withOverlay string, err error) {
 	rels, err := walkRegularFiles(dir)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	h := sha256.New()
 	for _, rel := range rels {
 		full := filepath.Join(dir, rel)
 		info, err := os.Lstat(full)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		// Length-prefix the path so no two distinct (path, contents) layouts can
 		// collide by concatenation. The tag byte after it is 0/1 for a regular
@@ -118,7 +133,7 @@ func hashArtifact(dir string, overlay map[string][]byte) (string, error) {
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(full)
 			if err != nil {
-				return "", err
+				return "", "", err
 			}
 			h.Write([]byte{2})
 			writeLenPrefixed(h, []byte(target))
@@ -133,23 +148,25 @@ func hashArtifact(dir string, overlay map[string][]byte) (string, error) {
 
 		f, err := os.Open(full)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		var size [8]byte
 		binary.BigEndian.PutUint64(size[:], uint64(info.Size()))
 		h.Write(size[:])
 		if _, err := io.Copy(h, f); err != nil {
 			f.Close()
-			return "", err
+			return "", "", err
 		}
 		f.Close()
 	}
+	bare = hex.EncodeToString(h.Sum(nil))
 	for _, rel := range overlayPaths(overlay) {
 		writeLenPrefixed(h, []byte(rel))
 		h.Write([]byte{0})
 		writeLenPrefixed(h, overlay[rel])
 	}
-	return hex.EncodeToString(h.Sum(nil)), nil
+	withOverlay = hex.EncodeToString(h.Sum(nil))
+	return bare, withOverlay, nil
 }
 
 func writeLenPrefixed(h io.Writer, b []byte) {
@@ -298,6 +315,12 @@ func isNotFound(err error) bool {
 type artifactRef struct {
 	Bucket string
 	Key    string
+
+	// BareHash is the function's `.func` tree hashed without its overlay
+	// (hashArtifactPair's bare return) — computed here, in the same walk that
+	// produces Key's hash, so resolveBytecodeFunctionConfig can compose a
+	// bytecode cache key from it without a second read of the tree.
+	BareHash string
 }
 
 // uploadFunctionArtifacts hashes, zips, and uploads every function's `.func`
@@ -335,7 +358,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 		g.Go(func() error {
 			dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
 			overlay := baked[fn.GetApp()].overlay()
-			hash, err := hashArtifact(dir, overlay)
+			bare, hash, err := hashArtifactPair(dir, overlay)
 			if err != nil {
 				return err
 			}
@@ -349,7 +372,7 @@ func uploadFunctionArtifacts(ctx context.Context, cfg Config, manifest *deployme
 			// stream.Send, which is not safe for concurrent use, and these
 			// goroutines run in parallel.
 			mu.Lock()
-			refs[fn.GetLogicalName()] = artifactRef{Bucket: cfg.ArtifactBucket, Key: key}
+			refs[fn.GetLogicalName()] = artifactRef{Bucket: cfg.ArtifactBucket, Key: key, BareHash: bare}
 			progress.report(deploymentsv1.Phase_PHASE_UPLOADING, "Uploading function artifacts", done.Add(1), total)
 			mu.Unlock()
 			return nil

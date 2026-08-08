@@ -57,6 +57,7 @@ type parsedTemplate struct {
 				Rules []struct {
 					Id                             string `yaml:"Id"`
 					Status                         string `yaml:"Status"`
+					Prefix                         string `yaml:"Prefix"`
 					ExpirationInDays               int    `yaml:"ExpirationInDays"`
 					AbortIncompleteMultipartUpload struct {
 						DaysAfterInitiation int `yaml:"DaysAfterInitiation"`
@@ -232,8 +233,10 @@ func TestArtifactBucket(t *testing.T) {
 // asset bucket that prerender configs + fallbacks are uploaded to. Unlike the
 // artifact bucket, assets are keyed by an immutable build id and a live build's
 // assets are never re-touched by later deploys, so the bucket carries NO
-// object-expiration rule (only an incomplete-multipart abort) and its name is
-// exported for the deploy path to consume.
+// object-expiration rule reaching them (only an incomplete-multipart abort) —
+// but it does carry a second rule, scoped by bytecodeKeyPrefix, that expires
+// only the content-addressed bytecode cache objects sharing the bucket. Its
+// name is exported for the deploy path to consume.
 func TestAssetBucket(t *testing.T) {
 	for _, tc := range []struct {
 		name     string
@@ -259,18 +262,33 @@ func TestAssetBucket(t *testing.T) {
 			}
 
 			rules := bucket.Properties.LifecycleConfiguration.Rules
-			if len(rules) != 1 {
-				t.Fatalf("AssetBucket lifecycle rules = %d, want exactly 1", len(rules))
+			if len(rules) != 2 {
+				t.Fatalf("AssetBucket lifecycle rules = %d, want exactly 2", len(rules))
 			}
-			rule := rules[0]
-			if rule.Status != "Enabled" {
-				t.Errorf("lifecycle rule Status = %q, want Enabled", rule.Status)
+
+			abort := rules[0]
+			if abort.Status != "Enabled" {
+				t.Errorf("abort-incomplete-uploads rule Status = %q, want Enabled", abort.Status)
 			}
-			if rule.ExpirationInDays != 0 {
-				t.Errorf("lifecycle rule ExpirationInDays = %d, want 0 (no object expiry)", rule.ExpirationInDays)
+			if abort.Prefix != "" {
+				t.Errorf("abort-incomplete-uploads rule Prefix = %q, want unscoped (applies to every key)", abort.Prefix)
 			}
-			if rule.AbortIncompleteMultipartUpload.DaysAfterInitiation != artifactAbortMultipartDays {
-				t.Errorf("lifecycle rule AbortIncompleteMultipartUpload = %d, want %d", rule.AbortIncompleteMultipartUpload.DaysAfterInitiation, artifactAbortMultipartDays)
+			if abort.ExpirationInDays != 0 {
+				t.Errorf("abort-incomplete-uploads rule ExpirationInDays = %d, want 0 (no object expiry)", abort.ExpirationInDays)
+			}
+			if abort.AbortIncompleteMultipartUpload.DaysAfterInitiation != artifactAbortMultipartDays {
+				t.Errorf("abort-incomplete-uploads rule AbortIncompleteMultipartUpload = %d, want %d", abort.AbortIncompleteMultipartUpload.DaysAfterInitiation, artifactAbortMultipartDays)
+			}
+
+			expire := rules[1]
+			if expire.Status != "Enabled" {
+				t.Errorf("expire-bytecode rule Status = %q, want Enabled", expire.Status)
+			}
+			if expire.Prefix != bytecodeKeyPrefix {
+				t.Errorf("expire-bytecode rule Prefix = %q, want %q", expire.Prefix, bytecodeKeyPrefix)
+			}
+			if expire.ExpirationInDays != bytecodeExpirationDays {
+				t.Errorf("expire-bytecode rule ExpirationInDays = %d, want %d", expire.ExpirationInDays, bytecodeExpirationDays)
 			}
 
 			if _, ok := tmpl.Outputs[outputAssetBucket]; !ok {

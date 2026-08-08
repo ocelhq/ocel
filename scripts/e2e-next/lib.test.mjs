@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   APP_NAME,
   BYTECODE_EMBEDDED_MARKER,
-  BYTECODE_EMBED_ENV,
   BYTECODE_S3_REHYDRATE_MARKER,
   DNS_LABEL,
   GOLDEN_MARKER,
@@ -16,9 +15,9 @@ import {
   WARM_SUMMARY_MARKER,
   appAssetPrefix,
   buildBaselineManifest,
+  bytecodeAppNamespace,
+  bytecodeCacheEntry,
   bytecodeCacheKeyName,
-  bytecodeCacheKeyPrefix,
-  bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
   bytecodeRehydrateOutcome,
   deployURL,
@@ -343,11 +342,61 @@ describe("appAssetPrefix", () => {
   });
 });
 
-describe("bytecodeCacheKeyPrefix", () => {
-  it("joins prefix/bytecode/functionName with a trailing slash", () => {
+describe("bytecodeAppNamespace", () => {
+  it("joins bytecode/env/slug/app in that order — mirrors bytecodeAppNamespace in bytecode.go", () => {
     expect(
-      bytecodeCacheKeyPrefix({ prefix: "preview-e2e-42/e2e-42/app/bld123", functionName: "proj--web-abc123" }),
-    ).toBe("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/");
+      bytecodeAppNamespace({ environment: { class: "preview", identity: "e2e-42-abcd1234" }, slug: "e2e-42-abcd1234", app: "app" }),
+    ).toBe("bytecode/preview-e2e-42-abcd1234/e2e-42-abcd1234/app");
+  });
+
+  it("uses the fixed prod segment for a production deploy", () => {
+    expect(bytecodeAppNamespace({ environment: { class: "production" }, slug: "s", app: "app" })).toBe(
+      "bytecode/prod/s/app",
+    );
+  });
+
+  it("is not appAssetPrefix's build-keyed prefix — the two must never collide", () => {
+    const environment = { class: "preview", identity: "e2e-42-abcd1234" };
+    const slug = "e2e-42-abcd1234";
+    const app = "app";
+    expect(bytecodeAppNamespace({ environment, slug, app })).not.toBe(
+      appAssetPrefix({ environment, slug, app, buildId: "bld123" }),
+    );
+  });
+});
+
+describe("bytecodeCacheEntry", () => {
+  // Pins the full derivation this harness has to agree with the Go side on,
+  // end to end: bytecodeAppNamespace + bytecodePrefixFor's hash segment +
+  // bytecodeCacheKey's own "node<version>-<arch>.tar.gz" (cloud/aws/deploy/
+  // bytecode.go, cloud/aws/cmd/lambdanode/bootstrap/bytecode.go). A real S3
+  // listing under bytecodeAppNamespace returns names with the namespace
+  // already stripped, which is what this parses. Carries no function name:
+  // the key is keyed off content hash alone, so two functions whose `.func`
+  // trees hash identically share one cache object.
+  it("reads the hash, node version and arch out of a real key's tail", () => {
+    const namespace = bytecodeAppNamespace({
+      environment: { class: "preview", identity: "e2e-42-abcd1234" },
+      slug: "e2e-42-abcd1234",
+      app: "app",
+    });
+    const hash = "a1b2c3d4e5f6";
+    const key = `${namespace}/${hash}/node24.3.1-x86_64.tar.gz`;
+
+    expect(bytecodeCacheEntry(key.slice(namespace.length + 1))).toEqual({
+      hash,
+      filename: "node24.3.1-x86_64.tar.gz",
+      nodeVersion: "24.3.1",
+      arch: "x86_64",
+    });
+  });
+
+  it("rejects a name with no hash/filename structure", () => {
+    expect(bytecodeCacheEntry("node24.3.1-x86_64.tar.gz")).toBeNull();
+  });
+
+  it("rejects a name whose filename is not node<version>-<arch>.tar.gz", () => {
+    expect(bytecodeCacheEntry("a1b2c3/not-a-cache-file")).toBeNull();
   });
 });
 
@@ -434,20 +483,6 @@ describe("bytecodeRehydrateOutcome", () => {
     expect(bytecodeRehydrateOutcome("ocel: no aws config for the compile cache: no EC2 IMDS role found", key).kind).toBe(
       "disabled",
     );
-  });
-});
-
-describe("bytecodeEmbedEnabled", () => {
-  it("is on for exactly the literal 1, mirroring the deploy's own gate", () => {
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "1" })).toBe(true);
-  });
-
-  it("is off when unset or set to anything else", () => {
-    expect(bytecodeEmbedEnabled({})).toBe(false);
-    expect(bytecodeEmbedEnabled(undefined)).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "0" })).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "true" })).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "" })).toBe(false);
   });
 });
 
@@ -626,6 +661,29 @@ describe("warmCoverage", () => {
   it("sets a summary naming another build's key aside", () => {
     expect(warmCoverage({ ...published, key: "other/build/node24.3.1-x86_64.tar.gz" }, key).kind).toBe("other-build");
   });
+
+  // A node app has no entry table at all — see warmNode
+  // (packages/lambda-entrypoints/src/node/entrypoint.mts) — and reports that
+  // honestly via wholeGraphLoadedAtInit rather than claiming a walk it never
+  // took. This must land as its own falsifiable verdict, not fall into the
+  // same bucket a bundle reporting zero entries because it published nothing
+  // measurable would.
+  it("reports a node app's whole-graph publish as its own, distinct, complete verdict", () => {
+    const verdict = warmCoverage(
+      { state: "published", uploaded: true, bytes: 4096, key, wholeGraphLoadedAtInit: true },
+      key,
+    );
+    expect(verdict.kind).toBe("whole-graph");
+    expect(verdict.detail).toContain("no entry table to walk");
+  });
+
+  it("never claims entry counts for a whole-graph publish, even if some sneak onto the wire", () => {
+    const verdict = warmCoverage(
+      { ...published, wholeGraphLoadedAtInit: true, entries: 0, loaded: 0 },
+      key,
+    );
+    expect(verdict.kind).toBe("whole-graph");
+  });
 });
 
 describe("strongestCoverage", () => {
@@ -639,6 +697,13 @@ describe("strongestCoverage", () => {
     const partial = { kind: "partial", detail: "" };
     expect(strongestCoverage([{ kind: "failed", detail: "" }, partial])).toBe(partial);
     expect(strongestCoverage([])).toBeNull();
+  });
+
+  it("ranks a node app's whole-graph verdict above partial and alongside complete", () => {
+    const wholeGraph = { kind: "whole-graph", detail: "" };
+    expect(strongestCoverage([{ kind: "partial", detail: "" }, wholeGraph])).toBe(wholeGraph);
+    const complete = { kind: "complete", detail: "" };
+    expect(strongestCoverage([wholeGraph, complete])).toBe(complete);
   });
 });
 

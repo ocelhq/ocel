@@ -64,20 +64,6 @@ const (
 	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:24"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
-	// bytecodeCacheEnv is the deploying process's own override for whether the
-	// membrane caches V8 bytecode. Bytecode caching is on for every Next app by
-	// default (nothing about it depends on the app), so the override exists only
-	// to turn it off — the literal "0", mirroring no other spelling.
-	bytecodeCacheEnv = "OCEL_BYTECODE_CACHE"
-
-	// bytecodeEmbedEnv opts a deploy into embedding each bundle's compile cache
-	// in its own deployment package (see embed.go), so a cold start reads it
-	// from /var/task instead of S3. The default is inverted from
-	// bytecodeCacheEnv's: embedding trades network for package size, and which
-	// way that trade lands depends on the bundle, so it is off until asked for —
-	// only the literal "1".
-	bytecodeEmbedEnv = "OCEL_BYTECODE_EMBED"
-
 	// A Next-fronted function's Function URL is IAM-gated: the edge worker signs
 	// its forwards (SigV4) with the edge reader's key, whose identity-based grant
 	// authorizes invoke on any function tagged ocel:app. This removes the public
@@ -121,33 +107,6 @@ func membraneLayerARN() string {
 		return arn
 	}
 	return defaultMembraneLayerARN
-}
-
-// bytecodeCacheEnabled reports whether a deployed function should have its
-// V8 bytecode cached, read from OCEL_BYTECODE_CACHE on the deploying process.
-// On by default; only the literal "0" turns it off.
-func bytecodeCacheEnabled() bool {
-	return os.Getenv(bytecodeCacheEnv) != "0"
-}
-
-// bytecodeEmbedRequested reports whether the deploy asked for embedding at all,
-// which is a different question from whether it can have it: a deploy that
-// asked and cannot is owed a line saying why, and only this can tell that from
-// a deploy that never asked. OCEL_BYTECODE_EMBED is read nowhere else.
-func bytecodeEmbedRequested() bool {
-	return os.Getenv(bytecodeEmbedEnv) == "1"
-}
-
-// bytecodeEmbedEnabled reports whether this deploy should embed each bundle's
-// published compile cache in its deployment package. Off by default; only the
-// literal "1" turns it on.
-//
-// Embedding implies caching: there is nothing to embed without a published
-// cache, so the two gates are ANDed here rather than left for a caller to
-// forget. embedBytecodeCaches names the contradiction when a deploy asks for
-// one and forbids the other.
-func bytecodeEmbedEnabled() bool {
-	return bytecodeEmbedRequested() && bytecodeCacheEnabled()
 }
 
 // functionArgs is the fully-resolved set of arguments a ManifestFunction lowers
@@ -228,14 +187,6 @@ func (c isrConfig) env() map[string]string {
 	if c.WriterURL != "" && c.WriterSecret != "" {
 		env["OCEL_ISR_WRITER_URL"] = c.WriterURL
 		env["OCEL_ISR_WRITER_SECRET"] = c.WriterSecret
-	}
-	// The membrane composes its own key under this prefix (bytecode/<function
-	// name>/node<major>-<arch>.tar.gz), which is why the value is the bare
-	// prefix rather than anything bytecode-specific: the same string isrPolicy
-	// already grants {bucket}/{prefix}/* against, so no extra grant is needed.
-	// Left unset when the gate is off, which is what makes the membrane no-op.
-	if bytecodeCacheEnabled() {
-		env["OCEL_BYTECODE_PREFIX"] = c.Prefix
 	}
 	return env
 }
@@ -397,19 +348,45 @@ type executionRole struct {
 	Slug           string
 	VarsClass      string
 	VarsReferenced []string
+
+	// BytecodeBucket and BytecodeNamespace grant this app's own bytecode-cache
+	// namespace (bytecodeAppNamespace), independent of Cache: a non-Next app has
+	// no ISR cache and so no Cache, but is exactly as eligible for this grant as
+	// long as one of its functions runs a nodejs* runtime. BytecodeNamespace
+	// empty means the app earned no grant — the deploy-wide gate is off, or none
+	// of the app's functions qualify.
+	BytecodeBucket    string
+	BytecodeNamespace string
 }
 
-// appExecutionRole is the role one app needs: its own cache and no other's,
-// plus the substrate's variable key off the deploy's config rather than derived
-// per app. The table is added only when the app's own bundle pins live
-// addresses, so a declaration is what earns the grant.
-func appExecutionRole(cfg Config, app string, caches map[string]*isrConfig, bundle appBundle) executionRole {
+// appExecutionRole is the role one app needs: its own ISR cache, its own
+// bytecode-cache namespace, plus the substrate's variable key off the
+// deploy's config rather than derived per app. The variable table is added
+// only when the app's own bundle pins live addresses, so a declaration is
+// what earns the grant.
+//
+// "Its own" namespace means the one bytecodeAppNamespace derives from this
+// app's own name, not a namespace unreachable by any other app in the
+// project: sanitizeWorkerName collapses distinct raw names to the same
+// token (e.g. "my.app" and "my-app" both become "my-app"; "web_1" and
+// "web-1" both become "web-1"; any two names agreeing past the 63-character
+// clamp), and normalizeApps (cli/internal/projectconfig/projectconfig.go)
+// rejects only duplicate raw names, not dots/underscores/case that collapse
+// to one. Two such apps in one project share a bytecode namespace, and each
+// one's grant covers the other's objects — intra-tenant only (same project,
+// same environment), and the pre-existing behaviour of appAssetPrefixFor,
+// which this shape deliberately matches.
+func appExecutionRole(cfg Config, slug, app string, caches map[string]*isrConfig, bundle appBundle, functions []*deploymentsv1.ManifestFunction) executionRole {
 	role := executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
 	if bundle.hasLive() {
 		role.VarsTableARN = cfg.VarsTableARN
 		role.VarsReferenced = bundle.Referenced
 		role.Slug = cfg.Slug
 		role.VarsClass = cfg.VarsClass
+	}
+	if ns := appBytecodeNamespace(cfg, slug, app, functions); ns != "" {
+		role.BytecodeBucket = cfg.AssetBucket
+		role.BytecodeNamespace = ns
 	}
 	return role
 }
@@ -442,6 +419,18 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 			return nil, err
 		}
 	}
+	if r.BytecodeNamespace != "" {
+		policy, err := bytecodePolicy(r.BytecodeBucket, r.BytecodeNamespace)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := iam.NewRolePolicy(ctx, name+"-bytecode", &iam.RolePolicyArgs{
+			Role:   role.Name,
+			Policy: pulumi.String(policy),
+		}); err != nil {
+			return nil, err
+		}
+	}
 	varsPolicy, err := varsReadPolicy(r)
 	if err != nil {
 		return nil, err
@@ -457,14 +446,15 @@ func newFunctionRole(ctx *pulumi.Context, r executionRole) (*iam.Role, error) {
 
 // functionEnv is the complete environment one function is deployed with: the
 // entries every function in the deploy shares (resource payloads and the app's
-// plaintext variables), the two the membrane needs, and the app's cache
-// coordinates when it keeps one. Pure and total, so what the deploy accounts
-// against the platform's budget is exactly what it deploys.
+// plaintext variables), the two the membrane needs, the app's ISR cache
+// coordinates when it keeps one, and this function's own bytecode-cache
+// coordinates when the feature reaches it. Pure and total, so what the deploy
+// accounts against the platform's budget is exactly what it deploys.
 //
 // The lambdanode bootstrap (in the membrane layer) takes over as the runtime
 // and imports the user entrypoint at /var/task/<handler>; the Lambda's own
 // Handler config is vestigial under this exec wrapper.
-func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[string]string {
+func functionEnv(base map[string]string, args functionArgs, isr *isrConfig, bytecode *bytecodeFunctionConfig) map[string]string {
 	env := make(map[string]string, len(base))
 	maps.Copy(env, base)
 	env["AWS_LAMBDA_EXEC_WRAPPER"] = execWrapper
@@ -472,6 +462,7 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[
 	if isr != nil {
 		maps.Copy(env, isr.env())
 	}
+	maps.Copy(env, bytecode.env())
 	return env
 }
 
@@ -484,13 +475,15 @@ func functionEnv(base map[string]string, args functionArgs, isr *isrConfig) map[
 // changes when the code changes, so Pulumi redeploys exactly the changed
 // functions. isr is the app's cache, nil when it keeps none; it injects the
 // cache handler's env, and the grant backing it lives on that same app's role.
-// The Function URL and the realized Lambda's physical name are exported under
-// logicalName for collectAppFunctionOutputs,
+// bytecode is this function's own bytecode-cache identity, nil when the
+// feature does not reach it; likewise its grant lives on the app's role
+// (appBytecodeNamespace). The Function URL and the realized Lambda's physical
+// name are exported under logicalName for collectAppFunctionOutputs,
 // which is the identity everything downstream uses; the Pulumi resource name is
 // the clamped lambdaResourceName, so a long route still fits AWS's name limit.
-func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, roleArn pulumi.StringInput) error {
+func registerFunction(ctx *pulumi.Context, logicalName string, tags pulumi.StringMap, args functionArgs, artifact artifactRef, base map[string]string, isr *isrConfig, bytecode *bytecodeFunctionConfig, roleArn pulumi.StringInput) error {
 	env := pulumi.StringMap{}
-	for key, value := range functionEnv(base, args, isr) {
+	for key, value := range functionEnv(base, args, isr, bytecode) {
 		env[key] = pulumi.String(value)
 	}
 

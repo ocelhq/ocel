@@ -28,41 +28,37 @@ import (
 
 func TestBytecodeCacheKey(t *testing.T) {
 	cases := []struct {
-		name         string
-		prefix       string
-		functionName string
-		nodeVersion  string
-		goArch       string
-		want         string
+		name        string
+		prefix      string
+		nodeVersion string
+		goArch      string
+		want        string
 	}{
 		{
-			name:         "amd64 maps to the AWS x86_64 spelling",
-			prefix:       "ocel",
-			functionName: "my-app",
-			nodeVersion:  "24.3.1",
-			goArch:       "amd64",
-			want:         "ocel/bytecode/my-app/node24.3.1-x86_64.tar.gz",
+			name:        "amd64 maps to the AWS x86_64 spelling",
+			prefix:      "ocel",
+			nodeVersion: "24.3.1",
+			goArch:      "amd64",
+			want:        "ocel/node24.3.1-x86_64.tar.gz",
 		},
 		{
-			name:         "arm64 passes through unchanged",
-			prefix:       "ocel",
-			functionName: "my-app",
-			nodeVersion:  "24.3.1",
-			goArch:       "arm64",
-			want:         "ocel/bytecode/my-app/node24.3.1-arm64.tar.gz",
+			name:        "arm64 passes through unchanged",
+			prefix:      "ocel",
+			nodeVersion: "24.3.1",
+			goArch:      "arm64",
+			want:        "ocel/node24.3.1-arm64.tar.gz",
 		},
 		{
-			name:         "an unrecognized arch still passes through",
-			prefix:       "stg/deploy",
-			functionName: "other-fn",
-			nodeVersion:  "20.11.0",
-			goArch:       "riscv64",
-			want:         "stg/deploy/bytecode/other-fn/node20.11.0-riscv64.tar.gz",
+			name:        "an unrecognized arch still passes through",
+			prefix:      "stg/deploy",
+			nodeVersion: "20.11.0",
+			goArch:      "riscv64",
+			want:        "stg/deploy/node20.11.0-riscv64.tar.gz",
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := bytecodeCacheKey(tc.prefix, tc.functionName, tc.nodeVersion, tc.goArch)
+			got := bytecodeCacheKey(tc.prefix, tc.nodeVersion, tc.goArch)
 			if got != tc.want {
 				t.Errorf("bytecodeCacheKey() = %q, want %q", got, tc.want)
 			}
@@ -846,25 +842,39 @@ func TestCompileCacheEnv(t *testing.T) {
 // constructs an AWS client.
 func TestResolveBytecodeResolution_NilWhenNotFullyConfigured(t *testing.T) {
 	cases := []struct {
-		name     string
-		prefix   string
-		bucket   string
-		function string
+		name   string
+		prefix string
+		bucket string
 	}{
-		{name: "no prefix", bucket: "assets", function: "my-app"},
-		{name: "no bucket", prefix: "ocel", function: "my-app"},
-		{name: "no function name", prefix: "ocel", bucket: "assets"},
+		{name: "no prefix", bucket: "assets"},
+		{name: "no bucket", prefix: "ocel"},
 	}
 	nodeVersion := func(context.Context) (string, error) { return "v24.3.1", nil }
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(bytecodePrefixEnvVar, tc.prefix)
-			t.Setenv("OCEL_ISR_BUCKET", tc.bucket)
-			t.Setenv("AWS_LAMBDA_FUNCTION_NAME", tc.function)
+			t.Setenv(bytecodeBucketEnvVar, tc.bucket)
 			if got := resolveBytecodeResolution(context.Background(), nodeVersion); got != nil {
 				t.Errorf("resolveBytecodeResolution() = %+v, want nil", got)
 			}
 		})
+	}
+}
+
+// AWS_LAMBDA_FUNCTION_NAME is no longer part of the gate: the key
+// bytecodeCacheKey composes carries no function name, so a resolution must
+// come back fully configured whether or not the runtime happens to set it —
+// unlike the prefix and the bucket, its absence must never disable the
+// feature.
+func TestResolveBytecodeResolution_IgnoresAWSLambdaFunctionName(t *testing.T) {
+	t.Setenv(bytecodePrefixEnvVar, "ocel")
+	t.Setenv(bytecodeBucketEnvVar, "assets")
+	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "")
+	t.Setenv("AWS_REGION", "us-east-1")
+	nodeVersion := func(context.Context) (string, error) { return "v24.3.1", nil }
+
+	if got := resolveBytecodeResolution(context.Background(), nodeVersion); got == nil {
+		t.Fatal("resolveBytecodeResolution() = nil, want a resolution even with no AWS_LAMBDA_FUNCTION_NAME set")
 	}
 }
 
@@ -873,8 +883,7 @@ func TestResolveBytecodeResolution_NilWhenNotFullyConfigured(t *testing.T) {
 // compose without it, so neither leg can be handed one.
 func TestResolveBytecodeResolution_NilWhenTheNodeVersionCannotBeRead(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel")
-	t.Setenv("OCEL_ISR_BUCKET", "assets")
-	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
+	t.Setenv(bytecodeBucketEnvVar, "assets")
 
 	cases := []struct {
 		name    string
@@ -896,13 +905,12 @@ func TestResolveBytecodeResolution_NilWhenTheNodeVersionCannotBeRead(t *testing.
 
 // A fully configured function gets a resolution composed from exactly what
 // the environment named and the version prober reported. Landing the
-// prefix, the bucket, the function name or the version in the wrong place
-// would compose a key nothing ever reads back, which no later leg could
-// detect — this is the test that pins the composition down.
+// prefix or the version in the wrong place would compose a key nothing ever
+// reads back, which no later leg could detect — this is the test that pins
+// the composition down.
 func TestResolveBytecodeResolution_CarriesTheEnvironmentAndVersionIntoTheKey(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel/stg")
-	t.Setenv("OCEL_ISR_BUCKET", "assets-xyz")
-	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
+	t.Setenv(bytecodeBucketEnvVar, "assets-xyz")
 	t.Setenv("AWS_REGION", "us-east-1")
 
 	nodeVersion := func(context.Context) (string, error) { return "v24.3.1", nil }
@@ -917,7 +925,7 @@ func TestResolveBytecodeResolution_CarriesTheEnvironmentAndVersionIntoTheKey(t *
 	if r.store == nil {
 		t.Error("store = nil, want an S3-backed store")
 	}
-	want := "ocel/stg/bytecode/my-app/node24.3.1-" + s3Arch(runtime.GOARCH) + ".tar.gz"
+	want := "ocel/stg/node24.3.1-" + s3Arch(runtime.GOARCH) + ".tar.gz"
 	if r.key != want {
 		t.Errorf("key = %q, want %q", r.key, want)
 	}
@@ -2376,8 +2384,8 @@ func TestEmbeddedBytecodePath_FollowsTheResolutionsKey(t *testing.T) {
 		key  string
 		want string
 	}{
-		{bytecodeCacheKey("ocel", "my-app", "24.3.1", "arm64"), "/var/task/.ocel/bytecode/node24.3.1-arm64.tar"},
-		{bytecodeCacheKey("stg/deploy", "other-fn", "20.11.0", "amd64"), "/var/task/.ocel/bytecode/node20.11.0-x86_64.tar"},
+		{bytecodeCacheKey("ocel", "24.3.1", "arm64"), "/var/task/.ocel/bytecode/node24.3.1-arm64.tar"},
+		{bytecodeCacheKey("stg/deploy", "20.11.0", "amd64"), "/var/task/.ocel/bytecode/node20.11.0-x86_64.tar"},
 	}
 	for _, c := range cases {
 		if got := embeddedBytecodePath(c.key); got != c.want {

@@ -54,23 +54,31 @@ const (
 // nobody could say what went into it. Reporting the counts as zeros would be
 // the same silence dressed as a measurement.
 //
+// WholeGraphLoadedAtInit is the third, honest answer for a launcher with no
+// entry table at all (a plain node app — see warmSummary.count and
+// packages/lambda-entrypoints/src/node/entrypoint.mts's warmNode). It is
+// deliberately its own field rather than a magic Entries/Loaded value: a
+// caller checks one flag instead of having to learn that zero here means "no
+// walk to measure" and not "a walk that measured nothing".
+//
 // Source is the one field that is always reported, never omitted: "none" is a
 // real answer — this instance compiled its own cache — and a missing field
 // would read the same as one this membrane is too old to send.
 type warmSummary struct {
-	State        string         `json:"state"`
-	Entries      int            `json:"entries,omitempty"`
-	Loaded       int            `json:"loaded,omitempty"`
-	Failures     []warmFailure  `json:"failures,omitempty"`
-	StoppedBy    string         `json:"stoppedBy,omitempty"`
-	Skipped      []string       `json:"skipped,omitempty"`
-	SkippedCount int            `json:"skippedCount,omitempty"`
-	Uncounted    string         `json:"uncounted,omitempty"`
-	Bytes        int64          `json:"bytes,omitempty"`
-	Key          string         `json:"key,omitempty"`
-	Source       bytecodeSource `json:"source"`
-	Uploaded     *bool          `json:"uploaded,omitempty"`
-	Error        string         `json:"error,omitempty"`
+	State                  string         `json:"state"`
+	Entries                int            `json:"entries,omitempty"`
+	Loaded                 int            `json:"loaded,omitempty"`
+	Failures               []warmFailure  `json:"failures,omitempty"`
+	StoppedBy              string         `json:"stoppedBy,omitempty"`
+	Skipped                []string       `json:"skipped,omitempty"`
+	SkippedCount           int            `json:"skippedCount,omitempty"`
+	Uncounted              string         `json:"uncounted,omitempty"`
+	WholeGraphLoadedAtInit bool           `json:"wholeGraphLoadedAtInit,omitempty"`
+	Bytes                  int64          `json:"bytes,omitempty"`
+	Key                    string         `json:"key,omitempty"`
+	Source                 bytecodeSource `json:"source"`
+	Uploaded               *bool          `json:"uploaded,omitempty"`
+	Error                  string         `json:"error,omitempty"`
 }
 
 // warmInvocationBudget is what the load window is measured against when the
@@ -193,15 +201,32 @@ func (m *Membrane) warmBytecodeCache(ctx context.Context) warmSummary {
 	return summary
 }
 
+// warmReportStateLoadedAtInit mirrors the node entrypoint's own spelling
+// (packages/lambda-entrypoints/src/node/entrypoint.mts's warmNode, via
+// WarmReport.state in packages/lambda-entrypoints/src/shared/membrane.mts):
+// the honest answer for a launcher with no entry table to walk at all,
+// because the whole module graph was already loaded before this handler
+// could ever run.
+const warmReportStateLoadedAtInit = "loaded-at-init"
+
 // count folds node's report into the summary, or records why there is none to
 // fold. An artifact with no warm capability is the same story as a report that
 // never arrived: the walk is unaccounted for, and only the counts are lost.
+//
+// A report naming warmReportStateLoadedAtInit is neither of those — it is a
+// real, positive answer, just not a walk — so it gets its own branch rather
+// than falling into the default one: reporting Entries/Loaded as 0 there
+// would look exactly like a walk that ran and covered nothing, which
+// WholeGraphLoadedAtInit exists to be told apart from.
 func (s *warmSummary) count(report compileCacheWarmedPayload, answered bool) {
 	switch {
 	case !answered:
 		s.Uncounted = "node did not report back on the compile-cache warm"
 	case !report.OK:
 		s.Uncounted = "this artifact has no compile-cache warm capability: " + report.State
+	case report.State == warmReportStateLoadedAtInit:
+		s.WholeGraphLoadedAtInit = true
+		s.Bytes = report.Bytes
 	default:
 		s.Entries = report.Entries
 		s.Loaded = report.Loaded

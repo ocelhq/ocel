@@ -32,13 +32,22 @@ import (
 const bytecodeCacheCeiling = 64 << 20 // 64 MiB
 
 // bytecodeCacheKey composes the S3 key the membrane uploads a function's
-// compile cache under and downloads it back from. prefix, functionName and
-// nodeVersion are the caller's to supply — nothing here reads the
-// environment, which is what keeps it callable from a test with no AWS
-// client in sight. nodeVersion is expected already canonical; this function
-// does not clean it.
-func bytecodeCacheKey(prefix, functionName, nodeVersion, goArch string) string {
-	return fmt.Sprintf("%s/bytecode/%s/node%s-%s.tar.gz", prefix, functionName, nodeVersion, s3Arch(goArch))
+// compile cache under and downloads it back from. prefix and nodeVersion are
+// the caller's to supply — nothing here reads the environment, which is what
+// keeps it callable from a test with no AWS client in sight. nodeVersion is
+// expected already canonical; this function does not clean it.
+//
+// Deliberately carries no function name: prefix already ends in the content
+// hash of the function's own `.func` tree (bytecodePrefixFor,
+// cloud/aws/deploy/bytecode.go), and two functions whose trees hash
+// identically are byte-identical code that should share one compile cache.
+// A function name folded in here would key the cache off Pulumi's own
+// autonamed physical name instead, which is regenerated on every deploy of a
+// non-Next app (a fresh DeploymentIdentity draws fresh random bytes) — so a
+// deploy that changed nothing would still miss the cache it just published,
+// forever.
+func bytecodeCacheKey(prefix, nodeVersion, goArch string) string {
+	return fmt.Sprintf("%s/node%s-%s.tar.gz", prefix, nodeVersion, s3Arch(goArch))
 }
 
 // s3Arch renders a Go GOARCH value the way AWS spells it in its own naming
@@ -152,6 +161,15 @@ const compileCacheDir = "/tmp/.ocel/compile-cache"
 // no compile cache at all — not the upload, not even NODE_COMPILE_CACHE on the
 // child — so the feature is off until a deploy turns it on.
 const bytecodePrefixEnvVar = "OCEL_BYTECODE_PREFIX"
+
+// bytecodeBucketEnvVar names the account-global bucket the compile cache lives
+// in. It is its own variable rather than a reuse of OCEL_ISR_BUCKET — that one
+// is unset for any function with no ISR cache, which used to be every
+// non-Next function this feature now also has to reach. There is no fallback
+// chain: a deploy that sets bytecodePrefixEnvVar always sets this alongside
+// it (see functionEnv on the deploy side), so an unset bucket here reads as
+// exactly what resolveBytecodeResolution already treats it as — the gate off.
+const bytecodeBucketEnvVar = "OCEL_BYTECODE_BUCKET"
 
 // bytecodeUploadBudget caps what the upload may spend after an invocation is
 // already served. It is billed duration, not request latency, but the sandbox is
@@ -797,18 +815,22 @@ func (r *bytecodeResolution) upload(flush func(context.Context) (compileCacheFlu
 // resolveBytecodeResolution builds the bytecode cache identity this
 // deployment is configured for, or nil for one that is configured for none.
 // Nil is the off switch every caller checks, so an unset prefix, a missing
-// bucket, a missing function name, a node version this process cannot read
-// or that doesn't parse, or an AWS config that will not load all land in the
-// same place: the membrane simply never tries, on either leg.
+// bucket, a node version this process cannot read or that doesn't parse, or
+// an AWS config that will not load all land in the same place: the membrane
+// simply never tries, on either leg.
+//
+// No longer reads AWS_LAMBDA_FUNCTION_NAME: the key bytecodeCacheKey composes
+// carries no function name (see its own doc comment), so gating on the
+// function's Pulumi-autonamed physical name would only ever disable a feature
+// that no longer reads it.
 //
 // nodeVersion is a field for the same reason it was one on bytecodeUpload
 // before this replaced it there: the whole resolution is exercisable without
 // a node binary, an AWS client or the environment in reach.
 func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Context) (string, error)) *bytecodeResolution {
 	prefix := os.Getenv(bytecodePrefixEnvVar)
-	bucket := os.Getenv("OCEL_ISR_BUCKET")
-	function := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
-	if prefix == "" || bucket == "" || function == "" {
+	bucket := os.Getenv(bytecodeBucketEnvVar)
+	if prefix == "" || bucket == "" {
 		return nil
 	}
 
@@ -832,7 +854,7 @@ func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Con
 	return &bytecodeResolution{
 		store:  s3BytecodeStore{client: s3.NewFromConfig(cfg)},
 		bucket: bucket,
-		key:    bytecodeCacheKey(prefix, function, canonical, runtime.GOARCH),
+		key:    bytecodeCacheKey(prefix, canonical, runtime.GOARCH),
 	}
 }
 

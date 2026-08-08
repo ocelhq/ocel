@@ -43,7 +43,7 @@ func TestOcelTags(t *testing.T) {
 func TestFunctionEnvWithoutCache(t *testing.T) {
 	base := map[string]string{"OCEL_RESOURCE_POSTGRES_main": "{}"}
 
-	env := functionEnv(base, functionArgs{Handler: "src/server.js"}, nil)
+	env := functionEnv(base, functionArgs{Handler: "src/server.js"}, nil, nil)
 
 	want := map[string]string{
 		"OCEL_RESOURCE_POSTGRES_main": "{}",
@@ -51,7 +51,7 @@ func TestFunctionEnvWithoutCache(t *testing.T) {
 		"OCEL_HANDLER":                "/var/task/src/server.js",
 	}
 	if !maps.Equal(env, want) {
-		t.Errorf("functionEnv(base, args, nil) = %v, want %v", env, want)
+		t.Errorf("functionEnv(base, args, nil, nil) = %v, want %v", env, want)
 	}
 }
 
@@ -61,7 +61,7 @@ func TestFunctionEnvWithoutCache(t *testing.T) {
 func TestFunctionEnvLeavesBaseUntouched(t *testing.T) {
 	base := map[string]string{"OCEL_RESOURCE_BUCKET_uploads": "{}"}
 
-	functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"})
+	functionEnv(base, functionArgs{Handler: "src/server.js"}, &isrConfig{Prefix: "prod/proj/web/B1"}, nil)
 
 	if got := slices.Sorted(maps.Keys(base)); !slices.Equal(got, []string{"OCEL_RESOURCE_BUCKET_uploads"}) {
 		t.Errorf("base keys = %v, want only OCEL_RESOURCE_BUCKET_uploads", got)

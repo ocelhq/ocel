@@ -928,21 +928,44 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	maps.Copy(env, variableEnv(app))
 	maps.Copy(env, baked.env())
 
+	// Resolved once per function, up front: uploadFunctionArtifacts already
+	// hashed every function's `.func` tree (artifacts[...].BareHash), so this
+	// only composes a key from that hash rather than reading the tree again.
+	// Bytecode caching is best-effort like the warm and embed passes that
+	// follow it — a function whose artifact somehow carries no hash gets no
+	// bytecode config rather than failing the whole app-deploy stack over it.
+	// logOrDiscard, not log itself, guards this: log may be nil (Run's own
+	// doc comment), and reassigning the log parameter would also change what
+	// upStack below passes to the Pulumi engine's own output forwarding.
+	logOrDiscard := log
+	if logOrDiscard == nil {
+		logOrDiscard = func(string) {}
+	}
+	bytecodeConfigs := make(map[string]*bytecodeFunctionConfig, len(functions))
+	for _, fn := range functions {
+		ref, ok := artifacts[fn.GetLogicalName()]
+		if !ok || ref.BareHash == "" {
+			logOrDiscard(fmt.Sprintf("ocel: %s has no content hash to key a bytecode cache on; bytecode caching skipped for it", fn.GetLogicalName()))
+			continue
+		}
+		bytecodeConfigs[fn.GetLogicalName()] = resolveBytecodeFunctionConfig(cfg, manifest.GetSlug(), name, fn, ref.BareHash)
+	}
+
 	// Accounted before the stack runs: an over-budget environment is a deploy
 	// that cannot succeed, and it must not cost any provisioning first.
 	for _, fn := range functions {
-		if err := checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name])); err != nil {
+		if err := checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name], bytecodeConfigs[fn.GetLogicalName()])); err != nil {
 			return nil, nil, err
 		}
 	}
 
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, appExecutionRole(cfg, name, caches, baked))
+		role, err := newFunctionRole(pctx, appExecutionRole(cfg, manifest.GetSlug(), name, caches, baked, functions))
 		if err != nil {
 			return err
 		}
 		for _, fn := range functions {
-			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(name, cfg.Env, manifest.GetSlug()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], role.Arn); err != nil {
+			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(name, cfg.Env, manifest.GetSlug()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], bytecodeConfigs[fn.GetLogicalName()], role.Arn); err != nil {
 				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}

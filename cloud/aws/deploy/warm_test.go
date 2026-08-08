@@ -94,41 +94,55 @@ func runWarm(t *testing.T, invoker FunctionInvoker, targets []warmTarget, budget
 }
 
 // The warm pass exists to fill the bytecode cache, so its targets must be
-// exactly the functions the bytecode feature is on for: an app with no ISR
-// cache gets no OCEL_BYTECODE_PREFIX and so has nothing to publish, and a
-// function whose stack never reported a physical name cannot be addressed.
-func TestWarmTargets_OnlyBytecodeGatedFunctions(t *testing.T) {
+// exactly the functions the bytecode feature reaches: any nodejs* function,
+// Next or not — an express app's function is exactly as eligible as a Next
+// one — and never a function on a non-node runtime, since the membrane that
+// reads OCEL_BYTECODE_PREFIX only ever runs under node. A function whose stack
+// never reported a physical name cannot be addressed either way.
+func TestWarmTargets_OnlyNodeRuntimeFunctions(t *testing.T) {
+	t.Setenv(bytecodeCacheEnv, "1")
 	manifest := &deploymentsv1.Manifest{
 		Slug: "proj",
 		Functions: []*deploymentsv1.ManifestFunction{
 			{LogicalName: "web_index", Framework: "next", App: "web"},
-			{LogicalName: "web_api", Framework: "next", App: "web"},
-			{LogicalName: "api_handler", App: "api"},
+			{LogicalName: "api_handler", Framework: "express", App: "api"},
+			{LogicalName: "worker_task", App: "worker", Runtime: "python3.12"},
 		},
 	}
-	caches := map[string]*isrConfig{"web": {Prefix: "prod/proj/web/B1"}}
 	names := map[string]string{
 		"web_index":   "ocel-web-index-abc",
 		"api_handler": "ocel-api-handler-def",
+		"worker_task": "ocel-worker-task-ghi",
 	}
 
-	targets := warmTargets(manifest, caches, names)
+	targets := warmTargets(manifest, names)
 
-	if len(targets) != 1 {
-		t.Fatalf("warmTargets = %+v, want only web_index", targets)
+	if len(targets) != 2 {
+		t.Fatalf("warmTargets = %+v, want web_index and api_handler", targets)
 	}
-	if targets[0].FunctionName != "ocel-web-index-abc" || targets[0].App != "web" {
-		t.Errorf("warmTargets[0] = %+v, want web_index on app web", targets[0])
+	byLogical := map[string]warmTarget{}
+	for _, target := range targets {
+		byLogical[target.LogicalName] = target
+	}
+	if byLogical["web_index"].FunctionName != "ocel-web-index-abc" || byLogical["web_index"].App != "web" {
+		t.Errorf("warmTargets[web_index] = %+v, want it on app web", byLogical["web_index"])
+	}
+	if byLogical["api_handler"].FunctionName != "ocel-api-handler-def" || byLogical["api_handler"].App != "api" {
+		t.Errorf("warmTargets[api_handler] = %+v, want the express function included too", byLogical["api_handler"])
+	}
+	if _, ok := byLogical["worker_task"]; ok {
+		t.Errorf("warmTargets includes worker_task, which runs python3.12, not a nodejs* runtime")
 	}
 }
 
-// The gate is the deploying process's own OCEL_BYTECODE_CACHE=0: with it off no
-// function is deployed with a prefix, so warming every one of them would spend
-// the deploy's time invoking functions that publish nothing.
+// The gate is the deploying process's own OCEL_BYTECODE_CACHE, off unless set
+// to exactly "1": with it off no function is deployed with a prefix, so
+// warming every one of them would spend the deploy's time invoking functions
+// that publish nothing.
 func TestWarmTargets_SkippedWhenGateIsOff(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "0")
+	t.Setenv(bytecodeCacheEnv, "")
 
-	targets := warmTargets(nextManifest(), map[string]*isrConfig{"web": {Prefix: "p"}}, map[string]string{"web_index": "fn"})
+	targets := warmTargets(nextManifest(), map[string]string{"web_index": "fn"})
 
 	if len(targets) != 0 {
 		t.Errorf("warmTargets with the gate off = %+v, want none", targets)
@@ -136,7 +150,7 @@ func TestWarmTargets_SkippedWhenGateIsOff(t *testing.T) {
 }
 
 func TestWarmPass_ReportsPublished(t *testing.T) {
-	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":47,"bytes":63963136,"uploaded":true,"key":"prod/p/web/B1/bytecode/fn/node24.3.1-arm64.tar.gz"}`),
+	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":47,"bytes":63963136,"uploaded":true,"key":"bytecode/prod/p/web/hash1/node24.3.1-arm64.tar.gz"}`),
 		warmTestTargets(1), time.Minute)
 
 	for _, want := range []string{
@@ -189,6 +203,26 @@ func TestWarmPass_ReportsUncountedCoverageAsUnknown(t *testing.T) {
 	}
 	if strings.Contains(out, "0/0 entries") {
 		t.Errorf("warm log = %s, want no counts it never measured", out)
+	}
+}
+
+// A node app's warm reply names no entries at all — there is no table to
+// walk — and the deploy log must say so honestly rather than rendering
+// "0/0 entries" (which reads as an empty or failed walk) or fabricated counts
+// that would read as a one-route Next-style warm.
+func TestWarmPass_ReportsWholeGraphLoadedAtInit(t *testing.T) {
+	out := runWarm(t, answering(`{"state":"published","uploaded":true,"bytes":153600,`+
+		`"wholeGraphLoadedAtInit":true}`),
+		warmTestTargets(1), time.Minute)
+
+	if !strings.Contains(out, "whole module graph loaded at INIT (no entry table to walk)") {
+		t.Errorf("warm log = %s, want the honest whole-graph line", out)
+	}
+	if !strings.Contains(out, "warmed 1/1 bundles") {
+		t.Errorf("warm log = %s, want a published cache counted as warmed", out)
+	}
+	if strings.Contains(out, "0/0 entries") {
+		t.Errorf("warm log = %s, want no fabricated entry counts", out)
 	}
 }
 

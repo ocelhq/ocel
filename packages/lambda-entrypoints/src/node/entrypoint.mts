@@ -1,14 +1,19 @@
+import { readdirSync, lstatSync } from "node:fs";
 import http from "node:http";
-import { isAbsolute } from "node:path";
+import Module from "node:module";
+import { isAbsolute, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { awaitLiveValues } from "../shared/live-values.mjs";
 import { fetchToNodeHandler, type FetchHandler } from "./fetch-bridge.mjs";
 import {
   installCompileCacheFlush,
+  installCompileCacheWarm,
   reportFatalBoot,
   serveInvoke,
   startServer,
+  UNSUPPORTED_WARM,
   type Invoke,
+  type WarmReport,
 } from "../shared/membrane.mjs";
 
 type Loaded =
@@ -126,8 +131,80 @@ function interceptListen(): ListenHook {
   };
 }
 
+// Sums the on-disk size of a flushed compile cache directory, the same way
+// next-dispatch.cjs's measureCompileCache does for entry-table bundles — a
+// missing directory measures as zero (nothing has been compiled yet), any
+// other read failure as null so the caller can tell "empty" from "unknown"
+// rather than reporting a partial total as if it were the whole one.
+function measureCompileCacheDir(dir: string): number | null {
+  let items;
+  try {
+    items = readdirSync(dir, { withFileTypes: true, recursive: true });
+  } catch (err: any) {
+    return err?.code === "ENOENT" ? 0 : null;
+  }
+  let total = 0;
+  for (const item of items) {
+    if (!item.isFile()) continue;
+    try {
+      total += lstatSync(join((item as any).parentPath, item.name)).size;
+    } catch (err: any) {
+      if (err?.code !== "ENOENT") return null;
+    }
+  }
+  return total;
+}
+
+// A node app has no entry table to walk — loadUserApp imports the whole
+// application before server-ready ever fires, so by the time a warm
+// invocation can reach this handler the module graph is already as loaded as
+// it will get (boot() would have died on a broken import, and this handler
+// would never have been installed to reply at all). There is nothing left to
+// warm, so this reports what that already-finished load put in the compile
+// cache — the measured bytes and dir — rather than fabricating an
+// entry-table walk that never happened: entries/loaded/failures/stoppedBy
+// describe a walk this launcher never took, and claiming entries:1, loaded:1
+// for "the app itself" as a stand-in unit is exactly that fabrication, just
+// dressed as a plausible-looking number instead of an obviously fake one. A
+// caller reading the counts alone could not tell that report apart from a
+// Next bundle that really did walk one route and stop.
+//
+// state: "loaded-at-init" is what tells the difference honestly. It says
+// positively that the whole graph is already loaded — no entry table exists
+// to walk, not merely that this one wasn't — which is a stronger and
+// different claim than "unsupported" (no compile-cache API at all, e.g. an
+// old node) or "warmed" (a walk ran and these are its real counts).
+function warmNode(): WarmReport {
+  const { getCompileCacheDir, flushCompileCache } = Module;
+  if (typeof getCompileCacheDir !== "function" || typeof flushCompileCache !== "function") {
+    return UNSUPPORTED_WARM;
+  }
+  const dir = getCompileCacheDir();
+  if (typeof dir !== "string" || dir.length === 0) return UNSUPPORTED_WARM;
+  try {
+    flushCompileCache();
+  } catch {
+    return UNSUPPORTED_WARM;
+  }
+  const bytes = measureCompileCacheDir(dir);
+  if (bytes === null) return UNSUPPORTED_WARM;
+  return {
+    ok: true,
+    state: "loaded-at-init",
+    entries: 0,
+    loaded: 0,
+    failures: [],
+    stoppedBy: "complete",
+    skipped: [],
+    skippedCount: 0,
+    bytes,
+    dir,
+  };
+}
+
 async function boot(): Promise<void> {
   installCompileCacheFlush();
+  installCompileCacheWarm(warmNode);
 
   // The user's module scope runs inside the import below, and a live value read
   // there must already be in hand. The membrane's fetch overlaps this process

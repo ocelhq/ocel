@@ -23,8 +23,10 @@
 //      S3 rehydrate line — so instances are reading it, and none of them fell
 //      through.
 //
-// Skips, loudly, unless $OCEL_BYTECODE_EMBED=1: without the flag the deploy runs
-// no embed pass, and every claim here would be false about a correct deployment.
+// Runs against any deployment made with bytecode caching on: embedding is no
+// longer its own gate (cloud/aws/deploy/embed.go) — whenever OCEL_BYTECODE_CACHE=1
+// turned the feature on at all, the deploy also ran the embed pass, so this
+// assertion needs no flag of its own to decide whether it applies.
 //
 // Usage: assert-embed.mjs [deployment-url]
 //   falls back to $NEXT_TEST_DEPLOY_URL, then $SMOKE_URL.
@@ -56,14 +58,11 @@ import {
   sleep,
 } from "./aws.mjs";
 import {
-  BYTECODE_EMBED_ENV,
   BYTECODE_S3_REHYDRATE_MARKER,
   DEPLOY_RESULT_FILE,
   TAG_PROBE_ROUTE,
-  appAssetPrefix,
-  bytecodeCacheKeyName,
-  bytecodeCacheKeyPrefix,
-  bytecodeEmbedEnabled,
+  bytecodeAppNamespace,
+  bytecodeCacheEntry,
   bytecodeEmbeddedOutcome,
   embeddedArtifactPairs,
   embeddedBytecodePath,
@@ -105,16 +104,6 @@ const BURST_LOG_FILTER = `?"embedded compile cache" ?"${BYTECODE_S3_REHYDRATE_MA
 // larger than this could not have been produced by it.
 const MAX_PACKAGE_BYTES = 250 * 1024 * 1024;
 
-if (!bytecodeEmbedEnabled(process.env)) {
-  log(
-    `SKIPPED, nothing asserted: $${BYTECODE_EMBED_ENV} is ${JSON.stringify(process.env[BYTECODE_EMBED_ENV] ?? null)}, ` +
-      `not "1", so the deploy ran no embed pass and this deployment is expected to fetch its compile cache from S3. ` +
-      `assert-bytecode.mjs is what proves that path. Re-deploy with ${BYTECODE_EMBED_ENV}=1 to make this assertion ` +
-      `mean anything.`,
-  );
-  process.exit(0);
-}
-
 const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
 if (!base) {
   fail("no deployment url given (argument, $NEXT_TEST_DEPLOY_URL or $SMOKE_URL)");
@@ -144,25 +133,22 @@ const functionName = resolveFunctionName(result.slug, app.name, fail);
 // feature derive the embedded path from that same key, so re-deriving it from
 // an independent listing is what makes step 2 an assertion about the match rule
 // rather than a restatement of whatever the pass happened to write.
-const keyPrefix = bytecodeCacheKeyPrefix({
-  prefix: appAssetPrefix({
-    environment: result.environment,
-    slug: result.slug,
-    app: app.name,
-    buildId: app.buildId,
-  }),
-  functionName,
-});
-const cacheNames = (await listRetrying(assetBucket, keyPrefix)).map((full) => full.slice(keyPrefix.length));
-const candidates = cacheNames.filter((name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH);
+const namespace = bytecodeAppNamespace({ environment: result.environment, slug: result.slug, app: app.name });
+const namespacePrefix = `${namespace}/`;
+const cacheNames = (await listRetrying(assetBucket, namespacePrefix)).map((full) => full.slice(namespacePrefix.length));
+const candidates = cacheNames
+  .map((name) => bytecodeCacheEntry(name))
+  .filter((entry) => entry && entry.arch === LAMBDA_ARCH);
 if (candidates.length !== 1) {
   fail(
-    `expected exactly one object matching node<version>-${LAMBDA_ARCH}.tar.gz under s3://${assetBucket}/${keyPrefix}, ` +
-      `found ${candidates.length}${candidates.length ? `: ${candidates.join(", ")}` : ""}. Without the published cache ` +
+    `expected exactly one object matching <hash>/node<version>-${LAMBDA_ARCH}.tar.gz under ` +
+      `s3://${assetBucket}/${namespacePrefix}, found ${candidates.length}` +
+      `${candidates.length ? `: ${candidates.map((c) => c.filename).join(", ")}` : ""}. Without the published cache ` +
       `there was nothing for the embed pass to embed — run assert-bytecode.mjs, which diagnoses the warm pass itself.`,
   );
 }
-const cacheKey = keyPrefix + candidates[0];
+const found = candidates[0];
+const cacheKey = `${namespace}/${found.hash}/${found.filename}`;
 const entryName = embeddedBytecodePath(cacheKey);
 if (!entryName) {
   fail(`could not derive an embedded tar path from ${cacheKey} — its name is not node<version>-<arch>.tar.gz`);
