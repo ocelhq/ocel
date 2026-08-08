@@ -67,6 +67,27 @@ describe("contentTypeFor", () => {
     expect(contentTypeFor("/README")).toBe("application/octet-stream");
     expect(contentTypeFor("/data.unknownext")).toBe("application/octet-stream");
   });
+
+  // The types Next.js itself serves for file-based metadata routes, which the
+  // host mime database the deploy used to stamp from disagrees with.
+  it("serves the file-based metadata routes as Next.js does", () => {
+    expect(contentTypeFor("/favicon.ico")).toBe("image/x-icon");
+    expect(contentTypeFor("/sitemap.xml")).toBe("application/xml");
+    expect(contentTypeFor("/robots.txt")).toBe("text/plain");
+    expect(contentTypeFor("/manifest.webmanifest")).toBe("application/manifest+json");
+    expect(contentTypeFor("/icons/static/apple-icon.png")).toBe("image/png");
+  });
+
+  // Next keys this one off the file name, not the extension.
+  it("serves app/manifest.json as a web manifest rather than as JSON", () => {
+    expect(contentTypeFor("/manifest.json")).toBe("application/manifest+json");
+    expect(contentTypeFor("/data.json")).toBe("application/json; charset=utf-8");
+  });
+
+  // A dot in a directory name is not an extension.
+  it("reads the extension off the file name alone", () => {
+    expect(contentTypeFor("/v1.0/README")).toBe("application/octet-stream");
+  });
 });
 
 describe("serveStaticAsset", () => {
@@ -86,22 +107,27 @@ describe("serveStaticAsset", () => {
     expect(res.headers.get("etag")).toBe("abc");
   });
 
-  it("serves the object's stored content-type when R2 carries one", async () => {
-    const url = new URL("https://serve-ct-1.example/download");
+  // Objects uploaded by a deploy that still stamped one carry a type the host
+  // mime database chose, which is not the type Next.js serves.
+  it("ignores any content-type the stored object carries", async () => {
+    const url = new URL("https://serve-ct-1.example/favicon.ico");
     const deps = countingDeps(
-      // A path with no extension the fallback could resolve: only the stored
-      // metadata can produce the right type.
-      bucketServing({ "assets/p/app/b1/download": { body: "hi", contentType: "application/pdf" } }),
+      bucketServing({
+        "assets/p/app/b1/favicon.ico": {
+          body: "icon",
+          contentType: "image/vnd.microsoft.icon",
+        },
+      }),
       "assets/p/app/b1",
     );
 
     const res = await serveStaticAsset(new Request(url), url, deps);
 
     expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toBe("application/pdf");
+    expect(res.headers.get("content-type")).toBe("image/x-icon");
   });
 
-  it("falls back to extension inference when the object carries no content-type", async () => {
+  it("infers the content-type from the name the object is stored under", async () => {
     const url = new URL("https://serve-ct-2.example/styles.css");
     const deps = countingDeps(
       bucketServing({ "assets/p/app/b1/styles.css": { body: "body{}" } }),
