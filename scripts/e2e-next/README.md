@@ -73,6 +73,11 @@ matrix start rather than being caught by the gate.
 
 ## What `assert-bytecode.mjs` proves
 
+Bytecode caching is opt-in: without `OCEL_BYTECODE_CACHE=1` on the deploying
+process no function is deployed with a bytecode prefix, the warm pass has no
+targets, and there is nothing for this script to find. Deploy with the flag set
+before running it.
+
 The claim is not "a request eventually leaves a cache behind" but **the cache is
 whole before the app serves anyone**. The upload is create-if-absent with no
 overwrite and no harvest, and a Next bundle hides many routes behind a

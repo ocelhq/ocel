@@ -98,6 +98,7 @@ func runWarm(t *testing.T, invoker FunctionInvoker, targets []warmTarget, budget
 // cache gets no OCEL_BYTECODE_PREFIX and so has nothing to publish, and a
 // function whose stack never reported a physical name cannot be addressed.
 func TestWarmTargets_OnlyBytecodeGatedFunctions(t *testing.T) {
+	t.Setenv(bytecodeCacheEnv, "1")
 	manifest := &deploymentsv1.Manifest{
 		Slug: "proj",
 		Functions: []*deploymentsv1.ManifestFunction{
@@ -122,11 +123,11 @@ func TestWarmTargets_OnlyBytecodeGatedFunctions(t *testing.T) {
 	}
 }
 
-// The gate is the deploying process's own OCEL_BYTECODE_CACHE=0: with it off no
+// The gate is the deploying process's own OCEL_BYTECODE_CACHE=1: without it no
 // function is deployed with a prefix, so warming every one of them would spend
 // the deploy's time invoking functions that publish nothing.
 func TestWarmTargets_SkippedWhenGateIsOff(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "0")
+	t.Setenv(bytecodeCacheEnv, "")
 
 	targets := warmTargets(nextManifest(), map[string]*isrConfig{"web": {Prefix: "p"}}, map[string]string{"web_index": "fn"})
 

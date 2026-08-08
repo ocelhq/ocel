@@ -28,7 +28,7 @@ import (
 // else, including the spellings a user might reasonably expect to work, leaves
 // the deploy on the S3 path it already has.
 func TestBytecodeEmbedEnabled_OffUnlessAskedForExactly(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
+	t.Setenv(bytecodeCacheEnv, "1")
 	t.Setenv(bytecodeEmbedEnv, "")
 	if bytecodeEmbedEnabled() {
 		t.Error("bytecodeEmbedEnabled() = true with no override, want false")
@@ -49,9 +49,9 @@ func TestBytecodeEmbedEnabled_OffUnlessAskedForExactly(t *testing.T) {
 // ANDed rather than left for a caller to get wrong.
 func TestBytecodeEmbedEnabled_ImpliesCaching(t *testing.T) {
 	t.Setenv(bytecodeEmbedEnv, "1")
-	t.Setenv(bytecodeCacheEnv, "0")
+	t.Setenv(bytecodeCacheEnv, "")
 	if bytecodeEmbedEnabled() {
-		t.Error("bytecodeEmbedEnabled() = true with OCEL_BYTECODE_CACHE=0, want false")
+		t.Error("bytecodeEmbedEnabled() = true without OCEL_BYTECODE_CACHE=1, want false")
 	}
 }
 
@@ -546,6 +546,7 @@ func TestEmbedPass_UnsettledUpdateIsNeverReportedAsUntouched(t *testing.T) {
 // told which piece is missing. Silence here is indistinguishable from a deploy
 // that embedded everything.
 func TestEmbedBytecodeCaches_NamesTheClientsItIsMissing(t *testing.T) {
+	t.Setenv(bytecodeCacheEnv, "1")
 	t.Setenv(bytecodeEmbedEnv, "1")
 	log, out := collectLog()
 
