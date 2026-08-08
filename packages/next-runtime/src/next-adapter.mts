@@ -306,9 +306,7 @@ const adapter = {
       // authored with. A built static output is named after the *route* it
       // answers, which servedPathname turns back into a file name.
       ...publicFiles.map((f) => [f.pathname, f.filePath] as const),
-      ...outputs.staticFiles.map(
-        (f) => [servedPathname(f.pathname), f.filePath] as const,
-      ),
+      ...outputs.staticFiles.map((f) => [servedPathname(f), f.filePath] as const),
     ];
     const assetHashes: Record<string, string> = {};
     for (const [pathname, filePath] of staticAssets) {
@@ -1091,20 +1089,23 @@ function renderLauncher(
 }
 
 // The file name a built static output is written and keyed under. Next names a
-// prerendered HTML document after the route it answers — /404, /some, /en —
-// with no extension at all, and a route is not a file name: static/some then
-// occupies the directory name every sibling output under /some/ needs, and the
-// bytes reach a browser with no content-type either serving layer can infer.
-// Naming the document .html settles both, and the worker maps a request for
-// /some back onto it. Everything Next already names as a file — the .rsc
-// fallbacks, the _next/static chunks, the app-router static metadata — passes
-// through as itself.
-function servedPathname(pathname: string): string {
-  return hasExtension(pathname) ? pathname : `${pathname}.html`;
-}
-
-function hasExtension(pathname: string): boolean {
-  return pathname.slice(pathname.lastIndexOf("/") + 1).includes(".");
+// prerendered HTML document after the route it answers — /404, /some, /en,
+// /v1.0 — and a route is not a file name: static/some then occupies the
+// directory name every sibling output under /some/ needs, and the bytes reach a
+// browser with no content-type either serving layer can infer. Naming the
+// document .html settles both, and the worker maps a request for /some back
+// onto it.
+//
+// Which outputs those are is read off the build rather than guessed from the
+// pathname: Next writes a document to .next/server/pages/<route>.html, so the
+// source file says what the bytes are where the route only says what they
+// answer. Everything Next already names as a file — the .rsc fallbacks, the
+// _next/static chunks, the app-router static metadata — passes through as
+// itself.
+function servedPathname(file: { pathname: string; filePath: string }): string {
+  return file.filePath.endsWith(".html") && !file.pathname.endsWith(".html")
+    ? `${file.pathname}.html`
+    : file.pathname;
 }
 
 // Copies a file and returns the sha256 of its bytes, hashing as it streams so

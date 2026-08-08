@@ -74,14 +74,20 @@ export function contentTypeFor(pathname: string): string {
   return CONTENT_TYPES[pathname.slice(dot).toLowerCase()] ?? "application/octet-stream";
 }
 
-// Where an object answering this request is stored, most likely first. A
-// prerendered HTML document is written under its .html name while the route it
-// answers carries no extension at all (/some, /404), so an extensionless
-// request looks for the document before looking for a file of its own name —
-// which is what still serves an extensionless public/ file. A request that
-// already names a file is only ever that file.
+// Where an object answering this request may be stored, likeliest first. The
+// build writes a prerendered document under its .html name while the route it
+// answers is spelled as a route — usually with no extension (/some, /404), but
+// a route may carry what only looks like one (/v1.0) — so both names are tried,
+// in the order that costs one read for what each kind of request nearly always
+// is. An extensionless request is a page, so the document comes first; the
+// request's own name still follows it, which is what serves an extensionless
+// public/ file, and what serves a build made before documents were named. A
+// request that names a file is nearly always that file, so it comes first
+// there. A request already asking for .html can only be itself.
 function storedPathnames(pathname: string): string[] {
-  return hasExtension(pathname) ? [pathname] : [`${pathname}.html`, pathname];
+  if (pathname.endsWith(".html")) return [pathname];
+  const document = `${pathname}.html`;
+  return hasExtension(pathname) ? [pathname, document] : [document, pathname];
 }
 
 function hasExtension(pathname: string): boolean {
