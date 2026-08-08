@@ -3,7 +3,6 @@ package deploy
 import (
 	"context"
 	"fmt"
-	"mime"
 	"os"
 	"path"
 	"path/filepath"
@@ -86,6 +85,14 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 		// over from a same-build-id publish of a different config would break every
 		// image request. Content-keyed assets carry no such risk.
 		replace bool
+		// Written onto the object, empty for everything but the image config.
+		// A static asset deliberately carries none: the frozen worker decides
+		// what an asset's bytes are from the name the build emitted it under
+		// (contentTypeFor in workers/nextjs/src/assets.ts, which mirrors what
+		// Next.js serves), and a second answer stamped here from the deploy
+		// host's own mime database — which is neither Next-conformant nor even
+		// the same on two hosts — could only contradict it.
+		contentType string
 	}
 	var uploads []upload
 	for _, app := range manifestApps(manifest) {
@@ -115,10 +122,11 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 		switch _, err := os.Stat(imageConfig); {
 		case err == nil:
 			uploads = append(uploads, upload{
-				key:     imageConfigKey(manifest.GetSlug(), name, buildID),
-				src:     imageConfig,
-				to:      []uploadTarget{assetBucket},
-				replace: true,
+				key:         imageConfigKey(manifest.GetSlug(), name, buildID),
+				src:         imageConfig,
+				to:          []uploadTarget{assetBucket},
+				replace:     true,
+				contentType: "application/json",
 			})
 		case !os.IsNotExist(err):
 			return fmt.Errorf("stat image config for %s: %w", name, err)
@@ -139,17 +147,14 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 		read := sync.OnceValues(func() ([]byte, error) { return os.ReadFile(u.src) })
 		for _, to := range u.to {
 			g.Go(func() error {
-				// An extension mime can't resolve stays "" so the worker's own
-				// fallback decides, rather than a clobbering octet-stream here.
-				ct := mime.TypeByExtension(path.Ext(u.key))
 				if u.replace {
 					data, err := read()
 					if err != nil {
 						return fmt.Errorf("read %s: %w", u.src, err)
 					}
-					return putArtifact(ctx, to.up, to.bucket, u.key, ct, data)
+					return putArtifact(ctx, to.up, to.bucket, u.key, u.contentType, data)
 				}
-				return uploadArtifact(ctx, to.up, to.bucket, u.key, ct, read)
+				return uploadArtifact(ctx, to.up, to.bucket, u.key, u.contentType, read)
 			})
 		}
 	}
