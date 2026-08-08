@@ -2061,6 +2061,82 @@ describe("data-request invocation pathname", () => {
     );
   });
 
+  it("does not treat a lookalike prefix as the app's basePath", async () => {
+    const { deps, invoked } = lambdaDeps({ basePath: "/docs" });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/docsy/works" },
+      },
+      new Request("https://app.example/docs/_next/data/t/docsy/works.json"),
+      deps,
+    );
+
+    expect(invoked().pathname).toBe("/docs/_next/data/t/docsy/works.json");
+  });
+
+  it("invokes an edge route with the data-wrapped pathname", async () => {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/[...route]": { kind: "edge", entryKey: "middleware_app/edge" },
+        },
+      },
+      edge: async (_entryKey, request) => {
+        captured = new URL(request.url);
+        return new Response("{}", { status: 200 });
+      },
+    });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works" },
+      },
+      new Request("https://app.example/_next/data/t/middleware/works.json"),
+      deps,
+    );
+
+    expect(captured!.pathname).toBe("/_next/data/t/middleware/works.json");
+  });
+
+  it("renders a prerendered route under the data pathname", async () => {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/[...route]": { kind: "prerender", id: "fn", config: {} },
+        },
+      },
+      functionUrls: { fn: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = new URL(req.url);
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works" },
+      },
+      new Request("https://app.example/_next/data/t/middleware/works.json"),
+      deps,
+    );
+
+    expect(captured!.pathname).toBe("/_next/data/t/middleware/works.json");
+  });
+
   it("preserves the query string of a data request", async () => {
     const { deps, invoked } = lambdaDeps();
 

@@ -1033,8 +1033,13 @@ function dataPathname(pathname: string, url: URL, manifest: Manifest): string {
     return pathname;
   }
   if (pathname.startsWith(`${prefix}/`)) return pathname;
-  const route = (pathname.startsWith(base) ? pathname.slice(base.length) : pathname)
-    .replace(/\/$/, "");
+  // Only a real path segment boundary counts as the basePath: /docsy is a
+  // different route from /docs, not /docs plus "y".
+  const underBase = pathname === base || pathname.startsWith(`${base}/`);
+  const route = (underBase ? pathname.slice(base.length) : pathname).replace(
+    /\/$/,
+    "",
+  );
   // Next's normalizeDataPath maps /index back to /, so /index is the inverse of
   // a root data request — not the /.json denormalizing the empty route gives.
   return `${prefix}${route || "/index"}.json`;
