@@ -938,27 +938,45 @@ test("enumerates public/ files as static in the routing manifest", async () => {
   expect(manifest.dispatch["/icons/logo.png"]).toEqual({ kind: "static" });
 });
 
-// Adds one built static file to a synthetic project, standing in for the
-// _next/static output a real build emits.
-async function withStaticFile(
-  projectDir: string,
-  args: {
-    outputs: {
-      staticFiles: { pathname: string; id: string; filePath: string }[];
-    };
-  },
+interface StaticOutputs {
+  outputs: { staticFiles: { pathname: string; id: string; filePath: string }[] };
+}
+
+async function addStaticOutput(
+  args: StaticOutputs,
   pathname: string,
+  filePath: string,
   contents: string,
 ) {
-  // Next writes a prerendered document at <route>.html, which is what lets a
-  // page and its own children coexist in .next/server/pages.
-  const rel = pathname.includes(".", pathname.lastIndexOf("/"))
-    ? pathname
-    : `${pathname}.html`;
-  const filePath = join(projectDir, ".next", rel);
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, contents);
   args.outputs.staticFiles.push({ pathname, id: pathname, filePath });
+}
+
+// Adds one built static file to a synthetic project, standing in for the
+// _next/static output a real build emits: Next names both the route and the
+// file itself, and they agree.
+async function withStaticFile(
+  projectDir: string,
+  args: StaticOutputs,
+  pathname: string,
+  contents: string,
+) {
+  await addStaticOutput(args, pathname, join(projectDir, ".next", pathname), contents);
+}
+
+// Adds one prerendered page document, which Next names after the route it
+// answers while writing the file itself at .next/server/pages/<route>.html —
+// the layout that lets a page and its own children coexist on disk, and the
+// only thing that says these bytes are a document.
+async function withStaticPage(
+  projectDir: string,
+  args: StaticOutputs,
+  pathname: string,
+  contents: string,
+) {
+  const filePath = join(projectDir, ".next/server/pages", `${pathname}.html`);
+  await addStaticOutput(args, pathname, filePath, contents);
 }
 
 test("carries the compiled image config and its hash into the manifest", async () => {
@@ -1029,7 +1047,7 @@ test("hashes both public/ and built static files into the manifest", async () =>
 // files they are written out as.
 test("keys the error pages by the path they are served at", async () => {
   const { projectDir, args } = await synthProject();
-  await withStaticFile(projectDir, args, "/404", "gone");
+  await withStaticPage(projectDir, args, "/404", "gone");
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
@@ -1046,7 +1064,7 @@ test("keys the error pages by the path they are served at", async () => {
 // is written out as the document it is.
 test("writes a statically-optimized page under its .html name", async () => {
   const { projectDir, args } = await synthProject();
-  await withStaticFile(projectDir, args, "/some", "<html>some</html>");
+  await withStaticPage(projectDir, args, "/some", "<html>some</html>");
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
@@ -1071,9 +1089,9 @@ test("writes a statically-optimized page under its .html name", async () => {
 // make the build write a file and a directory at the same path.
 test("emits a page and its own children without colliding", async () => {
   const { projectDir, args } = await synthProject();
-  await withStaticFile(projectDir, args, "/overlap", "<html>parent</html>");
+  await withStaticPage(projectDir, args, "/overlap", "<html>parent</html>");
   await withStaticFile(projectDir, args, "/overlap.rsc", "RSC");
-  await withStaticFile(projectDir, args, "/overlap/[slug]", "<html>child</html>");
+  await withStaticPage(projectDir, args, "/overlap/[slug]", "<html>child</html>");
   await withStaticFile(projectDir, args, "/overlap/[slug].rsc", "CHILD RSC");
   const adapter = await loadAdapterIn(projectDir);
 
@@ -1092,12 +1110,14 @@ test("emits a page and its own children without colliding", async () => {
   );
 });
 
-// Everything Next already names as a file is what it says it is.
-test("leaves static outputs that already carry an extension alone", async () => {
+// Everything Next already wrote as a file is what its own name says it is —
+// including a static output whose route only looks like a document's.
+test("leaves static outputs that are already files alone", async () => {
   const { projectDir, args } = await synthProject();
   await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
   await withStaticFile(projectDir, args, "/favicon.ico", "ICO");
   await withStaticFile(projectDir, args, "/opengraph-image.png", "PNG");
+  await withStaticFile(projectDir, args, "/sitemap.xml", "<urlset/>");
   const adapter = await loadAdapterIn(projectDir);
 
   await adapter.onBuildComplete(args as never);
@@ -1106,10 +1126,36 @@ test("leaves static outputs that already carry an extension alone", async () => 
   expect(await exists(join(staticDir, "_next/static/chunks/a.js"))).toBe(true);
   expect(await exists(join(staticDir, "favicon.ico"))).toBe(true);
   expect(await exists(join(staticDir, "opengraph-image.png"))).toBe(true);
+  expect(await readFile(join(staticDir, "sitemap.xml"), "utf8")).toBe("<urlset/>");
   expect(await exists(join(staticDir, "_next/static/chunks/a.js.html"))).toBe(
     false,
   );
   expect(await exists(join(staticDir, "favicon.ico.html"))).toBe(false);
+  expect(await exists(join(staticDir, "sitemap.xml.html"))).toBe(false);
+});
+
+// A route may carry what only looks like an extension. pages/v1.0.js is still a
+// document, and still occupies the directory name pages/v1.0/[slug].js needs —
+// so the build dies exactly as it does for an extensionless page unless the
+// document is recognised by what the build wrote, not by how the route reads.
+test("emits a dotted page and its own children without colliding", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticPage(projectDir, args, "/v1.0", "<html>parent</html>");
+  await withStaticPage(projectDir, args, "/v1.0/[slug]", "<html>child</html>");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const staticDir = join(projectDir, ".ocel/output/static");
+  expect(await readFile(join(staticDir, "v1.0.html"), "utf8")).toBe(
+    "<html>parent</html>",
+  );
+  expect(await readFile(join(staticDir, "v1.0/[slug].html"), "utf8")).toBe(
+    "<html>child</html>",
+  );
+  expect((await readManifest(projectDir)).dispatch["/v1.0"]).toEqual({
+    kind: "static",
+  });
 });
 
 // A public/ file is already a file: whatever it is named is what it is served

@@ -212,6 +212,52 @@ describe("serveStaticAsset", () => {
     expect(keys).toEqual(["assets/p/app/b1/some.rsc"]);
   });
 
+  // A route whose last segment carries what only looks like an extension is
+  // still a page, and is still stored as the document it is.
+  it("resolves a dotted route to its document once its own name misses", async () => {
+    const url = new URL("https://serve-html-5.example/v1.0");
+    const keys: string[] = [];
+    const store: AssetBucket = {
+      async get(key) {
+        keys.push(key);
+        return key === "assets/p/app/b1/v1.0.html"
+          ? { body: new Blob(["<html>v1</html>"]).stream() }
+          : null;
+      },
+    };
+    const deps = countingDeps(store, "assets/p/app/b1");
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>v1</html>");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(keys).toEqual([
+      "assets/p/app/b1/v1.0",
+      "assets/p/app/b1/v1.0.html",
+    ]);
+  });
+
+  // The page a browser navigates to is the hit worth spending one read on.
+  it("reads only the document for an extensionless page", async () => {
+    const url = new URL("https://serve-html-6.example/some");
+    const keys: string[] = [];
+    const store: AssetBucket = {
+      async get(key) {
+        keys.push(key);
+        return key === "assets/p/app/b1/some.html"
+          ? { body: new Blob(["<html>some</html>"]).stream() }
+          : null;
+      },
+    };
+    const deps = countingDeps(store, "assets/p/app/b1");
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(keys).toEqual(["assets/p/app/b1/some.html"]);
+  });
+
   it("serves a colo cache hit without reading the store again", async () => {
     const url = new URL("https://serve-4.example/next.svg");
     let reads = 0;
