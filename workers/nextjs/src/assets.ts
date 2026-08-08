@@ -8,16 +8,14 @@
 
 const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable";
 
-// One object as the R2 binding hands it back: a stream, (when present) its
-// etag, and the metadata it was written with — exactly the shape
-// serveStaticAsset needs. The deploy now stamps each object's content-type at
-// upload (via mime.TypeByExtension), so httpMetadata.contentType is the
-// authoritative type; contentTypeFor is the fallback for legacy objects
-// uploaded before that, and for extensions the deploy left unset.
+// One object as the R2 binding hands it back: a stream and, when present, its
+// etag — exactly the shape serveStaticAsset needs. Nothing the store was
+// written with is read back: contentTypeFor below is the single source of
+// truth for what an asset's bytes are, so a deploy cannot stamp a type that
+// disagrees with the one this worker would serve.
 export interface AssetObject {
   body: ReadableStream | null;
   httpEtag?: string;
-  httpMetadata?: { contentType?: string };
 }
 
 // The R2 bucket as this file needs it — the Cloudflare R2 binding satisfies
@@ -60,18 +58,33 @@ const CONTENT_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
   ".ttf": "font/ttf",
   ".eot": "application/vnd.ms-fontobject",
-  ".txt": "text/plain; charset=utf-8",
+  // Bare, no charset: what Next.js serves a robots.txt metadata route as.
+  ".txt": "text/plain",
   ".xml": "application/xml",
+  ".webmanifest": "application/manifest+json",
   ".wasm": "application/wasm",
 };
 
-// contentTypeFor infers a static file's content-type from its path, mirroring
-// the extension this Deployment's build emitted it under — the R2 store holds
-// raw bytes with no content-type of its own to read back.
+// Next keys one of its metadata routes off the file NAME rather than the
+// extension (getContentType in packages/next/src/build/webpack/loaders/
+// next-metadata-route-loader.ts): app/manifest.json is a web manifest, not
+// JSON. Every other name it special-cases — favicon, sitemap, robots — agrees
+// with what its own extension already implies above.
+const METADATA_CONTENT_TYPES: Record<string, string> = {
+  "manifest.json": "application/manifest+json",
+};
+
+// contentTypeFor infers a static file's content-type from the name the build
+// emitted it under, and is the only thing that decides one: the R2 store holds
+// raw bytes, and the deploy deliberately stamps no type of its own, so this
+// table cannot be contradicted by a second one.
 export function contentTypeFor(pathname: string): string {
-  const dot = pathname.lastIndexOf(".");
+  const name = pathname.slice(pathname.lastIndexOf("/") + 1).toLowerCase();
+  const metadata = METADATA_CONTENT_TYPES[name];
+  if (metadata) return metadata;
+  const dot = name.lastIndexOf(".");
   if (dot === -1) return "application/octet-stream";
-  return CONTENT_TYPES[pathname.slice(dot).toLowerCase()] ?? "application/octet-stream";
+  return CONTENT_TYPES[name.slice(dot)] ?? "application/octet-stream";
 }
 
 // Where an object answering this request may be stored, likeliest first. The
@@ -142,7 +155,7 @@ export async function serveStaticAsset(
     // Inferred from the name the object is STORED under, never the request's:
     // the request names a route, and only the stored name says what the bytes
     // are.
-    "content-type": object.httpMetadata?.contentType || contentTypeFor(hit.pathname),
+    "content-type": contentTypeFor(hit.pathname),
     "cache-control": IMMUTABLE_CACHE_CONTROL,
   });
   if (object.httpEtag) headers.set("etag", object.httpEtag);
