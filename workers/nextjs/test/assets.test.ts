@@ -149,6 +149,69 @@ describe("serveStaticAsset", () => {
     expect(res.status).toBe(404);
   });
 
+  it("resolves a route to the .html document the build stored it as", async () => {
+    const url = new URL("https://serve-html-1.example/some");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/some.html": { body: "<html>some</html>" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>some</html>");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  // The dispatch map keys the error pages on /404 and /500; the documents are
+  // stored as the files they are. Same resolution, no second rule.
+  it("resolves a directly requested error page to its document", async () => {
+    const url = new URL("https://serve-html-2.example/404");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+  });
+
+  it("still serves an extensionless file stored under its own name", async () => {
+    const url = new URL("https://serve-html-3.example/LICENSE");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/LICENSE": { body: "MIT" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("MIT");
+    expect(res.headers.get("content-type")).toBe("application/octet-stream");
+  });
+
+  it("reads only the requested key for a path that already names a file", async () => {
+    const url = new URL("https://serve-html-4.example/some.rsc");
+    const keys: string[] = [];
+    const store: AssetBucket = {
+      async get(key) {
+        keys.push(key);
+        return key === "assets/p/app/b1/some.rsc"
+          ? { body: new Blob(["RSC"]).stream() }
+          : null;
+      },
+    };
+    const deps = countingDeps(store, "assets/p/app/b1");
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("RSC");
+    expect(keys).toEqual(["assets/p/app/b1/some.rsc"]);
+  });
+
   it("serves a colo cache hit without reading the store again", async () => {
     const url = new URL("https://serve-4.example/next.svg");
     let reads = 0;

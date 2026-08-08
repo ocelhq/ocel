@@ -74,6 +74,20 @@ export function contentTypeFor(pathname: string): string {
   return CONTENT_TYPES[pathname.slice(dot).toLowerCase()] ?? "application/octet-stream";
 }
 
+// Where an object answering this request is stored, most likely first. A
+// prerendered HTML document is written under its .html name while the route it
+// answers carries no extension at all (/some, /404), so an extensionless
+// request looks for the document before looking for a file of its own name —
+// which is what still serves an extensionless public/ file. A request that
+// already names a file is only ever that file.
+function storedPathnames(pathname: string): string[] {
+  return hasExtension(pathname) ? [pathname] : [`${pathname}.html`, pathname];
+}
+
+function hasExtension(pathname: string): boolean {
+  return pathname.slice(pathname.lastIndexOf("/") + 1).includes(".");
+}
+
 // A request that matches nothing — no route, no asset — is answered with the
 // app's own rendered 404 page, which the build emits as static/404.html (App
 // Router not-found.js and Pages Router 404.js alike) and the deploy uploads
@@ -105,12 +119,24 @@ export async function serveStaticAsset(
   const cached = await deps.cache.match(request);
   if (cached) return cached;
 
-  const key = `${deps.assetPrefix}${url.pathname}`;
-  const object = await deps.store.get(key);
-  if (!object?.body) return notFound(deps);
+  let hit:
+    | { pathname: string; object: AssetObject & { body: ReadableStream } }
+    | undefined;
+  for (const pathname of storedPathnames(url.pathname)) {
+    const object = await deps.store.get(`${deps.assetPrefix}${pathname}`);
+    if (object?.body) {
+      hit = { pathname, object: { ...object, body: object.body } };
+      break;
+    }
+  }
+  if (!hit) return notFound(deps);
 
+  const { object } = hit;
   const headers = new Headers({
-    "content-type": object.httpMetadata?.contentType || contentTypeFor(url.pathname),
+    // Inferred from the name the object is STORED under, never the request's:
+    // the request names a route, and only the stored name says what the bytes
+    // are.
+    "content-type": object.httpMetadata?.contentType || contentTypeFor(hit.pathname),
     "cache-control": IMMUTABLE_CACHE_CONTROL,
   });
   if (object.httpEtag) headers.set("etag", object.httpEtag);

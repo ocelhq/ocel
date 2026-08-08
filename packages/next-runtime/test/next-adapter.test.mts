@@ -950,7 +950,12 @@ async function withStaticFile(
   pathname: string,
   contents: string,
 ) {
-  const filePath = join(projectDir, ".next", pathname);
+  // Next writes a prerendered document at <route>.html, which is what lets a
+  // page and its own children coexist in .next/server/pages.
+  const rel = pathname.includes(".", pathname.lastIndexOf("/"))
+    ? pathname
+    : `${pathname}.html`;
+  const filePath = join(projectDir, ".next", rel);
   await mkdir(dirname(filePath), { recursive: true });
   await writeFile(filePath, contents);
   args.outputs.staticFiles.push({ pathname, id: pathname, filePath });
@@ -1034,6 +1039,94 @@ test("keys the error pages by the path they are served at", async () => {
     createHash("sha256").update("gone").digest("hex"),
   );
   expect(assetHashes["/404"]).toBeUndefined();
+});
+
+// A statically-optimized Pages Router page arrives named after its route, with
+// no extension. Written out under that name it is served as a download, so it
+// is written out as the document it is.
+test("writes a statically-optimized page under its .html name", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/some", "<html>some</html>");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const staticDir = join(projectDir, ".ocel/output/static");
+  expect(await readFile(join(staticDir, "some.html"), "utf8")).toBe(
+    "<html>some</html>",
+  );
+  expect(await exists(join(staticDir, "some"))).toBe(false);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.assetHashes["/some.html"]).toBe(
+    createHash("sha256").update("<html>some</html>").digest("hex"),
+  );
+  // The dispatch map stays keyed on the route; only the stored file moved.
+  expect(manifest.dispatch["/some"]).toEqual({ kind: "static" });
+  expect(manifest.dispatch["/some.html"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/some");
+});
+
+// pages/x.js beside pages/x/[slug].js is ordinary Next routing, and it used to
+// make the build write a file and a directory at the same path.
+test("emits a page and its own children without colliding", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/overlap", "<html>parent</html>");
+  await withStaticFile(projectDir, args, "/overlap.rsc", "RSC");
+  await withStaticFile(projectDir, args, "/overlap/[slug]", "<html>child</html>");
+  await withStaticFile(projectDir, args, "/overlap/[slug].rsc", "CHILD RSC");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const staticDir = join(projectDir, ".ocel/output/static");
+  expect(await readFile(join(staticDir, "overlap.html"), "utf8")).toBe(
+    "<html>parent</html>",
+  );
+  expect(await readFile(join(staticDir, "overlap/[slug].html"), "utf8")).toBe(
+    "<html>child</html>",
+  );
+  expect(await readFile(join(staticDir, "overlap.rsc"), "utf8")).toBe("RSC");
+  expect(await readFile(join(staticDir, "overlap/[slug].rsc"), "utf8")).toBe(
+    "CHILD RSC",
+  );
+});
+
+// Everything Next already names as a file is what it says it is.
+test("leaves static outputs that already carry an extension alone", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
+  await withStaticFile(projectDir, args, "/favicon.ico", "ICO");
+  await withStaticFile(projectDir, args, "/opengraph-image.png", "PNG");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const staticDir = join(projectDir, ".ocel/output/static");
+  expect(await exists(join(staticDir, "_next/static/chunks/a.js"))).toBe(true);
+  expect(await exists(join(staticDir, "favicon.ico"))).toBe(true);
+  expect(await exists(join(staticDir, "opengraph-image.png"))).toBe(true);
+  expect(await exists(join(staticDir, "_next/static/chunks/a.js.html"))).toBe(
+    false,
+  );
+  expect(await exists(join(staticDir, "favicon.ico.html"))).toBe(false);
+});
+
+// A public/ file is already a file: whatever it is named is what it is served
+// as, extension or not.
+test("copies an extensionless public/ file under its own name", async () => {
+  const { projectDir, args } = await synthProject();
+  await writeFile(join(projectDir, "public", "LICENSE"), "MIT");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const staticDir = join(projectDir, ".ocel/output/static");
+  expect(await readFile(join(staticDir, "LICENSE"), "utf8")).toBe("MIT");
+  expect(await exists(join(staticDir, "LICENSE.html"))).toBe(false);
+  expect((await readManifest(projectDir)).assetHashes["/LICENSE"]).toBe(
+    createHash("sha256").update("MIT").digest("hex"),
+  );
 });
 
 test("omits the image config when the app opted out of optimization", async () => {

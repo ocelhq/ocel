@@ -301,11 +301,19 @@ const adapter = {
     // local source by its content hash, so identical bytes keep their optimized
     // variants across a redeploy and changed bytes cannot serve a stale one.
     const publicFiles = await collectPublicFiles(projectDir);
+    const staticAssets = [
+      // A public/ file is already a file: it is served under the name it was
+      // authored with. A built static output is named after the *route* it
+      // answers, which servedPathname turns back into a file name.
+      ...publicFiles.map((f) => [f.pathname, f.filePath] as const),
+      ...outputs.staticFiles.map(
+        (f) => [servedPathname(f.pathname), f.filePath] as const,
+      ),
+    ];
     const assetHashes: Record<string, string> = {};
-    for (const file of [...publicFiles, ...outputs.staticFiles]) {
-      const pathname = servedPathname(file.pathname);
+    for (const [pathname, filePath] of staticAssets) {
       assetHashes[pathname] = await copyHashedFile(
-        file.filePath,
+        filePath,
         join(outputRoot, "static", pathname),
       );
     }
@@ -1082,12 +1090,21 @@ function renderLauncher(
   );
 }
 
-// The path a static file is actually served at, which is also how it is keyed
-// in the asset hash map: the error pages arrive as extensionless routes.
+// The file name a built static output is written and keyed under. Next names a
+// prerendered HTML document after the route it answers — /404, /some, /en —
+// with no extension at all, and a route is not a file name: static/some then
+// occupies the directory name every sibling output under /some/ needs, and the
+// bytes reach a browser with no content-type either serving layer can infer.
+// Naming the document .html settles both, and the worker maps a request for
+// /some back onto it. Everything Next already names as a file — the .rsc
+// fallbacks, the _next/static chunks, the app-router static metadata — passes
+// through as itself.
 function servedPathname(pathname: string): string {
-  return pathname === "/404" || pathname === "/500"
-    ? `${pathname}.html`
-    : pathname;
+  return hasExtension(pathname) ? pathname : `${pathname}.html`;
+}
+
+function hasExtension(pathname: string): boolean {
+  return pathname.slice(pathname.lastIndexOf("/") + 1).includes(".");
 }
 
 // Copies a file and returns the sha256 of its bytes, hashing as it streams so
