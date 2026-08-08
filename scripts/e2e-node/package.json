@@ -1,0 +1,17 @@
+{
+  "name": "@ocel-scripts/e2e-node",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Live-deployment harness proving the V8 compile-cache legs for a plain node app",
+  "scripts": {
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ocel-scripts/e2e-shared": "workspace:*",
+    "aws4fetch": "^1.0.20"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.9"
+  }
+}

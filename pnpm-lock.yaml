@@ -945,10 +945,29 @@ importers:
         version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
 
   scripts/e2e-next:
+    dependencies:
+      '@ocel-scripts/e2e-shared':
+        specifier: workspace:*
+        version: link:../e2e-shared
     devDependencies:
       vitest:
         specifier: ^4.1.9
         version: 4.1.9(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
+
+  scripts/e2e-node:
+    dependencies:
+      '@ocel-scripts/e2e-shared':
+        specifier: workspace:*
+        version: link:../e2e-shared
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
+    devDependencies:
+      vitest:
+        specifier: ^4.1.9
+        version: 4.1.9(@types/node@26.1.1)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)
+
+  scripts/e2e-shared: {}
 
   tests/e2e:
     dependencies:
