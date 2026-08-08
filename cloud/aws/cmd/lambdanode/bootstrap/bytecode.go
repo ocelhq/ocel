@@ -153,6 +153,15 @@ const compileCacheDir = "/tmp/.ocel/compile-cache"
 // child — so the feature is off until a deploy turns it on.
 const bytecodePrefixEnvVar = "OCEL_BYTECODE_PREFIX"
 
+// bytecodeBucketEnvVar names the account-global bucket the compile cache lives
+// in. It is its own variable rather than a reuse of OCEL_ISR_BUCKET — that one
+// is unset for any function with no ISR cache, which used to be every
+// non-Next function this feature now also has to reach. There is no fallback
+// chain: a deploy that sets bytecodePrefixEnvVar always sets this alongside
+// it (see functionEnv on the deploy side), so an unset bucket here reads as
+// exactly what resolveBytecodeResolution already treats it as — the gate off.
+const bytecodeBucketEnvVar = "OCEL_BYTECODE_BUCKET"
+
 // bytecodeUploadBudget caps what the upload may spend after an invocation is
 // already served. It is billed duration, not request latency, but the sandbox is
 // still holding the runtime loop off /next, so the cap is short and the
@@ -806,7 +815,7 @@ func (r *bytecodeResolution) upload(flush func(context.Context) (compileCacheFlu
 // a node binary, an AWS client or the environment in reach.
 func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Context) (string, error)) *bytecodeResolution {
 	prefix := os.Getenv(bytecodePrefixEnvVar)
-	bucket := os.Getenv("OCEL_ISR_BUCKET")
+	bucket := os.Getenv(bytecodeBucketEnvVar)
 	function := os.Getenv("AWS_LAMBDA_FUNCTION_NAME")
 	if prefix == "" || bucket == "" || function == "" {
 		return nil

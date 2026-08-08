@@ -68,11 +68,6 @@ func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deployment
 	if log == nil {
 		log = func(string) {}
 	}
-	caches, err := appCaches(cfg, manifest)
-	if err != nil {
-		log(fmt.Sprintf("ocel: could not work out which bundles to warm: %v", err))
-		return nil
-	}
 	names := map[string]string{}
 	for _, app := range appFunctionNames {
 		for logical, physical := range app {
@@ -81,7 +76,7 @@ func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deployment
 	}
 	return warmPass{
 		invoker: cfg.Invoker,
-		targets: warmTargets(manifest, caches, names),
+		targets: warmTargets(manifest, names),
 		budget:  warmPassDeadline,
 		log:     log,
 	}.run(ctx)
@@ -94,26 +89,30 @@ type warmTarget struct {
 }
 
 // warmTargets are the functions this deploy should warm: exactly those the
-// bytecode feature is on for. That is the deploy-wide gate (bytecodeCacheEnabled)
-// and an app that keeps an ISR cache, which together are what put
-// OCEL_BYTECODE_PREFIX on a function's environment — deriving the set from the
-// same two facts rather than restating them is what keeps a function that
-// publishes nothing from being invoked for it.
+// bytecode feature is on for. That is the deploy-wide gate
+// (bytecodeCacheEnabled) and the function's own resolved runtime being
+// nodejs* — together what put OCEL_BYTECODE_PREFIX on a function's environment
+// (resolveBytecodeFunctionConfig) — deriving the set from the same two facts
+// rather than restating them is what keeps a function that publishes nothing
+// from being invoked for it. Framework plays no part: an express or fastify
+// function is exactly as eligible as a Next one.
 //
 // names maps a logical name to the physical Lambda name its stack realized, so
 // a function whose app-deploy stack failed is simply absent and is not warmed.
-func warmTargets(manifest *deploymentsv1.Manifest, caches map[string]*isrConfig, names map[string]string) []warmTarget {
+func warmTargets(manifest *deploymentsv1.Manifest, names map[string]string) []warmTarget {
 	if !bytecodeCacheEnabled() {
 		return nil
 	}
 	var targets []warmTarget
 	for _, fn := range manifest.GetFunctions() {
-		app := fn.GetApp()
-		physical := names[fn.GetLogicalName()]
-		if caches[app] == nil || physical == "" {
+		if !isNodeRuntime(translateFunction(fn).Runtime) {
 			continue
 		}
-		targets = append(targets, warmTarget{App: app, LogicalName: fn.GetLogicalName(), FunctionName: physical})
+		physical := names[fn.GetLogicalName()]
+		if physical == "" {
+			continue
+		}
+		targets = append(targets, warmTarget{App: fn.GetApp(), LogicalName: fn.GetLogicalName(), FunctionName: physical})
 	}
 	return targets
 }

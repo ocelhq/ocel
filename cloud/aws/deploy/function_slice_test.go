@@ -2,7 +2,6 @@ package deploy
 
 import (
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -90,99 +89,6 @@ func TestMembraneLayerARN_DefaultAndEnvOverride(t *testing.T) {
 	t.Setenv(membraneLayerARNEnv, "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9")
 	if got := membraneLayerARN(); got != "arn:aws:lambda:us-east-1:123:layer:ocel-membrane:9" {
 		t.Errorf("membraneLayerARN() = %q, want the env override", got)
-	}
-}
-
-// Bytecode caching is on for every Next app unless the deploying process opts
-// out, so the default case (no override) must still see the prefix.
-func TestBytecodeCacheEnabled_DefaultAndEnvOverride(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
-	if !bytecodeCacheEnabled() {
-		t.Error("bytecodeCacheEnabled() = false with no override, want true")
-	}
-	t.Setenv(bytecodeCacheEnv, "0")
-	if bytecodeCacheEnabled() {
-		t.Error("bytecodeCacheEnabled() = true with OCEL_BYTECODE_CACHE=0, want false")
-	}
-	// Only the literal "0" disables, matching the one-spelling precedent the
-	// other deploy-time overrides in this package follow.
-	for _, v := range []string{"false", "off", "no", "FALSE"} {
-		t.Setenv(bytecodeCacheEnv, v)
-		if !bytecodeCacheEnabled() {
-			t.Errorf("bytecodeCacheEnabled() = false with OCEL_BYTECODE_CACHE=%q, want true (only \"0\" disables)", v)
-		}
-	}
-}
-
-func TestISREnv_SetsBytecodePrefixToTheAssetPrefix(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-	env := cfg.env()
-	if env["OCEL_BYTECODE_PREFIX"] != cfg.Prefix {
-		t.Errorf("OCEL_BYTECODE_PREFIX = %q, want %q", env["OCEL_BYTECODE_PREFIX"], cfg.Prefix)
-	}
-}
-
-func TestISREnv_OmitsBytecodePrefixWhenGateIsOff(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "0")
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-	env := cfg.env()
-	if _, ok := env["OCEL_BYTECODE_PREFIX"]; ok {
-		t.Errorf("OCEL_BYTECODE_PREFIX = %q, want it unset when OCEL_BYTECODE_CACHE=0", env["OCEL_BYTECODE_PREFIX"])
-	}
-}
-
-// The membrane composes its uploaded key as
-// {prefix}/bytecode/{function}/node{major}-{arch}.tar.gz. isrPolicy grants
-// {bucket}/{prefix}/* — this proves that composed key actually falls under the
-// wildcard the function's role is issued, not just that the two format strings
-// share a literal prefix.
-func TestISRPolicy_CoversTheComposedBytecodeKey(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
-	cfg := isrConfig{
-		Bucket:   "assets-xyz",
-		Prefix:   "prod/proj123/marketing/build456",
-		Table:    "state-abc",
-		TableARN: "arn:aws:dynamodb:us-east-1:1234:table/state-abc",
-	}
-
-	prefix := cfg.env()["OCEL_BYTECODE_PREFIX"]
-	bytecodeKey := fmt.Sprintf("%s/bytecode/my-function/node22-x64.tar.gz", prefix)
-
-	raw, err := isrPolicy(cfg)
-	if err != nil {
-		t.Fatalf("isrPolicy: %v", err)
-	}
-	var doc struct {
-		Statement []struct {
-			Resource string `json:"Resource"`
-		}
-	}
-	if err := json.Unmarshal([]byte(raw), &doc); err != nil {
-		t.Fatalf("policy is not valid JSON: %v", err)
-	}
-
-	s3Resource := doc.Statement[0].Resource
-	if !strings.HasPrefix(s3Resource, "arn:aws:s3:::") {
-		t.Fatalf("Statement[0].Resource = %q, want the S3 grant", s3Resource)
-	}
-	pattern := strings.TrimPrefix(s3Resource, "arn:aws:s3:::")
-	if !strings.HasSuffix(pattern, "/*") {
-		t.Fatalf("S3 resource pattern %q does not end in /*", pattern)
-	}
-	dir := strings.TrimSuffix(pattern, "*")
-	if !strings.HasPrefix(fmt.Sprintf("%s/%s", cfg.Bucket, bytecodeKey), dir) {
-		t.Errorf("bytecode key %s/%s is not covered by the policy's resource pattern %q", cfg.Bucket, bytecodeKey, pattern)
 	}
 }
 
@@ -492,7 +398,7 @@ func TestISRCacheStore_LeavesNoStandingCredentialOnTheFunction(t *testing.T) {
 		CacheStoreBucket: "ocel-edge-cache",
 	}
 
-	env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg)
+	env := functionEnv(map[string]string{}, functionArgs{Handler: "index.mjs"}, &cfg, nil)
 	for name, value := range env {
 		if strings.Contains(name, "ACCESS_KEY") || strings.Contains(name, "SECRET_ACCESS") {
 			t.Errorf("env carries %s = %q", name, value)

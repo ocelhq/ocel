@@ -928,21 +928,34 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	maps.Copy(env, variableEnv(app))
 	maps.Copy(env, baked.env())
 
+	// Resolved once per function, up front: each hashes its own `.func` tree
+	// (resolveBytecodeFunctionConfig), which both the budget check and
+	// registerFunction below need, and doing it twice would hash every function
+	// in the app twice for no reason.
+	bytecodeConfigs := make(map[string]*bytecodeFunctionConfig, len(functions))
+	for _, fn := range functions {
+		bc, err := resolveBytecodeFunctionConfig(cfg, manifest.GetSlug(), name, fn)
+		if err != nil {
+			return nil, nil, err
+		}
+		bytecodeConfigs[fn.GetLogicalName()] = bc
+	}
+
 	// Accounted before the stack runs: an over-budget environment is a deploy
 	// that cannot succeed, and it must not cost any provisioning first.
 	for _, fn := range functions {
-		if err := checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name])); err != nil {
+		if err := checkFunctionEnvBudget(fn.GetLogicalName(), functionEnv(env, translateFunction(fn), caches[name], bytecodeConfigs[fn.GetLogicalName()])); err != nil {
 			return nil, nil, err
 		}
 	}
 
 	program := func(pctx *pulumi.Context) error {
-		role, err := newFunctionRole(pctx, appExecutionRole(cfg, name, caches, baked))
+		role, err := newFunctionRole(pctx, appExecutionRole(cfg, manifest.GetSlug(), name, caches, baked, functions))
 		if err != nil {
 			return err
 		}
 		for _, fn := range functions {
-			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(name, cfg.Env, manifest.GetSlug()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], role.Arn); err != nil {
+			if err := registerFunction(pctx, fn.GetLogicalName(), ocelTags(name, cfg.Env, manifest.GetSlug()), translateFunction(fn), artifacts[fn.GetLogicalName()], env, caches[name], bytecodeConfigs[fn.GetLogicalName()], role.Arn); err != nil {
 				return fmt.Errorf("declare %s: %w", fn.GetLogicalName(), err)
 			}
 		}

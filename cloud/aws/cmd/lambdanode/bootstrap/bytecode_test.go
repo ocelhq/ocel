@@ -859,7 +859,7 @@ func TestResolveBytecodeResolution_NilWhenNotFullyConfigured(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv(bytecodePrefixEnvVar, tc.prefix)
-			t.Setenv("OCEL_ISR_BUCKET", tc.bucket)
+			t.Setenv(bytecodeBucketEnvVar, tc.bucket)
 			t.Setenv("AWS_LAMBDA_FUNCTION_NAME", tc.function)
 			if got := resolveBytecodeResolution(context.Background(), nodeVersion); got != nil {
 				t.Errorf("resolveBytecodeResolution() = %+v, want nil", got)
@@ -873,7 +873,7 @@ func TestResolveBytecodeResolution_NilWhenNotFullyConfigured(t *testing.T) {
 // compose without it, so neither leg can be handed one.
 func TestResolveBytecodeResolution_NilWhenTheNodeVersionCannotBeRead(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel")
-	t.Setenv("OCEL_ISR_BUCKET", "assets")
+	t.Setenv(bytecodeBucketEnvVar, "assets")
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 
 	cases := []struct {
@@ -901,7 +901,7 @@ func TestResolveBytecodeResolution_NilWhenTheNodeVersionCannotBeRead(t *testing.
 // detect — this is the test that pins the composition down.
 func TestResolveBytecodeResolution_CarriesTheEnvironmentAndVersionIntoTheKey(t *testing.T) {
 	t.Setenv(bytecodePrefixEnvVar, "ocel/stg")
-	t.Setenv("OCEL_ISR_BUCKET", "assets-xyz")
+	t.Setenv(bytecodeBucketEnvVar, "assets-xyz")
 	t.Setenv("AWS_LAMBDA_FUNCTION_NAME", "my-app")
 	t.Setenv("AWS_REGION", "us-east-1")
 

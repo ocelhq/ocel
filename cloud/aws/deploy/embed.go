@@ -120,30 +120,24 @@ type embedTarget struct {
 // the caches and told this side their keys — and before the promote, so no
 // traffic ever reaches a function mid-update.
 //
-// It is opt-in and best-effort in both directions: the S3 path stays exactly as
-// it is, and a function this pass cannot re-package keeps the artifact it was
-// deployed with.
+// Embedding is no longer its own gate: whenever bytecode caching is on, this
+// runs. Caching without a repackage would mean every cold start paying an S3
+// round trip when the deploy already holds the bytes to avoid it, and no
+// deploy has ever had a reason to want that. It stays best-effort: a function
+// this pass cannot re-package keeps the artifact it was deployed with, which
+// still fetches its cache from S3 exactly as it always could.
 func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) {
 	if log == nil {
 		log = func(string) {}
 	}
-	if !bytecodeEmbedRequested() {
-		return
-	}
-	if !bytecodeEmbedEnabled() {
-		log(fmt.Sprintf("ocel: %s=1 has nothing to embed while %s=0; not embedding", bytecodeEmbedEnv, bytecodeCacheEnv))
+	if !bytecodeCacheEnabled() {
 		return
 	}
 	// Named rather than silent: a caller that wires no clients is a deploy path
-	// this feature was never plumbed into, and the user who set the flag and got
-	// nothing has no other way to find that out.
+	// this feature was never plumbed into, and a deploy with the gate on that
+	// gets no embedding has no other way to find that out.
 	if missing := missingEmbedClients(cfg); missing != "" {
-		log(fmt.Sprintf("ocel: %s=1 but this deploy has no %s; not embedding", bytecodeEmbedEnv, missing))
-		return
-	}
-	caches, err := appCaches(cfg, manifest)
-	if err != nil {
-		log(fmt.Sprintf("ocel: could not work out which bundles to embed: %v", err))
+		log(fmt.Sprintf("ocel: bytecode caching is on but this deploy has no %s; not embedding", missing))
 		return
 	}
 	embedPass{
@@ -151,7 +145,7 @@ func embedBytecodeCaches(ctx context.Context, cfg Config, manifest *deploymentsv
 		uploader: cfg.Uploader,
 		code:     cfg.CodeUpdater,
 		invoker:  cfg.Invoker,
-		targets:  embedTargets(cfg, manifest, caches, artifacts, warmed, log),
+		targets:  embedTargets(cfg, manifest, artifacts, warmed, log),
 		budget:   embedPassDeadline,
 		settle:   embedUpdateSettle,
 		log:      log,
@@ -180,26 +174,30 @@ func missingEmbedClients(cfg Config) string {
 }
 
 // embedTargets are the bundles this pass can act on: those the warm pass left
-// holding a cache, whose app keeps one, and whose artifact this deploy uploaded.
-// A bundle missing any of the three is dropped silently — the warm pass has
-// already reported why it has no cache, and repeating it here would double
-// every line of a deploy that warmed nothing.
+// holding a cache, whose function still resolves a nodejs* runtime, and whose
+// artifact this deploy uploaded. A bundle missing any of the three is dropped
+// silently — the warm pass has already reported why it has no cache, and
+// repeating it here would double every line of a deploy that warmed nothing.
+// CacheBucket is the same account-global bucket every bytecode object lives
+// in, addressed under OCEL_BYTECODE_BUCKET rather than derived per app — there
+// is exactly one, and it is cfg's to know.
 //
 // Nothing else is filtered here. A bundle that answered from an embedded copy
 // is still a target: the merge refuses a package that already holds the entry,
 // which is a named line, whereas dropping it here would be the one outcome
 // neither pass ever reports.
-func embedTargets(cfg Config, manifest *deploymentsv1.Manifest, caches map[string]*isrConfig, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) []embedTarget {
+func embedTargets(cfg Config, manifest *deploymentsv1.Manifest, artifacts map[string]artifactRef, warmed []warmResult, log func(string)) []embedTarget {
 	dirs := map[string]string{}
+	runtimes := map[string]string{}
 	for _, fn := range manifest.GetFunctions() {
 		dirs[fn.GetLogicalName()] = artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
+		runtimes[fn.GetLogicalName()] = translateFunction(fn).Runtime
 	}
 	var targets []embedTarget
 	for _, result := range warmed {
 		logical := result.Target.LogicalName
-		cache := caches[result.Target.App]
 		artifact := artifacts[logical]
-		if cache == nil || artifact.Key == "" || result.Reply.Key == "" {
+		if !isNodeRuntime(runtimes[logical]) || artifact.Key == "" || result.Reply.Key == "" {
 			continue
 		}
 		// Measured, not estimated: the hard ceiling is what stands between this
@@ -215,7 +213,7 @@ func embedTargets(cfg Config, manifest *deploymentsv1.Manifest, caches map[strin
 			LogicalName:  logical,
 			FunctionName: result.Target.FunctionName,
 			Artifact:     artifact,
-			CacheBucket:  cache.Bucket,
+			CacheBucket:  cfg.AssetBucket,
 			CacheKey:     result.Reply.Key,
 			TreeBytes:    size,
 		})

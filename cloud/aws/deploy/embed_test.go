@@ -24,37 +24,6 @@ import (
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
-// Embedding is opt-in, and it is opt-in the strict way: exactly "1". Anything
-// else, including the spellings a user might reasonably expect to work, leaves
-// the deploy on the S3 path it already has.
-func TestBytecodeEmbedEnabled_OffUnlessAskedForExactly(t *testing.T) {
-	t.Setenv(bytecodeCacheEnv, "")
-	t.Setenv(bytecodeEmbedEnv, "")
-	if bytecodeEmbedEnabled() {
-		t.Error("bytecodeEmbedEnabled() = true with no override, want false")
-	}
-	for _, v := range []string{"true", "yes", "on", "01", "1 "} {
-		t.Setenv(bytecodeEmbedEnv, v)
-		if bytecodeEmbedEnabled() {
-			t.Errorf("bytecodeEmbedEnabled() = true with OCEL_BYTECODE_EMBED=%q, want false (only \"1\" enables)", v)
-		}
-	}
-	t.Setenv(bytecodeEmbedEnv, "1")
-	if !bytecodeEmbedEnabled() {
-		t.Error("bytecodeEmbedEnabled() = false with OCEL_BYTECODE_EMBED=1, want true")
-	}
-}
-
-// There is nothing to embed without a published cache, so the two gates are
-// ANDed rather than left for a caller to get wrong.
-func TestBytecodeEmbedEnabled_ImpliesCaching(t *testing.T) {
-	t.Setenv(bytecodeEmbedEnv, "1")
-	t.Setenv(bytecodeCacheEnv, "0")
-	if bytecodeEmbedEnabled() {
-		t.Error("bytecodeEmbedEnabled() = true with OCEL_BYTECODE_CACHE=0, want false")
-	}
-}
-
 // The gate is arithmetic over two numbers and is the only thing standing
 // between an embed and an undeployable package, so it is asserted directly
 // rather than through a pass.
@@ -542,11 +511,11 @@ func TestEmbedPass_UnsettledUpdateIsNeverReportedAsUntouched(t *testing.T) {
 	}
 }
 
-// A deploy that asked for embedding and is not wired for it must be told, and
-// told which piece is missing. Silence here is indistinguishable from a deploy
-// that embedded everything.
+// A deploy with bytecode caching on and not wired for embedding must be told,
+// and told which piece is missing — embedding is no longer its own opt-in, so
+// silence here is indistinguishable from a deploy that embedded everything.
 func TestEmbedBytecodeCaches_NamesTheClientsItIsMissing(t *testing.T) {
-	t.Setenv(bytecodeEmbedEnv, "1")
+	t.Setenv(bytecodeCacheEnv, "1")
 	log, out := collectLog()
 
 	embedBytecodeCaches(context.Background(), Config{}, nextManifest(), nil, nil, log)
@@ -581,9 +550,8 @@ func TestEmbedTargets_KeepsABundleThatAlreadyAnsweredFromItsPackage(t *testing.T
 
 	log, out := collectLog()
 	targets := embedTargets(
-		Config{ArtifactRoot: root},
+		Config{ArtifactRoot: root, AssetBucket: "assets"},
 		manifest,
-		map[string]*isrConfig{"web": {Bucket: "assets", Prefix: "prod/proj/web/B1"}},
 		map[string]artifactRef{"web_index": {Bucket: "artifacts", Key: "proj/web/abc123.zip"}},
 		warmed,
 		log,
@@ -594,6 +562,66 @@ func TestEmbedTargets_KeepsABundleThatAlreadyAnsweredFromItsPackage(t *testing.T
 	}
 	if targets[0].CacheKey != embedTestCacheKey {
 		t.Errorf("embedTargets[0].CacheKey = %q, want the key the membrane reported", targets[0].CacheKey)
+	}
+}
+
+// TestEmbedTargets_SelectsNodeRuntimeFunctionsOfAnyFramework proves the gate
+// moved off framework here too: a manifest carrying both a Next app and an
+// express app selects both functions' warmed caches, and a sibling function on
+// a non-node runtime is excluded even though the warm pass (which produced
+// `warmed`) never runs for it either — embedTargets' own filter must agree.
+func TestEmbedTargets_SelectsNodeRuntimeFunctionsOfAnyFramework(t *testing.T) {
+	root := t.TempDir()
+	for _, app := range []string{"web.func", "api.func"} {
+		if err := os.MkdirAll(filepath.Join(root, app), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, app, "index.js"), []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	manifest := &deploymentsv1.Manifest{
+		Slug: "proj",
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "web_index", Framework: "next", App: "web", ArtifactPath: "web.func"},
+			{LogicalName: "api_handler", Framework: "express", App: "api", ArtifactPath: "api.func"},
+		},
+	}
+	warmed := []warmResult{
+		{
+			Target: warmTarget{App: "web", LogicalName: "web_index", FunctionName: "ocel-web-index"},
+			Reply:  warmReply{Key: "prod/p/bytecode/web/hash1/bytecode/web_index/node24.3.1-arm64.tar.gz"},
+		},
+		{
+			Target: warmTarget{App: "api", LogicalName: "api_handler", FunctionName: "ocel-api-handler"},
+			Reply:  warmReply{Key: "prod/p/bytecode/api/hash2/bytecode/api_handler/node24.3.1-arm64.tar.gz"},
+		},
+	}
+	artifacts := map[string]artifactRef{
+		"web_index":   {Bucket: "artifacts", Key: "proj/web/abc123.zip"},
+		"api_handler": {Bucket: "artifacts", Key: "proj/api/def456.zip"},
+	}
+
+	log, out := collectLog()
+	targets := embedTargets(Config{ArtifactRoot: root, AssetBucket: "assets"}, manifest, artifacts, warmed, log)
+
+	if len(targets) != 2 {
+		t.Fatalf("embedTargets = %+v, want both the Next and the express function (log: %s)", targets, out())
+	}
+	byLogical := map[string]embedTarget{}
+	for _, target := range targets {
+		byLogical[target.LogicalName] = target
+	}
+	if _, ok := byLogical["web_index"]; !ok {
+		t.Error("embedTargets dropped the Next function")
+	}
+	if _, ok := byLogical["api_handler"]; !ok {
+		t.Error("embedTargets dropped the express function")
+	}
+	for _, target := range targets {
+		if target.CacheBucket != "assets" {
+			t.Errorf("%s CacheBucket = %q, want the config's asset bucket", target.LogicalName, target.CacheBucket)
+		}
 	}
 }
 

@@ -133,8 +133,9 @@ type Config struct {
 	// Getter and CodeUpdater are what the embed pass (see embed.go) needs on top
 	// of Uploader and Invoker: one reads the published cache and the deployed
 	// package back, the other moves a function onto the repackaged one. Nil
-	// leaves embedding off entirely, which is also what OCEL_BYTECODE_EMBED does
-	// by default — every bundle then fetches its cache from S3 as before.
+	// leaves embedding off entirely regardless of OCEL_BYTECODE_CACHE — every
+	// bundle then fetches its cache from S3, as any deploy path that never wired
+	// these two already does.
 	Getter      ObjectGetter
 	CodeUpdater FunctionCodeUpdater
 
