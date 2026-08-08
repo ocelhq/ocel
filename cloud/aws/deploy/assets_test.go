@@ -72,11 +72,14 @@ func TestUploadStaticAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 	}
 }
 
-// TestUploadStaticAssets_SetsContentType proves each static object is written
-// with the content-type its extension implies (so the R2 store is
-// self-describing), and an extension the standard library can't resolve is
-// left unset for the worker's own fallback to decide.
-func TestUploadStaticAssets_SetsContentType(t *testing.T) {
+// TestUploadStaticAssets_StampsNoContentType proves no static object is written
+// with a content-type. The frozen worker derives one from the name the build
+// emitted the file under, mirroring what Next.js serves; a stamp here would
+// come from the deploy host's own mime database — which answers
+// image/vnd.microsoft.icon where Next serves image/x-icon, and answers
+// differently on two hosts — and would be a second, contradicting source of
+// truth.
+func TestUploadStaticAssets_StampsNoContentType(t *testing.T) {
 	store := &fakeUploader{exists: map[string]bool{}}
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
@@ -84,6 +87,7 @@ func TestUploadStaticAssets_SetsContentType(t *testing.T) {
 		"apps/web/static/_next/static/chunk.js": "console.log(1)",
 		"apps/web/static/styles.css":            "body{}",
 		"apps/web/static/chunk.js.map":          `{"version":3}`,
+		"apps/web/static/favicon.ico":           "icon",
 	})
 	cfg := Config{
 		ArtifactRoot: root, AssetBucket: "assets", Env: "prod",
@@ -95,19 +99,8 @@ func TestUploadStaticAssets_SetsContentType(t *testing.T) {
 		t.Fatalf("uploadStaticAssets: %v", err)
 	}
 
-	want := map[string]string{
-		"assets/proj/web/WEB1/next.svg":              "image/svg+xml",
-		"assets/proj/web/WEB1/_next/static/chunk.js": "text/javascript; charset=utf-8",
-		"assets/proj/web/WEB1/styles.css":            "text/css; charset=utf-8",
-	}
-	for key, ct := range want {
-		if got := store.contentTypes[key]; got != ct {
-			t.Errorf("content-type for %q = %q, want %q", key, got, ct)
-		}
-	}
-	// An unresolvable extension is left unset so the worker fallback decides.
-	if got, ok := store.contentTypes["assets/proj/web/WEB1/chunk.js.map"]; ok {
-		t.Errorf("content-type for .map = %q, want unset", got)
+	if len(store.contentTypes) != 0 {
+		t.Errorf("content-types = %v, want none — the worker names the type", store.contentTypes)
 	}
 }
 
