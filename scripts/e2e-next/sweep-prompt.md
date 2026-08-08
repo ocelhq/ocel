@@ -227,9 +227,18 @@ suite that no-ops costs the same 15 minutes as one that tells you something.
    nothing. `test/e2e/app-dir/rewrites-redirects/rewrites-redirects.test.ts:12-15`
    does exactly this and cost a full slot. Screen candidates with
    `grep -l isNextDeploy` and read the hit before scheduling it.
-3. **Suites blocked by `ocelhq-e7w`** (build-time `EEXIST`, now P0). These die at
-   build until it is fixed; do not schedule any of them:
-   `test/e2e/app-dir/app/index.test.ts`,
+3. **Suites formerly blocked by `ocelhq-e7w`** (build-time `EEXIST`, was P0). The
+   build-blocking fix landed on branch `fix/pages-static-html` (commits
+   `a914478`, `304e93b`) and is live-verified: `ocel build` now succeeds with
+   zero `EEXIST`/`EISDIR`, and served pages-router documents carry
+   `content-type: text/html` instead of `application/octet-stream`. The branch
+   is **not yet merged** — once it lands, this whole blocklist goes away.
+   `test/e2e/app-dir/app/index.test.ts` has already been run against the fix
+   (project slug `e2e-e7wv-261cb405`) and completes: 86 passed / 15 known-cause
+   / 2 un-attributed failed / 5 skipped, no e7w signature in any failure. The
+   other seven are **unblocked and are high-value verify candidates** for the
+   next sweep once the branch is merged — they have not themselves been run
+   against the fix, so treat them as unverified, not confirmed green:
    `test/e2e/app-dir/app/experimental-compile.test.ts`,
    `test/e2e/app-dir/app/useReportWebVitals.test.ts`,
    `test/e2e/app-dir/app/standalone.test.ts`,
