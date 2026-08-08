@@ -62,12 +62,14 @@ func TestResolveBytecodeFunctionConfig_GateAndRuntime(t *testing.T) {
 	cfg := Config{ArtifactRoot: dir, AssetBucket: "assets", Env: "prod"}
 	fn := &deploymentsv1.ManifestFunction{LogicalName: "api", ArtifactPath: ".", App: "api"}
 
+	hash, err := hashArtifact(dir, nil)
+	if err != nil {
+		t.Fatalf("hashArtifact: %v", err)
+	}
+
 	t.Run("nil with the gate off", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "")
-		got, err := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn)
-		if err != nil {
-			t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
-		}
+		got := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn, hash)
 		if got != nil {
 			t.Errorf("config = %+v, want nil with the gate off", got)
 		}
@@ -76,10 +78,7 @@ func TestResolveBytecodeFunctionConfig_GateAndRuntime(t *testing.T) {
 	t.Run("nil for a non-node runtime even with the gate on", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
 		nonNode := &deploymentsv1.ManifestFunction{LogicalName: "worker", ArtifactPath: ".", App: "worker", Runtime: "python3.12"}
-		got, err := resolveBytecodeFunctionConfig(cfg, "proj", "worker", nonNode)
-		if err != nil {
-			t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
-		}
+		got := resolveBytecodeFunctionConfig(cfg, "proj", "worker", nonNode, hash)
 		if got != nil {
 			t.Errorf("config = %+v, want nil for a python3.12 function", got)
 		}
@@ -87,19 +86,12 @@ func TestResolveBytecodeFunctionConfig_GateAndRuntime(t *testing.T) {
 
 	t.Run("set for an ordinary (default-runtime) function with the gate on", func(t *testing.T) {
 		t.Setenv(bytecodeCacheEnv, "1")
-		got, err := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn)
-		if err != nil {
-			t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
-		}
+		got := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn, hash)
 		if got == nil {
 			t.Fatal("config = nil, want one for an ordinary nodejs function with the gate on")
 		}
 		if got.Bucket != "assets" {
 			t.Errorf("Bucket = %q, want the asset bucket", got.Bucket)
-		}
-		hash, err := hashArtifact(dir, nil)
-		if err != nil {
-			t.Fatalf("hashArtifact: %v", err)
 		}
 		if want := bytecodePrefixFor("prod", "proj", "api", hash); got.Prefix != want {
 			t.Errorf("Prefix = %q, want %q", got.Prefix, want)
@@ -116,17 +108,16 @@ func TestResolveBytecodeFunctionConfig_GateAndRuntime(t *testing.T) {
 // It exercises the real path rather than restating hashArtifact's own
 // behaviour: two real renders of the same app's bundle (renderAppBundle,
 // genuinely different ciphertext each time — the same property
-// TestRenderBakedBundle_EveryRenderGetsAFreshDataKey proves) feed nothing
-// into two real resolutions of the same function's bytecode config
-// (resolveBytecodeFunctionConfig), and the claim is that those two
-// resolutions land on the same prefix regardless. A version of this test that
-// called hashArtifact directly, the way an earlier one here did, stays green
-// even if resolveBytecodeFunctionConfig starts threading the overlay through
-// — it would just be proving hashArtifact's own behaviour a second time.
-// Confirmed by hand while writing this test: temporarily changing
-// resolveBytecodeFunctionConfig's hashArtifact(dir, nil) call to
-// hashArtifact(dir, bundle.overlay()) (fetching bundle from a
-// map[string]appBundle passed in alongside app) turns this red.
+// TestRenderBakedBundle_EveryRenderGetsAFreshDataKey proves) feed into two
+// real calls to hashArtifactPair — the same call uploadFunctionArtifacts
+// makes, and the only place a hash is computed on this path since
+// resolveBytecodeFunctionConfig stopped reading the tree itself (G1) — and
+// the claim is that the bare hash each yields, and so the prefix
+// resolveBytecodeFunctionConfig composes from it, lands the same regardless.
+// A version of this test that called hashArtifact directly, the way an
+// earlier one here did, stays green even if hashArtifactPair's bare
+// component started threading the overlay through — it would just be
+// proving hashArtifact's own behaviour a second time.
 func TestBytecodePrefix_StableAcrossTheOverlayMovesWithCode(t *testing.T) {
 	t.Setenv(bytecodeCacheEnv, "1")
 	dir := writeTree(t, map[string]string{"src/server.js": "handler"})
@@ -153,28 +144,35 @@ func TestBytecodePrefix_StableAcrossTheOverlayMovesWithCode(t *testing.T) {
 		t.Fatal("test setup: two renders of the same sensitive variable must produce different ciphertext (fresh data key each time)")
 	}
 
-	configA, err := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn)
+	bareA, _, err := hashArtifactPair(dir, bundleA.overlay())
 	if err != nil {
-		t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
+		t.Fatalf("hashArtifactPair(bundleA): %v", err)
 	}
+	bareB, _, err := hashArtifactPair(dir, bundleB.overlay())
+	if err != nil {
+		t.Fatalf("hashArtifactPair(bundleB): %v", err)
+	}
+	if bareA != bareB {
+		t.Fatalf("bare hash = %q then %q, want the same bare hash for the same source tree across two renders whose "+
+			"overlays are genuinely different from each other", bareA, bareB)
+	}
+
+	configA := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn, bareA)
 	if configA == nil {
 		t.Fatal("resolveBytecodeFunctionConfig = nil, want a config for a nodejs function with the gate on")
 	}
-	configB, err := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn)
-	if err != nil {
-		t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
-	}
+	configB := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn, bareB)
 	if configA.Prefix != configB.Prefix {
 		t.Errorf("Prefix = %q then %q, want the same prefix for the same source tree across two renders whose "+
 			"overlays are genuinely different from each other", configA.Prefix, configB.Prefix)
 	}
 
-	changedCfg := cfg
-	changedCfg.ArtifactRoot = writeTree(t, map[string]string{"src/server.js": "handler v2"})
-	configChanged, err := resolveBytecodeFunctionConfig(changedCfg, "proj", "api", fn)
+	changedDir := writeTree(t, map[string]string{"src/server.js": "handler v2"})
+	bareChanged, _, err := hashArtifactPair(changedDir, bundleA.overlay())
 	if err != nil {
-		t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
+		t.Fatalf("hashArtifactPair(changed): %v", err)
 	}
+	configChanged := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn, bareChanged)
 	if configChanged.Prefix == configA.Prefix {
 		t.Error("bytecodePrefixFor did not move when the function's code changed")
 	}

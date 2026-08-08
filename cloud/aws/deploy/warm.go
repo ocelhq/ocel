@@ -57,10 +57,9 @@ type FunctionInvoker interface {
 // names as they came back from it — an app whose stack failed contributes none,
 // so a doomed deploy spends nothing here.
 //
-// It returns no error and swallows what it cannot do, including a cache
-// derivation that fails: warming is an optimization, and the caller is one step
-// from the promote. What it does return is each bundle's summary, for the embed
-// pass that may follow.
+// It returns no error and swallows what it cannot do: warming is an
+// optimization, and the caller is one step from the promote. What it does
+// return is each bundle's summary, for the embed pass that may follow.
 func warmDeployedFunctions(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, appFunctionNames []map[string]string, log func(string)) []warmResult {
 	if cfg.Invoker == nil {
 		return nil

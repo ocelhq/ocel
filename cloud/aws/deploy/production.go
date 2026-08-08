@@ -928,17 +928,27 @@ func runAppStack(ctx context.Context, cfg Config, manifest *deploymentsv1.Manife
 	maps.Copy(env, variableEnv(app))
 	maps.Copy(env, baked.env())
 
-	// Resolved once per function, up front: each hashes its own `.func` tree
-	// (resolveBytecodeFunctionConfig), which both the budget check and
-	// registerFunction below need, and doing it twice would hash every function
-	// in the app twice for no reason.
+	// Resolved once per function, up front: uploadFunctionArtifacts already
+	// hashed every function's `.func` tree (artifacts[...].BareHash), so this
+	// only composes a key from that hash rather than reading the tree again.
+	// Bytecode caching is best-effort like the warm and embed passes that
+	// follow it — a function whose artifact somehow carries no hash gets no
+	// bytecode config rather than failing the whole app-deploy stack over it.
+	// logOrDiscard, not log itself, guards this: log may be nil (Run's own
+	// doc comment), and reassigning the log parameter would also change what
+	// upStack below passes to the Pulumi engine's own output forwarding.
+	logOrDiscard := log
+	if logOrDiscard == nil {
+		logOrDiscard = func(string) {}
+	}
 	bytecodeConfigs := make(map[string]*bytecodeFunctionConfig, len(functions))
 	for _, fn := range functions {
-		bc, err := resolveBytecodeFunctionConfig(cfg, manifest.GetSlug(), name, fn)
-		if err != nil {
-			return nil, nil, err
+		ref, ok := artifacts[fn.GetLogicalName()]
+		if !ok || ref.BareHash == "" {
+			logOrDiscard(fmt.Sprintf("ocel: %s has no content hash to key a bytecode cache on; bytecode caching skipped for it", fn.GetLogicalName()))
+			continue
 		}
-		bytecodeConfigs[fn.GetLogicalName()] = bc
+		bytecodeConfigs[fn.GetLogicalName()] = resolveBytecodeFunctionConfig(cfg, manifest.GetSlug(), name, fn, ref.BareHash)
 	}
 
 	// Accounted before the stack runs: an over-budget environment is a deploy

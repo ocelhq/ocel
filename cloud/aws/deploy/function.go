@@ -359,11 +359,23 @@ type executionRole struct {
 	BytecodeNamespace string
 }
 
-// appExecutionRole is the role one app needs: its own ISR cache and no
-// other's, its own bytecode-cache namespace and no other's, plus the
-// substrate's variable key off the deploy's config rather than derived per
-// app. The variable table is added only when the app's own bundle pins live
-// addresses, so a declaration is what earns the grant.
+// appExecutionRole is the role one app needs: its own ISR cache, its own
+// bytecode-cache namespace, plus the substrate's variable key off the
+// deploy's config rather than derived per app. The variable table is added
+// only when the app's own bundle pins live addresses, so a declaration is
+// what earns the grant.
+//
+// "Its own" namespace means the one bytecodeAppNamespace derives from this
+// app's own name, not a namespace unreachable by any other app in the
+// project: sanitizeWorkerName collapses distinct raw names to the same
+// token (e.g. "my.app" and "my-app" both become "my-app"; "web_1" and
+// "web-1" both become "web-1"; any two names agreeing past the 63-character
+// clamp), and normalizeApps (cli/internal/projectconfig/projectconfig.go)
+// rejects only duplicate raw names, not dots/underscores/case that collapse
+// to one. Two such apps in one project share a bytecode namespace, and each
+// one's grant covers the other's objects — intra-tenant only (same project,
+// same environment), and the pre-existing behaviour of appAssetPrefixFor,
+// which this shape deliberately matches.
 func appExecutionRole(cfg Config, slug, app string, caches map[string]*isrConfig, bundle appBundle, functions []*deploymentsv1.ManifestFunction) executionRole {
 	role := executionRole{App: app, Cache: caches[app], VarsKeyARN: cfg.VarsKeyARN}
 	if bundle.hasLive() {

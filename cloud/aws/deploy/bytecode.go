@@ -112,28 +112,25 @@ func (c *bytecodeFunctionConfig) env() map[string]string {
 // default already resolves nodejs24.x for an empty one, so an ordinary
 // function is admitted without declaring anything).
 //
-// The prefix is a content hash of the function's own `.func` tree, taken
-// WITHOUT the baked-values overlay (hashArtifact's overlay parameter, here
-// nil) — see vars.go's renderAppBundle: the overlay is a sealed data file
-// (baked.FilePath / live.FilePath) the SDK reads off disk at runtime, never a
-// module V8 compiles, and renderAppBundle draws a fresh crypto/rand data key
-// on every render, which would otherwise draw a fresh hash on every single
-// deploy of an app declaring a `sensitive` variable — defeating the one
-// property this cache exists for, that identical code redeploys hit an
-// existing cache.
-func resolveBytecodeFunctionConfig(cfg Config, slug, app string, fn *deploymentsv1.ManifestFunction) (*bytecodeFunctionConfig, error) {
+// hash is the function's own `.func` tree hashed WITHOUT the baked-values
+// overlay — bare, in artifactRef's sense — which the caller already computed
+// once in uploadFunctionArtifacts (hashArtifactPair) and hands in here rather
+// than this function reading the tree a second time. See vars.go's
+// renderAppBundle for why the overlay must stay out of it: the overlay is a
+// sealed data file (baked.FilePath / live.FilePath) the SDK reads off disk at
+// runtime, never a module V8 compiles, and renderAppBundle draws a fresh
+// crypto/rand data key on every render, which would otherwise draw a fresh
+// hash on every single deploy of an app declaring a `sensitive` variable —
+// defeating the one property this cache exists for, that identical code
+// redeploys hit an existing cache.
+func resolveBytecodeFunctionConfig(cfg Config, slug, app string, fn *deploymentsv1.ManifestFunction, hash string) *bytecodeFunctionConfig {
 	if !bytecodeCacheEnabled() || !isNodeRuntime(translateFunction(fn).Runtime) {
-		return nil, nil
-	}
-	dir := artifactArchivePath(cfg.ArtifactRoot, fn.GetArtifactPath())
-	hash, err := hashArtifact(dir, nil)
-	if err != nil {
-		return nil, fmt.Errorf("hash %s for its bytecode cache key: %w", fn.GetLogicalName(), err)
+		return nil
 	}
 	return &bytecodeFunctionConfig{
 		Bucket: cfg.AssetBucket,
 		Prefix: bytecodePrefixFor(cfg.Env, slug, app, hash),
-	}, nil
+	}
 }
 
 // appBytecodeNamespace is the app-scoped bytecode key namespace this app's
