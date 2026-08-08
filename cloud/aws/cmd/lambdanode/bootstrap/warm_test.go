@@ -32,6 +32,13 @@ const warmedReply = `{"type":"compile-cache-warmed","payload":` +
 // existed — or any non-Next one — answers with.
 const unsupportedReply = `{"type":"compile-cache-warmed","payload":{"ok":false,"state":"unsupported","dir":null}}`
 
+// loadedAtInitReply is what the node entrypoint answers with: no entry table
+// to walk, because loadUserApp already imported the whole module graph before
+// this handler could ever run (packages/lambda-entrypoints/src/node/
+// entrypoint.mts's warmNode).
+const loadedAtInitReply = `{"type":"compile-cache-warmed","payload":` +
+	`{"ok":true,"state":"loaded-at-init","bytes":150,"dir":"/tmp/.ocel/compile-cache"}}`
+
 // stoppedReply is a walk the ceiling cut short, naming a bounded sample of what
 // it never reached.
 const stoppedReply = `{"type":"compile-cache-warmed","payload":` +
@@ -278,6 +285,30 @@ func TestWarmBytecodeCache_UnsupportedArtifactStillPublishesWhatInitLoaded(t *te
 	}
 	if got.Entries != 0 || got.Loaded != 0 {
 		t.Errorf("summary = %+v, want no counts it never measured", got)
+	}
+}
+
+// A node app's report names no entries at all — there is no table to walk —
+// and that must publish and report a real, distinct state of its own rather
+// than falling into the same "counts unknown" bucket a report that never
+// arrived gets, or fabricated counts that would look like a one-route walk.
+func TestWarmBytecodeCache_LoadedAtInitReportsItsOwnState(t *testing.T) {
+	store := &fakeBytecodeStore{}
+	m := warmFixture(t, store, cacheDirWith(t, "compiled bytes"), loadedAtInitReply)
+
+	got := m.warmBytecodeCache(warmCtx(t, 10*time.Second))
+
+	if got.State != warmStatePublished {
+		t.Fatalf("state = %q (%+v), want %q", got.State, got, warmStatePublished)
+	}
+	if !got.WholeGraphLoadedAtInit {
+		t.Errorf("summary = %+v, want WholeGraphLoadedAtInit", got)
+	}
+	if got.Uncounted != "" {
+		t.Errorf("uncounted = %q, want empty — this is a real answer, not an unknown one", got.Uncounted)
+	}
+	if got.Entries != 0 || got.Loaded != 0 {
+		t.Errorf("summary = %+v, want no entry counts — there was no table to walk", got)
 	}
 }
 

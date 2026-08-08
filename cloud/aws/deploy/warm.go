@@ -310,19 +310,20 @@ func tailOf(payload []byte, n int) []byte {
 // not apply to a state are omitted from the response, so every one of these
 // reads as its zero value when it was not sent.
 type warmReply struct {
-	State        string            `json:"state"`
-	Entries      int               `json:"entries"`
-	Loaded       int               `json:"loaded"`
-	Failures     []json.RawMessage `json:"failures"`
-	StoppedBy    string            `json:"stoppedBy"`
-	Skipped      []string          `json:"skipped"`
-	SkippedCount int               `json:"skippedCount"`
-	Uncounted    string            `json:"uncounted"`
-	Bytes        int64             `json:"bytes"`
-	Key          string            `json:"key"`
-	Source       warmSource        `json:"source"`
-	Uploaded     bool              `json:"uploaded"`
-	Error        string            `json:"error"`
+	State                  string            `json:"state"`
+	Entries                int               `json:"entries"`
+	Loaded                 int               `json:"loaded"`
+	Failures               []json.RawMessage `json:"failures"`
+	StoppedBy              string            `json:"stoppedBy"`
+	Skipped                []string          `json:"skipped"`
+	SkippedCount           int               `json:"skippedCount"`
+	Uncounted              string            `json:"uncounted"`
+	WholeGraphLoadedAtInit bool              `json:"wholeGraphLoadedAtInit"`
+	Bytes                  int64             `json:"bytes"`
+	Key                    string            `json:"key"`
+	Source                 warmSource        `json:"source"`
+	Uploaded               bool              `json:"uploaded"`
+	Error                  string            `json:"error"`
 }
 
 // already-cached counts as warmed. The deploy cannot pre-check whether a cache
@@ -357,7 +358,17 @@ func (r warmReply) report() (string, bool) {
 // stayed cold: "38/51" tells an operator a cache is partial but not which
 // requests will pay for it, and the deploy output is the only place that ever
 // surfaces.
+//
+// wholeGraphLoadedAtInit is checked first and rendered as its own honest
+// line, never folded into the "N/M entries" shape below: a plain node app
+// has no entry table at all (see warmSummary.count,
+// cloud/aws/cmd/lambdanode/bootstrap/warm.go), and "0/0 entries" would read
+// as an empty or failed walk to an operator, not as the full coverage it
+// actually is.
 func (r warmReply) walk() string {
+	if r.WholeGraphLoadedAtInit {
+		return "whole module graph loaded at INIT (no entry table to walk)"
+	}
 	if r.Uncounted != "" {
 		return fmt.Sprintf("entry counts unknown (%s)", r.Uncounted)
 	}

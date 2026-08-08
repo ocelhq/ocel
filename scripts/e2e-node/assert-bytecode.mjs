@@ -16,12 +16,16 @@
 //   - There is no entry table to walk. loadUserApp
 //     (packages/lambda-entrypoints/src/node/entrypoint.mts) imports the whole
 //     module graph at INIT, before a warm invocation can ever reach the
-//     handler, so warmNode reports entries:1, loaded:1 for that one unit
-//     rather than walking anything — see warmCoverage's own doc comment for
-//     how that maps onto the same "complete" verdict a fully-covered Next
-//     bundle gets. This script additionally asserts the deploy log carries
-//     that honest report rather than the "node did not report back on the
-//     compile-cache warm" line an unpatched entrypoint would have produced
+//     handler, so warmNode reports that honestly — state "loaded-at-init",
+//     no fabricated entry count — rather than pretending it walked one entry.
+//     The Go side surfaces this as its own summary field
+//     (wholeGraphLoadedAtInit) and the harness reads it into its own
+//     falsifiable verdict, "whole-graph": see warmCoverage's own doc comment
+//     for why that is distinct from, but ranks alongside, the "complete"
+//     verdict a fully-covered Next bundle gets. This script additionally
+//     asserts the deploy log carries that honest report rather than the
+//     "node did not report back on the compile-cache warm" line a launcher
+//     that never answered the warm request would have produced
 //     (cloud/aws/cmd/lambdanode/bootstrap/warm.go's warmSummary.count).
 //   - No framework here registers a Cloudflare worker
 //     (cloud/edge/framework/registry.go), so the app is served straight from
@@ -285,7 +289,7 @@ log(
     `nested under a subdirectory`,
 );
 log(
-  coverage.kind === "complete"
+  coverage.kind === "complete" || coverage.kind === "whole-graph"
     ? "bytecode cache published, whole, before the first request"
     : "bytecode cache published before the first request, covering part of the bundle",
 );

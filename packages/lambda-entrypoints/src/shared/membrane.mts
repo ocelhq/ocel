@@ -94,9 +94,20 @@ export interface WarmBounds {
   ceilingBytes: number;
 }
 
+// "loaded-at-init" is the third, honest answer for a launcher with no entry
+// table to walk at all — a plain node app, whose loadUserApp imports the
+// whole module graph before server-ready ever fires (see
+// packages/lambda-entrypoints/src/node/entrypoint.mts's warmNode). It is not
+// a weaker "warmed": there is nothing left to load by the time this handler
+// runs, so entries/loaded/stoppedBy have no walk to describe and are left at
+// their zero values rather than a count this launcher never took. The Go
+// side (warmSummary.count, cloud/aws/cmd/lambdanode/bootstrap/warm.go) reads
+// this state to report a summary field the deploy-log line and the e2e
+// harness both key off, instead of folding it into the counted branch and
+// reporting fabricated numbers.
 export interface WarmReport {
   ok: boolean;
-  state: "warmed" | "unsupported";
+  state: "warmed" | "unsupported" | "loaded-at-init";
   entries: number;
   loaded: number;
   failures: { entry: string; message: string }[];

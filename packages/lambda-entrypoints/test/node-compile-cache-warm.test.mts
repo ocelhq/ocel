@@ -90,7 +90,7 @@ test("replies unsupported when the process has no compile cache enabled", async 
   });
 });
 
-test("reports the already-loaded app as warmed, sized off the flushed cache on disk", async () => {
+test("reports the already-loaded app honestly, sized off the flushed cache on disk, with no fabricated entry count", async () => {
   const cacheDir = join(dir, "compile-cache");
   await mkdir(cacheDir, { recursive: true });
   await writeFile(join(cacheDir, "one.blob"), Buffer.alloc(100));
@@ -112,9 +112,9 @@ test("reports the already-loaded app as warmed, sized off the flushed cache on d
 
   expect(await warmReply()).toEqual({
     ok: true,
-    state: "warmed",
-    entries: 1,
-    loaded: 1,
+    state: "loaded-at-init",
+    entries: 0,
+    loaded: 0,
     failures: [],
     stoppedBy: "complete",
     skipped: [],

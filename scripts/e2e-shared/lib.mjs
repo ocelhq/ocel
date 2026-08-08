@@ -496,11 +496,20 @@ export function warmSummaryOutcome(message) {
  * a broken cache and not a proof of a complete one. A publish the membrane
  * could not account for (`uncounted`: node never reported back, or the artifact
  * has no warm capability) is "partial" for the same reason: the object landed,
- * and nothing measured what went into it. A node app that HAS no entry table —
- * loadUserApp loads the whole module graph at INIT, before a warm invocation
- * can ever reach it — reports entries:1, loaded:1 for that one unit rather than
- * leaving this uncounted; see packages/lambda-entrypoints/src/node/entrypoint.mts's
- * warmNode.
+ * and nothing measured what went into it.
+ *
+ * A node app has no entry table at all — loadUserApp loads the whole module
+ * graph at INIT, before a warm invocation can ever reach it — and reports
+ * that honestly via `wholeGraphLoadedAtInit` rather than an entries/loaded
+ * count it never took (see warmNode in
+ * packages/lambda-entrypoints/src/node/entrypoint.mts and warmSummary.count
+ * in cloud/aws/cmd/lambdanode/bootstrap/warm.go). That is its own verdict,
+ * "whole-graph": a real, positive, falsifiable claim — the object published
+ * and the flag is set — distinct from both "complete" (a Next bundle whose
+ * walk covered every entry) and "partial" (something was uncounted or cut
+ * short). Checked before the entries===0 case below, which is what an
+ * accountless publish or a walk that measured nothing in common look like,
+ * and would otherwise be indistinguishable from this on the wire.
  *
  * already-cached is "unproven", never a pass: the object exists, but this pass
  * neither wrote it nor measured what is in it.
@@ -513,11 +522,14 @@ export function warmCoverage(summary, key) {
   const stoppedBy = summary?.stoppedBy ?? "";
   const uncounted = summary?.uncounted ?? "";
   const skipped = summary?.skipped ?? [];
-  const walk = uncounted
-    ? `entry counts unknown (${uncounted}), ${summary?.bytes ?? 0} bytes`
-    : `${loaded}/${entries} entries loaded, ${failures.length} failed, ` +
-      `${summary?.skippedCount ?? 0} skipped${skipped.length ? ` (${skipped.join(", ")})` : ""}, ` +
-      `stopped by ${stoppedBy || "(unreported)"}, ${summary?.bytes ?? 0} bytes`;
+  const wholeGraphLoadedAtInit = summary?.wholeGraphLoadedAtInit === true;
+  const walk = wholeGraphLoadedAtInit
+    ? `no entry table to walk — the whole module graph was already loaded at INIT, ${summary?.bytes ?? 0} bytes`
+    : uncounted
+      ? `entry counts unknown (${uncounted}), ${summary?.bytes ?? 0} bytes`
+      : `${loaded}/${entries} entries loaded, ${failures.length} failed, ` +
+        `${summary?.skippedCount ?? 0} skipped${skipped.length ? ` (${skipped.join(", ")})` : ""}, ` +
+        `stopped by ${stoppedBy || "(unreported)"}, ${summary?.bytes ?? 0} bytes`;
 
   // A summary naming another key is another build's, and says nothing either
   // way about this one — the key carries the build id, so the two can never be
@@ -530,6 +542,9 @@ export function warmCoverage(summary, key) {
     case "published":
       if (summary?.uploaded !== true) {
         return { kind: "failed", detail: `published without uploaded:true (${walk}) — the two cannot both be true` };
+      }
+      if (wholeGraphLoadedAtInit) {
+        return { kind: "whole-graph", detail: walk };
       }
       if (uncounted) {
         return { kind: "partial", detail: walk };
@@ -563,8 +578,13 @@ export function warmCoverage(summary, key) {
  * second pass legitimately answers already-cached — so a caller takes the
  * strongest rather than the first or the last: the object is one object, and
  * the pass that actually wrote it is the one that says what is in it.
+ *
+ * "whole-graph" ranks beside "complete", not below it: both are full,
+ * positive proof that the published object covers everything there was to
+ * cover, for their own class of launcher (a node app has no entry table for
+ * "complete" to even mean anything for).
  */
-const WARM_COVERAGE_RANK = ["failed", "unproven", "partial", "complete"];
+const WARM_COVERAGE_RANK = ["failed", "unproven", "partial", "whole-graph", "complete"];
 
 export function strongestCoverage(verdicts) {
   return (verdicts ?? []).reduce((best, verdict) => {

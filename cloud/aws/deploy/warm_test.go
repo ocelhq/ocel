@@ -206,6 +206,26 @@ func TestWarmPass_ReportsUncountedCoverageAsUnknown(t *testing.T) {
 	}
 }
 
+// A node app's warm reply names no entries at all — there is no table to
+// walk — and the deploy log must say so honestly rather than rendering
+// "0/0 entries" (which reads as an empty or failed walk) or fabricated counts
+// that would read as a one-route Next-style warm.
+func TestWarmPass_ReportsWholeGraphLoadedAtInit(t *testing.T) {
+	out := runWarm(t, answering(`{"state":"published","uploaded":true,"bytes":153600,`+
+		`"wholeGraphLoadedAtInit":true}`),
+		warmTestTargets(1), time.Minute)
+
+	if !strings.Contains(out, "whole module graph loaded at INIT (no entry table to walk)") {
+		t.Errorf("warm log = %s, want the honest whole-graph line", out)
+	}
+	if !strings.Contains(out, "warmed 1/1 bundles") {
+		t.Errorf("warm log = %s, want a published cache counted as warmed", out)
+	}
+	if strings.Contains(out, "0/0 entries") {
+		t.Errorf("warm log = %s, want no fabricated entry counts", out)
+	}
+}
+
 // published and uploaded:false cannot both be true, and believing the state
 // over the field would report a cache nothing wrote as this deploy's.
 func TestWarmPass_PublishedWithoutUploadingIsNotWarmed(t *testing.T) {

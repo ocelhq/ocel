@@ -161,11 +161,19 @@ function measureCompileCacheDir(dir: string): number | null {
 // it will get (boot() would have died on a broken import, and this handler
 // would never have been installed to reply at all). There is nothing left to
 // warm, so this reports what that already-finished load put in the compile
-// cache rather than fabricating an entry-table walk that never happened:
-// entries/loaded describe the one unit there was — the app itself — which is
-// only reportable as loaded because reaching this handler proves it did.
-// Everything about *how* it got there (failures, stoppedBy, skipped) has no
-// node-side analogue and is left at the same values UNSUPPORTED_WARM uses.
+// cache — the measured bytes and dir — rather than fabricating an
+// entry-table walk that never happened: entries/loaded/failures/stoppedBy
+// describe a walk this launcher never took, and claiming entries:1, loaded:1
+// for "the app itself" as a stand-in unit is exactly that fabrication, just
+// dressed as a plausible-looking number instead of an obviously fake one. A
+// caller reading the counts alone could not tell that report apart from a
+// Next bundle that really did walk one route and stop.
+//
+// state: "loaded-at-init" is what tells the difference honestly. It says
+// positively that the whole graph is already loaded — no entry table exists
+// to walk, not merely that this one wasn't — which is a stronger and
+// different claim than "unsupported" (no compile-cache API at all, e.g. an
+// old node) or "warmed" (a walk ran and these are its real counts).
 function warmNode(): WarmReport {
   const { getCompileCacheDir, flushCompileCache } = Module;
   if (typeof getCompileCacheDir !== "function" || typeof flushCompileCache !== "function") {
@@ -182,9 +190,9 @@ function warmNode(): WarmReport {
   if (bytes === null) return UNSUPPORTED_WARM;
   return {
     ok: true,
-    state: "warmed",
-    entries: 1,
-    loaded: 1,
+    state: "loaded-at-init",
+    entries: 0,
+    loaded: 0,
     failures: [],
     stoppedBy: "complete",
     skipped: [],

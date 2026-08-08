@@ -677,6 +677,29 @@ describe("warmCoverage", () => {
   it("sets a summary naming another build's key aside", () => {
     expect(warmCoverage({ ...published, key: "other/build/node24.3.1-x86_64.tar.gz" }, key).kind).toBe("other-build");
   });
+
+  // A node app has no entry table at all — see warmNode
+  // (packages/lambda-entrypoints/src/node/entrypoint.mts) — and reports that
+  // honestly via wholeGraphLoadedAtInit rather than claiming a walk it never
+  // took. This must land as its own falsifiable verdict, not fall into the
+  // same bucket a bundle reporting zero entries because it published nothing
+  // measurable would.
+  it("reports a node app's whole-graph publish as its own, distinct, complete verdict", () => {
+    const verdict = warmCoverage(
+      { state: "published", uploaded: true, bytes: 4096, key, wholeGraphLoadedAtInit: true },
+      key,
+    );
+    expect(verdict.kind).toBe("whole-graph");
+    expect(verdict.detail).toContain("no entry table to walk");
+  });
+
+  it("never claims entry counts for a whole-graph publish, even if some sneak onto the wire", () => {
+    const verdict = warmCoverage(
+      { ...published, wholeGraphLoadedAtInit: true, entries: 0, loaded: 0 },
+      key,
+    );
+    expect(verdict.kind).toBe("whole-graph");
+  });
 });
 
 describe("strongestCoverage", () => {
@@ -690,6 +713,13 @@ describe("strongestCoverage", () => {
     const partial = { kind: "partial", detail: "" };
     expect(strongestCoverage([{ kind: "failed", detail: "" }, partial])).toBe(partial);
     expect(strongestCoverage([])).toBeNull();
+  });
+
+  it("ranks a node app's whole-graph verdict above partial and alongside complete", () => {
+    const wholeGraph = { kind: "whole-graph", detail: "" };
+    expect(strongestCoverage([{ kind: "partial", detail: "" }, wholeGraph])).toBe(wholeGraph);
+    const complete = { kind: "complete", detail: "" };
+    expect(strongestCoverage([wholeGraph, complete])).toBe(complete);
   });
 });
 
