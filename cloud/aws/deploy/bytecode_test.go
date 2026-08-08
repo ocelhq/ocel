@@ -1,10 +1,13 @@
 package deploy
 
 import (
+	"bytes"
 	"encoding/json"
 	"testing"
 
+	"github.com/ocelhq/ocel/cloud/aws/vars/baked"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 // Bytecode caching costs a standing IAM grant and two extra deploy passes, so
@@ -108,49 +111,71 @@ func TestResolveBytecodeFunctionConfig_GateAndRuntime(t *testing.T) {
 // whole namespace exists for: renderAppBundle draws a fresh crypto/rand data
 // key on every render, so an overlay-inclusive hash would move on every single
 // deploy of an app declaring a `sensitive` variable — defeating the point of a
-// cache meant to survive across builds. hashArtifact(dir, nil) — no overlay —
-// is what resolveBytecodeFunctionConfig actually calls; this proves the
-// resulting key is stable under exactly the thing that changes on every
-// render, and still moves when the code itself does.
+// cache meant to survive across builds.
+//
+// It exercises the real path rather than restating hashArtifact's own
+// behaviour: two real renders of the same app's bundle (renderAppBundle,
+// genuinely different ciphertext each time — the same property
+// TestRenderBakedBundle_EveryRenderGetsAFreshDataKey proves) feed nothing
+// into two real resolutions of the same function's bytecode config
+// (resolveBytecodeFunctionConfig), and the claim is that those two
+// resolutions land on the same prefix regardless. A version of this test that
+// called hashArtifact directly, the way an earlier one here did, stays green
+// even if resolveBytecodeFunctionConfig starts threading the overlay through
+// — it would just be proving hashArtifact's own behaviour a second time.
+// Confirmed by hand while writing this test: temporarily changing
+// resolveBytecodeFunctionConfig's hashArtifact(dir, nil) call to
+// hashArtifact(dir, bundle.overlay()) (fetching bundle from a
+// map[string]appBundle passed in alongside app) turns this red.
 func TestBytecodePrefix_StableAcrossTheOverlayMovesWithCode(t *testing.T) {
+	t.Setenv(bytecodeCacheEnv, "1")
 	dir := writeTree(t, map[string]string{"src/server.js": "handler"})
 
-	overlayA := map[string][]byte{".ocel/variables.enc": []byte("ciphertext-one")}
-	overlayB := map[string][]byte{".ocel/variables.enc": []byte("ciphertext-two-and-longer")}
-
-	bare, err := hashArtifact(dir, nil)
-	if err != nil {
-		t.Fatalf("hashArtifact: %v", err)
-	}
-	withA, err := hashArtifact(dir, overlayA)
-	if err != nil {
-		t.Fatalf("hashArtifact: %v", err)
-	}
-	withB, err := hashArtifact(dir, overlayB)
-	if err != nil {
-		t.Fatalf("hashArtifact: %v", err)
-	}
-	// The overlay changes hashArtifact's own output — that is what
-	// TestHashArtifact_SensitiveToTheOverlay proves — but the bytecode config
-	// never passes it an overlay at all, so its key is exactly the bare hash
-	// regardless of what a fresh render's overlay happens to be.
-	if withA == withB {
-		t.Fatal("test setup: two different overlays must hash differently through hashArtifact")
-	}
-	prefixBare := bytecodePrefixFor("prod", "proj", "api", bare)
-	if prefixBare != bytecodePrefixFor("prod", "proj", "api", bare) {
-		t.Error("bytecodePrefixFor is not deterministic for the same hash")
+	cfg := liveConfig()
+	cfg.ArtifactRoot = dir
+	cfg.AssetBucket = "assets"
+	cfg.Env = "prod"
+	fn := &deploymentsv1.ManifestFunction{LogicalName: "api", ArtifactPath: ".", App: "api"}
+	app := &deploymentsv1.ManifestApp{
+		Name:      "api",
+		Variables: []*deploymentsv1.ManifestVariable{variable("STRIPE_API_KEY", "sk-live", resourcesv1.VariableClass_VARIABLE_CLASS_SENSITIVE)},
 	}
 
-	changedCode := writeTree(t, map[string]string{"src/server.js": "handler v2"})
-	movedHash, err := hashArtifact(changedCode, nil)
+	bundleA, err := renderAppBundle(cfg, "proj", app)
 	if err != nil {
-		t.Fatalf("hashArtifact: %v", err)
+		t.Fatalf("renderAppBundle: %v", err)
 	}
-	if movedHash == bare {
-		t.Fatal("test setup: changed source must hash differently")
+	bundleB, err := renderAppBundle(cfg, "proj", app)
+	if err != nil {
+		t.Fatalf("renderAppBundle: %v", err)
 	}
-	if bytecodePrefixFor("prod", "proj", "api", movedHash) == prefixBare {
+	if bytes.Equal(bundleA.overlay()[baked.FilePath], bundleB.overlay()[baked.FilePath]) {
+		t.Fatal("test setup: two renders of the same sensitive variable must produce different ciphertext (fresh data key each time)")
+	}
+
+	configA, err := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn)
+	if err != nil {
+		t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
+	}
+	if configA == nil {
+		t.Fatal("resolveBytecodeFunctionConfig = nil, want a config for a nodejs function with the gate on")
+	}
+	configB, err := resolveBytecodeFunctionConfig(cfg, "proj", "api", fn)
+	if err != nil {
+		t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
+	}
+	if configA.Prefix != configB.Prefix {
+		t.Errorf("Prefix = %q then %q, want the same prefix for the same source tree across two renders whose "+
+			"overlays are genuinely different from each other", configA.Prefix, configB.Prefix)
+	}
+
+	changedCfg := cfg
+	changedCfg.ArtifactRoot = writeTree(t, map[string]string{"src/server.js": "handler v2"})
+	configChanged, err := resolveBytecodeFunctionConfig(changedCfg, "proj", "api", fn)
+	if err != nil {
+		t.Fatalf("resolveBytecodeFunctionConfig: %v", err)
+	}
+	if configChanged.Prefix == configA.Prefix {
 		t.Error("bytecodePrefixFor did not move when the function's code changed")
 	}
 }
