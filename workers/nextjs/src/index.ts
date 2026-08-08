@@ -610,20 +610,19 @@ async function dispatch(
   if (result.middlewareResponded) {
     return middlewareResponse(result.middleware, result.status);
   }
-  const middlewareRedirect = result.middleware?.result.redirect;
-  if (middlewareRedirect) {
-    // resolveRoutes drops a middleware redirect — it returns resolvedHeaders and
-    // a status, and no resolvedPathname, so the request would otherwise fall
-    // through to a 404. Response.redirect cannot carry the Set-Cookie an auth
-    // middleware pairs with it, so the response is built explicitly; its
-    // location comes from resolvedHeaders like every other header.
-    return new Response(null, { status: middlewareRedirect.status });
-  }
   if (result.redirect) {
     return Response.redirect(
       result.redirect.url.toString(),
       result.redirect.status,
     );
+  }
+  if (isRoutingRedirect(result)) {
+    // Built explicitly rather than with Response.redirect, which cannot carry
+    // the Set-Cookie an auth middleware pairs with its redirect. Checked before
+    // resolvedPathname: routing may have gone on to resolve a real page (a
+    // trailingSlash app self-redirecting /about still resolves /about), and the
+    // redirect must win over serving it.
+    return new Response(null, { status: result.status });
   }
   if (result.externalRewrite) {
     return doFetch(new Request(result.externalRewrite, request));
@@ -1145,6 +1144,24 @@ async function edgeResponse(
     console.error(`ocel: edge entry ${entryKey} failed`, error);
     return new Response("Edge invocation failed", { status: 500 });
   }
+}
+
+// Every redirect resolveRoutes does not hand back as a `redirect`: next.config
+// `redirects()`, the adapter's trailing-slash normalization, and the
+// middleware's own redirect. All arrive as a bare status with the target
+// already on resolvedHeaders, and no resolvedPathname, so without this they
+// fall through to the asset store and 404. The status is what marks them —
+// next.config `headers()` can set a location on an ordinary page.
+function isRoutingRedirect(
+  result: RouteResult,
+): result is RouteResult & { status: number } {
+  return (
+    result.status !== undefined &&
+    result.status >= 300 &&
+    result.status < 400 &&
+    (result.resolvedHeaders?.has("location") === true ||
+      result.resolvedHeaders?.has("refresh") === true)
+  );
 }
 
 // A response with one of these statuses carries no body at all, and constructing

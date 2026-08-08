@@ -192,6 +192,9 @@ cli/platform/dist/
 # scripts/orchestrator.mjs run logs (local bookkeeping, not issue state — issues live in bd)
 .scratch/
 
+# superpowers agent-skill working state (per-machine, not project state)
+.superpowers/
+
 # air (.air.toml) internal log/pid files
 /tmp/
 

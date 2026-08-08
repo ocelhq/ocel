@@ -1,7 +1,8 @@
+import type { Route } from "@next/routing";
 import { tagSnapshotKey } from "@ocel/next-cache";
 import { describe, expect, it } from "vitest";
 
-import { dispatchResult, type RouteDeps } from "../src/index";
+import { dispatchResult, serve, type RouteDeps } from "../src/index";
 import { refreshBackoffSeconds, sentinelUrl } from "../src/cache";
 import { coloDeps } from "./cache-deps";
 import type { AssetBucket } from "../src/assets";
@@ -1560,6 +1561,85 @@ describe("dispatchResult", () => {
     expect(res.headers.get("location")).toBe("https://app.example/new");
   });
 
+  it("answers a routing redirect that names no destination", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Location: "/redirect-dest" }),
+      },
+      new Request("https://app.example/redirect/a"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/redirect-dest");
+  });
+
+  it("lets a redirect status win over the page routing went on to resolve", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/about": { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ "/about": "<h1>about</h1>" }),
+    });
+
+    const res = await dispatchResult(
+      {
+        status: 308,
+        resolvedHeaders: new Headers({ Location: "/about/" }),
+        resolvedPathname: "/about",
+      },
+      new Request("https://app.example/about"),
+      deps,
+    );
+
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/about/");
+  });
+
+  it("answers a routing redirect expressed as a Refresh header", async () => {
+    const res = await dispatchResult(
+      {
+        status: 307,
+        resolvedHeaders: new Headers({ Refresh: "0;url=/redirect-dest" }),
+      },
+      new Request("https://app.example/redirect/a"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("refresh")).toBe("0;url=/redirect-dest");
+  });
+
+  it("serves the page when a headers() rule sets a location without a redirect status", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/about": { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ "/about": "<h1>about</h1>" }),
+    });
+
+    const res = await dispatchResult(
+      {
+        resolvedHeaders: new Headers({ Location: "/elsewhere" }),
+        resolvedPathname: "/about",
+      },
+      new Request("https://app.example/about"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<h1>about</h1>");
+  });
+
   it("tags a matched route with x-matched-path using the resolved template", async () => {
     const deps = baseDeps({
       manifest: {
@@ -1594,6 +1674,90 @@ describe("dispatchResult", () => {
     );
 
     expect(res.headers.has("x-matched-path")).toBe(false);
+  });
+});
+
+// Next expresses both next.config `redirects()` and the adapter's own
+// trailing-slash normalization as a beforeMiddleware rule carrying a Location
+// header and a status and no destination — resolveRoutes reports those as a
+// bare status, so the worker used to serve them as a 404 wearing the right
+// Location.
+describe("routing redirects that name no destination", () => {
+  function redirectDeps(beforeMiddleware: Route[], files: Record<string, string> = {}) {
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: Object.keys(files),
+        routes: {
+          beforeMiddleware,
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: Object.fromEntries(
+          Object.keys(files).map((path) => [path, { kind: "static" as const }]),
+        ),
+      },
+      assetStore: assetStoreServing(files),
+    });
+  }
+
+  it("redirects a next.config rule with 307 rather than 404", async () => {
+    const res = await serve(
+      new Request("https://app.example/redirect/a", { redirect: "manual" }),
+      redirectDeps([
+        {
+          sourceRegex: "^/redirect/a(?:/)?$",
+          headers: { Location: "/redirect-dest" },
+          status: 307,
+        },
+      ]),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/redirect-dest");
+  });
+
+  it("normalizes a trailing slash with 308 when trailingSlash is false", async () => {
+    const res = await serve(
+      new Request("https://app.example/docs/", { redirect: "manual" }),
+      redirectDeps([
+        {
+          sourceRegex: "^/(.+?)/$",
+          headers: { Location: "/$1" },
+          // Next attaches this to the file rule so a next/link data request is
+          // not bounced through a redirect.
+          missing: [{ type: "header", key: "x-nextjs-data" }],
+          status: 308,
+        },
+      ]),
+    );
+
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/docs");
+  });
+
+  it("adds a trailing slash with 308 when trailingSlash is true, over a page that resolves", async () => {
+    const res = await serve(
+      new Request("https://app.example/about", { redirect: "manual" }),
+      redirectDeps(
+        [
+          {
+            sourceRegex: "^/((?!\\.well-known(?:/.*)?)(?:[^/\\.]+/)*[^/\\.]+)$",
+            headers: { Location: "/$1/" },
+            missing: [{ type: "header", key: "x-nextjs-data" }],
+            status: 308,
+          },
+        ],
+        { "/about": "<h1>about</h1>" },
+      ),
+    );
+
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/about/");
   });
 });
 
