@@ -9,8 +9,10 @@
 // routes, so suites running concurrently contend over nothing at all.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, closeSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, openSync, readFileSync, closeSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+
+import { linkSidecar } from "@ocel-scripts/e2e-shared/sidecar.mjs";
 
 import {
   APP_NAME,
@@ -74,7 +76,7 @@ function deploy() {
 
   writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug, previewDomain }));
   ensureDeps();
-  linkSidecar(sidecarDir);
+  linkSidecar(appDir, sidecarDir);
   ensureBuildScript();
 
   // Build and deploy are separate CLI runs so a build failure is reported as
@@ -103,43 +105,6 @@ function ensureDeps() {
   }
   console.error("[ocel-e2e] no node_modules/.bin/next; installing dependencies");
   run("pnpm install", "pnpm", ["install", "--prefer-offline"]);
-}
-
-// linkSidecar points the temp app at the prebuilt Ocel packages. Only `ocel`
-// and the @ocel scope are linked: the harness owns the rest of node_modules
-// (notably its isolated `next`), and replacing the directory would break the
-// app it built.
-//
-// `ocel` (the bundled ocel.config.ts imports ocel/config) and
-// `@ocel/provider-aws-<platform>` (providerlocator require.resolve's it from the
-// project dir) are the two that must resolve from here.
-function linkSidecar(sidecarDir) {
-  const modules = join(appDir, "node_modules");
-  mkdirSync(modules, { recursive: true });
-  for (const name of ["ocel", "@ocel"]) {
-    const target = join(sidecarDir, "node_modules", name);
-    if (!existsSync(target)) {
-      throw new Error(
-        `sidecar has no ${name} package at ${target}. A sidecar packed before ` +
-          `@ocel/sdk folded into the root ocel package carries only @ocel/*; ` +
-          `repack it from the ocel and @ocel/provider-aws* tarballs — see ` +
-          `"Repacking the sidecar" in scripts/e2e-next/README.md.`,
-      );
-    }
-    const link = join(modules, name);
-    if (existsSync(link) || isSymlink(link)) {
-      rmSync(link, { recursive: true, force: true });
-    }
-    symlinkSync(target, link, "dir");
-  }
-}
-
-function isSymlink(path) {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
-  }
 }
 
 // ensureBuildScript is the backstop for a fixture whose package.json the

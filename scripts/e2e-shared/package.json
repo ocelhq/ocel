@@ -1,0 +1,12 @@
+{
+  "name": "@ocel-scripts/e2e-shared",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AWS plumbing and pure logic shared by every deployment-e2e harness (scripts/e2e-next, scripts/e2e-node)",
+  "exports": {
+    "./lib.mjs": "./lib.mjs",
+    "./aws.mjs": "./aws.mjs",
+    "./sidecar.mjs": "./sidecar.mjs"
+  }
+}

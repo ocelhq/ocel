@@ -21,12 +21,19 @@ against a deployment URL by hand (see "Golden gate" below).
 in its place when the deploy embedded that cache in the artifact
 (`OCEL_BYTECODE_EMBED=1`). Both read slug, environment, app, build id and deploy
 time from `.ocel/deploy-result.json` in the deployed app's directory, so run
-them from there. `lib.mjs` holds the shared pure logic (unit tested: `pnpm
---filter @ocel-scripts/e2e-next test`); `aws.mjs` holds the `aws` CLI calls the
-two assertion scripts share, which is everything that could not be unit tested
-and so is kept out of `lib.mjs` rather than left uncovered inside it.
+them from there. `lib.mjs` holds this harness's own pure logic (unit tested:
+`pnpm --filter @ocel-scripts/e2e-next test`) plus everything framework-agnostic
+re-exported from `@ocel-scripts/e2e-shared/lib.mjs` — project/slug derivation,
+the ocel.config.ts renderer, the bytecode-cache key shape and its CloudWatch
+line matching, the tar/zip readers — which `scripts/e2e-node` reads from the
+same module rather than a forked copy. `aws.mjs` re-exports
+`@ocel-scripts/e2e-shared/aws.mjs` the same way: the `aws` CLI calls the two
+assertion scripts share, which is everything that could not be unit tested and
+so is kept out of `lib.mjs` rather than left uncovered inside it.
 `merge-baseline.mjs` records the known-failure baseline. `stage-smoke-app.mjs`
-stages the smoke job's app. `guard-accounts.sh` refuses to deploy anywhere but
+stages the smoke job's app. `guard-accounts.sh` execs
+`scripts/e2e-shared/guard-accounts.sh`, the same account guard
+`scripts/e2e-node` runs, so a deploy from either harness refuses anywhere but
 the disposable account. The workflow that drives all of it is
 `.github/workflows/test-e2e-deploy.yml` — **manual dispatch only**.
 
