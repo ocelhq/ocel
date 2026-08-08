@@ -41,7 +41,14 @@ const appDir = process.cwd();
 // the custom-script one. Without it `next build` skips the shim that sets
 // `__NEXT_TEST_MODE`, so `window.__NEXT_HYDRATED` never fires and every page load
 // in the suite waits out next-webdriver's 10-second fallback.
-const CHILD_ENV = { ...process.env, NEXT_PRIVATE_TEST_MODE: "e2e" };
+//
+// OCEL_BYTECODE_CACHE=1 is set explicitly rather than relied on from whatever
+// invoked this script: the deploy-side gate (cloud/aws/deploy/bytecode.go) is
+// off by default, and assert-bytecode.mjs / assert-embed.mjs exist
+// specifically to prove the two legs it turns on — without this, every deploy
+// this harness drives would carry no compile cache at all and those
+// assertions would have nothing to find.
+const CHILD_ENV = { ...process.env, NEXT_PRIVATE_TEST_MODE: "e2e", OCEL_BYTECODE_CACHE: "1" };
 
 try {
   process.stdout.write(deploy() + "\n");
