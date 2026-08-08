@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  cacheControlFor,
   contentTypeFor,
   serveStaticAsset,
   type AssetBucket,
@@ -90,8 +91,40 @@ describe("contentTypeFor", () => {
   });
 });
 
+describe("cacheControlFor", () => {
+  const immutable = "public, max-age=31536000, immutable";
+  const revalidate = "public, max-age=0, must-revalidate";
+
+  it("makes the content-hashed _next/static chunks immutable", () => {
+    expect(cacheControlFor("/_next/static/chunks/main-abc123.js")).toBe(immutable);
+    expect(cacheControlFor("/_next/static/css/app.css")).toBe(immutable);
+    expect(cacheControlFor("/_next/static/media/font.woff2")).toBe(immutable);
+  });
+
+  // Next publishes the service worker at a build-invariant URL, so an
+  // immutable response would pin a visitor to one deploy's worker for a year
+  // with no later deploy able to replace it.
+  it("exempts the service-worker chunk", () => {
+    expect(cacheControlFor("/_next/static/service-worker/sw.js")).toBe(revalidate);
+  });
+
+  // basePath prefixes every asset URL, the service worker's included.
+  it("classifies a basePath app's assets the same way", () => {
+    expect(cacheControlFor("/docs/_next/static/chunks/main.js")).toBe(immutable);
+    expect(cacheControlFor("/docs/_next/static/service-worker/sw.js")).toBe(revalidate);
+  });
+
+  it("revalidates every asset served at a stable URL", () => {
+    expect(cacheControlFor("/favicon.ico")).toBe(revalidate);
+    expect(cacheControlFor("/sitemap.xml")).toBe(revalidate);
+    expect(cacheControlFor("/icons/static/apple-icon.png")).toBe(revalidate);
+    expect(cacheControlFor("/next.svg")).toBe(revalidate);
+    expect(cacheControlFor("/some.html")).toBe(revalidate);
+  });
+});
+
 describe("serveStaticAsset", () => {
-  it("reads the object at <prefix><pathname> and serves it with immutable headers", async () => {
+  it("reads the object at <prefix><pathname> and serves it", async () => {
     const url = new URL("https://serve-1.example/next.svg");
     const deps = countingDeps(
       bucketServing({ "assets/p/app/b1/next.svg": { body: "<svg/>", etag: "abc" } }),
@@ -103,8 +136,21 @@ describe("serveStaticAsset", () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("<svg/>");
     expect(res.headers.get("content-type")).toBe("image/svg+xml");
-    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
     expect(res.headers.get("etag")).toBe("abc");
+  });
+
+  it("serves a content-hashed chunk with immutable headers", async () => {
+    const url = new URL("https://serve-1b.example/_next/static/chunks/main.js");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/_next/static/chunks/main.js": { body: "1" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
   });
 
   // Objects uploaded by a deploy that still stamped one carry a type the host
@@ -284,13 +330,15 @@ describe("serveStaticAsset", () => {
     expect(keys).toEqual(["assets/p/app/b1/some.html"]);
   });
 
+  // Only an immutable asset earns a colo hit; a must-revalidate one is stale
+  // the moment it is written, so the cache declines to answer for it.
   it("serves a colo cache hit without reading the store again", async () => {
-    const url = new URL("https://serve-4.example/next.svg");
+    const url = new URL("https://serve-4.example/_next/static/chunks/main.js");
     let reads = 0;
     const store: AssetBucket = {
       async get(key) {
         reads++;
-        return key === "assets/p/app/b1/next.svg"
+        return key === "assets/p/app/b1/_next/static/chunks/main.js"
           ? { body: new Blob(["<svg/>"]).stream() }
           : null;
       },
