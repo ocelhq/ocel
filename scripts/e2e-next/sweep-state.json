@@ -89,29 +89,25 @@
    }
   },
   "test/e2e/app-dir/navigation/navigation.test.ts": {
-   "lastRun": "sweep-2026-07-27a",
+   "lastRun": "wnav1",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 45,
-    "failed": 7,
+    "passed": 47,
+    "failed": 5,
     "known": 0,
     "skipped": 0
    },
    "projectSlug": "e2e-sweep-2026-07-27a-7887b178",
    "openIssues": [
     "ocelhq-e7w",
-    "ocelhq-e8z",
-    "ocelhq-hzp",
     "ocelhq-iud"
    ],
    "failedTests": {
     "app dir - navigation query string useParams identity between renders should be stable in pages": "ocelhq-iud",
-    "app dir - navigation redirect next.config.js redirects should redirect from next.config.js": "ocelhq-e8z",
-    "app dir - navigation redirect next.config.js redirects should redirect from next.config.js with link navigation": "ocelhq-e8z",
     "app dir - navigation navigation between pages and app should not contain _rsc query while navigating from app to pages": "ocelhq-e7w",
     "app dir - navigation navigation between pages and app should not contain _rsc query while navigating from pages to app": "ocelhq-e7w",
     "app dir - navigation navigation between pages and app should not omit the hash while navigating from app to pages": "ocelhq-e7w",
-    "app dir - navigation browser back after a push followed by a refresh should load the previous page": "ocelhq-hzp"
+    "app dir - navigation navigating to a page with async metadata shows a fallback when prefetch completed": null
    }
   },
   "test/e2e/app-dir/rsc-basic/rsc-basic.test.ts": {
