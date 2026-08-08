@@ -1958,3 +1958,172 @@ describe("a Server Action's invalidation reaching the colo it travelled through"
     expect(after.headers.get("x-nextjs-cache")).toBe("HIT");
   });
 });
+
+// A pages-router data request resolved by @next/routing's final dynamic-route
+// table comes back with its /_next/data/<buildId>/… wrapper stripped, because
+// that one branch never restores what it normalized away to match. Next decides
+// a request is a data request from its URL alone, so the pathname the origin is
+// invoked under is what these assert.
+describe("data-request invocation pathname", () => {
+  function lambdaDeps(
+    manifest: Partial<RouteDeps["manifest"]> = {},
+  ): { deps: RouteDeps; invoked: () => URL } {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/[...route]": { kind: "lambda", id: "fn", entryKey: "e" } },
+        ...manifest,
+      },
+      functionUrls: { fn: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = new URL(req.url);
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    return { deps, invoked: () => captured! };
+  }
+
+  it("forwards a _next/data request to the lambda under its data pathname", async () => {
+    const { deps, invoked } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works" },
+      },
+      new Request("https://app.example/_next/data/t/middleware/works.json"),
+      deps,
+    );
+
+    expect(invoked().pathname).toBe("/_next/data/t/middleware/works.json");
+  });
+
+  it("keeps the locale prefix on a data pathname", async () => {
+    const { deps, invoked } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/en/middleware/works" },
+      },
+      new Request("https://app.example/_next/data/t/en/middleware/works.json"),
+      deps,
+    );
+
+    expect(invoked().pathname).toBe("/_next/data/t/en/middleware/works.json");
+  });
+
+  it("maps the root invocation pathname back to index.json", async () => {
+    const { deps, invoked } = lambdaDeps();
+
+    await dispatchResult(
+      { resolvedPathname: "/[...route]", invocationTarget: { pathname: "/" } },
+      new Request("https://app.example/_next/data/t/index.json"),
+      deps,
+    );
+
+    expect(invoked().pathname).toBe("/_next/data/t/index.json");
+  });
+
+  it("drops a trailingSlash app's trailing slash from the data pathname", async () => {
+    const { deps, invoked } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works/" },
+      },
+      new Request("https://app.example/_next/data/t/middleware/works.json"),
+      deps,
+    );
+
+    expect(invoked().pathname).toBe("/_next/data/t/middleware/works.json");
+  });
+
+  it("wraps the data pathname under the app's basePath", async () => {
+    const { deps, invoked } = lambdaDeps({ basePath: "/docs" });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/docs/middleware/works" },
+      },
+      new Request("https://app.example/docs/_next/data/t/middleware/works.json"),
+      deps,
+    );
+
+    expect(invoked().pathname).toBe(
+      "/docs/_next/data/t/middleware/works.json",
+    );
+  });
+
+  it("preserves the query string of a data request", async () => {
+    const { deps, invoked } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works" },
+      },
+      new Request("https://app.example/_next/data/t/middleware/works.json?a=1"),
+      deps,
+    );
+
+    expect(invoked().pathname).toBe("/_next/data/t/middleware/works.json");
+    expect(invoked().search).toBe("?a=1");
+  });
+
+  it("leaves a document request's invocation pathname untouched", async () => {
+    const { deps, invoked } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works" },
+      },
+      new Request("https://app.example/middleware/works"),
+      deps,
+    );
+
+    expect(invoked().pathname).toBe("/middleware/works");
+  });
+
+  it("does not double-wrap an already-data invocation pathname", async () => {
+    let captured: URL | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: {
+          "/_next/data/t/index.json": {
+            kind: "prerender",
+            id: "fn",
+            config: {},
+          },
+        },
+      },
+      functionUrls: { fn: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = new URL(req.url);
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/_next/data/t/index.json",
+        invocationTarget: { pathname: "/_next/data/t/index.json" },
+      },
+      new Request("https://app.example/_next/data/t/index.json"),
+      deps,
+    );
+
+    expect(captured!.pathname).toBe("/_next/data/t/index.json");
+  });
+});

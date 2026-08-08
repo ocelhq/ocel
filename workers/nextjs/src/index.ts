@@ -649,7 +649,7 @@ async function dispatch(
       if (!fnUrl) return noFunctionUrl(target.id);
       return doOrigin(
         withEntry(
-          forward(originUrl(fnUrl, url, result), request, headers),
+          forward(originUrl(fnUrl, url, result, manifest), request, headers),
           target.entryKey,
         ),
       );
@@ -665,7 +665,7 @@ async function dispatch(
       return edgeResponse(
         deps,
         target.entryKey,
-        forward(originUrl(url.origin, url, result), request, headers),
+        forward(originUrl(url.origin, url, result, manifest), request, headers),
       );
     }
 
@@ -703,7 +703,7 @@ async function dispatchPrerender(
   // are bound; an edge-rendered route has no Function URL at all and reaches its
   // renderer through the loader instead.
   const doFetch = originFetch(deps);
-  const forwardUrl = originUrl(fnUrl ?? url.origin, url, result);
+  const forwardUrl = originUrl(fnUrl ?? url.origin, url, result, deps.manifest);
   // Every tier's origin call goes through render, under its own header set — the
   // bundle entry is stamped here so no tier can be built without it.
   const render = (rendered: Request) => {
@@ -1021,11 +1021,35 @@ function once<T>(run: () => Promise<T>): () => Promise<T> {
   return () => (pending ??= run());
 }
 
+// @next/routing strips the /_next/data/<buildId>/… wrapper before matching and
+// restores it only on its rewrite branches — a route resolved by the final
+// dynamic-route table comes back with the data-ness gone. Next derives
+// isNextDataRequest from the request URL alone, so invoking that pathname would
+// render the document where the client asked for pageData.
+function dataPathname(pathname: string, url: URL, manifest: Manifest): string {
+  const base = manifest.basePath ?? "";
+  const prefix = `${base}/_next/data/${manifest.buildId}`;
+  if (!url.pathname.startsWith(`${prefix}/`) || !url.pathname.endsWith(".json")) {
+    return pathname;
+  }
+  if (pathname.startsWith(`${prefix}/`)) return pathname;
+  const route = (pathname.startsWith(base) ? pathname.slice(base.length) : pathname)
+    .replace(/\/$/, "");
+  // Next's normalizeDataPath maps /index back to /, so /index is the inverse of
+  // a root data request — not the /.json denormalizing the empty route gives.
+  return `${prefix}${route || "/index"}.json`;
+}
+
 // originUrl points a request at its Function URL, preferring the routing
 // result's invocation target so a rewritten path reaches the right handler.
-function originUrl(fnUrl: string, url: URL, result: RouteResult): URL {
+function originUrl(
+  fnUrl: string,
+  url: URL,
+  result: RouteResult,
+  manifest: Manifest,
+): URL {
   const pathname = result.invocationTarget?.pathname ?? url.pathname;
-  return new URL(pathname + url.search, fnUrl);
+  return new URL(dataPathname(pathname, url, manifest) + url.search, fnUrl);
 }
 
 // bufferBody reads a request's body into memory so every forward of it carries a
