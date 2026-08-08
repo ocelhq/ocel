@@ -54,9 +54,8 @@ import {
   DEPLOY_RESULT_FILE,
   TAG_PROBE_ROUTE,
   WARM_SUMMARY_MARKER,
-  appAssetPrefix,
-  bytecodeCacheKeyName,
-  bytecodeCacheKeyPrefix,
+  bytecodeAppNamespace,
+  bytecodeCacheEntry,
   bytecodeEmbedEnabled,
   bytecodeRehydrateOutcome,
   strongestCoverage,
@@ -119,58 +118,63 @@ if (!Number.isFinite(deployedAt)) {
 }
 
 const bucket = process.env.OCEL_ASSET_BUCKET || resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
-const prefix = appAssetPrefix({
-  environment: result.environment,
-  slug: result.slug,
-  app: app.name,
-  buildId: app.buildId,
-});
 const functionName = resolveFunctionName(result.slug, app.name, fail);
-const keyPrefix = bytecodeCacheKeyPrefix({ prefix, functionName });
-log(`expecting one object under s3://${bucket}/${keyPrefix}`);
+// The content-hash segment bytecodePrefixFor appends below this namespace
+// (cloud/aws/deploy/bytecode.go) is not composed here — nothing outside a
+// running deploy can compute hashArtifact's hash ahead of time — so this
+// script lists the whole namespace and discovers it from what is actually
+// there, one level down.
+const namespace = bytecodeAppNamespace({ environment: result.environment, slug: result.slug, app: app.name });
+const namespacePrefix = `${namespace}/`;
+log(`expecting one object for ${functionName} under s3://${bucket}/${namespacePrefix}`);
 
 // --- warm leg: the cache is whole before anyone hits the app ---------------
 
 // Read before this script sends a single request, which is the whole point:
 // an object here now cannot have been produced by anything this script did.
-// The prefix carries the build id, so it also cannot be an earlier run's
-// leftover — a build's key is only ever writable by that build's deploy.
+// The namespace carries the project's own slug, so it also cannot be an
+// earlier run's leftover — a build's key is only ever writable by that
+// build's deploy.
 let names = null;
 let listError = null;
 const listDeadline = Date.now() + LIST_RETRY_DEADLINE_MS;
 while (names === null) {
   try {
-    names = listBytecodeObjects(bucket, keyPrefix);
+    names = listBytecodeObjects(bucket, namespacePrefix);
   } catch (err) {
     listError = err;
     if (Date.now() >= listDeadline) {
       fail(
-        `could not list s3://${bucket}/${keyPrefix} at all within ${LIST_RETRY_DEADLINE_MS / 1000}s — every attempt ` +
+        `could not list s3://${bucket}/${namespacePrefix} at all within ${LIST_RETRY_DEADLINE_MS / 1000}s — every attempt ` +
           `failed, so nothing here says whether the object exists: ${listError.message}`,
       );
     }
-    log(`could not list s3://${bucket}/${keyPrefix} (${err.message}); will retry`);
+    log(`could not list s3://${bucket}/${namespacePrefix} (${err.message}); will retry`);
     await sleep(POLL_INTERVAL_MS);
   }
 }
 
-const candidates = names.filter((name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH);
+const candidates = names
+  .map((name) => bytecodeCacheEntry(name))
+  .filter((entry) => entry && entry.functionName === functionName && entry.arch === LAMBDA_ARCH);
 if (candidates.length > 1) {
   fail(
-    `found ${candidates.length} objects under s3://${bucket}/${keyPrefix} matching node<version>-${LAMBDA_ARCH}.tar.gz ` +
-      `(${candidates.map((name) => keyPrefix + name).join(", ")}) — expected exactly one`,
+    `found ${candidates.length} objects under s3://${bucket}/${namespacePrefix} matching ` +
+      `<hash>/bytecode/${functionName}/node<version>-${LAMBDA_ARCH}.tar.gz ` +
+      `(${candidates.map((c) => `${namespacePrefix}${c.hash}/bytecode/${c.functionName}/${c.filename}`).join(", ")}) — expected exactly one`,
   );
 }
 if (candidates.length === 0) {
   fail(
-    `no object matching node<version>-${LAMBDA_ARCH}.tar.gz exists under s3://${bucket}/${keyPrefix}, and this script ` +
-      `has not touched the deployment yet. The deploy warms every bytecode-gated bundle before it promotes and does ` +
-      `not return until each warm invocation has answered, so a missing object means the warm pass never published ` +
-      `one — check the deploy output for its per-bundle lines ("warmed N/M bundles"), and the function's CloudWatch ` +
-      `logs for "ocel: warm invocation:".`,
+    `no object matching <hash>/bytecode/${functionName}/node<version>-${LAMBDA_ARCH}.tar.gz exists under ` +
+      `s3://${bucket}/${namespacePrefix}, and this script has not touched the deployment yet. The deploy warms every ` +
+      `bytecode-gated bundle before it promotes and does not return until each warm invocation has answered, so a ` +
+      `missing object means the warm pass never published one — check the deploy output for its per-bundle lines ` +
+      `("warmed N/M bundles"), and the function's CloudWatch logs for "ocel: warm invocation:".`,
   );
 }
-const key = keyPrefix + candidates[0];
+const found = candidates[0];
+const key = `${namespace}/${found.hash}/bytecode/${found.functionName}/${found.filename}`;
 log(`s3://${bucket}/${key} already exists, before this script has issued a request`);
 
 // That the object exists says nothing about *what* published it or how much of

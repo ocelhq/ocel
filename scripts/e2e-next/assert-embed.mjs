@@ -60,9 +60,8 @@ import {
   BYTECODE_S3_REHYDRATE_MARKER,
   DEPLOY_RESULT_FILE,
   TAG_PROBE_ROUTE,
-  appAssetPrefix,
-  bytecodeCacheKeyName,
-  bytecodeCacheKeyPrefix,
+  bytecodeAppNamespace,
+  bytecodeCacheEntry,
   bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
   embeddedArtifactPairs,
@@ -144,25 +143,22 @@ const functionName = resolveFunctionName(result.slug, app.name, fail);
 // feature derive the embedded path from that same key, so re-deriving it from
 // an independent listing is what makes step 2 an assertion about the match rule
 // rather than a restatement of whatever the pass happened to write.
-const keyPrefix = bytecodeCacheKeyPrefix({
-  prefix: appAssetPrefix({
-    environment: result.environment,
-    slug: result.slug,
-    app: app.name,
-    buildId: app.buildId,
-  }),
-  functionName,
-});
-const cacheNames = (await listRetrying(assetBucket, keyPrefix)).map((full) => full.slice(keyPrefix.length));
-const candidates = cacheNames.filter((name) => bytecodeCacheKeyName(name)?.arch === LAMBDA_ARCH);
+const namespace = bytecodeAppNamespace({ environment: result.environment, slug: result.slug, app: app.name });
+const namespacePrefix = `${namespace}/`;
+const cacheNames = (await listRetrying(assetBucket, namespacePrefix)).map((full) => full.slice(namespacePrefix.length));
+const candidates = cacheNames
+  .map((name) => bytecodeCacheEntry(name))
+  .filter((entry) => entry && entry.functionName === functionName && entry.arch === LAMBDA_ARCH);
 if (candidates.length !== 1) {
   fail(
-    `expected exactly one object matching node<version>-${LAMBDA_ARCH}.tar.gz under s3://${assetBucket}/${keyPrefix}, ` +
-      `found ${candidates.length}${candidates.length ? `: ${candidates.join(", ")}` : ""}. Without the published cache ` +
+    `expected exactly one object matching <hash>/bytecode/${functionName}/node<version>-${LAMBDA_ARCH}.tar.gz under ` +
+      `s3://${assetBucket}/${namespacePrefix}, found ${candidates.length}` +
+      `${candidates.length ? `: ${candidates.map((c) => c.filename).join(", ")}` : ""}. Without the published cache ` +
       `there was nothing for the embed pass to embed — run assert-bytecode.mjs, which diagnoses the warm pass itself.`,
   );
 }
-const cacheKey = keyPrefix + candidates[0];
+const found = candidates[0];
+const cacheKey = `${namespace}/${found.hash}/bytecode/${found.functionName}/${found.filename}`;
 const entryName = embeddedBytecodePath(cacheKey);
 if (!entryName) {
   fail(`could not derive an embedded tar path from ${cacheKey} — its name is not node<version>-<arch>.tar.gz`);

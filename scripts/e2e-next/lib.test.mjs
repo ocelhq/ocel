@@ -16,8 +16,9 @@ import {
   WARM_SUMMARY_MARKER,
   appAssetPrefix,
   buildBaselineManifest,
+  bytecodeAppNamespace,
+  bytecodeCacheEntry,
   bytecodeCacheKeyName,
-  bytecodeCacheKeyPrefix,
   bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
   bytecodeRehydrateOutcome,
@@ -343,11 +344,65 @@ describe("appAssetPrefix", () => {
   });
 });
 
-describe("bytecodeCacheKeyPrefix", () => {
-  it("joins prefix/bytecode/functionName with a trailing slash", () => {
+describe("bytecodeAppNamespace", () => {
+  it("joins env/slug/bytecode/app in that order — mirrors bytecodeAppNamespace in bytecode.go", () => {
     expect(
-      bytecodeCacheKeyPrefix({ prefix: "preview-e2e-42/e2e-42/app/bld123", functionName: "proj--web-abc123" }),
-    ).toBe("preview-e2e-42/e2e-42/app/bld123/bytecode/proj--web-abc123/");
+      bytecodeAppNamespace({ environment: { class: "preview", identity: "e2e-42-abcd1234" }, slug: "e2e-42-abcd1234", app: "app" }),
+    ).toBe("preview-e2e-42-abcd1234/e2e-42-abcd1234/bytecode/app");
+  });
+
+  it("uses the fixed prod segment for a production deploy", () => {
+    expect(bytecodeAppNamespace({ environment: { class: "production" }, slug: "s", app: "app" })).toBe(
+      "prod/s/bytecode/app",
+    );
+  });
+
+  it("is not appAssetPrefix's build-keyed prefix — the two must never collide", () => {
+    const environment = { class: "preview", identity: "e2e-42-abcd1234" };
+    const slug = "e2e-42-abcd1234";
+    const app = "app";
+    expect(bytecodeAppNamespace({ environment, slug, app })).not.toBe(
+      appAssetPrefix({ environment, slug, app, buildId: "bld123" }),
+    );
+  });
+});
+
+describe("bytecodeCacheEntry", () => {
+  // Pins the full derivation this harness has to agree with the Go side on,
+  // end to end: bytecodeAppNamespace + bytecodePrefixFor's hash segment +
+  // bytecodeCacheKey's own "bytecode/<functionName>/node<version>-<arch>.tar.gz"
+  // (cloud/aws/deploy/bytecode.go, cloud/aws/cmd/lambdanode/bootstrap/bytecode.go).
+  // A real S3 listing under bytecodeAppNamespace returns names with the
+  // namespace already stripped, which is what this parses.
+  it("reads the hash, function name, node version and arch out of a real key's tail", () => {
+    const namespace = bytecodeAppNamespace({
+      environment: { class: "preview", identity: "e2e-42-abcd1234" },
+      slug: "e2e-42-abcd1234",
+      app: "app",
+    });
+    const hash = "a1b2c3d4e5f6";
+    const functionName = "proj--web-abc123";
+    const key = `${namespace}/${hash}/bytecode/${functionName}/node24.3.1-x86_64.tar.gz`;
+
+    expect(bytecodeCacheEntry(key.slice(namespace.length + 1))).toEqual({
+      hash,
+      functionName,
+      filename: "node24.3.1-x86_64.tar.gz",
+      nodeVersion: "24.3.1",
+      arch: "x86_64",
+    });
+  });
+
+  it("rejects a name with no hash/bytecode/functionName structure", () => {
+    expect(bytecodeCacheEntry("node24.3.1-x86_64.tar.gz")).toBeNull();
+  });
+
+  it("rejects a name whose filename is not node<version>-<arch>.tar.gz", () => {
+    expect(bytecodeCacheEntry("a1b2c3/bytecode/proj--web-abc123/not-a-cache-file")).toBeNull();
+  });
+
+  it("rejects a name missing the literal bytecode segment", () => {
+    expect(bytecodeCacheEntry("a1b2c3/nope/proj--web-abc123/node24.3.1-x86_64.tar.gz")).toBeNull();
   });
 });
 

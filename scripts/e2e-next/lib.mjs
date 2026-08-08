@@ -355,32 +355,65 @@ export function appAssetPrefix({ environment, slug, app, buildId }) {
 }
 
 /**
- * bytecodeCacheKeyPrefix is the S3 prefix every bytecode cache object for one
- * function lives under. Mirrors the directory portion of bytecodeCacheKey in
- * cloud/aws/cmd/lambdanode/bootstrap/bytecode.go — the filename that follows
- * it carries the live node patch version, which nothing outside a running
- * instance can know ahead of time, so a caller lists this prefix rather than
- * composing the full key.
+ * bytecodeAppNamespace is the S3 prefix every one of an app's bytecode
+ * caches lives under, one level above the content-hash segment that picks
+ * which one. Mirrors bytecodeAppNamespace in cloud/aws/deploy/bytecode.go:
+ * <env>/<slug>/bytecode/<app>. `app` is assumed to already be a valid worker
+ * name — the same assumption appAssetPrefix makes, for the same reason:
+ * every app this suite deploys is declared under APP_NAME, which needs no
+ * sanitizing.
+ *
+ * Deliberately its own namespace, not appAssetPrefix's build-keyed one: that
+ * prefix is what prune sweeps on every build (prune.go), and a bytecode
+ * cache living under it would be reaped by the very redeploy it exists to
+ * speed up — see the Go doc comment on bytecodeKeyNamespace.
  */
-export function bytecodeCacheKeyPrefix({ prefix, functionName }) {
-  return `${prefix}/bytecode/${functionName}/`;
+export function bytecodeAppNamespace({ environment, slug, app }) {
+  return [envSegment(environment), slug, "bytecode", app].join("/");
 }
 
 const BYTECODE_ARCHIVE_NAME = /^node(\d+\.\d+\.\d+)-([a-z0-9_]+)\.tar\.gz$/;
 
 /**
  * bytecodeCacheKeyName parses the filename segment of a bytecode cache key —
- * everything after bytecodeCacheKeyPrefix — into its node version and arch,
- * or null if it does not have the "node<version>-<arch>.tar.gz" shape
- * bytecodeCacheKey in bytecode.go composes. A caller lists objects under the
- * prefix and uses this to tell a real cache archive from anything else that
- * might land there, and to assert the version is the three-dot-separated-
- * numbers shape bytecode.go's canonicalNodeVersion requires.
+ * everything after bytecodeCacheEntry's own prefix — into its node version
+ * and arch, or null if it does not have the "node<version>-<arch>.tar.gz"
+ * shape bytecodeCacheKey in bytecode.go composes. A caller lists objects
+ * under the prefix and uses this to tell a real cache archive from anything
+ * else that might land there, and to assert the version is the
+ * three-dot-separated-numbers shape bytecode.go's canonicalNodeVersion
+ * requires.
  */
 export function bytecodeCacheKeyName(name) {
   const match = BYTECODE_ARCHIVE_NAME.exec(name ?? "");
   if (!match) return null;
   return { nodeVersion: match[1], arch: match[2] };
+}
+
+const BYTECODE_CACHE_ENTRY = /^([^/]+)\/bytecode\/([^/]+)\/(.+)$/;
+
+/**
+ * bytecodeCacheEntry reads one name found by listing bytecodeAppNamespace
+ * (an S3 key with that namespace already stripped) into the content hash and
+ * function name it names, plus whatever bytecodeCacheKeyName can read out of
+ * its filename — or null for anything that does not have the shape
+ * bytecodePrefixFor and bytecodeCacheKey together produce:
+ * <hash>/bytecode/<functionName>/node<version>-<arch>.tar.gz.
+ *
+ * The hash itself (hashArtifact in cloud/aws/deploy/artifact.go, a content
+ * hash of the function's whole `.func` tree) is deliberately not reproduced
+ * here: nothing outside a running deploy can compute it ahead of time, so the
+ * caller discovers it from what is actually in the bucket rather than from a
+ * second, independent hash implementation — exactly the kind of drift this
+ * suite exists to catch, not add.
+ */
+export function bytecodeCacheEntry(name) {
+  const match = BYTECODE_CACHE_ENTRY.exec(name ?? "");
+  if (!match) return null;
+  const [, hash, functionName, filename] = match;
+  const parsed = bytecodeCacheKeyName(filename);
+  if (!parsed) return null;
+  return { hash, functionName, filename, ...parsed };
 }
 
 /**
