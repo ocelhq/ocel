@@ -272,7 +272,7 @@ func (f *fakeCodeUpdater) GetFunctionConfiguration(context.Context, *lambda.GetF
 	}, nil
 }
 
-const embedTestCacheKey = "prod/p/web/B1/bytecode/fn/node24.3.1-arm64.tar.gz"
+const embedTestCacheKey = "bytecode/prod/p/web/hash1/node24.3.1-arm64.tar.gz"
 
 // embedTestPass wires one target against fakes holding a real gzipped tar and a
 // real zip, so every leg the pass runs is the production one.
@@ -590,11 +590,11 @@ func TestEmbedTargets_SelectsNodeRuntimeFunctionsOfAnyFramework(t *testing.T) {
 	warmed := []warmResult{
 		{
 			Target: warmTarget{App: "web", LogicalName: "web_index", FunctionName: "ocel-web-index"},
-			Reply:  warmReply{Key: "prod/p/bytecode/web/hash1/bytecode/web_index/node24.3.1-arm64.tar.gz"},
+			Reply:  warmReply{Key: "bytecode/prod/p/web/hash1/node24.3.1-arm64.tar.gz"},
 		},
 		{
 			Target: warmTarget{App: "api", LogicalName: "api_handler", FunctionName: "ocel-api-handler"},
-			Reply:  warmReply{Key: "prod/p/bytecode/api/hash2/bytecode/api_handler/node24.3.1-arm64.tar.gz"},
+			Reply:  warmReply{Key: "bytecode/prod/p/api/hash2/node24.3.1-arm64.tar.gz"},
 		},
 	}
 	artifacts := map[string]artifactRef{

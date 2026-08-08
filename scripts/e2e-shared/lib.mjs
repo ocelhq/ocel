@@ -205,15 +205,20 @@ export function bytecodeCacheKeyName(name) {
   return { nodeVersion: match[1], arch: match[2] };
 }
 
-const BYTECODE_CACHE_ENTRY = /^([^/]+)\/bytecode\/([^/]+)\/(.+)$/;
+const BYTECODE_CACHE_ENTRY = /^([^/]+)\/(.+)$/;
 
 /**
  * bytecodeCacheEntry reads one name found by listing bytecodeAppNamespace
- * (an S3 key with that namespace already stripped) into the content hash and
- * function name it names, plus whatever bytecodeCacheKeyName can read out of
- * its filename — or null for anything that does not have the shape
- * bytecodePrefixFor and bytecodeCacheKey together produce:
- * <hash>/bytecode/<functionName>/node<version>-<arch>.tar.gz.
+ * (an S3 key with that namespace already stripped) into the content hash it
+ * names, plus whatever bytecodeCacheKeyName can read out of its filename —
+ * or null for anything that does not have the shape bytecodePrefixFor and
+ * bytecodeCacheKey together produce: <hash>/node<version>-<arch>.tar.gz.
+ *
+ * Carries no function name: the key is the content hash of the function's
+ * whole `.func` tree plus its runtime shape, nothing else — two functions
+ * whose trees hash identically share one cache object, by design (see
+ * bytecodeCacheKey's own doc comment in
+ * cloud/aws/cmd/lambdanode/bootstrap/bytecode.go).
  *
  * The hash itself (hashArtifact in cloud/aws/deploy/artifact.go, a content
  * hash of the function's whole `.func` tree) is deliberately not reproduced
@@ -225,10 +230,10 @@ const BYTECODE_CACHE_ENTRY = /^([^/]+)\/bytecode\/([^/]+)\/(.+)$/;
 export function bytecodeCacheEntry(name) {
   const match = BYTECODE_CACHE_ENTRY.exec(name ?? "");
   if (!match) return null;
-  const [, hash, functionName, filename] = match;
+  const [, hash, filename] = match;
   const parsed = bytecodeCacheKeyName(filename);
   if (!parsed) return null;
-  return { hash, functionName, filename, ...parsed };
+  return { hash, filename, ...parsed };
 }
 
 /**

@@ -370,39 +370,35 @@ describe("bytecodeAppNamespace", () => {
 describe("bytecodeCacheEntry", () => {
   // Pins the full derivation this harness has to agree with the Go side on,
   // end to end: bytecodeAppNamespace + bytecodePrefixFor's hash segment +
-  // bytecodeCacheKey's own "bytecode/<functionName>/node<version>-<arch>.tar.gz"
-  // (cloud/aws/deploy/bytecode.go, cloud/aws/cmd/lambdanode/bootstrap/bytecode.go).
-  // A real S3 listing under bytecodeAppNamespace returns names with the
-  // namespace already stripped, which is what this parses.
-  it("reads the hash, function name, node version and arch out of a real key's tail", () => {
+  // bytecodeCacheKey's own "node<version>-<arch>.tar.gz" (cloud/aws/deploy/
+  // bytecode.go, cloud/aws/cmd/lambdanode/bootstrap/bytecode.go). A real S3
+  // listing under bytecodeAppNamespace returns names with the namespace
+  // already stripped, which is what this parses. Carries no function name:
+  // the key is keyed off content hash alone, so two functions whose `.func`
+  // trees hash identically share one cache object.
+  it("reads the hash, node version and arch out of a real key's tail", () => {
     const namespace = bytecodeAppNamespace({
       environment: { class: "preview", identity: "e2e-42-abcd1234" },
       slug: "e2e-42-abcd1234",
       app: "app",
     });
     const hash = "a1b2c3d4e5f6";
-    const functionName = "proj--web-abc123";
-    const key = `${namespace}/${hash}/bytecode/${functionName}/node24.3.1-x86_64.tar.gz`;
+    const key = `${namespace}/${hash}/node24.3.1-x86_64.tar.gz`;
 
     expect(bytecodeCacheEntry(key.slice(namespace.length + 1))).toEqual({
       hash,
-      functionName,
       filename: "node24.3.1-x86_64.tar.gz",
       nodeVersion: "24.3.1",
       arch: "x86_64",
     });
   });
 
-  it("rejects a name with no hash/bytecode/functionName structure", () => {
+  it("rejects a name with no hash/filename structure", () => {
     expect(bytecodeCacheEntry("node24.3.1-x86_64.tar.gz")).toBeNull();
   });
 
   it("rejects a name whose filename is not node<version>-<arch>.tar.gz", () => {
-    expect(bytecodeCacheEntry("a1b2c3/bytecode/proj--web-abc123/not-a-cache-file")).toBeNull();
-  });
-
-  it("rejects a name missing the literal bytecode segment", () => {
-    expect(bytecodeCacheEntry("a1b2c3/nope/proj--web-abc123/node24.3.1-x86_64.tar.gz")).toBeNull();
+    expect(bytecodeCacheEntry("a1b2c3/not-a-cache-file")).toBeNull();
   });
 });
 

@@ -121,16 +121,16 @@ const namespacePrefix = `${namespace}/`;
 const cacheNames = (await listRetrying(assetBucket, namespacePrefix)).map((full) => full.slice(namespacePrefix.length));
 const candidates = cacheNames
   .map((name) => bytecodeCacheEntry(name))
-  .filter((entry) => entry && entry.functionName === functionName && entry.arch === LAMBDA_ARCH);
+  .filter((entry) => entry && entry.arch === LAMBDA_ARCH);
 if (candidates.length !== 1) {
   fail(
-    `expected exactly one object matching <hash>/bytecode/${functionName}/node<version>-${LAMBDA_ARCH}.tar.gz under ` +
+    `expected exactly one object matching <hash>/node<version>-${LAMBDA_ARCH}.tar.gz under ` +
       `s3://${assetBucket}/${namespacePrefix}, found ${candidates.length}. Without the published cache there was ` +
       `nothing for the embed pass to embed — run assert-bytecode.mjs, which diagnoses the warm pass itself.`,
   );
 }
 const found = candidates[0];
-const cacheKey = `${namespace}/${found.hash}/bytecode/${found.functionName}/${found.filename}`;
+const cacheKey = `${namespace}/${found.hash}/${found.filename}`;
 const entryName = embeddedBytecodePath(cacheKey);
 if (!entryName) {
   fail(`could not derive an embedded tar path from ${cacheKey} — its name is not node<version>-<arch>.tar.gz`);

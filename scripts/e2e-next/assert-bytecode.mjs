@@ -154,19 +154,17 @@ while (names === null) {
   }
 }
 
-const candidates = names
-  .map((name) => bytecodeCacheEntry(name))
-  .filter((entry) => entry && entry.functionName === functionName && entry.arch === LAMBDA_ARCH);
+const candidates = names.map((name) => bytecodeCacheEntry(name)).filter((entry) => entry && entry.arch === LAMBDA_ARCH);
 if (candidates.length > 1) {
   fail(
     `found ${candidates.length} objects under s3://${bucket}/${namespacePrefix} matching ` +
-      `<hash>/bytecode/${functionName}/node<version>-${LAMBDA_ARCH}.tar.gz ` +
-      `(${candidates.map((c) => `${namespacePrefix}${c.hash}/bytecode/${c.functionName}/${c.filename}`).join(", ")}) — expected exactly one`,
+      `<hash>/node<version>-${LAMBDA_ARCH}.tar.gz ` +
+      `(${candidates.map((c) => `${namespacePrefix}${c.hash}/${c.filename}`).join(", ")}) — expected exactly one`,
   );
 }
 if (candidates.length === 0) {
   fail(
-    `no object matching <hash>/bytecode/${functionName}/node<version>-${LAMBDA_ARCH}.tar.gz exists under ` +
+    `no object matching <hash>/node<version>-${LAMBDA_ARCH}.tar.gz exists under ` +
       `s3://${bucket}/${namespacePrefix}, and this script has not touched the deployment yet. The deploy warms every ` +
       `bytecode-gated bundle before it promotes and does not return until each warm invocation has answered, so a ` +
       `missing object means the warm pass never published one — check the deploy output for its per-bundle lines ` +
@@ -174,7 +172,7 @@ if (candidates.length === 0) {
   );
 }
 const found = candidates[0];
-const key = `${namespace}/${found.hash}/bytecode/${found.functionName}/${found.filename}`;
+const key = `${namespace}/${found.hash}/${found.filename}`;
 log(`s3://${bucket}/${key} already exists, before this script has issued a request`);
 
 // That the object exists says nothing about *what* published it or how much of

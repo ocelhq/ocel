@@ -157,25 +157,23 @@ while (names === null) {
   }
 }
 
-const candidates = names
-  .map((name) => bytecodeCacheEntry(name))
-  .filter((entry) => entry && entry.functionName === functionName && entry.arch === LAMBDA_ARCH);
+const candidates = names.map((name) => bytecodeCacheEntry(name)).filter((entry) => entry && entry.arch === LAMBDA_ARCH);
 if (candidates.length > 1) {
   fail(
     `found ${candidates.length} objects under s3://${bucket}/${namespacePrefix} matching ` +
-      `<hash>/bytecode/${functionName}/node<version>-${LAMBDA_ARCH}.tar.gz — expected exactly one`,
+      `<hash>/node<version>-${LAMBDA_ARCH}.tar.gz — expected exactly one`,
   );
 }
 if (candidates.length === 0) {
   fail(
-    `no object matching <hash>/bytecode/${functionName}/node<version>-${LAMBDA_ARCH}.tar.gz exists under ` +
+    `no object matching <hash>/node<version>-${LAMBDA_ARCH}.tar.gz exists under ` +
       `s3://${bucket}/${namespacePrefix}, and this script has not touched the deployment yet. Check the deploy ` +
       `output for its warm pass lines ("ocel: warmed N/M bundles"), and the function's CloudWatch logs for ` +
       `"ocel: warm invocation:".`,
   );
 }
 const found = candidates[0];
-const key = `${namespace}/${found.hash}/bytecode/${found.functionName}/${found.filename}`;
+const key = `${namespace}/${found.hash}/${found.filename}`;
 log(`s3://${bucket}/${key} already exists, before this script has issued a request`);
 
 const warmLogStart = deployedAt - WARM_LOG_LOOKBACK_MS;

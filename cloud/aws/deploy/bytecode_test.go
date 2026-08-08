@@ -261,7 +261,7 @@ func TestAppBytecodeNamespace_GateAndAtLeastOneNodeFunction(t *testing.T) {
 // isrConfig — and therefore OCEL_BYTECODE_PREFIX — only ever existed for a
 // Next app.
 func TestFunctionEnv_CarriesBytecodePrefixAndBucketForAnyRuntime(t *testing.T) {
-	bc := &bytecodeFunctionConfig{Bucket: "assets-xyz", Prefix: "prod/proj/bytecode/api/deadbeef"}
+	bc := &bytecodeFunctionConfig{Bucket: "assets-xyz", Prefix: "bytecode/prod/proj/api/deadbeef"}
 
 	env := functionEnv(map[string]string{}, functionArgs{Handler: "src/server.js"}, nil, bc)
 

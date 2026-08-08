@@ -150,7 +150,7 @@ func TestWarmTargets_SkippedWhenGateIsOff(t *testing.T) {
 }
 
 func TestWarmPass_ReportsPublished(t *testing.T) {
-	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":47,"bytes":63963136,"uploaded":true,"key":"prod/p/web/B1/bytecode/fn/node24.3.1-arm64.tar.gz"}`),
+	out := runWarm(t, answering(`{"state":"published","entries":51,"loaded":47,"bytes":63963136,"uploaded":true,"key":"bytecode/prod/p/web/hash1/node24.3.1-arm64.tar.gz"}`),
 		warmTestTargets(1), time.Minute)
 
 	for _, want := range []string{
