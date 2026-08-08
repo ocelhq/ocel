@@ -8,20 +8,12 @@
 // response markers, and how its project slug is derived without an external
 // test harness driving it) is defined here.
 
-import { join } from "node:path";
-
 import { projectSlug, renderOcelConfig as renderSharedOcelConfig } from "@ocel-scripts/e2e-shared/lib.mjs";
 
+// STATE_FILE, BUILD_LOG_FILE and DEPLOY_RESULT_FILE come from this re-export
+// rather than being redeclared here — see their doc comments in
+// @ocel-scripts/e2e-shared/lib.mjs.
 export * from "@ocel-scripts/e2e-shared/lib.mjs";
-
-/** The file deploy.mjs persists this app's identity to, read by cleanup.mjs. */
-export const STATE_FILE = ".ocel-e2e.json";
-
-/** The file every byte of the deploy's output is redirected to. */
-export const BUILD_LOG_FILE = ".adapter-build.log";
-
-/** The CLI's machine-readable deploy result, relative to the app directory. */
-export const DEPLOY_RESULT_FILE = join(".ocel", "deploy-result.json");
 
 /**
  * The name the smoke app is declared under. Isolation lives in the project
@@ -61,19 +53,21 @@ export function renderOcelConfig({ slug, previewDomain }) {
 }
 
 /**
- * The smoke app's readiness probe, and also the burst target the bytecode
- * assertions hit to force fresh sandboxes. Mirrors smoke-app/src/server.js —
- * a plain node app carries no CDN or edge cache tier in front of it (no
- * framework here registers an edge worker: cloud/edge/framework/registry.go),
- * so unlike scripts/e2e-next's TAG_PROBE_ROUTE this needs no force-dynamic
+ * The smoke app's readiness probe (waitForHealthy). Mirrors
+ * smoke-app/src/server.js. Not the burst target — that is ECHO_ROUTE, below —
+ * though for the same reason either route would do: a plain node app carries
+ * no CDN or edge cache tier in front of it (no framework here registers an
+ * edge worker: cloud/edge/framework/registry.go), so unlike
+ * scripts/e2e-next's TAG_PROBE_ROUTE neither route needs a force-dynamic
  * trick to guarantee every request reaches the Lambda.
  */
 export const HEALTH_ROUTE = "/health";
 
 /**
- * The correctness probe's route and the marker its body carries. Mirrors
- * smoke-app/src/server.js — assert-correctness.mjs reads them from here so
- * the route and its assertion cannot drift apart.
+ * The correctness probe's route and the marker its body carries, and also
+ * the burst target the bytecode assertions hit to force fresh sandboxes.
+ * Mirrors smoke-app/src/server.js — assert-bytecode.mjs and assert-embed.mjs
+ * read them from here so the route and its assertions cannot drift apart.
  */
 export const ECHO_ROUTE = "/echo";
 export const ECHO_MARKER = "ocel-e2e-node-smoke-v1";

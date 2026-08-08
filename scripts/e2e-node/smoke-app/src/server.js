@@ -12,19 +12,21 @@ import express from "express";
 
 const app = express();
 
-// The harness's readiness probe, and also what the bytecode assertions burst
-// against to force fresh sandboxes: express has no CDN or edge cache tier in
-// front of it (unlike Next's worker), so any route reaches the Lambda on
-// every request — no force-dynamic trick is needed here the way Next's
-// TAG_PROBE_ROUTE needs one.
+// The harness's readiness probe (waitForHealthy). Not what the bytecode
+// assertions burst against — that is /echo, below — but express has no CDN or
+// edge cache tier in front of it either way (unlike Next's worker), so any
+// route reaches the Lambda on every request; no force-dynamic trick is needed
+// here the way Next's TAG_PROBE_ROUTE needs one.
 app.get("/health", (_req, res) => {
   res.json({ ok: true });
 });
 
 // SMOKE_MARKER proves the response body is this app's own render, not a
-// cached or default one: assert-correctness reads it back verbatim, and a
-// value that echoes the query string proves the route actually executed
-// rather than answered from some earlier response.
+// cached or default one: assert-bytecode.mjs and assert-embed.mjs read it
+// back verbatim, and a value that echoes the query string proves the route
+// actually executed rather than answered from some earlier response. This is
+// also the route the bytecode assertions burst against to force fresh
+// sandboxes.
 const SMOKE_MARKER = "ocel-e2e-node-smoke-v1";
 
 app.get("/echo", (req, res) => {

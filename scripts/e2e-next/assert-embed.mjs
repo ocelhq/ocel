@@ -23,8 +23,10 @@
 //      S3 rehydrate line — so instances are reading it, and none of them fell
 //      through.
 //
-// Skips, loudly, unless $OCEL_BYTECODE_EMBED=1: without the flag the deploy runs
-// no embed pass, and every claim here would be false about a correct deployment.
+// Runs against any deployment made with bytecode caching on: embedding is no
+// longer its own gate (cloud/aws/deploy/embed.go) — whenever OCEL_BYTECODE_CACHE=1
+// turned the feature on at all, the deploy also ran the embed pass, so this
+// assertion needs no flag of its own to decide whether it applies.
 //
 // Usage: assert-embed.mjs [deployment-url]
 //   falls back to $NEXT_TEST_DEPLOY_URL, then $SMOKE_URL.
@@ -56,13 +58,11 @@ import {
   sleep,
 } from "./aws.mjs";
 import {
-  BYTECODE_EMBED_ENV,
   BYTECODE_S3_REHYDRATE_MARKER,
   DEPLOY_RESULT_FILE,
   TAG_PROBE_ROUTE,
   bytecodeAppNamespace,
   bytecodeCacheEntry,
-  bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
   embeddedArtifactPairs,
   embeddedBytecodePath,
@@ -103,16 +103,6 @@ const BURST_LOG_FILTER = `?"embedded compile cache" ?"${BYTECODE_S3_REHYDRATE_MA
 // the cache), but the ceiling is the embed pass's own legality gate — anything
 // larger than this could not have been produced by it.
 const MAX_PACKAGE_BYTES = 250 * 1024 * 1024;
-
-if (!bytecodeEmbedEnabled(process.env)) {
-  log(
-    `SKIPPED, nothing asserted: $${BYTECODE_EMBED_ENV} is ${JSON.stringify(process.env[BYTECODE_EMBED_ENV] ?? null)}, ` +
-      `not "1", so the deploy ran no embed pass and this deployment is expected to fetch its compile cache from S3. ` +
-      `assert-bytecode.mjs is what proves that path. Re-deploy with ${BYTECODE_EMBED_ENV}=1 to make this assertion ` +
-      `mean anything.`,
-  );
-  process.exit(0);
-}
 
 const base = process.argv[2] || process.env.NEXT_TEST_DEPLOY_URL || process.env.SMOKE_URL;
 if (!base) {

@@ -17,7 +17,10 @@
 // separate. See assert-bytecode.mjs's own header for the fuller version of
 // each of these.
 //
-// Skips, loudly, unless $OCEL_BYTECODE_EMBED=1.
+// Runs against any deployment made with bytecode caching on: embedding is no
+// longer its own gate (cloud/aws/deploy/embed.go) — whenever OCEL_BYTECODE_CACHE=1
+// turned the feature on at all, the deploy also ran the embed pass, so this
+// assertion needs no flag of its own to decide whether it applies.
 //
 // Usage: assert-embed.mjs [deployment-url]
 //   falls back to $OCEL_E2E_NODE_DEPLOY_URL.
@@ -49,7 +52,6 @@ import {
   sleep,
 } from "./aws.mjs";
 import {
-  BYTECODE_EMBED_ENV,
   BYTECODE_S3_REHYDRATE_MARKER,
   DEPLOY_RESULT_FILE,
   ECHO_MARKER,
@@ -57,7 +59,6 @@ import {
   HEALTH_ROUTE,
   bytecodeAppNamespace,
   bytecodeCacheEntry,
-  bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
   echoValue,
   embeddedArtifactPairs,
@@ -68,22 +69,16 @@ import {
 } from "./lib.mjs";
 import { sigv4Fetch } from "./sigv4.mjs";
 
+// Exceeds the disposable e2e account's 10-request Lambda concurrency quota on
+// purpose: the burst exists to force fresh sandboxes, not to stay under the
+// quota, and burstEcho reports (rather than absorbs) whatever fraction of it
+// the quota throttles — see burstEcho's own doc comment.
 const BURST_SIZE = 20;
 const LOG_CONFIRM_DEADLINE_MS = 30_000;
 const TASK_ROOT = "/var/task";
 const BURST_LOG_FILTER = `?"embedded compile cache" ?"${BYTECODE_S3_REHYDRATE_MARKER.trim()}"`;
 const MAX_PACKAGE_BYTES = 250 * 1024 * 1024;
 const HEALTH_RETRY_DEADLINE_MS = 3 * 60_000;
-
-if (!bytecodeEmbedEnabled(process.env)) {
-  log(
-    `SKIPPED, nothing asserted: $${BYTECODE_EMBED_ENV} is ${JSON.stringify(process.env[BYTECODE_EMBED_ENV] ?? null)}, ` +
-      `not "1", so the deploy ran no embed pass and this deployment is expected to fetch its compile cache from S3. ` +
-      `assert-bytecode.mjs is what proves that path. Re-deploy with ${BYTECODE_EMBED_ENV}=1 to make this assertion ` +
-      `mean anything.`,
-  );
-  process.exit(0);
-}
 
 const base = process.argv[2] || process.env.OCEL_E2E_NODE_DEPLOY_URL;
 if (!base) {
@@ -202,8 +197,19 @@ log(`the deployed package carries ${entryName} among its ${entries.length} entri
 
 const burstStart = Date.now();
 log(`bursting ${BURST_SIZE} concurrent requests to force fresh sandboxes`);
-const { succeeded: burstSucceeded, correct: burstCorrect } = await burstEcho(BURST_SIZE, "embed-burst");
+const {
+  succeeded: burstSucceeded,
+  correct: burstCorrect,
+  throttled: burstThrottled,
+} = await burstEcho(BURST_SIZE, "embed-burst");
 log(`burst: ${burstSucceeded}/${BURST_SIZE} requests succeeded, ${burstCorrect}/${burstSucceeded} answered correctly`);
+if (burstThrottled) {
+  log(
+    `${burstThrottled}/${BURST_SIZE} burst requests were throttled (HTTP 429) by the account's Lambda concurrency ` +
+      `quota rather than reaching the function — expected when the burst (${BURST_SIZE}) exceeds it; the assertion ` +
+      `still holds as long as enough requests got through to confirm the read leg.`,
+  );
+}
 if (burstSucceeded === 0) {
   fail(`all ${BURST_SIZE} burst requests to ${ECHO_ROUTE} failed — the function was never invoked at all.`);
 }
@@ -318,6 +324,13 @@ async function waitForHealthy() {
   fail(`${target} never answered healthy within ${HEALTH_RETRY_DEADLINE_MS / 1000}s: ${lastError?.message}`);
 }
 
+// A 429 is reported as its own outcome rather than folded into "not ok": at
+// BURST_SIZE=20 against the disposable e2e account's 10-request Lambda
+// concurrency quota, some throttling is an expected consequence of the
+// mismatch, not evidence the read leg is broken — but it must be counted and
+// surfaced rather than silently absorbed into "not ok" alongside every other
+// kind of failure, which would let a run that throttled most of its burst
+// still read as an unqualified pass.
 async function burstEcho(n, label) {
   const results = await Promise.all(
     Array.from({ length: n }, async (_, i) => {
@@ -325,6 +338,7 @@ async function burstEcho(n, label) {
       const target = new URL(`${ECHO_ROUTE}?value=${encodeURIComponent(value)}`, base).toString();
       try {
         const res = await signedFetch(target);
+        if (res.status === 429) return { ok: false, throttled: true };
         if (!res.ok) return { ok: false };
         const body = await res.json();
         return { ok: true, correct: body?.marker === ECHO_MARKER && body?.value === value };
@@ -335,7 +349,8 @@ async function burstEcho(n, label) {
   );
   const succeeded = results.filter((r) => r.ok).length;
   const correct = results.filter((r) => r.ok && r.correct).length;
-  return { succeeded, correct };
+  const throttled = results.filter((r) => r.throttled).length;
+  return { succeeded, correct, throttled };
 }
 
 function ingest(events) {

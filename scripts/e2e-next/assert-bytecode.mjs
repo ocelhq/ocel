@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 // Asserts that a Next app's V8 compile cache is complete in S3 *before the app
-// serves anyone*, and that a later cold start actually reads it back — not
-// merely that the deploy succeeded and a request answers 200.
+// serves anyone* — not merely that the deploy succeeded and a request answers
+// 200. It does not prove a later cold start reads that object back: embedding
+// is unconditional whenever bytecode caching is on
+// (cloud/aws/deploy/embed.go), so this deployment's own cold starts load the
+// cache from their own artifact instead, and the S3 read leg goes SKIPPED —
+// see the warning it logs, and assert-embed.mjs, which is what proves the
+// read leg that actually runs.
 //
 // Why this exists as its own assertion: everything between a warm compile
-// cache in /tmp and a reusable object in S3, and everything between that
-// object and a later instance's own /tmp, is machinery no request can see —
-// the flush-compile-cache control message, the tar+gzip+upload, the HEAD guard
-// that skips a redundant re-upload, and the rehydrate leg that downloads and
-// untars the archive before node ever spawns
+// cache in /tmp and a reusable object in S3 is machinery no request can see —
+// the flush-compile-cache control message, the tar+gzip+upload, and the HEAD
+// guard that skips a redundant re-upload
 // (cloud/aws/cmd/lambdanode/bootstrap/bytecode.go). A 200 from the deployment
 // proves none of it.
 //
@@ -52,15 +55,10 @@ import {
 } from "./aws.mjs";
 import {
   DEPLOY_RESULT_FILE,
-  TAG_PROBE_ROUTE,
   WARM_SUMMARY_MARKER,
   bytecodeAppNamespace,
   bytecodeCacheEntry,
-  bytecodeEmbedEnabled,
-  bytecodeRehydrateOutcome,
   strongestCoverage,
-  summarizeOutcomes,
-  tagProbeTag,
   tarEntryNames,
   warmCoverage,
   warmSummaryOutcome,
@@ -72,15 +70,6 @@ import {
 // this script starts, and a successful list that does not find it is a real
 // miss to fail on rather than something to poll away. LIST_RETRY_DEADLINE_MS is
 // only for retrying a list that could not be made at all.
-
-// Lambda reuses a warm instance for a request it can serve sequentially; only
-// concurrency forces it to provision more. At most the deploy's own warm
-// instance is still alive when this burst fires, and that one rehydrated
-// nothing (it ran when there was nothing to read), so this many concurrent
-// requests reliably lands most of them on fresh sandboxes. The account's
-// concurrency ceiling is 1000, so this is a tuning choice, not something
-// bounded by it.
-const REHYDRATE_BURST_SIZE = 20;
 
 // How far before the deploy's completion the warm summaries are looked for.
 // The pass runs after the last app stack succeeds and before stageAndPromote,
@@ -294,108 +283,23 @@ log(
 // --- read leg ----------------------------------------------------------
 
 // The read leg below requires the S3 rehydrate line, which embedding makes
-// false rather than merely unlikely: with the embed pass on, the deploy bakes
-// this same cache into the function's own artifact and a cold start loads it
-// from /var/task, never fetching `key` at all. Requiring the line here would
-// fail a deployment that is working exactly as designed, so the leg is dropped
-// — loudly, and named as unproven, because a skipped assertion that reads as a
-// pass is the one failure mode worth more than the assertion itself.
+// false rather than merely unlikely: embedding is no longer its own gate
+// (cloud/aws/deploy/embed.go) — whenever bytecode caching is on at all, the
+// deploy bakes this same cache into the function's own artifact, and a cold
+// start loads it from /var/task, never fetching `key` from S3. Requiring the
+// line here would fail a deployment that is working exactly as designed, so
+// the leg is unconditionally dropped — loudly, and named as unproven, because
+// a skipped assertion that reads as a pass is the one failure mode worth more
+// than the assertion itself.
 //
-// The write leg above stays valid under the flag and is deliberately not
-// skipped: the embed pass runs *after* the warm pass and reads what it
-// published, so the object and its warm summary must exist either way.
-if (bytecodeEmbedEnabled(process.env)) {
-  warn(
-    `read leg SKIPPED and UNPROVEN: $OCEL_BYTECODE_EMBED=1, so cold starts load the compile cache from the function's ` +
-      `own artifact and no instance will ever report rehydrating ${key} from S3. Run assert-embed.mjs against this ` +
-      `deployment — it asserts the embedded read leg, and nothing here does.`,
-  );
-  reportWarnings();
-  process.exit(0);
-}
-
-// The object above proves the write leg but says nothing about rehydration:
-// the instance the deploy warmed never rehydrates itself (it had nothing to
-// read when it started), so proving the read leg needs a later instance that
-// starts *after* the object exists. Bursting concurrent requests is what
-// forces Lambda to provision those.
-const burstStart = Date.now();
-log(`bursting ${REHYDRATE_BURST_SIZE} concurrent requests to force fresh sandboxes`);
-// TAG_PROBE_ROUTE is force-dynamic (see its own file), so these are guaranteed
-// to reach the Lambda rather than being answered from an edge- or CDN-cached
-// response — reusing it borrows a route already proven to invoke the function
-// rather than adding a new one just for this.
-const burstResults = await Promise.all(
-  Array.from({ length: REHYDRATE_BURST_SIZE }, (_, i) => {
-    const burstTag = tagProbeTag(`bytecode-burst-${Date.now()}-${process.pid}-${i}`);
-    const burstTarget = new URL(TAG_PROBE_ROUTE + `?tag=${encodeURIComponent(burstTag)}`, base).toString();
-    return fetch(burstTarget, { method: "POST" })
-      .then((r) => r.ok)
-      .catch(() => false);
-  }),
+// The write leg above stays valid regardless and is deliberately not skipped:
+// the embed pass runs *after* the warm pass and reads what it published, so
+// the object and its warm summary must exist either way.
+warn(
+  `read leg SKIPPED and UNPROVEN: embedding is unconditional whenever bytecode caching is on, so cold starts load ` +
+    `the compile cache from the function's own artifact and no instance will ever report rehydrating ${key} from ` +
+    `S3. Run assert-embed.mjs against this deployment — it asserts the embedded read leg, and nothing here does.`,
 );
-const burstSucceeded = burstResults.filter(Boolean).length;
-log(`burst: ${burstSucceeded}/${REHYDRATE_BURST_SIZE} requests succeeded`);
-if (burstSucceeded === 0) {
-  fail(
-    `all ${REHYDRATE_BURST_SIZE} burst requests to ${TAG_PROBE_ROUTE} failed — the function was never invoked at ` +
-      `all, so no rehydrate hit could ever appear in its logs. This is a burst/deployment problem, not evidence ` +
-      `the read leg is broken.`,
-  );
-}
-
-log(`polling CloudWatch for up to ${LOG_DEADLINE_MS / 1000}s for a rehydrate hit naming ${key}`);
-const logDeadline = Date.now() + LOG_DEADLINE_MS;
-let hit = null;
-const observed = [];
-const seenEventIds = new Set();
-let logsSucceeded = false;
-let logsError = null;
-while (Date.now() < logDeadline && !hit) {
-  let events;
-  try {
-    events = fetchFunctionLogs(functionName, burstStart);
-    logsSucceeded = true;
-  } catch (err) {
-    logsError = err;
-    log(`could not read /aws/lambda/${functionName} logs (${err.message}); will retry`);
-    await sleep(LOG_POLL_INTERVAL_MS);
-    continue;
-  }
-  for (const event of events) {
-    if (event.eventId) {
-      if (seenEventIds.has(event.eventId)) continue;
-      seenEventIds.add(event.eventId);
-    }
-    const outcome = bytecodeRehydrateOutcome(event.message, key);
-    if (!outcome) continue;
-    if (outcome.kind === "hit") {
-      hit = outcome;
-      break;
-    }
-    observed.push(outcome);
-  }
-  if (!hit) await sleep(LOG_POLL_INTERVAL_MS);
-}
-
-if (!hit && !logsSucceeded) {
-  fail(
-    `could not read /aws/lambda/${functionName} logs at all within ${LOG_DEADLINE_MS / 1000}s — every attempt ` +
-      `failed, so nothing here says whether a rehydrate hit ever happened: ${logsError?.message}`,
-  );
-}
-if (!hit) {
-  const samples = observed.length
-    ? `; samples: ${observed.slice(0, 5).map((o) => o.message).join(" | ")}`
-    : "";
-  fail(
-    `no instance reported rehydrating the compile cache from ${key} within ${LOG_DEADLINE_MS / 1000}s of the burst ` +
-      `(${summarizeOutcomes(observed)} seen in /aws/lambda/${functionName})${samples}`,
-  );
-}
-log(`rehydrate hit: ${hit.message}`);
-log("bytecode cache rehydrated end to end");
-
 reportWarnings();
 
 // Warnings are re-printed at the end because the run that produces one is a

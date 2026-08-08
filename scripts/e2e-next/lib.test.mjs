@@ -4,7 +4,6 @@ import { describe, expect, it, vi } from "vitest";
 import {
   APP_NAME,
   BYTECODE_EMBEDDED_MARKER,
-  BYTECODE_EMBED_ENV,
   BYTECODE_S3_REHYDRATE_MARKER,
   DNS_LABEL,
   GOLDEN_MARKER,
@@ -19,7 +18,6 @@ import {
   bytecodeAppNamespace,
   bytecodeCacheEntry,
   bytecodeCacheKeyName,
-  bytecodeEmbedEnabled,
   bytecodeEmbeddedOutcome,
   bytecodeRehydrateOutcome,
   deployURL,
@@ -485,20 +483,6 @@ describe("bytecodeRehydrateOutcome", () => {
     expect(bytecodeRehydrateOutcome("ocel: no aws config for the compile cache: no EC2 IMDS role found", key).kind).toBe(
       "disabled",
     );
-  });
-});
-
-describe("bytecodeEmbedEnabled", () => {
-  it("is on for exactly the literal 1, mirroring the deploy's own gate", () => {
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "1" })).toBe(true);
-  });
-
-  it("is off when unset or set to anything else", () => {
-    expect(bytecodeEmbedEnabled({})).toBe(false);
-    expect(bytecodeEmbedEnabled(undefined)).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "0" })).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "true" })).toBe(false);
-    expect(bytecodeEmbedEnabled({ [BYTECODE_EMBED_ENV]: "" })).toBe(false);
   });
 });
 

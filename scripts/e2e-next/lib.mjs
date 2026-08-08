@@ -11,20 +11,12 @@
 // comparison, the harness's own marker lines, the baseline manifest) is
 // defined here.
 
-import { join } from "node:path";
-
 import { projectSlug, renderOcelConfig as renderSharedOcelConfig } from "@ocel-scripts/e2e-shared/lib.mjs";
 
+// STATE_FILE, BUILD_LOG_FILE and DEPLOY_RESULT_FILE come from this re-export
+// rather than being redeclared here — see their doc comments in
+// @ocel-scripts/e2e-shared/lib.mjs.
 export * from "@ocel-scripts/e2e-shared/lib.mjs";
-
-/** The file deploy.mjs persists this app's identity to, read by logs/cleanup. */
-export const STATE_FILE = ".ocel-e2e.json";
-
-/** The file every byte of the deploy's output is redirected to. */
-export const BUILD_LOG_FILE = ".adapter-build.log";
-
-/** The CLI's machine-readable deploy result, relative to the app directory. */
-export const DEPLOY_RESULT_FILE = join(".ocel", "deploy-result.json");
 
 /**
  * The name every temp app is declared under. Isolation lives in the project slug

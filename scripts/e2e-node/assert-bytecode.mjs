@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 // Asserts that a plain node app's V8 compile cache is complete in S3 *before
-// the app serves anyone*, that a later cold start actually reads it back, and
-// that the app answers correctly with the cache in place — not merely that
-// the deploy succeeded and a request answers 200.
+// the app serves anyone*, and that the app answers correctly — not merely
+// that the deploy succeeded and a request answers 200. It does not prove a
+// later cold start reads that object back from S3: embedding is unconditional
+// whenever bytecode caching is on (cloud/aws/deploy/embed.go), so this
+// deployment's own cold starts load the cache from their own artifact
+// instead, and the S3 read leg goes SKIPPED — see the warning it logs, and
+// assert-embed.mjs, which is what proves the read leg that actually runs.
 //
 // This is scripts/e2e-next/assert-bytecode.mjs's proof, unchanged in what it
 // claims — see that file's own header for the full reasoning, which applies
@@ -35,12 +39,13 @@
 //     it 403s before the app ever sees it. scripts/e2e-next never needs this:
 //     its requests land on a Cloudflare worker that signs its own forward.
 //   - Bursting for fresh sandboxes needs no force-dynamic route: nothing
-//     fronts this app with a response cache, so HEALTH_ROUTE reaches the
-//     Lambda on every request already.
-//   - The read-leg burst doubles as the correctness proof: each successful
-//     response is parsed and checked against ECHO_MARKER, so "served with the
-//     cache in place" is proven by the very requests that proved the cache
-//     was read, not by a fourth thing this script would otherwise have to do.
+//     fronts this app with a response cache, so ECHO_ROUTE reaches the
+//     Lambda on every request already — moot here since the read-leg burst
+//     never runs (see above), but what scripts/e2e-next needs a force-dynamic
+//     route for.
+//   - Correctness is proven by a single signed request (assertCorrectness)
+//     rather than folded into a burst: with the read leg always skipped there
+//     is no burst here to fold it into.
 //
 // Usage: assert-bytecode.mjs [deployment-url]
 //   falls back to $OCEL_E2E_NODE_DEPLOY_URL.
@@ -76,21 +81,13 @@ import {
   WARM_SUMMARY_MARKER,
   bytecodeAppNamespace,
   bytecodeCacheEntry,
-  bytecodeEmbedEnabled,
-  bytecodeRehydrateOutcome,
   echoValue,
   strongestCoverage,
-  summarizeOutcomes,
   tarEntryNames,
   warmCoverage,
   warmSummaryOutcome,
 } from "./lib.mjs";
 import { sigv4Fetch } from "./sigv4.mjs";
-
-// Same reasoning as scripts/e2e-next's: Lambda reuses a warm instance for a
-// request it can serve sequentially, so only concurrency forces fresh
-// sandboxes.
-const REHYDRATE_BURST_SIZE = 20;
 
 // See scripts/e2e-next/assert-bytecode.mjs's own constant for the full
 // reasoning: generous on purpose, since the window only has to contain the
@@ -210,11 +207,11 @@ while (Date.now() < warmDeadline && verdicts.length === 0) {
       warn(`a warm summary in /aws/lambda/${functionName} could not be read as JSON (${outcome.reason}): ${outcome.message}`);
       continue;
     }
+    const verdict = warmCoverage(outcome.summary, key);
+    if (verdict.kind === "other-build") continue;
     if (outcome.summary?.uncounted?.includes("did not report back")) {
       sawUnreportedWarm = true;
     }
-    const verdict = warmCoverage(outcome.summary, key);
-    if (verdict.kind === "other-build") continue;
     verdicts.push(verdict);
   }
   if (verdicts.length === 0) await sleep(LOG_POLL_INTERVAL_MS);
@@ -296,91 +293,18 @@ log(
 
 // --- read leg (and correctness) --------------------------------------------
 
-// Same split as scripts/e2e-next's: with the embed flag on, cold starts never
-// fetch `key` from S3 at all, so this leg is dropped rather than made to fail
-// a deployment working exactly as designed. assert-embed.mjs covers it in this
-// script's place.
-if (bytecodeEmbedEnabled(process.env)) {
-  warn(
-    `read leg SKIPPED and UNPROVEN: $OCEL_BYTECODE_EMBED=1, so cold starts load the compile cache from the function's ` +
-      `own artifact and no instance will ever report rehydrating ${key} from S3. Run assert-embed.mjs against this ` +
-      `deployment — it asserts the embedded read leg, and nothing here does.`,
-  );
-  await assertCorrectness();
-  reportWarnings();
-  process.exit(0);
-}
-
-const burstStart = Date.now();
-log(`bursting ${REHYDRATE_BURST_SIZE} concurrent requests to force fresh sandboxes`);
-const { succeeded: burstSucceeded, correct: burstCorrect } = await burstEcho(REHYDRATE_BURST_SIZE, "bytecode-burst");
-log(`burst: ${burstSucceeded}/${REHYDRATE_BURST_SIZE} requests succeeded, ${burstCorrect}/${burstSucceeded} answered correctly`);
-if (burstSucceeded === 0) {
-  fail(
-    `all ${REHYDRATE_BURST_SIZE} burst requests to ${ECHO_ROUTE} failed — the function was never invoked at all, so ` +
-      `no rehydrate hit could ever appear in its logs. This is a burst/deployment problem, not evidence the read leg ` +
-      `is broken.`,
-  );
-}
-if (burstCorrect !== burstSucceeded) {
-  fail(
-    `${burstSucceeded - burstCorrect}/${burstSucceeded} successful burst requests to ${ECHO_ROUTE} answered without ` +
-      `${JSON.stringify(ECHO_MARKER)} in the body — the app is being reached but is not serving its own correct ` +
-      `response with the compile cache in place.`,
-  );
-}
-log(`all ${burstCorrect} successful burst requests answered correctly`);
-
-log(`polling CloudWatch for up to ${LOG_DEADLINE_MS / 1000}s for a rehydrate hit naming ${key}`);
-const logDeadline = Date.now() + LOG_DEADLINE_MS;
-let hit = null;
-const observed = [];
-const seenEventIds = new Set();
-let logsSucceeded = false;
-let logsError = null;
-while (Date.now() < logDeadline && !hit) {
-  let events;
-  try {
-    events = fetchFunctionLogs(functionName, burstStart);
-    logsSucceeded = true;
-  } catch (err) {
-    logsError = err;
-    log(`could not read /aws/lambda/${functionName} logs (${err.message}); will retry`);
-    await sleep(LOG_POLL_INTERVAL_MS);
-    continue;
-  }
-  for (const event of events) {
-    if (event.eventId) {
-      if (seenEventIds.has(event.eventId)) continue;
-      seenEventIds.add(event.eventId);
-    }
-    const outcome = bytecodeRehydrateOutcome(event.message, key);
-    if (!outcome) continue;
-    if (outcome.kind === "hit") {
-      hit = outcome;
-      break;
-    }
-    observed.push(outcome);
-  }
-  if (!hit) await sleep(LOG_POLL_INTERVAL_MS);
-}
-
-if (!hit && !logsSucceeded) {
-  fail(
-    `could not read /aws/lambda/${functionName} logs at all within ${LOG_DEADLINE_MS / 1000}s — every attempt ` +
-      `failed, so nothing here says whether a rehydrate hit ever happened: ${logsError?.message}`,
-  );
-}
-if (!hit) {
-  const samples = observed.length ? `; samples: ${observed.slice(0, 5).map((o) => o.message).join(" | ")}` : "";
-  fail(
-    `no instance reported rehydrating the compile cache from ${key} within ${LOG_DEADLINE_MS / 1000}s of the burst ` +
-      `(${summarizeOutcomes(observed)} seen in /aws/lambda/${functionName})${samples}`,
-  );
-}
-log(`rehydrate hit: ${hit.message}`);
-log("bytecode cache rehydrated end to end");
-
+// Embedding is no longer its own gate (cloud/aws/deploy/embed.go): whenever
+// bytecode caching is on at all, cold starts never fetch `key` from S3, so
+// this leg is unconditionally dropped rather than made to fail a deployment
+// working exactly as designed. assert-embed.mjs covers it in this script's
+// place; a single signed request stands in for the correctness proof the
+// (now permanently skipped) burst would otherwise have folded in.
+warn(
+  `read leg SKIPPED and UNPROVEN: embedding is unconditional whenever bytecode caching is on, so cold starts load ` +
+    `the compile cache from the function's own artifact and no instance will ever report rehydrating ${key} from ` +
+    `S3. Run assert-embed.mjs against this deployment — it asserts the embedded read leg, and nothing here does.`,
+);
+await assertCorrectness();
 reportWarnings();
 
 // --- helpers -----------------------------------------------------------
@@ -411,6 +335,12 @@ async function waitForHealthy() {
 // many succeeded and, of those, how many carried ECHO_MARKER and their own
 // echoed value — the correctness proof this harness folds into the same burst
 // that forces fresh sandboxes for the read leg.
+// A 429 is reported as its own outcome rather than folded into "not ok": the
+// account's Lambda concurrency quota is lower than a full-size burst
+// (REHYDRATE_BURST_SIZE in the scripts that burst with this), so a run that
+// throttles some fraction of its requests is an expected, reportable outcome
+// of that mismatch, not silently indistinguishable from every other kind of
+// failure a caller has to guess at.
 async function burstEcho(n, label) {
   const results = await Promise.all(
     Array.from({ length: n }, async (_, i) => {
@@ -418,6 +348,7 @@ async function burstEcho(n, label) {
       const target = new URL(`${ECHO_ROUTE}?value=${encodeURIComponent(value)}`, base).toString();
       try {
         const res = await signedFetch(target);
+        if (res.status === 429) return { ok: false, throttled: true };
         if (!res.ok) return { ok: false };
         const body = await res.json();
         return { ok: true, correct: body?.marker === ECHO_MARKER && body?.value === value };
@@ -428,7 +359,8 @@ async function burstEcho(n, label) {
   );
   const succeeded = results.filter((r) => r.ok).length;
   const correct = results.filter((r) => r.ok && r.correct).length;
-  return { succeeded, correct };
+  const throttled = results.filter((r) => r.throttled).length;
+  return { succeeded, correct, throttled };
 }
 
 // assertCorrectness is the embed-path's stand-in for the burst's correctness
