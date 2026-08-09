@@ -72,8 +72,11 @@ if (changedOnMiss) {
 fail(
   `${target} still serves token ${first.token} after ${Math.round(CHANGE_DEADLINE_MS / 1000)}s past a ` +
     `${ISR_REVALIDATE_SECONDS}s revalidate window (tiers seen: ${[...tiersSeen].join(", ") || "none"}). ` +
-    `Revalidation is dead — suspect the worker's \`revalidates = !edgeEntryKey\` and the adapter's ` +
-    `entryKey/edgeEntryKey split for node-parented prerenders`,
+    `A frozen body does not mean the render failed: check the store before the renderer. The entry in ` +
+    `R2 may be current while the colo tier serves its original bytes — the queue leg reports "landed" ` +
+    `without rewriting the colo, so the only thing that replaces it is a promotion from below, and a ` +
+    `colo entry that never advances also freezes the lastModified the next enqueue's dedup id is ` +
+    `derived from. Read the R2 entry's lastModified against the served token first (bd ocelhq-46eb)`,
 );
 
 // --- probing ---------------------------------------------------------------
