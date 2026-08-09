@@ -506,6 +506,7 @@ async function trailingSlashRedirect(
     pathnames: [],
     routes: {
       ...table,
+      beforeMiddleware: table.beforeMiddleware ?? [],
       beforeFiles: [],
       afterFiles: [],
       dynamicRoutes: [],
