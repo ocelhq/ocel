@@ -19,10 +19,14 @@ export interface TrailingSlashConfig {
 }
 
 // Next matches its internal redirects against the path with basePath removed,
-// and re-adds basePath to the destination.
-function withoutBasePath(pathname: string, basePath: string): string {
-  if (!basePath || !pathname.startsWith(basePath)) return pathname;
-  return pathname.slice(basePath.length);
+// and re-adds basePath to the destination — so a path that is not under basePath
+// cannot match them at all, and undefined is what says so. The boundary is a
+// segment, not a prefix: /docsy is not under /docs.
+function withoutBasePath(pathname: string, basePath: string): string | undefined {
+  if (!basePath) return pathname;
+  if (pathname === basePath) return "";
+  if (pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);
+  return undefined;
 }
 
 // `/:file(...(?:[^/]+/)*[^/]+\.\w+)/` — the strip rule's final segment.
@@ -46,6 +50,7 @@ function applyPolicy(
 ): string {
   const basePath = config.basePath ?? "";
   const rest = withoutBasePath(pathname, basePath);
+  if (rest === undefined) return pathname;
 
   if (!config.trailingSlash) {
     // `/:path+/` — generic, and deliberately not scoped to dotted segments or

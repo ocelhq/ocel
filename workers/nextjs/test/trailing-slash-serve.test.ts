@@ -20,15 +20,20 @@ function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore
   };
 }
 
-// The internal redirects Next unshifts ahead of every other route, verbatim from
-// load-custom-routes.ts, as the adapter emits them into beforeMiddleware:
-// destination-less rules carrying a Location, a 308, and the `priority` flag the
-// build maps Next's `internal: true` onto. Included in every scenario below so
-// the tests also prove serve drops them rather than 308ing the canonical form it
-// just normalized straight back at the client.
-function internalRedirects(trailingSlash: boolean, basePath = ""): Route[] {
+// Next's own internal trailing-slash redirects, which it unshifts ahead of every
+// other route, as the build emits them into beforeMiddleware: destination-less
+// rules carrying a Location, a 308, and the `priority` flag build-complete.ts
+// maps `internal: true` onto. basePath is baked into the source, because the
+// build compiles these from the routes manifest, whose regex already carries it
+// (and internal rules skip modifyRouteRegex, so the source is used as-is).
+//
+// Included in every scenario below so the tests also prove serve drops them
+// rather than 308ing the canonical form it just normalized straight back at the
+// client.
+function internalRedirects(trailingSlash: boolean, basePath = ""): unknown[] {
   if (trailingSlash) {
     return [
+      // basePath: false on this one, so its source is the bare basePath.
       ...(basePath
         ? [
             {
@@ -40,19 +45,19 @@ function internalRedirects(trailingSlash: boolean, basePath = ""): Route[] {
           ]
         : []),
       {
-        sourceRegex: "^/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+)/$",
-        headers: { Location: "/$1" },
+        sourceRegex: `^${basePath}/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/]+\\.\\w+)/$`,
+        headers: { Location: `${basePath}/$1` },
         missing: [{ type: "header", key: "x-nextjs-data" }],
         status: 308,
         priority: true,
       },
       {
-        sourceRegex: "^/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+)$",
-        headers: { Location: "/$1/" },
+        sourceRegex: `^${basePath}/((?!\\.well-known(?:/.*)?)(?:[^/]+/)*[^/\\.]+)$`,
+        headers: { Location: `${basePath}/$1/` },
         status: 308,
         priority: true,
       },
-    ] as unknown as Route[];
+    ];
   }
   return [
     ...(basePath
@@ -65,8 +70,47 @@ function internalRedirects(trailingSlash: boolean, basePath = ""): Route[] {
           },
         ]
       : []),
-    { sourceRegex: "^/(.+?)/$", headers: { Location: "/$1" }, status: 308, priority: true },
-  ] as unknown as Route[];
+    {
+      sourceRegex: `^${basePath}/(.+?)/$`,
+      headers: { Location: `${basePath}/$1` },
+      status: 308,
+      priority: true,
+    },
+  ];
+}
+
+// The two rules withoutInternalRedirects must NOT drop, riding alongside the
+// internal ones in every scenario:
+//
+//   * Next's own Service-Worker-Allowed header rule, which the build marks
+//     `priority` exactly as it marks the redirects but which carries no status —
+//     the half of the predicate that keeps header rules alive.
+//   * an ordinary next.config `redirects()` entry, which can never be marked
+//     (checkCustomRoutes rejects `internal` from user config) and so must keep
+//     reaching isRoutingRedirect.
+const SERVICE_WORKER_PATH = "/_next/static/service-worker/sw.js";
+const USER_REDIRECT_FROM = "/old.txt";
+
+function survivingRoutes(basePath = ""): unknown[] {
+  return [
+    {
+      sourceRegex: `^${basePath}/_next/static/service-worker/(.*)$`,
+      headers: { "Service-Worker-Allowed": basePath || "/" },
+      priority: true,
+    },
+    {
+      sourceRegex: `^${basePath}${USER_REDIRECT_FROM}(?:/)?$`,
+      headers: { Location: `${basePath}/a/` },
+      status: 308,
+    },
+  ];
+}
+
+function manifestRoutes(trailingSlash: boolean, basePath = ""): Route[] {
+  return [
+    ...internalRedirects(trailingSlash, basePath),
+    ...survivingRoutes(basePath),
+  ] as Route[];
 }
 
 interface Scenario {
@@ -91,7 +135,7 @@ function deps(scenario: Scenario): RouteDeps {
       skipTrailingSlashRedirect: scenario.skipTrailingSlashRedirect,
       pathnames: pages,
       routes: {
-        beforeMiddleware: internalRedirects(!!scenario.trailingSlash, basePath),
+        beforeMiddleware: manifestRoutes(!!scenario.trailingSlash, basePath),
         beforeFiles: [],
         afterFiles: [],
         dynamicRoutes: [],
@@ -322,4 +366,56 @@ describe("a request about to be redirected", () => {
     expect(res.headers.get("location")).toBe("/a/");
     expect(request.bodyUsed).toBe(false);
   });
+});
+
+// Next compiles basePath into the source of every internal rule, so an
+// off-basePath path matches none of them and Next 404s it as it stands. A
+// redirect here would regress a correct 404 and tell a prober the app's basePath.
+describe("basePath: /docs, paths that are not under it", () => {
+  for (const trailingSlash of [true, false]) {
+    describe(`trailingSlash: ${trailingSlash}`, () => {
+      const scenario: Scenario = {
+        trailingSlash,
+        basePath: "/docs",
+        pages: ["/docs/hello"],
+        files: { "/docs/hello.html": "hello" },
+      };
+
+      it.each(["/", "/favicon.ico", "/wp-admin", "/foo", "/docsy/page", "/docsy/page/"])(
+        "404s %s without a redirect",
+        async (path) => {
+          const res = await serve(get(path), deps(scenario));
+          expect(res.status).toBe(404);
+          expect(await res.text()).toBe("not found");
+        },
+      );
+    });
+  }
+});
+
+// The negative side of withoutInternalRedirects: it must drop Next's internal
+// trailing-slash redirects and nothing else.
+describe("routes withoutInternalRedirects keeps", () => {
+  for (const trailingSlash of [true, false]) {
+    describe(`trailingSlash: ${trailingSlash}`, () => {
+      const scenario: Scenario = {
+        trailingSlash,
+        pages: ["/a", SERVICE_WORKER_PATH],
+        files: { "/a.html": "<h1>a</h1>", [SERVICE_WORKER_PATH]: "self.skipWaiting()" },
+      };
+
+      // Marked `priority` like the redirects, but it carries no status.
+      it("Next's own priority-flagged header rule", async () => {
+        const res = await serve(get(SERVICE_WORKER_PATH), deps(scenario));
+        expect(res.status).toBe(200);
+        expect(res.headers.get("service-worker-allowed")).toBe("/");
+      });
+
+      it("an unmarked next.config redirect", async () => {
+        const res = await serve(get(USER_REDIRECT_FROM), deps(scenario));
+        expect(res.status).toBe(308);
+        expect(res.headers.get("location")).toBe("/a/");
+      });
+    });
+  }
 });
