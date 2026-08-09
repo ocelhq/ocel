@@ -1110,6 +1110,31 @@ test("emits a page and its own children without colliding", async () => {
   );
 });
 
+// A statically-optimized dynamic page is one document spanning every path its
+// template matches, so the dispatch key is route-shaped and the asset key is
+// document-shaped. The worker serves a static target by its manifest key, and
+// this is the build side of that contract.
+test("writes a statically-optimized dynamic page under its template's name", async () => {
+  const { projectDir, args } = await synthProject();
+  args.config = { ...args.config, basePath: "/docs" };
+  await withStaticPage(projectDir, args, "/docs/[slug]", "<html>slug</html>");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const staticDir = join(projectDir, ".ocel/output/static");
+  expect(await readFile(join(staticDir, "docs/[slug].html"), "utf8")).toBe(
+    "<html>slug</html>",
+  );
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.assetHashes["/docs/[slug].html"]).toBe(
+    createHash("sha256").update("<html>slug</html>").digest("hex"),
+  );
+  expect(manifest.dispatch["/docs/[slug]"]).toEqual({ kind: "static" });
+  expect(manifest.pathnames).toContain("/docs/[slug]");
+});
+
 // Everything Next already wrote as a file is what its own name says it is —
 // including a static output whose route only looks like a document's.
 test("leaves static outputs that are already files alone", async () => {
