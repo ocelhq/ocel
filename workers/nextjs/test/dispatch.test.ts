@@ -1732,11 +1732,13 @@ describe("dispatchResult", () => {
   });
 });
 
-// Next expresses both next.config `redirects()` and the adapter's own
-// trailing-slash normalization as a beforeMiddleware rule carrying a Location
-// header and a status and no destination — resolveRoutes reports those as a
-// bare status, so the worker used to serve them as a 404 wearing the right
-// Location.
+// Next expresses a next.config `redirects()` entry as a beforeMiddleware rule
+// carrying a Location header and a status and no destination — resolveRoutes
+// reports those as a bare status, so the worker used to serve them as a 404
+// wearing the right Location. Every rule here is a *user* rule: unmarked (no
+// `priority`) under a manifest with no trailingSlash policy, which is what makes
+// it reach isRoutingRedirect at all. Next's own internal trailing-slash rules
+// never get this far — serve drops them (see trailing-slash-serve.test.ts).
 describe("routing redirects that name no destination", () => {
   function redirectDeps(beforeMiddleware: Route[], files: Record<string, string> = {}) {
     return baseDeps({
@@ -1776,7 +1778,7 @@ describe("routing redirects that name no destination", () => {
     expect(res.headers.get("location")).toBe("/redirect-dest");
   });
 
-  it("normalizes a trailing slash with 308 when trailingSlash is false", async () => {
+  it("answers a destination-less user rule that strips a trailing slash", async () => {
     const res = await serve(
       new Request("https://app.example/docs/", { redirect: "manual" }),
       redirectDeps([
@@ -1795,7 +1797,7 @@ describe("routing redirects that name no destination", () => {
     expect(res.headers.get("location")).toBe("/docs");
   });
 
-  it("adds a trailing slash with 308 when trailingSlash is true, over a page that resolves", async () => {
+  it("answers a destination-less user rule that adds one, over a page that resolves", async () => {
     const res = await serve(
       new Request("https://app.example/about", { redirect: "manual" }),
       redirectDeps(

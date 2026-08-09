@@ -36,6 +36,32 @@ function check(config: TrailingSlashConfig, rows: Row[]) {
   });
 }
 
+// Next compiles the basePath into the source of every internal rule, so a path
+// that is not under basePath matches none of them and Next 404s it as it stands.
+// The boundary is a segment: /docsy is not under /docs. Nothing here may be
+// touched, whatever trailingSlash says — a redirect would both regress a correct
+// 404 and tell a prober what the app's basePath is.
+const offBasePath: Row[] = ["/", "/favicon.ico", "/wp-admin", "/foo", "/docsy/page"].map(
+  (path) => ({
+    what: "off basePath, untouched",
+    path,
+    canonical: path,
+    routing: path,
+    redirects: false,
+    middleware: path,
+  }),
+);
+
+offBasePath.push({
+  // Not even the trailingSlash: false generic strip reaches off-basePath paths.
+  what: "off basePath, a trailing slash is not stripped either",
+  path: "/docsy/page/",
+  canonical: "/docsy/page/",
+  routing: "/docsy/page",
+  redirects: false,
+  middleware: "/docsy/page",
+});
+
 describe("trailingSlash: true", () => {
   const config: TrailingSlashConfig = { basePath: "", trailingSlash: true };
 
@@ -245,6 +271,7 @@ describe("trailingSlash: true, basePath: /docs", () => {
       redirects: false,
       middleware: "/docs/.well-known/acme",
     },
+    ...offBasePath,
   ]);
 });
 
@@ -390,6 +417,7 @@ describe("trailingSlash: false, basePath: /docs", () => {
       middleware: "/docs/hello",
       isDataRequest: true,
     },
+    ...offBasePath,
   ]);
 });
 
