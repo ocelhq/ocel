@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { serve, type RouteDeps } from "../src/index";
 import type { AssetBucket } from "../src/assets";
+import { localeOf, resolveLocale } from "../src/i18n";
 
 // Pages-router i18n: the build adapter emits one locale-prefixed pathname per
 // page (/en/about, /fr/about) and a dynamic route whose sourceRegex carries a
@@ -34,24 +35,32 @@ function i18nDeps(
     i18n?: RouteDeps["manifest"]["i18n"];
     basePath?: string;
     files?: Record<string, string>;
+    // Outputs the build named without a locale, as an app-router page or a
+    // public/ file is.
+    unlocalized?: string[];
   } = {},
 ): RouteDeps & { forwarded: string[] } {
   const basePath = over.basePath ?? "";
   const i18n = "i18n" in over ? over.i18n : I18N;
   const forwarded: string[] = [];
   const page = (pathname: string) => `${basePath}${pathname}`;
+  const unlocalized = over.unlocalized ?? [];
   return {
     manifest: {
       buildId: "b1",
       basePath,
       ...(i18n && { i18n }),
       pathnames: [
+        // The root, as the adapter emits it: /en, never /en/.
+        page("/en"),
+        page("/fr"),
         page("/en/about"),
         page("/fr/about"),
         page("/en/posts/[slug]"),
         page("/fr/posts/[slug]"),
         "/api/hello",
         "/_next/static/x.js",
+        ...unlocalized,
       ],
       routes: {
         beforeMiddleware: [],
@@ -67,6 +76,9 @@ function i18nDeps(
         fallback: [],
       },
       dispatch: {
+        [page("/en")]: { kind: "static" },
+        [page("/fr")]: { kind: "static" },
+        ...Object.fromEntries(unlocalized.map((p) => [p, { kind: "static" as const }])),
         [page("/en/about")]: { kind: "static" },
         [page("/fr/about")]: { kind: "static" },
         [page("/en/posts/[slug]")]: { kind: "lambda", id: "posts" },
@@ -151,30 +163,67 @@ describe("pages-router i18n", () => {
     expect(res.headers.get("x-matched-path")).toBe("/docs/en/about");
   });
 
-  it("redirects an unprefixed path to the locale the NEXT_LOCALE cookie names", async () => {
-    const deps = i18nDeps();
+  // The root is the one output the adapter names /en rather than /en/about —
+  // and the one path whose prefixing has to drop the request's own slash, or
+  // string equality misses everything the build emitted.
+  it("serves the default locale's root for /", async () => {
+    const deps = i18nDeps({ files: { "/en.html": "<h1>home</h1>" } });
 
-    const res = await serve(
-      new Request("https://app.example/about", {
-        headers: { cookie: "NEXT_LOCALE=fr" },
-        redirect: "manual",
-      }),
-      deps,
-    );
+    const res = await serve(new Request("https://app.example/"), deps);
 
-    expect(res.status).toBe(307);
-    expect(new URL(res.headers.get("location") ?? "").pathname).toBe("/fr/about");
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<h1>home</h1>");
+    expect(res.headers.get("x-matched-path")).toBe("/en");
   });
 
-  it("serves the default locale with localeDetection off, whatever the cookie says", async () => {
+  it("serves the default locale's root under a basePath", async () => {
     const deps = i18nDeps({
-      i18n: { ...I18N, localeDetection: false },
-      files: { "/en/about.html": "<h1>about</h1>" },
+      basePath: "/docs",
+      files: { "/docs/en.html": "<h1>home</h1>" },
     });
+
+    const res = await serve(new Request("https://app.example/docs"), deps);
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-matched-path")).toBe("/docs/en");
+  });
+
+  // Next's adapter localizes no app-router page, so a project carrying both an
+  // app/ and an i18n config gets a manifest holding /en/about beside a bare
+  // /dashboard. Prefixing that one would route it at a page no build emitted.
+  it("leaves an app-router page in a hybrid build unprefixed", async () => {
+    const deps = i18nDeps({
+      unlocalized: ["/dashboard"],
+      files: { "/dashboard.html": "<h1>dashboard</h1>" },
+    });
+
+    const res = await serve(new Request("https://app.example/dashboard"), deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<h1>dashboard</h1>");
+    expect(res.headers.get("x-matched-path")).toBe("/dashboard");
+  });
+
+  it("leaves a public/ file unprefixed", async () => {
+    const deps = i18nDeps({
+      unlocalized: ["/next.svg"],
+      files: { "/next.svg": "<svg/>" },
+    });
+
+    const res = await serve(new Request("https://app.example/next.svg"), deps);
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<svg/>");
+  });
+
+  // Next redirects on locale detection at the site root and nowhere else: the
+  // default locale never appears in a URL a visitor is sent to.
+  it("serves an unprefixed path under the default locale whatever Accept-Language says", async () => {
+    const deps = i18nDeps({ files: { "/en/about.html": "<h1>about</h1>" } });
 
     const res = await serve(
       new Request("https://app.example/about", {
-        headers: { cookie: "NEXT_LOCALE=fr" },
+        headers: { "accept-language": "fr" },
         redirect: "manual",
       }),
       deps,
@@ -182,6 +231,69 @@ describe("pages-router i18n", () => {
 
     expect(res.status).toBe(200);
     expect(res.headers.get("x-matched-path")).toBe("/en/about");
+  });
+
+  it("redirects the root to the locale the NEXT_LOCALE cookie names", async () => {
+    const deps = i18nDeps();
+
+    const res = await serve(
+      new Request("https://app.example/", {
+        headers: { cookie: "NEXT_LOCALE=fr" },
+        redirect: "manual",
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location") ?? "").pathname).toBe("/fr");
+  });
+
+  it("redirects the root to the locale Accept-Language prefers", async () => {
+    const deps = i18nDeps();
+
+    const res = await serve(
+      new Request("https://app.example/", {
+        headers: { "accept-language": "fr-FR,fr;q=0.9" },
+        redirect: "manual",
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location") ?? "").pathname).toBe("/fr");
+  });
+
+  it("does not redirect the root towards the default locale", async () => {
+    const deps = i18nDeps({ files: { "/en.html": "<h1>home</h1>" } });
+
+    const res = await serve(
+      new Request("https://app.example/", {
+        headers: { "accept-language": "en-US,en;q=0.9" },
+        redirect: "manual",
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-matched-path")).toBe("/en");
+  });
+
+  it("serves the default locale with localeDetection off, whatever the cookie says", async () => {
+    const deps = i18nDeps({
+      i18n: { ...I18N, localeDetection: false },
+      files: { "/en.html": "<h1>home</h1>" },
+    });
+
+    const res = await serve(
+      new Request("https://app.example/", {
+        headers: { cookie: "NEXT_LOCALE=fr" },
+        redirect: "manual",
+      }),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-matched-path")).toBe("/en");
   });
 
   it("routes a single-locale config through the same prefixing", async () => {
@@ -258,5 +370,37 @@ describe("pages-router i18n", () => {
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("<h1>fr 404</h1>");
+  });
+});
+
+describe("resolveLocale", () => {
+  const at = (pathname: string, basePath = "", headers = new Headers()) =>
+    resolveLocale(I18N, basePath, [], new URL(`https://app.example${pathname}`), headers);
+
+  // A basePath owns its own segment and nothing that merely starts with its
+  // letters: /documents is not a page under /docs.
+  it("only strips a basePath on a segment boundary", () => {
+    expect(at("/documents", "/docs").pathname).toBe("/en/documents");
+    expect(at("/docs/about", "/docs").pathname).toBe("/docs/en/about");
+    expect(at("/docs", "/docs").pathname).toBe("/docs/en");
+  });
+
+  it("keeps the locale a path already names", () => {
+    expect(at("/fr/about")).toEqual({ pathname: "/fr/about", locale: "fr" });
+  });
+
+  it("prefixes the root without a trailing slash", () => {
+    expect(at("/").pathname).toBe("/en");
+  });
+});
+
+describe("localeOf", () => {
+  const at = (pathname: string, basePath = "") =>
+    localeOf(I18N, basePath, new URL(`https://app.example${pathname}`));
+
+  it("reads the locale a path names, past its basePath", () => {
+    expect(at("/docs/fr/about", "/docs")).toBe("fr");
+    expect(at("/docs/about", "/docs")).toBe("en");
+    expect(at("/documents", "/docs")).toBe("en");
   });
 });

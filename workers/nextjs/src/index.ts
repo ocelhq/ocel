@@ -1,6 +1,4 @@
 import {
-  detectDomainLocale,
-  normalizeLocalePath,
   resolveRoutes,
   responseToMiddlewareResult,
   type I18nConfig,
@@ -13,6 +11,7 @@ import {
   routingPathname,
   withoutBasePath,
 } from "./trailing-slash";
+import { localeOf, resolveLocale } from "./i18n";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeInvoker } from "./edge";
 import {
   CacheDeps,
@@ -600,14 +599,37 @@ async function serveRequest(
     });
   }
 
+  // Ahead of routing and behind normalization, as Next's router-server does it:
+  // a request that names no locale is given one to match on, and the root may
+  // redirect to the locale the visitor asked for. The prefix goes on the routing
+  // URL alone — the request keeps the name the client used, which is what the
+  // 308 above, the middleware URL below and every cache key are derived from.
+  const routingUrl = new URL(request.url);
+  if (deps.manifest.i18n) {
+    const resolution = resolveLocale(
+      deps.manifest.i18n,
+      deps.manifest.basePath,
+      deps.manifest.pathnames,
+      routingUrl,
+      request.headers,
+    );
+    if (resolution.redirect) {
+      return Response.redirect(resolution.redirect.toString(), 307);
+    }
+    routingUrl.pathname = resolution.pathname;
+  }
+
   let outcome: MiddlewareOutcome | undefined;
   let failure: unknown;
 
   const result = (await resolveRoutes({
-    url: new URL(request.url),
+    url: routingUrl,
     buildId: deps.manifest.buildId,
     basePath: deps.manifest.basePath,
-    i18n: deps.manifest.i18n,
+    // Normalized above instead: the library's own i18n handling diverges from
+    // Next on the root path, on when a locale redirect fires, and on app-router
+    // outputs (see ./i18n).
+    i18n: undefined,
     headers: request.headers,
     requestBody: streamOf(body) as ReadableStream,
     pathnames: deps.manifest.pathnames,
@@ -754,23 +776,6 @@ async function noteRevalidation(
   await invalidateSnapshot(config, clockDeps);
 }
 
-// Which locale's 404 document answers a request that matched nothing. Read from
-// the request's own pathname rather than from routing's, which a miss leaves
-// unresolved: an unprefixed path falls back to the locale the domain (or the
-// config) makes default, exactly as routing would have prefixed it.
-function notFoundLocale(manifest: Manifest, url: URL): string | undefined {
-  const { i18n } = manifest;
-  if (!i18n) return undefined;
-  const pathname = url.pathname.startsWith(manifest.basePath)
-    ? url.pathname.slice(manifest.basePath.length) || "/"
-    : url.pathname;
-  return (
-    normalizeLocalePath(pathname, i18n.locales).detectedLocale ??
-    detectDomainLocale(i18n.domains, url.hostname)?.defaultLocale ??
-    i18n.defaultLocale
-  );
-}
-
 async function dispatch(
   result: RouteResult,
   request: Request,
@@ -797,7 +802,12 @@ async function dispatch(
       ? new URL(result.invocationTarget.pathname + url.search, url)
       : url;
   const staticAsset = (at: URL = assetUrl) =>
-    serveStaticAsset(request, at, deps.assetStore, notFoundLocale(manifest, url));
+    serveStaticAsset(
+      request,
+      at,
+      deps.assetStore,
+      manifest.i18n && localeOf(manifest.i18n, manifest.basePath, url),
+    );
 
   if (result.middlewareResponded) {
     return middlewareResponse(result.middleware, result.status);
