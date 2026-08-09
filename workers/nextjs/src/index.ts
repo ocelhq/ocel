@@ -4,6 +4,7 @@ import {
   type MiddlewareResult,
 } from "@next/routing";
 import { serveStaticAsset, type AssetStoreDeps } from "./assets";
+import { canonicalPathname, routingPathname } from "./trailing-slash";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeInvoker } from "./edge";
 import {
   CacheDeps,
@@ -458,6 +459,28 @@ function imageResponse(
   });
 }
 
+type RoutingTable = Parameters<typeof resolveRoutes>[0]["routes"];
+
+// Next marks the redirects it generates itself `internal`, which the build's
+// Route shape carries through as `priority`, and the only ones it generates are
+// the trailing-slash rules (its header rules are marked too, but carry no
+// status). serve now answers those rules itself, against the canonical pathname,
+// before routing runs — and the URL routing then sees is the *routing* form,
+// which the add-slash rule matches. Left in the table they would not sit inert:
+// they would 308 every canonical request straight back into a loop.
+function withoutInternalRedirects(routes: unknown): RoutingTable {
+  const table = routes as RoutingTable;
+  const beforeMiddleware = (table.beforeMiddleware ?? []) as ({
+    priority?: boolean;
+  } & RoutingTable["beforeMiddleware"][number])[];
+  return {
+    ...table,
+    beforeMiddleware: beforeMiddleware.filter(
+      (route) => !(route.priority && route.status !== undefined),
+    ),
+  };
+}
+
 // The one exit every served response leaves through, and so the only place the
 // x-vercel-cache alias is stamped: every tier's status header is set below here
 // (withStatus in cache.ts, composePpr in ppr.ts), and nothing above it.
@@ -471,20 +494,47 @@ export async function serve(
   );
 }
 
-// The whole request path: buffer, route, dispatch. The body is read here rather
-// than at dispatch because middleware may consume it — routing gets a fresh
-// stream over the buffer, and the forward that follows reuses the same bytes
-// instead of a stream someone else already drained.
+// The whole request path: normalize, buffer, route, dispatch. The body is read
+// here rather than at dispatch because middleware may consume it — routing gets
+// a fresh stream over the buffer, and the forward that follows reuses the same
+// bytes instead of a stream someone else already drained.
 async function serveRequest(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
+  // Ahead of normalization on purpose: /_next/image is answered before routing
+  // ever runs, and an optimizer request is never a page, so it is never
+  // redirected to a canonical form.
   const image = imageResponse(request, deps);
   if (image) return image;
 
+  const url = new URL(request.url);
+  const canonical = canonicalPathname(
+    url.pathname,
+    deps.manifest,
+    request.headers.has("x-nextjs-data"),
+  );
+  // Before bufferBody and before routing, so a redirected request neither has
+  // its body read nor reaches middleware. Relative Location, as the manifest's
+  // own redirect rules emit — which are now inert, because everything past here
+  // is already canonical.
+  if (canonical !== url.pathname) {
+    return new Response(null, {
+      status: 308,
+      headers: { location: canonical + url.search },
+    });
+  }
+
   const body = await bufferBody(request);
-  if (body) {
-    request = new Request(request.url, {
+  const routed = routingPathname(url.pathname);
+  const rerouted = routed !== url.pathname;
+  if (rerouted) url.pathname = routed;
+  // The single rebuild of the served request: routing, dispatch, the asset key,
+  // the colo cache key and the origin forward all read the routing form off it
+  // and none of them normalize again. Drops cf properties, as the body rebuild
+  // it folds into already did.
+  if (body || rerouted) {
+    request = new Request(url, {
       method: request.method,
       headers: request.headers,
       body,
@@ -503,7 +553,7 @@ async function serveRequest(
     headers: request.headers,
     requestBody: streamOf(body) as ReadableStream,
     pathnames: deps.manifest.pathnames,
-    routes: deps.manifest.routes as Parameters<typeof resolveRoutes>[0]["routes"],
+    routes: withoutInternalRedirects(deps.manifest.routes),
 
     // resolveRoutes has no matcher field: whether middleware runs at all is
     // entirely this callback's decision, and it returns neither the middleware's
