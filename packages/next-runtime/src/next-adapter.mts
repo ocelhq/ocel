@@ -451,7 +451,7 @@ const adapter = {
       );
     }
 
-    await emitEdgeBundle(outputRoot, [
+    await emitEdgeBundle(outputRoot, distDir, [
       ...edgeRoutes,
       ...(middleware ? [middleware] : []),
     ]);
@@ -622,6 +622,45 @@ async function moduleIds(
   return { idByKey, modules };
 }
 
+// The shape of <distDir>/server/middleware-manifest.json this adapter reads.
+// Declared locally rather than imported from next/dist internals: the adapter
+// is esbuilt into the CLI's platform dist, and six fields are not worth the
+// coupling.
+interface EdgeManifest {
+  middleware: Record<string, EdgeManifestFn>;
+  functions: Record<string, EdgeManifestFn>;
+}
+
+interface EdgeManifestFn {
+  name: string;
+  assets?: { name: string; filePath: string }[];
+}
+
+// The build merges an edge entry's JS files and its traced assets into one flat
+// `assets` record, destroying the distinction the bundle needs. The manifest
+// that produced those outputs still holds it, so read it back.
+async function edgeAssetNames(distDir: string): Promise<Set<string> | null> {
+  const path = join(distDir, "server", "middleware-manifest.json");
+  let manifest: EdgeManifest;
+  try {
+    manifest = JSON.parse(await readFile(path, "utf8")) as EdgeManifest;
+  } catch (error) {
+    console.warn(
+      `ocel: could not read ${path} (${error instanceof Error ? error.message : String(error)}) — classifying edge assets by file extension instead`,
+    );
+    return null;
+  }
+
+  const names = new Set<string>();
+  for (const fn of [
+    ...Object.values(manifest.middleware ?? {}),
+    ...Object.values(manifest.functions ?? {}),
+  ]) {
+    for (const asset of fn.assets ?? []) names.add(asset.name);
+  }
+  return names;
+}
+
 // emitEdgeBundle writes the single JSON file the main worker turns into a
 // Cloudflare dynamic worker: every edge chunk under an opaque module id, the
 // wasm those chunks need, the env they read, and the table mapping each entry
@@ -630,12 +669,22 @@ async function moduleIds(
 // an identical file — the deployment's worker id is a hash of these bytes.
 async function emitEdgeBundle(
   outputRoot: string,
+  distDir: string,
   sources: readonly EdgeOutput[],
 ): Promise<void> {
   if (sources.length === 0) return;
 
+  const assetNames = await edgeAssetNames(distDir);
+
   // Source maps are dead weight in the bundle — one alone runs to 1.5 MB.
-  const isChunk = (key: string) => !key.endsWith(".map");
+  // Traced assets are worse than dead weight: workerd compiles the whole module
+  // bundle at isolate startup, so one .png declared as a JS chunk fails every
+  // entry in the deployment. The middleware manifest is the authority on which
+  // key is which — an extension test would mis-file a `.js` file a route binds
+  // with `new URL("./worker.js", import.meta.url)` straight back into a chunk.
+  const isChunk = (key: string) =>
+    !key.endsWith(".map") &&
+    (assetNames ? !assetNames.has(key) : /\.[cm]?js$/.test(key));
 
   const chunkPathByKey = new Map<string, string>();
   const wasmPathByName = new Map<string, string>();

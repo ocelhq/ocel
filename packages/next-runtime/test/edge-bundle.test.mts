@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, writeFile, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
@@ -46,6 +46,48 @@ async function synthEdgeProject() {
   await mkdir(dirname(wasmPath), { recursive: true });
   await writeFile(wasmPath, Buffer.from([0, 97, 115, 109]));
 
+  // Traced blobs: Next merges these into the same flat `assets` record as the
+  // JS files, and only the middleware manifest still says which is which.
+  const tracedAssets = {
+    "server/edge/assets/text.abc.txt": Buffer.from("PLAIN TEXT ASSET"),
+    "server/edge/assets/pic.abc.png": Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe,
+    ]),
+    "server/edge/assets/worker.abc.js": Buffer.from("NOT A CHUNK"),
+  };
+  const tracedAbs: Record<string, string> = {};
+  for (const [name, bytes] of Object.entries(tracedAssets)) {
+    tracedAbs[name] = join(projectDir, ".next", name);
+    await mkdir(dirname(tracedAbs[name]!), { recursive: true });
+    await writeFile(tracedAbs[name]!, bytes);
+  }
+
+  const middlewareManifest = join(
+    projectDir,
+    ".next/server/middleware-manifest.json",
+  );
+  await writeFile(
+    middlewareManifest,
+    JSON.stringify({
+      version: 3,
+      middleware: {
+        "/": {
+          name: "middleware",
+          assets: [],
+        },
+      },
+      functions: {
+        "/edge-page": {
+          name: "app/edge-page/page",
+          assets: Object.keys(tracedAssets).map((name) => ({
+            name,
+            filePath: name,
+          })),
+        },
+      },
+    }),
+  );
+
   const nodeHandler = join(projectDir, ".next/server/app/api/docs/route.js");
   await mkdir(dirname(nodeHandler), { recursive: true });
   await writeFile(nodeHandler, "module.exports = () => {}");
@@ -55,6 +97,7 @@ async function synthEdgeProject() {
     "chunks/page.js": abs["chunks/page.js"]!,
     "chunks/page.js.map": abs["chunks/page.js.map"]!,
     "chunks/shared.js": abs["chunks/shared.js"]!,
+    ...tracedAbs,
   };
   const pageEdgeRuntime = {
     modulePath: abs["chunks/page.js"]!,
@@ -174,7 +217,7 @@ async function synthEdgeProject() {
 
   vi.stubEnv("OCEL_OUTPUT_DIR", join(projectDir, ".ocel/output"));
 
-  return { projectDir, args };
+  return { projectDir, args, middlewareManifest, tracedAssets };
 }
 
 function outputDir(projectDir: string): string {
@@ -285,6 +328,53 @@ test("leaves source maps out of the bundle", async () => {
   const bundle = await readBundle(projectDir);
   expect(Object.values(bundle.chunks)).not.toContain('{"version":3}');
   expect(bundle.entries["middleware_app/edge-page/page"].chunks).toHaveLength(3);
+});
+
+// workerd compiles every declared module when the isolate starts, so a traced
+// blob emitted as a `c/N.js` chunk fails the whole bundle — every edge route in
+// the deployment, not just the route that traced it.
+test("keeps traced assets out of the chunk table", async () => {
+  const { projectDir, args, tracedAssets } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  const sources = Object.values(bundle.chunks) as string[];
+  for (const bytes of Object.values(tracedAssets)) {
+    expect(sources).not.toContain(bytes.toString("utf8"));
+  }
+  expect(bundle.entries["middleware_app/edge-page/page"].chunks).toHaveLength(3);
+});
+
+// A route may legitimately bind a .js file as an asset via
+// `new URL("./worker.js", import.meta.url)`; only the manifest can tell.
+test("classifies by the middleware manifest, not by file extension", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  expect(Object.values(bundle.chunks)).not.toContain("NOT A CHUNK");
+});
+
+test("falls back to extensions when the manifest is unreadable", async () => {
+  const { projectDir, args, middlewareManifest } = await synthEdgeProject();
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  await rm(middlewareManifest);
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  const sources = Object.values(bundle.chunks) as string[];
+  expect(sources).not.toContain("PLAIN TEXT ASSET");
+  expect(sources).not.toContain(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]).toString("utf8"),
+  );
+  expect(
+    warn.mock.calls
+      .map(([message]) => String(message))
+      .some((message) => message.includes("middleware-manifest.json")),
+  ).toBe(true);
 });
 
 test("carries wasm assets as base64, declared once for the whole bundle", async () => {
