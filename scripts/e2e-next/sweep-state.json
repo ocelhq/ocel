@@ -1,7 +1,7 @@
 {
  "schema": 2,
- "lastSweepId": "ctypes",
- "lastRunAt": "2026-08-09T00:38:41.000Z",
+ "lastSweepId": "tslash-fix-verify",
+ "lastRunAt": "2026-08-09T04:30:00Z",
  "notes": "sweep-2026-07-27g (8 waves x 5, 43 suites dispatched, 39 of them never-covered ground; rot checks dropped from wave 2 onward at the user's direction since no e2e-next issue is closed). Lambda quota verified 1000; ZERO throttles, consistent with sweep-f. Adapter-only pass rate 94.1% (80/85). FIVE failure clusters reduced to THREE root causes: two collapsed into the existing P0 ocelhq-9q8, two merged into one new issue ocelhq-slzm, one new issue ocelhq-2f8x. The headline lesson is that three of five clusters were NOT what their assertions said: 9q8's cases were content-type mislabelling surfacing as missing metadata and NaN timings, and slzm's were correct-but-late responses surfacing as broken actions. A WEAK confirm verdict on ocelhq-iud was escalated to a debugger and turned out CORRECT, which also uncovered a second, worker-side half of that bug (index.ts:471 static branch uses the original request URL, so no request path can retrieve the object). New structural trap 6 recorded: fixtures shipping nodejs-runtime middleware/proxy die at build under ocelhq-dly and burn a slot invisibly to all five earlier screens. Footprint: 52/52 slugs verified clean, account-wide ocel:project lambda count 0, 0 sweep-matching Cloudflare worker scripts.",
  "totalSuitesInTree": 690,
  "suites": {
@@ -157,26 +157,23 @@
    "note": "Ran twice. Wave 1 (concurrent with a second suite) gave 57P/5F; wave 3 solo gave 60P/2F with zero source changes. The 3 extra wave-1 failures were quota-contention artifacts, filed and closed as ocelhq-nbk. The solo run is authoritative. Both logs and result JSONs retained in .coverage/."
   },
   "test/e2e/app-dir/trailingslash/trailingslash.test.ts": {
-   "lastRun": "sweep-2026-07-27b",
+   "lastRun": "tslash-fix-verify",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 4,
-    "failed": 4,
-    "known": 0,
+    "passed": 6,
+    "failed": 0,
+    "known": 2,
     "skipped": 0
    },
-   "projectSlug": "e2e-sweep-2026-07-27b-e7a1d023",
+   "projectSlug": "e2e-tsl2-ed9a56a6",
    "openIssues": [
-    "ocelhq-e8z",
-    "ocelhq-xlj"
+    "ocelhq-uu2x"
    ],
    "failedTests": {
-    "app-dir trailingSlash handling should redirect route when requesting it directly": "ocelhq-e8z",
-    "app-dir trailingSlash handling should redirect route when clicking link": "ocelhq-xlj",
-    "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=true)": "ocelhq-e8z",
-    "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=false)": "ocelhq-e8z"
+    "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=true)": "ocelhq-uu2x",
+    "app-dir trailingSlash handling should revalidate a page with generated static params (withSlash=false)": "ocelhq-uu2x"
    },
-   "note": "Attempt 1 died infra (transient SSM 502 during ocel preview bootstrap, zero test results); attempt 2 succeeded and is recorded here. Both retained. This suite settled ocelhq-e8z's previously-untested trailing-slash note: CONFIRMED, and it also exposed a second distinct defect downstream (ocelhq-xlj). Also note `should redirect route when requesting it directly by browser` PASSES FOR THE WRONG REASON - /a serves the page at 200 instead of redirecting, satisfying a weaker assertion. It will start depending on ocelhq-xlj once e8z is fixed."
+   "note": "Post-fix/trailing-slash-normalization re-run. Baseline was 4 passed / 4 failed; all four slash-form 404s are now fixed (ocelhq-xlj CLOSED). The two residuals are ocelhq-uu2x (ISR entry-key divergence under trailingSlash:true), filed separately and out of scope for this branch."
   },
   "test/e2e/app-dir/app-static/app-static.test.ts": {
    "lastRun": "sweep-2026-07-27e",
@@ -2863,37 +2860,26 @@
    ]
   },
   "test/e2e/middleware-trailing-slash/test/index.test.ts": {
-   "lastRun": "sweep-2026-07-28b",
+   "lastRun": "tslash-fix-verify",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 10,
-    "failed": 13,
+    "passed": 16,
+    "failed": 7,
     "known": 0,
-    "skipped": 0
+    "skipped": 4
    },
-   "knownCauseCount": 13,
-   "openIssues": [
-    "ocelhq-4fg",
-    "ocelhq-glyd",
-    "ocelhq-e8z",
-    "ocelhq-xlj",
-    "ocelhq-e7w"
-   ],
+   "projectSlug": "e2e-tsm3-d817dfb8",
+   "openIssues": [],
    "failedTests": {
-    "Middleware Runtime trailing slash > should have correct query values for rewrite to ssg page": "ocelhq-4fg",
-    "Middleware Runtime trailing slash > should have correct dynamic route params on client-transition to dynamic route": "ocelhq-glyd",
-    "Middleware Runtime trailing slash > should have correct dynamic route params for middleware rewrite to dynamic route": "ocelhq-4fg",
-    "Middleware Runtime trailing slash > should have correct route params for chained rewrite from middleware to config rewrite": "ocelhq-4fg",
-    "Middleware Runtime trailing slash > should redirect the same for direct visit and client-transition": "ocelhq-e8z",
-    "Middleware Runtime trailing slash > should rewrite the same for direct visit and client-transition": "ocelhq-xlj",
-    "Middleware Runtime trailing slash > should rewrite correctly for non-SSG/SSP page": "ocelhq-xlj",
-    "Middleware Runtime trailing slash > should trigger middleware for data requests": "ocelhq-glyd",
-    "Middleware Runtime trailing slash > should normalize data requests into page requests": "ocelhq-glyd",
-    "Middleware Runtime trailing slash > should add a rewrite header on data requests for rewrites": "ocelhq-glyd",
-    "Middleware Runtime trailing slash > allows shallow linking with middleware": "ocelhq-glyd",
-    "Middleware Runtime trailing slash > with .html extension > should work when navigating": "ocelhq-e7w",
-    "Middleware Runtime trailing slash > without .html extension > should work when navigating": "ocelhq-e7w"
-   }
+    "Middleware Runtime trailing slash should have correct dynamic route params on client-transition to dynamic route": null,
+    "Middleware Runtime trailing slash should have correct dynamic route params for middleware rewrite to dynamic route": null,
+    "Middleware Runtime trailing slash should rewrite the same for direct visit and client-transition": null,
+    "Middleware Runtime trailing slash should rewrite correctly for non-SSG/SSP page": null,
+    "Middleware Runtime trailing slash allows shallow linking with middleware": null,
+    "Middleware Runtime trailing slash with .html extension should work when navigating": null,
+    "Middleware Runtime trailing slash without .html extension should work when navigating": null
+   },
+   "note": "Post-fix/trailing-slash-normalization re-run (after matcher-form gate fix cc5b310). All 3 ocelhq-glyd cluster cases now pass (should normalize data requests into page requests / should trigger middleware for data requests / should add a rewrite header on data requests for rewrites) -> ocelhq-glyd CLOSED. Merge-base baseline (b5317d5, slug e2e-tsmbl-cb4c4e5e) measured 11 passed / 12 failed; all 7 residual failures here fail identically at baseline -> zero regressions, the branch is +5 passed / -5 failed net. The 7 residuals are pre-existing and unattributed (no bd issue filed yet)."
   },
   "test/e2e/next-script/index.test.ts": {
    "lastRun": "sweep-2026-07-28b",
@@ -4821,24 +4807,18 @@
    "failedTests": {}
   },
   "test/e2e/basepath/trailing-slash.test.ts": {
-   "lastRun": "sweep-2026-07-28e",
+   "lastRun": "tslash-fix-verify",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 0,
-    "failed": 3,
+    "passed": 3,
+    "failed": 0,
     "known": 0,
-    "knownCause": 0,
     "skipped": 0
    },
-   "projectSlug": "e2e-sweep-2026-07-28e-3bc4c05e",
-   "openIssues": [
-    "ocelhq-xlj"
-   ],
-   "failedTests": {
-    "basePath + trailingSlash › should allow URL query strings without refresh": "ocelhq-xlj",
-    "basePath + trailingSlash › should allow URL query strings on index without refresh": "ocelhq-xlj",
-    "basePath + trailingSlash › should correctly replace state when same asPath but different url": "ocelhq-xlj"
-   }
+   "projectSlug": "e2e-tslash-a8d36ab4",
+   "openIssues": [],
+   "failedTests": {},
+   "note": "Post-fix/trailing-slash-normalization re-run. Baseline was 0 passed / 3 failed; the basePath face of ocelhq-xlj is fixed, all 3 cases now pass."
   },
   "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-asset-prefix.test.ts": {
    "lastRun": "sweep-2026-07-28e",
@@ -6915,6 +6895,34 @@
    },
    "openIssues": [],
    "failedTests": {}
+  },
+  "test/e2e/skip-trailing-slash-redirect/index.test.ts": {
+   "lastRun": "tslash-fix-verify",
+   "lastOutcome": "completed",
+   "counts": {
+    "passed": 20,
+    "failed": 0,
+    "known": 11,
+    "skipped": 1
+   },
+   "projectSlug": "e2e-tsk3-702dc39a",
+   "openIssues": [
+    "ocelhq-t2qx"
+   ],
+   "failedTests": {
+    "skip-trailing-slash-redirect should merge cookies from middleware and API routes correctly": null,
+    "skip-trailing-slash-redirect should merge cookies from middleware and edge API routes correctly": null,
+    "skip-trailing-slash-redirect should apply config redirect correctly": null,
+    "skip-trailing-slash-redirect should apply config rewrites correctly": "ocelhq-t2qx",
+    "skip-trailing-slash-redirect should not apply trailing slash on load on client": null,
+    "skip-trailing-slash-redirect pages dir should not apply trailing slash redirect (with slash)": null,
+    "skip-trailing-slash-redirect pages dir should not apply trailing slash redirect (without slash)": null,
+    "skip-trailing-slash-redirect pages dir should preserve original trailing slashes to links on client": null,
+    "skip-trailing-slash-redirect pages dir should respond to index correctly": null,
+    "skip-trailing-slash-redirect pages dir should respond to dynamic route correctly": null,
+    "skip-trailing-slash-redirect pages dir should navigate client side correctly": null
+   },
+   "note": "Post-fix/trailing-slash-normalization re-run (after matcher-form gate fix cc5b310). Merge-base baseline (b5317d5, slugs e2e-tsbl3-efb214ee / e2e-tsbl3b-5f7dbccd, reproduced twice): 16 passed / 15 failed. This run: 20 passed / 0 unattributed failed / 11 known-cause / 1 skipped. Both true regressions found mid-effort ('should parse locale info for data request correctly', 'should provide original _next/data URL with skipProxyUrlNormalize') are confirmed FIXED by 2475fdf. 'should apply config rewrites correctly' is known-cause ocelhq-t2qx (rewrite-face asset keying, fix lives on unmerged branch fix/pages-dynamic-dispatch). The other 10 known-cause failures are pre-existing-at-baseline and unattributed (no bd issue filed yet). Zero regressions vs. baseline."
   }
  },
  "runs": [
@@ -7173,6 +7181,20 @@
    "infra": 0,
    "lambdaConcurrencyQuota": 1000,
    "notes": "Targeted 2-suite verification run (not a sweep) confirming ocelhq-sae and ocelhq-2d0 fixes on fix/patch-content-types (commits b6fcff2, f810cb7, d626b5d, 9e2eb06, 82582c7, 251193c) against a fresh preview deploy. metadata.test.ts: 45 passed / 2 failed (was 39/8) — only ocelhq-8xo's crossOrigin cases remain, ocelhq-sae's five targets and one ocelhq-9q8 case now pass. service-worker-register.test.ts: 8 passed / 0 failed (was 6/2) — ocelhq-2d0 fully clear. Live curl evidence against a re-staged fresh preview (e2e-stgct-a213dc7d) confirmed post-fix content-type/cache-control values and a working If-None-Match->304. Full report at .superpowers/sdd/ocelhq-sae/verify-report.md."
+  },
+  {
+   "sweepId": "tslash-fix-verify",
+   "ranAt": "2026-08-09T04:30:00Z",
+   "waves": 1,
+   "suitesPerWave": 4,
+   "suites": 4,
+   "passed": 45,
+   "failed": 7,
+   "known": 13,
+   "skipped": 5,
+   "infra": 0,
+   "lambdaConcurrencyQuota": 1000,
+   "notes": "Targeted re-verification of fix/trailing-slash-normalization (ocelhq-xlj, ocelhq-glyd) after the CLI rebuild and the matcher-form gate fix (cc5b310), not a tree-wide sweep wave. Merge-base (b5317d5) baselines proving zero regressions: middleware-trailing-slash 11 passed/12 failed (slug e2e-tsmbl-cb4c4e5e) vs this run's 16/7; skip-trailing-slash-redirect 16 passed/15 failed (slugs e2e-tsbl3-efb214ee / e2e-tsbl3b-5f7dbccd, reproduced twice) vs this run's 20 passed/0 failed/11 known/1 skipped. app-dir/trailingslash baseline was 4 passed/4 failed vs this run's 6/0/2known. basepath/trailing-slash baseline was 0 passed/3 failed vs this run's 3/0."
   }
  ],
  "issues": {
@@ -7577,7 +7599,7 @@
    "note": "Distinct from ocelhq-bvm despite both being pre-invoke AWS rejections: bvm corrupts the CanonicalURI term (unencoded path chars -> 400), this corrupts the payload-hash term (-> 403). Fixing bvm does not touch this. Reproduced deterministically in two independent runs at 423ms and 425ms."
   },
   "ocelhq-xlj": {
-   "status": "open",
+   "status": "closed",
    "priority": "P1",
    "kind": "adapter",
    "tests": 1,
@@ -8425,7 +8447,7 @@
    "notes": " [sweep-2026-07-28g] Precondition generalized: fires for ANY app whose /404 (or not-found) is a lambda rather than a build-emitted static/404.html — including pages-router apps whose _app.js has getInitialProps. Do NOT propose a bare text/plain;charset=UTF-8 matcher: that is the Workers default for any string-bodied Response and would swallow unrelated worker error paths."
   },
   "ocelhq-glyd": {
-   "status": "open",
+   "status": "closed",
    "priority": "P1",
    "kind": "adapter",
    "tests": 5,
@@ -9111,6 +9133,43 @@
    "lastSeen": "sweep-2026-07-28h",
    "note": "Coupled to ocelhq-4f9b. Fix both in one pass over _parse.mjs: route each matcher against the evidence stream its kind names, and make an unusable matcher kind fail loudly at registry load instead of silently no-opping. Deliberately carries NO matchers: it is a defect in the matching machinery itself, not a test-failure signature, so it can never auto-attribute.",
    "matchers": []
+  },
+  "ocelhq-ypgp": {
+   "status": "open",
+   "priority": "P1",
+   "kind": "adapter",
+   "tests": 0,
+   "oneLine": "next.config route sources written WITH a trailing slash never match under trailingSlash: true (accepted follow-up regression introduced by fix/trailing-slash-normalization)",
+   "related": [
+    "ocelhq-xlj",
+    "ocelhq-glyd"
+   ],
+   "matchers": [
+    {
+     "kind": "config-source",
+     "pattern": "a next.config redirect/rewrite `source` literally ends in `/` and its route stops matching once trailingSlash normalization runs before routing",
+     "confidence": "specific",
+     "check": "Accepted follow-up: strictly better than 404-on-every-canonical-URL (the pre-fix state). Confirmed live-verified: fix/trailing-slash-normalization landed and e2e-verified (ocelhq-xlj, ocelhq-glyd closed), so this regression is live on that branch."
+    }
+   ]
+  },
+  "ocelhq-uu2x": {
+   "status": "open",
+   "priority": "P2",
+   "kind": "adapter",
+   "tests": 2,
+   "oneLine": "ISR cache entries are written under a slash-suffixed key under trailingSlash: true while the build seeds them slash-free (entry-key divergence)",
+   "related": [
+    "ocelhq-xlj"
+   ],
+   "matchers": [
+    {
+     "kind": "jest-error",
+     "pattern": "page\\.waitForSelector: Timeout .* waiting for locator\\('#generated-at'\\)",
+     "confidence": "specific",
+     "check": "app-dir/trailingslash.test.ts 'should revalidate a page with generated static params (withSlash=true/false)'. Confirmed live on slug e2e-tsl2-ed9a56a6 as the only 2 residual failures after the trailing-slash fix landed."
+    }
+   ]
   }
  },
  "suiteCounts": {
