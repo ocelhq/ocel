@@ -224,6 +224,14 @@ function outputDir(projectDir: string): string {
   return join(projectDir, ".ocel/output");
 }
 
+// The name -> module id table the shim inlines, which is what resolves a
+// `blob:` fetch.
+function assetTable(shim: string): Record<string, string> {
+  const match = /^const ASSETS = (.*)$/m.exec(shim);
+  if (!match) throw new Error("shim carries no ASSETS table");
+  return JSON.parse(match[1]!) as Record<string, string>;
+}
+
 async function readBundleRaw(projectDir: string): Promise<string> {
   return readFile(join(outputDir(projectDir), "edge/bundle.json"), "utf8");
 }
@@ -253,7 +261,7 @@ test("gives every edge entry key one bundle entry, variants folded together", as
   await adapter.onBuildComplete!(args as never);
 
   const bundle = await readBundle(projectDir);
-  expect(bundle.version).toBe(1);
+  expect(bundle.version).toBe(2);
   expect(bundle.mainModule).toBe("main.js");
   // /edge-page and /edge-page.rsc are two outputs but one compiled entry.
   expect(Object.keys(bundle.entries).sort()).toEqual([
@@ -375,6 +383,37 @@ test("falls back to extensions when the manifest is unreadable", async () => {
       .map(([message]) => String(message))
       .some((message) => message.includes("middleware-manifest.json")),
   ).toBe(true);
+});
+
+// base64 and never utf8: utf8 replaces every invalid byte sequence with U+FFFD,
+// which would silently corrupt a png or a font.
+test("carries traced assets as base64, byte-exact", async () => {
+  const { projectDir, args, tracedAssets } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  const ids = assetTable(bundle.shim);
+  for (const [name, bytes] of Object.entries(tracedAssets)) {
+    expect(Buffer.from(bundle.assets[ids[name]!], "base64")).toEqual(bytes);
+  }
+});
+
+// The key of an asset is the manifest's name, which is also the string the
+// compiled chunk hands user code after `blob:` — so the shim's table is what
+// turns that fetch into a module import.
+test("maps each asset's blob name to its module id in the shim", async () => {
+  const { projectDir, args, tracedAssets } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  const table = assetTable(bundle.shim);
+  expect(Object.keys(table).sort()).toEqual(Object.keys(tracedAssets).sort());
+  for (const id of Object.values(table)) {
+    expect(bundle.assets).toHaveProperty(id);
+  }
+  expect(bundle.shim).toContain('url.startsWith("blob:")');
 });
 
 test("carries wasm assets as base64, declared once for the whole bundle", async () => {
@@ -687,7 +726,9 @@ test("prints the bundle size, chunk count and entry count", async () => {
   await adapter.onBuildComplete!(args as never);
 
   expect(log).toHaveBeenCalledWith(
-    expect.stringMatching(/^ocel: edge bundle \d+\.\d MB, 5 chunks, 3 entries$/),
+    expect.stringMatching(
+      /^ocel: edge bundle \d+\.\d MB, 5 chunks, 3 assets, 3 entries$/,
+    ),
   );
 });
 

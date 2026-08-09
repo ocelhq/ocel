@@ -19,14 +19,15 @@ export interface EdgeWorkers {
   compatFlags?: string[];
 }
 
-// The bundle the adapter emits. Chunk and wasm ids are opaque module names it
-// assigns; the shim imports them by those names.
+// The bundle the adapter emits. Chunk, wasm and asset ids are opaque module
+// names it assigns; the shim imports them by those names.
 interface EdgeBundle {
   version: number;
   mainModule: string;
   shim: string;
   chunks: Record<string, string>;
   wasm?: Record<string, string>;
+  assets?: Record<string, string>;
   env?: Record<string, string>;
 }
 
@@ -34,7 +35,7 @@ interface EdgeBundle {
 // frozen at deploy time and outlives the deployments it serves (ADR 0002), so it
 // can legitimately be handed a bundle a later adapter wrote; a shape it cannot
 // read is a 500, not a best-effort load.
-const BUNDLE_VERSION = 1;
+const BUNDLE_VERSION = 2;
 
 // Invokes one entry of the Deployment's edge bundle. Throws on any failure —
 // callers turn that into a 500 rather than routing on as though the entry had
@@ -84,7 +85,13 @@ export function createEdgeInvoker(
     // throwing "require is not defined" the moment it evaluates.
     for (const [id, cjs] of Object.entries(bundle.chunks)) modules[id] = { cjs };
     for (const [id, base64] of Object.entries(bundle.wasm ?? {})) {
-      modules[id] = { wasm: wasmBytes(base64) };
+      modules[id] = { wasm: base64Bytes(base64) };
+    }
+    // A traced asset — a .txt, .png or font an entry binds with
+    // `new URL(…, import.meta.url)` — is a data module, whose default export is
+    // its bytes. The shim serves it to the `blob:` fetch the chunk emits.
+    for (const [id, base64] of Object.entries(bundle.assets ?? {})) {
+      modules[id] = { data: base64Bytes(base64) };
     }
 
     return {
@@ -127,7 +134,7 @@ export function createEdgeInvoker(
       .fetch(request);
 }
 
-function wasmBytes(base64: string): ArrayBuffer {
+function base64Bytes(base64: string): ArrayBuffer {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
