@@ -6,6 +6,7 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/pulumi/pulumi/sdk/v3/go/auto"
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optdestroy"
@@ -80,7 +81,7 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 	}
 	if _, err := stack.Destroy(ctx, destroyOpts...); err != nil {
 		logWriter.Flush()
-		return fmt.Errorf("destroy stack %s: %w", cfg.StackName, err)
+		return fmt.Errorf("destroy stack %s: %w%s", cfg.StackName, err, lockRecoveryHint(err, cfg))
 	}
 	logWriter.Flush()
 
@@ -89,6 +90,22 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 		return fmt.Errorf("remove stack %s: %w", cfg.StackName, err)
 	}
 	return nil
+}
+
+// lockRecoveryHint appends the recovery path for the one Pulumi failure a killed
+// run leaves behind for good: a stack lock nothing releases on its own, which
+// fails every later teardown of that stack identically. Releasing it stays
+// manual and explicit — the same lock also protects a deploy that is genuinely
+// still running, and breaking that one corrupts the stack's state — so this
+// names the command and the precondition instead of clearing the lock. Pure.
+func lockRecoveryHint(err error, cfg TeardownConfig) string {
+	if err == nil || !strings.Contains(err.Error(), "the stack is currently locked") {
+		return ""
+	}
+	return fmt.Sprintf("\n\nthis lock outlives a run that was killed rather than one still working."+
+		"\nconfirm no deploy or teardown is running against this stack, then release it with:"+
+		"\n  PULUMI_BACKEND_URL=%s PULUMI_CONFIG_PASSPHRASE=<the account passphrase> pulumi cancel --stack %s"+
+		"\nand re-run the teardown", cfg.BackendURL, cfg.StackName)
 }
 
 // PreviewStack is one enumerated preview-class stack, in the pure shape

@@ -29,6 +29,16 @@ func PreviewInfraStackFor(slug, pointer string, persistent bool) string {
 	return PreviewInfraStackName(slug, pointer)
 }
 
+// PreviewRemovalResult is what RemovePreview reports back about the edge.
+// EdgeTornDown means the project's last preview pointer is gone and nothing
+// edge-side survived it — no worker, no store instance — so the host may forget
+// the persisted root-stack state. It stays false whenever a worker or the
+// instance may still stand, because that state is the only thing that can name
+// them to a re-run.
+type PreviewRemovalResult struct {
+	EdgeTornDown bool
+}
+
 // RemovePreview tears one preview pointer down, traffic-first: the store pointer
 // goes first both so it stops resolving and because the record keys its removal
 // reports name exactly the app-deploy stacks and R2 assets left to reclaim.
@@ -37,16 +47,21 @@ func PreviewInfraStackFor(slug, pointer string, persistent bool) string {
 // sweep goes last, leaving the state and instance a re-run needs in place if an
 // earlier step failed.
 //
-// stack/state may be zero when the project never reconciled a preview root stack
-// (nothing was ever deployed under this pointer), in which case there is nothing
-// store-side to remove and only a stray infra/app stack, if any, is swept.
-func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, progress, log func(string)) error {
+// No step is ever skipped silently. The edge is swept on every path: through the
+// store's own removal when it reported one, and — when the project holds no
+// root-stack state at all — by listing the project's preview worker prefix
+// directly, which is the only way a deploy that died inside the root-stack
+// reconcile is ever reclaimed. The one path that cannot sweep (the store was
+// reachable but refused the removal, so a sibling pointer may still be fronted by
+// the same worker) reports what it left standing rather than returning success.
+func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, progress, log func(string)) (PreviewRemovalResult, error) {
 	report := nilSafe(progress)
 
 	var errs []error
 	var removal edge.PointerRemoval
+	stored := stack != nil && len(state) > 0
 	removed := false
-	if stack != nil && len(state) > 0 {
+	if stored {
 		report(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
 		result, err := stack.RemovePointer(ctx, state, pointer)
 		if err != nil {
@@ -70,8 +85,11 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 		}
 	}
 
-	if removed {
-		errs = append(errs, reclaimPreviewEdge(ctx, stack, state, slug, removal, report))
+	var result PreviewRemovalResult
+	switch {
+	case removed:
+		edgeErr := reclaimPreviewEdge(ctx, stack, state, slug, removal, report)
+		errs = append(errs, edgeErr)
 
 		// Artifact keys carry no pointer, so identical code under two pointers is
 		// one object: only the last pointer's removal leaves a prefix no live
@@ -81,9 +99,41 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 		if removal.RemainingPointers == 0 {
 			report("Purging preview function artifacts — no previews remain")
 			errs = append(errs, purgeProjectArtifacts(ctx, cfg, slug))
+			result.EdgeTornDown = edgeErr == nil
 		}
+	case stored:
+		errs = append(errs, fmt.Errorf("left this project's preview worker(s) and its deployments-store instance standing: the store did not report %q removed, so whether a sibling preview is still fronted by the same worker is unknown; re-run `ocel preview rm` once the store is reachable", pointer))
+	default:
+		errs = append(errs, sweepOrphanedPreviewEdge(ctx, stack, cfg, slug, report))
 	}
 
+	return result, errors.Join(errs...)
+}
+
+// sweepOrphanedPreviewEdge reclaims what a project holding no root-stack state
+// can still be paying for. A deploy that dies inside the root-stack reconcile
+// leaves its generic worker(s) deployed and records nothing, and the store
+// instance those workers would otherwise be listed from is exactly what was never
+// written — so listing the project's preview worker prefix on the edge is the
+// only thing that can ever name them again. Nothing was recorded, so no sibling
+// pointer can exist and the whole prefix is this teardown's to take.
+func sweepOrphanedPreviewEdge(ctx context.Context, stack edge.RootStack, cfg Config, slug string, report func(string)) error {
+	if stack == nil {
+		return nil
+	}
+	deployed, err := stack.ListDeployedWorkers(ctx, previewWorkerPrefix(slug))
+	if err != nil {
+		return fmt.Errorf("resolve orphaned preview workers: %w", err)
+	}
+	var errs []error
+	if len(deployed) > 0 {
+		report("Destroying the project's preview worker(s) — orphaned by a deploy that recorded no state")
+		if err := stack.DestroyRootStack(ctx, deployed); err != nil {
+			errs = append(errs, fmt.Errorf("destroy orphaned preview workers %v: %w", deployed, err))
+		}
+	}
+	report("Purging preview function artifacts")
+	errs = append(errs, purgeProjectArtifacts(ctx, cfg, slug))
 	return errors.Join(errs...)
 }
 
