@@ -112,7 +112,7 @@ func TestRemovePreview_DropsOnlyThisPointersRoutesWhileSiblingsRemain(t *testing
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
-	if err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
+	if _, err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 
@@ -150,7 +150,7 @@ func TestRemovePreview_SweepsTheEdgeFootprintWhenItWasTheLastPointer(t *testing.
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
-	if err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
+	if _, err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 
@@ -190,7 +190,7 @@ func TestPreviewSweepWorkers_CoversAClampedNameThePrefixCannotReach(t *testing.T
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
-	if err := RemovePreview(ctx, fake, state, Config{}, slug, "pr-1", false, nil, nil); err != nil {
+	if _, err := RemovePreview(ctx, fake, state, Config{}, slug, "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 	if !slices.Contains(fake.destroyedWorkers, worker) {
@@ -233,7 +233,7 @@ func TestRemovePreview_KeepsTheStoreInstanceWhenTheWorkerDestroyFails(t *testing
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
-	err = RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil)
+	_, err = RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil)
 	if !errors.Is(err, boom) {
 		t.Fatalf("RemovePreview error = %v, want it to report %v", err, boom)
 	}
@@ -242,17 +242,112 @@ func TestRemovePreview_KeepsTheStoreInstanceWhenTheWorkerDestroyFails(t *testing
 	}
 }
 
-// A project that never reconciled a preview root stack has nothing edge-side, so
-// every store-side step must stay behind the same guard.
-func TestRemovePreview_NoRootStackStateTouchesNothingEdgeSide(t *testing.T) {
-	fake := &recordingRootStack{}
+// A project holding no root-stack state has no store to ask, so the edge itself
+// is the only source left for the workers a deploy that died inside reconcile
+// left deployed — and nothing else in the system will ever name them again.
+func TestRemovePreview_NoRootStackStateSweepsTheEdgeByPrefix(t *testing.T) {
+	orphan := previewGenericName("shop", "web")
+	fake := &recordingRootStack{deployedWorkers: []string{orphan, workerScriptName("shop-production", "web")}}
 
-	if err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
+	result, err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, nil, nil)
+	if err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
-	if len(fake.removedPointers) != 0 || len(fake.removedRoutes) != 0 ||
-		len(fake.listedPrefixes) != 0 || fake.destroyed != 0 || fake.destroyedInstance != 0 {
-		t.Errorf("RemovePreview touched the edge with no root-stack state: %+v", fake)
+	if !reflect.DeepEqual(fake.listedPrefixes, []string{previewWorkerPrefix("shop")}) {
+		t.Errorf("listed prefixes = %v, want [%s]", fake.listedPrefixes, previewWorkerPrefix("shop"))
+	}
+	if want := []string{orphan}; !reflect.DeepEqual(fake.destroyedWorkers, want) {
+		t.Errorf("destroyed workers = %v, want %v (production must be untouched)", fake.destroyedWorkers, want)
+	}
+	// Nothing store-side may be attempted: there is no state to authenticate with.
+	if len(fake.removedPointers) != 0 || len(fake.removedRoutes) != 0 || fake.destroyedInstance != 0 {
+		t.Errorf("RemovePreview touched the store with no root-stack state: %+v", fake)
+	}
+	if result.EdgeTornDown {
+		t.Error("EdgeTornDown = true with no state: there is no state for the host to forget")
+	}
+}
+
+// The same path must stay quiet for the common case it also covers: a preview
+// that never got as far as deploying anything.
+func TestRemovePreview_NoRootStackStateAndNothingDeployedDestroysNothing(t *testing.T) {
+	fake := &recordingRootStack{}
+
+	if _, err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
+		t.Fatalf("RemovePreview: %v", err)
+	}
+	if fake.destroyed != 0 || len(fake.destroyedWorkers) != 0 {
+		t.Errorf("destroyed %v with nothing deployed under the prefix", fake.destroyedWorkers)
+	}
+}
+
+// A store that refuses the removal leaves the shared worker's fate unknown — a
+// sibling pointer may still be fronted by it — so the teardown can neither sweep
+// it nor report success over it.
+func TestRemovePreview_FailedPointerRemovalReportsWhatItLeftStanding(t *testing.T) {
+	fake := &recordingRootStack{deployedWorkers: []string{previewGenericName("shop", "web")}}
+	// A state the fake cannot authenticate makes its RemovePointer reject.
+	stale := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
+
+	result, err := RemovePreview(context.Background(), fake, stale, Config{}, "shop", "pr-1", false, nil, nil)
+	if err == nil {
+		t.Fatal("RemovePreview err = nil, want a failure naming what is still live")
+	}
+	if !strings.Contains(err.Error(), "still") && !strings.Contains(err.Error(), "standing") {
+		t.Errorf("error %q does not name what was left live", err)
+	}
+	if fake.destroyed != 0 || fake.destroyedInstance != 0 {
+		t.Errorf("swept the edge on an unknown removal: %+v", fake)
+	}
+	if result.EdgeTornDown {
+		t.Error("EdgeTornDown = true after a failed pointer removal")
+	}
+}
+
+// EdgeTornDown is the host's licence to forget the persisted state, so it may
+// only be true once the workers and the instance are actually gone.
+func TestRemovePreview_ReportsTheEdgeTornDownOnlyOnACleanLastPointerSweep(t *testing.T) {
+	ctx := context.Background()
+	newFake := func(destroyErr error) (*recordingRootStack, edge.RootStackState) {
+		f := &recordingRootStack{
+			pointerRemoval:      edge.PointerRemoval{RemainingPointers: 0},
+			deployedWorkers:     []string{previewGenericName("shop", "web")},
+			destroyRootStackErr: destroyErr,
+		}
+		state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
+		if err != nil {
+			t.Fatalf("ReconcileRootStack: %v", err)
+		}
+		return f, state
+	}
+
+	clean, state := newFake(nil)
+	result, err := RemovePreview(ctx, clean, state, Config{}, "shop", "pr-1", false, nil, nil)
+	if err != nil {
+		t.Fatalf("RemovePreview: %v", err)
+	}
+	if !result.EdgeTornDown {
+		t.Error("EdgeTornDown = false after a clean last-pointer sweep: the state is kept pointing at a wiped instance")
+	}
+
+	broken, state := newFake(errors.New("cloudflare said no"))
+	result, err = RemovePreview(ctx, broken, state, Config{}, "shop", "pr-1", false, nil, nil)
+	if err == nil {
+		t.Fatal("RemovePreview err = nil after a failed worker destroy")
+	}
+	if result.EdgeTornDown {
+		t.Error("EdgeTornDown = true with a worker still standing: the state a re-run needs would be forgotten")
+	}
+
+	// A surviving sibling is not a torn-down edge either.
+	sibling, state := newFake(nil)
+	sibling.pointerRemoval = edge.PointerRemoval{RemainingPointers: 1}
+	result, err = RemovePreview(ctx, sibling, state, Config{}, "shop", "pr-1", false, nil, nil)
+	if err != nil {
+		t.Fatalf("RemovePreview: %v", err)
+	}
+	if result.EdgeTornDown {
+		t.Error("EdgeTornDown = true while a sibling preview still uses the state")
 	}
 }
 

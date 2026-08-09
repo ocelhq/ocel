@@ -136,9 +136,12 @@ func realize(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, 
 	if err != nil {
 		return Result{}, err
 	}
+	// The partial state is carried out with the error on purpose: reconcile
+	// deploys workers before it records anything, so dropping what it did get to
+	// leaves a live worker no teardown can ever name again.
 	state, err := reconcileRootStack(ctx, stack, specs, cfg.RootStackState)
 	if err != nil {
-		return Result{}, err
+		return Result{RootStackState: state}, err
 	}
 
 	// An ephemeral preview has no infra stack (BuildPlan leaves it empty): its

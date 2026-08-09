@@ -11,6 +11,7 @@ package deploy
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -223,42 +224,39 @@ func asPrefixDeleter(up ArtifactUploader) PrefixDeleter {
 // so trying both buckets unconditionally is safe. Performs the real Pulumi
 // destroy and S3/R2 calls; not exercised by unit tests, like Destroy.
 func Reclaim(ctx context.Context, cfg Config, targets []PruneTarget, progress, log func(string)) error {
+	var errs []error
 	for _, t := range targets {
 		if progress != nil {
 			progress(fmt.Sprintf("Reclaiming %s deployment %s", t.App, t.Identity))
 		}
-		if err := Destroy(ctx, teardownConfig(cfg, t.Stack), progress, log); err != nil {
-			return fmt.Errorf("destroy app-deploy stack %s: %w", t.Stack, err)
-		}
-
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, t.AssetPrefix); err != nil {
-			return err
-		}
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, t.CachePrefix); err != nil {
-			return err
-		}
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, t.EdgePrefix); err != nil {
-			return err
-		}
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, t.AssetPrefix); err != nil {
-			return err
-		}
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, t.ImageConfigKey); err != nil {
-			return err
-		}
-		if err := deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, t.CachePrefix); err != nil {
-			return err
-		}
-		// The build's write secret retires with the entries it wrote (epic
-		// decision 6d): an empty CachePrefix means a surviving Deployment still
-		// serves this build, so its writer must keep working.
-		if t.CachePrefix != "" {
-			if err := retireISRWriter(ctx, cfg, t.CachePrefix); err != nil {
-				return err
-			}
-		}
+		errs = append(errs, reclaimTarget(ctx, cfg, t, progress, log))
 	}
-	return nil
+	return errors.Join(errs...)
+}
+
+// reclaimTarget reclaims one Deployment. A failed stack destroy stops this
+// target and only this target: its objects are still being served by the
+// functions that survived, so deleting them would break a live Deployment —
+// whereas the next target is independent, and abandoning it only leaks.
+func reclaimTarget(ctx context.Context, cfg Config, t PruneTarget, progress, log func(string)) error {
+	if err := Destroy(ctx, teardownConfig(cfg, t.Stack), progress, log); err != nil {
+		return fmt.Errorf("destroy app-deploy stack %s: %w", t.Stack, err)
+	}
+
+	var errs []error
+	for _, p := range []string{t.AssetPrefix, t.CachePrefix, t.EdgePrefix} {
+		errs = append(errs, deletePrefix(ctx, asPrefixDeleter(cfg.CacheStoreUploader), cfg.CacheStoreBucket, p))
+	}
+	for _, p := range []string{t.AssetPrefix, t.ImageConfigKey, t.CachePrefix} {
+		errs = append(errs, deletePrefix(ctx, asPrefixDeleter(cfg.Uploader), cfg.AssetBucket, p))
+	}
+	// The build's write secret retires with the entries it wrote (epic
+	// decision 6d): an empty CachePrefix means a surviving Deployment still
+	// serves this build, so its writer must keep working.
+	if t.CachePrefix != "" {
+		errs = append(errs, retireISRWriter(ctx, cfg, t.CachePrefix))
+	}
+	return errors.Join(errs...)
 }
 
 // Prune reclaims a project's old Deployments (ADR 0001): stack's own

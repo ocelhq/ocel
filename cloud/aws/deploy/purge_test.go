@@ -137,7 +137,7 @@ func TestRemovePreview_LeavesArtifactsWhileSiblingPointersRemain(t *testing.T) {
 	}
 	cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 
-	if err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
+	if _, err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 
@@ -161,7 +161,7 @@ func TestRemovePreview_PurgesArtifactsWhenItWasTheLastPointer(t *testing.T) {
 	}
 	cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 
-	if err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
+	if _, err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 
@@ -179,7 +179,7 @@ func TestRemovePreview_LeavesArtifactsWhenThePointerRemovalFailed(t *testing.T) 
 	cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 	state := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
 
-	err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, nil, nil)
+	_, err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, nil, nil)
 	if err == nil {
 		t.Fatal("RemovePreview err = nil, want the failed pointer removal reported")
 	}
@@ -291,7 +291,7 @@ func TestRemovePreview_KeepsTheEnvironmentsOverrides(t *testing.T) {
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
-	if err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, nil, nil); err != nil {
+	if _, err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 

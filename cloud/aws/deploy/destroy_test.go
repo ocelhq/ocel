@@ -1,11 +1,35 @@
 package deploy
 
 import (
+	"errors"
 	"reflect"
+	"strings"
 	"testing"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
+
+// A lock left by a killed run fails every later teardown of that stack the same
+// way, and the CLI offers no unlock: the error is the only place the way out can
+// be stated.
+func TestLockRecoveryHint_NamesTheReleaseCommandForAStaleLockOnly(t *testing.T) {
+	cfg := TeardownConfig{StackName: "shop--preview-pr-1--infra", BackendURL: "s3://state-bucket"}
+
+	locked := errors.New("the stack is currently locked by 1 lock(s). Either wait for the other process(es) to end or delete the lock file with 'pulumi cancel'")
+	hint := lockRecoveryHint(locked, cfg)
+	for _, want := range []string{"pulumi cancel", cfg.StackName, cfg.BackendURL} {
+		if !strings.Contains(hint, want) {
+			t.Errorf("hint %q does not mention %q", hint, want)
+		}
+	}
+
+	if got := lockRecoveryHint(errors.New("resource still has dependencies"), cfg); got != "" {
+		t.Errorf("hint on an unrelated failure = %q, want empty", got)
+	}
+	if got := lockRecoveryHint(nil, cfg); got != "" {
+		t.Errorf("hint on no error = %q, want empty", got)
+	}
+}
 
 func TestPreviewStacksFromNames_OneEntryPerPointerWithInferredLifecycle(t *testing.T) {
 	got := previewStacksFromNames("shop", []string{

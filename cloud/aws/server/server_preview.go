@@ -208,7 +208,24 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 
 	pointer := env.GetIdentity()
 	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
-	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, progress, logf)
+	result, rerr := deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, progress, logf)
+
+	// Forget the persisted preview root-stack state only once this project's last
+	// preview is gone and nothing edge-side survived it, exactly as the
+	// whole-project teardown does. Kept otherwise, because it is the only thing
+	// that can name a surviving worker or the store instance to a re-run; dropped
+	// here, because it would otherwise point at an instance that no longer exists
+	// and make every later `preview rm` fail against it.
+	if result.EdgeTornDown && len(state) > 0 {
+		awscfg, awsErr := loadAWS(ctx, opts.Region)
+		if awsErr != nil {
+			return errors.Join(rerr, awsErr)
+		}
+		if err := bootstrap.DeleteRootStackStateFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, req.GetSlug()); err != nil {
+			rerr = errors.Join(rerr, err)
+		}
+	}
+	return rerr
 }
 
 // previewTeardownContext resolves everything a preview teardown (rm/prune/
