@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode"
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
@@ -372,31 +373,63 @@ func readFunction(outputDir, functionsDir, funcDir, app string) (manifestbuilder
 	}, nil
 }
 
+// summaryLines is how much of the tail failureSummary headlines. Two is the
+// failing line plus the line that follows it, which is usually the tool
+// restating the failure; more than that starts reaching back into the warnings
+// the tail exists to leave behind.
+const summaryLines = 2
+
+// failureSummary picks the lines a failed build should be named by. A build
+// tool warns on the way in and dies on the way out, so the cause is at the end
+// of its output and the noise is at the front: taking the tail headlines the
+// failure instead of whatever deprecation notice happened to print first. Lines
+// carrying no letter or digit are separators and banners, dropped so they can
+// never take the tail's place. Nothing is lost by summarizing — the full output
+// is already forwarded to the caller's writer as it is produced.
+func failureSummary(output string) string {
+	var lines []string
+	for _, line := range strings.Split(output, "\n") {
+		line = strings.TrimSpace(line)
+		if strings.ContainsFunc(line, func(r rune) bool { return unicode.IsLetter(r) || unicode.IsDigit(r) }) {
+			lines = append(lines, line)
+		}
+	}
+	if len(lines) > summaryLines {
+		lines = lines[len(lines)-summaryLines:]
+	}
+	return strings.Join(lines, "\n")
+}
+
 // runNode spawns the builder under the environment Build composed. Everything
 // the build needs travels there rather than in the request, because `next
 // build` reads some of it (NEXT_ADAPTER_PATH, via
 // next/dist/server/config-shared.js) by env inheritance through the builder and
 // never sees the request at all.
+//
+// Both streams are captured, not just stderr: a builder that reports its
+// failure on stdout would otherwise fail with an error carrying no detail.
+// Assigning one writer to both fields is what keeps them in the order they were
+// written — os/exec gives the child a single pipe when they are equal.
 func runNode(ctx context.Context, scriptPath string, env []string, request []byte, stderr io.Writer) error {
 	if _, err := exec.LookPath("node"); err != nil {
 		return fmt.Errorf("node not found on PATH: %w", err)
 	}
 
+	var captured bytes.Buffer
+	out := io.Writer(&captured)
+	if stderr != nil {
+		out = io.MultiWriter(stderr, &captured)
+	}
+
 	cmd := exec.CommandContext(ctx, "node", scriptPath)
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(request)
-	cmd.Stdout = stderr
-
-	var capturedErr bytes.Buffer
-	if stderr != nil {
-		cmd.Stderr = io.MultiWriter(stderr, &capturedErr)
-	} else {
-		cmd.Stderr = &capturedErr
-	}
+	cmd.Stdout = out
+	cmd.Stderr = out
 
 	if err := cmd.Run(); err != nil {
-		if msg := strings.TrimSpace(capturedErr.String()); msg != "" {
-			return fmt.Errorf("node-builder failed: %s", msg)
+		if summary := failureSummary(captured.String()); summary != "" {
+			return fmt.Errorf("node-builder failed (%w): %s", err, summary)
 		}
 		return fmt.Errorf("node-builder failed: %w", err)
 	}
