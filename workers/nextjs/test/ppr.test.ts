@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { composePpr, resumeRequest, type PprHit } from "../src/ppr";
 
@@ -101,17 +101,43 @@ describe("composePpr", () => {
     await Promise.all([fresh.text(), stale.text()]);
   });
 
-  it("truncates rather than appends an error body when the resume fails", async () => {
-    const resumed = Promise.resolve(new Response("ERROR PAGE", { status: 500 }));
-    const res = composePpr(hit(), resumed);
+  describe("a dropped resume", () => {
+    let logged: string[];
 
-    // The shell survives; the failed dynamic half is discarded, not concatenated.
-    expect(await res.text()).toBe("[shell]");
-  });
+    beforeEach(() => {
+      logged = [];
+      vi.spyOn(console, "error").mockImplementation((message) => {
+        logged.push(String(message));
+      });
+    });
 
-  it("truncates when the resume promise rejects outright", async () => {
-    const res = composePpr(hit(), Promise.reject(new Error("origin down")));
-    expect(await res.text()).toBe("[shell]");
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it("truncates rather than appends an error body, and says so", async () => {
+      const res = composePpr(
+        hit(),
+        Promise.resolve(new Response("ERROR PAGE", { status: 500 })),
+      );
+
+      // The shell survives; the failed dynamic half is discarded, not concatenated.
+      expect(await res.text()).toBe("[shell]");
+      expect(logged).toEqual(["ppr resume dropped: origin answered 500"]);
+    });
+
+    // Names the error's class and nothing else: workerd puts the url it failed
+    // to fetch into a fetch error's message, and that url is the forward this
+    // visitor's query string rode in on.
+    it("truncates when the resume promise rejects outright, and says so", async () => {
+      const res = composePpr(
+        hit(),
+        Promise.reject(new TypeError("fetch failed: https://fn.example/p?token=secret")),
+      );
+
+      expect(await res.text()).toBe("[shell]");
+      expect(logged).toEqual(["ppr resume dropped: TypeError"]);
+    });
   });
 
   it("carries the shell's status", () => {

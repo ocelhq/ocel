@@ -1,3 +1,4 @@
+import type http from "node:http";
 import { dirname, isAbsolute, relative } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runWithWaitUntil } from "../shared/background.mjs";
@@ -21,6 +22,16 @@ import {
 // `headers()`. Registered rather than local because the cache handler is a
 // separate bundle: only the global registry makes the two the same symbol.
 const RSC_REQUEST = Symbol.for("ocel.rsc-request");
+
+// The edge already flushed this route's prerendered shell and is asking only for
+// the dynamic half to append to it (see the worker's resumeRequest). Left to
+// itself Next answers a resume by rendering a fresh static shell of its own and
+// resuming on top of that, so the client receives the shell twice. Minimal mode
+// is what tells it the platform owns the shell — declared for this leg alone, so
+// every other request keeps Next's own caching, fallback and revalidation.
+function isPprResume(req: http.IncomingMessage): boolean {
+  return req.method === "POST" && req.headers["next-resume"] === "1";
+}
 
 async function boot(): Promise<void> {
   installCompileCacheFlush();
@@ -62,7 +73,11 @@ async function boot(): Promise<void> {
     return runWithWaitUntil(ocel.waitUntil, () =>
       handler(req, res, {
         waitUntil: ocel.waitUntil,
-        requestMeta: { relativeProjectDir, hostname: req.headers.host },
+        requestMeta: {
+          relativeProjectDir,
+          hostname: req.headers.host,
+          ...(isPprResume(req) && { minimalMode: true }),
+        },
       }),
     );
   };

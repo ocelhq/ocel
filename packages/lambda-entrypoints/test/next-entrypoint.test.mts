@@ -10,8 +10,15 @@ import { writeNextProjectFixture } from "./next-project-fixture.mjs";
 // The launcher's handler performs unstable_cache's pages-path flow against
 // globalThis.__incrementalCache — the exact resolution that used to find
 // nothing, throw its invariant, and 500 every pages route using unstable_cache.
+// It also echoes the requestMeta it was called with, which is how the membrane
+// states the platform contract a request runs under.
 const launcherModule = `module.exports = {
   async handler(req, res, ctx) {
+    if (req.url === "/__request-meta") {
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify(ctx.requestMeta));
+      return;
+    }
     const cache = globalThis.__incrementalCache;
     res.setHeader("content-type", "application/json");
     if (!cache) {
@@ -129,4 +136,30 @@ test("the server-action self-fetch origin is the loopback the app bound", async 
 
   const reached = await fetch(`${process.env.__NEXT_PRIVATE_ORIGIN}/api/anything`);
   expect(reached.status).toBe(200);
+});
+
+function requestMeta(init?: RequestInit): Promise<any> {
+  return fetch(`http://127.0.0.1:${port}/__request-meta`, init).then((r) => r.json());
+}
+
+const resume = { method: "POST", headers: { "next-resume": "1" }, body: "[1,{}]" };
+
+// The edge flushed the shell already and is asking only for the dynamic half.
+// Without minimal mode Next renders a shell of its own for this leg too, and the
+// client receives the prerendered shell twice.
+test("a PPR resume runs under minimal mode", async () => {
+  expect(await requestMeta(resume)).toMatchObject({ minimalMode: true });
+});
+
+// Minimal mode on any other leg would cost Next its own caching, fallback and
+// revalidation, none of which the edge takes over.
+test.each([
+  ["a document GET", undefined],
+  ["a POST that is not a resume", { method: "POST", body: "x" }],
+  ["a GET carrying the resume header", { headers: { "next-resume": "1" } }],
+])("%s does not", async (_name, init) => {
+  const meta = await requestMeta(init);
+
+  expect(meta.minimalMode).toBeUndefined();
+  expect(meta.relativeProjectDir).toBeTruthy();
 });

@@ -735,3 +735,82 @@ test("measures a cache directory that does not exist yet as empty", () => {
   expect(report.stoppedBy).toBe("complete");
   expect(report.loaded).toBe(3);
 });
+
+// Next's own memoization, verbatim: route-module.ts builds the response cache
+// from the first request to reach it and reuses it forever after.
+const NEXT_REQUEST_META = Symbol.for("NextInternalRequestMeta");
+
+function routeModuleLoader(getResponseCache?: () => never) {
+  const caches: (boolean | undefined)[] = [];
+  const routeModule = {
+    responseCache: undefined as { minimal: boolean } | undefined,
+    getResponseCache:
+      getResponseCache ??
+      ((req: any) => {
+        if (!routeModule.responseCache) {
+          const minimal = (req[NEXT_REQUEST_META] ?? {}).minimalMode ?? false;
+          caches.push(minimal);
+          routeModule.responseCache = { minimal };
+        }
+        return routeModule.responseCache;
+      }),
+  };
+  return { caches, routeModule, load: () => ({ handler: () => {}, routeModule }) };
+}
+
+function resumeReq() {
+  const req: any = fakeReq("app/page");
+  req[NEXT_REQUEST_META] = { minimalMode: true };
+  return req;
+}
+
+test("builds an entry's response cache non-minimal as it loads the entry", () => {
+  const { caches, routeModule, load } = routeModuleLoader();
+
+  createDispatch({ entries: ENTRIES, primary: "app/page", load });
+
+  expect(caches).toEqual([false]);
+  expect(routeModule.responseCache).toEqual({ minimal: false });
+});
+
+// The regression this pin exists for: a PPR resume runs in minimal mode, and is
+// a likely first request, so an unpinned route module would memoize a minimal
+// response cache — no durable ISR read or write — for the whole instance.
+test("keeps that cache non-minimal when a minimal-mode request arrives first", () => {
+  const { caches, routeModule, load } = routeModuleLoader();
+  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+
+  dispatch.handler(fakeReq("app/page"), fakeRes(), {});
+  const cache = routeModule.getResponseCache(resumeReq());
+
+  expect(cache).toEqual({ minimal: false });
+  expect(caches).toEqual([false]);
+});
+
+test("still serves an entry whose response cache refuses to be built", () => {
+  silenceErrors();
+  const { load } = routeModuleLoader(() => {
+    throw new Error("boom");
+  });
+  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+
+  const res = fakeRes();
+  dispatch.handler(fakeReq("app/page"), res, {});
+
+  expect(res.statusCode).toBe(200);
+});
+
+// The pin's silent-failure mode: a Next that renames the getter takes the pin
+// with it, and every instance a resume reaches first serves the rest of its life
+// with ISR off. One line, once, is the only warning there would be.
+test("reports a route module that exposes no response-cache getter, once", () => {
+  const errors = silenceErrors();
+  const load = () => ({ handler: () => {}, routeModule: {} });
+  const dispatch = createDispatch({ entries: ENTRIES, primary: null, load });
+
+  dispatch.handler(fakeReq("app/page"), fakeRes(), {});
+  dispatch.handler(fakeReq("app/api/x/route"), fakeRes(), {});
+
+  expect(errors).toHaveBeenCalledTimes(1);
+  expect(String(errors.mock.calls[0]?.[0])).toMatch(/getResponseCache/);
+});
