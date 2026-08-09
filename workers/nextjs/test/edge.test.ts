@@ -1493,9 +1493,9 @@ describe("the URL middleware is handed", () => {
     });
   });
 
-  // The opt-out means the URL the client sent, minus the canonical trailing
-  // slash Next would have re-added. It is not an opt-out of the data-to-page
-  // rewrite: that one is the router's and Next runs it either way.
+  // The opt-out means the URL the client sent, verbatim: Next hands middleware
+  // `initURL` instead of the routed URL, so the data-to-page rewrite goes with
+  // the slash and the locale prefix.
   describe("skipMiddlewareUrlNormalize", () => {
     it("shows middleware the canonical form the client sent", async () => {
       const res = await serve(
@@ -1523,19 +1523,21 @@ describe("the URL middleware is handed", () => {
       expect(res.headers.get("req-url-path")).toBe(PAGE);
     });
 
-    // Still the page, and slash-free under both trailingSlash values: the flag's
-    // deprecated alias skipProxyUrlNormalize is exactly what makes Next's
-    // maybeAddTrailingSlash a no-op here.
+    // Still the data URL under both trailingSlash values, which is what the
+    // upstream suite's "should provide original _next/data URL with
+    // skipProxyUrlNormalize" asserts: its middleware only rewrites when
+    // req.nextUrl.pathname still startsWith('/_next/data').
     it.each([true, false])(
-      "still shows a data request as its page under trailingSlash: %s",
+      "shows a data request as the data URL under trailingSlash: %s",
       async (trailingSlash) => {
+        const path = `/_next/data/t${PAGE}.json`;
         const res = await serve(
-          get(`/_next/data/t${PAGE}.json`, { "x-nextjs-data": "1" }),
+          get(path, { "x-nextjs-data": "1" }),
           pageDeps({ trailingSlash, skipMiddlewareUrlNormalize: true }),
         );
 
-        expect(res.headers.get("req-url-path")).toBe(PAGE);
-        expect(res.headers.get("x-matched-path")).toBe(`/_next/data/t${PAGE}.json`);
+        expect(res.headers.get("req-url-path")).toBe(path);
+        expect(res.headers.get("x-matched-path")).toBe(path);
       },
     );
   });

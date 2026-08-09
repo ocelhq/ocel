@@ -122,22 +122,39 @@ function dataPagePathname(
 // form unrecoverable. Idempotent on a canonical input, so a routing-form
 // pathname is also a valid argument wherever the two coincide.
 //
-// skipMiddlewareUrlNormalize suppresses the trailing slash and nothing else. The
-// data-to-page rewrite is the router's, unconditional (resolve-routes.ts's
-// middleware_next_data); the flag is compiled into the bundle instead, where it
-// only stops NextURL re-parsing what the router already did.
-export function middlewarePathname(
+// This is the form the middleware *matchers* are tested against, which the
+// router normalizes whether or not skipMiddlewareUrlNormalize is set: it matches
+// on its own parsedUrl.pathname (resolve-routes.ts's `middleware` route), after
+// middleware_next_data has already rewritten a data path to its page there.
+export function middlewareMatchPathname(
   pathname: string,
   config: TrailingSlashConfig,
   buildId: string,
 ): string {
   const page = dataPagePathname(pathname, config, buildId);
   if (page !== undefined) {
-    const slashed =
-      config.trailingSlash && !config.skipMiddlewareUrlNormalize && page !== "/";
-    return slashed ? `${page}/` : page;
+    return config.trailingSlash && page !== "/" ? `${page}/` : page;
   }
-
-  if (config.skipMiddlewareUrlNormalize) return pathname;
   return canonicalPathname(pathname, config, false);
+}
+
+// The URL middleware is handed. The same form, except that
+// skipMiddlewareUrlNormalize (skipProxyUrlNormalize) suppresses every one of
+// those normalizations at once — it does not suppress them one by one, it makes
+// Next hand middleware `initURL`, the URL as the client sent it, in place of the
+// routed one (next-server.ts's runMiddleware: `if
+// (this.nextConfig.skipProxyUrlNormalize) url = getRequestMeta(req, 'initURL')`).
+// The router still rewrites its own parsedUrl for the filesystem lookup and the
+// matchers above, but middleware never sees that URL, so the data-to-page
+// rewrite, the locale prefix and the slash re-add all stay off it. The
+// bundle-side __NEXT_NO_MIDDLEWARE_URL_NORMALIZE then keeps NextURL from
+// re-deriving them (next-url.ts's parseData) while still reading the locale out
+// of the data pathname (get-next-pathname-info.ts).
+export function middlewarePathname(
+  pathname: string,
+  config: TrailingSlashConfig,
+  buildId: string,
+): string {
+  if (config.skipMiddlewareUrlNormalize) return pathname;
+  return middlewareMatchPathname(pathname, config, buildId);
 }
