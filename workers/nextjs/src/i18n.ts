@@ -26,6 +26,8 @@ import {
   type I18nConfig,
 } from "@next/routing";
 
+import { withoutBasePath } from "./trailing-slash";
+
 export interface LocaleResolution {
   // What routing matches on: the request's pathname with the locale prefixed,
   // unless it already named one or names an output no locale owns.
@@ -43,7 +45,7 @@ export function resolveLocale(
   headers: Headers,
 ): LocaleResolution {
   const rest = withoutBasePath(url.pathname, basePath);
-  const hadBasePath = rest !== null;
+  const hadBasePath = rest !== undefined;
   const pathname = rest ?? url.pathname;
   const domain = detectDomainLocale(i18n.domains, url.hostname);
   const defaultLocale = domain?.defaultLocale ?? i18n.defaultLocale;
@@ -85,22 +87,14 @@ export function localeOf(i18n: I18nConfig, basePath: string, url: URL): string {
   );
 }
 
-// The pathname under a basePath, or null when the request is not under it at
-// all. Matched on a segment boundary: basePath /docs owns /docs and /docs/a,
-// and has nothing to do with /documents.
-function withoutBasePath(pathname: string, basePath: string): string | null {
-  if (!basePath) return pathname;
-  if (pathname === basePath) return "/";
-  if (pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);
-  return null;
-}
-
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
 
+// "" is the bare basePath, which withoutBasePath returns for a request naming
+// nothing under it — the same root /docs/ and / name.
 function isRoot(pathname: string): boolean {
-  return pathname === "/" || pathname === "/index";
+  return pathname === "" || pathname === "/" || pathname === "/index";
 }
 
 // getLocaleRedirect, upstream's version: only at the root, only when locale
