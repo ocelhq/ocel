@@ -326,8 +326,15 @@ The manifest lives in two places, deliberately:
 Nothing but the copy step knows about the second path; edit and commit the first.
 
 1. Dispatch the workflow with **`recordBaseline: true`**. The matrix then runs
-   unfiltered, emits a results file per suite, and the `baseline` job merges
-   every group's fragment.
+   unfiltered, and the `baseline` job merges every group's fragment.
+
+   Each group's fragment is built from the harness's own stdout, tee'd to
+   `$RUNNER_TEMP`, rather than the `.results.json` files it leaves in the
+   checkout. Between retries of a failing suite the harness runs `git clean -fdx`
+   on that suite's directory, and for a top-level `test/e2e/<name>.test.ts` that
+   directory is the whole of `test/e2e` — which deletes every other suite's
+   results file. `collect` fails the job if any suite the harness started has no
+   result, so a group can never silently record a fraction of its run.
 2. Download the `baseline-manifest` artifact and commit it over
    `scripts/e2e-next/baseline-manifest.json`.
 3. Dispatch normally from then on.

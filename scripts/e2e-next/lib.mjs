@@ -4,7 +4,7 @@
 // the temp app directory rather than memory.
 
 import { createHash } from "node:crypto";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 
 /** A valid single DNS label, per RFC 1035 (mirrors cli/internal/previewid). */
 export const DNS_LABEL = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
@@ -928,12 +928,46 @@ export function tail(text, maxLines) {
   return lines.slice(Math.max(0, lines.length - maxLines)).join("\n");
 }
 
-/** Recovers the harness's test-file key from `${test.file}.results.json`. */
-export function suiteFromResultsPath(resultsPath) {
-  return resultsPath
-    .replace(/\\/g, "/")
-    .replace(/^\.\//, "")
-    .replace(/\.results\.json$/, "");
+const HARNESS_OUTPUT = /--test output start-- (.*) --test output end--/;
+const HARNESS_STARTING = /\bStarting (\S+\.test\.\w+) retry \d+\/\d+/;
+
+/**
+ * suitesFromHarnessOutput recovers every suite's Jest results from run-tests.js's
+ * stdout, where each suite's JSON is framed on a single line.
+ *
+ * Reading stdout rather than the `.results.json` files the harness leaves on disk
+ * is deliberate. Between retries of a failing suite the harness runs `git clean
+ * -fdx` on that suite's directory, and for a top-level `test/e2e/<name>.test.ts`
+ * that directory is the whole of `test/e2e` — so the clean also deletes every
+ * other suite's untracked results file. A group holding one such failing suite
+ * keeps only the results written after the last clean; stdout keeps them all.
+ */
+export function suitesFromHarnessOutput(stdout, nextjsDir) {
+  const suites = [];
+  for (const line of stdout.split("\n")) {
+    const framed = HARNESS_OUTPUT.exec(line);
+    if (!framed) continue;
+    let results;
+    try {
+      results = JSON.parse(framed[1]);
+    } catch {
+      continue;
+    }
+    const name = results?.testResults?.[0]?.name;
+    if (!name) continue;
+    suites.push({ suite: relative(nextjsDir, name).replace(/\\/g, "/"), results });
+  }
+  return suites;
+}
+
+/** Every suite the harness announced it was starting, deduped across its retries. */
+export function suitesStartedInHarnessOutput(stdout) {
+  const started = new Set();
+  for (const line of stdout.split("\n")) {
+    const match = HARNESS_STARTING.exec(line.trim());
+    if (match) started.add(match[1]);
+  }
+  return [...started];
 }
 
 /**
@@ -963,15 +997,15 @@ export function suiteResultFromJest(results) {
 }
 
 /**
- * buildBaselineManifest turns one group's collected Jest results files into a
- * baseline manifest fragment, keyed by test file — the legacy (unversioned)
+ * buildBaselineManifest turns one group's collected Jest results into a baseline
+ * manifest fragment, keyed by test file — the legacy (unversioned)
  * NEXT_EXTERNAL_TESTS_FILTERS shape, where a listed suite's `failed` cases are
  * excluded and any newly added case is automatically included.
  */
-export function buildBaselineManifest(files) {
+export function buildBaselineManifest(suites) {
   const manifest = {};
-  for (const { path, results } of files) {
-    manifest[suiteFromResultsPath(path)] = suiteResultFromJest(results);
+  for (const { suite, results } of suites) {
+    manifest[suite] = suiteResultFromJest(results);
   }
   return manifest;
 }

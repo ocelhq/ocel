@@ -400,14 +400,22 @@ jobs:
           OCEL_API_URL: ${{ vars.E2E_OCEL_API_URL }}
           OCEL_E2E_PREVIEW_DOMAIN: ${{ vars.E2E_OCEL_PREVIEW_DOMAIN }}
           OCEL_E2E_SIDECAR_DIR: ${{ github.workspace }}/sidecar
-        run: node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e
+        # Tee'd to RUNNER_TEMP, deliberately outside the checkout: the harness
+        # runs `git clean -fdx` on a failing suite's directory between retries,
+        # and for a top-level test/e2e/<name>.test.ts that is all of test/e2e —
+        # anything kept in there is liable to be deleted mid-run.
+        shell: bash
+        run: |
+          node run-tests.js --timings -g ${{ matrix.group }} -c 2 --type e2e \
+            2>&1 | tee "$RUNNER_TEMP/deploy-tests.log"
 
       - name: Collect this group's results into a baseline fragment
         if: ${{ always() && inputs.recordBaseline }}
         run: |
           set -euo pipefail
           group="$(echo '${{ matrix.group }}' | tr '/' '-')"
-          node adapter/scripts/e2e-next/merge-baseline.mjs collect nextjs "baseline-$group.json"
+          node adapter/scripts/e2e-next/merge-baseline.mjs collect \
+            nextjs "$RUNNER_TEMP/deploy-tests.log" "baseline-$group.json"
           echo "BASELINE_FRAGMENT=baseline-$group.json" >> "$GITHUB_ENV"
 
       - name: Upload this group's baseline fragment
