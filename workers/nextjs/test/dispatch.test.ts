@@ -74,6 +74,61 @@ describe("dispatchResult", () => {
     expect(await res.text()).toBe("<svg/>");
   });
 
+  // A statically-optimized dynamic page is one document answering every path its
+  // template spans, stored under the template's own name — so the asset is read
+  // under the manifest key the target was found at, not the path requested.
+  it("serves a statically-optimized dynamic page under its manifest key", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "/docs",
+        pathnames: ["/docs/[slug]"],
+        routes: {},
+        dispatch: { "/docs/[slug]": { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ "/docs/[slug].html": "<html>slug</html>" }),
+    });
+
+    const res = await dispatchResult(
+      {
+        resolvedPathname: "/docs/[slug]",
+        invocationTarget: { pathname: "/docs/slug-1" },
+      },
+      new Request("https://app.example/docs/slug-1"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>slug</html>");
+    expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
+    expect(res.headers.get("x-matched-path")).toBe("/docs/[slug]");
+  });
+
+  it("serves an ordinary static page under a basePath", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "/docs",
+        pathnames: ["/docs/hello"],
+        routes: {},
+        dispatch: { "/docs/hello": { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ "/docs/hello.html": "<html>hello</html>" }),
+    });
+
+    const res = await dispatchResult(
+      {
+        resolvedPathname: "/docs/hello",
+        invocationTarget: { pathname: "/docs/hello" },
+      },
+      new Request("https://app.example/docs/hello"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("<html>hello</html>");
+  });
+
   // The membrane sends an empty body as one sentinel byte because a Function URL
   // never terminates a bodyless streamed response; leaving the byte in place
   // would serve it as the response's content.
