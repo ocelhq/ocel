@@ -1761,6 +1761,67 @@ describe("routing redirects that name no destination", () => {
   });
 });
 
+// A service worker registering at a scope broader than its own directory is
+// rejected by the browser unless its script response carries
+// Service-Worker-Allowed. Next sets that header in the same runtime branch this
+// worker mirrors for cache-control, but it ALSO emits it as a build-time header
+// rule (packages/next/src/build/index.ts pushes an internal rule for
+// /_next/static/service-worker/:path*, which the adapter hands over as
+// routing.beforeMiddleware and next-adapter.mts writes into the manifest
+// verbatim). Routing already applies it, so serveStaticAsset must not set a
+// second copy — this pins the header arriving from the manifest, and the
+// cache-control the worker decides itself arriving alongside it.
+describe("the service-worker chunk", () => {
+  const swPath = "/_next/static/service-worker/sw.js";
+
+  function swDeps(basePath: string) {
+    const pathname = `${basePath}${swPath}`;
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath,
+        pathnames: [pathname],
+        routes: {
+          // The rule as a real build emits it: internal, so priority is set and
+          // the regex is used unmodified.
+          beforeMiddleware: [
+            {
+              source: `${basePath}/_next/static/service-worker/:path*`,
+              sourceRegex: `^${basePath}/_next/static/service-worker(?:/(.*))?(?:/)?$`,
+              headers: { "Service-Worker-Allowed": basePath || "/" },
+              priority: true,
+            },
+          ],
+          beforeFiles: [],
+          afterFiles: [],
+          dynamicRoutes: [],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: { [pathname]: { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ [pathname]: "self.addEventListener" }),
+    });
+  }
+
+  it("carries Service-Worker-Allowed from the manifest and a revalidated policy", async () => {
+    const res = await serve(new Request(`https://app.example${swPath}`), swDeps(""));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("service-worker-allowed")).toBe("/");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+    expect(res.headers.get("content-type")).toBe("text/javascript; charset=utf-8");
+  });
+
+  it("carries both under a basePath", async () => {
+    const res = await serve(new Request(`https://app.example/docs${swPath}`), swDeps("/docs"));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("service-worker-allowed")).toBe("/docs");
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+  });
+});
+
 // A Server Action invalidates a tag at the origin, which republishes the edge's
 // tag-clock replica. The colo the action travelled through is fronting that
 // replica with a TTL'd Cache API copy, so without an explicit purge it keeps
