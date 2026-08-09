@@ -225,6 +225,11 @@ interface MiddlewareMatcher {
 interface Manifest {
   buildId: string;
   basePath: string;
+  // Absent on a manifest built before the adapter emitted them, which reads as
+  // `false` — today's behaviour.
+  trailingSlash?: boolean;
+  skipTrailingSlashRedirect?: boolean;
+  skipMiddlewareUrlNormalize?: boolean;
   pathnames: string[];
   routes: unknown;
   dispatch: Record<string, DispatchTarget>;

@@ -324,6 +324,9 @@ const adapter = {
       buildId,
       appName,
       basePath: config.basePath || "",
+      trailingSlash: !!config.trailingSlash,
+      skipTrailingSlashRedirect: !!config.skipTrailingSlashRedirect,
+      skipMiddlewareUrlNormalize: !!config.skipMiddlewareUrlNormalize,
       i18n: config.i18n ?? undefined,
       ...(images && {
         images: { ...images, configHash: imageConfigHash(images) },
