@@ -2,6 +2,7 @@ import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
 import { serveStaticAsset, type AssetStoreDeps } from "./assets";
 import {
   canonicalPathname,
+  middlewareMatchPathname,
   middlewarePathname,
   routingPathname,
 } from "./trailing-slash";
@@ -611,15 +612,23 @@ async function serveRequest(
         // handed is not the routing one ctx carries: it is the canonical form
         // the client is on, and for a data request the page that request is
         // for. A copy — resolveRoutes goes on routing with ctx.url.
+        const matchUrl = new URL(ctx.url);
+        matchUrl.pathname = middlewareMatchPathname(
+          requested,
+          deps.manifest,
+          deps.manifest.buildId,
+        );
+        if (!middlewareMatches(middleware.matchers, matchUrl, ctx.headers)) {
+          return {};
+        }
+        // Only skipMiddlewareUrlNormalize separates the two: it hands middleware
+        // the client's own URL while the matchers keep matching the routed one.
         const mwUrl = new URL(ctx.url);
         mwUrl.pathname = middlewarePathname(
           requested,
           deps.manifest,
           deps.manifest.buildId,
         );
-        if (!middlewareMatches(middleware.matchers, mwUrl, ctx.headers)) {
-          return {};
-        }
         if (!deps.edge) {
           throw new Error("no edge runtime is bound to this deployment");
         }

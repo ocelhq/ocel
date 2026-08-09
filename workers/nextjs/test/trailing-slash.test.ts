@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   canonicalPathname,
+  middlewareMatchPathname,
   middlewarePathname,
   routingPathname,
   type TrailingSlashConfig,
@@ -454,36 +455,92 @@ describe("skipTrailingSlashRedirect", () => {
   }
 });
 
-// skipMiddlewareUrlNormalize stands the slash re-add down and nothing else. The
-// data rewrite belongs to Next's router (resolve-routes.ts's
-// middleware_next_data) and is unconditional; the flag is compiled into the
-// bundle, where it only stops NextURL parsing the rewrite the router already
-// did. Suppressing it here would hide the page path from a middleware that Next
-// shows it to.
-describe("skipMiddlewareUrlNormalize", () => {
+// skipMiddlewareUrlNormalize is not one of the three normalizations standing
+// down — it is Next handing middleware `initURL`, the client's own URL, in place
+// of the routed one (next-server.ts's runMiddleware). So all three are off at
+// once: no page rewrite, no locale prefix, no slash. Under the flag the expected
+// value is always the input.
+describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
+  const cases: {
+    what: string;
+    path: string;
+    normalized: Record<"true" | "false", string>;
+  }[] = [
+    { what: "the root", path: "/", normalized: { true: "/", false: "/" } },
+    { what: "a slash-free page", path: "/a", normalized: { true: "/a/", false: "/a" } },
+    { what: "a slashed page", path: "/a/", normalized: { true: "/a/", false: "/a" } },
+    {
+      what: "a nested page",
+      path: "/blog/post",
+      normalized: { true: "/blog/post/", false: "/blog/post" },
+    },
+    {
+      what: "a dotted path",
+      path: "/next.svg",
+      normalized: { true: "/next.svg", false: "/next.svg" },
+    },
+    {
+      what: "a well-known path",
+      path: "/.well-known/acme",
+      normalized: { true: "/.well-known/acme", false: "/.well-known/acme" },
+    },
+    {
+      what: "a data request",
+      path: "/_next/data/t/a.json",
+      normalized: { true: "/a/", false: "/a" },
+    },
+    {
+      what: "a nested data request",
+      path: "/_next/data/t/blog/post.json",
+      normalized: { true: "/blog/post/", false: "/blog/post" },
+    },
+    {
+      what: "an index data request",
+      path: "/_next/data/t/index.json",
+      normalized: { true: "/", false: "/" },
+    },
+    // The regression the live skip-trailing-slash-redirect suite caught: the
+    // fixture's middleware branches on `startsWith('/_next/data')` and echoes
+    // req.nextUrl.pathname back, so converting the path here loses both the
+    // branch and the assertion. NextURL still reports locale `ja-jp` off this
+    // pathname, since get-next-pathname-info reads the locale out of the data
+    // path even when parseData is off.
+    {
+      what: "a locale-prefixed data request",
+      path: "/_next/data/t/ja-jp/locale-test.json",
+      normalized: { true: "/ja-jp/locale-test/", false: "/ja-jp/locale-test" },
+    },
+  ];
+
   for (const trailingSlash of [true, false]) {
     describe(`trailingSlash: ${trailingSlash}`, () => {
-      const config: TrailingSlashConfig = {
-        basePath: "",
-        trailingSlash,
-        skipMiddlewareUrlNormalize: true,
-      };
+      const key = String(trailingSlash) as "true" | "false";
 
-      it.each(["/", "/a", "/a/", "/next.svg", "/.well-known/acme"])(
-        "hands middleware %s unchanged",
-        (path) => {
+      describe("with the flag set", () => {
+        const config: TrailingSlashConfig = {
+          basePath: "",
+          trailingSlash,
+          skipMiddlewareUrlNormalize: true,
+        };
+
+        it.each(cases)("hands middleware $what as requested", ({ path }) => {
           expect(middlewarePathname(path, config, BUILD_ID)).toBe(path);
-        },
-      );
+        });
 
-      // Slash-free under the flag either way: Next's own maybeAddTrailingSlash
-      // is what the flag's deprecated alias, skipProxyUrlNormalize, turns off.
-      it.each([
-        ["/_next/data/t/a.json", "/a"],
-        ["/_next/data/t/blog/post.json", "/blog/post"],
-        ["/_next/data/t/index.json", "/"],
-      ])("still rewrites %s to the page %s", (path, page) => {
-        expect(middlewarePathname(path, config, BUILD_ID)).toBe(page);
+        // The flag moves the URL middleware is handed, not the one the matchers
+        // are tested against — the router matches those on its own routed
+        // pathname either way.
+        it.each(cases)("still matches $what on the routed form", ({ path, normalized }) => {
+          expect(middlewareMatchPathname(path, config, BUILD_ID)).toBe(normalized[key]);
+        });
+      });
+
+      describe("without the flag", () => {
+        const config: TrailingSlashConfig = { basePath: "", trailingSlash };
+
+        it.each(cases)("normalizes $what", ({ path, normalized }) => {
+          expect(middlewarePathname(path, config, BUILD_ID)).toBe(normalized[key]);
+        });
       });
     });
   }
