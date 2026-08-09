@@ -22,6 +22,7 @@ import {
   renderOcelConfig,
   tail,
   withBuildScript,
+  withPinnedTypeScript,
 } from "./lib.mjs";
 
 // How long building and deploying one app may take, in total, before it is
@@ -48,7 +49,21 @@ const CHILD_ENV = {
   // the opt-in in the build's routing manifest and the edge stamps the alias
   // beside `x-ocel-cache`; nothing outside this harness sets it (ocelhq-6l0y).
   OCEL_E2E_VERCEL_CACHE_HEADER: "1",
+  // Next transpiles a TypeScript next.config through SWC to commonjs and
+  // requires it from a string, which cannot load a config with top-level await;
+  // only with this set does transpile-config take its `await import()` path.
+  // `next build --experimental-next-config-strip-types` is what normally sets
+  // it, and the build script here is the fixture's own plain `next build`.
+  //
+  // It reaches `next build` by inheritance: the Go CLI composes the builder's
+  // environment from os.Environ() (cli/internal/appbuilder), and buildNext
+  // spawns the build script under process.env (cli/platform/src/builder/next.ts).
+  ...(hasTypeScriptNextConfig() ? { __NEXT_NODE_NATIVE_TS_LOADER_ENABLED: "true" } : {}),
 };
+
+function hasTypeScriptNextConfig() {
+  return ["next.config.ts", "next.config.mts"].some((name) => existsSync(join(appDir, name)));
+}
 
 try {
   process.stdout.write(deploy() + "\n");
@@ -73,9 +88,11 @@ function deploy() {
   console.error(`[ocel-e2e] project ${slug} in ${appDir}`);
 
   writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug, previewDomain }));
+  // Before ensureDeps: the TypeScript pin is only worth anything if it is in
+  // package.json when pnpm resolves it.
+  patchPackageJson();
   ensureDeps();
   linkSidecar(sidecarDir);
-  ensureBuildScript();
 
   // Build and deploy are separate CLI runs so a build failure is reported as
   // one, rather than as a failed deploy. `preview up --prebuilt` then ships the
@@ -142,15 +159,15 @@ function isSymlink(path) {
   }
 }
 
-// ensureBuildScript is the backstop for a fixture whose package.json the
-// harness leaves without the `build` script buildNext requires.
-function ensureBuildScript() {
+// patchPackageJson gives the fixture the `build` script buildNext requires
+// (which the harness does not always leave one with) and pins its TypeScript.
+function patchPackageJson() {
   const path = join(appDir, "package.json");
   const pkg = JSON.parse(readFileSync(path, "utf8"));
-  const patched = withBuildScript(pkg);
+  const patched = withPinnedTypeScript(withBuildScript(pkg));
   if (patched !== pkg) {
     writeFileSync(path, JSON.stringify(patched, null, 2) + "\n");
-    console.error(`[ocel-e2e] added a "build" script to package.json`);
+    console.error("[ocel-e2e] patched package.json (build script, typescript pin)");
   }
 }
 

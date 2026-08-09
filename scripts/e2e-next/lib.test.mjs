@@ -44,6 +44,8 @@ import {
   warmCoverage,
   warmSummaryOutcome,
   withBuildScript,
+  withPinnedTypeScript,
+  TYPESCRIPT_PIN,
   zipEntryNames,
 } from "./lib.mjs";
 
@@ -138,6 +140,51 @@ describe("withBuildScript", () => {
     const pkg = { name: "app" };
     withBuildScript(pkg);
     expect(pkg).toEqual({ name: "app" });
+  });
+});
+
+describe("withPinnedTypeScript", () => {
+  const overrides = { typescript: TYPESCRIPT_PIN };
+
+  it("pins the pin to a range typescript 7 cannot satisfy", () => {
+    expect(TYPESCRIPT_PIN).toBe("^5");
+  });
+
+  it.each(["latest", "*", "^7", "7.0.2", "next"])("rewrites a devDependency on %s", (range) => {
+    const patched = withPinnedTypeScript({ devDependencies: { typescript: range, next: "latest" } });
+    expect(patched.devDependencies).toEqual({ typescript: TYPESCRIPT_PIN, next: "latest" });
+  });
+
+  it("rewrites a runtime dependency too, without inventing a devDependency", () => {
+    const patched = withPinnedTypeScript({ dependencies: { typescript: "latest" } });
+    expect(patched.dependencies).toEqual({ typescript: TYPESCRIPT_PIN });
+    expect(patched.devDependencies).toBeUndefined();
+  });
+
+  it("declares typescript for a fixture with none, so Next never auto-installs one", () => {
+    const patched = withPinnedTypeScript({ name: "app", devDependencies: { next: "latest" } });
+    expect(patched.devDependencies).toEqual({ next: "latest", typescript: TYPESCRIPT_PIN });
+  });
+
+  it("pins transitive resolutions under both override spellings", () => {
+    const patched = withPinnedTypeScript({ overrides: { react: "19" }, pnpm: { peerDependencyRules: {} } });
+    expect(patched.overrides).toEqual({ react: "19", typescript: TYPESCRIPT_PIN });
+    expect(patched.pnpm).toEqual({ peerDependencyRules: {}, overrides: overrides });
+  });
+
+  it("returns the same object when every route is already pinned", () => {
+    const pkg = {
+      devDependencies: { typescript: TYPESCRIPT_PIN },
+      overrides,
+      pnpm: { overrides },
+    };
+    expect(withPinnedTypeScript(pkg)).toBe(pkg);
+  });
+
+  it("does not mutate its input", () => {
+    const pkg = { devDependencies: { typescript: "latest" } };
+    withPinnedTypeScript(pkg);
+    expect(pkg).toEqual({ devDependencies: { typescript: "latest" } });
   });
 });
 

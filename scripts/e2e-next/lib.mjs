@@ -122,6 +122,63 @@ export function withBuildScript(pkg) {
 }
 
 /**
+ * The only TypeScript range a temp app may build against. typescript@7 is the
+ * Go-native rewrite: its exports map is `{ ".": "./lib/version.cjs" }` and it
+ * ships no `lib/typescript.js`, which is the file Next's
+ * has-necessary-dependencies probes for. Without it Next decides TypeScript is
+ * missing, auto-installs `typescript@latest` (getting 7 again), and then calls
+ * `require(undefined)`.
+ */
+export const TYPESCRIPT_PIN = "^5";
+
+/**
+ * withPinnedTypeScript returns the app's package.json with every route to
+ * TypeScript 7 closed, or the same object when they already are.
+ *
+ * Three routes exist and all three are closed, because closing only the first
+ * leaves the others open:
+ *
+ * - a declared `typescript` that floats (`latest`, `*`, `^7`) — rewritten;
+ * - a fixture that declares none at all but carries a tsconfig or a .ts file,
+ *   which makes Next install one itself at build time — given an explicit
+ *   devDependency, so the probe finds TypeScript 5 and the auto-install never
+ *   runs;
+ * - a transitive one — pinned by an override. Both the npm/yarn `overrides`
+ *   spelling and pnpm's `pnpm.overrides` are written: the temp app has no
+ *   lockfile, so which package manager Next's auto-install would detect is not
+ *   something this script can decide for it.
+ */
+export function withPinnedTypeScript(pkg) {
+  const patched = { ...pkg };
+  let changed = false;
+
+  for (const field of ["dependencies", "devDependencies"]) {
+    const range = pkg[field]?.typescript;
+    if (range && range !== TYPESCRIPT_PIN) {
+      patched[field] = { ...pkg[field], typescript: TYPESCRIPT_PIN };
+      changed = true;
+    }
+  }
+
+  if (!pkg.dependencies?.typescript && !pkg.devDependencies?.typescript) {
+    patched.devDependencies = { ...pkg.devDependencies, typescript: TYPESCRIPT_PIN };
+    changed = true;
+  }
+
+  if (pkg.overrides?.typescript !== TYPESCRIPT_PIN) {
+    patched.overrides = { ...pkg.overrides, typescript: TYPESCRIPT_PIN };
+    changed = true;
+  }
+
+  if (pkg.pnpm?.overrides?.typescript !== TYPESCRIPT_PIN) {
+    patched.pnpm = { ...pkg.pnpm, overrides: { ...pkg.pnpm?.overrides, typescript: TYPESCRIPT_PIN } };
+    changed = true;
+  }
+
+  return changed ? patched : pkg;
+}
+
+/**
  * The smoke app's revalidation probe, and the window it declares. Mirrors
  * `revalidate` and the marker in smoke-app/app/isr/page.tsx — assert-isr.mjs
  * reads them from here so the page and its assertion cannot drift apart.
