@@ -302,6 +302,7 @@ OCEL_E2E_SIDECAR_DIR="/home/vndaba/Dev/ocelhq-work/sidecar" \
 OCEL_E2E_DEPLOY_TIMEOUT_MS=540000 \
 HEADLESS=true \
 IS_TURBOPACK_TEST=1 \
+NEXT_ENABLE_ADAPTER=1 \
 NEXT_TEST_JOB=1 \
 NEXT_TEST_MODE=deploy \
 NEXT_E2E_TEST_TIMEOUT=600000 \
@@ -321,6 +322,20 @@ Notes on this block, so you do not "fix" it:
 - `GITHUB_RUN_ID` is set to `SWEEP_ID` so every project slug from this sweep
   carries a common, greppable token. Left unset it degrades to the literal
   `local` and orphans become unattributable.
+- `NEXT_ENABLE_ADAPTER=1` is **load-bearing, not decorative**: 8 suites
+  (`ocelhq-ktl`) compute `skipDeployment: !isAdapterTest` from this exact
+  variable and, with it unset, silently replace their entire body with a
+  single `should skip next deploy` no-op case — no deploy, no signal, exit 0
+  in well under a second. Omitting it burns a wave slot that looks like a
+  pass. Setting it is safe here: the custom-deploy-script path
+  (`NEXT_TEST_DEPLOY_SCRIPT_PATH`) short-circuits past every other
+  `NEXT_ENABLE_ADAPTER` consumer in `next-deploy.ts` (the Vercel CLI
+  team/token branch), so it cannot trigger a Vercel deploy or token lookup —
+  it only flips the suite-level gate, which is the intent. Two suites use an
+  **inverted** gate (`skipDeployment: isAdapterTest && isTurbopackTest`) and
+  become disabled by this combination with `IS_TURBOPACK_TEST=1`; see
+  `ocelhq-ktl` before scheduling `test/e2e/middleware-rewrites/test/index.test.ts`
+  or `test/e2e/i18n-api-support/index.test.ts`.
 - `OCEL_E2E_DEPLOY_TIMEOUT_MS` is set to 9 minutes, under Jest's
   `NEXT_E2E_TEST_TIMEOUT`. The script's own default is 25 minutes, which would let
   Jest time out first and report a deploy hang as a test failure.
@@ -463,7 +478,7 @@ OCEL_E2E_PREVIEW_DOMAIN="*.ocel.site" \
 OCEL_E2E_SIDECAR_DIR="/home/vndaba/Dev/ocelhq-work/sidecar" \
 OCEL_E2E_DEPLOY_TIMEOUT_MS=540000 \
 HEADLESS=true \
-IS_TURBOPACK_TEST=1 NEXT_TEST_JOB=1 NEXT_TEST_MODE=deploy \
+IS_TURBOPACK_TEST=1 NEXT_ENABLE_ADAPTER=1 NEXT_TEST_JOB=1 NEXT_TEST_MODE=deploy \
 NEXT_TEST_SKIP_CLEANUP=1 \
 NEXT_E2E_TEST_TIMEOUT=600000 NEXT_TELEMETRY_DISABLED=1 \
 NEXT_TEST_DEPLOY_SCRIPT_PATH=/home/vndaba/Dev/ocelhq/scripts/e2e-next/deploy.mjs \
@@ -472,6 +487,10 @@ pnpm jest --runInBand <SUITE_PATH> -t "<one failing test name>"
 ```
 
 Why each piece, so you do not "simplify" it:
+- `NEXT_ENABLE_ADAPTER=1` is load-bearing for the same reason as in Step 2:
+  omitting it makes `skipDeployment: !isAdapterTest` suites short-circuit to a
+  no-op case, so the staging deploy never happens and no debugger gets a
+  preview. See the Step 2 note and `ocelhq-ktl`.
 - `NEXT_TEST_SKIP_CLEANUP=1` guards **only** the `rmSync` of the temp dir, so the
   staged app survives.
 - `NEXT_TEST_CLEANUP_SCRIPT_PATH` is **deliberately omitted**. `next-deploy.ts`
