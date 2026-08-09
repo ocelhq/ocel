@@ -288,9 +288,18 @@ test -d node_modules/ocel && test -x node_modules/@ocel/provider-aws-linux-x64/b
 ```
 
 `@ocel/linux-x64` carries the CLI binary the worker bundle and the Next adapter
-are embedded in, and it is an optionalDependency of `ocel` — leave it out of the
-pack list and npm fetches the *published* CLI instead, so a local worker or
-adapter change never reaches the deploy.
+are embedded in, and it is an optionalDependency of `ocel` — but `deploy.mjs`
+runs the adapter repo's own `packages/ocel/bin/run.js`, never the sidecar's, so
+this list controls only which CLI the sidecar's `ocel` would launch if
+something ran it directly. A worker-source or Next-adapter change needs a
+rebuild of that binary in the adapter repo, not a sidecar repack:
+
+```bash
+node scripts/build-native.mjs --host --target cli
+```
+
+The sidecar only needs repacking when `ocel/config` resolution or the
+`@ocel/provider-aws*` binaries change.
 
 ## Recording a baseline
 
