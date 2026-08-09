@@ -543,8 +543,12 @@ func preflight(ctx context.Context, runner *providerrunner.Runner, provider *pro
 	if err != nil {
 		return nil, err
 	}
-	if banner := formatIdentityBanner(resp.GetIdentity()); banner != "" {
-		fmt.Fprint(out, banner)
+	// Only ever to a terminal. The banner names the account being deployed
+	// into, which orients a developer and leaks in a log — and a CI run's log
+	// on a public repository is world-readable. Anything that is not a terminal
+	// is a log: a pipe, a file, a CI runner's captured stdout.
+	if stdoutIsTerminal(out) {
+		fmt.Fprint(out, formatIdentityBanner(resp.GetIdentity()))
 	}
 	if err := credentialProblems(resp.GetCredentialProblems()); err != nil {
 		return nil, err
@@ -558,10 +562,19 @@ func preflight(ctx context.Context, runner *providerrunner.Runner, provider *pro
 	return resp, nil
 }
 
+// stdoutIsTerminal is a seam over isTTY for the identity banner's one decision.
+// Every test drives these commands with an in-memory buffer, which is never a
+// terminal, so without the seam the banner is unreachable in a test and the
+// rule that it stays out of a log is unfalsifiable. There is no CI detection
+// behind it on purpose: a terminal on stdout is the signal, matching the rest
+// of the CLI rather than guessing at an environment.
+var stdoutIsTerminal = func(w io.Writer) bool { return isTTY(w) }
+
 // formatIdentityBanner renders the "Running with:" block from the identity the
 // provider resolved, or "" when nothing resolved (every credential failed, so
 // the credential-problems block carries the detail instead). AWS shows its
-// profile when one is set, else the caller's principal from the ARN.
+// profile when one is set, else the caller's principal from the ARN. Printed
+// only to a terminal — see the call site in preflight.
 func formatIdentityBanner(id *deploymentsv1.Identity) string {
 	if id == nil {
 		return ""

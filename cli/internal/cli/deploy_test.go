@@ -423,11 +423,21 @@ func TestRunDeploy_YesBypassesTheSlugDriftGuard(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
+// pretendStdoutIsTerminal makes the identity banner reachable in a test, which
+// otherwise writes to a buffer and so never sees a terminal.
+func pretendStdoutIsTerminal(t *testing.T) {
+	t.Helper()
+	prior := stdoutIsTerminal
+	stdoutIsTerminal = func(io.Writer) bool { return true }
+	t.Cleanup(func() { stdoutIsTerminal = prior })
+}
+
 // TestRunDeploy_PrintsIdentityBanner_BeforeBuildAndDeploy proves the preflight
 // identity banner is shown, and shown before the build and the Deploy — the
 // reordering that lets a user see which account they're about to hit, and lets
 // a bad credential abort before the build.
 func TestRunDeploy_PrintsIdentityBanner_BeforeBuildAndDeploy(t *testing.T) {
+	pretendStdoutIsTerminal(t)
 	root, sockPath := setUpDeployFixture(t)
 	t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
 	t.Setenv(fakeIDAwsProfileEnvVar, "default")
@@ -458,11 +468,42 @@ func TestRunDeploy_PrintsIdentityBanner_BeforeBuildAndDeploy(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
+// TestRunDeploy_WithoutATerminal_OmitsIdentityBanner proves the account being
+// deployed into never reaches a log. A CI runner's captured stdout is not a
+// terminal, and on a public repository that log is world-readable.
+func TestRunDeploy_WithoutATerminal_OmitsIdentityBanner(t *testing.T) {
+	root, sockPath := setUpDeployFixture(t)
+	t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
+	t.Setenv(fakeIDAwsProfileEnvVar, "default")
+	t.Setenv(fakeIDAwsRegionEnvVar, "us-east-1")
+	t.Setenv(fakeIDCfAccountEnvVar, "abcd1234")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	// The deploy still has to have run: an absence proved by nothing happening
+	// would hold just as well if the command had died before the preflight.
+	out := stdout.String()
+	if !strings.Contains(out, "Deployed") {
+		t.Fatalf("stdout = %q, want the deploy to have proceeded", out)
+	}
+	for _, leaked := range []string{"Running with:", "123456789012", "abcd1234", "profile=default"} {
+		if strings.Contains(out+stderr.String(), leaked) {
+			t.Errorf("output leaked %q with no terminal to print it to:\n%s", leaked, out)
+		}
+	}
+
+	waitForNoStaleSocket(t, sockPath)
+}
+
 // TestRunDeploy_CredentialProblem_AbortsBeforeBuildAndDeploy proves a reported
 // credential failure aborts at preflight — before the build runs and before any
 // Deploy is driven — with the aggregated problem surfaced and the identity of
-// whatever resolved still shown.
+// whatever resolved still shown to a terminal.
 func TestRunDeploy_CredentialProblem_AbortsBeforeBuildAndDeploy(t *testing.T) {
+	pretendStdoutIsTerminal(t)
 	root, _ := setUpDeployFixture(t)
 	t.Setenv(fakeIDAwsAccountEnvVar, "123456789012")
 	t.Setenv(fakeIDAwsProfileEnvVar, "default")
