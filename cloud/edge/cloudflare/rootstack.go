@@ -518,7 +518,7 @@ func buildDurableObjectScriptMultipart(worker edge.Worker, do durableObjectWorke
 		"main_module":         worker.Main.Name,
 		"compatibility_date":  compatDate,
 		"compatibility_flags": compatFlags,
-		"observability":       observability,
+		"observability":       observability(),
 		"bindings":            bindings,
 	}
 	migrations, err := pendingMigrations(do.migrations, deployedClasses)

@@ -215,6 +215,20 @@ Both halves are independently safe and production must set neither: a build
 without the variable emits no manifest field, and a worker whose manifest lacks
 the field emits no alias. Nothing outside this harness sets it (bd ocelhq-6l0y).
 
+## No Cloudflare observability: `OCEL_EDGE_OBSERVABILITY`
+
+Cloudflare bills Workers logs and traces per event, and one run of this suite
+deploys hundreds of workers whose output nobody ever reads. `deploy.mjs` always
+sets `OCEL_EDGE_OBSERVABILITY=off`, and `cloud/edge/cloudflare` then uploads
+every script — the app workers and the account-level deployments-store and
+isr-writer workers alike — with `observability.enabled: false`.
+
+So there is nothing to look at in the Cloudflare dashboard for a failing suite.
+Debug from `deploy-build.log` in the temp app and from `logs.mjs`, which replays
+it. To get the dashboard back for one investigation, unset the variable and
+redeploy: the disable is uploaded explicitly, so the next upload turns it back
+on rather than leaving the script with whatever it last had.
+
 ## One-time setup (out of band, by a human)
 
 This suite deploys real infrastructure hundreds of times per run. Do all of this

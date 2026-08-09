@@ -49,6 +49,10 @@ const CHILD_ENV = {
   // the opt-in in the build's routing manifest and the edge stamps the alias
   // beside `x-ocel-cache`; nothing outside this harness sets it (ocelhq-6l0y).
   OCEL_E2E_VERCEL_CACHE_HEADER: "1",
+  // Cloudflare bills Workers logs and traces per event, and a suite run deploys
+  // hundreds of workers whose output nobody ever reads. Every script this deploy
+  // uploads ships with observability off.
+  OCEL_EDGE_OBSERVABILITY: "off",
   // Next transpiles a TypeScript next.config through SWC to commonjs and
   // requires it from a string, which cannot load a config with top-level await;
   // only with this set does transpile-config take its `await import()` path.
