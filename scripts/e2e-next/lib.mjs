@@ -979,21 +979,25 @@ export function suitesStartedInHarnessOutput(stdout) {
  * ran (a crash while loading, a deploy the harness could not reach), which the
  * manifest records as runtimeError so the whole file is skipped rather than
  * every case in it being listed.
+ *
+ * Passing cases are counted but never recorded. `test/get-test-filter.js` reads
+ * only `runtimeError`, `failed` and `flakey`; a passed list would be dead weight
+ * in the committed baseline, and hand-maintaining it as fixes land is work that
+ * buys nothing.
  */
 export function suiteResultFromJest(results) {
-  const passed = [];
+  let passed = 0;
   const failed = [];
   for (const suite of results?.testResults ?? []) {
     for (const assertion of suite?.assertionResults ?? []) {
-      const name = [...(assertion.ancestorTitles ?? []), assertion.title].filter(Boolean).join(" > ");
       if (assertion.status === "passed") {
-        passed.push(name);
+        passed += 1;
       } else if (assertion.status === "failed") {
-        failed.push(name);
+        failed.push([...(assertion.ancestorTitles ?? []), assertion.title].filter(Boolean).join(" > "));
       }
     }
   }
-  return { passed, failed, flakey: [], runtimeError: passed.length === 0 && failed.length === 0 };
+  return { failed, flakey: [], runtimeError: passed === 0 && failed.length === 0 };
 }
 
 /**
@@ -1001,11 +1005,18 @@ export function suiteResultFromJest(results) {
  * manifest fragment, keyed by test file — the legacy (unversioned)
  * NEXT_EXTERNAL_TESTS_FILTERS shape, where a listed suite's `failed` cases are
  * excluded and any newly added case is automatically included.
+ *
+ * A suite with nothing to exclude is left out entirely: an unlisted suite runs in
+ * full, which is exactly what a green suite should do. So the manifest holds only
+ * outstanding work, and empties as the adapter is fixed.
  */
 export function buildBaselineManifest(suites) {
   const manifest = {};
   for (const { suite, results } of suites) {
-    manifest[suite] = suiteResultFromJest(results);
+    const entry = suiteResultFromJest(results);
+    if (entry.failed.length > 0 || entry.flakey.length > 0 || entry.runtimeError) {
+      manifest[suite] = entry;
+    }
   }
   return manifest;
 }
@@ -1024,7 +1035,6 @@ export function mergeBaselineManifest(manifests) {
       const prior = merged[suite];
       if (!prior) {
         merged[suite] = {
-          passed: [...(entry.passed ?? [])],
           failed: [...(entry.failed ?? [])],
           flakey: [...(entry.flakey ?? [])],
           runtimeError: Boolean(entry.runtimeError),
@@ -1032,7 +1042,6 @@ export function mergeBaselineManifest(manifests) {
         continue;
       }
       merged[suite] = {
-        passed: union(prior.passed, entry.passed),
         failed: union(prior.failed, entry.failed),
         flakey: union(prior.flakey, entry.flakey),
         runtimeError: prior.runtimeError || Boolean(entry.runtimeError),

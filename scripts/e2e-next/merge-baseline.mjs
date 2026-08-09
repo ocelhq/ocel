@@ -15,10 +15,14 @@
 // then fails loudly if any suite the harness started has no result, so a group
 // can never again record a fraction of its run and exit 0.
 //
-// The manifest is the harness's unversioned shape — { "<test file>": { passed,
-// failed, flakey, runtimeError } } — where a listed suite's `failed` cases are
-// excluded from the run and a newly added case is included automatically. So
-// promoting a fix is a matter of deleting its line, not re-recording.
+// The manifest is the harness's unversioned shape — { "<test file>": { failed,
+// flakey, runtimeError } } — where a listed suite's `failed` cases are excluded
+// from the run and a newly added case is included automatically. So promoting a
+// fix is a matter of deleting its line, not re-recording.
+//
+// Those three fields are all test/get-test-filter.js reads, and only suites with
+// something to exclude are listed: an unlisted suite runs in full. The manifest
+// is therefore a list of outstanding work, and empties as the adapter is fixed.
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";

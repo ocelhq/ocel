@@ -345,10 +345,16 @@ worker-script limits mid-flight; re-dispatch and merge again if it does.
 ## Promoting newly-passing tests
 
 Newly *added* cases are included automatically — the manifest only ever excludes
-what it lists. So when a fix makes a case pass, **delete that case's line from
-its suite's `failed` array** in `scripts/e2e-next/baseline-manifest.json` and
-commit. The next run will hold the fix in place: if it regresses, the case is no
-longer excused and the job fails.
+what it lists, and a suite it does not list runs in full. So when a fix makes a
+case pass, **delete that case's line from its suite's `failed` array** in
+`scripts/e2e-next/baseline-manifest.json` and commit. The next run will hold the
+fix in place: if it regresses, the case is no longer excused and the job fails.
+Delete the suite's whole entry once its `failed` array is empty.
+
+`test/get-test-filter.js` reads only `runtimeError`, `failed` and `flakey`, so
+those are the only fields recorded — there is no `passed` list to maintain, and a
+green suite is simply absent. The manifest is the outstanding-work list; it is
+empty when the adapter is green.
 
 Dropping a whole suite's `"runtimeError": true` entry re-enables the entire file
 the same way. Do not re-record a full baseline to promote a fix — that would

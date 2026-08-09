@@ -997,7 +997,6 @@ describe("suiteResultFromJest", () => {
         ],
       }),
     ).toEqual({
-      passed: ["app dir > renders"],
       failed: ["app dir > revalidates"],
       flakey: [],
       runtimeError: false,
@@ -1006,53 +1005,85 @@ describe("suiteResultFromJest", () => {
 
   it("marks a suite that produced no assertions as a runtime error", () => {
     expect(suiteResultFromJest({ testResults: [] })).toEqual({
-      passed: [],
       failed: [],
       flakey: [],
       runtimeError: true,
     });
   });
+
+  it("does not record passing cases — the harness only ever reads the exclusions", () => {
+    const entry = suiteResultFromJest({
+      testResults: [{ assertionResults: [{ title: "renders", status: "passed" }] }],
+    });
+    expect(entry).not.toHaveProperty("passed");
+  });
 });
 
 describe("buildBaselineManifest", () => {
-  it("keys each suite's outcome by its test file", () => {
+  it("keys each suite's exclusions by its test file", () => {
     const manifest = buildBaselineManifest([
       {
         suite: "test/e2e/a.test.ts",
-        results: { testResults: [{ assertionResults: [{ title: "ok", status: "passed" }] }] },
+        results: {
+          testResults: [
+            {
+              assertionResults: [
+                { title: "ok", status: "passed" },
+                { title: "broken", status: "failed" },
+              ],
+            },
+          ],
+        },
       },
     ]);
     expect(manifest).toEqual({
-      "test/e2e/a.test.ts": { passed: ["ok"], failed: [], flakey: [], runtimeError: false },
+      "test/e2e/a.test.ts": { failed: ["broken"], flakey: [], runtimeError: false },
+    });
+  });
+
+  it("omits a fully green suite, which the harness runs in full when unlisted", () => {
+    const manifest = buildBaselineManifest([
+      {
+        suite: "test/e2e/green.test.ts",
+        results: { testResults: [{ assertionResults: [{ title: "ok", status: "passed" }] }] },
+      },
+    ]);
+    expect(manifest).toEqual({});
+  });
+
+  it("keeps a suite that produced nothing, so the whole file stays skipped", () => {
+    const manifest = buildBaselineManifest([{ suite: "test/e2e/dead.test.ts", results: { testResults: [] } }]);
+    expect(manifest).toEqual({
+      "test/e2e/dead.test.ts": { failed: [], flakey: [], runtimeError: true },
     });
   });
 });
 
 describe("mergeBaselineManifest", () => {
-  it("unions each suite's passed and failed cases across groups", () => {
+  it("unions each suite's excluded cases across groups", () => {
     const merged = mergeBaselineManifest([
-      { "test/a.test.ts": { passed: ["one"], failed: ["two"], flakey: [], runtimeError: false } },
-      { "test/a.test.ts": { passed: ["three"], failed: ["two"], flakey: [], runtimeError: false } },
-      { "test/b.test.ts": { passed: [], failed: [], flakey: [], runtimeError: true } },
+      { "test/a.test.ts": { failed: ["two"], flakey: [], runtimeError: false } },
+      { "test/a.test.ts": { failed: ["three"], flakey: [], runtimeError: false } },
+      { "test/b.test.ts": { failed: [], flakey: [], runtimeError: true } },
     ]);
     expect(merged).toEqual({
-      "test/a.test.ts": { passed: ["one", "three"], failed: ["two"], flakey: [], runtimeError: false },
-      "test/b.test.ts": { passed: [], failed: [], flakey: [], runtimeError: true },
+      "test/a.test.ts": { failed: ["two", "three"], flakey: [], runtimeError: false },
+      "test/b.test.ts": { failed: [], flakey: [], runtimeError: true },
     });
   });
 
   it("keeps a suite that any group saw crash marked as a runtime error", () => {
     const merged = mergeBaselineManifest([
-      { "test/a.test.ts": { passed: ["one"], failed: [], flakey: [], runtimeError: false } },
-      { "test/a.test.ts": { passed: [], failed: [], flakey: [], runtimeError: true } },
+      { "test/a.test.ts": { failed: ["one"], flakey: [], runtimeError: false } },
+      { "test/a.test.ts": { failed: [], flakey: [], runtimeError: true } },
     ]);
     expect(merged["test/a.test.ts"].runtimeError).toBe(true);
   });
 
   it("sorts suites so a committed baseline has a stable diff", () => {
     const merged = mergeBaselineManifest([
-      { "test/b.test.ts": { passed: [], failed: [], flakey: [], runtimeError: false } },
-      { "test/a.test.ts": { passed: [], failed: [], flakey: [], runtimeError: false } },
+      { "test/b.test.ts": { failed: [], flakey: [], runtimeError: false } },
+      { "test/a.test.ts": { failed: [], flakey: [], runtimeError: false } },
     ]);
     expect(Object.keys(merged)).toEqual(["test/a.test.ts", "test/b.test.ts"]);
   });
