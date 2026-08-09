@@ -288,7 +288,6 @@ export function withVercelCacheAlias(
   if (!enabled) return response;
   const status = response.headers.get(CACHE_STATUS);
   if (status === null) return response;
-  // A response off the wire has immutable headers, so the alias needs a clone.
   const aliased = new Response(response.body, response);
   aliased.headers.set(VERCEL_CACHE_STATUS, status);
   return aliased;
