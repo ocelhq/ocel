@@ -18,8 +18,12 @@ export { IsrDeploy, IsrSnapshot };
 // path is this plus one op segment. The entry op reaches the object named by
 // that prefix before it has authenticated anyone, so the shape is checked first
 // and the object writes no storage until an initialize (see registry.ts).
+// A segment may not begin with a dot, which is the whole of what keeps `.` and
+// `..` out; `-` and `_` lead nothing anywhere, and a Next buildId is a nanoid
+// over an alphabet that includes both, so refusing them rejects one build in
+// thirty for no reason at all.
 const PREFIX_SEGMENTS = 4;
-const PREFIX_SEGMENT = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+const PREFIX_SEGMENT = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,127}$/;
 
 function deployPrefix(segments: string[]): string | null {
   if (segments.length !== PREFIX_SEGMENTS) return null;

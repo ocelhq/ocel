@@ -299,6 +299,18 @@ describe("routing", () => {
     expect(secretHash).not.toHaveBeenCalled();
     secretHash.mockRestore();
   });
+
+  // A Next buildId is a nanoid, whose alphabet leads with `-` or `_` about one
+  // build in thirty. Neither can climb out of the prefix, so neither may cost a
+  // deploy the whole of its cache.
+  it.each(["-H1t_CFb4Ec1S1wr0e2T4", "_H1t-CFb4Ec1S1wr0e2T4"])(
+    "accepts the build id %s, which a nanoid leads with once in thirty builds",
+    async (buildId) => {
+      const prefix = `preview-p/p/app/${buildId}`;
+      expect((await initialize(prefix, "write-secret")).status).toBe(204);
+      expect((await writeEntryReq(prefix, "blog/post", "write-secret")).status).toBe(204);
+    },
+  );
 });
 
 // Seeds a deploy straight into the DO's storage, leaving this isolate's memo
