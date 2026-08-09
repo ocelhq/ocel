@@ -42,6 +42,12 @@ func nilSafe(progress func(string)) func(string) {
 // Destroy tears down one stack — a `pulumi destroy` followed by removing the
 // stack from the backend — and streams progress. progress and log may be nil.
 // Destroy performs the real teardown and is not exercised by unit tests.
+//
+// A stack the backend has never heard of is nothing to remove, so Destroy
+// succeeds on it. Callers that derive a stack name rather than read it back from
+// the backend (RemovePreview names a persistent preview's infra stack) would
+// otherwise fail teardown over infrastructure that was never created — a deploy
+// that died before provisioning leaves exactly that state.
 func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)) error {
 	report := func(f func(string), msg string) {
 		if f != nil {
@@ -55,6 +61,10 @@ func Destroy(ctx context.Context, cfg TeardownConfig, progress, log func(string)
 		auto.SecretsProvider("passphrase"),
 		auto.EnvVars(pulumiEnv(cfg.Region, cfg.BackendURL, cfg.Passphrase)),
 	)
+	if auto.IsSelectStack404Error(err) {
+		report(progress, "No stack "+cfg.StackName+" to destroy")
+		return nil
+	}
 	if err != nil {
 		return fmt.Errorf("select stack %s: %w", cfg.StackName, err)
 	}
