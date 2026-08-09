@@ -234,8 +234,15 @@ zone it lands on has to be prepared:
    from a scratch directory holding an `ocel.config.ts` that declares the AWS
    provider, run `ocel bootstrap --preview` (the suite's deploys are
    `ocel preview up`, which refuses if it is missing).
-3. Mint an AWS access key and a Cloudflare API token scoped to those accounts,
-   and an Ocel access token.
+3. Create the **AWS role the workflow assumes** — no access key is stored. It
+   needs a GitHub OIDC trust policy (provider
+   `token.actions.githubusercontent.com`, audience `sts.amazonaws.com`, subject
+   scoped to this repo) and a **`MaxSessionDuration` of at least 21600** (6h).
+   The `test` job mints one 6h session at its start and never refreshes it: the
+   deploy path reads credentials off the default chain and has nowhere to go
+   back to for new ones, so a shorter maximum fails the assume immediately —
+   which is the failure to want, since expiry mid-run strands deployed apps.
+4. Mint a Cloudflare API token scoped to that account, and an Ocel access token.
 
 ## Secrets and variables the workflow needs
 
@@ -244,9 +251,8 @@ Repository **secrets**:
 | name                                | what                                                                 |
 | ----------------------------------- | -------------------------------------------------------------------- |
 | `E2E_OCEL_ACCESS_TOKEN`             | Ocel access token (`OCEL_ACCESS_TOKEN`; no `ocel login` in CI)        |
-| `E2E_AWS_ACCESS_KEY_ID`             | AWS key for the disposable account                                    |
-| `E2E_AWS_SECRET_ACCESS_KEY`         | its secret                                                            |
-| `E2E_EXPECTED_AWS_ACCOUNT_ID`       | the account id the guard requires the key to resolve to               |
+| `E2E_AWS_ROLE_ARN`                  | the role each AWS-touching job assumes over OIDC                      |
+| `E2E_EXPECTED_AWS_ACCOUNT_ID`       | the account id the guard requires the session to resolve to           |
 | `E2E_CLOUDFLARE_API_TOKEN`          | Cloudflare API token                                                  |
 | `E2E_CLOUDFLARE_ACCOUNT_ID`         | Cloudflare account id passed to the provider                          |
 | `E2E_EXPECTED_CLOUDFLARE_ACCOUNT_ID`| the account id the guard requires the token to hold                   |
