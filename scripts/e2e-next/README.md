@@ -182,9 +182,9 @@ It fetches `smoke-app/app/golden/page.tsx` — a prerender whose body carries
 nothing per-render — twice per variant (html and RSC), both down the BYPASS path
 so the edge handles them identically and the only difference reaching the Lambda
 is the header. Status, body bytes and headers must match, modulo the set in
-`GOLDEN_VOLATILE_HEADERS` (`date`/`age`, `x-nextjs-cache`, `x-ocel-cache`, and
-the Cloudflare/transport headers), each excluded for a reason named at the
-constant.
+`GOLDEN_VOLATILE_HEADERS` (`date`/`age`, `x-nextjs-cache`, `x-ocel-cache`,
+`x-vercel-cache`, and the Cloudflare/transport headers), each excluded for a
+reason named at the constant.
 
 Each pair is preceded by a wait past the probe page's own short `revalidate`, so
 both legs are answered from a STALE entry, and a pair where neither leg reports
@@ -200,6 +200,20 @@ Not wired into the workflow: like `assert-tag-publisher.mjs`, it is run by hand
 against a deployment URL. Its pure half is covered by
 `pnpm --filter @ocel-scripts/e2e-next test`, which proves the comparison, not the
 Lambda — only a run against a real deployment does that.
+
+## The `x-vercel-cache` alias: `OCEL_E2E_VERCEL_CACHE_HEADER`
+
+Next's deploy suites (`cache-components-prerender-matrix` and friends) assert
+Vercel's `x-vercel-cache` header to tell which tier answered. `deploy.mjs` always
+sets `OCEL_E2E_VERCEL_CACHE_HEADER=1` on the build it runs; the Next adapter reads
+it once and records `vercelCacheAlias: true` in `routing-manifest.json`, and the
+edge worker stamps `x-vercel-cache` as a verbatim copy of `x-ocel-cache` on the
+way out — never into a stored cache entry, and never on a response that carries
+no `x-ocel-cache`.
+
+Both halves are independently safe and production must set neither: a build
+without the variable emits no manifest field, and a worker whose manifest lacks
+the field emits no alias. Nothing outside this harness sets it (bd ocelhq-6l0y).
 
 ## One-time setup (out of band, by a human)
 
@@ -265,13 +279,18 @@ app whose `ocel.config.ts` cannot resolve `ocel/config`. Repack it once:
 SIDECAR=<sidecar dir>
 TARBALLS=$(mktemp -d)
 cd <adapter repo> && pnpm --filter ocel build
-for pkg in ocel @ocel/provider-aws @ocel/provider-aws-linux-x64; do
+for pkg in ocel @ocel/linux-x64 @ocel/provider-aws @ocel/provider-aws-linux-x64; do
   pnpm --filter "$pkg" exec pnpm pack --pack-destination "$TARBALLS"
 done
 cd "$SIDECAR" && npm init -y >/dev/null
 npm install --no-audit --no-fund "$TARBALLS"/*.tgz
 test -d node_modules/ocel && test -x node_modules/@ocel/provider-aws-linux-x64/bin/deploy
 ```
+
+`@ocel/linux-x64` carries the CLI binary the worker bundle and the Next adapter
+are embedded in, and it is an optionalDependency of `ocel` — leave it out of the
+pack list and npm fetches the *published* CLI instead, so a local worker or
+adapter change never reaches the deploy.
 
 ## Recording a baseline
 

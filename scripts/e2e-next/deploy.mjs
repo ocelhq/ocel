@@ -41,7 +41,14 @@ const appDir = process.cwd();
 // the custom-script one. Without it `next build` skips the shim that sets
 // `__NEXT_TEST_MODE`, so `window.__NEXT_HYDRATED` never fires and every page load
 // in the suite waits out next-webdriver's 10-second fallback.
-const CHILD_ENV = { ...process.env, NEXT_PRIVATE_TEST_MODE: "e2e" };
+const CHILD_ENV = {
+  ...process.env,
+  NEXT_PRIVATE_TEST_MODE: "e2e",
+  // Next's deploy suites assert Vercel's `x-vercel-cache`. The adapter records
+  // the opt-in in the build's routing manifest and the edge stamps the alias
+  // beside `x-ocel-cache`; nothing outside this harness sets it (ocelhq-6l0y).
+  OCEL_E2E_VERCEL_CACHE_HEADER: "1",
+};
 
 try {
   process.stdout.write(deploy() + "\n");

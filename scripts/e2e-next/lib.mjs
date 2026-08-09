@@ -190,9 +190,11 @@ export const PREFETCH_PURPOSE_VALUE = "prefetch";
  * - `date`/`age`: the responses are seconds apart.
  * - `x-nextjs-cache`: the freshness of the entry each render was answered from,
  *   which is what the suppression legitimately changes.
- * - `x-ocel-cache`: the tier that answered. Compared separately by the
- *   assertion, which requires both legs to report the same one — a difference
- *   there means the legs were never comparable, not that the render differed.
+ * - `x-ocel-cache`, and `x-vercel-cache` where the build opted into the alias
+ *   (OCEL_E2E_VERCEL_CACHE_HEADER): the tier that answered. Compared separately
+ *   by the assertion, which requires both legs to report the same one — a
+ *   difference there means the legs were never comparable, not that the render
+ *   differed.
  * - the Cloudflare and connection-level set: stamped per response by the edge
  *   and the transport, never by the render.
  * - the `x-amzn-*` set: the Lambda Function URL stamps a fresh request id, trace
@@ -212,6 +214,7 @@ export const GOLDEN_VOLATILE_HEADERS = new Set([
   "age",
   "x-nextjs-cache",
   "x-ocel-cache",
+  "x-vercel-cache",
   "cf-ray",
   "cf-cache-status",
   "x-amzn-requestid",
