@@ -465,6 +465,11 @@ describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
     what: string;
     path: string;
     normalized: Record<"true" | "false", string>;
+    // Only data-request rows need this: the matcher rewrites a data path to its
+    // page unconditionally, but re-adds the trailing slash only when the flag is
+    // unset, unlike `normalized`'s slash-free-URL rows, which go through
+    // canonicalPathname either way and so match `normalized` under the flag too.
+    matchedWithFlag?: Record<"true" | "false", string>;
   }[] = [
     { what: "the root", path: "/", normalized: { true: "/", false: "/" } },
     { what: "a slash-free page", path: "/a", normalized: { true: "/a/", false: "/a" } },
@@ -488,16 +493,19 @@ describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
       what: "a data request",
       path: "/_next/data/t/a.json",
       normalized: { true: "/a/", false: "/a" },
+      matchedWithFlag: { true: "/a", false: "/a" },
     },
     {
       what: "a nested data request",
       path: "/_next/data/t/blog/post.json",
       normalized: { true: "/blog/post/", false: "/blog/post" },
+      matchedWithFlag: { true: "/blog/post", false: "/blog/post" },
     },
     {
       what: "an index data request",
       path: "/_next/data/t/index.json",
       normalized: { true: "/", false: "/" },
+      matchedWithFlag: { true: "/", false: "/" },
     },
     // The regression the live skip-trailing-slash-redirect suite caught: the
     // fixture's middleware branches on `startsWith('/_next/data')` and echoes
@@ -509,6 +517,7 @@ describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
       what: "a locale-prefixed data request",
       path: "/_next/data/t/ja-jp/locale-test.json",
       normalized: { true: "/ja-jp/locale-test/", false: "/ja-jp/locale-test" },
+      matchedWithFlag: { true: "/ja-jp/locale-test", false: "/ja-jp/locale-test" },
     },
   ];
 
@@ -529,10 +538,18 @@ describe("the URL middleware is handed, per skipMiddlewareUrlNormalize", () => {
 
         // The flag moves the URL middleware is handed, not the one the matchers
         // are tested against — the router matches those on its own routed
-        // pathname either way.
-        it.each(cases)("still matches $what on the routed form", ({ path, normalized }) => {
-          expect(middlewareMatchPathname(path, config, BUILD_ID)).toBe(normalized[key]);
-        });
+        // pathname either way. But that routed pathname's trailing slash is
+        // itself gated on !skipMiddlewareUrlNormalize (maybeAddTrailingSlash in
+        // resolve-routes.ts), so a data request's matcher form stays slash-free
+        // under the flag even when trailingSlash: true.
+        it.each(cases)(
+          "still matches $what on the routed form",
+          ({ path, normalized, matchedWithFlag }) => {
+            expect(middlewareMatchPathname(path, config, BUILD_ID)).toBe(
+              (matchedWithFlag ?? normalized)[key],
+            );
+          },
+        );
       });
 
       describe("without the flag", () => {
