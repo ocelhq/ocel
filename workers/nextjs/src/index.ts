@@ -640,9 +640,15 @@ async function dispatch(
 
   switch (target.kind) {
     case "static":
-      // _next/static, public/, and the other truly-static files. Use the
-      // ORIGINAL request/URL so the asset path matches.
-      return serveStaticAsset(request, url, deps.assetStore);
+      // The manifest key names the file; the request path does not. One
+      // document answers every path a dynamic template spans
+      // (/docs/[slug].html for /docs/slug-1), so the asset is looked up under
+      // the key the target was found at.
+      return serveStaticAsset(
+        request,
+        new URL(result.resolvedPathname, url),
+        deps.assetStore,
+      );
 
     case "lambda": {
       const fnUrl = functionUrls[target.id];
