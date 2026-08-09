@@ -2319,3 +2319,121 @@ describe("data-request invocation pathname", () => {
     expect(captured!.pathname).toBe("/_next/data/t/index.json");
   });
 });
+
+// The alias the edge stamps beside x-ocel-cache for a build that asked for it
+// (manifest vercelCacheAlias, from OCEL_E2E_VERCEL_CACHE_HEADER). Asserted
+// through serve rather than dispatchResult: serve is the choke point every tier
+// leaves through, which is the whole reason the stamp lives there.
+describe("the x-vercel-cache alias", () => {
+  const emptyRoutes = {
+    beforeMiddleware: [],
+    beforeFiles: [],
+    afterFiles: [],
+    dynamicRoutes: [],
+    onMatch: [],
+    fallback: [],
+  };
+
+  const isrPrefix = "prod/p/app/build";
+
+  // A colo that always misses, so a prerender route is answered by the origin
+  // and stamped MISS.
+  const missingColo = () =>
+    coloDeps({
+      cache: {
+        match: async () => undefined,
+        put: async () => {},
+      } as unknown as Cache,
+      waitUntil: () => {},
+    });
+
+  function aliasDeps(vercelCacheAlias?: boolean): RouteDeps {
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/"],
+        routes: emptyRoutes,
+        dispatch: { "/": { kind: "prerender", id: "/", config: {} } },
+        ...(vercelCacheAlias !== undefined && { vercelCacheAlias }),
+      },
+      functionUrls: { "/": "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("rendered", {
+          status: 200,
+          headers: { "cache-control": "s-maxage=60" },
+        })) as unknown as typeof fetch,
+      cache: missingColo(),
+    });
+  }
+
+  it("stamps the tier that answered under Vercel's name", async () => {
+    const res = await serve(new Request("https://app.example/"), aliasDeps(true));
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(res.headers.get("x-vercel-cache")).toBe("MISS");
+    expect(await res.text()).toBe("rendered");
+  });
+
+  it("emits nothing for a build that did not ask for it", async () => {
+    const res = await serve(new Request("https://app.example/"), aliasDeps());
+
+    expect(res.headers.get("x-ocel-cache")).toBe("MISS");
+    expect(res.headers.get("x-vercel-cache")).toBeNull();
+  });
+
+  // composePpr stamps its own status instead of going through withStatus, so the
+  // composed-shell path is the one that proves the stamp is at the choke point
+  // and not inside the cache tier.
+  it("stamps a composed PPR shell, which never passes through withStatus", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/ppr"],
+        routes: emptyRoutes,
+        dispatch: {
+          "/ppr": {
+            kind: "prerender",
+            id: "/ppr",
+            config: {},
+            fallback: { initialRevalidate: 60, initialExpiration: 3600 },
+            pprChain: { headers: { "next-resume": "1" } },
+          },
+        },
+        vercelCacheAlias: true,
+      },
+      functionUrls: { "/ppr": "https://fn.example.com" },
+      fetch: (async () => new Response("[dynamic]", { status: 200 })) as unknown as typeof fetch,
+      cache: missingColo(),
+      interception: {
+        config: { isrPrefix },
+        now: () => 2_000,
+        store: {
+          async get(key: string) {
+            if (key !== `${isrPrefix}/cache/ppr.cache.json`) return null;
+            return {
+              text: async () =>
+                JSON.stringify({
+                  lastModified: 1_000,
+                  value: {
+                    kind: "APP_PAGE",
+                    html: "[shell]",
+                    postponed: "POSTPONED",
+                    status: 200,
+                    headers: {},
+                  },
+                }),
+            };
+          },
+        },
+      },
+    });
+
+    const res = await serve(new Request("https://app.example/ppr"), deps);
+
+    expect(await res.text()).toBe("[shell][dynamic]");
+    expect(res.headers.get("x-ocel-cache")).toBe("PRERENDER");
+    expect(res.headers.get("x-vercel-cache")).toBe("PRERENDER");
+  });
+});

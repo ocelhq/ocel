@@ -328,6 +328,16 @@ const adapter = {
       ...(images && {
         images: { ...images, configHash: imageConfigHash(images) },
       }),
+
+      // The `x-vercel-cache` alias the edge stamps beside `x-ocel-cache`, so
+      // Next's own deploy suites — which assert Vercel's header name — are real
+      // coverage rather than a baseline entry. The opt-in is recorded here, at
+      // build time: a build whose deploying process did not set the flag carries
+      // no field, and a worker reading no field emits no alias.
+      ...(process.env.OCEL_E2E_VERCEL_CACHE_HEADER === "1" && {
+        vercelCacheAlias: true,
+      }),
+
       assetHashes,
       pathnames: [
         ...new Set([

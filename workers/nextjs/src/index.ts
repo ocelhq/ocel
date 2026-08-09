@@ -17,6 +17,7 @@ import {
   servedFromStore,
   storeInColo,
   withStatus,
+  withVercelCacheAlias,
 } from "./cache";
 import {
   functionUrlImageOrigin,
@@ -239,11 +240,14 @@ interface Manifest {
   // variant outlives the build it was produced under. Absent on a manifest
   // built before the adapter emitted it.
   assetHashes?: Record<string, string>;
+  // Set by a build that opted into the `x-vercel-cache` alias
+  // (OCEL_E2E_VERCEL_CACHE_HEADER). Absent on every production build.
+  vercelCacheAlias?: boolean;
 }
 
 // What resolveRoutes never hands back: the middleware's own Response, the
 // redirect it asked for, and the request headers it rewrote. The invoker
-// captures all three (see invokeMiddleware in `serve`).
+// captures all three (see invokeMiddleware in `serveRequest`).
 export interface MiddlewareOutcome {
   response: Response;
   result: MiddlewareResult;
@@ -449,11 +453,24 @@ function imageResponse(
   });
 }
 
-// serve is the whole request path: buffer, route, dispatch. The body is read
-// here rather than at dispatch because middleware may consume it — routing gets
-// a fresh stream over the buffer, and the forward that follows reuses the same
-// bytes instead of a stream someone else already drained.
+// The one exit every served response leaves through, and so the only place the
+// x-vercel-cache alias is stamped: every tier's status header is set below here
+// (withStatus in cache.ts, composePpr in ppr.ts), and nothing above it.
 export async function serve(
+  request: Request,
+  deps: RouteDeps,
+): Promise<Response> {
+  return withVercelCacheAlias(
+    await serveRequest(request, deps),
+    deps.manifest.vercelCacheAlias,
+  );
+}
+
+// The whole request path: buffer, route, dispatch. The body is read here rather
+// than at dispatch because middleware may consume it — routing gets a fresh
+// stream over the buffer, and the forward that follows reuses the same bytes
+// instead of a stream someone else already drained.
+async function serveRequest(
   request: Request,
   deps: RouteDeps,
 ): Promise<Response> {
