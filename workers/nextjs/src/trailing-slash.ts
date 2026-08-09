@@ -122,10 +122,12 @@ function dataPagePathname(
 // form unrecoverable. Idempotent on a canonical input, so a routing-form
 // pathname is also a valid argument wherever the two coincide.
 //
-// This is the form the middleware *matchers* are tested against, which the
-// router normalizes whether or not skipMiddlewareUrlNormalize is set: it matches
-// on its own parsedUrl.pathname (resolve-routes.ts's `middleware` route), after
-// middleware_next_data has already rewritten a data path to its page there.
+// This is the form the middleware *matchers* are tested against: it matches on
+// its own parsedUrl.pathname (resolve-routes.ts's `middleware` route), after
+// middleware_next_data has already rewritten a data path to its page there. That
+// rewrite is unconditional, but the trailing-slash re-add it then applies
+// (maybeAddTrailingSlash) is gated on !skipProxyUrlNormalize, same as
+// skipMiddlewareUrlNormalize below.
 export function middlewareMatchPathname(
   pathname: string,
   config: TrailingSlashConfig,
@@ -133,7 +135,8 @@ export function middlewareMatchPathname(
 ): string {
   const page = dataPagePathname(pathname, config, buildId);
   if (page !== undefined) {
-    return config.trailingSlash && page !== "/" ? `${page}/` : page;
+    const slash = config.trailingSlash && !config.skipMiddlewareUrlNormalize;
+    return slash && page !== "/" ? `${page}/` : page;
   }
   return canonicalPathname(pathname, config, false);
 }
