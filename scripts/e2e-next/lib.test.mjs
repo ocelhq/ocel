@@ -157,6 +157,10 @@ describe("isrToken", () => {
     expect(isrToken('<p id="isr-token">isr-token:1769000000000</p>')).toBe("1769000000000");
   });
 
+  it("reads it through the separator React renders between the marker and the token", () => {
+    expect(isrToken('<p id="isr-token">isr-token:<!-- -->1769000000000</p>')).toBe("1769000000000");
+  });
+
   it("is null when the response is not the probe page", () => {
     expect(isrToken("<h1>500</h1>")).toBeNull();
     expect(isrToken("")).toBeNull();

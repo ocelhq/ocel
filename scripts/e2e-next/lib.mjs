@@ -134,9 +134,15 @@ export const ISR_REVALIDATE_SECONDS = 5;
  * the marker is absent, which means the response was not that page at all —
  * a redirect, an error page, or a build that dropped the route — and must be
  * reported as such rather than compared as a value.
+ *
+ * The token is a sibling text child of the marker, and React's hydratable
+ * renderer delimits adjacent text with an empty comment, so what a probe
+ * actually reads is `isr-token:<!-- -->1769…`. Every marker page here is written
+ * that way; tolerating the separator keeps the shape of the JSX from deciding
+ * whether the assertion can see its own probe.
  */
 export function isrToken(html) {
-  return /isr-token:(\d+)/.exec(String(html ?? ""))?.[1] ?? null;
+  return /isr-token:(?:<!--.*?-->)?(\d+)/.exec(String(html ?? ""))?.[1] ?? null;
 }
 
 /**
