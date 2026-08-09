@@ -117,17 +117,23 @@ function dataPagePathname(
 // skipTrailingSlashRedirect or skipMiddlewareUrlNormalize makes the canonical
 // form unrecoverable. Idempotent on a canonical input, so a routing-form
 // pathname is also a valid argument wherever the two coincide.
+//
+// skipMiddlewareUrlNormalize suppresses the trailing slash and nothing else. The
+// data-to-page rewrite is the router's, unconditional (resolve-routes.ts's
+// middleware_next_data); the flag is compiled into the bundle instead, where it
+// only stops NextURL re-parsing what the router already did.
 export function middlewarePathname(
   pathname: string,
   config: TrailingSlashConfig,
   buildId: string,
 ): string {
-  if (config.skipMiddlewareUrlNormalize) return pathname;
-
   const page = dataPagePathname(pathname, config, buildId);
   if (page !== undefined) {
-    return config.trailingSlash && page !== "/" ? `${page}/` : page;
+    const slashed =
+      config.trailingSlash && !config.skipMiddlewareUrlNormalize && page !== "/";
+    return slashed ? `${page}/` : page;
   }
 
+  if (config.skipMiddlewareUrlNormalize) return pathname;
   return canonicalPathname(pathname, config, false);
 }
