@@ -347,6 +347,29 @@ Dropping a whole suite's `"runtimeError": true` entry re-enables the entire file
 the same way. Do not re-record a full baseline to promote a fix — that would
 silently adopt every *new* failure alongside it.
 
+## What `deploy.mjs` writes into the temp app before installing
+
+The harness hands over a fixture directory, not a reproducible install: it
+carries no lockfile, and its `package.json` may declare `"typescript": "latest"`.
+So `deploy.mjs` patches `package.json` **before** `ensureDeps()` runs any
+install, via `withPinnedTypeScript` (pure, unit-tested in `lib.test.mjs`):
+
+- `typescript` is pinned to `^5` in `dependencies`/`devDependencies`, and
+  declared as a devDependency for a fixture that has none. typescript@7 is the
+  Go-native rewrite and ships no `lib/typescript.js`, which is the file Next's
+  `has-necessary-dependencies` probes for; without it Next concludes TypeScript
+  is missing, auto-installs `latest` (7 again), and calls `require(undefined)`.
+  Declaring it means that auto-install never runs.
+- The same pin goes into both `overrides` and `pnpm.overrides`, covering
+  transitive resolutions and whichever package manager Next would have detected.
+
+Separately, an app with a `next.config.ts`/`.mts` is built with
+`__NEXT_NODE_NATIVE_TS_LOADER_ENABLED=true`. Without it Next transpiles the
+config to commonjs and `require`s it from a string, which cannot load a config
+containing top-level await. It reaches `next build` by inheritance: the Go CLI
+composes the builder's environment from `os.Environ()`, and `buildNext` spawns
+the fixture's build script under `process.env`.
+
 ## Known limits (accepted, not bugs)
 
 - The membrane Lambda layer is **pinned** (`defaultMembraneLayerARN`), so branch
