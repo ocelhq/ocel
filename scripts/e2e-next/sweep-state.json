@@ -1,7 +1,7 @@
 {
  "schema": 2,
- "lastSweepId": "sweep-2026-07-28h",
- "lastRunAt": "2026-07-28T18:07:12.768Z",
+ "lastSweepId": "ctypes",
+ "lastRunAt": "2026-08-09T00:38:41.000Z",
  "notes": "sweep-2026-07-27g (8 waves x 5, 43 suites dispatched, 39 of them never-covered ground; rot checks dropped from wave 2 onward at the user's direction since no e2e-next issue is closed). Lambda quota verified 1000; ZERO throttles, consistent with sweep-f. Adapter-only pass rate 94.1% (80/85). FIVE failure clusters reduced to THREE root causes: two collapsed into the existing P0 ocelhq-9q8, two merged into one new issue ocelhq-slzm, one new issue ocelhq-2f8x. The headline lesson is that three of five clusters were NOT what their assertions said: 9q8's cases were content-type mislabelling surfacing as missing metadata and NaN timings, and slzm's were correct-but-late responses surfacing as broken actions. A WEAK confirm verdict on ocelhq-iud was escalated to a debugger and turned out CORRECT, which also uncovered a second, worker-side half of that bug (index.ts:471 static branch uses the original request URL, so no request path can retrieve the object). New structural trap 6 recorded: fixtures shipping nodejs-runtime middleware/proxy die at build under ocelhq-dly and burn a slot invisibly to all five earlier screens. Footprint: 52/52 slugs verified clean, account-wide ocel:project lambda count 0, 0 sweep-matching Cloudflare worker scripts.",
  "totalSuitesInTree": 690,
  "suites": {
@@ -63,29 +63,21 @@
    }
   },
   "test/e2e/app-dir/metadata/metadata.test.ts": {
-   "lastRun": "sweep-2026-07-27a",
+   "lastRun": "ctypes",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 39,
-    "failed": 8,
+    "passed": 45,
+    "failed": 2,
     "known": 0,
     "skipped": 0
    },
-   "projectSlug": "e2e-sweep-2026-07-27a-84c4be70",
+   "projectSlug": "e2e-ctypes-6b403f02",
    "openIssues": [
-    "ocelhq-8xo",
-    "ocelhq-9q8",
-    "ocelhq-sae"
+    "ocelhq-8xo"
    ],
    "failedTests": {
     "app dir - metadata basic should support other basic tags": "ocelhq-8xo",
-    "app dir - metadata basic should support other basic tags (edge)": "ocelhq-8xo",
-    "app dir - metadata basic should not contain query in canonical url after client navigation": "ocelhq-9q8",
-    "app dir - metadata static routes should have /favicon.ico as route": "ocelhq-sae",
-    "app dir - metadata static routes should have icons as route": "ocelhq-sae",
-    "app dir - metadata static routes should support root dir robots.txt": "ocelhq-sae",
-    "app dir - metadata static routes should support sitemap.xml under every routes": "ocelhq-sae",
-    "app dir - metadata static routes should support static manifest.webmanifest": "ocelhq-sae"
+    "app dir - metadata basic should support other basic tags (edge)": "ocelhq-8xo"
    }
   },
   "test/e2e/app-dir/navigation/navigation.test.ts": {
@@ -847,22 +839,17 @@
    }
   },
   "test/e2e/app-dir/service-worker/service-worker-register.test.ts": {
-   "lastRun": "sweep-2026-07-27d",
+   "lastRun": "ctypes",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 6,
-    "failed": 2,
+    "passed": 8,
+    "failed": 0,
     "known": 0,
     "skipped": 0
    },
-   "projectSlug": "e2e-sweep-2026-07-27d-0756c530",
-   "openIssues": [
-    "ocelhq-2d0"
-   ],
-   "failedTests": {
-    "app dir - service worker register serves the worker chunk as a revalidated, mutable asset": "ocelhq-2d0",
-    "app dir - service worker register (basePath) serves the worker chunk as a revalidated, mutable asset": "ocelhq-2d0"
-   }
+   "projectSlug": "e2e-ctypes-600021bd, e2e-ctypes-03246e4f",
+   "openIssues": [],
+   "failedTests": {}
   },
   "test/e2e/app-dir/sitemap-group/sitemap-group.test.ts": {
    "lastRun": "sweep-2026-07-27d",
@@ -7162,6 +7149,20 @@
    "infra": 2,
    "lambdaConcurrencyQuota": 1000,
    "notes": "All 40 slots new coverage: Verify tier empty (nothing fixed since 28g) and rot checks skipped by instruction. 12 raw failures collapsed to 7 clusters and then to 6 distinct causes, of which only 3 were new (ocelhq-uusu, ocelhq-icgy/nafw, plus tooling ocelhq-i4o2) — the rest were already-known issues reached from new directions. 2 failures re-bucketed failed -> infra (transient CF 522, ocelhq-bfbg). Zero stranded projects: all 49 projects (40 run + 8 staged + 1 smoke) verified clear by ocel:project tag scan. Candidate pool is now genuinely thin — 40 suites carried only 53 effective cases; fixing ocelhq-dly is the single biggest unlock, it blocks the three richest remaining candidates (middleware-general at 46 cases, middleware-custom-matchers, middleware-responses)."
+  },
+  {
+   "sweepId": "ctypes",
+   "ranAt": "2026-08-09T00:38:41.000Z",
+   "waves": 1,
+   "suitesPerWave": 2,
+   "suites": 2,
+   "passed": 53,
+   "failed": 2,
+   "known": 0,
+   "skipped": 0,
+   "infra": 0,
+   "lambdaConcurrencyQuota": 1000,
+   "notes": "Targeted 2-suite verification run (not a sweep) confirming ocelhq-sae and ocelhq-2d0 fixes on fix/patch-content-types (commits b6fcff2, f810cb7, d626b5d, 9e2eb06, 82582c7, 251193c) against a fresh preview deploy. metadata.test.ts: 45 passed / 2 failed (was 39/8) — only ocelhq-8xo's crossOrigin cases remain, ocelhq-sae's five targets and one ocelhq-9q8 case now pass. service-worker-register.test.ts: 8 passed / 0 failed (was 6/2) — ocelhq-2d0 fully clear. Live curl evidence against a re-staged fresh preview (e2e-stgct-a213dc7d) confirmed post-fix content-type/cache-control values and a working If-None-Match->304. Full report at .superpowers/sdd/ocelhq-sae/verify-report.md."
   }
  ],
  "issues": {
@@ -7262,7 +7263,7 @@
    "orderingNote": "Consult ocelhq-k8pr FIRST. Deployments hitting k8pr also serve their working /index as application/octet-stream, which is e7w's serve-time face; an e7w-first ordering mis-attributes the whole k8pr cluster."
   },
   "ocelhq-sae": {
-   "status": "open",
+   "status": "closed",
    "priority": "P1",
    "kind": "adapter",
    "tests": 5,
@@ -7888,7 +7889,7 @@
    ]
   },
   "ocelhq-2d0": {
-   "status": "open",
+   "status": "closed",
    "title": "service-worker chunk served immutable; assets.ts has no asset-class cache table",
    "matchers": [
     {
