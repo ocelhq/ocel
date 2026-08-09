@@ -213,6 +213,34 @@ describe("serveStaticAsset", () => {
     expect(res.headers.get("content-type")).toBe("text/html; charset=utf-8");
   });
 
+  // A pages-router i18n build emits the 404 document once per locale and never
+  // a bare one, so the miss is answered under the locale routing resolved.
+  it("serves the locale's own 404 page when the request resolved to one", async () => {
+    const url = new URL("https://serve-2i.example/blog/timm");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/fr/404.html": { body: "<h1>introuvable</h1>" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps, "fr");
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<h1>introuvable</h1>");
+  });
+
+  it("falls back to the bare 404 page when the locale emitted none", async () => {
+    const url = new URL("https://serve-2j.example/blog/timm");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/404.html": { body: "<h1>gone</h1>" } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(new Request(url), url, deps, "fr");
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("<h1>gone</h1>");
+  });
+
   it("returns a plain 404 when the build emitted no 404 page", async () => {
     const url = new URL("https://serve-2b.example/missing.txt");
     const deps = countingDeps(bucketServing({}), "assets/p/app/b1");
