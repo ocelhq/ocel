@@ -80,7 +80,7 @@ func TestUploadStaticAssets_UploadsEachAppUnderItsOwnPrefix(t *testing.T) {
 // differently on two hosts — and would be a second, contradicting source of
 // truth.
 func TestUploadStaticAssets_StampsNoContentType(t *testing.T) {
-	store := &fakeUploader{exists: map[string]bool{}}
+	store, asset := &fakeUploader{exists: map[string]bool{}}, &fakeUploader{exists: map[string]bool{}}
 	root := writeTree(t, map[string]string{
 		"apps/web/routing-manifest.json":        `{"buildId":"WEB1"}`,
 		"apps/web/static/next.svg":              "<svg/>",
@@ -89,18 +89,21 @@ func TestUploadStaticAssets_StampsNoContentType(t *testing.T) {
 		"apps/web/static/chunk.js.map":          `{"version":3}`,
 		"apps/web/static/favicon.ico":           "icon",
 	})
-	cfg := Config{
-		ArtifactRoot: root, AssetBucket: "assets", Env: "prod",
-		Uploader:         &fakeUploader{exists: map[string]bool{}},
-		CacheStoreBucket: "isr", CacheStoreUploader: store,
-	}
+	cfg := mirrorConfig(root, store, asset)
 
 	if err := uploadStaticAssets(context.Background(), cfg, nextManifest()); err != nil {
 		t.Fatalf("uploadStaticAssets: %v", err)
 	}
 
-	if len(store.contentTypes) != 0 {
-		t.Errorf("content-types = %v, want none — the worker names the type", store.contentTypes)
+	// Both halves of the asset plane, not just the one the worker reads: the
+	// two carry identical keys and must carry identical (absent) metadata.
+	for name, up := range map[string]*fakeUploader{"cache store": store, "asset bucket": asset} {
+		if len(up.contentTypes) != 0 {
+			t.Errorf("%s content-types = %v, want none — the worker names the type", name, up.contentTypes)
+		}
+		if len(sortedPuts(up)) == 0 {
+			t.Errorf("%s received no uploads, so it proves nothing", name)
+		}
 	}
 }
 
@@ -225,9 +228,6 @@ func TestUploadStaticAssets_MirrorsIdenticalKeysAndBytesToBothTargets(t *testing
 	}
 	if store.putBodies[key] != asset.putBodies[key] {
 		t.Errorf("mirrored bodies differ: store = %q, asset = %q", store.putBodies[key], asset.putBodies[key])
-	}
-	if store.contentTypes[key] != asset.contentTypes[key] {
-		t.Errorf("mirrored content-types differ: store = %q, asset = %q", store.contentTypes[key], asset.contentTypes[key])
 	}
 	for _, b := range asset.buckets {
 		if b != "assets" {

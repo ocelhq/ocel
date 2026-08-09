@@ -85,13 +85,9 @@ func uploadStaticAssets(ctx context.Context, cfg Config, manifest *deploymentsv1
 		// over from a same-build-id publish of a different config would break every
 		// image request. Content-keyed assets carry no such risk.
 		replace bool
-		// Written onto the object, empty for everything but the image config.
-		// A static asset deliberately carries none: the frozen worker decides
-		// what an asset's bytes are from the name the build emitted it under
-		// (contentTypeFor in workers/nextjs/src/assets.ts, which mirrors what
-		// Next.js serves), and a second answer stamped here from the deploy
-		// host's own mime database — which is neither Next-conformant nor even
-		// the same on two hosts — could only contradict it.
+		// Empty for a static asset: the worker types those from the name the
+		// build emitted them under (contentTypeFor in workers/nextjs/src/
+		// assets.ts), and a stamp here could only contradict it.
 		contentType string
 	}
 	var uploads []upload
