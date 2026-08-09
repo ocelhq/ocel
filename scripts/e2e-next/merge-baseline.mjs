@@ -3,35 +3,54 @@
 // runs against, out of a recording run's per-suite Jest results.
 //
 // Two modes, matching the two halves of the workflow:
-//   collect <nextjs-dir> <out.json>   one group, in the nextjs checkout: reduce
-//                                     every *.results.json run-tests.js wrote
-//                                     into a manifest fragment
-//   merge <out.json> <fragment...>    the baseline job: fold every group's
-//                                     fragment into the manifest to commit
+//   collect <nextjs-dir> <log> <out.json>  one group: reduce every suite result
+//                                          run-tests.js framed in its stdout into
+//                                          a manifest fragment
+//   merge <out.json> <fragment...>         the baseline job: fold every group's
+//                                          fragment into the manifest to commit
+//
+// collect reads the harness's stdout, not the `.results.json` files it leaves
+// behind: a failing top-level suite makes the harness `git clean -fdx` the whole
+// of test/e2e between retries, which deletes the other 51 suites' results. It
+// then fails loudly if any suite the harness started has no result, so a group
+// can never again record a fraction of its run and exit 0.
 //
 // The manifest is the harness's unversioned shape — { "<test file>": { passed,
 // failed, flakey, runtimeError } } — where a listed suite's `failed` cases are
 // excluded from the run and a newly added case is included automatically. So
 // promoting a fix is a matter of deleting its line, not re-recording.
 
-import { readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join, relative } from "node:path";
+import { readFileSync, writeFileSync } from "node:fs";
+import { resolve } from "node:path";
 
-import { buildBaselineManifest, mergeBaselineManifest } from "./lib.mjs";
+import {
+  buildBaselineManifest,
+  mergeBaselineManifest,
+  suitesFromHarnessOutput,
+  suitesStartedInHarnessOutput,
+} from "./lib.mjs";
 
 const [mode, ...args] = process.argv.slice(2);
 
 if (mode === "collect") {
-  const [nextjsDir, out] = args;
-  if (!nextjsDir || !out) {
+  const [nextjsDir, log, out] = args;
+  if (!nextjsDir || !log || !out) {
     usage();
   }
-  const files = resultsFiles(join(nextjsDir, "test")).map((path) => ({
-    path: relative(nextjsDir, path),
-    results: JSON.parse(readFileSync(path, "utf8")),
-  }));
-  write(out, buildBaselineManifest(files));
-  console.error(`[ocel-e2e] collected ${files.length} suite results into ${out}`);
+  const stdout = readFileSync(log, "utf8");
+  const suites = suitesFromHarnessOutput(stdout, resolve(nextjsDir));
+  const missing = suitesStartedInHarnessOutput(stdout).filter(
+    (suite) => !suites.some((collected) => collected.suite === suite),
+  );
+  if (missing.length > 0) {
+    console.error(
+      `[ocel-e2e] ${missing.length} suite(s) the harness started produced no result in ${log}; ` +
+        `the fragment would be incomplete:\n  ${missing.join("\n  ")}`,
+    );
+    process.exit(1);
+  }
+  write(out, buildBaselineManifest(suites));
+  console.error(`[ocel-e2e] collected ${suites.length} suite results into ${out}`);
 } else if (mode === "merge") {
   const [out, ...fragments] = args;
   if (!out || fragments.length === 0) {
@@ -44,26 +63,13 @@ if (mode === "collect") {
   usage();
 }
 
-function resultsFiles(dir) {
-  const found = [];
-  for (const entry of readdirSync(dir, { withFileTypes: true })) {
-    const path = join(dir, entry.name);
-    if (entry.isDirectory()) {
-      found.push(...resultsFiles(path));
-    } else if (entry.isFile() && entry.name.endsWith(".results.json") && statSync(path).size > 0) {
-      found.push(path);
-    }
-  }
-  return found;
-}
-
 function write(path, manifest) {
   writeFileSync(path, JSON.stringify(manifest, null, 2) + "\n");
 }
 
 function usage() {
   console.error(
-    "usage: merge-baseline.mjs collect <nextjs-dir> <out.json>\n" +
+    "usage: merge-baseline.mjs collect <nextjs-dir> <harness-log> <out.json>\n" +
       "       merge-baseline.mjs merge <out.json> <fragment.json...>",
   );
   process.exit(2);

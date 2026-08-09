@@ -36,7 +36,8 @@ import {
   projectSlugForApp,
   renderOcelConfig,
   strongestCoverage,
-  suiteFromResultsPath,
+  suitesFromHarnessOutput,
+  suitesStartedInHarnessOutput,
   summarizeOutcomes,
   suiteResultFromJest,
   tail,
@@ -910,15 +911,74 @@ describe("tail", () => {
   });
 });
 
-describe("suiteFromResultsPath", () => {
-  it("recovers the harness's test-file key", () => {
-    expect(suiteFromResultsPath("test/e2e/app-dir/app/index.test.ts.results.json")).toBe(
-      "test/e2e/app-dir/app/index.test.ts",
-    );
+describe("suitesFromHarnessOutput", () => {
+  const framed = (file, results) =>
+    `--test output start-- ${JSON.stringify({
+      testResults: [{ name: `/work/nextjs/${file}`, ...results }],
+    })} --test output end--`;
+
+  it("keys each framed suite result by its path inside the checkout", () => {
+    const stdout = [
+      "::group::Result as JSON for tooling",
+      framed("test/e2e/app-dir/app/index.test.ts", {
+        assertionResults: [{ title: "renders", status: "passed" }],
+      }),
+      "::endgroup::",
+    ].join("\n");
+
+    expect(suitesFromHarnessOutput(stdout, "/work/nextjs")).toEqual([
+      {
+        suite: "test/e2e/app-dir/app/index.test.ts",
+        results: {
+          testResults: [
+            {
+              name: "/work/nextjs/test/e2e/app-dir/app/index.test.ts",
+              assertionResults: [{ title: "renders", status: "passed" }],
+            },
+          ],
+        },
+      },
+    ]);
   });
 
-  it("normalizes windows separators and a leading ./", () => {
-    expect(suiteFromResultsPath("./test\\e2e\\app\\index.test.ts.results.json")).toBe("test/e2e/app/index.test.ts");
+  it("reads every suite, not just the one whose results file survived", () => {
+    const stdout = [
+      framed("test/e2e/a.test.ts", { assertionResults: [] }),
+      "Cleaning test files at /work/nextjs/test/e2e",
+      framed("test/e2e/b.test.ts", { assertionResults: [] }),
+    ].join("\n");
+
+    expect(suitesFromHarnessOutput(stdout, "/work/nextjs").map((s) => s.suite)).toEqual([
+      "test/e2e/a.test.ts",
+      "test/e2e/b.test.ts",
+    ]);
+  });
+
+  it("ignores a line the harness truncated mid-JSON rather than aborting the group", () => {
+    const stdout = [
+      "--test output start-- {\"testResults\":[{\"name\":\"/work/nextjs/test/e2e/tru --test output end--",
+      framed("test/e2e/ok.test.ts", { assertionResults: [] }),
+    ].join("\n");
+
+    expect(suitesFromHarnessOutput(stdout, "/work/nextjs").map((s) => s.suite)).toEqual(["test/e2e/ok.test.ts"]);
+  });
+});
+
+describe("suitesStartedInHarnessOutput", () => {
+  it("collects each suite the harness announced, once across its retries", () => {
+    const stdout = [
+      "Starting test/e2e/a.test.ts retry 0/2",
+      "Starting test/e2e/a.test.ts retry 1/2",
+      "Starting test/e2e/b.test.ts retry 0/2",
+      "test/e2e/b.test.ts finished on retry 0/2 in 3s",
+    ].join("\n");
+
+    expect(suitesStartedInHarnessOutput(stdout)).toEqual(["test/e2e/a.test.ts", "test/e2e/b.test.ts"]);
+  });
+
+  it("still sees the announcement when concurrent output shares the line", () => {
+    const stdout = "  ✓ some earlier assertion Starting test/e2e/a.test.ts retry 0/2";
+    expect(suitesStartedInHarnessOutput(stdout)).toEqual(["test/e2e/a.test.ts"]);
   });
 });
 
@@ -958,7 +1018,7 @@ describe("buildBaselineManifest", () => {
   it("keys each suite's outcome by its test file", () => {
     const manifest = buildBaselineManifest([
       {
-        path: "test/e2e/a.test.ts.results.json",
+        suite: "test/e2e/a.test.ts",
         results: { testResults: [{ assertionResults: [{ title: "ok", status: "passed" }] }] },
       },
     ]);
