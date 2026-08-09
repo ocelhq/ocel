@@ -454,19 +454,37 @@ describe("skipTrailingSlashRedirect", () => {
   }
 });
 
-// skipMiddlewareUrlNormalize means the app wants the URL as routed, so the data
-// rewrite and the slash re-add both stand down.
+// skipMiddlewareUrlNormalize stands the slash re-add down and nothing else. The
+// data rewrite belongs to Next's router (resolve-routes.ts's
+// middleware_next_data) and is unconditional; the flag is compiled into the
+// bundle, where it only stops NextURL parsing the rewrite the router already
+// did. Suppressing it here would hide the page path from a middleware that Next
+// shows it to.
 describe("skipMiddlewareUrlNormalize", () => {
-  const config: TrailingSlashConfig = {
-    basePath: "",
-    trailingSlash: true,
-    skipMiddlewareUrlNormalize: true,
-  };
+  for (const trailingSlash of [true, false]) {
+    describe(`trailingSlash: ${trailingSlash}`, () => {
+      const config: TrailingSlashConfig = {
+        basePath: "",
+        trailingSlash,
+        skipMiddlewareUrlNormalize: true,
+      };
 
-  it.each(["/", "/a", "/next.svg", "/_next/data/t/a.json"])(
-    "hands middleware %s unchanged",
-    (path) => {
-      expect(middlewarePathname(path, config, BUILD_ID)).toBe(path);
-    },
-  );
+      it.each(["/", "/a", "/a/", "/next.svg", "/.well-known/acme"])(
+        "hands middleware %s unchanged",
+        (path) => {
+          expect(middlewarePathname(path, config, BUILD_ID)).toBe(path);
+        },
+      );
+
+      // Slash-free under the flag either way: Next's own maybeAddTrailingSlash
+      // is what the flag's deprecated alias, skipProxyUrlNormalize, turns off.
+      it.each([
+        ["/_next/data/t/a.json", "/a"],
+        ["/_next/data/t/blog/post.json", "/blog/post"],
+        ["/_next/data/t/index.json", "/"],
+      ])("still rewrites %s to the page %s", (path, page) => {
+        expect(middlewarePathname(path, config, BUILD_ID)).toBe(page);
+      });
+    });
+  }
 });

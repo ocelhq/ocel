@@ -1436,8 +1436,9 @@ describe("the URL middleware is handed", () => {
     });
   });
 
-  // The opt-out means literally the URL the client sent: no canonical form, and
-  // no data-to-page conversion either.
+  // The opt-out means the URL the client sent, minus the canonical trailing
+  // slash Next would have re-added. It is not an opt-out of the data-to-page
+  // rewrite: that one is the router's and Next runs it either way.
   describe("skipMiddlewareUrlNormalize", () => {
     it("shows middleware the canonical form the client sent", async () => {
       const res = await serve(
@@ -1465,13 +1466,20 @@ describe("the URL middleware is handed", () => {
       expect(res.headers.get("req-url-path")).toBe(PAGE);
     });
 
-    it("leaves a data request as the data URL", async () => {
-      const res = await serve(
-        get(`/_next/data/t${PAGE}.json`, { "x-nextjs-data": "1" }),
-        pageDeps({ trailingSlash: true, skipMiddlewareUrlNormalize: true }),
-      );
+    // Still the page, and slash-free under both trailingSlash values: the flag's
+    // deprecated alias skipProxyUrlNormalize is exactly what makes Next's
+    // maybeAddTrailingSlash a no-op here.
+    it.each([true, false])(
+      "still shows a data request as its page under trailingSlash: %s",
+      async (trailingSlash) => {
+        const res = await serve(
+          get(`/_next/data/t${PAGE}.json`, { "x-nextjs-data": "1" }),
+          pageDeps({ trailingSlash, skipMiddlewareUrlNormalize: true }),
+        );
 
-      expect(res.headers.get("req-url-path")).toBe(`/_next/data/t${PAGE}.json`);
-    });
+        expect(res.headers.get("req-url-path")).toBe(PAGE);
+        expect(res.headers.get("x-matched-path")).toBe(`/_next/data/t${PAGE}.json`);
+      },
+    );
   });
 });
