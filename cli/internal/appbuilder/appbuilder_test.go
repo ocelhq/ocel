@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -215,6 +216,99 @@ func TestBuild_BuildFailure_ReturnsClearError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no entrypoint resolved") {
 		t.Errorf("error = %q, want it to surface the node-builder failure", err)
+	}
+}
+
+// TestFailureSummary is the fix for a build error that headlined a deprecation
+// notice while the cause sat on the line below it. The summary must name what
+// killed the build, whatever the tool printed on the way there.
+func TestFailureSummary(t *testing.T) {
+	tests := []struct {
+		name   string
+		output string
+		want   string
+	}{
+		{
+			name: "leading warnings do not headline the failure",
+			output: ` ⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+The "id" argument must be of type string. Received undefined
+Next.js build worker exited with code: 1 and signal: null
+`,
+			want: "The \"id\" argument must be of type string. Received undefined\nNext.js build worker exited with code: 1 and signal: null",
+		},
+		{
+			name:   "single line",
+			output: "no entrypoint resolved for app \"api\"\n",
+			want:   "no entrypoint resolved for app \"api\"",
+		},
+		{
+			name:   "empty output",
+			output: "   \n\n",
+			want:   "",
+		},
+		{
+			name:   "decorative lines never take the tail",
+			output: "Error: adapter threw\n────────────\n   ▲   \n===\n",
+			want:   "Error: adapter threw",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := failureSummary(tt.output)
+			if got != tt.want {
+				t.Errorf("failureSummary() = %q, want %q", got, tt.want)
+			}
+			if first, _, _ := strings.Cut(got, "\n"); strings.Contains(first, "deprecated") {
+				t.Errorf("summary headlines a deprecation warning: %q", first)
+			}
+		})
+	}
+}
+
+// runNodeScript runs the real runNode over a throwaway script, which is the
+// only way to prove what the child's two streams do.
+func runNodeScript(t *testing.T, source string) error {
+	t.Helper()
+	if _, err := exec.LookPath("node"); err != nil {
+		t.Skip("node not on PATH")
+	}
+	path := filepath.Join(t.TempDir(), "builder.mjs")
+	if err := os.WriteFile(path, []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return runNode(context.Background(), path, os.Environ(), []byte("{}"), io.Discard)
+}
+
+// A builder that reports its failure on stdout used to produce an error with no
+// detail at all, because only stderr was captured.
+func TestRunNode_StdoutOnlyFailure_IsNotDropped(t *testing.T) {
+	err := runNodeScript(t, "console.log('adapter could not resolve the entrypoint');process.exit(1);")
+	if err == nil {
+		t.Fatal("runNode succeeded on a non-zero exit, want error")
+	}
+	if !strings.Contains(err.Error(), "adapter could not resolve the entrypoint") {
+		t.Errorf("error = %q, want it to carry the failure the builder reported on stdout", err)
+	}
+}
+
+func TestRunNode_NamesTheExitCode(t *testing.T) {
+	err := runNodeScript(t, "console.error('boom');process.exit(3);")
+	if err == nil {
+		t.Fatal("runNode succeeded on a non-zero exit, want error")
+	}
+	if !strings.Contains(err.Error(), "3") || !strings.Contains(err.Error(), "boom") {
+		t.Errorf("error = %q, want it to name exit status 3 and the failure", err)
+	}
+}
+
+func TestRunNode_SilentFailure_StillErrors(t *testing.T) {
+	err := runNodeScript(t, "process.exit(1);")
+	if err == nil {
+		t.Fatal("runNode succeeded on a non-zero exit, want error")
+	}
+	if !strings.Contains(err.Error(), "node-builder failed") {
+		t.Errorf("error = %q, want it to name the failing builder", err)
 	}
 }
 
