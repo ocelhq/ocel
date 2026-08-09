@@ -1192,3 +1192,286 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     expect(await serve(preview)).toBe("1:preview/p/app/b1");
   });
 });
+
+// Closes ocelhq-glyd: with trailingSlash: true the worker handed middleware the
+// slash-free routing pathname, so a middleware guarding on `url.pathname ===
+// '/send-url/'` never matched. Middleware runs ahead of the filesystem lookup,
+// so the URL it sees is the canonical one, and for a data request it is the page
+// that request is for — neither of which is the URL routing continues on.
+describe("the URL middleware is handed", () => {
+  const PAGE = "/send-url";
+
+  // Echoes back what the bundle itself sees, which is the only thing under test
+  // here: the pathname on `new URL(request.url)` inside the isolate.
+  const echo = () =>
+    middlewareInvoker(
+      `async (request) => new Response(null, {
+         headers: {
+           "x-middleware-next": "1",
+           "req-url-path": new URL(request.url).pathname,
+         },
+       })`,
+    );
+
+  interface Scenario {
+    trailingSlash?: boolean;
+    skipTrailingSlashRedirect?: boolean;
+    skipMiddlewareUrlNormalize?: boolean;
+    matchers?: unknown;
+    edge?: EdgeInvoker;
+  }
+
+  // One static page and its data route, both keyed by the routing pathname the
+  // build emits, so the dispatch entry a data request lands on is visible.
+  function pageDeps(scenario: Scenario): RouteDeps {
+    const dataPaths = [`/_next/data/t${PAGE}.json`, "/_next/data/t/index.json"];
+    const pathnames = [PAGE, "/", ...dataPaths];
+    return deps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        trailingSlash: scenario.trailingSlash,
+        skipTrailingSlashRedirect: scenario.skipTrailingSlashRedirect,
+        skipMiddlewareUrlNormalize: scenario.skipMiddlewareUrlNormalize,
+        pathnames,
+        routes: emptyRoutes,
+        dispatch: Object.fromEntries(
+          pathnames.map((path) => [path, { kind: "static" }]),
+        ),
+        middleware: {
+          entryKey: MIDDLEWARE_KEY,
+          ...(scenario.matchers !== undefined && { matchers: scenario.matchers }),
+        },
+      },
+      assetStore: assetStoreServing({
+        [`${PAGE}.html`]: "the page",
+        "/.html": "the root",
+        "/404.html": "not found",
+        ...Object.fromEntries(dataPaths.map((path) => [path, `{"at":"${path}"}`])),
+      }),
+      edge: scenario.edge ?? echo(),
+    } as Partial<RouteDeps>);
+  }
+
+  function get(path: string, headers: Record<string, string> = {}) {
+    return new Request(`https://app.example${path}`, { redirect: "manual", headers });
+  }
+
+  it("hands middleware the slashed pathname under trailingSlash: true", async () => {
+    const res = await serve(get(`${PAGE}/`), pageDeps({ trailingSlash: true }));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("req-url-path")).toBe(`${PAGE}/`);
+    expect(await res.text()).toBe("the page");
+  });
+
+  it("hands middleware the bare pathname under trailingSlash: false", async () => {
+    const res = await serve(get(PAGE), pageDeps({}));
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("req-url-path")).toBe(PAGE);
+    expect(await res.text()).toBe("the page");
+  });
+
+  describe("a data request", () => {
+    it.each([
+      [true, `${PAGE}/`],
+      [false, PAGE],
+    ])(
+      "is shown to middleware as its page under trailingSlash: %s",
+      async (trailingSlash, expected) => {
+        const res = await serve(
+          get(`/_next/data/t${PAGE}.json`, { "x-nextjs-data": "1" }),
+          pageDeps({ trailingSlash }),
+        );
+
+        expect(res.headers.get("req-url-path")).toBe(expected);
+        // Routing never left the data pathname: only the middleware URL moved.
+        expect(res.headers.get("x-matched-path")).toBe(`/_next/data/t${PAGE}.json`);
+        expect(await res.text()).toBe(`{"at":"/_next/data/t${PAGE}.json"}`);
+      },
+    );
+
+    it.each([true, false])(
+      "for index is shown as the root under trailingSlash: %s",
+      async (trailingSlash) => {
+        const res = await serve(
+          get("/_next/data/t/index.json", { "x-nextjs-data": "1" }),
+          pageDeps({ trailingSlash }),
+        );
+
+        expect(res.headers.get("req-url-path")).toBe("/");
+        expect(res.headers.get("x-matched-path")).toBe("/_next/data/t/index.json");
+      },
+    );
+  });
+
+  describe("matchers, which are tested against that same URL", () => {
+    it("runs a matcher written against the canonical slashed form", async () => {
+      const { edge, calls } = counted(echo());
+      const res = await serve(
+        get(`${PAGE}/`),
+        pageDeps({ trailingSlash: true, matchers: [{ sourceRegex: "^/send-url/$" }], edge }),
+      );
+
+      expect(calls()).toBe(1);
+      expect(res.headers.get("req-url-path")).toBe(`${PAGE}/`);
+    });
+
+    it("loses no match for one path-to-regexp wrote with the optional slash", async () => {
+      // tryToParsePath compiles matchers with strict: false, so every source
+      // ends `(?:\/(?=$))?$` and matches both forms — the canonical form cannot
+      // cost a match.
+      const { edge, calls } = counted(echo());
+      await serve(
+        get(`${PAGE}/`),
+        pageDeps({
+          trailingSlash: true,
+          matchers: [{ sourceRegex: "^/send-url(?:\\/(?=$))?$" }],
+          edge,
+        }),
+      );
+
+      expect(calls()).toBe(1);
+    });
+
+    it("still does not run one whose matcher names another path", async () => {
+      const { edge, calls } = counted(echo());
+      const res = await serve(
+        get(`${PAGE}/`),
+        pageDeps({ trailingSlash: true, matchers: [{ sourceRegex: "^/other$" }], edge }),
+      );
+
+      expect(calls()).toBe(0);
+      expect(await res.text()).toBe("the page");
+    });
+  });
+
+  it("routes a canonical rewrite destination on its routing form", async () => {
+    // NextResponse.rewrite(new URL('/b', url)) leaves the edge bundle as `/b/`,
+    // because NextURL re-adds the slash it parsed off the incoming URL. Left
+    // alone that matches no build pathname and 404s. A lambda target, so what
+    // the origin is asked for is visible — a static one would be read out of R2
+    // by the request path rather than the resolved one (ocelhq-t2qx).
+    const edge = middlewareInvoker(
+      `async () => new Response(null, { headers: { "x-middleware-rewrite": "/b/" } })`,
+    );
+
+    const res = await serve(
+      get(`${PAGE}/`),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          trailingSlash: true,
+          pathnames: [PAGE, "/b"],
+          routes: emptyRoutes,
+          dispatch: { [PAGE]: { kind: "static" }, "/b": { kind: "lambda", id: "/b" } },
+          middleware: { entryKey: MIDDLEWARE_KEY },
+        },
+        assetStore: assetStoreServing({ [`${PAGE}.html`]: "the page", "/404.html": "not found" }),
+        functionUrls: { "/b": "https://fn.example.com" },
+        edge,
+        fetch: (async (input: Request) =>
+          new Response(new URL(input.url).pathname)) as unknown as typeof fetch,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-matched-path")).toBe("/b");
+    expect(await res.text()).toBe("/b");
+  });
+
+  describe("a request about to be redirected", () => {
+    it("never reaches middleware", async () => {
+      const { edge, calls } = counted(echo());
+      const res = await serve(get(PAGE), pageDeps({ trailingSlash: true, edge }));
+
+      expect(res.status).toBe(308);
+      expect(res.headers.get("location")).toBe(`${PAGE}/`);
+      expect(calls()).toBe(0);
+    });
+
+    it("is not answered by a middleware that would have taken it", async () => {
+      const { edge, calls } = counted(
+        middlewareInvoker(`async () => new Response("from middleware", { status: 200 })`),
+      );
+      const res = await serve(get(PAGE), pageDeps({ trailingSlash: true, edge }));
+
+      expect(res.status).toBe(308);
+      expect(calls()).toBe(0);
+    });
+  });
+
+  // The 308 is suppressed, so both forms are served — and each middleware sees
+  // the form its own client asked for, which no longer survives in the routing
+  // URL. Nothing else changes: a data request is still shown its page.
+  describe("skipTrailingSlashRedirect", () => {
+    it.each([
+      [true, `${PAGE}/`],
+      [true, PAGE],
+      [false, `${PAGE}/`],
+      [false, PAGE],
+    ])("under trailingSlash: %s, shows middleware %s as requested", async (
+      trailingSlash,
+      path,
+    ) => {
+      const res = await serve(
+        get(path),
+        pageDeps({ trailingSlash, skipTrailingSlashRedirect: true }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("req-url-path")).toBe(path);
+      expect(await res.text()).toBe("the page");
+    });
+
+    it("still shows a data request as its page", async () => {
+      const res = await serve(
+        get(`/_next/data/t${PAGE}.json`, { "x-nextjs-data": "1" }),
+        pageDeps({ trailingSlash: true, skipTrailingSlashRedirect: true }),
+      );
+
+      expect(res.headers.get("req-url-path")).toBe(`${PAGE}/`);
+    });
+  });
+
+  // The opt-out means literally the URL the client sent: no canonical form, and
+  // no data-to-page conversion either.
+  describe("skipMiddlewareUrlNormalize", () => {
+    it("shows middleware the canonical form the client sent", async () => {
+      const res = await serve(
+        get(`${PAGE}/`),
+        pageDeps({ trailingSlash: true, skipMiddlewareUrlNormalize: true }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("req-url-path")).toBe(`${PAGE}/`);
+    });
+
+    it("shows middleware a slash-free form the 308 no longer takes away", async () => {
+      // The flag governs the middleware URL, not the redirect: only
+      // skipTrailingSlashRedirect lets /send-url reach middleware at all.
+      const res = await serve(
+        get(PAGE),
+        pageDeps({
+          trailingSlash: true,
+          skipMiddlewareUrlNormalize: true,
+          skipTrailingSlashRedirect: true,
+        }),
+      );
+
+      expect(res.status).toBe(200);
+      expect(res.headers.get("req-url-path")).toBe(PAGE);
+    });
+
+    it("leaves a data request as the data URL", async () => {
+      const res = await serve(
+        get(`/_next/data/t${PAGE}.json`, { "x-nextjs-data": "1" }),
+        pageDeps({ trailingSlash: true, skipMiddlewareUrlNormalize: true }),
+      );
+
+      expect(res.headers.get("req-url-path")).toBe(`/_next/data/t${PAGE}.json`);
+    });
+  });
+});
