@@ -32,17 +32,31 @@ interface EdgeEntry {
 
 // The shim the adapter emits into every bundle: entry table inlined,
 // process.env populated before the first chunk import, entry key read off
-// ctx.props and published on __OCEL_EDGE_ENTRY before anything evaluates.
+// ctx.props and published on __OCEL_EDGE_ENTRY before anything evaluates, and
+// global fetch serving `blob:<asset name>` out of the bundle's data modules.
 //
 // It is a hand-kept copy of renderEdgeShim (packages/next-runtime's
 // next-adapter.mts), not a golden — workers/nextjs is a workerd-pool package
 // and does not depend on next-runtime, whose own tests pin the original. Keep
 // the two in step by hand; what this file buys that those cannot is running the
 // shim in a real isolate.
-function shimFor(entries: Record<string, EdgeEntry>): string {
+function shimFor(
+  entries: Record<string, EdgeEntry>,
+  assetIdByName: Record<string, string> = {},
+): string {
   return `import { AsyncLocalStorage } from "node:async_hooks"
 
 const ENTRIES = ${JSON.stringify(entries)}
+const ASSETS = ${JSON.stringify(assetIdByName)}
+
+const ocelFetch = globalThis.fetch
+globalThis.fetch = (input, init) => {
+  const url =
+    typeof input === "string" ? input : input instanceof URL ? input.href : input?.url
+  const id = typeof url === "string" && url.startsWith("blob:") ? ASSETS[url.slice(5)] : undefined
+  if (id === undefined) return ocelFetch(input, init)
+  return import("./" + id).then((m) => new Response(m.default))
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -88,6 +102,10 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 `;
 }
 
+function base64Of(bytes: Uint8Array): string {
+  return btoa(String.fromCharCode(...bytes));
+}
+
 // The loader keys its compiled worker on the record id, so every bundle gets a
 // fresh one — otherwise the second test to use the same id would run the first
 // test's code.
@@ -102,6 +120,8 @@ function invokerFor(
   // The bundle's loader id. Defaulted per bundle; named explicitly by the tests
   // that need two deployments over one bundle, which share it.
   id?: string,
+  // Traced blobs, keyed by the name a chunk fetches as `blob:<name>`.
+  assetBytes: Record<string, Uint8Array> = {},
 ): EdgeInvoker {
   const chunks: Record<string, string> = {};
   const entries: Record<string, EdgeEntry> = {};
@@ -112,12 +132,22 @@ function invokerFor(
     entries[entryKey] = { chunks: [id], handlerExport: "handler" };
   }
 
+  const assets: Record<string, string> = {};
+  const assetIdByName: Record<string, string> = {};
+  let nextAsset = 0;
+  for (const [name, bytes] of Object.entries(assetBytes)) {
+    const id = `a/${nextAsset++}.bin`;
+    assets[id] = base64Of(bytes);
+    assetIdByName[name] = id;
+  }
+
   const json = JSON.stringify({
-    version: 1,
+    version: 2,
     mainModule: "main.js",
-    shim: shimFor(entries),
+    shim: shimFor(entries, assetIdByName),
     chunks,
     wasm: {},
+    assets,
     env: { __NEXT_BUILD_ID: "t" },
     entries,
   });
@@ -149,7 +179,7 @@ function futureBundleInvoker(): EdgeInvoker {
   const seq = bundles++;
   const bundleKey = `edge/${seq}/bundle.json`;
   const json = JSON.stringify({
-    version: 2,
+    version: 3,
     mainModule: "main.js",
     shim: shimFor({}),
     chunks: {},
@@ -685,6 +715,121 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
 
     expect(res.status).toBe(200);
     expect(await res.text()).toBe("middleware_app/edge");
+  });
+
+  // A traced blob reaches user code as the string `blob:<manifest asset name>`,
+  // wrapped in the `new URL(…)` the source wrote. Cloudflare's fetch cannot load
+  // one, so the shim answers it out of the bundle's data modules.
+  it("answers a blob: fetch from the bundle's assets, byte for byte", async () => {
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe]);
+    const edge = invokerFor(
+      {
+        "middleware_app/edge": `async () =>
+           new Response(await (await fetch(new URL("blob:server/edge/assets/pic.png"))).arrayBuffer())`,
+      },
+      undefined,
+      undefined,
+      undefined,
+      { "server/edge/assets/pic.png": bytes },
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
+      new Request("https://app.example/edge"),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/edge"],
+          routes: emptyRoutes,
+          dispatch: {
+            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+          },
+        },
+        edge,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(res.status).toBe(200);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
+  });
+
+  it("leaves a fetch the asset table does not name to the runtime", async () => {
+    const edge = invokerFor(
+      {
+        "middleware_app/edge": `async () => {
+           try {
+             await fetch("blob:server/edge/assets/absent.png")
+             return new Response("answered-from-table")
+           } catch {
+             return new Response("reached-the-runtime")
+           }
+         }`,
+      },
+      undefined,
+      undefined,
+      undefined,
+      { "server/edge/assets/pic.png": new Uint8Array([1, 2, 3]) },
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
+      new Request("https://app.example/edge"),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/edge"],
+          routes: emptyRoutes,
+          dispatch: {
+            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+          },
+        },
+        edge,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(await res.text()).toBe("reached-the-runtime");
+  });
+
+  // Bytes that are not valid UTF-8 are exactly what a .png or a font is. They
+  // must not cost the entries that never touch them: workerd compiles a declared
+  // module only when it is imported.
+  it("serves an entry from a bundle carrying an asset that is not valid UTF-8", async () => {
+    const edge = invokerFor(
+      {
+        "middleware_app/other": `async () => new Response("other-entry")`,
+        "middleware_app/edge": `async () => new Response("edge-entry")`,
+      },
+      undefined,
+      undefined,
+      undefined,
+      {
+        "server/edge/assets/pic.png": new Uint8Array([
+          0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe,
+        ]),
+      },
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
+      new Request("https://app.example/edge"),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/edge"],
+          routes: emptyRoutes,
+          dispatch: {
+            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+          },
+        },
+        edge,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("edge-entry");
   });
 
   it("returns 500 when the bundle cannot be read", async () => {

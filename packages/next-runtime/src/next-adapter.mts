@@ -535,10 +535,32 @@ function edgeEntryOf(output: EdgeOutput): {
 // which outlives every request — and never from the request's ctx: the isolate
 // is cached, so a stub captured from whichever request cold-started it is
 // disposed at that request's end and leaves requests 2..N holding a dead one.
-function renderEdgeShim(entries: Record<string, EdgeEntry>): string {
+//
+// A traced asset reaches user code as the string `blob:<manifest asset name>`
+// (`new URL('./x.txt', import.meta.url)` compiles to it), which the platform's
+// fetch cannot load — so global fetch resolves those out of the bundle's asset
+// modules, the way Next's own sandbox resolves them with fetchInlineAsset. The
+// compiled chunks call `fetch` as a bare global and never shadow it, so this is
+// the whole path. Module scope, not per request: it must be installed before a
+// chunk can capture fetch, and the module body runs once per isolate, which
+// makes it idempotent by construction.
+function renderEdgeShim(
+  entries: Record<string, EdgeEntry>,
+  assetIdByName: Map<string, string>,
+): string {
   return `import { AsyncLocalStorage } from "node:async_hooks"
 
 const ENTRIES = ${stableStringify(entries)}
+const ASSETS = ${stableStringify(Object.fromEntries(assetIdByName))}
+
+const ocelFetch = globalThis.fetch
+globalThis.fetch = (input, init) => {
+  const url =
+    typeof input === "string" ? input : input instanceof URL ? input.href : input?.url
+  const id = typeof url === "string" && url.startsWith("blob:") ? ASSETS[url.slice(5)] : undefined
+  if (id === undefined) return ocelFetch(input, init)
+  return import("./" + id).then((m) => new Response(m.default))
+}
 
 export default {
   async fetch(request, env, ctx) {
@@ -663,7 +685,8 @@ async function edgeAssetNames(distDir: string): Promise<Set<string> | null> {
 
 // emitEdgeBundle writes the single JSON file the main worker turns into a
 // Cloudflare dynamic worker: every edge chunk under an opaque module id, the
-// wasm those chunks need, the env they read, and the table mapping each entry
+// wasm and traced assets those chunks need, the env they read, and the table
+// mapping each entry
 // key to what must be evaluated before its handler can be called. Ids are
 // content-deduped and assigned in sorted-key order so an unchanged build yields
 // an identical file — the deployment's worker id is a hash of these bytes.
@@ -682,12 +705,18 @@ async function emitEdgeBundle(
   // entry in the deployment. The middleware manifest is the authority on which
   // key is which — an extension test would mis-file a `.js` file a route binds
   // with `new URL("./worker.js", import.meta.url)` straight back into a chunk.
+  const isMap = (key: string) => key.endsWith(".map");
   const isChunk = (key: string) =>
-    !key.endsWith(".map") &&
+    !isMap(key) &&
     (assetNames ? !assetNames.has(key) : /\.[cm]?js$/.test(key));
+  // The key of an asset is the manifest's asset name — build-complete writes
+  // `output.assets[item.name]` — which is also the string a chunk hands user
+  // code after `blob:`. So the shim's table resolves by construction.
+  const isAsset = (key: string) => !isMap(key) && !isChunk(key);
 
   const chunkPathByKey = new Map<string, string>();
   const wasmPathByName = new Map<string, string>();
+  const assetPathByName = new Map<string, string>();
   const env: Record<string, string> = {};
   const entryAssets = new Map<string, Set<string>>();
   const handlerExports = new Map<string, string>();
@@ -701,6 +730,10 @@ async function emitEdgeBundle(
     entryAssets.set(entryKey, assets);
     const ownChunkKeys: string[] = [];
     for (const [key, abs] of Object.entries(source.assets)) {
+      if (isAsset(key)) {
+        assetPathByName.set(key, abs);
+        continue;
+      }
       if (!isChunk(key)) continue;
       chunkPathByKey.set(key, abs);
       assets.add(key);
@@ -742,6 +775,14 @@ async function emitEdgeBundle(
     (n) => `w/${n}.wasm`,
     (bytes) => bytes.toString("base64"),
   );
+  // Assets are declared globally like wasm, and base64 like wasm — never utf8,
+  // which replaces every invalid byte sequence with U+FFFD and would silently
+  // corrupt a png or a font.
+  const { idByKey: assetIdByName, modules: assetModules } = await moduleIds(
+    assetPathByName,
+    (n) => `a/${n}.bin`,
+    (bytes) => bytes.toString("base64"),
+  );
 
   warnEdgeEnvRoutes(chunkKeysByPathname, chunkIdByKey, chunks);
 
@@ -760,11 +801,12 @@ async function emitEdgeBundle(
   }
 
   const json = stableStringify({
-    version: 1,
+    version: 2,
     mainModule: "main.js",
-    shim: renderEdgeShim(entries),
+    shim: renderEdgeShim(entries, assetIdByName),
     chunks,
     wasm: wasmModules,
+    assets: assetModules,
     env,
     entries,
   });
@@ -775,7 +817,7 @@ async function emitEdgeBundle(
 
   const mb = (Buffer.byteLength(json) / 1024 / 1024).toFixed(1);
   console.log(
-    `ocel: edge bundle ${mb} MB, ${Object.keys(chunks).length} chunks, ${Object.keys(entries).length} entries`,
+    `ocel: edge bundle ${mb} MB, ${Object.keys(chunks).length} chunks, ${Object.keys(assetModules).length} assets, ${Object.keys(entries).length} entries`,
   );
 }
 
