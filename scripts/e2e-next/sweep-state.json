@@ -4147,25 +4147,20 @@
    "failedTests": {}
   },
   "test/e2e/edge-compiler-can-import-blob-assets/index.test.ts": {
-   "lastRun": "sweep-2026-07-28d",
+   "lastRun": "verify-ebal2",
    "lastOutcome": "completed",
    "counts": {
-    "passed": 0,
-    "failed": 5,
+    "passed": 5,
+    "failed": 0,
     "known": 0,
-    "skipped": 0
+    "skipped": 0,
+    "infra": 0
    },
    "knownCauseCount": 0,
-   "openIssues": [
-    "ocelhq-d3ew"
-   ],
-   "failedTests": {
-    "Edge Compiler can import asset assets › allows to fetch a remote URL": "ocelhq-d3ew",
-    "Edge Compiler can import asset assets › allows to fetch a remote URL with a path and basename": "ocelhq-d3ew",
-    "Edge Compiler can import asset assets › allows to fetch text assets": "ocelhq-d3ew",
-    "Edge Compiler can import asset assets › allows to fetch image assets": "ocelhq-d3ew",
-    "Edge Compiler can import asset assets › allows to assets from node_modules": "ocelhq-d3ew"
-   }
+   "openIssues": [],
+   "failedTests": {},
+   "projectSlug": "e2e-ebal2-6aa83e21",
+   "note": "[verify-ebal2] Targeted re-run verifying the ocelhq-d3ew fix on branch fix/edge-bundle-assets (def7175, 811951b, 71d2ddd): 5 passed / 0 failed / 0 infra, jest EXIT=0. An earlier run (slug e2e-ebal-6c724e2e) was 4 passed / 1 infra — the 'remote URL with a path and basename' case took a Cloudflare 522 on an outbound fetch to example.vercel.sh with no x-amzn-* header and no CloudWatch invocation; curling ?handler=remote-with-base after teardown still returns 523, so it is the edge in front of *.ocel.site, not the adapter. Structural proof from the surviving bundle.json: version 2, assets keyed a/0.bin..a/2.bin decoding byte-for-byte to source (30079-byte .png sha256-identical), node --check clean on all 4 chunks, entry chunks arrays .js-only, shim ASSETS keys equal to the middleware-manifest asset names. Both projects torn down; nothing stranded."
   },
   "test/e2e/use-link-status/index.test.ts": {
    "lastRun": "sweep-2026-07-28d",
@@ -6459,7 +6454,8 @@
    ],
    "failedTests": {
     "app dir - Metadata API on the Edge runtime › should render OpenGraph image meta tag correctly": "ocelhq-d3ew"
-   }
+   },
+   "note": "[verify-ebal2] Its only failure is attributed to ocelhq-d3ew, which is now CLOSED (fixed and live-verified on branch fix/edge-bundle-assets via test/e2e/edge-compiler-can-import-blob-assets). This suite was NOT re-run — the counts above are still the pre-fix sweep-2026-07-28h result. High-value verify candidate for the next sweep; do not treat as passing until re-run."
   },
   "test/e2e/app-dir/metadata-thrown/metadata-thrown.test.ts": {
    "lastRun": "sweep-2026-07-28h",
@@ -7149,6 +7145,20 @@
    "infra": 2,
    "lambdaConcurrencyQuota": 1000,
    "notes": "All 40 slots new coverage: Verify tier empty (nothing fixed since 28g) and rot checks skipped by instruction. 12 raw failures collapsed to 7 clusters and then to 6 distinct causes, of which only 3 were new (ocelhq-uusu, ocelhq-icgy/nafw, plus tooling ocelhq-i4o2) — the rest were already-known issues reached from new directions. 2 failures re-bucketed failed -> infra (transient CF 522, ocelhq-bfbg). Zero stranded projects: all 49 projects (40 run + 8 staged + 1 smoke) verified clear by ocel:project tag scan. Candidate pool is now genuinely thin — 40 suites carried only 53 effective cases; fixing ocelhq-dly is the single biggest unlock, it blocks the three richest remaining candidates (middleware-general at 46 cases, middleware-custom-matchers, middleware-responses)."
+  },
+  {
+   "sweepId": "verify-ebal2",
+   "ranAt": "2026-08-09T00:00:00.000Z",
+   "waves": 1,
+   "suitesPerWave": 1,
+   "suites": 1,
+   "passed": 5,
+   "failed": 0,
+   "known": 0,
+   "skipped": 0,
+   "infra": 0,
+   "lambdaConcurrencyQuota": 1000,
+   "notes": "Not a sweep: a targeted single-suite verification of the ocelhq-d3ew fix (branch fix/edge-bundle-assets, commits def7175/811951b/71d2ddd) against test/e2e/edge-compiler-can-import-blob-assets/index.test.ts. 5/5 passing, EXIT=0, slug e2e-ebal2-6aa83e21. A first attempt (e2e-ebal-6c724e2e) was 4 passed / 1 infra, the non-pass being a Cloudflare 522/523 on an outbound fetch to example.vercel.sh, proven to originate at the edge ahead of Lambda. ocelhq-d3ew closed. test/e2e/app-dir/metadata-edge shares the root cause and was deliberately not re-run; it stays recorded at its pre-fix counts. Rollback hazard recorded separately as ocelhq-6sds. Both projects torn down."
   },
   {
    "sweepId": "ctypes",
@@ -8648,7 +8658,7 @@
    ]
   },
   "ocelhq-d3ew": {
-   "status": "open",
+   "status": "closed",
    "kind": "adapter",
    "firstSeen": "sweep-2026-07-28d",
    "priority": "P1",
