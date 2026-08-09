@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { resolveRoutes, type I18nConfig } from "@next/routing";
 
 import { serve, type RouteDeps } from "../src/index";
 import type { AssetBucket } from "../src/assets";
@@ -386,11 +387,44 @@ describe("resolveLocale", () => {
   });
 
   it("keeps the locale a path already names", () => {
-    expect(at("/fr/about")).toEqual({ pathname: "/fr/about", locale: "fr" });
+    expect(at("/fr/about")).toEqual({ pathname: "/fr/about" });
   });
 
   it("prefixes the root without a trailing slash", () => {
     expect(at("/").pathname).toBe("/en");
+  });
+});
+
+// The worker prefixes the locale itself and hands resolveRoutes `i18n:
+// undefined` so the library never does it too (src/i18n). Only a comment says
+// so, so this pins both halves: given an i18n block the library prefixes on its
+// own, and given none — the way the worker calls it — it must leave the
+// already-normalized path alone. An upgrade that resumed prefixing regardless
+// would double it to /en/en/about, and this is what fails first.
+describe("@next/routing boundary", () => {
+  const call = (i18n: I18nConfig | undefined, pathname: string) =>
+    resolveRoutes({
+      url: new URL(`https://app.example${pathname}`),
+      buildId: "b1",
+      basePath: "",
+      i18n,
+      headers: new Headers(),
+      requestBody: undefined as unknown as ReadableStream,
+      pathnames: ["/en/about"],
+      routes: {
+        beforeMiddleware: [],
+        beforeFiles: [],
+        afterFiles: [],
+        dynamicRoutes: [],
+        onMatch: [],
+        fallback: [],
+      } as unknown as Parameters<typeof resolveRoutes>[0]["routes"],
+      invokeMiddleware: async () => ({}),
+    });
+
+  it("prefixes the locale only when handed an i18n block, which the worker never does", async () => {
+    expect((await call(I18N, "/about")).resolvedPathname).toBe("/en/about");
+    expect((await call(undefined, "/en/about")).resolvedPathname).toBe("/en/about");
   });
 });
 

@@ -12,6 +12,11 @@
 // the build emits `/en`, it redirects on every path rather than only the root,
 // and it knows nothing of app-router outputs, which carry no locale at all — so
 // this module does the normalization and the library is handed no i18n block.
+//
+// This port diverges from upstream on one point of its own: it skips /api as
+// well as /_next/, where resolve-routes.ts skips only /_next/ and localizes API
+// routes (upstream un-localizes them later, in checkLocaleApi). The adapter
+// emits API routes unlocalized, so the skip is where it has to happen here.
 
 import {
   detectDomainLocale,
@@ -25,9 +30,6 @@ export interface LocaleResolution {
   // What routing matches on: the request's pathname with the locale prefixed,
   // unless it already named one or names an output no locale owns.
   pathname: string;
-  // The locale answering this request — which 404 document a miss is served
-  // from, and which locale a prefixed path was found under.
-  locale: string;
   // Set only at the site root, the one place Next lets a cookie or an
   // Accept-Language header change the URL.
   redirect?: URL;
@@ -49,30 +51,27 @@ export function resolveLocale(
   // Next localizes neither: an asset carries no locale, and an API route is
   // reachable only under its own bare path.
   if (pathname.startsWith("/_next/") || isApiPath(pathname)) {
-    return { pathname: url.pathname, locale: defaultLocale };
+    return { pathname: url.pathname };
   }
 
   const { detectedLocale, pathname: bare } = normalizeLocalePath(pathname, i18n.locales);
-  if (detectedLocale) return { pathname: url.pathname, locale: detectedLocale };
+  if (detectedLocale) return { pathname: url.pathname };
 
   // An output the build named without a locale — an app-router page, a public/
   // file — is served under that name. App pages are deliberately not localized
   // (Next's adapter skips them), so a hybrid app+pages build carries both kinds
   // and prefixing this one would route it at a page that was never emitted.
   if (pathnames.includes(url.pathname)) {
-    return { pathname: url.pathname, locale: defaultLocale };
+    return { pathname: url.pathname };
   }
 
   if (isRoot(bare)) {
     const redirect = rootRedirect(i18n, basePath, url, headers, domain, defaultLocale);
-    if (redirect) return { pathname: url.pathname, locale: defaultLocale, redirect };
+    if (redirect) return { pathname: url.pathname, redirect };
   }
 
   const prefixed = isRoot(bare) ? `/${defaultLocale}` : `/${defaultLocale}${bare}`;
-  return {
-    pathname: (hadBasePath ? basePath : "") + prefixed,
-    locale: defaultLocale,
-  };
+  return { pathname: (hadBasePath ? basePath : "") + prefixed };
 }
 
 // Which locale's 404 document answers a request that matched nothing: the one
