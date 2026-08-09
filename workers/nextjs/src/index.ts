@@ -1101,13 +1101,22 @@ async function dispatchPrerender(
 
     // What an admitted refresh consults before it renders. It re-reads R2 past
     // the entry memo — the memo is what declared the entry stale, and it
-    // outlives the admission wait — and a fresh entry there means some other
+    // outlives the admission wait — and a newer entry there means some other
     // colo has already regenerated this route: take it into the colo and skip
-    // the render. Anything the colo cannot take (a miss, a still-stale entry, a
-    // shell that cannot refill a complete variant, an unreadable store) returns
-    // false and the render proceeds, so this can only ever cost a redundant R2
-    // GET, never a suppressed refresh.
-    const satisfiedFromBelow = async () => {
+    // the render. Anything the colo cannot take (a miss, an entry no newer than
+    // the one being refreshed, a shell that cannot refill a complete variant,
+    // an unreadable store) returns false and the render proceeds, so this can
+    // only ever cost a redundant R2 GET, never a suppressed refresh.
+    //
+    // Newer, not fresh. A route whose revalidate window is shorter than the
+    // round trip is essentially always stale by the time it is read back, so a
+    // freshness test would refuse every entry below and leave the colo serving
+    // its original bytes until hard expiry — a year, on Next's default. A stale
+    // entry below is still strictly better than an older entry here, and taking
+    // it advances this tier's lastModified, which is what the next enqueue's
+    // dedup id is derived from. Promoted stale means the next request serves
+    // STALE and admits again, which is the intended steady state.
+    const satisfiedFromBelow = async (refreshing: number) => {
       const below = await intercept(request, interceptTarget, config, {
         ...interceptDeps,
         tagClock,
@@ -1115,11 +1124,11 @@ async function dispatchPrerender(
       });
       if (!below) return false;
       const answered = below.kind === "complete" ? below.response : below.shell;
-      if (below.stale) {
+      if (below.lastModified <= refreshing) {
         answered.body?.cancel();
         return false;
       }
-      // Fresh below — but that only settles the render when this tier ends up
+      // Newer below — but that only settles the render when this tier ends up
       // reflecting it. A variant with no colo entry (the PPR admission site) has
       // nothing to refill: the render's whole effect would have been
       // regenerating what R2 already holds, so it is genuinely redundant.
@@ -1163,6 +1172,7 @@ async function dispatchPrerender(
           admitRefresh(
             cacheDeps,
             refreshKey,
+            hit.lastModified,
             async () => {
               if (await enqueued(cacheDeps.enqueueRevalidation, revalidation, hit.lastModified)) {
                 return "landed";
@@ -1202,6 +1212,7 @@ async function dispatchPrerender(
         admitRefresh(
           cacheDeps,
           refreshKey,
+          hit.lastModified,
           async () => {
             if (await enqueued(cacheDeps.enqueueRevalidation, revalidation, hit.lastModified)) {
               return "landed";

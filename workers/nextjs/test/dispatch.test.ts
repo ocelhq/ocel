@@ -843,6 +843,11 @@ describe("dispatchResult", () => {
     // postponed entry the colo's own variant cannot be refilled from.
     landsDuringWait?: Record<string, unknown>,
     lambdaStatus = 200,
+    // When the landing entry claims to have been written. The default is `now`,
+    // so it reads back fresh; an earlier one reads back stale, which is the
+    // steady state of any route whose revalidate window is shorter than the
+    // round trip from a landing to the next read of it.
+    landsModified = 1_000 + 61_000,
   ) {
     let lambda = 0;
     const pending: Promise<unknown>[] = [];
@@ -894,7 +899,7 @@ describe("dispatchResult", () => {
         admissionDelay: async () => {
           if (landsDuringWait === undefined) return;
           entries[entryKey("blog")] = {
-            lastModified: 1_000 + 61_000,
+            lastModified: landsModified,
             value: landsDuringWait,
           };
         },
@@ -988,6 +993,47 @@ describe("dispatchResult", () => {
     await Promise.all(pending);
 
     expect(lambdaCalls()).toBe(1);
+  });
+
+  // A route whose revalidate window is shorter than the round trip is never
+  // read back fresh: the entry below is newer than the one this tier holds, and
+  // still stale. Refusing it on staleness alone freezes this tier's
+  // lastModified forever — the colo goes on serving an ancient body until hard
+  // expiry, and the dedup id derived from that lastModified freezes with it, so
+  // the queue drops nearly every enqueue that would have unstuck it.
+  it("promotes a stale entry below that is newer than the one being refreshed", async () => {
+    const { deps, pending, puts, lambdaCalls } = refreshOverStore(
+      staleBelow(),
+      pageValue("<html>newer</html>"),
+      200,
+      // 60.5s before `now`: past revalidate=60, and newer than the 1_000 above.
+      1_500,
+    );
+
+    await dispatchBlog(deps);
+    await Promise.all(pending);
+
+    expect(lambdaCalls()).toBe(0);
+    // Mirrored into the colo, dated by the entry it came from — that advance is
+    // the whole point, since it is what the next enqueue's dedup id is built on.
+    expect(
+      puts.find((put) => put.body === "<html>newer</html>")?.entryModified,
+    ).toBe(String(1_500));
+  });
+
+  it("renders when the stale entry below is older than the one being refreshed", async () => {
+    const { deps, pending, puts, lambdaCalls } = refreshOverStore(
+      staleBelow(),
+      pageValue("<html>older</html>"),
+      200,
+      500,
+    );
+
+    await dispatchBlog(deps);
+    await Promise.all(pending);
+
+    expect(lambdaCalls()).toBe(1);
+    expect(puts.map((put) => put.body)).not.toContain("<html>older</html>");
   });
 
   // A prefetch is answered without a staleness gate — it serves whatever the

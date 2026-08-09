@@ -80,12 +80,19 @@ export interface CacheDeps {
   // stale entry it was taken for went on being served. Absent (no tier below is
   // bound, or this is the image class, which has none) renders, as before.
   //
+  // The argument is the lastModified of the entry being refreshed: "fresher"
+  // is measured against it, not against the clock. A route whose revalidate
+  // window is shorter than the round trip is never read back fresh below, so a
+  // freshness-only test would refuse every entry there and pin this tier's
+  // lastModified forever — which also pins the dedup id the next enqueue is
+  // named by, and the queue then drops the very refreshes that would unpin it.
+  //
   // It exists because a background refresh reaches the origin through
   // originBlocking, which carries x-prerender-revalidate straight to the
   // Function URL: that call is never absorbed by the tier below, so without
   // this read every colo that admits renders, whatever another colo wrote to
   // the tier below half a second earlier.
-  satisfiedFromBelow?: () => Promise<boolean>;
+  satisfiedFromBelow?: (refreshing: number) => Promise<boolean>;
   // Deduplicated deferral of an admitted background refresh: true iff the queue
   // took the message, and then the render happens once, in the consumer, for
   // every colo that asked. Absent (no queue bound) or false means this caller
@@ -676,9 +683,9 @@ async function settleSentinel(
 // Fails open on any error — an unreadable tier below costs a duplicate render,
 // while reading it as satisfied would cost the refresh entirely and leave the
 // entry stale until the claim lapsed. See CacheDeps.satisfiedFromBelow.
-async function askBelow(deps: CacheDeps): Promise<boolean> {
+async function askBelow(deps: CacheDeps, refreshing: number): Promise<boolean> {
   try {
-    return (await deps.satisfiedFromBelow?.()) === true;
+    return (await deps.satisfiedFromBelow?.(refreshing)) === true;
   } catch {
     return false;
   }
@@ -701,6 +708,10 @@ async function askBelow(deps: CacheDeps): Promise<boolean> {
 export function admitRefresh(
   deps: CacheDeps,
   key: string,
+  // The generation of the entry this refresh was admitted for. It is what the
+  // tier below is asked to beat; there is no defensible default for it, which
+  // is why it is required rather than optional.
+  refreshing: number,
   run: () => Promise<RefreshOutcome>,
   staleForMs = Infinity,
 ): void {
@@ -716,7 +727,7 @@ export function admitRefresh(
     // nothing would suppress the retry it needs.
     let outcome: RefreshOutcome = "failed";
     try {
-      outcome = (await askBelow(deps)) ? "landed" : await run();
+      outcome = (await askBelow(deps, refreshing)) ? "landed" : await run();
     } finally {
       await settleSentinel(deps.cache, sentinel, outcome);
     }
@@ -776,7 +787,13 @@ async function serveOrAdmitRefresh(
     // names none: it is invalidated by its content hash changing rather than by
     // a stale route, so it keeps the per-isolate dedupe on its own entry.
     if (target.refreshKey) {
-      admitRefresh(deps, target.refreshKey, refresh, staleWindowMs(meta, now()));
+      admitRefresh(
+        deps,
+        target.refreshKey,
+        modified,
+        refresh,
+        staleWindowMs(meta, now()),
+      );
     } else refreshOnce(deps, target.key, refresh);
     return policy.forServe(fromStorage(cached, true), "STALE");
   }

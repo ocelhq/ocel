@@ -616,6 +616,27 @@ describe("serveCached", () => {
     expect(bounds).toEqual([500]);
   });
 
+  it("asks the tier below about the colo entry's own lastModified", async () => {
+    const clock = { ms: 1_000 };
+    const seen: number[] = [];
+    const deps = testDeps(clock, caches.default, async (modified) => {
+      seen.push(modified);
+      return false;
+    });
+    const origin = countingOrigin("s-maxage=1");
+    const refresh = countingOrigin("s-maxage=1");
+    const t = target("below-modified", { refreshKey: "build:/below-modified" });
+
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    clock.ms = 5_000;
+    await serveCached(req(), t, deps, origin, refresh);
+    await deps.flush();
+
+    expect(seen).toEqual([1_000]);
+  });
+
   it("leaves the wait unbounded when the entry declares no expiry", async () => {
     const clock = { ms: 0 };
     const bounds: number[] = [];
@@ -1167,17 +1188,17 @@ describe("admitRefresh", () => {
     const deps = testDeps(clock, ttlCache(clock));
     const run = countingRun();
 
-    admitRefresh(deps, "build:/ttl", run);
+    admitRefresh(deps, "build:/ttl", 0, run);
     await deps.flush();
     expect(run.calls).toBe(1);
 
     clock.ms = refreshSentinelTtlSeconds * 1_000 - 1;
-    admitRefresh(deps, "build:/ttl", run);
+    admitRefresh(deps, "build:/ttl", 0, run);
     await deps.flush();
     expect(run.calls).toBe(1);
 
     clock.ms = refreshSentinelTtlSeconds * 1_000;
-    admitRefresh(deps, "build:/ttl", run);
+    admitRefresh(deps, "build:/ttl", 0, run);
     await deps.flush();
     expect(run.calls).toBe(2);
   });
@@ -1187,9 +1208,9 @@ describe("admitRefresh", () => {
     const deps = testDeps(clock, ttlCache(clock));
     const run = countingRun();
 
-    admitRefresh(deps, "build:/a", run);
+    admitRefresh(deps, "build:/a", 0, run);
     await deps.flush();
-    admitRefresh(deps, "build:/b", run);
+    admitRefresh(deps, "build:/b", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(2);
@@ -1201,11 +1222,11 @@ describe("admitRefresh", () => {
     const throwing = countingRun("threw");
     const succeeding = countingRun();
 
-    admitRefresh(deps, "build:/failed", throwing);
+    admitRefresh(deps, "build:/failed", 0, throwing);
     await deps.flush();
     expect(throwing.calls).toBe(1);
 
-    admitRefresh(deps, "build:/failed", succeeding);
+    admitRefresh(deps, "build:/failed", 0, succeeding);
     await deps.flush();
     expect(succeeding.calls).toBe(1);
   });
@@ -1218,12 +1239,12 @@ describe("admitRefresh", () => {
     const deps = testDeps(clock, ttlCache(clock));
     const refused = countingRun("refused");
 
-    admitRefresh(deps, "build:/refused", refused);
+    admitRefresh(deps, "build:/refused", 0, refused);
     await deps.flush();
     expect(refused.calls).toBe(1);
 
     clock.ms = refreshBackoffSeconds * 1_000 - 1;
-    admitRefresh(deps, "build:/refused", refused);
+    admitRefresh(deps, "build:/refused", 0, refused);
     await deps.flush();
     expect(refused.calls).toBe(1);
   });
@@ -1233,11 +1254,11 @@ describe("admitRefresh", () => {
     const deps = testDeps(clock, ttlCache(clock));
     const refused = countingRun("refused");
 
-    admitRefresh(deps, "build:/recovers", refused);
+    admitRefresh(deps, "build:/recovers", 0, refused);
     await deps.flush();
 
     clock.ms = refreshBackoffSeconds * 1_000;
-    admitRefresh(deps, "build:/recovers", refused);
+    admitRefresh(deps, "build:/recovers", 0, refused);
     await deps.flush();
 
     expect(refused.calls).toBe(2);
@@ -1249,11 +1270,11 @@ describe("admitRefresh", () => {
     const missed = countingRun("failed");
     const succeeding = countingRun();
 
-    admitRefresh(deps, "build:/missed", missed);
+    admitRefresh(deps, "build:/missed", 0, missed);
     await deps.flush();
     expect(missed.calls).toBe(1);
 
-    admitRefresh(deps, "build:/missed", succeeding);
+    admitRefresh(deps, "build:/missed", 0, succeeding);
     await deps.flush();
     expect(succeeding.calls).toBe(1);
   });
@@ -1268,19 +1289,19 @@ describe("admitRefresh", () => {
     }) as () => Promise<RefreshOutcome>;
     const next = countingRun();
 
-    admitRefresh(deps, "build:/slow", slow);
+    admitRefresh(deps, "build:/slow", 0, slow);
     await deps.flush();
     expect(clock.ms).toBe(3_000);
 
     // Past a TTL measured from the claim, still inside one measured from the
     // landing — the whole window the refresh's own duration would otherwise eat.
     clock.ms = 3_000 + refreshSentinelTtlSeconds * 1_000 - 1;
-    admitRefresh(deps, "build:/slow", next);
+    admitRefresh(deps, "build:/slow", 0, next);
     await deps.flush();
     expect(next.calls).toBe(0);
 
     clock.ms = 3_000 + refreshSentinelTtlSeconds * 1_000;
-    admitRefresh(deps, "build:/slow", next);
+    admitRefresh(deps, "build:/slow", 0, next);
     await deps.flush();
     expect(next.calls).toBe(1);
   });
@@ -1293,7 +1314,7 @@ describe("admitRefresh", () => {
     const deps = testDeps(clock, ttlCache(clock), async () => true);
     const run = countingRun();
 
-    admitRefresh(deps, "build:/already-fresh", run);
+    admitRefresh(deps, "build:/already-fresh", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(0);
@@ -1309,12 +1330,12 @@ describe("admitRefresh", () => {
     const deps = testDeps(clock, ttlCache(clock), async () => below);
     const run = countingRun();
 
-    admitRefresh(deps, "build:/held", run);
+    admitRefresh(deps, "build:/held", 0, run);
     await deps.flush();
 
     below = false;
     clock.ms = refreshSentinelTtlSeconds * 1_000 - 1;
-    admitRefresh(deps, "build:/held", run);
+    admitRefresh(deps, "build:/held", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(0);
@@ -1325,10 +1346,27 @@ describe("admitRefresh", () => {
     const deps = testDeps(clock, ttlCache(clock), async () => false);
     const run = countingRun();
 
-    admitRefresh(deps, "build:/still-stale", run);
+    admitRefresh(deps, "build:/still-stale", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(1);
+  });
+
+  it("hands the tier below the lastModified of the entry being refreshed", async () => {
+    // The tier below cannot judge "newer" without it, and a tier that only
+    // answers "is it fresh?" strands a route whose window is shorter than the
+    // round trip: its entry below is always stale by the time it is read.
+    const clock = { ms: 0 };
+    const seen: number[] = [];
+    const deps = testDeps(clock, ttlCache(clock), async (modified) => {
+      seen.push(modified);
+      return false;
+    });
+
+    admitRefresh(deps, "build:/modified", 1_786_297_209_383, countingRun());
+    await deps.flush();
+
+    expect(seen).toEqual([1_786_297_209_383]);
   });
 
   it("renders when the tier-below read throws, never suppressing the refresh", async () => {
@@ -1340,7 +1378,7 @@ describe("admitRefresh", () => {
     });
     const run = countingRun();
 
-    admitRefresh(deps, "build:/exploded", run);
+    admitRefresh(deps, "build:/exploded", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(1);
@@ -1356,9 +1394,9 @@ describe("admitRefresh", () => {
     });
     const run = countingRun();
 
-    admitRefresh(deps, "build:/claimed", run);
+    admitRefresh(deps, "build:/claimed", 0, run);
     await deps.flush();
-    admitRefresh(deps, "build:/claimed", run);
+    admitRefresh(deps, "build:/claimed", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(1);
@@ -1376,9 +1414,9 @@ describe("admitRefresh", () => {
     } as unknown as Cache);
     const run = countingRun();
 
-    admitRefresh(deps, "build:/inert", run);
+    admitRefresh(deps, "build:/inert", 0, run);
     await deps.flush();
-    admitRefresh(deps, "build:/inert", run);
+    admitRefresh(deps, "build:/inert", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(2);
@@ -1400,13 +1438,13 @@ describe("admitRefresh", () => {
     const deps = testDeps(clock, thrower);
     const run = countingRun();
 
-    admitRefresh(deps, "build:/throwing", run);
+    admitRefresh(deps, "build:/throwing", 0, run);
     await deps.flush();
     expect(run.calls).toBe(1);
 
     // And a throwing delete after a failed run neither escapes nor suppresses.
     const failing = countingRun("threw");
-    admitRefresh(deps, "build:/throwing-failure", failing);
+    admitRefresh(deps, "build:/throwing-failure", 0, failing);
     await deps.flush();
     expect(failing.calls).toBe(1);
   });
@@ -1420,7 +1458,7 @@ describe("admitRefresh", () => {
     const deps = { ...testDeps(clock, cache), admissionDelay: () => new Promise<void>(() => {}) };
     const run = countingRun();
 
-    admitRefresh(deps, "build:/evicted", run);
+    admitRefresh(deps, "build:/evicted", 0, run);
     await Promise.resolve();
     await Promise.resolve();
 
@@ -1442,7 +1480,7 @@ describe("admitRefresh", () => {
             clock.ms = draw;
           },
         };
-        admitRefresh(deps, "build:/spread", run);
+        admitRefresh(deps, "build:/spread", 0, run);
         await deps.flush();
       }
       return run.calls;
@@ -1468,8 +1506,8 @@ describe("admitRefresh", () => {
     const waiting = { ...testDeps(clock, cache), admissionDelay: () => held };
     const other = { ...testDeps(clock, cache), admissionDelay: () => Promise.resolve() };
 
-    admitRefresh(waiting, "build:/shared", run);
-    admitRefresh(other, "build:/shared", run);
+    admitRefresh(waiting, "build:/shared", 0, run);
+    admitRefresh(other, "build:/shared", 0, run);
     release();
     await waiting.flush();
     await other.flush();
@@ -1504,7 +1542,7 @@ describe("admitRefresh", () => {
 
     try {
       const started = Date.now();
-      admitRefresh(deps, "build:/default", run);
+      admitRefresh(deps, "build:/default", 0, run);
       expect(run.calls).toBe(0);
       await deps.flush();
       const elapsed = Date.now() - started;
@@ -1531,7 +1569,7 @@ describe("admitRefresh", () => {
     } as unknown as Cache);
     const run = countingRun();
 
-    admitRefresh(deps, "build:/put-throws", run);
+    admitRefresh(deps, "build:/put-throws", 0, run);
     await deps.flush();
 
     expect(run.calls).toBe(1);
