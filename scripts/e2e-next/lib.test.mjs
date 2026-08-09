@@ -997,10 +997,35 @@ describe("suiteResultFromJest", () => {
         ],
       }),
     ).toEqual({
-      failed: ["app dir > revalidates"],
+      failed: ["app dir revalidates"],
       flakey: [],
       runtimeError: false,
     });
+  });
+
+  // A recorded name is only worth anything if the harness's own exclusion
+  // matches it, and the two live in different repos. Both halves below are
+  // transcribed from Next: the pattern from run-tests.js, the id from
+  // jest-circus's getTestID. A separator that reads well but is not Jest's
+  // silently excludes nothing and turns the whole baseline into a no-op.
+  it("records the name the harness's exclusion pattern actually matches", () => {
+    const escapeRegexp = (s) => s.replace(/[|\\{}()[\]^$+*?.-]/g, "\\$&");
+    const exclusionPattern = (cases) => new RegExp(`^(?!(?:${cases.map(escapeRegexp).join("|")})$).`, "i");
+    const jestTestId = (ancestorTitles, title) => [...ancestorTitles, title].join(" ");
+
+    const { failed } = suiteResultFromJest({
+      testResults: [
+        {
+          assertionResults: [
+            { ancestorTitles: ["app dir", "revalidation"], title: "revalidates on demand", status: "failed" },
+          ],
+        },
+      ],
+    });
+    const runs = exclusionPattern(failed);
+
+    expect(runs.test(jestTestId(["app dir", "revalidation"], "revalidates on demand"))).toBe(false);
+    expect(runs.test(jestTestId(["app dir", "revalidation"], "revalidates on a timer"))).toBe(true);
   });
 
   it("marks a suite that produced no assertions as a runtime error", () => {

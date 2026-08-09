@@ -972,8 +972,10 @@ export function suitesStartedInHarnessOutput(stdout) {
 
 /**
  * suiteResultFromJest reduces one suite's Jest JSON output to the baseline
- * manifest's per-suite entry. Case names are the full "ancestors > title" path,
- * which is what the harness's excludedCases matches on.
+ * manifest's per-suite entry. A case name is its ancestor titles and its own
+ * title joined by a single space — Jest's own test id (`getTestID`), and the
+ * only spelling `run-tests.js`'s `--testNamePattern` exclusion can match. Any
+ * other separator silently excludes nothing.
  *
  * A suite that produced no assertions at all did not merely fail — it never
  * ran (a crash while loading, a deploy the harness could not reach), which the
@@ -993,7 +995,7 @@ export function suiteResultFromJest(results) {
       if (assertion.status === "passed") {
         passed += 1;
       } else if (assertion.status === "failed") {
-        failed.push([...(assertion.ancestorTitles ?? []), assertion.title].filter(Boolean).join(" > "));
+        failed.push([...(assertion.ancestorTitles ?? []), assertion.title].filter(Boolean).join(" "));
       }
     }
   }
