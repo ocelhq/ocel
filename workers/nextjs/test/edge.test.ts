@@ -50,10 +50,24 @@ const ENTRIES = ${JSON.stringify(entries)}
 const ASSETS = ${JSON.stringify(assetIdByName)}
 
 const ocelFetch = globalThis.fetch
+
+const ocelAssetId = (url) => {
+  if (typeof url !== "string" || !url.startsWith("blob:")) return undefined
+  const name = url.slice(5)
+  if (Object.hasOwn(ASSETS, name)) return ASSETS[name]
+  let decoded
+  try {
+    decoded = decodeURIComponent(name)
+  } catch {
+    return undefined
+  }
+  return Object.hasOwn(ASSETS, decoded) ? ASSETS[decoded] : undefined
+}
+
 globalThis.fetch = (input, init) => {
   const url =
     typeof input === "string" ? input : input instanceof URL ? input.href : input?.url
-  const id = typeof url === "string" && url.startsWith("blob:") ? ASSETS[url.slice(5)] : undefined
+  const id = ocelAssetId(url)
   if (id === undefined) return ocelFetch(input, init)
   return import("./" + id).then((m) => new Response(m.default))
 }
@@ -754,15 +768,57 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
     expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
   });
 
-  it("leaves a fetch the asset table does not name to the runtime", async () => {
+  // The fall-through is the widest path in the change: every outbound fetch an
+  // edge route makes goes through it. A data: URL is answered by the platform
+  // itself, so a real body coming back proves the interceptor handed the call on
+  // and returned the platform's own Response — a catch-any-throw assertion would
+  // have passed just as well if the interceptor were broken.
+  it("hands a fetch the asset table does not name to the platform", async () => {
+    const edge = invokerFor(
+      {
+        "middleware_app/edge": `async () => {
+           const res = await fetch("data:text/plain,from-the-platform")
+           return new Response(res.status + ":" + (await res.text()))
+         }`,
+      },
+      undefined,
+      undefined,
+      undefined,
+      { "server/edge/assets/pic.png": new Uint8Array([1, 2, 3]) },
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
+      new Request("https://app.example/edge"),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/edge"],
+          routes: emptyRoutes,
+          dispatch: {
+            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+          },
+        },
+        edge,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(await res.text()).toBe("200:from-the-platform");
+  });
+
+  // A `blob:` name the table does not hold must reach the platform too, and fail
+  // as the platform's own rejection. Pinned by identity: a TypeError thrown from
+  // inside the interceptor would otherwise read as the same failure.
+  it("hands an unknown blob: name to the platform, which rejects it", async () => {
     const edge = invokerFor(
       {
         "middleware_app/edge": `async () => {
            try {
              await fetch("blob:server/edge/assets/absent.png")
              return new Response("answered-from-table")
-           } catch {
-             return new Response("reached-the-runtime")
+           } catch (e) {
+             return new Response(e.name + "|" + e.message)
            }
          }`,
       },
@@ -789,7 +845,45 @@ globalThis._ENTRIES[${JSON.stringify(entryKey)}] = {
       } as Partial<RouteDeps>),
     );
 
-    expect(await res.text()).toBe("reached-the-runtime");
+    expect(await res.text()).toBe(
+      "TypeError|Fetch API cannot load: blob:server/edge/assets/absent.png",
+    );
+  });
+
+  // URL percent-encodes non-ASCII in an opaque path, so the name arrives encoded
+  // while the table is keyed by the name the build wrote.
+  it("resolves an asset whose name the URL constructor percent-encodes", async () => {
+    const bytes = new Uint8Array([0xde, 0xad, 0xbe, 0xef]);
+    const edge = invokerFor(
+      {
+        "middleware_app/edge": `async () =>
+           new Response(await (await fetch(new URL("blob:server/edge/assets/caf\u00e9.png"))).arrayBuffer())`,
+      },
+      undefined,
+      undefined,
+      undefined,
+      { "server/edge/assets/caf\u00e9.png": bytes },
+    );
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/edge", invocationTarget: { pathname: "/edge" } },
+      new Request("https://app.example/edge"),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          pathnames: ["/edge"],
+          routes: emptyRoutes,
+          dispatch: {
+            "/edge": { kind: "edge", entryKey: "middleware_app/edge" },
+          },
+        },
+        edge,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(res.status).toBe(200);
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(bytes);
   });
 
   // Bytes that are not valid UTF-8 are exactly what a .png or a font is. They

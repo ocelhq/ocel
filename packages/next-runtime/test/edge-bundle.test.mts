@@ -54,6 +54,10 @@ async function synthEdgeProject() {
       0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe,
     ]),
     "server/edge/assets/worker.abc.js": Buffer.from("NOT A CHUNK"),
+    // Names a user filename can legitimately produce: one the URL constructor
+    // percent-encodes, and one carrying JS template-literal syntax.
+    "server/edge/assets/caf\u00e9.abc.txt": Buffer.from("ACCENTED"),
+    "server/edge/assets/a`b${c}.abc.txt": Buffer.from("TEMPLATEY"),
   };
   const tracedAbs: Record<string, string> = {};
   for (const [name, bytes] of Object.entries(tracedAssets)) {
@@ -416,6 +420,33 @@ test("maps each asset's blob name to its module id in the shim", async () => {
   expect(bundle.shim).toContain('url.startsWith("blob:")');
 });
 
+// An asset name is a user filename, so it can carry JS template-literal syntax.
+// It lands inside a double-quoted JSON string in the emitted shim, where a
+// backtick and `${` are ordinary characters — this is what says so.
+test("emits a loadable shim for an asset name carrying template syntax", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const { shim } = await readBundle(projectDir);
+  expect(assetTable(shim)).toHaveProperty("server/edge/assets/a`b${c}.abc.txt");
+  const mod = await import(`data:text/javascript,${encodeURIComponent(shim)}`);
+  expect(typeof mod.default.fetch).toBe("function");
+});
+
+// The chunk fetches `new URL(<blob string>)`, and URL percent-encodes non-ASCII
+// in an opaque path, so the name can arrive encoded. The table is keyed by the
+// name the build wrote; the shim decodes to reach it.
+test("keys the asset table by the build's name and decodes to reach it", async () => {
+  const { projectDir, args } = await synthEdgeProject();
+
+  await adapter.onBuildComplete!(args as never);
+
+  const { shim } = await readBundle(projectDir);
+  expect(assetTable(shim)).toHaveProperty("server/edge/assets/caf\u00e9.abc.txt");
+  expect(shim).toContain("decodeURIComponent");
+});
+
 test("carries wasm assets as base64, declared once for the whole bundle", async () => {
   const { projectDir, args } = await synthEdgeProject();
 
@@ -727,7 +758,7 @@ test("prints the bundle size, chunk count and entry count", async () => {
 
   expect(log).toHaveBeenCalledWith(
     expect.stringMatching(
-      /^ocel: edge bundle \d+\.\d MB, 5 chunks, 3 assets, 3 entries$/,
+      /^ocel: edge bundle \d+\.\d MB, 5 chunks, 5 assets, 3 entries$/,
     ),
   );
 });
