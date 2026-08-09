@@ -1,4 +1,10 @@
-import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
+import {
+  detectDomainLocale,
+  normalizeLocalePath,
+  resolveRoutes,
+  responseToMiddlewareResult,
+  type I18nConfig,
+} from "@next/routing";
 import { serveStaticAsset, type AssetStoreDeps } from "./assets";
 import {
   canonicalPathname,
@@ -243,6 +249,11 @@ interface Manifest {
   // requests /_next/image, so the route is not registered at all and the path
   // falls through to the asset store exactly as any other unmatched path.
   images?: ImageConfig;
+  // The pages-router i18n block, verbatim from next.config as the build adapter
+  // emitted it. Every page route the manifest carries is locale-prefixed under
+  // it, so routing must prefix the request's pathname to match. Absent for
+  // app-router builds, which do i18n in user middleware instead.
+  i18n?: I18nConfig;
   // Every static file the build emitted, by served path, with the sha256 of its
   // bytes. The image cache keys a local source by its hash, so an optimized
   // variant outlives the build it was produced under. Absent on a manifest
@@ -596,7 +607,7 @@ async function serveRequest(
     url: new URL(request.url),
     buildId: deps.manifest.buildId,
     basePath: deps.manifest.basePath,
-    i18n: undefined,
+    i18n: deps.manifest.i18n,
     headers: request.headers,
     requestBody: streamOf(body) as ReadableStream,
     pathnames: deps.manifest.pathnames,
@@ -743,6 +754,23 @@ async function noteRevalidation(
   await invalidateSnapshot(config, clockDeps);
 }
 
+// Which locale's 404 document answers a request that matched nothing. Read from
+// the request's own pathname rather than from routing's, which a miss leaves
+// unresolved: an unprefixed path falls back to the locale the domain (or the
+// config) makes default, exactly as routing would have prefixed it.
+function notFoundLocale(manifest: Manifest, url: URL): string | undefined {
+  const { i18n } = manifest;
+  if (!i18n) return undefined;
+  const pathname = url.pathname.startsWith(manifest.basePath)
+    ? url.pathname.slice(manifest.basePath.length) || "/"
+    : url.pathname;
+  return (
+    normalizeLocalePath(pathname, i18n.locales).detectedLocale ??
+    detectDomainLocale(i18n.domains, url.hostname)?.defaultLocale ??
+    i18n.defaultLocale
+  );
+}
+
 async function dispatch(
   result: RouteResult,
   request: Request,
@@ -759,6 +787,17 @@ async function dispatch(
   const headers = withoutControlHeaders(
     result.middleware?.headers ?? request.headers,
   );
+
+  // Under pages-router i18n the client asks for an unprefixed path while the
+  // build emitted one document per locale (static/en/about.html), so the object
+  // is named by what routing resolved rather than by what was asked for. Every
+  // other build serves the asset under the request's own name.
+  const assetUrl =
+    manifest.i18n && result.invocationTarget
+      ? new URL(result.invocationTarget.pathname + url.search, url)
+      : url;
+  const staticAsset = (at: URL = assetUrl) =>
+    serveStaticAsset(request, at, deps.assetStore, notFoundLocale(manifest, url));
 
   if (result.middlewareResponded) {
     return middlewareResponse(result.middleware, result.status);
@@ -781,14 +820,14 @@ async function dispatch(
     return doFetch(new Request(result.externalRewrite, request));
   }
   if (!result.resolvedPathname) {
-    return serveStaticAsset(request, url, deps.assetStore);
+    return staticAsset();
   }
 
   const target = manifest.dispatch[result.resolvedPathname];
   if (!target) {
     // Not in the manifest — fall back to the asset store before giving up, so
     // any file present in static/ is still served even if unenumerated.
-    return serveStaticAsset(request, url, deps.assetStore);
+    return staticAsset();
   }
 
   switch (target.kind) {
@@ -796,14 +835,11 @@ async function dispatch(
       // The manifest key names the file; the request path does not. One
       // document answers every path a dynamic template spans
       // (/docs/[slug].html for /docs/slug-1), so the asset is looked up under
-      // the key the target was found at. For a directly requested path that key
+      // the key the target was found at — which under i18n is the localized
+      // key the request was prefixed to. For a directly requested path that key
       // is the request's own pathname — serve normalized it to the routing form
       // before routing ever saw it, so the two are the same string here.
-      return serveStaticAsset(
-        request,
-        new URL(result.resolvedPathname, url),
-        deps.assetStore,
-      );
+      return staticAsset(new URL(result.resolvedPathname, url));
 
     case "lambda": {
       const fnUrl = functionUrls[target.id];
@@ -831,7 +867,7 @@ async function dispatch(
     }
 
     default:
-      return serveStaticAsset(request, url, deps.assetStore);
+      return staticAsset();
   }
 }
 
