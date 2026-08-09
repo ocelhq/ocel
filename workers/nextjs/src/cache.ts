@@ -26,6 +26,11 @@ export const CACHE_STATUS = "x-ocel-cache";
 // never gets one. A cache tier answering without the Lambda has to restate it,
 // because it, not the Lambda, knows the freshness of what it is about to serve.
 export const NEXT_CACHE_STATUS = "x-nextjs-cache";
+// Vercel's spelling of CACHE_STATUS, emitted only where the build asked for it
+// (manifest `vercelCacheAlias`, set by OCEL_E2E_VERCEL_CACHE_HEADER at build
+// time): Next's own deployment e2e suites assert this name, and nothing else in
+// the response says which tier answered. Never emitted in production.
+export const VERCEL_CACHE_STATUS = "x-vercel-cache";
 const DRAFT_COOKIE = "__prerender_bypass";
 
 // The single revert point for self-revalidation suppression (bd
@@ -270,6 +275,23 @@ export function withStatus(response: Response, status: CacheStatus): Response {
   const headers = new Headers(response.headers);
   headers.set(CACHE_STATUS, status);
   return respond(response, headers);
+}
+
+// Stamps the alias on the way out, after every tier has decided. Deliberately
+// not folded into withStatus: what that function returns is also what the colo
+// and R2 tiers store, and an alias baked into a stored entry would outlive the
+// build that asked for it.
+export function withVercelCacheAlias(
+  response: Response,
+  enabled: boolean | undefined,
+): Response {
+  if (!enabled) return response;
+  const status = response.headers.get(CACHE_STATUS);
+  if (status === null) return response;
+  // A response off the wire has immutable headers, so the alias needs a clone.
+  const aliased = new Response(response.body, response);
+  aliased.headers.set(VERCEL_CACHE_STATUS, status);
+  return aliased;
 }
 
 function respond(response: Response, headers: Headers): Response {

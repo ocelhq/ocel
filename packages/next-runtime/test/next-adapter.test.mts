@@ -1218,6 +1218,27 @@ test("omits the image config when the app opted out of optimization", async () =
   warn.mockRestore();
 });
 
+// The x-vercel-cache alias is a build-time opt-in the edge worker reads back off
+// the manifest, so a build the flag was absent from must carry no field at all.
+test("records the x-vercel-cache opt-in when the deploying process set the flag", async () => {
+  const { projectDir, args } = await synthProject();
+  vi.stubEnv("OCEL_E2E_VERCEL_CACHE_HEADER", "1");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect((await readManifest(projectDir)).vercelCacheAlias).toBe(true);
+});
+
+test("omits the x-vercel-cache opt-in from an ordinary build", async () => {
+  const { projectDir, args } = await synthProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  expect(await readManifest(projectDir)).not.toHaveProperty("vercelCacheAlias");
+});
+
 test("writes no Vercel-style prerender config or fallback files", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
