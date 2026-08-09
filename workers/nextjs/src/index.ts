@@ -742,7 +742,9 @@ async function dispatch(
       // The manifest key names the file; the request path does not. One
       // document answers every path a dynamic template spans
       // (/docs/[slug].html for /docs/slug-1), so the asset is looked up under
-      // the key the target was found at.
+      // the key the target was found at. For a directly requested path that key
+      // is the request's own pathname — serve normalized it to the routing form
+      // before routing ever saw it, so the two are the same string here.
       return serveStaticAsset(
         request,
         new URL(result.resolvedPathname, url),

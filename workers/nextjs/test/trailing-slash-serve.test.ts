@@ -3,10 +3,15 @@ import { describe, expect, it } from "vitest";
 
 import { serve, type RouteDeps } from "../src/index";
 import type { AssetBucket } from "../src/assets";
+import { coloDeps } from "./cache-deps";
 
-function assetStoreServing(files: Record<string, string>): RouteDeps["assetStore"] {
+function assetStoreServing(
+  files: Record<string, string>,
+  probes?: string[],
+): RouteDeps["assetStore"] {
   const store: AssetBucket = {
     async get(key) {
+      probes?.push(key);
       const body = files[key];
       if (body === undefined) return null;
       return { body: new Blob([body]).stream() };
@@ -122,6 +127,14 @@ interface Scenario {
   files?: Record<string, string>;
   edge?: RouteDeps["edge"];
   middleware?: { entryKey: string; matchers?: { sourceRegex: string }[] };
+  // Overrides the all-static dispatch table `pages` implies, for the lambda and
+  // prerender arms.
+  dispatch?: RouteDeps["manifest"]["dispatch"];
+  functionUrls?: RouteDeps["functionUrls"];
+  fetch?: RouteDeps["fetch"];
+  cache?: RouteDeps["cache"];
+  // Every key serveStaticAsset asked the store for, in order.
+  probes?: string[];
 }
 
 function deps(scenario: Scenario): RouteDeps {
@@ -142,19 +155,21 @@ function deps(scenario: Scenario): RouteDeps {
         onMatch: [],
         fallback: [],
       },
-      dispatch: Object.fromEntries(
-        pages.map((path) => [path, { kind: "static" as const }]),
-      ),
+      dispatch:
+        scenario.dispatch ??
+        Object.fromEntries(pages.map((path) => [path, { kind: "static" as const }])),
       middleware: scenario.middleware,
     },
-    functionUrls: {},
+    functionUrls: scenario.functionUrls ?? {},
     slug: "p1",
     app: "web",
-    assetStore: assetStoreServing({
-      "/404.html": "not found",
-      ...(scenario.files ?? {}),
-    }),
+    assetStore: assetStoreServing(
+      { "/404.html": "not found", ...(scenario.files ?? {}) },
+      scenario.probes,
+    ),
     edge: scenario.edge,
+    fetch: scenario.fetch,
+    cache: scenario.cache,
   };
 }
 
@@ -418,4 +433,259 @@ describe("routes withoutInternalRedirects keeps", () => {
       });
     });
   }
+});
+
+// ---------------------------------------------------------------------------
+// What the response is keyed by, once the seam has run.
+//
+// ocelhq-xlj's field face was a 404 on the canonical URL, and the merge note on
+// it argued the real defect was asset keying: a kind:static dispatch is read
+// from R2 by the REQUEST pathname (index.ts's static arm hands serveStaticAsset
+// `url`, not `result.resolvedPathname`), so `/a/` resolving to `/a` would still
+// read `<prefix>/a/.html` and miss. These pin that for a DIRECTLY requested
+// path: `serve` rebuilt the request on the routing form, so `url.pathname` IS
+// the resolved path by the time dispatch runs and every downstream key — the R2
+// object, the colo cache entry, the origin forward — is the slash-free one.
+//
+// The other face of that keying bug is untouched here and stays open
+// (ocelhq-t2qx / ocelhq-iud): a kind:static target reached through a rewrite is
+// still read by the SOURCE page's path, because there the request pathname and
+// the resolved pathname genuinely differ. Nothing below routes through a
+// rewrite, deliberately.
+describe("the resolved path is what keys the response", () => {
+  const ENTRY_HEADER = "x-ocel-entry";
+
+  describe("a static prerender, read from R2", () => {
+    it.each([false, true])(
+      "serves /a/ from /a.html under trailingSlash: true (skipTrailingSlashRedirect: %s)",
+      async (skipTrailingSlashRedirect) => {
+        const probes: string[] = [];
+        const res = await serve(
+          get("/a/"),
+          deps({
+            trailingSlash: true,
+            skipTrailingSlashRedirect,
+            pages: ["/a"],
+            files: { "/a.html": "<h1>a</h1>" },
+            probes,
+          }),
+        );
+
+        expect(res.status).toBe(200);
+        expect(await res.text()).toBe("<h1>a</h1>");
+        expect(res.headers.get("x-matched-path")).toBe("/a");
+        expect(probes).toContain("/a.html");
+        expect(probes.some((key) => key.includes("/a/"))).toBe(false);
+      },
+    );
+
+    it("under trailingSlash: false, /a/ 308s and /a serves", async () => {
+      const scenario: Scenario = {
+        pages: ["/a"],
+        files: { "/a.html": "<h1>a</h1>" },
+      };
+
+      const slashed = await serve(get("/a/"), deps(scenario));
+      expect(slashed.status).toBe(308);
+      expect(slashed.headers.get("location")).toBe("/a");
+
+      const probes: string[] = [];
+      const bare = await serve(get("/a"), deps({ ...scenario, probes }));
+      expect(bare.status).toBe(200);
+      expect(await bare.text()).toBe("<h1>a</h1>");
+      expect(probes).toContain("/a.html");
+    });
+
+    // Both of these 404'd in the field: the basePath root and a page under it.
+    it("serves the basePath root and a page under it from their own objects", async () => {
+      const probes: string[] = [];
+      const scenario: Scenario = {
+        trailingSlash: true,
+        basePath: "/docs",
+        pages: ["/docs", "/docs/hello"],
+        files: { "/docs.html": "docs root", "/docs/hello.html": "hello" },
+        probes,
+      };
+
+      const root = await serve(get("/docs/"), deps(scenario));
+      expect(root.status).toBe(200);
+      expect(await root.text()).toBe("docs root");
+      expect(probes).toContain("/docs.html");
+
+      const page = await serve(get("/docs/hello/"), deps(scenario));
+      expect(page.status).toBe(200);
+      expect(await page.text()).toBe("hello");
+      expect(probes).toContain("/docs/hello.html");
+      expect(probes.some((key) => key.endsWith("/.html"))).toBe(false);
+    });
+  });
+
+  describe("a lambda route, forwarded to its Function URL", () => {
+    function lambdaScenario(
+      overrides: Partial<Scenario> & { route: string },
+    ): { scenario: Scenario; forwarded: () => Request | undefined } {
+      let captured: Request | undefined;
+      const { route, ...rest } = overrides;
+      return {
+        forwarded: () => captured,
+        scenario: {
+          pages: [route],
+          dispatch: { [route]: { kind: "lambda", id: "fn", entryKey: "page:ssr" } },
+          functionUrls: { fn: "https://fn.example.com" },
+          fetch: (async (input: Request) => {
+            captured = input;
+            return new Response("ssr", { status: 200 });
+          }) as unknown as typeof fetch,
+          ...rest,
+        },
+      };
+    }
+
+    it("forwards /ssr/ on the slash-free path under trailingSlash: true", async () => {
+      const { scenario, forwarded } = lambdaScenario({
+        route: "/ssr",
+        trailingSlash: true,
+      });
+
+      const res = await serve(get("/ssr/?q=1"), deps(scenario));
+
+      expect(res.status).toBe(200);
+      expect(await res.text()).toBe("ssr");
+      const url = new URL(forwarded()!.url);
+      expect(url.host).toBe("fn.example.com");
+      expect(url.pathname).toBe("/ssr");
+      expect(url.search).toBe("?q=1");
+      expect(forwarded()!.headers.get(ENTRY_HEADER)).toBe("page:ssr");
+    });
+
+    it("308s /ssr to /ssr/ under trailingSlash: true without forwarding", async () => {
+      const { scenario, forwarded } = lambdaScenario({
+        route: "/ssr",
+        trailingSlash: true,
+      });
+
+      const res = await serve(get("/ssr"), deps(scenario));
+
+      expect(res.status).toBe(308);
+      expect(res.headers.get("location")).toBe("/ssr/");
+      expect(forwarded()).toBeUndefined();
+    });
+
+    it("forwards /ssr on the same path under trailingSlash: false", async () => {
+      const { scenario, forwarded } = lambdaScenario({ route: "/ssr" });
+
+      const res = await serve(get("/ssr"), deps(scenario));
+
+      expect(res.status).toBe(200);
+      expect(new URL(forwarded()!.url).pathname).toBe("/ssr");
+
+      const slashed = await serve(get("/ssr/"), deps(scenario));
+      expect(slashed.status).toBe(308);
+      expect(slashed.headers.get("location")).toBe("/ssr");
+    });
+
+    // The other path observed 404ing in the field.
+    it("forwards /docs/ssr/ as /docs/ssr under a basePath", async () => {
+      const { scenario, forwarded } = lambdaScenario({
+        route: "/docs/ssr",
+        trailingSlash: true,
+        basePath: "/docs",
+      });
+
+      const res = await serve(get("/docs/ssr/"), deps(scenario));
+
+      expect(res.status).toBe(200);
+      expect(new URL(forwarded()!.url).pathname).toBe("/docs/ssr");
+      expect(forwarded()!.headers.get(ENTRY_HEADER)).toBe("page:ssr");
+    });
+  });
+
+  describe("a prerender route, keyed in the colo cache", () => {
+    function coloScenario(trailingSlash: boolean, skip = false) {
+      const stored = new Map<string, Response>();
+      const pending: Promise<unknown>[] = [];
+      let renders = 0;
+      const scenario: Scenario = {
+        trailingSlash,
+        skipTrailingSlashRedirect: skip,
+        pages: ["/p"],
+        dispatch: { "/p": { kind: "prerender", id: "fn", config: {} } },
+        functionUrls: { fn: "https://fn.example.com" },
+        fetch: (async () => {
+          renders += 1;
+          return new Response("prerendered", {
+            status: 200,
+            headers: { "cache-control": "s-maxage=60" },
+          });
+        }) as unknown as typeof fetch,
+        cache: coloDeps({
+          cache: {
+            match: async (req: Request) => stored.get(req.url)?.clone(),
+            put: async (req: Request, res: Response) => {
+              stored.set(req.url, res);
+            },
+          } as unknown as Cache,
+          waitUntil: (p: Promise<unknown>) => {
+            pending.push(p);
+          },
+        }),
+      };
+      const settle = () => Promise.all(pending.splice(0));
+      return { scenario, settle, renders: () => renders, keys: () => [...stored.keys()] };
+    }
+
+    it("gives the canonical and the slash-free form one key under trailingSlash: true", async () => {
+      const { scenario, settle, renders, keys } = coloScenario(true);
+      const d = deps(scenario);
+
+      const first = await serve(get("/p/"), d);
+      expect(first.status).toBe(200);
+      expect(first.headers.get("x-ocel-cache")).toBe("MISS");
+      await settle();
+
+      // The client's next hop for /p is the 308's target, which must land on the
+      // entry the first request wrote.
+      const redirect = await serve(get("/p"), d);
+      expect(redirect.status).toBe(308);
+      expect(redirect.headers.get("location")).toBe("/p/");
+
+      const follow = await serve(get("/p/"), d);
+      expect(follow.headers.get("x-ocel-cache")).toBe("HIT");
+      expect(await follow.text()).toBe("prerendered");
+      expect(renders()).toBe(1);
+      expect(keys()).toEqual(["https://cache.ocel/t/p"]);
+    });
+
+    // With the 308 suppressed both forms are served, so the two requests reach
+    // the cache key directly rather than through a redirect — the sharpest test
+    // that cacheKey does not fork on the slash.
+    it("gives both served forms one key under skipTrailingSlashRedirect", async () => {
+      const { scenario, settle, renders, keys } = coloScenario(true, true);
+      const d = deps(scenario);
+
+      const first = await serve(get("/p/"), d);
+      expect(first.headers.get("x-ocel-cache")).toBe("MISS");
+      await settle();
+
+      const second = await serve(get("/p"), d);
+      expect(second.headers.get("x-ocel-cache")).toBe("HIT");
+      expect(await second.text()).toBe("prerendered");
+      expect(renders()).toBe(1);
+      expect(keys()).toEqual(["https://cache.ocel/t/p"]);
+    });
+  });
+
+  // The fallthrough arm: no resolvedPathname at all, so the asset store is the
+  // only thing that can answer. It must still be probed on the routing form.
+  it("probes an unmatched path slash-free before serving the build's 404", async () => {
+    const probes: string[] = [];
+    const res = await serve(
+      get("/unknown/"),
+      deps({ trailingSlash: true, pages: ["/a"], probes }),
+    );
+
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("not found");
+    expect(probes).toEqual(["/unknown.html", "/unknown", "/404.html"]);
+  });
 });
