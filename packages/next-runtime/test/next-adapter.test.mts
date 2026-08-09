@@ -1239,6 +1239,36 @@ test("omits the x-vercel-cache opt-in from an ordinary build", async () => {
   expect(await readManifest(projectDir)).not.toHaveProperty("vercelCacheAlias");
 });
 
+test("carries the app's trailing-slash config into the routing manifest", async () => {
+  const { projectDir, args } = await synthProject();
+  args.config = {
+    ...args.config,
+    trailingSlash: true,
+    skipTrailingSlashRedirect: true,
+    skipMiddlewareUrlNormalize: true,
+  };
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.trailingSlash).toBe(true);
+  expect(manifest.skipTrailingSlashRedirect).toBe(true);
+  expect(manifest.skipMiddlewareUrlNormalize).toBe(true);
+});
+
+test("defaults the trailing-slash config to false when the app sets none of it", async () => {
+  const { projectDir, args } = await synthProject();
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.trailingSlash).toBe(false);
+  expect(manifest.skipTrailingSlashRedirect).toBe(false);
+  expect(manifest.skipMiddlewareUrlNormalize).toBe(false);
+});
+
 test("writes no Vercel-style prerender config or fallback files", async () => {
   const { projectDir, args } = await synthPrerenderProject();
   const adapter = await loadAdapterIn(projectDir);
