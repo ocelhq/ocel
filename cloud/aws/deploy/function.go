@@ -61,7 +61,7 @@ const (
 	// layer version. It is a released-artifact version, bumped only when the
 	// layer is republished (`make publish-layer`); override via
 	// OCEL_MEMBRANE_LAYER_ARN for dev/testing.
-	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:24"
+	defaultMembraneLayerARN = "arn:aws:lambda:us-east-1:363236815301:layer:ocel-membrane:29"
 	membraneLayerARNEnv     = "OCEL_MEMBRANE_LAYER_ARN"
 
 	// bytecodeCacheEnv opts a deploy into having the membrane cache V8 bytecode.
