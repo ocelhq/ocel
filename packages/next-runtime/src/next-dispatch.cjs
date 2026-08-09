@@ -114,6 +114,37 @@ module.exports = function createDispatch({
     return undefined;
   };
 
+  // Each app-page entry owns one route module, whose response cache is built
+  // once from whichever request happens to reach it first and then reused for
+  // the life of the instance. A PPR resume is a likely first request and runs in
+  // minimal mode, which would leave that route's cache minimal — reading and
+  // writing nothing durable — for every later request. Building it here, off a
+  // request that declares no meta, fixes it non-minimal before any request can.
+  //
+  // A route module that has no getter is reported rather than skipped: it means
+  // Next renamed or dropped it, and the failure it leaves behind is silent — the
+  // pin stops happening and ISR quietly ends for any instance a resume reaches
+  // first.
+  let warnedMissingGetter = false;
+  const pinResponseCache = (module) => {
+    const routeModule = module?.routeModule;
+    if (!routeModule) return;
+    if (typeof routeModule.getResponseCache !== "function") {
+      if (warnedMissingGetter) return;
+      warnedMissingGetter = true;
+      console.error(
+        "ocel: this Next build's route modules expose no getResponseCache; " +
+          "an instance whose first request is a PPR resume will serve it with ISR off",
+      );
+      return;
+    }
+    try {
+      routeModule.getResponseCache({ headers: {} });
+    } catch (error) {
+      console.error(`ocel: response cache pin failed: ${error?.stack ?? error}`);
+    }
+  };
+
   // Loading one entry pulls in the chunk graph its routes share, through Next's
   // own chunk ordering — a Turbopack chunk evaluated out of order fails with its
   // dependency's factory unavailable, so an entry is only ever required whole.
@@ -129,6 +160,7 @@ module.exports = function createDispatch({
     if (already) return already;
     try {
       const entry = { module: load(entries[key]) };
+      pinResponseCache(entry.module);
       loaded.set(key, entry);
       return entry;
     } catch (error) {

@@ -95,10 +95,22 @@ const PREFETCH_PURPOSE = "purpose";
 // it, which makes the forwarded values exactly the ones this worker stamped.
 const CONTROL_PREFIX = "x-ocel-";
 
+// Outside that namespace but just as much this worker's to stamp: next-resume is
+// what tells the origin a request is the dynamic half of a PPR serve, and the
+// origin answers one under minimal mode — Next's own caching, fallback and
+// revalidation handed to the platform. A client that could forge it could make a
+// non-PPR SSG route render and cache a path generateStaticParams never produced.
+// Next itself only ever emits it from the build's own resume chain, never from a
+// browser, and resumeRequest sets it on the one leg that is a resume.
+const CONTROL_HEADERS = ["next-resume"];
+
 function withoutControlHeaders(headers: Headers): Headers {
   const kept = new Headers(headers);
   for (const name of [...headers.keys()]) {
-    if (name.toLowerCase().startsWith(CONTROL_PREFIX)) kept.delete(name);
+    const lower = name.toLowerCase();
+    if (lower.startsWith(CONTROL_PREFIX) || CONTROL_HEADERS.includes(lower)) {
+      kept.delete(name);
+    }
   }
   return kept;
 }
@@ -1289,18 +1301,26 @@ function streamOf(body: ArrayBuffer | null): ReadableStream | null {
 // byte cached as page content would outlive the request that fetched it.
 const EMPTY_BODY_HEADER = "x-ocel-empty-body";
 
+// The Next runtime stamps this on every SSG response once minimal mode is on
+// (the platform's contract with it, not something a client should ever see),
+// so it is this hop's job to consume it same as it consumes EMPTY_BODY_HEADER.
+const NEXT_CACHE_TAGS_HEADER = "x-next-cache-tags";
+
 // originFetch is how every Function-URL forward is made: signed when edge
 // credentials are bound, and always stripped of the sentinel body.
 function originFetch(deps: RouteDeps): typeof fetch {
   const doFetch = deps.originFetch ?? deps.fetch ?? fetch;
   return (async (input, init) => {
     const response = await doFetch(input as RequestInfo, init);
-    if (!response.headers.has(EMPTY_BODY_HEADER)) return response;
+    const hasEmptyBody = response.headers.has(EMPTY_BODY_HEADER);
+    const hasCacheTags = response.headers.has(NEXT_CACHE_TAGS_HEADER);
+    if (!hasEmptyBody && !hasCacheTags) return response;
 
-    await response.body?.cancel();
-    const empty = new Response(null, response);
-    empty.headers.delete(EMPTY_BODY_HEADER);
-    return empty;
+    if (hasEmptyBody) await response.body?.cancel();
+    const rebuilt = new Response(hasEmptyBody ? null : response.body, response);
+    rebuilt.headers.delete(EMPTY_BODY_HEADER);
+    rebuilt.headers.delete(NEXT_CACHE_TAGS_HEADER);
+    return rebuilt;
   }) as typeof fetch;
 }
 

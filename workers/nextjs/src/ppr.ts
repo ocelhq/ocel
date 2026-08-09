@@ -93,9 +93,18 @@ async function pipe(
     async (response) => {
       if (response.ok) return response.body;
       await response.body?.cancel();
+      // Status only: the resumed response is rebuilt by the origin hop and
+      // carries no url, and the request's own url would put this visitor's
+      // query string — tokens included — into the logs.
+      console.error(`ppr resume dropped: origin answered ${response.status}`);
       return null;
     },
-    () => null,
+    (err) => {
+      // Name only, for the same reason: workerd puts the url it failed to fetch
+      // in a fetch error's message, and that url is this request's forward.
+      console.error(`ppr resume dropped: ${errorName(err)}`);
+      return null;
+    },
   );
 
   const writer = writable.getWriter();
@@ -114,4 +123,8 @@ async function pipe(
     return;
   }
   await body.pipeTo(writable).catch(() => {});
+}
+
+function errorName(err: unknown): string {
+  return err instanceof Error ? err.name : typeof err;
 }

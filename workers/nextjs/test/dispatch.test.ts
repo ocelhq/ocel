@@ -164,6 +164,38 @@ describe("dispatchResult", () => {
     },
   );
 
+  // Once the Lambda handler runs in minimal mode, Next stamps this header on
+  // SSG responses as its contract with the platform — the platform is meant to
+  // consume it, not let it leak to a client.
+  it("strips x-next-cache-tags from a Lambda-forwarded response", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/tags": { kind: "lambda", id: "/tags" } },
+      },
+      functionUrls: { "/tags": "https://fn.example.com" },
+      fetch: (async () =>
+        new Response("from-lambda", {
+          status: 200,
+          headers: { "x-next-cache-tags": "tag1,tag2", "x-custom": "kept" },
+        })) as unknown as typeof fetch,
+    });
+
+    const res = await dispatchResult(
+      { resolvedPathname: "/tags", invocationTarget: { pathname: "/tags" } },
+      new Request("https://app.example/tags"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("from-lambda");
+    expect(res.headers.get("x-next-cache-tags")).toBeNull();
+    expect(res.headers.get("x-custom")).toBe("kept");
+  });
+
   it("leaves a body that is genuinely one byte alone", async () => {
     const deps = baseDeps({
       manifest: {
@@ -499,6 +531,25 @@ describe("dispatchResult", () => {
 
     expect(res.headers.get("x-ocel-cache")).toBe("BYPASS");
     expect(captured?.headers.get("cookie")).toBe("session=xyz");
+  });
+
+  // "Its own headers" stops at next-resume. The membrane runs a request bearing
+  // it under minimal mode — Next's caching, fallback and revalidation handed to
+  // the platform — and a non-GET is forwarded here under the client's headers.
+  // Forged onto a dynamic SSG route it would skip the fallback check that 404s a
+  // path generateStaticParams never produced, and have Next render and cache it.
+  it("drops a client-forged next-resume from a non-GET prerender forward", async () => {
+    let captured: Request | undefined;
+    await dispatchDraft(
+      draftDeps((req) => (captured = req)),
+      new Request("https://app.example/ssg-draft-mode/test-1", {
+        method: "POST",
+        headers: { "next-resume": "1" },
+        body: "[1,{}]",
+      }),
+    );
+
+    expect(captured?.headers.get("next-resume")).toBeNull();
   });
 
   it("forwards the RSC-family headers to a prerender origin past allowHeader", async () => {
@@ -1338,6 +1389,7 @@ describe("dispatchResult", () => {
   // never a plain render. These assert that dispatch-level wiring.
   function pprDeps(opts: {
     resume: string;
+    resumeHeaders?: Record<string, string>;
     entryPath?: string;
     entry: Record<string, unknown> | null;
     dispatch?: Record<string, unknown>;
@@ -1355,7 +1407,7 @@ describe("dispatchResult", () => {
     let plainCalled = false;
     const record = (async (req: Request) => {
       resumeRequests.push(req);
-      return new Response(opts.resume, { status: 200 });
+      return new Response(opts.resume, { status: 200, headers: opts.resumeHeaders });
     }) as unknown as typeof fetch;
     const deps = baseDeps({
       manifest: {
@@ -1424,6 +1476,24 @@ describe("dispatchResult", () => {
       deps,
     );
 
+  // Minimal mode makes Next stamp x-next-cache-tags on every SSG response it
+  // renders — the platform's to consume, never a client's to see. The Lambda
+  // leg has its own coverage above; this is the leg that reaches the origin
+  // through dispatchPrerender's own signed fetch rather than that one.
+  it("strips x-next-cache-tags from a prerender's origin render", async () => {
+    const { deps } = pprDeps({
+      resume: "[rendered]",
+      resumeHeaders: { "x-next-cache-tags": "tag1,tag2", "x-custom": "kept" },
+      entry: null,
+    });
+
+    const res = await dispatchPpr(deps);
+
+    expect(await res.text()).toBe("[rendered]");
+    expect(res.headers.get("x-next-cache-tags")).toBeNull();
+    expect(res.headers.get("x-custom")).toBe("kept");
+  });
+
   it("composes shell + resumed dynamic for a PPR entry and POSTs the resume", async () => {
     const { deps, resumeRequests } = pprDeps({
       resume: "[dynamic]",
@@ -1438,6 +1508,21 @@ describe("dispatchResult", () => {
     expect(resume.method).toBe("POST");
     expect(resume.headers.get("next-resume")).toBe("1");
     expect(await resume.text()).toBe("POSTPONED");
+  });
+
+  // The other half of dropping an inbound next-resume: the strip runs above
+  // dispatch, and the resume chain stamps its own header below it, so the leg
+  // that is genuinely a resume still declares itself.
+  it("stamps next-resume on the real resume even when the client sent one", async () => {
+    const { deps, resumeRequests } = pprDeps({
+      resume: "[dynamic]",
+      entry: pprShellEntry,
+    });
+
+    const res = await dispatchPpr(deps, { "next-resume": "1" });
+
+    expect(await res.text()).toBe("[shell][dynamic]");
+    expect(resumeRequests()[0]?.headers.get("next-resume")).toBe("1");
   });
 
   it("POSTs the resume through the signed origin seam, never plain fetch", async () => {
