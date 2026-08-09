@@ -10,6 +10,10 @@
 //
 // These three functions are those three sites, and nothing downstream of `serve`
 // may reimplement any of them.
+//
+// A locale prefix is not a form this module knows: pathnames arrive with whatever
+// locale segment they were requested under, which is all the worker's routing
+// deals in (it passes i18n: undefined to resolveRoutes).
 
 export interface TrailingSlashConfig {
   basePath: string;

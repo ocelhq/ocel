@@ -1382,6 +1382,63 @@ describe("the URL middleware is handed", () => {
     expect(await res.text()).toBe("/b");
   });
 
+  it("forwards a rewrite to another origin byte-verbatim", async () => {
+    // The strip is scoped to the app's own origin: an external destination is
+    // not keyed by any build pathname, so its slash is the remote host's
+    // business.
+    const edge = middlewareInvoker(
+      `async () => new Response(null, {
+         headers: { "x-middleware-rewrite": "https://ext.example.com/b/?q=1" },
+       })`,
+    );
+    let forwarded: string | undefined;
+
+    const res = await serve(
+      get(`${PAGE}/`),
+      deps({
+        manifest: {
+          buildId: "t",
+          basePath: "",
+          trailingSlash: true,
+          pathnames: [PAGE],
+          routes: emptyRoutes,
+          dispatch: { [PAGE]: { kind: "static" } },
+          middleware: { entryKey: MIDDLEWARE_KEY },
+        },
+        assetStore: assetStoreServing({ [`${PAGE}.html`]: "the page" }),
+        edge,
+        fetch: (async (input: Request) => {
+          forwarded = input.url;
+          return new Response("from ext");
+        }) as unknown as typeof fetch,
+      } as Partial<RouteDeps>),
+    );
+
+    expect(forwarded).toBe("https://ext.example.com/b/?q=1");
+    expect(await res.text()).toBe("from ext");
+  });
+
+  it.each([`/b/`, "/b"])(
+    "leaves a middleware redirect to %s exactly as authored",
+    async (location) => {
+      // Client-visible, so nothing here normalizes it: Next does not either.
+      const edge = middlewareInvoker(
+        `async () => new Response(null, {
+           status: 307,
+           headers: { location: "${location}" },
+         })`,
+      );
+
+      const res = await serve(
+        get(`${PAGE}/`),
+        pageDeps({ trailingSlash: true, edge }),
+      );
+
+      expect(res.status).toBe(307);
+      expect(res.headers.get("location")).toBe(location);
+    },
+  );
+
   describe("a request about to be redirected", () => {
     it("never reaches middleware", async () => {
       const { edge, calls } = counted(echo());

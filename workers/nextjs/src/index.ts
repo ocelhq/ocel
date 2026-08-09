@@ -1,8 +1,4 @@
-import {
-  resolveRoutes,
-  responseToMiddlewareResult,
-  type MiddlewareResult,
-} from "@next/routing";
+import { resolveRoutes, responseToMiddlewareResult } from "@next/routing";
 import { serveStaticAsset, type AssetStoreDeps } from "./assets";
 import {
   canonicalPathname,
@@ -255,12 +251,11 @@ interface Manifest {
   vercelCacheAlias?: boolean;
 }
 
-// What resolveRoutes never hands back: the middleware's own Response, the
-// redirect it asked for, and the request headers it rewrote. The invoker
-// captures all three (see invokeMiddleware in `serveRequest`).
+// What resolveRoutes never hands back: the middleware's own Response and the
+// request headers it rewrote. The invoker captures both (see invokeMiddleware in
+// `serveRequest`).
 export interface MiddlewareOutcome {
   response: Response;
-  result: MiddlewareResult;
   headers: Headers;
 }
 
@@ -485,6 +480,47 @@ function withoutInternalRedirects(routes: unknown): RoutingTable {
   };
 }
 
+// Next's `headers()` rules live in the same list as the trailing-slash redirects
+// and run ahead of them, so they apply to the redirect response too. Rather than
+// rematch them here, the routing phase they live in is run for its headers
+// alone: the table is cut to beforeMiddleware, no pathname can match, and
+// middleware is never invoked. That is a second routing pass, paid only by a
+// request that is being redirected anyway.
+//
+// Everything else the pass resolves is discarded — the Location is the one
+// derived from the config, with the query the rules themselves drop.
+async function trailingSlashRedirect(
+  location: string,
+  url: URL,
+  request: Request,
+  deps: RouteDeps,
+): Promise<Response> {
+  const table = deps.manifest.routes as RoutingTable;
+  const { resolvedHeaders } = await resolveRoutes({
+    url,
+    buildId: deps.manifest.buildId,
+    basePath: deps.manifest.basePath,
+    i18n: undefined,
+    headers: request.headers,
+    requestBody: streamOf(null) as ReadableStream,
+    pathnames: [],
+    routes: {
+      ...table,
+      beforeFiles: [],
+      afterFiles: [],
+      dynamicRoutes: [],
+      onMatch: [],
+      fallback: [],
+    },
+    invokeMiddleware: async () => ({}),
+  });
+
+  const headers = new Headers();
+  applyResolvedHeaders(headers, resolvedHeaders);
+  headers.set("location", location);
+  return new Response(null, { status: 308, headers });
+}
+
 // The one exit every served response leaves through, and so the only place the
 // x-vercel-cache alias is stamped: every tier's status header is set below here
 // (withStatus in cache.ts, composePpr in ppr.ts), and nothing above it.
@@ -507,8 +543,10 @@ async function serveRequest(
   deps: RouteDeps,
 ): Promise<Response> {
   // Ahead of normalization on purpose: /_next/image is answered before routing
-  // ever runs, and an optimizer request is never a page, so it is never
-  // redirected to a canonical form.
+  // ever runs, so a request this route claims is never redirected to a canonical
+  // form. It only claims one where the build emitted an image config; without
+  // one, /_next/image is an unmatched path like any other and normalization
+  // applies to it (see imageResponse).
   const image = imageResponse(request, deps);
   if (image) return image;
 
@@ -523,10 +561,7 @@ async function serveRequest(
   // own redirect rules emit — which are now inert, because everything past here
   // is already canonical.
   if (canonical !== url.pathname) {
-    return new Response(null, {
-      status: 308,
-      headers: { location: canonical + url.search },
-    });
+    return trailingSlashRedirect(canonical + url.search, url, request, deps);
   }
 
   const body = await bufferBody(request);
@@ -539,14 +574,15 @@ async function serveRequest(
   if (rerouted) url.pathname = routed;
   // The single rebuild of the served request: routing, dispatch, the asset key,
   // the colo cache key and the origin forward all read the routing form off it
-  // and none of them normalize again. Drops cf properties, as the body rebuild
-  // it folds into already did.
+  // and none of them normalize again.
   if (body || rerouted) {
     request = new Request(url, {
       method: request.method,
       headers: request.headers,
       body,
       redirect: "manual",
+      cf: request.cf,
+      signal: request.signal,
     });
   }
 
@@ -612,7 +648,7 @@ async function serveRequest(
         if (rewrite && rewrite.origin === mwUrl.origin) {
           rewrite.pathname = routingPathname(rewrite.pathname);
         }
-        outcome = { response, result: middlewareResult, headers: ctx.headers };
+        outcome = { response, headers: ctx.headers };
         return middlewareResult;
       } catch (error) {
         failure = error;
@@ -648,12 +684,7 @@ export async function dispatchResult(
   // Applied here, after every cache tier: merging next.config `headers()` and
   // the middleware's response headers before serveCached memoizes would bake
   // one visitor's Set-Cookie into an entry every visitor is served.
-  result.resolvedHeaders?.forEach((value, name) => {
-    if (name.toLowerCase() !== "set-cookie") tagged.headers.set(name, value);
-  });
-  for (const cookie of result.resolvedHeaders?.getSetCookie() ?? []) {
-    tagged.headers.append("set-cookie", cookie);
-  }
+  applyResolvedHeaders(tagged.headers, result.resolvedHeaders);
   stripMiddlewareHeaders(tagged.headers);
   // x-matched-path mirrors Next.js: the matched route template with dynamic
   // segments left un-substituted (e.g. /posts/[id]). Set only when routing
@@ -662,6 +693,18 @@ export async function dispatchResult(
     tagged.headers.set("x-matched-path", result.resolvedPathname);
   }
   return tagged;
+}
+
+// Set-Cookie is the one header a Headers clone flattens, so it is carried over
+// as the list it is.
+function applyResolvedHeaders(target: Headers, resolved: Headers | undefined): void {
+  if (!resolved) return;
+  resolved.forEach((value, name) => {
+    if (name.toLowerCase() !== "set-cookie") target.set(name, value);
+  });
+  for (const cookie of resolved.getSetCookie()) {
+    target.append("set-cookie", cookie);
+  }
 }
 
 // Next stamps this on a Server Action response that invalidated a tag, a cookie

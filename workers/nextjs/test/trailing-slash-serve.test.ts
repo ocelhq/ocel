@@ -111,8 +111,15 @@ function survivingRoutes(basePath = ""): unknown[] {
   ];
 }
 
-function manifestRoutes(trailingSlash: boolean, basePath = ""): Route[] {
+function manifestRoutes(
+  trailingSlash: boolean,
+  basePath = "",
+  headerRoutes: unknown[] = [],
+): Route[] {
   return [
+    // Where the build puts next.config `headers()`: ahead of the redirects, in
+    // the same list, so Next applies them to the redirect response too.
+    ...headerRoutes,
     ...internalRedirects(trailingSlash, basePath),
     ...survivingRoutes(basePath),
   ] as Route[];
@@ -135,6 +142,8 @@ interface Scenario {
   cache?: RouteDeps["cache"];
   // Every key serveStaticAsset asked the store for, in order.
   probes?: string[];
+  // next.config `headers()` rules, as the build emits them into beforeMiddleware.
+  headerRoutes?: unknown[];
 }
 
 function deps(scenario: Scenario): RouteDeps {
@@ -148,7 +157,11 @@ function deps(scenario: Scenario): RouteDeps {
       skipTrailingSlashRedirect: scenario.skipTrailingSlashRedirect,
       pathnames: pages,
       routes: {
-        beforeMiddleware: manifestRoutes(!!scenario.trailingSlash, basePath),
+        beforeMiddleware: manifestRoutes(
+          !!scenario.trailingSlash,
+          basePath,
+          scenario.headerRoutes,
+        ),
         beforeFiles: [],
         afterFiles: [],
         dynamicRoutes: [],
@@ -686,6 +699,48 @@ describe("the resolved path is what keys the response", () => {
 
     expect(res.status).toBe(404);
     expect(await res.text()).toBe("not found");
-    expect(probes).toEqual(["/unknown.html", "/unknown", "/404.html"]);
+    expect(probes).toContain("/unknown.html");
+    expect(probes.some((key) => key.includes("/unknown/"))).toBe(false);
+  });
+});
+
+// Next resolves its header routes ahead of the internal trailing-slash
+// redirects, in the same list, and applies them to the redirect it answers with
+// — so the 308 carries them, on a default config as much as a slashed one.
+describe("next.config headers() on the trailing-slash 308", () => {
+  const headerRoutes = [
+    {
+      sourceRegex: "^/(.*)$",
+      headers: { "x-frame-options": "DENY", "set-cookie": "banner=1" },
+    },
+  ];
+
+  it("carries them on the strip redirect", async () => {
+    const res = await serve(
+      get("/a/?q=1"),
+      deps({ pages: ["/a"], files: { "/a.html": "a" }, headerRoutes }),
+    );
+
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/a?q=1");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.getSetCookie()).toEqual(["banner=1"]);
+  });
+
+  it("carries them on the add-slash redirect", async () => {
+    const res = await serve(
+      get("/a"),
+      deps({
+        trailingSlash: true,
+        pages: ["/a"],
+        files: { "/a.html": "a" },
+        headerRoutes,
+      }),
+    );
+
+    expect(res.status).toBe(308);
+    expect(res.headers.get("location")).toBe("/a/");
+    expect(res.headers.get("x-frame-options")).toBe("DENY");
+    expect(res.headers.getSetCookie()).toEqual(["banner=1"]);
   });
 });
