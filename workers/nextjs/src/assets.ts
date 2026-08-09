@@ -148,15 +148,21 @@ function hasExtension(pathname: string): boolean {
 // A request that matches nothing — no route, no asset — is answered with the
 // app's own rendered 404 page, which the build emits as static/404.html (App
 // Router not-found.js and Pages Router 404.js alike) and the deploy uploads
-// beside every other asset. Only a build that emitted none falls back to a
-// bare body.
-async function notFound(deps: AssetStoreDeps): Promise<Response> {
-  const page = await deps.store?.get(`${deps.assetPrefix}/404.html`);
-  if (!page?.body) return new Response("Not Found", { status: 404 });
-  return new Response(page.body, {
-    status: 404,
-    headers: { "content-type": "text/html; charset=utf-8" },
-  });
+// beside every other asset. A pages-router i18n build emits that document once
+// per locale and never a bare one, so the locale the request resolved to is
+// tried first. Only a build that emitted neither falls back to a bare body.
+async function notFound(deps: AssetStoreDeps, locale?: string): Promise<Response> {
+  const names = locale ? [`/${locale}/404.html`, "/404.html"] : ["/404.html"];
+  for (const name of names) {
+    const page = await deps.store?.get(`${deps.assetPrefix}${name}`);
+    if (page?.body) {
+      return new Response(page.body, {
+        status: 404,
+        headers: { "content-type": "text/html; charset=utf-8" },
+      });
+    }
+  }
+  return new Response("Not Found", { status: 404 });
 }
 
 // serveStaticAsset answers a static-asset request from the R2 cache store,
@@ -168,8 +174,9 @@ export async function serveStaticAsset(
   request: Request,
   url: URL,
   deps: AssetStoreDeps,
+  locale?: string,
 ): Promise<Response> {
-  if (!deps.store) return notFound(deps);
+  if (!deps.store) return notFound(deps, locale);
 
   const cached = await deps.cache.match(request);
   if (cached) return cached;
@@ -184,7 +191,7 @@ export async function serveStaticAsset(
       break;
     }
   }
-  if (!hit) return notFound(deps);
+  if (!hit) return notFound(deps, locale);
 
   const { object } = hit;
   const cacheControl = cacheControlFor(hit.pathname);
