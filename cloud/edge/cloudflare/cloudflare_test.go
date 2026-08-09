@@ -87,6 +87,30 @@ func TestBuildScriptMultipartEnablesObservability(t *testing.T) {
 	}
 }
 
+// A worker uploaded with observability off carries the disable explicitly, so a
+// script that was deployed with it on goes quiet on the next upload rather than
+// keeping the settings it already has.
+func TestBuildScriptMultipartDisablesObservability(t *testing.T) {
+	t.Setenv(envObservability, "off")
+	worker := edge.Worker{
+		Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},
+	}
+
+	meta := metadataFromMultipart(t, worker, "")
+	obs, ok := meta["observability"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata has no observability object: %v", meta["observability"])
+	}
+	if obs["enabled"] != false {
+		t.Errorf("observability.enabled = %v, want false", obs["enabled"])
+	}
+	for _, key := range []string{"logs", "traces", "head_sampling_rate"} {
+		if _, present := obs[key]; present {
+			t.Errorf("observability.%s is set on a disabled worker: %v", key, obs[key])
+		}
+	}
+}
+
 func TestScriptBindings_EmitsSecretTextAndPlainText(t *testing.T) {
 	worker := edge.Worker{
 		Main:    edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")},

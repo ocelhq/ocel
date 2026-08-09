@@ -57,15 +57,30 @@ const (
 	routeRecordComment = "managed by ocel — worker route placeholder"
 )
 
+// envObservability turns Workers observability off for every script this edge
+// uploads when it is set to "off". Cloudflare bills logs and traces per event,
+// so an account that exists only to run test suites would spend a real quota on
+// output nobody reads.
+const envObservability = "OCEL_EDGE_OBSERVABILITY"
+
 // observability is the Workers observability settings every deployed worker
 // ships with: logs (with per-invocation summaries) and OTel traces, both at 100%
 // head sampling. It is uploaded as a field of the script metadata, the same way
 // wrangler applies it, so no separate settings call is needed.
-var observability = map[string]any{
-	"enabled":            true,
-	"head_sampling_rate": 1,
-	"logs":               map[string]any{"enabled": true, "invocation_logs": true},
-	"traces":             map[string]any{"enabled": true},
+//
+// Turning it off uploads an explicit disable rather than omitting the field: a
+// script already deployed with observability on keeps its settings until
+// something replaces them, so silence has to be stated to converge.
+func observability() map[string]any {
+	if strings.EqualFold(os.Getenv(envObservability), "off") {
+		return map[string]any{"enabled": false}
+	}
+	return map[string]any{
+		"enabled":            true,
+		"head_sampling_rate": 1,
+		"logs":               map[string]any{"enabled": true, "invocation_logs": true},
+		"traces":             map[string]any{"enabled": true},
+	}
 }
 
 // provider is the cloudflare-go-backed edge.Provider. It performs the real
@@ -496,7 +511,7 @@ func buildScriptMultipart(worker edge.Worker, assetsJWT string) ([]byte, string,
 		"main_module":         worker.Main.Name,
 		"compatibility_date":  compatDate,
 		"compatibility_flags": compatFlags,
-		"observability":       observability,
+		"observability":       observability(),
 		"bindings":            scriptBindings(worker, includeAssets),
 	}
 	if includeAssets {

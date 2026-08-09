@@ -54,6 +54,21 @@ func testStoreWorker() edge.Worker {
 	return edge.Worker{Main: edge.WorkerModule{Name: "index.js", ContentType: "application/javascript+module", Content: []byte("export default {}")}}
 }
 
+// The account-level workers sit on every request and deploy path, so they honour
+// the observability switch the app workers do.
+func TestBuildDurableObjectScriptMultipartDisablesObservability(t *testing.T) {
+	t.Setenv(envObservability, "off")
+
+	meta := doMetadataFromMultipart(t, testStoreWorker(), deploymentsStoreWorker, nil)
+	obs, ok := meta["observability"].(map[string]any)
+	if !ok {
+		t.Fatalf("metadata has no observability object: %v", meta["observability"])
+	}
+	if obs["enabled"] != false {
+		t.Errorf("observability.enabled = %v, want false", obs["enabled"])
+	}
+}
+
 func TestStoreScriptNameFor(t *testing.T) {
 	prod, err := storeScriptNameFor(edge.ClassProduction)
 	if err != nil {
