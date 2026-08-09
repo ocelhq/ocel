@@ -5,6 +5,7 @@ import {
   middlewareMatchPathname,
   middlewarePathname,
   routingPathname,
+  withoutBasePath,
 } from "./trailing-slash";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeInvoker } from "./edge";
 import {
@@ -1194,12 +1195,9 @@ function dataPathname(pathname: string, url: URL, manifest: Manifest): string {
   }
   if (pathname.startsWith(`${prefix}/`)) return pathname;
   // Only a real path segment boundary counts as the basePath: /docsy is a
-  // different route from /docs, not /docs plus "y".
-  const underBase = pathname === base || pathname.startsWith(`${base}/`);
-  const route = (underBase ? pathname.slice(base.length) : pathname).replace(
-    /\/$/,
-    "",
-  );
+  // different route from /docs, not /docs plus "y". A pathname outside the
+  // basePath keeps every character it has.
+  const route = (withoutBasePath(pathname, base) ?? pathname).replace(/\/$/, "");
   // Next's normalizeDataPath maps /index back to /, so /index is the inverse of
   // a root data request — not the /.json denormalizing the empty route gives.
   return `${prefix}${route || "/index"}.json`;

@@ -26,7 +26,10 @@ export interface TrailingSlashConfig {
 // and re-adds basePath to the destination — so a path that is not under basePath
 // cannot match them at all, and undefined is what says so. The boundary is a
 // segment, not a prefix: /docsy is not under /docs.
-function withoutBasePath(pathname: string, basePath: string): string | undefined {
+export function withoutBasePath(
+  pathname: string,
+  basePath: string,
+): string | undefined {
   if (!basePath) return pathname;
   if (pathname === basePath) return "";
   if (pathname.startsWith(`${basePath}/`)) return pathname.slice(basePath.length);
