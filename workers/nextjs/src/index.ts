@@ -4,7 +4,11 @@ import {
   type MiddlewareResult,
 } from "@next/routing";
 import { serveStaticAsset, type AssetStoreDeps } from "./assets";
-import { canonicalPathname, routingPathname } from "./trailing-slash";
+import {
+  canonicalPathname,
+  middlewarePathname,
+  routingPathname,
+} from "./trailing-slash";
 import { createEdgeInvoker, type EdgeCacheStub, type EdgeInvoker } from "./edge";
 import {
   CacheDeps,
@@ -526,6 +530,10 @@ async function serveRequest(
   }
 
   const body = await bufferBody(request);
+  // Held for the middleware URL below: past this point url.pathname is the
+  // routing form, and where the 308 is suppressed the requested form cannot be
+  // derived back out of it.
+  const requested = url.pathname;
   const routed = routingPathname(url.pathname);
   const rerouted = routed !== url.pathname;
   if (rerouted) url.pathname = routed;
@@ -562,7 +570,17 @@ async function serveRequest(
       const middleware = deps.manifest.middleware;
       if (!middleware) return {};
       try {
-        if (!middlewareMatches(middleware.matchers, ctx.url, ctx.headers)) {
+        // Middleware runs ahead of the filesystem lookup, so the URL it is
+        // handed is not the routing one ctx carries: it is the canonical form
+        // the client is on, and for a data request the page that request is
+        // for. A copy — resolveRoutes goes on routing with ctx.url.
+        const mwUrl = new URL(ctx.url);
+        mwUrl.pathname = middlewarePathname(
+          requested,
+          deps.manifest,
+          deps.manifest.buildId,
+        );
+        if (!middlewareMatches(middleware.matchers, mwUrl, ctx.headers)) {
           return {};
         }
         if (!deps.edge) {
@@ -570,7 +588,7 @@ async function serveRequest(
         }
         const response = await deps.edge(
           middleware.entryKey,
-          new Request(ctx.url, {
+          new Request(mwUrl, {
             method: request.method,
             headers: ctx.headers,
             body,
@@ -583,8 +601,17 @@ async function serveRequest(
         const middlewareResult = responseToMiddlewareResult(
           response,
           ctx.headers,
-          ctx.url,
+          mwUrl,
         );
+        // A rewrite goes back into routing, so it needs the routing form: a
+        // middleware built on NextURL emits its destination canonically
+        // (/b -> /b/ under trailingSlash), which matches no build pathname.
+        // Next absorbs the same slash in its filesystem lookup. The redirect is
+        // client-visible and stays exactly as authored.
+        const rewrite = middlewareResult.rewrite;
+        if (rewrite && rewrite.origin === mwUrl.origin) {
+          rewrite.pathname = routingPathname(rewrite.pathname);
+        }
         outcome = { response, result: middlewareResult, headers: ctx.headers };
         return middlewareResult;
       } catch (error) {

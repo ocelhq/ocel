@@ -111,6 +111,12 @@ function dataPagePathname(
 // The URL middleware is handed, which is not the routing URL: middleware runs
 // ahead of the filesystem lookup, so it sees the canonical form, and it sees a
 // data request as the page that request is for.
+//
+// Takes the pathname as requested, which is already canonical — anything else
+// was redirected before middleware could run — and is the only form left when
+// skipTrailingSlashRedirect or skipMiddlewareUrlNormalize makes the canonical
+// form unrecoverable. Idempotent on a canonical input, so a routing-form
+// pathname is also a valid argument wherever the two coincide.
 export function middlewarePathname(
   pathname: string,
   config: TrailingSlashConfig,
