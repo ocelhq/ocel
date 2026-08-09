@@ -13,6 +13,8 @@ function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
       pathnames: [],
       routes: {},
       dispatch: {},
+      // Carried so a Manifest field dropped on the way in is caught here.
+      i18n: { locales: ["en", "fr"], defaultLocale: "en" },
     },
     functionUrls: { "/": "https://fn.example.com" },
     assetPrefix: "build-1",
