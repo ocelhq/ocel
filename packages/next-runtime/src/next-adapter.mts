@@ -554,10 +554,27 @@ const ENTRIES = ${stableStringify(entries)}
 const ASSETS = ${stableStringify(Object.fromEntries(assetIdByName))}
 
 const ocelFetch = globalThis.fetch
+
+const ocelAssetId = (url) => {
+  if (typeof url !== "string" || !url.startsWith("blob:")) return undefined
+  const name = url.slice(5)
+  if (Object.hasOwn(ASSETS, name)) return ASSETS[name]
+  // A chunk fetches \`new URL(<blob string>)\`, and URL percent-encodes non-ASCII
+  // in an opaque path — so the name can arrive encoded. One that is not valid
+  // encoding at all was never one of ours.
+  let decoded
+  try {
+    decoded = decodeURIComponent(name)
+  } catch {
+    return undefined
+  }
+  return Object.hasOwn(ASSETS, decoded) ? ASSETS[decoded] : undefined
+}
+
 globalThis.fetch = (input, init) => {
   const url =
     typeof input === "string" ? input : input instanceof URL ? input.href : input?.url
-  const id = typeof url === "string" && url.startsWith("blob:") ? ASSETS[url.slice(5)] : undefined
+  const id = ocelAssetId(url)
   if (id === undefined) return ocelFetch(input, init)
   return import("./" + id).then((m) => new Response(m.default))
 }
@@ -686,10 +703,10 @@ async function edgeAssetNames(distDir: string): Promise<Set<string> | null> {
 // emitEdgeBundle writes the single JSON file the main worker turns into a
 // Cloudflare dynamic worker: every edge chunk under an opaque module id, the
 // wasm and traced assets those chunks need, the env they read, and the table
-// mapping each entry
-// key to what must be evaluated before its handler can be called. Ids are
-// content-deduped and assigned in sorted-key order so an unchanged build yields
-// an identical file — the deployment's worker id is a hash of these bytes.
+// mapping each entry key to what must be evaluated before its handler can be
+// called. Ids are content-deduped and assigned in sorted-key order so an
+// unchanged build yields an identical file — the deployment's worker id is a
+// hash of these bytes.
 async function emitEdgeBundle(
   outputRoot: string,
   distDir: string,
