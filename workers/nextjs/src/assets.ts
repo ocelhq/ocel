@@ -40,7 +40,13 @@ export interface AssetStoreDeps {
   waitUntil: (promise: Promise<unknown>) => void;
 }
 
-const CONTENT_TYPES: Record<string, string> = {
+// A Map, not an object literal: these are looked up by a name taken off the
+// request, and an object literal would answer `constructor` with a function.
+function table(entries: Record<string, string>): Map<string, string> {
+  return new Map(Object.entries(entries));
+}
+
+const CONTENT_TYPES = table({
   ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
@@ -59,21 +65,27 @@ const CONTENT_TYPES: Record<string, string> = {
   ".woff2": "font/woff2",
   ".ttf": "font/ttf",
   ".eot": "application/vnd.ms-fontobject",
-  // Bare, no charset: what Next.js serves a robots.txt metadata route as.
-  ".txt": "text/plain",
+  ".txt": "text/plain; charset=utf-8",
   ".xml": "application/xml",
   ".webmanifest": "application/manifest+json",
   ".wasm": "application/wasm",
-};
+});
 
-// Next keys one of its metadata routes off the file NAME rather than the
-// extension (getContentType in packages/next/src/build/webpack/loaders/
-// next-metadata-route-loader.ts): app/manifest.json is a web manifest, not
-// JSON. Every other name it special-cases — favicon, sitemap, robots — agrees
-// with what its own extension already implies above.
-const METADATA_CONTENT_TYPES: Record<string, string> = {
+// Next types a file-based metadata route by its NAME, not its extension
+// (getContentType in packages/next/src/build/webpack/loaders/
+// next-metadata-route-loader.ts), and the two answers differ: app/manifest.json
+// is a web manifest rather than JSON, and app/robots.txt is bare text/plain
+// where a public/ .txt served through send() carries a charset.
+//
+// Which of Next's two rules applies turns on the directory a file came from,
+// and a request carries only its name — so a public/ file that happens to be
+// named like a metadata route is typed as the metadata route. That is the side
+// worth being right on: the metadata route is the one Next's own suite asserts,
+// and a public/robots.txt is served by the same bytes either way.
+const METADATA_CONTENT_TYPES = table({
+  "robots.txt": "text/plain",
   "manifest.json": "application/manifest+json",
-};
+});
 
 // contentTypeFor infers a static file's content-type from the name the build
 // emitted it under, and is the only thing that decides one: the R2 store holds
@@ -81,11 +93,11 @@ const METADATA_CONTENT_TYPES: Record<string, string> = {
 // table cannot be contradicted by a second one.
 export function contentTypeFor(pathname: string): string {
   const name = pathname.slice(pathname.lastIndexOf("/") + 1).toLowerCase();
-  const metadata = METADATA_CONTENT_TYPES[name];
+  const metadata = METADATA_CONTENT_TYPES.get(name);
   if (metadata) return metadata;
   const dot = name.lastIndexOf(".");
   if (dot === -1) return "application/octet-stream";
-  return CONTENT_TYPES[name.slice(dot)] ?? "application/octet-stream";
+  return CONTENT_TYPES.get(name.slice(dot)) ?? "application/octet-stream";
 }
 
 const NEXT_STATIC_PREFIX = "/_next/static/";
@@ -175,16 +187,37 @@ export async function serveStaticAsset(
   if (!hit) return notFound(deps);
 
   const { object } = hit;
+  const cacheControl = cacheControlFor(hit.pathname);
   const headers = new Headers({
     // Inferred from the name the object is STORED under, never the request's:
     // the request names a route, and only the stored name says what the bytes
     // are.
     "content-type": contentTypeFor(hit.pathname),
-    "cache-control": cacheControlFor(hit.pathname),
+    "cache-control": cacheControl,
   });
   if (object.httpEtag) headers.set("etag", object.httpEtag);
 
+  if (object.httpEtag && matchesEtag(request, object.httpEtag)) {
+    await object.body.cancel();
+    return new Response(null, { status: 304, headers });
+  }
+
   const response = new Response(object.body, { status: 200, headers });
-  deps.waitUntil(deps.cache.put(request, response.clone()));
+  // Only an immutable asset is worth writing: anything else is stale the moment
+  // it lands, so the colo would never answer from it.
+  if (cacheControl === IMMUTABLE_CACHE_CONTROL) {
+    deps.waitUntil(deps.cache.put(request, response.clone()));
+  }
   return response;
+}
+
+// Whether the client already holds this exact object, per RFC 9110's
+// If-None-Match: a bare "*", or any member of the list matching the object's
+// etag once both sides are compared weakly.
+function matchesEtag(request: Request, etag: string): boolean {
+  const header = request.headers.get("if-none-match");
+  if (!header) return false;
+  if (header.trim() === "*") return true;
+  const strong = (tag: string) => tag.trim().replace(/^W\//, "");
+  return header.split(",").some((tag) => strong(tag) === strong(etag));
 }

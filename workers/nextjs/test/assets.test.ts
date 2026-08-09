@@ -74,15 +74,26 @@ describe("contentTypeFor", () => {
   it("serves the file-based metadata routes as Next.js does", () => {
     expect(contentTypeFor("/favicon.ico")).toBe("image/x-icon");
     expect(contentTypeFor("/sitemap.xml")).toBe("application/xml");
+    expect(contentTypeFor("/products/sitemap.xml")).toBe("application/xml");
     expect(contentTypeFor("/robots.txt")).toBe("text/plain");
     expect(contentTypeFor("/manifest.webmanifest")).toBe("application/manifest+json");
     expect(contentTypeFor("/icons/static/apple-icon.png")).toBe("image/png");
   });
 
-  // Next keys this one off the file name, not the extension.
-  it("serves app/manifest.json as a web manifest rather than as JSON", () => {
+  // Next types these by file name, and its answer differs from what the same
+  // extension means for a file served out of public/.
+  it("types the metadata routes Next keys off a file name by that name", () => {
     expect(contentTypeFor("/manifest.json")).toBe("application/manifest+json");
     expect(contentTypeFor("/data.json")).toBe("application/json; charset=utf-8");
+    expect(contentTypeFor("/robots.txt")).toBe("text/plain");
+    expect(contentTypeFor("/notes.txt")).toBe("text/plain; charset=utf-8");
+  });
+
+  // A name taken off the request must never reach Object.prototype.
+  it("answers a file named after an object prototype member as unknown", () => {
+    expect(contentTypeFor("/constructor")).toBe("application/octet-stream");
+    expect(contentTypeFor("/__proto__")).toBe("application/octet-stream");
+    expect(contentTypeFor("/x.toString")).toBe("application/octet-stream");
   });
 
   // A dot in a directory name is not an extension.
@@ -328,6 +339,75 @@ describe("serveStaticAsset", () => {
 
     expect(res.status).toBe(200);
     expect(keys).toEqual(["assets/p/app/b1/some.html"]);
+  });
+
+  // must-revalidate without this means the whole body travels again on every
+  // navigation — the bandwidth cost the policy is supposed to avoid.
+  it("answers 304 when the client already holds the object's etag", async () => {
+    const url = new URL("https://serve-304-1.example/_next/static/service-worker/sw.js");
+    const deps = countingDeps(
+      bucketServing({
+        "assets/p/app/b1/_next/static/service-worker/sw.js": { body: "sw", etag: '"v1"' },
+      }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(
+      new Request(url, { headers: { "if-none-match": '"v1"' } }),
+      url,
+      deps,
+    );
+
+    expect(res.status).toBe(304);
+    expect(res.body).toBe(null);
+    expect(res.headers.get("etag")).toBe('"v1"');
+    expect(res.headers.get("cache-control")).toBe("public, max-age=0, must-revalidate");
+  });
+
+  it("answers 304 for a weak or listed etag, and for *", async () => {
+    const files = { "assets/p/app/b1/robots.txt": { body: "ok", etag: '"v1"' } };
+    const cases = ['W/"v1"', '"v0", "v1"', "*"];
+
+    for (const [i, header] of cases.entries()) {
+      const url = new URL(`https://serve-304-2-${i}.example/robots.txt`);
+      const res = await serveStaticAsset(
+        new Request(url, { headers: { "if-none-match": header } }),
+        url,
+        countingDeps(bucketServing(files), "assets/p/app/b1"),
+      );
+      expect(res.status, header).toBe(304);
+    }
+  });
+
+  it("serves the body when the client holds a different etag", async () => {
+    const url = new URL("https://serve-304-3.example/robots.txt");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/robots.txt": { body: "ok", etag: '"v2"' } }),
+      "assets/p/app/b1",
+    );
+
+    const res = await serveStaticAsset(
+      new Request(url, { headers: { "if-none-match": '"v1"' } }),
+      url,
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+    expect(await res.text()).toBe("ok");
+  });
+
+  // A response the colo can never answer from is a write for nothing.
+  it("writes only the immutable assets to the colo cache", async () => {
+    const url = new URL("https://serve-put-1.example/favicon.ico");
+    const deps = countingDeps(
+      bucketServing({ "assets/p/app/b1/favicon.ico": { body: "icon" } }),
+      "assets/p/app/b1",
+    );
+
+    expect((await serveStaticAsset(new Request(url), url, deps)).status).toBe(200);
+    await deps.flush();
+
+    expect(deps.puts).toBe(0);
   });
 
   // Only an immutable asset earns a colo hit; a must-revalidate one is stale
