@@ -228,7 +228,7 @@ on the service-binding fetch. One second is the regime the design is sized for: 
 as `C·E` requests spread over exactly `J = 1 s`, so at 423–438 rps against a ≥500 rps object the
 queue formed by one stale event drains inside that second. Waiting longer buys an answer that is
 worth less than the render it is delaying — the same argument the origin's entry read uses for
-3 s against the write's 10 s (`packages/lambda-entrypoints/src/next/isr-writer.mts:19-25`).
+3 s against the write's 10 s (`platform/aws/functions/entrypoints/src/next/isr-writer.mts:19-25`).
 
 `lease-settle` gets the same treatment and its failure is swallowed entirely: an unsettled lease
 lapses at `renderBudgetMs`.

@@ -29,7 +29,7 @@ is not misled; this table is the index.
 | D | Trigger-secret hardening: SSE-KMS on the queue **and** the DLQ; an explicit no-log-the-raw-record rule in the handler; and **the host is not validated, it is resolved** — see the note below, which supersedes §5.2's regex and §4.2's `url` field. | §3.1, §4.2, §5.2, §5.3 |
 | E | `.26` (suppression) lands **BELOW** `.25` (enqueue) in the stack. §10 asserts suppression must precede enqueue being live and then orders them the other way. Edges: `.24 → .23`, `.26 → .24`, `.25 → .26`, `.27 → .25`. | §10 |
 | F | `OCEL_REVALIDATE_QUEUE_URL` is rendered **only when the revalidator function is rendered** — i.e. only when the artifact pin is present — not merely when the queue exists. Otherwise a deploy landing between `.25` and `.27` enqueues into a consumer-less queue, the thunk returns "landed", the sentinel re-arms, and the route silently stops revalidating until hard expiry. | §3.2, §5.3 |
-| G | `VisibilityTimeout` is **300**, not 60: a batch of 10 at 10s per record is up to 120s of work (10 records × a 10s trigger budget plus, in the worst case of ten distinct deploys, a 2s record read; `packages/revalidator/src/limits.mts` sizes it and `test/limits.test.mts` asserts it), and at 60s the consumer DLQs records it already processed successfully. Also: `MaximumConcurrency` is a **`ScalingConfig` sub-property** in CloudFormation, not a top-level event-source-mapping property, and the document gives the Lambda **no function timeout at all** — it needs an explicit one. | §3.1, §5.3 |
+| G | `VisibilityTimeout` is **300**, not 60: a batch of 10 at 10s per record is up to 120s of work (10 records × a 10s trigger budget plus, in the worst case of ten distinct deploys, a 2s record read; `platform/aws/functions/revalidator/src/limits.mts` sizes it and `test/limits.test.mts` asserts it), and at 60s the consumer DLQs records it already processed successfully. Also: `MaximumConcurrency` is a **`ScalingConfig` sub-property** in CloudFormation, not a top-level event-source-mapping property, and the document gives the Lambda **no function timeout at all** — it needs an explicit one. | §3.1, §5.3 |
 
 ### Amendment D in full: the message names no host
 
@@ -124,7 +124,7 @@ What this obliges, beyond `.23`:
 ## 1. Verified facts this design rests on (do not re-derive)
 
 Full citations in §12. The installed Next is exactly `next@16.2.10` (single copy in the
-pnpm store; `packages/lambda-entrypoints` has no `next` dependency).
+pnpm store; `platform/aws/functions/entrypoints` has no `next` dependency).
 
 1. **`x-prerender-revalidate: <previewModeId>` forces a blocking on-demand render.** The
    response cache's serve-stale early-resolve is guarded on `!context.isOnDemandRevalidate`
@@ -210,7 +210,7 @@ pnpm store; `packages/lambda-entrypoints` has no `next` dependency).
   `originBlocking`. L0/L1/jitter remain as send-rate bounds, no longer as the render
   bound.
 - **Decision 17 — the consumer.** A new account-level `revalidator` Lambda (package
-  `packages/revalidator`) consumes the queue and sends a SigV4-signed HEAD trigger to the
+  `platform/aws/functions/revalidator`) consumes the queue and sends a SigV4-signed HEAD trigger to the
   origin. It mirrors the tag-publisher packaging/pin/release pattern; separate artifact,
   IAM, alarms, DLQ.
 - **Decision 18 — self-revalidation suppression.** The edge adds `purpose: prefetch` to
@@ -297,7 +297,7 @@ from the queue URL — the existing signing client is `service: "lambda"`
 ### 4.2 The message
 
 AMENDED by amendment D: the message names no host, and gains `routeId`. This is the
-shape `.25` builds and `packages/revalidator` parses (`src/message.mts`).
+shape `.25` builds and `platform/aws/functions/revalidator` parses (`src/message.mts`).
 
 ```ts
 interface RevalidationMessage {
@@ -359,11 +359,11 @@ Consequences, all deliberate:
 
 ---
 
-## 5. Component: the consumer (`packages/revalidator` + `cloud/aws`)
+## 5. Component: the consumer (`platform/aws/functions/revalidator` + `cloud/aws`)
 
 ### 5.1 Package
 
-New `packages/revalidator` (`@ocel/revalidator`), mirroring `packages/tag-publisher`
+New `platform/aws/functions/revalidator` (`@platform/aws-revalidator`), mirroring `platform/aws/functions/tag-publisher`
 byte-for-byte in build shape: single-file esbuild ESM bundle via the same
 `scripts/build-zip.mjs` pattern (fixed timestamps, sorted entries, reproducible
 `dist/revalidator.zip`), released as GitHub asset `revalidator-v<version>`, pinned by
@@ -415,7 +415,7 @@ either tightens it or records the acceptance); `s3:GetObject` on `${AssetBucket.
 (scoped to the record's own name — see §5.3a) and `OCEL_ASSET_BUCKET: !Ref AssetBucket`,
 for the origin resolution of amendment D; and
 **an explicit function `Timeout`** (amendment G — the document sets none; the package
-documents 150s in `packages/revalidator/README.md`, sized in `src/limits.mts` and
+documents 150s in `platform/aws/functions/revalidator/README.md`, sized in `src/limits.mts` and
 asserted there, and it must stay below the queue's 300s `VisibilityTimeout`).
 ESM on the queue: batch size 10, `ReportBatchItemFailures`, `MaximumConcurrency: 10`
 **nested under `ScalingConfig`** (amendment G — it is a `ScalingConfig` sub-property in
@@ -615,7 +615,7 @@ production line, watch the named test fail, restore). All `CacheDeps` built thro
   cache errors admit (inert cache ⇒ exactly today's per-isolate behavior); **[M]** an
   `.rsc` follower never receives an HTML leader's fill (variant keying).
 
-### packages/revalidator
+### platform/aws/functions/revalidator
 
 - Handler: **[M]** per-group stop-at-first-failure (batch with groups A,B where A's
   first record fails: A's failed + unprocessed records reported, B fully processed);
@@ -656,7 +656,7 @@ production line, watch the named test fail, restore). All `CacheDeps` built thro
 File as `.23`–`.28` with `bd dep add` edges as listed; each description must cite the
 decision (§2) it serves, per the epic-filing rule.
 
-1. **`.23` — packages/revalidator** (consumer + zip/release machinery + unpinned
+1. **`.23` — platform/aws/functions/revalidator** (consumer + zip/release machinery + unpinned
    `revalidatorversion.go`). No deps. Unit tests §9.
 2. **`.24` — cloud/aws queue + consumer resources + EdgeUser grant + worker env
    plumbing.** Depends on `.23` (artifact name/env contract). Renders inert until the pin
@@ -715,9 +715,9 @@ promotion `build/templates/app-page.js:654-656` (no user-facing block in this ve
 HEAD full-pipeline `server/send-payload.js:76-79`, `server/base-server.js:1310-1320`;
 error clamp `server/response-cache/index.js:290-307`.
 
-**Ocel** (at `63e35a1`): membrane waitUntil `packages/lambda-entrypoints/src/shared/
+**Ocel** (at `63e35a1`): membrane waitUntil `platform/aws/functions/entrypoints/src/shared/
 membrane.mts:80-93`, `cloud/aws/cmd/lambdanode/bootstrap/forward.go:48-61`; cache
-handler real lastModified `packages/lambda-entrypoints/src/next/cache-handler.mts:186-205`;
+handler real lastModified `platform/aws/functions/entrypoints/src/next/cache-handler.mts:186-205`;
 originBlocking + signing `workers/nextjs/src/index.ts:741-744`, `workers/nextjs/src/
 signing.ts:11,50-92`; forward/safeHeaders seam `workers/nextjs/src/index.ts:694-699` (the `render` thunk),
 `723-739`; admission machinery `workers/nextjs/src/cache.ts:471,489,525-533,

@@ -2,7 +2,7 @@ go 1.25.11
 
 use (
 	./cli
-	./cloud/aws
+	./platform/aws/provider
 	./cloud/edge
 	./cloud/edge/cloudflare
 	./pkg/channel

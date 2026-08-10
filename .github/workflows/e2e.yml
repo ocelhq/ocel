@@ -48,7 +48,7 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: |
             cli/go.sum
-            cloud/aws/go.sum
+            platform/aws/provider/go.sum
             cloud/edge/cloudflare/go.sum
             pkg/proto/go.sum
             sdk/go.sum

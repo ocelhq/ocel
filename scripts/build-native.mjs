@@ -21,7 +21,7 @@ const TARGETS = {
     binaries: [{ cmd: "./ocel", name: "ocel" }],
   },
   provider: {
-    goModuleDir: join(REPO_ROOT, "cloud", "aws"),
+    goModuleDir: join(REPO_ROOT, "platform", "aws", "provider"),
     pkgPrefix: "provider-aws",
     versionLdflagPkg: "main",
     binaries: [

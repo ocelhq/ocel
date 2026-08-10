@@ -28,7 +28,7 @@ jobs:
           go-version-file: cli/go.mod
           cache-dependency-path: |
             cli/go.sum
-            cloud/aws/go.sum
+            platform/aws/provider/go.sum
             cloud/edge/cloudflare/go.sum
             pkg/proto/go.sum
             sdk/go.sum
@@ -49,7 +49,7 @@ jobs:
           github.com/ocelhq/ocel/cli/...
           github.com/ocelhq/ocel/pkg/proto/...
           github.com/ocelhq/ocel/sdk/...
-          github.com/ocelhq/ocel/cloud/aws/...
+          github.com/ocelhq/ocel/platform/aws/provider/...
 
       - name: pnpm --filter ocel build (tsc)
         run: pnpm --filter ocel build

@@ -1,0 +1,23 @@
+{
+  "name": "@platform/aws-tag-publisher",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "zip": "node scripts/build-zip.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1083.0",
+    "@aws-sdk/client-ssm": "^3.1083.0",
+    "@framework/next-cache": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.160",
+    "@types/node": "^24",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
