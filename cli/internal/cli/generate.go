@@ -14,7 +14,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/deploycollector"
 	"github.com/ocelhq/ocel/cli/internal/envgate"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/platform"
+	"github.com/ocelhq/ocel/cli/node"
 )
 
 var collectDeclarations = deploycollector.Collect
@@ -46,7 +46,7 @@ func runGenerate(ctx context.Context, cwd string, stdout, stderr io.Writer) erro
 		return err
 	}
 
-	if err := platform.Ensure(cfg.Dir); err != nil {
+	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 

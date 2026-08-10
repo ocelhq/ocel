@@ -1,6 +1,6 @@
 packages:
   - console/*
-  - cli/platform
+  - cli/node
   - packages/*
   - packages/native-lib/*
   - tools/*

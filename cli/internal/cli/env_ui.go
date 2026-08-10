@@ -15,7 +15,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
 	"github.com/ocelhq/ocel/cli/internal/varsui"
-	"github.com/ocelhq/ocel/cli/platform"
+	"github.com/ocelhq/ocel/cli/node"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
@@ -89,7 +89,7 @@ func startVarsUI(
 	preview bool,
 	gate *envgate.Gate,
 ) (*varsui.Session, error) {
-	assets, err := platform.VarsUI()
+	assets, err := node.VarsUI()
 	if err != nil {
 		return nil, fmt.Errorf("read the bundled variables UI: %w", err)
 	}

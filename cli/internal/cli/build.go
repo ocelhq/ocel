@@ -12,7 +12,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/clientenv"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/platform"
+	"github.com/ocelhq/ocel/cli/node"
 )
 
 var buildCmd = &cobra.Command{
@@ -38,7 +38,7 @@ func runBuild(ctx context.Context, cwd string, stdout, stderr io.Writer) error {
 		return err
 	}
 
-	if err := platform.Ensure(cfg.Dir); err != nil {
+	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 

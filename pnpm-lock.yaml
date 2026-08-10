@@ -233,7 +233,7 @@ importers:
         specifier: workspace:*
         version: link:packages/ocel
 
-  cli/platform:
+  cli/node:
     dependencies:
       '@ocel/next-runtime':
         specifier: workspace:^

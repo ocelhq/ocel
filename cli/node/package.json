@@ -1,5 +1,5 @@
 {
-  "name": "@ocel/cli-platform",
+  "name": "@cli/node",
   "version": "0.0.0",
   "private": true,
   "type": "module",

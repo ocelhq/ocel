@@ -15,7 +15,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/platform"
+	"github.com/ocelhq/ocel/cli/node"
 )
 
 func swapExec(t *testing.T, fn func(ctx context.Context, scriptPath string, env []string, request []byte, stderr io.Writer) error) {
@@ -37,7 +37,7 @@ func lookup(env []string, name string) (string, bool) {
 
 func writeBuilder(t *testing.T, projectDir string) string {
 	t.Helper()
-	path := platform.BuilderPath(projectDir)
+	path := node.BuilderPath(projectDir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -134,8 +134,8 @@ func TestBuild_RunsBuilderAndDiscoversFunctions(t *testing.T) {
 	if gotScript != builderPath {
 		t.Errorf("script path = %q, want %q", gotScript, builderPath)
 	}
-	if got, _ := lookup(gotEnv, "NEXT_ADAPTER_PATH"); got != platform.AdapterPath(root) {
-		t.Errorf("adapter path = %q, want %q", got, platform.AdapterPath(root))
+	if got, _ := lookup(gotEnv, "NEXT_ADAPTER_PATH"); got != node.AdapterPath(root) {
+		t.Errorf("adapter path = %q, want %q", got, node.AdapterPath(root))
 	}
 }
 
@@ -150,7 +150,7 @@ func TestBuild_MissingBuilder(t *testing.T) {
 	if err == nil {
 		t.Fatal("Build succeeded with no materialized builder, want error")
 	}
-	if !strings.Contains(err.Error(), platform.BuilderPath(root)) {
+	if !strings.Contains(err.Error(), node.BuilderPath(root)) {
 		t.Errorf("error = %q, want it to name the missing builder path", err)
 	}
 }
@@ -484,13 +484,13 @@ func TestBuild_Integration(t *testing.T) {
 		t.Skip("integration test: spawns real node over the builder")
 	}
 
-	fixtureRoot := repoRelPath(t, "cli", "platform", "test", "fixtures", "express-app")
+	fixtureRoot := repoRelPath(t, "cli", "node", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
 	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
-	if err := platform.Ensure(fixtureRoot); err != nil {
-		t.Fatalf("platform.Ensure: %v", err)
+	if err := node.Ensure(fixtureRoot); err != nil {
+		t.Fatalf("node.Ensure: %v", err)
 	}
 
 	cfg := &projectconfig.Config{
@@ -528,13 +528,13 @@ func TestBuild_Integration_DetectsSingleApp(t *testing.T) {
 		t.Skip("integration test: spawns real node over the builder")
 	}
 
-	fixtureRoot := repoRelPath(t, "cli", "platform", "test", "fixtures", "express-app")
+	fixtureRoot := repoRelPath(t, "cli", "node", "test", "fixtures", "express-app")
 	if _, err := os.Stat(fixtureRoot); err != nil {
 		t.Skipf("fixture not available: %v", err)
 	}
 	t.Cleanup(func() { os.RemoveAll(filepath.Join(fixtureRoot, ".ocel")) })
-	if err := platform.Ensure(fixtureRoot); err != nil {
-		t.Fatalf("platform.Ensure: %v", err)
+	if err := node.Ensure(fixtureRoot); err != nil {
+		t.Fatalf("node.Ensure: %v", err)
 	}
 
 	var stderr bytes.Buffer

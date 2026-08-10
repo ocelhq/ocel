@@ -17,7 +17,7 @@ import (
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
-	"github.com/ocelhq/ocel/cli/platform"
+	"github.com/ocelhq/ocel/cli/node"
 )
 
 const scratchDirName = ".ocel"
@@ -118,7 +118,7 @@ func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]m
 		return fmt.Errorf("create %s: %w", relOutput, err)
 	}
 
-	builderPath := platform.BuilderPath(cfg.Dir)
+	builderPath := node.BuilderPath(cfg.Dir)
 	if _, err := os.Stat(builderPath); err != nil {
 		return fmt.Errorf("node builder not found at %s: %w", builderPath, err)
 	}
@@ -139,7 +139,7 @@ func Build(ctx context.Context, cfg *projectconfig.Config, envByApp map[string]m
 	if err != nil {
 		return fmt.Errorf("marshal build request: %w", err)
 	}
-	return builderExec(ctx, builderPath, builderEnv(platform.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr)
+	return builderExec(ctx, builderPath, builderEnv(node.AdapterPath(cfg.Dir), envByApp[rootAppEnv]), payload, stderr)
 }
 
 func CollectFunctions(projectDir string) ([]manifestbuilder.Function, error) {
