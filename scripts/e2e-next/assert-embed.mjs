@@ -134,7 +134,7 @@ const assetBucket =
   process.env.OCEL_ASSET_BUCKET || resolveBootstrapBucket("AssetBucket", "$OCEL_ASSET_BUCKET", fail);
 const artifactBucket =
   process.env.OCEL_ARTIFACT_BUCKET || resolveBootstrapBucket("ArtifactBucket", "$OCEL_ARTIFACT_BUCKET", fail);
-const functionName = resolveFunctionName(result.slug, app.name, fail);
+const functionName = resolveFunctionName(result.slug, app.name, result.environment, fail);
 
 // --- what the membrane would look for -------------------------------------
 

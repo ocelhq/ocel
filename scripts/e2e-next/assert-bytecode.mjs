@@ -125,7 +125,7 @@ const prefix = appAssetPrefix({
   app: app.name,
   buildId: app.buildId,
 });
-const functionName = resolveFunctionName(result.slug, app.name, fail);
+const functionName = resolveFunctionName(result.slug, app.name, result.environment, fail);
 const keyPrefix = bytecodeCacheKeyPrefix({ prefix, functionName });
 log(`expecting one object under s3://${bucket}/${keyPrefix}`);
 

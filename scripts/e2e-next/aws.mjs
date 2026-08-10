@@ -1,5 +1,5 @@
 // The `aws` CLI calls the assertion scripts share (assert-bytecode.mjs,
-// assert-embed.mjs).
+// assert-embed.mjs) and the one sweep-projects.mjs makes.
 //
 // Deliberately not in lib.mjs: that module is the suite's pure logic, unit
 // tested in lib.test.mjs. Nothing here can be, because every function shells out
@@ -20,7 +20,7 @@
 
 import { execFileSync } from "node:child_process";
 
-import { lambdaFunctionNames } from "./lib.mjs";
+import { envSegment, lambdaFunctionNames } from "./lib.mjs";
 
 /** How long to wait between attempts at a list that could not be made. */
 export const POLL_INTERVAL_MS = 3_000;
@@ -99,6 +99,27 @@ export function fetchFunctionLogs(functionName, startTime, filterPattern) {
   return response.events ?? [];
 }
 
+/**
+ * The names of every SSM parameter under a path. `describe-parameters` rather
+ * than `get-parameters-by-path`: the only thing any caller here wants is the
+ * names, and these parameters are SecureStrings holding a project's root-stack
+ * secret and owner token — reading their values to learn their names would be
+ * asking for something this suite has no business handling.
+ */
+export function listParameterNames(pathPrefix) {
+  const response = JSON.parse(
+    aws([
+      "ssm",
+      "describe-parameters",
+      "--parameter-filters",
+      `Key=Name,Option=BeginsWith,Values=${pathPrefix}`,
+      "--output",
+      "json",
+    ]),
+  );
+  return (response.Parameters ?? []).map((entry) => entry.Name);
+}
+
 export function getObject(bucket, key, maxBuffer = 128 * 1024 * 1024) {
   return execFileSync("aws", ["s3", "cp", `s3://${bucket}/${key}`, "-"], { maxBuffer });
 }
@@ -109,11 +130,13 @@ export function describeFunction(functionName) {
 
 // resolveFunctionName finds the one Lambda function an app deployed, the same
 // way logs.mjs finds its log groups: by the ocel tags every Ocel function
-// carries (cloud/aws/deploy/function.go). Both `ocel:project` and `ocel:app` are
-// filtered on, unlike logs.mjs's project-only filter, because the keys these
-// scripts compose are one function's — a project with more than one app would
-// otherwise leave which function ambiguous.
-export function resolveFunctionName(slug, app, fail) {
+// carries (cloud/aws/deploy/function.go). All three are filtered on, because
+// the keys these scripts compose are one deployment's: a whole CI run shares
+// one project, so `ocel:project` alone matches every fixture's function, and
+// every one of them declares the same app name. `ocel:env` — the asset key's
+// environment segment, "preview-<pointer>" — is what separates them.
+export function resolveFunctionName(slug, app, environment, fail) {
+  const env = envSegment(environment);
   const names = lambdaFunctionNames(
     JSON.parse(
       aws([
@@ -122,6 +145,7 @@ export function resolveFunctionName(slug, app, fail) {
         "--tag-filters",
         `Key=ocel:project,Values=${slug}`,
         `Key=ocel:app,Values=${app}`,
+        `Key=ocel:env,Values=${env}`,
         "--resource-type-filters",
         "lambda:function",
         "--output",
@@ -131,7 +155,7 @@ export function resolveFunctionName(slug, app, fail) {
   );
   if (names.length !== 1) {
     fail(
-      `expected exactly one lambda function tagged ocel:project=${slug} ocel:app=${app}, found ` +
+      `expected exactly one lambda function tagged ocel:project=${slug} ocel:app=${app} ocel:env=${env}, found ` +
         `${names.length}${names.length ? `: ${names.join(", ")}` : ""}`,
     );
   }

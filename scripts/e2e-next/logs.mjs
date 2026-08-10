@@ -16,7 +16,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { BUILD_LOG_FILE, DEPLOY_RESULT_FILE, STATE_FILE, lambdaLogGroups, markerLines } from "./lib.mjs";
+import { BUILD_LOG_FILE, DEPLOY_RESULT_FILE, STATE_FILE, envSegment, lambdaLogGroups, markerLines } from "./lib.mjs";
 
 // How far back CloudWatch is queried when the state file carries no start time.
 const DEFAULT_LOG_WINDOW_MS = 60 * 60 * 1000;
@@ -60,16 +60,25 @@ function replay(label, path) {
 
 // printLambdaLogs pulls this app's recent CloudWatch events. The functions are
 // Pulumi-autonamed, so they are found by the ocel tags every Ocel function
-// carries (cloud/aws/deploy/function.go). `ocel:project` is the one to filter
-// on: every temp app is declared under the constant APP_NAME and gets its own
-// project instead, so `ocel:app` would match every app deployed concurrently
-// into the account and mix their logs into this one's diagnostics.
+// carries (cloud/aws/deploy/function.go). `ocel:env` is the one that isolates
+// this app: a whole CI run shares one project, so `ocel:project` matches every
+// fixture running concurrently, and `ocel:app` matches nothing narrower still
+// (every temp app is declared under the constant APP_NAME). `ocel:env` is the
+// asset key's environment segment — "preview-<this app's pointer>".
+//
+// It comes off the deploy result rather than the state file: the pointer is
+// what the CLI resolved the ref to, not something these scripts derive. A
+// deploy that produced no result falls back to the project filter, which mixes
+// concurrent fixtures' logs together but is better than printing none.
 function printLambdaLogs() {
   console.log("=== lambda logs ===");
   if (!state.slug) {
     console.log("(no deploy state; cannot resolve this app's functions)");
     return;
   }
+
+  const env = result.environment ? envSegment(result.environment) : "";
+  const filters = [`Key=ocel:project,Values=${state.slug}`, ...(env ? [`Key=ocel:env,Values=${env}`] : [])];
 
   let groups;
   try {
@@ -79,7 +88,7 @@ function printLambdaLogs() {
           "resourcegroupstaggingapi",
           "get-resources",
           "--tag-filters",
-          `Key=ocel:project,Values=${state.slug}`,
+          ...filters,
           "--resource-type-filters",
           "lambda:function",
         ]),
@@ -91,7 +100,7 @@ function printLambdaLogs() {
   }
 
   if (groups.length === 0) {
-    console.log(`(no functions tagged ocel:project=${state.slug})`);
+    console.log(`(no functions tagged ${filters.join(" ")})`);
     return;
   }
 

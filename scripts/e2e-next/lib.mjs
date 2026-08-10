@@ -1,15 +1,19 @@
 // Pure helpers shared by the Next.js adapter-harness lifecycle scripts
-// (deploy.mjs, logs.mjs, cleanup.mjs, merge-baseline.mjs). The harness runs
-// them as separate processes, so everything they share travels through files in
-// the temp app directory rather than memory.
+// (deploy.mjs, logs.mjs, cleanup.mjs, merge-baseline.mjs) and by the two
+// project-level scripts the workflow drives (project-teardown.mjs,
+// sweep-projects.mjs). The harness runs them as separate processes, so
+// everything they share travels through files in the temp app directory rather
+// than memory.
 
-import { createHash } from "node:crypto";
 import { join, relative } from "node:path";
 
 /** A valid single DNS label, per RFC 1035 (mirrors cli/internal/previewid). */
 export const DNS_LABEL = /^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$/;
 
-/** The file deploy.mjs persists this app's identity to, read by logs/cleanup. */
+/**
+ * The file deploy.mjs persists this app's identity — the run's project slug and
+ * this app's own preview ref — to, read by logs/cleanup.
+ */
 export const STATE_FILE = ".ocel-e2e.json";
 
 /** The file every byte of the deploy's output is redirected to. */
@@ -18,58 +22,107 @@ export const BUILD_LOG_FILE = ".adapter-build.log";
 /** The CLI's machine-readable deploy result, relative to the app directory. */
 export const DEPLOY_RESULT_FILE = join(".ocel", "deploy-result.json");
 
-/** How many hex characters of the temp dir's hash disambiguate one app. */
-const HASH_LEN = 8;
-
 /** Run-id token used when the scripts run outside GitHub Actions. */
 const LOCAL_RUN_ID = "local";
 
+/** The SSM path every project's preview root-stack state is stored under, one
+ * parameter per project (cloud/aws/bootstrap/rootstack.go). Enumerating it is
+ * how the sweeper finds projects an earlier run stranded. */
+export const PREVIEW_ROOT_STACK_PARAM_PREFIX = "/ocel/rootstack-preview/";
+
+/** The prefix every project this suite mints carries, and the only thing that
+ * marks a project as this suite's to reclaim. */
+export const SLUG_PREFIX = "e2e-";
+
 /**
- * The name every temp app is declared under. Isolation lives in the project slug
- * (projectSlug), so a per-app name would buy nothing and cost length: the
- * Cloudflare worker script name derived from both ("ocel-<slug>-preview-<app>")
- * has 63 characters to fit in.
+ * The name every temp app is declared under. Isolation lives in the preview
+ * pointer (previewRef), so a per-app name would buy nothing and cost length:
+ * the project's asset prefixes and Lambda tags carry it verbatim.
  */
 export const APP_NAME = "app";
 
 /**
- * The longest slug a preview pointer named after it can still be served on: the
- * route hostname's first label is the pointer plus an 11-character suffix
- * (cloud/aws/deploy/previewhost.go) and a DNS label holds 63, which is the same
- * cap `ocel preview up --name` enforces (cli/internal/previewid).
+ * The longest slug the project's one preview worker script can still be named
+ * after: `ocel-<slug>-preview` (cloud/aws/deploy/production.go) has 63
+ * characters to fit in, and the slug itself must be a DNS label
+ * (cli/internal/projectconfig).
  */
-export const MAX_SLUG_LEN = 52;
+export const MAX_SLUG_LEN = 63 - "ocel-".length - "-preview".length;
 
 /**
- * projectSlug derives the identity that isolates one temp app: the `slug` of the
- * Ocel project it deploys into, which is also the name of the persistent preview
- * pointer inside that project. A project is the unit concurrent deploys must not
- * share — it namespaces the Pulumi stacks, the deployments store, the asset
- * prefixes and the Cloudflare worker scripts and routes — so every temp app gets
- * its own.
+ * projectSlug is the `slug` of the ONE Ocel project a whole CI run deploys
+ * into. The project owns the preview wildcard domain — a project's declaration
+ * of `domains.preview` claims that wildcard outright — so two projects can
+ * never share one, and a run therefore mints exactly one project and hangs
+ * every fixture off it as a preview pointer (previewRef).
  *
- * It must be a valid single DNS label within MAX_SLUG_LEN (it becomes the
- * preview subdomain), unique per temp app, and stable for a given run and
- * directory: cleanup re-derives it when the state file is lost, and a slug it
- * cannot re-derive is infrastructure nothing will ever tear down.
+ * It must be a valid single DNS label within MAX_SLUG_LEN, unique per run, and
+ * stable for that run: cleanup, the sweeper and the destroy job all re-derive
+ * it, and a slug that cannot be re-derived is infrastructure nothing will ever
+ * tear down — and, because it holds the domain claim, one that blocks every
+ * future run until a human reclaims it.
  */
-export function projectSlug({ runId, dir }) {
+export function projectSlug({ runId }) {
   const run = sanitizeToken(String(runId ?? "")) || LOCAL_RUN_ID;
-  const hash = createHash("sha256").update(String(dir ?? "")).digest("hex").slice(0, HASH_LEN);
-  // "e2e-" gives the label its required letter start; the run token is capped
-  // so run + hash can never push the slug past MAX_SLUG_LEN.
-  const maxRun = MAX_SLUG_LEN - "e2e-".length - 1 - HASH_LEN;
-  return `e2e-${run.slice(0, maxRun)}-${hash}`;
+  // SLUG_PREFIX gives the label its required letter start and marks the project
+  // as this suite's; the run token is capped so it cannot push past the budget,
+  // and re-trimmed because the cut can land on a hyphen.
+  const maxRun = MAX_SLUG_LEN - SLUG_PREFIX.length;
+  return SLUG_PREFIX + run.slice(0, maxRun).replace(/-+$/, "");
 }
 
 /**
- * projectSlugForApp is how deploy.mjs and cleanup.mjs derive the slug. Both must
- * derive the same one from the same environment — a drift between them means
- * cleanup tears down the wrong project, or nothing — so the environment read
- * lives here, in one place, rather than at each call site.
+ * previewRef is the git ref one temp app's ephemeral preview is keyed by:
+ * `ocel preview up --ref <ref>` resolves it through previewid.Resolve, which
+ * sanitizes and hashes it into the pointer that becomes the app's subdomain
+ * label. The temp directory is what makes it unique — it is the harness's own
+ * per-suite isolation — and keeping the path readable in the pointer is what
+ * lets a stranded preview be traced back to the suite that left it.
+ *
+ * Trailing separators are dropped so two spellings of one directory cannot
+ * resolve to two pointers.
  */
-export function projectSlugForApp(appDir) {
-  return projectSlug({ runId: process.env.GITHUB_RUN_ID, dir: process.env.NEXT_TEST_DIR || appDir });
+export function previewRef({ dir }) {
+  const ref = String(dir ?? "").trim().replace(/\/+$/, "");
+  if (!ref) {
+    throw new Error("previewRef needs a directory: neither NEXT_TEST_DIR nor a working directory was set");
+  }
+  return ref;
+}
+
+/**
+ * projectSlugForRun and previewRefForApp are how deploy.mjs and cleanup.mjs
+ * derive the two identities. Both scripts must derive the SAME pair from the
+ * same environment — a drift between them means cleanup tears down the wrong
+ * preview, or nothing at all — so the environment reads live here, in one
+ * place, rather than at each call site.
+ */
+export function projectSlugForRun() {
+  return projectSlug({ runId: process.env.GITHUB_RUN_ID });
+}
+
+export function previewRefForApp(appDir) {
+  return previewRef({ dir: process.env.NEXT_TEST_DIR || appDir });
+}
+
+/**
+ * strandedProjectSlugs picks the projects an earlier run left behind out of a
+ * listing of SSM parameter names under PREVIEW_ROOT_STACK_PARAM_PREFIX: every
+ * slug this suite minted (SLUG_PREFIX) except the running run's own.
+ *
+ * This is the suite's only orphan reclamation. A cancelled or killed run never
+ * reaches its destroy job, and the project it leaves behind still holds the
+ * preview domain's wildcard route — which is an account-wide claim, so it
+ * blocks every future run rather than merely costing money. Anything not
+ * carrying the prefix is somebody else's project and is left alone.
+ */
+export function strandedProjectSlugs(parameterNames, keepSlug) {
+  const slugs = (parameterNames ?? [])
+    .map((name) => String(name ?? ""))
+    .filter((name) => name.startsWith(PREVIEW_ROOT_STACK_PARAM_PREFIX))
+    .map((name) => name.slice(PREVIEW_ROOT_STACK_PARAM_PREFIX.length))
+    .filter((slug) => slug.startsWith(SLUG_PREFIX) && slug !== keepSlug);
+  return [...new Set(slugs)].sort();
 }
 
 function sanitizeToken(value) {
@@ -80,13 +133,13 @@ function sanitizeToken(value) {
 }
 
 /**
- * renderOcelConfig is the ocel.config.ts written into the temp app. `slug` is
- * this app's own project (projectSlug) — that is what gives it its own worker
- * scripts and asset prefixes — and the app under it is declared explicitly
- * rather than discovered, under APP_NAME. Pure: cleanup re-renders it from the
- * same environment when a failed deploy left no config to tear down.
- * `ocel` and `@ocel/provider-aws` must resolve from the app directory —
- * the config is bundled and executed from there.
+ * renderOcelConfig is the ocel.config.ts written into the temp app, and the one
+ * project-teardown.mjs renders into a scratch directory to address the project
+ * with. `slug` is the run's project (projectSlug) and the app under it is
+ * declared explicitly rather than discovered, under APP_NAME. Pure: cleanup and
+ * teardown re-render it from the same environment when a failed deploy left no
+ * config behind. `ocel` and `@ocel/provider-aws` must resolve from the
+ * directory it is written to — the config is bundled and executed from there.
  */
 export function renderOcelConfig({ slug, previewDomain }) {
   const lines = [
