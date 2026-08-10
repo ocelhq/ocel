@@ -5,7 +5,7 @@ import {
   type EdgeCacheRpc,
   type FetchCacheEntry,
   type TagRecord,
-} from "@ocel/next-cache";
+} from "@framework/next-cache";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { awsServiceFetch, type AwsServiceFetch } from "./signing";

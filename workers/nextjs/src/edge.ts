@@ -1,4 +1,4 @@
-import type { EdgeCacheRpc } from "@ocel/next-cache";
+import type { EdgeCacheRpc } from "@framework/next-cache";
 
 import type { ObjectStoreReader } from "./tag-clock";
 

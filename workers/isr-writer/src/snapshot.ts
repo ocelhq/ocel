@@ -5,7 +5,7 @@ import {
   tagSnapshotKey,
   type TagRecord,
   type TagSnapshot,
-} from "@ocel/next-cache";
+} from "@framework/next-cache";
 
 import { isRateLimited } from "./r2";
 

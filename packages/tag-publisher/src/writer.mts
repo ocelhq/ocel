@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 
-import type { TagRecord } from "@ocel/next-cache";
+import type { TagRecord } from "@framework/next-cache";
 
 export function isrWriteSecret(seed: string, isrPrefix: string): string {
   return createHmac("sha256", seed).update(isrPrefix).digest("hex");

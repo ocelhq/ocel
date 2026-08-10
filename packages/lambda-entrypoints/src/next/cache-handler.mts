@@ -12,7 +12,7 @@ import {
   deserialize as deserializeBytes,
   tagsOf,
   variantHeadersFile,
-} from "@ocel/next-cache";
+} from "@framework/next-cache";
 import { background } from "../shared/background.mjs";
 import { recordTags, tagsExpireEntry } from "./tag-clock.mjs";
 

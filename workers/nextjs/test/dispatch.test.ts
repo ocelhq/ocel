@@ -1,5 +1,5 @@
 import type { Route } from "@next/routing";
-import { tagSnapshotKey } from "@ocel/next-cache";
+import { tagSnapshotKey } from "@framework/next-cache";
 import { describe, expect, it } from "vitest";
 
 import { dispatchResult, serve, type RouteDeps } from "../src/index";

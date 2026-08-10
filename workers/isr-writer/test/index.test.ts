@@ -1,4 +1,4 @@
-import { entryMissHeader, tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
+import { entryMissHeader, tagSnapshotKey, type TagSnapshot } from "@framework/next-cache";
 import { SELF, env, runDurableObjectAlarm, runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 

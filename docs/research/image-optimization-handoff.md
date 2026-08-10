@@ -23,7 +23,7 @@ main (5a63297)
 under epic `ocelhq-pf6q`, children `.1`–`.6`.
 
 Verification state at handoff:
-- `packages/next-runtime`: typecheck, build, 154 tests pass.
+- `frameworks/next/adapter`: typecheck, build, 154 tests pass.
 - `cloud/aws`: `go build ./...`, `go test -race ./...`, `gofmt -l .` all clean.
 - `workers/nextjs`: typecheck clean, 456 tests pass.
 

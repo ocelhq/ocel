@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { entryMissHeader } from "@ocel/next-cache";
-import type { CacheEntryFile } from "@ocel/next-cache";
+import { entryMissHeader } from "@framework/next-cache";
+import type { CacheEntryFile } from "@framework/next-cache";
 
 import { IsrWriteRejected, entryStoreAt, isrEntryStore } from "../src/next/isr-writer.mjs";
 

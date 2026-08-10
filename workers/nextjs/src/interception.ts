@@ -3,7 +3,7 @@ import {
   deserialize,
   tagsOf,
   type CacheEntryFile,
-} from "@ocel/next-cache";
+} from "@framework/next-cache";
 
 import { evaluate, staleWindowMs } from "./cache";
 import { lruSet } from "./lru";

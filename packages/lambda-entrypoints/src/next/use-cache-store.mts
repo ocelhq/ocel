@@ -10,7 +10,7 @@ import {
   type TagRecord,
   type TagRecordUpdate,
   type TagSnapshot,
-} from "@ocel/next-cache";
+} from "@framework/next-cache";
 
 export interface UseCacheEntry {
   tags: string[];

@@ -1,5 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
-import type { TagRecordUpdate } from "@ocel/next-cache";
+import type { TagRecordUpdate } from "@framework/next-cache";
 import type {
   TagSnapshotRead,
   UseCacheEntry,

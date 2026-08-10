@@ -1,4 +1,4 @@
-import { isrPrefixOf, mergeRecord, type TagRecord } from "@ocel/next-cache";
+import { isrPrefixOf, mergeRecord, type TagRecord } from "@framework/next-cache";
 
 type Attribute = { S?: string; N?: string };
 

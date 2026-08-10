@@ -15,7 +15,7 @@ import {
   PHASE_DEVELOPMENT_SERVER,
   PHASE_PRODUCTION_BUILD,
 } from "next/constants.js";
-import { variantHeadersFile } from "@ocel/next-cache/naming";
+import { variantHeadersFile } from "@framework/next-cache/naming";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { defaultImages } from "./fixtures.mts";
 

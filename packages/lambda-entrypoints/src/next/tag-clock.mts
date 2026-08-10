@@ -1,4 +1,4 @@
-import { areTagsExpired, mergeRecord, type TagRecord } from "@ocel/next-cache";
+import { areTagsExpired, mergeRecord, type TagRecord } from "@framework/next-cache";
 
 import { awsUseCacheStore, type UseCacheStore } from "./use-cache-store.mjs";
 import { now } from "./use-cache-entry.mjs";

@@ -218,7 +218,7 @@ pass its own tests standalone.
 
 Branch: `image-opt-manifest-config`
 
-`packages/next-runtime/src/next-adapter.mts` currently reads only `config.basePath` and
+`frameworks/next/adapter/src/next-adapter.mts` currently reads only `config.basePath` and
 `config.i18n` from the adapter's `config` object. Add an `images` section to the emitted
 routing manifest.
 

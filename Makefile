@@ -10,7 +10,7 @@ all: cli provider layer lib
 generate: proto
 
 lib: 
-	pnpm -F=ocel -F=@ocel/next-runtime -F=@ocel/worker-nextjs -F=@ocel/worker-deployments-store build
+	pnpm -F=ocel -F=@framework/next-adapter -F=@ocel/worker-nextjs -F=@ocel/worker-deployments-store build
 
 cli:
 	node scripts/build-native.mjs --host --target cli

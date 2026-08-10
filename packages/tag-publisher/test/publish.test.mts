@@ -1,4 +1,4 @@
-import { tagSnapshotKey, type TagRecord, type TagSnapshot } from "@ocel/next-cache";
+import { tagSnapshotKey, type TagRecord, type TagSnapshot } from "@framework/next-cache";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { publishAll } from "../src/publish.mjs";

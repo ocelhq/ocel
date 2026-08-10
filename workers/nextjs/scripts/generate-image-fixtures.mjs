@@ -284,7 +284,7 @@ async function compiledConfig() {
     await readFile(join(appRoot, ".next", "required-server-files.json"), "utf8"),
   );
   const { compileImageConfig, imageConfigHash } = await import(
-    pathToFileURL(join(repoRoot, "packages", "next-runtime", "dist", "image-config.mjs")).href
+    pathToFileURL(join(repoRoot, "frameworks", "next", "adapter", "dist", "image-config.mjs")).href
   );
   const compiled = compileImageConfig(required.config.images);
   if (!compiled) throw new Error("the fixture app compiled to no image config");
@@ -329,7 +329,7 @@ async function main() {
     await writeFile(file, bytes);
   }
 
-  await run("pnpm", ["--filter", "@ocel/next-runtime", "build"], { cwd: repoRoot });
+  await run("pnpm", ["--filter", "@framework/next-adapter", "build"], { cwd: repoRoot });
 
   const baseEnv = await clientEnv();
   const variants = [];

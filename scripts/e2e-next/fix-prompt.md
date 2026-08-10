@@ -248,7 +248,7 @@ Known couplings from the last run (none of these edges exist in the DB yet —
 
 - **`ocelhq-e7w` + `ocelhq-iud` are two halves of one mechanism.** e7w is the
   `.html` extension the adapter fails to append when emitting
-  `outputs.staticFiles` (`packages/next-runtime/src/next-adapter.mts`); iud is
+  `outputs.staticFiles` (`frameworks/next/adapter/src/next-adapter.mts`); iud is
   the R2 dispatch key the worker builds from the raw request pathname
   (`workers/nextjs/src/assets.ts`). They overlap in both files and the second
   is not fixed by the first. **Do not split them across two agents** — give one
@@ -339,7 +339,7 @@ from `ADAPTER_DIR`.
 cd <WORKTREE>
 pnpm install --frozen-lockfile
 pnpm --filter ocel build
-pnpm --filter @ocel/next-runtime build
+pnpm --filter @framework/next-adapter build
 pnpm --filter @ocel/worker-nextjs build
 pnpm --filter @ocel/worker-deployments-store build
 node scripts/build-native.mjs --host --target cli
@@ -402,7 +402,7 @@ cd "$SIDECAR" && npm init -y >/dev/null && npm install --no-audit --no-fund "$TA
 test -x node_modules/@ocel/provider-aws-linux-x64/bin/deploy
 ```
 
-If your change is confined to `workers/nextjs/**`, `packages/next-runtime/**`,
+If your change is confined to `workers/nextjs/**`, `frameworks/next/adapter/**`,
 `packages/ocel/bin/**`, `cli/**` (which includes the node builder at
 `cli/node/**`) or `scripts/e2e-next/**`, use the shared sidecar read-only
 and skip this.
@@ -474,7 +474,7 @@ a killed agent still leaves a reclaimable slug behind.
 Edit code in the worktree, rebuild only what changed, redeploy in place:
 
 ```bash
-cd <WORKTREE> && pnpm --filter @ocel/worker-nextjs build     # or next-runtime / ocel
+cd <WORKTREE> && pnpm --filter @ocel/worker-nextjs build     # or next-adapter / ocel
 # Go changes: node scripts/build-native.mjs --host --target cli|provider
 #   (and rebuild your sidecar if the change was under cloud/**)
 
@@ -495,7 +495,7 @@ worker-only (`workers/nextjs/**`) or provider-only (`cloud/aws/**`) changes go
 straight to `preview up --prebuilt`, which is much faster. Changes that feed the
 build output require it: the node builder (`cli/node/**`, which also needs
 `go generate` via `build-native.mjs --target cli`), the Next adapter
-(`packages/next-runtime/**`), and the SDK (`packages/ocel/src/**`, which the
+(`frameworks/next/adapter/**`), and the SDK (`packages/ocel/src/**`, which the
 builder traces into the app's function bundles).
 
 Then re-check the failing route with `curl`, always capturing headers:
@@ -589,7 +589,7 @@ stop and report it — do not paper over it with retries.
    before and after, with `x-amzn-requestid` present on both.
 3. The repo's own tests for every package you touched, e.g.
    `pnpm --filter @ocel/worker-nextjs test`,
-   `pnpm --filter @ocel/next-runtime test`,
+   `pnpm --filter @framework/next-adapter test`,
    `pnpm --filter @ocel-scripts/e2e-next test`, `go test ./...` in the module.
 
 **Membrane-layer caveat.** The Lambda membrane layer is **pinned** in

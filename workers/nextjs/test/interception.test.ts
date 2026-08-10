@@ -1,7 +1,7 @@
-import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
+import { tagSnapshotKey, type TagSnapshot } from "@framework/next-cache";
 import { describe, expect, it } from "vitest";
 
-import genesisSnapshot from "../../../packages/next-cache/fixtures/genesis-tag-snapshot.json?raw";
+import genesisSnapshot from "../../../frameworks/next/cache/fixtures/genesis-tag-snapshot.json?raw";
 import {
   intercept,
   type InterceptDeps,

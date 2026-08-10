@@ -140,7 +140,7 @@ pnpm store; `packages/lambda-entrypoints` has no `next` dependency).
    (`response-cache/index.js:188-207, 174-175`). Ocel's membrane implements `waitUntil`
    and drains it before invocation-complete (`membrane.mts:80-93`,
    `forward.go:48-61`), so these renders run to completion. Nothing in lambda-entrypoints
-   or next-runtime fakes `lastModified` or a prefetch purpose; `get()` returns the stored
+   or next-adapter fakes `lastModified` or a prefetch purpose; `get()` returns the stored
    `lastModified` verbatim (`cache-handler.mts:186-205`). The trigger header on the
    consumer's request cannot prevent *other* requests from spawning their own renders —
    they are different requests.
