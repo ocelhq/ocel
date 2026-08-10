@@ -38,7 +38,7 @@ unpublished, so a deprecation path isn't worth carrying.
 
 **Hard cut on the wire, no state migration.** `project_id` becomes `slug` across
 `proto/deployments/v1/deployments.proto` (10 sites: `Manifest` plus the
-destroy/rollback/list/preview messages) and across `cloud/aws/` (`stackName`,
+destroy/rollback/list/preview messages) and across `platform/aws/provider/` (`stackName`,
 `InfraStackName`, `PreviewInfraStackName`, `AppDeployStackName`,
 `PreviewAppDeployStackName`, `bootstrap.Read/WriteRootStackStateFor`). Stacks
 keyed on the old UUID are orphaned. `workers/` was already slug-keyed

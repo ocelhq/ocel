@@ -55,7 +55,7 @@ sha256sum platform/aws/functions/revalidator/dist/revalidator.zip
 ```
 
 Publish it as asset `revalidator.zip` on tag `revalidator-v0.0.1` (the URL bootstrap will
-ask for is `revalidatorReleaseURL` in `cloud/aws/bootstrap/revalidator.go`):
+ask for is `revalidatorReleaseURL` in `platform/aws/provider/bootstrap/revalidator.go`):
 
 ```bash
 gh release create revalidator-v0.0.1 \
@@ -72,7 +72,7 @@ curl -sL https://github.com/ocelhq/ocel/releases/download/revalidator-v0.0.1/rev
 ```
 
 Only if that matches, apply the pin. This is the entire diff, in
-`cloud/aws/bootstrap/revalidatorversion.go`:
+`platform/aws/provider/bootstrap/revalidatorversion.go`:
 
 ```diff
 -	RevalidatorArtifactVersion = ""
@@ -84,7 +84,7 @@ Only if that matches, apply the pin. This is the entire diff, in
 The comment block above those constants also carries the "release is outstanding" framing;
 update it to the pinned framing the way `publisherversion.go` reads after `.14`.
 
-Then `cd cloud/aws && go test ./...` — `TestRevalidator_UnpinnedRendersNoConsumerAndNoQueueURL`
+Then `cd platform/aws/provider && go test ./...` — `TestRevalidator_UnpinnedRendersNoConsumerAndNoQueueURL`
 uses fixture pins, not the real ones, so it must still pass after the pin lands. If it
 fails, a template test is reading the shipped pin and that is a defect, not a rebaseline.
 
@@ -117,7 +117,7 @@ Verify the binary is actually newer than the pin edit before deploying:
 
 ```bash
 ls -l --time-style=full-iso packages/native-lib/provider-aws-linux-x64/bin/deploy \
-  cloud/aws/bootstrap/revalidatorversion.go
+  platform/aws/provider/bootstrap/revalidatorversion.go
 ```
 
 ## 4. Bootstrap, and watch decision F's transition
@@ -340,7 +340,7 @@ separately means deploying the substrate twice.
    tag for a script migrated with the older single-tag form? `.15` established that **no
    migration tag is reported at all** — `settings.Migrations` comes back fully zeroed for a
    script that demonstrably carries its class — and the fix keys on the deployed classes
-   instead (`cloud/edge/cloudflare/durableobjectmigration.go`). Re-confirm on this run by
+   instead (`platform/edge/cloudflare/deploy/durableobjectmigration.go`). Re-confirm on this run by
    calling the settings endpoint directly and recording the verbatim response; do not
    re-derive the API shape from docs.
 

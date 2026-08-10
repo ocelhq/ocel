@@ -166,7 +166,7 @@ func installRealProvider(t *testing.T, repoRoot, root string) (binPath string) {
 	build := exec.Command("go", "build", "-o", binPath, "github.com/ocelhq/ocel/platform/aws/provider/cmd/deploy")
 	build.Dir = repoRoot
 	if out, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("go build cloud/aws: %v\n%s", err, out)
+		t.Fatalf("go build the aws provider: %v\n%s", err, out)
 	}
 
 	return binPath
