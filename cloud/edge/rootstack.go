@@ -1,6 +1,24 @@
 package edge
 
-import "context"
+import (
+	"context"
+	"strings"
+)
+
+// NameUnderStem reports whether a worker script name belongs to the family a
+// worker-name stem heads: the stem itself, or a name segmented below it
+// ("<stem>-…"). It is the one spelling of that question — a caller computing
+// which workers are a project's own and an edge applying a caller-given stem
+// answer it identically — and it is deliberately not a raw string prefix, so a
+// name that merely starts with the same characters ("<stem>er") is a different
+// family. The stem's meaning is the caller's alone: nothing here knows what a
+// segment stands for. Pure.
+func NameUnderStem(stem, name string) bool {
+	if stem == "" || name == "" {
+		return false
+	}
+	return name == stem || strings.HasPrefix(name, stem+"-")
+}
 
 // RootStack is an optional Provider capability (ADR 0001/0002): reconciling a
 // project's frozen root stack and operating the deployments store it carries.
@@ -10,15 +28,16 @@ type RootStack interface {
 	// ReconcileRootStack brings the frozen root stack up to spec.Version: it
 	// deploys spec.Generic (service-bound to the shared deployments-store
 	// worker named spec.StoreScriptName and carrying spec.Slug) and attaches
-	// each hostname in spec.Domains as its own worker route. On a fresh project
-	// it also mints an owner token and the
-	// per-project secret and seeds them into the project's store instance via
-	// spec's endpoint/bootstrap credential; a later call re-puts the generic
+	// each hostname in spec.Domains as its own worker route. It also seeds the
+	// project's store instance via spec's endpoint/bootstrap credential and
+	// adopts the identity that call reports back, so concurrent first deploys of
+	// one slug converge on a single identity; a later call re-puts the generic
 	// worker only when the version already deployed is behind spec.Version. The
-	// version is per project while a route is per hostname, so an up-to-date
-	// root stack still attaches spec.Domains and returns prior unchanged —
-	// otherwise a second preview pointer deploying against a current root stack
-	// would never get a route. The shared store worker itself is not
+	// version stamp gates the script upload alone: an up-to-date root stack
+	// still reconciles spec.Domains and returns prior unchanged, so a route or
+	// record that drifted — deleted out of band, or never finished being
+	// attached — heals on the next deploy rather than surviving until the
+	// version happens to move. The shared store worker itself is not
 	// deployed here (it is provisioned once at bootstrap). prior is the
 	// RootStackState the last reconcile for this project returned, or nil the
 	// very first time; the caller persists whatever this returns, opaque, and
@@ -55,22 +74,28 @@ type RootStack interface {
 	// nothing, so its active promotion goes too. It backs `ocel preview rm`,
 	// which removes a whole preview. It reports the removed record keys so the
 	// caller can reclaim the app-deploy stacks and R2 assets those records named,
-	// exactly like DeletePromotionArtifacts; alongside them, the worker routes the
-	// removed pointer owned, so the caller can delete exactly those without
-	// recomputing a hostname it has no config for, and how many pointers remain,
-	// so it can tell whether it just retired the project's last preview (whose
-	// generic worker every preview pointer shared). An empty pointer is refused by
-	// the store so production can never be torn down implicitly.
-	RemovePointer(ctx context.Context, state RootStackState, pointer string) (PointerRemoval, error)
+	// exactly like DeletePromotionArtifacts — it reports the same PruneResult,
+	// with nothing kept. A pointer owns no edge state of its
+	// own — the project's wildcard route is attached once for its lifetime — so
+	// removing one is pure store work, and it never reaches anything the project
+	// shares: the entrypoint worker and the store instance outlive every pointer
+	// and are only ever reclaimed by an explicit project teardown. An empty
+	// pointer is refused by the store so production can never be torn down
+	// implicitly.
+	RemovePointer(ctx context.Context, state RootStackState, pointer string) (PruneResult, error)
 
-	// RemoveRoute deletes the worker route for hostname off the named worker
-	// script, leaving the script and every other route attached to it serving,
-	// and touching no DNS record. It backs per-pointer preview teardown: a
-	// project's preview pointers all share one generic worker and hold one exact
-	// route each (the hostnames RemovePointer reports), so retiring one pointer
-	// must drop only that pointer's route. A route that is already gone is not an
-	// error, so a re-run resumes, exactly as with DestroyRootStack.
-	RemoveRoute(ctx context.Context, worker, hostname string) error
+	// RouteOwner reports the worker script currently bound to pattern on the
+	// edge — for an Ocel-deployed hostname, the project that already holds it —
+	// or "" when nothing holds it. It is read-only: it creates, moves and
+	// deletes nothing. It backs the deploy-time domain-claim check, which
+	// refuses a hostname another project owns before anything is built.
+	//
+	// Matching is exact-pattern only. "*.app.com/*" and "*.preview.app.com/*"
+	// are two unrelated patterns here even though traffic for the second falls
+	// under the first, so an overlapping wildcard is not reported and stays the
+	// late collision it is today. Closing that gap belongs to the planned
+	// `ocel domains`, not here.
+	RouteOwner(ctx context.Context, pattern string) (string, error)
 
 	// DestroyRootStack deletes every worker named in workers — the project's
 	// generic worker(s) — detaching each one's custom-domain binding first
@@ -84,16 +109,15 @@ type RootStack interface {
 	// worker and joins any failures. Backs the root-stack half of `ocel destroy`.
 	DestroyRootStack(ctx context.Context, workers []string) error
 
-	// ListDeployedWorkers returns the script names of every worker the edge has
-	// deployed whose name begins with prefix — a project-scoped worker-name stem
-	// the caller computes. It lets a whole-project teardown find a project's
-	// workers when its own record of them is gone: a shared generic worker fronts
-	// every preview pointer and outlives them, so once a pointer's promotion
-	// history (which names the worker) has been removed by `ocel preview rm`,
-	// enumerating from the store can no longer name it. Listing from the edge
-	// closes that gap. Best-effort and read-only; an edge with nothing under the
-	// prefix returns an empty slice, not an error.
-	ListDeployedWorkers(ctx context.Context, prefix string) ([]string, error)
+	// ListDeployedWorkers returns the script names of every worker this edge has
+	// deployed that falls under stem (NameUnderStem) — the stem itself and every
+	// name segmented below it. It exists so the caller can hand DestroyRootStack
+	// an exact set even for workers it no longer names: an earlier shape of a
+	// project's deploy can have left workers standing that nothing computes a
+	// name for any more, and nothing else on this interface can find them.
+	// Read-only and best-effort; an edge with nothing under stem returns an
+	// empty slice, not an error.
+	ListDeployedWorkers(ctx context.Context, stem string) ([]string, error)
 
 	// DestroyInstance wipes the project's own instance in the shared
 	// deployments-store worker — its promotion history, records, ownership and
@@ -146,20 +170,30 @@ type RootStackSpec struct {
 	BootstrapCred string
 	// Domains are the custom hostnames Generic is attached to, each as a worker
 	// route. Empty serves it on the edge's own vendor subdomain instead.
-	// Production may carry several; a preview carries its one pointer-exact
-	// hostname.
+	// Production may carry several exact hostnames; a preview carries the one
+	// wildcard its project declared, which every pointer is served under.
 	Domains []string
 	// PruneRoutes deletes any route on Generic whose hostname is not in Domains.
-	// A preview leaves it false: its shared generic worker carries one route per
-	// live pointer while a reconcile knows only the pointer it is deploying, so
-	// pruning would delete concurrently-deploying siblings' routes. Teardown
-	// (RemoveRoute) removes a preview's route instead.
+	// Both classes set it: Domains is the project's complete desired route set,
+	// per-app for production and the project's wildcard for preview, so anything
+	// else on the script is drift.
 	PruneRoutes bool
-	// RequiredRecord is a DNS record Domains resolve through — a "*.<base>"
-	// wildcard over a preview base domain, say. Reconcile verifies it is present
-	// and proxied and fails otherwise; it never plants or reclaims it, because
-	// every project and pointer under that base shares it. Empty instead ensures
-	// Ocel's own proxied placeholder record per hostname in Domains.
+	// PruneWorkerStem widens that sweep past Generic itself: with PruneRoutes on,
+	// a route bound to any worker whose name falls under this stem (NameUnderStem)
+	// and whose hostname is not in Domains is drift too. It is how a reconcile
+	// reclaims hostnames left on workers an earlier shape of this same deploy
+	// deployed and no longer uploads — a route on a script nothing puts any more
+	// outlives it, and a more specific pattern wins at the edge, so it would
+	// shadow Generic on that hostname forever. The stem is the caller's to
+	// compute and its meaning is the caller's alone; an edge matches names
+	// against it and reads nothing into the segments. Empty sweeps Generic only.
+	PruneWorkerStem string
+	// RequiredRecord is a DNS record Domains resolve through, which reconcile
+	// verifies is present and proxied and fails otherwise, planting and
+	// reclaiming nothing — for a record shared with something outside this
+	// project's authority. Empty instead ensures Ocel's own proxied placeholder
+	// record per hostname in Domains, which is what both classes do today: a
+	// preview base domain belongs to exactly one project.
 	RequiredRecord string
 	// Values are what this edge reported at bootstrap, persisted verbatim by
 	// the host and handed back unread — the same contract AppDeployment.Values
@@ -187,13 +221,15 @@ const (
 	// RootStackKeyEndpoint is the shared deployments store's HTTP endpoint, the
 	// address every store operation calls.
 	RootStackKeyEndpoint = "endpoint"
-	// RootStackKeySecret is the per-project secret, minted on the project's
-	// first reconcile and seeded into its instance, that every store operation
-	// authenticates with.
+	// RootStackKeySecret is the per-project secret the project's instance holds,
+	// which every store operation authenticates with. It is whatever the
+	// instance reported at initialize — the pair this reconcile presented when
+	// it seeded a fresh instance, or the pair an already-seeded one already
+	// carried — never what this reconcile minted locally.
 	RootStackKeySecret = "secret"
-	// RootStackKeyOwnerToken is the self-minted owner token seeded into the
-	// project's instance, presented on a later reconcile to distinguish
-	// legitimate recovery from a slug collision.
+	// RootStackKeyOwnerToken is the owner token the project's instance is seeded
+	// under, adopted from the same initialize response as the secret. It marks
+	// the instance as this project's across a later recovery.
 	RootStackKeyOwnerToken = "ownerToken"
 )
 
@@ -203,6 +239,13 @@ const (
 // the host writes this straight to the store over HTTP.
 type DeploymentRecord struct {
 	App string `json:"app"`
+	// Framework is what the app declared in its manifest ("next"). One
+	// entrypoint worker fronts a whole project, whose apps need not share a
+	// framework, so it is the Deployment that says what can serve it: the
+	// worker dispatches on this field and answers 501 for anything it has no
+	// handler for. Never omitempty — an absent field reads as unsupported, so
+	// a record that shipped without one could never serve.
+	Framework string `json:"framework"`
 	// Identity is the Deployment's own identity — the framework build id plus
 	// the fingerprint of the values baked into it — and is what the store keys
 	// the record by. The wire name predates identities: a Deployment with
@@ -235,12 +278,6 @@ type DeploymentRecord struct {
 	// routes/middleware): where its bundle lives and what runtime to evaluate
 	// it under. Omitted when the build produced no edge output at all.
 	EdgeWorkers *Code `json:"edgeWorkers,omitempty"`
-	// RouteHostnames are the worker-route hostnames the deploy that produced
-	// this record registered for it, so a teardown can delete exactly those
-	// without recomputing them from config it does not have. A preview carries
-	// its one pointer-exact hostname; production carries none — its routes are
-	// project-lifetime and reconciled declaratively.
-	RouteHostnames []string `json:"routeHostnames,omitempty"`
 	// ValueFingerprint is the digest of every variable in Variables, so two
 	// Deployments that shipped different values never read alike. It is wider
 	// than the fingerprint inside Identity, which covers baked values alone:
@@ -309,8 +346,9 @@ type HistoryEntry struct {
 	Active bool `json:"active"`
 }
 
-// PruneResult reports what DeletePromotionArtifacts removed. Mirrors
-// PruneResult in workers/deployments-store/src/store.ts.
+// PruneResult reports what DeletePromotionArtifacts or RemovePointer removed —
+// the store answers both with the same shape, a removal simply keeping nothing.
+// Mirrors PruneResult in workers/deployments-store/src/store.ts.
 type PruneResult struct {
 	KeptPromotionIDs    []string `json:"keptPromotionIds"`
 	RemovedPromotionIDs []string `json:"removedPromotionIds"`
@@ -330,27 +368,4 @@ type PruneResult struct {
 	// so it belongs to one pointer alone and survives only a Deployment of that
 	// pointer.
 	SurvivingPointerRecordKeys []string `json:"survivingPointerRecordKeys"`
-}
-
-// RemovedRoute is one worker route a removed pointer owned: the app it fronted
-// and the hostname it was attached to. Mirrors RemovedRoute in
-// workers/deployments-store/src/store.ts — the two must agree on shape.
-type RemovedRoute struct {
-	App      string `json:"app"`
-	Hostname string `json:"hostname"`
-}
-
-// PointerRemoval reports what RemovePointer removed: a PruneResult plus the
-// routes the pointer owned and the pointers left behind. Distinct from
-// PruneResult, which DeletePromotionArtifacts returns, because a prune keeps
-// the pointer and its route alive. Mirrors PointerRemoval in
-// workers/deployments-store/src/store.ts — the two must agree on shape.
-type PointerRemoval struct {
-	PruneResult
-	// RemainingPointers are the preview pointers left in the project's store
-	// instance after the removal, excluding the reserved production default.
-	// Zero means the project just retired its last preview, so the generic
-	// worker every preview pointer shared can go too.
-	RemainingPointers int            `json:"remainingPointers"`
-	RemovedRoutes     []RemovedRoute `json:"removedRoutes"`
 }

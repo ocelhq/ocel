@@ -92,11 +92,21 @@ type provider struct {
 	client *cf.Client
 }
 
+// The host reaches every optional capability through a type assertion, so an
+// interface this edge silently stopped satisfying would only surface at runtime.
+var _ edge.RootStack = (*provider)(nil)
+
 // New builds the Cloudflare edge. Its API token is read from
-// CLOUDFLARE_API_TOKEN by the cloudflare-go client.
+// CLOUDFLARE_API_TOKEN by the cloudflare-go client, which retries a throttled
+// or failing API call rather than failing the deploy on the first attempt.
 func New() edge.Provider {
-	return &provider{client: cf.NewClient()}
+	return &provider{client: cf.NewClient(option.WithMaxRetries(clientMaxRetries))}
 }
+
+// clientMaxRetries is how many times the cloudflare-go client retries one API
+// call. A deploy issues many calls against an account-wide rate limit, and a
+// single 429 anywhere in the sequence would otherwise strand it half-applied.
+const clientMaxRetries = 5
 
 func (p *provider) Kind() edge.Kind { return edge.KindCloudflare }
 
@@ -677,6 +687,7 @@ func (p *provider) setSubdomain(ctx context.Context, up upload, enabled bool) (s
 type routePlan struct {
 	desired        []string
 	prune          bool
+	pruneStem      string
 	requiredRecord string
 }
 
@@ -720,7 +731,7 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 		if !coveredByUniversalSSL(host, zoneName) {
 			warn(fmt.Sprintf("%s is more than one label below %s, which the zone's Universal SSL certificate does not cover — TLS will fail there until you add a Cloudflare Advanced Certificate for it", host, zoneName))
 		}
-		if err := p.ensureRoute(ctx, zoneID, host+"/*", up.scriptName); err != nil {
+		if err := p.ensureRoute(ctx, zoneID, RoutePattern(host), up.scriptName); err != nil {
 			return err
 		}
 		if plan.requiredRecord != "" {
@@ -734,14 +745,21 @@ func (p *provider) reconcileWorkerRoutes(ctx context.Context, up upload, plan ro
 	if !plan.prune {
 		return nil
 	}
-	return p.pruneStaleRoutes(ctx, up, wanted)
+	return p.pruneStaleRoutes(ctx, up, plan.pruneStem, wanted)
 }
 
-// pruneStaleRoutes deletes every route pointing at this script whose hostname is
-// not in wanted, across all of the account's zones — so dropping a hostname from
-// the config (even the last one in a whole zone) tears its route and Ocel's
+// pruneStaleRoutes deletes every route this deploy sweeps whose hostname is not
+// in wanted, across all of the account's zones — so dropping a hostname from the
+// config (even the last one in a whole zone) tears its route and Ocel's
 // placeholder record down. A record the user manages is left untouched.
-func (p *provider) pruneStaleRoutes(ctx context.Context, up upload, wanted map[string]bool) error {
+//
+// The sweep covers this script and, when the caller gave a stem, every worker
+// under it (edge.NameUnderStem) — a hostname left on a worker the caller no
+// longer deploys is drift the same way, and its more specific pattern would
+// otherwise outrank this script's on that hostname. wanted is consulted first,
+// so a hostname this reconcile just attached is never taken whichever worker
+// holds it.
+func (p *provider) pruneStaleRoutes(ctx context.Context, up upload, stem string, wanted map[string]bool) error {
 	owned := p.client.Zones.ListAutoPaging(ctx, zones.ZoneListParams{
 		Account: cf.F(zones.ZoneListParamsAccount{ID: cf.F(up.accountID)}),
 	})
@@ -751,7 +769,7 @@ func (p *provider) pruneStaleRoutes(ctx context.Context, up upload, wanted map[s
 		routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
 		for routes.Next() {
 			route := routes.Current()
-			if route.Script != up.scriptName {
+			if route.Script != up.scriptName && !edge.NameUnderStem(stem, route.Script) {
 				continue
 			}
 			host := strings.TrimSuffix(route.Pattern, "/*")
@@ -820,6 +838,44 @@ func nilSafeWarn(warn func(string)) func(string) {
 		return func(string) {}
 	}
 	return warn
+}
+
+// RoutePattern is how a hostname is spelled as a Cloudflare worker route: the
+// hostname and every path under it. It is exported so a caller asking
+// RouteOwner who holds a hostname spells the pattern exactly as the reconcile
+// that attached it did — the lookup is exact-pattern, so a second spelling
+// would silently answer "unclaimed" for a hostname this edge itself holds.
+func RoutePattern(hostname string) string {
+	return hostname + "/*"
+}
+
+// RouteOwner reports the worker script bound to pattern, or "" when the zone
+// that owns its hostname holds no such route. Read-only: it lists and nothing
+// more. Matching is exact-pattern (see edge.RootStack.RouteOwner) — an
+// overlapping wildcard is a different pattern and is not reported.
+//
+// A hostname no zone in this account owns is an error rather than an empty
+// owner: this edge cannot say who holds it, and reporting it unclaimed would
+// read as a hostname free to take.
+func (p *provider) RouteOwner(ctx context.Context, pattern string) (string, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return "", fmt.Errorf("%s is not set; it is required to read Cloudflare worker routes", envAccountID)
+	}
+	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(strings.TrimSuffix(pattern, "/*")))
+	if err != nil {
+		return "", err
+	}
+	routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
+	for routes.Next() {
+		if route := routes.Current(); route.Pattern == pattern {
+			return route.Script, nil
+		}
+	}
+	if err := routes.Err(); err != nil {
+		return "", fmt.Errorf("list worker routes in zone %s: %w", zoneID, err)
+	}
+	return "", nil
 }
 
 // ensureRoute makes the zone route pattern to scriptName: it reuses an existing

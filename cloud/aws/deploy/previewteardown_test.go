@@ -2,9 +2,7 @@ package deploy
 
 import (
 	"context"
-	"errors"
 	"reflect"
-	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -93,261 +91,108 @@ func TestClassifyPreviewStacks_SplitsInfraAppAndPointers(t *testing.T) {
 	}
 }
 
-// Pointers share one generic worker per app, so retiring one while siblings are
-// live must leave the script, their routes and the store instance serving
-// (ocelhq-5w3).
-func TestRemovePreview_DropsOnlyThisPointersRoutesWhileSiblingsRemain(t *testing.T) {
-	fake := &recordingRootStack{
-		pointerRemoval: edge.PointerRemoval{
-			RemainingPointers: 1,
-			RemovedRoutes: []edge.RemovedRoute{
-				{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"},
-				{App: "api", Hostname: "pr-1-bbbbbbbbbb.preview.acme.com"},
-			},
-		},
+// The entrypoint worker is the only preview worker a deploy names today, but an
+// earlier shape of it deployed one per app — so teardown reclaims the whole
+// worker family, not just the name it can compute. Reclaiming the deterministic
+// name is unconditional: it is the project's whether or not the list found it.
+func TestPreviewProjectWorkers_ReclaimsTheWholeWorkerFamily(t *testing.T) {
+	got := previewProjectWorkers("shop", []string{
+		previewWorkerName("shop") + "-web",
+		previewWorkerName("shop"),
+		previewWorkerName("shop") + "-api",
+	})
+	want := []string{"ocel-shop-preview", "ocel-shop-preview-api", "ocel-shop-preview-web"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("workers = %v, want %v", got, want)
 	}
+}
+
+func TestPreviewProjectWorkers_AnEmptyListStillReclaimsTheEntrypoint(t *testing.T) {
+	got := previewProjectWorkers("shop", nil)
+	if !reflect.DeepEqual(got, []string{"ocel-shop-preview"}) {
+		t.Errorf("workers = %v, want just the entrypoint worker", got)
+	}
+}
+
+// Teardown deletes what it is handed, so a name outside the family must never
+// reach it — whatever the edge happened to report.
+func TestPreviewProjectWorkers_NeverAdoptsANameOutsideTheFamily(t *testing.T) {
+	got := previewProjectWorkers("shop", []string{
+		previewWorkerName("shopfoo"),
+		previewWorkerName("other") + "-web",
+		"ocel-shop-preview-web",
+		"ocel-shop-previewer",
+		workerScriptName("shop-production", "web"),
+	})
+	want := []string{"ocel-shop-preview", "ocel-shop-preview-web"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("workers = %v, want %v", got, want)
+	}
+}
+
+func TestPreviewProjectWorkers_NoSlugNamesNothing(t *testing.T) {
+	if got := previewProjectWorkers("", []string{"ocel-shop-preview"}); got != nil {
+		t.Errorf("workers = %v, want none for a project with no slug", got)
+	}
+}
+
+// Every pointer is served through the project's one wildcard route, so retiring
+// one is pure store work — and stays pure store work even when it was the last
+// pointer the store held: another deploy may be landing its own pointer right
+// now, and it is served by the same worker.
+func TestRemovePreview_TouchesNoProjectLevelEdgeState(t *testing.T) {
+	fake := &recordingRootStack{}
 	ctx := context.Background()
 	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
 	if err != nil {
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
-	if _, err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
+	if err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 
-	want := []routeRemoval{
-		{worker: previewGenericName("shop", "web"), hostname: "pr-1-aaaaaaaaaa.preview.acme.com"},
-		{worker: previewGenericName("shop", "api"), hostname: "pr-1-bbbbbbbbbb.preview.acme.com"},
-	}
-	if !reflect.DeepEqual(fake.removedRoutes, want) {
-		t.Errorf("removed routes = %+v, want %+v", fake.removedRoutes, want)
+	if !reflect.DeepEqual(fake.removedPointers, []string{"pr-1"}) {
+		t.Errorf("removed pointers = %v, want [pr-1]", fake.removedPointers)
 	}
 	if fake.destroyed != 0 || len(fake.destroyedWorkers) != 0 {
-		t.Errorf("destroyed workers %v: the shared generic worker still fronts live pointers", fake.destroyedWorkers)
+		t.Errorf("destroyed workers %v: the entrypoint worker outlives every pointer", fake.destroyedWorkers)
 	}
 	if fake.destroyedInstance != 0 {
-		t.Error("the store instance still holds the sibling pointers")
+		t.Error("wiped the store instance: it outlives every pointer and only `ocel destroy --preview` retires it")
 	}
 }
 
-// The last preview leaves the whole edge footprint garbage, and nothing else
-// would ever reclaim it.
-func TestRemovePreview_SweepsTheEdgeFootprintWhenItWasTheLastPointer(t *testing.T) {
-	fake := &recordingRootStack{
-		pointerRemoval: edge.PointerRemoval{
-			RemainingPointers: 0,
-			RemovedRoutes:     []edge.RemovedRoute{{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"}},
-		},
-		deployedWorkers: []string{
-			previewGenericName("shop", "web"),
-			workerScriptName("shop-production", "web"),
-		},
-	}
-	ctx := context.Background()
-	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-
-	if _, err := RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
-		t.Fatalf("RemovePreview: %v", err)
-	}
-
-	if !reflect.DeepEqual(fake.listedPrefixes, []string{previewWorkerPrefix("shop")}) {
-		t.Errorf("listed prefixes = %v, want [%s]", fake.listedPrefixes, previewWorkerPrefix("shop"))
-	}
-	if want := []string{previewGenericName("shop", "web")}; !reflect.DeepEqual(fake.destroyedWorkers, want) {
-		t.Errorf("destroyed workers = %v, want %v (production must be untouched)", fake.destroyedWorkers, want)
-	}
-	if fake.destroyedInstance != 1 {
-		t.Errorf("destroyed instances = %d, want 1: the store instance leaks otherwise", fake.destroyedInstance)
-	}
-	if len(fake.removedRoutes) != 0 {
-		t.Errorf("removed routes = %+v, want none: destroying the script takes its routes with it", fake.removedRoutes)
-	}
-}
-
-// previewWorkerPrefix is un-clamped while the deployed name is clamped to the
-// platform's name limit, so a long slug's worker sits outside the prefix the
-// sweep lists. Naming it from the removal is the only way it is ever reclaimed.
-func TestPreviewSweepWorkers_CoversAClampedNameThePrefixCannotReach(t *testing.T) {
-	slug := strings.Repeat("s", 50)
-	worker := previewGenericName(slug, "web")
-	if strings.HasPrefix(worker, previewWorkerPrefix(slug)) {
-		t.Fatalf("previewGenericName(%q, web) = %q is still under prefix %q — pick a slug long enough to clamp", slug, worker, previewWorkerPrefix(slug))
-	}
-
-	fake := &recordingRootStack{
-		pointerRemoval: edge.PointerRemoval{
-			RemovedRoutes: []edge.RemovedRoute{{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"}},
-		},
-		deployedWorkers: []string{worker},
-	}
-	ctx := context.Background()
-	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: slug}, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-
-	if _, err := RemovePreview(ctx, fake, state, Config{}, slug, "pr-1", false, nil, nil); err != nil {
-		t.Fatalf("RemovePreview: %v", err)
-	}
-	if !slices.Contains(fake.destroyedWorkers, worker) {
-		t.Errorf("destroyed workers = %v, want the clamped %q", fake.destroyedWorkers, worker)
-	}
-}
-
-func TestPreviewSweepWorkers_UnionsTheListedPrefixTheRoutesAndTheRecords(t *testing.T) {
-	removal := edge.PointerRemoval{
-		PruneResult:   edge.PruneResult{RemovedRecordKeys: []string{"record:api/b1", "record:web/b2"}},
-		RemovedRoutes: []edge.RemovedRoute{{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"}},
-	}
-	got := previewSweepWorkers("shop", removal, []string{previewGenericName("shop", "docs")})
-
-	want := []string{
-		previewGenericName("shop", "docs"),
-		previewGenericName("shop", "web"),
-		previewGenericName("shop", "api"),
-	}
-	sort.Strings(got)
-	sort.Strings(want)
-	if !reflect.DeepEqual(got, want) {
-		t.Errorf("sweep workers = %v, want %v (deduplicated union)", got, want)
-	}
-}
-
-// The store instance is what a re-run needs to name the workers again: destroy it
-// while a worker destroy is failing and RemovePointer can never report a removal
-// again, so the surviving workers are stranded with no path back to `preview rm`.
-func TestRemovePreview_KeepsTheStoreInstanceWhenTheWorkerDestroyFails(t *testing.T) {
-	boom := errors.New("cloudflare said no")
-	fake := &recordingRootStack{
-		pointerRemoval:      edge.PointerRemoval{RemovedRoutes: []edge.RemovedRoute{{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"}}},
-		deployedWorkers:     []string{previewGenericName("shop", "web")},
-		destroyRootStackErr: boom,
-	}
-	ctx := context.Background()
-	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-
-	_, err = RemovePreview(ctx, fake, state, Config{}, "shop", "pr-1", false, nil, nil)
-	if !errors.Is(err, boom) {
-		t.Fatalf("RemovePreview error = %v, want it to report %v", err, boom)
-	}
-	if fake.destroyedInstance != 0 {
-		t.Errorf("destroyed instances = %d, want 0: wiping the store strands the workers that survived", fake.destroyedInstance)
-	}
-}
-
-// A project holding no root-stack state has no store to ask, so the edge itself
-// is the only source left for the workers a deploy that died inside reconcile
-// left deployed — and nothing else in the system will ever name them again.
-func TestRemovePreview_NoRootStackStateSweepsTheEdgeByPrefix(t *testing.T) {
-	orphan := previewGenericName("shop", "web")
-	fake := &recordingRootStack{deployedWorkers: []string{orphan, workerScriptName("shop-production", "web")}}
-
-	result, err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, nil, nil)
-	if err != nil {
-		t.Fatalf("RemovePreview: %v", err)
-	}
-	if !reflect.DeepEqual(fake.listedPrefixes, []string{previewWorkerPrefix("shop")}) {
-		t.Errorf("listed prefixes = %v, want [%s]", fake.listedPrefixes, previewWorkerPrefix("shop"))
-	}
-	if want := []string{orphan}; !reflect.DeepEqual(fake.destroyedWorkers, want) {
-		t.Errorf("destroyed workers = %v, want %v (production must be untouched)", fake.destroyedWorkers, want)
-	}
-	// Nothing store-side may be attempted: there is no state to authenticate with.
-	if len(fake.removedPointers) != 0 || len(fake.removedRoutes) != 0 || fake.destroyedInstance != 0 {
-		t.Errorf("RemovePreview touched the store with no root-stack state: %+v", fake)
-	}
-	if result.EdgeTornDown {
-		t.Error("EdgeTornDown = true with no state: there is no state for the host to forget")
-	}
-}
-
-// The same path must stay quiet for the common case it also covers: a preview
-// that never got as far as deploying anything.
-func TestRemovePreview_NoRootStackStateAndNothingDeployedDestroysNothing(t *testing.T) {
+// A project holding no root-stack state has no store to ask — and nothing
+// project-level to take either: the worker its half-finished deploy left behind
+// is the same worker its next deploy reconciles.
+func TestRemovePreview_NoRootStackStateTouchesNothing(t *testing.T) {
 	fake := &recordingRootStack{}
 
-	if _, err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
+	if err := RemovePreview(context.Background(), fake, nil, Config{}, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
-	if fake.destroyed != 0 || len(fake.destroyedWorkers) != 0 {
-		t.Errorf("destroyed %v with nothing deployed under the prefix", fake.destroyedWorkers)
+	if fake.destroyed != 0 || len(fake.removedPointers) != 0 || fake.destroyedInstance != 0 {
+		t.Errorf("RemovePreview touched the edge with no root-stack state: %+v", fake)
 	}
 }
 
-// A store that refuses the removal leaves the shared worker's fate unknown — a
-// sibling pointer may still be fronted by it — so the teardown can neither sweep
-// it nor report success over it.
-func TestRemovePreview_FailedPointerRemovalReportsWhatItLeftStanding(t *testing.T) {
-	fake := &recordingRootStack{deployedWorkers: []string{previewGenericName("shop", "web")}}
+// A store that refuses the removal is reported rather than stepped over: the
+// pointer is still live and still resolving.
+func TestRemovePreview_ReportsAFailedPointerRemoval(t *testing.T) {
+	fake := &recordingRootStack{}
 	// A state the fake cannot authenticate makes its RemovePointer reject.
 	stale := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
 
-	result, err := RemovePreview(context.Background(), fake, stale, Config{}, "shop", "pr-1", false, nil, nil)
+	err := RemovePreview(context.Background(), fake, stale, Config{}, "shop", "pr-1", false, nil, nil)
 	if err == nil {
-		t.Fatal("RemovePreview err = nil, want a failure naming what is still live")
+		t.Fatal("RemovePreview err = nil, want the refused removal reported")
 	}
-	if !strings.Contains(err.Error(), "still") && !strings.Contains(err.Error(), "standing") {
-		t.Errorf("error %q does not name what was left live", err)
+	if !strings.Contains(err.Error(), "pr-1") {
+		t.Errorf("error %q does not name the pointer it failed to remove", err)
 	}
 	if fake.destroyed != 0 || fake.destroyedInstance != 0 {
-		t.Errorf("swept the edge on an unknown removal: %+v", fake)
-	}
-	if result.EdgeTornDown {
-		t.Error("EdgeTornDown = true after a failed pointer removal")
-	}
-}
-
-// EdgeTornDown is the host's licence to forget the persisted state, so it may
-// only be true once the workers and the instance are actually gone.
-func TestRemovePreview_ReportsTheEdgeTornDownOnlyOnACleanLastPointerSweep(t *testing.T) {
-	ctx := context.Background()
-	newFake := func(destroyErr error) (*recordingRootStack, edge.RootStackState) {
-		f := &recordingRootStack{
-			pointerRemoval:      edge.PointerRemoval{RemainingPointers: 0},
-			deployedWorkers:     []string{previewGenericName("shop", "web")},
-			destroyRootStackErr: destroyErr,
-		}
-		state, err := f.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-		if err != nil {
-			t.Fatalf("ReconcileRootStack: %v", err)
-		}
-		return f, state
-	}
-
-	clean, state := newFake(nil)
-	result, err := RemovePreview(ctx, clean, state, Config{}, "shop", "pr-1", false, nil, nil)
-	if err != nil {
-		t.Fatalf("RemovePreview: %v", err)
-	}
-	if !result.EdgeTornDown {
-		t.Error("EdgeTornDown = false after a clean last-pointer sweep: the state is kept pointing at a wiped instance")
-	}
-
-	broken, state := newFake(errors.New("cloudflare said no"))
-	result, err = RemovePreview(ctx, broken, state, Config{}, "shop", "pr-1", false, nil, nil)
-	if err == nil {
-		t.Fatal("RemovePreview err = nil after a failed worker destroy")
-	}
-	if result.EdgeTornDown {
-		t.Error("EdgeTornDown = true with a worker still standing: the state a re-run needs would be forgotten")
-	}
-
-	// A surviving sibling is not a torn-down edge either.
-	sibling, state := newFake(nil)
-	sibling.pointerRemoval = edge.PointerRemoval{RemainingPointers: 1}
-	result, err = RemovePreview(ctx, sibling, state, Config{}, "shop", "pr-1", false, nil, nil)
-	if err != nil {
-		t.Fatalf("RemovePreview: %v", err)
-	}
-	if result.EdgeTornDown {
-		t.Error("EdgeTornDown = true while a sibling preview still uses the state")
+		t.Errorf("touched the project's edge state: %+v", fake)
 	}
 }
 

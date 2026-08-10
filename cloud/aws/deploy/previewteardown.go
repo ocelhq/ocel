@@ -1,16 +1,16 @@
 // Preview teardown (ADR 0001): the per-pointer counterpart to DestroyProject.
-// `ocel preview rm` retains nothing. An ephemeral preview has no infra stack, so
-// it has nothing stateful to remove; removing the project's last preview also
-// reclaims the generic worker(s) and store instance every pointer shared, which
-// nothing else ever would. RemovePreview drives the real store/Pulumi/S3 calls
-// and, like DestroyProject, is exercised end-to-end only by an opt-in run against
-// a live account; everything pure here is unit-tested directly.
+// `ocel preview rm` removes exactly one pointer and never anything the project's
+// previews share. An ephemeral preview has no infra stack, so it has nothing
+// stateful to remove. RemovePreview drives the real store/Pulumi/S3 calls and,
+// like DestroyProject, is exercised end-to-end only by an opt-in run against a
+// live account; everything pure here is unit-tested directly.
 package deploy
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -29,45 +29,32 @@ func PreviewInfraStackFor(slug, pointer string, persistent bool) string {
 	return PreviewInfraStackName(slug, pointer)
 }
 
-// PreviewRemovalResult is what RemovePreview reports back about the edge.
-// EdgeTornDown means the project's last preview pointer is gone and nothing
-// edge-side survived it — no worker, no store instance — so the host may forget
-// the persisted root-stack state. It stays false whenever a worker or the
-// instance may still stand, because that state is the only thing that can name
-// them to a re-run.
-type PreviewRemovalResult struct {
-	EdgeTornDown bool
-}
-
 // RemovePreview tears one preview pointer down, traffic-first: the store pointer
 // goes first both so it stops resolving and because the record keys its removal
-// reports name exactly the app-deploy stacks and R2 assets left to reclaim.
+// reports name exactly the app-deploy stacks and R2 assets left to reclaim. A
+// persistent preview's own infra stack goes with it; an ephemeral one has none.
 // Best-effort: a failed step never stops the rest, and every failure is joined so
-// the host can report what remains and a re-run can resume — which is why the edge
-// sweep goes last, leaving the state and instance a re-run needs in place if an
-// earlier step failed.
+// the host can report what remains and a re-run can resume.
 //
-// No step is ever skipped silently. The edge is swept on every path: through the
-// store's own removal when it reported one, and — when the project holds no
-// root-stack state at all — by listing the project's preview worker prefix
-// directly, which is the only way a deploy that died inside the root-stack
-// reconcile is ever reclaimed. The one path that cannot sweep (the store was
-// reachable but refused the removal, so a sibling pointer may still be fronted by
-// the same worker) reports what it left standing rather than returning success.
-func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, progress, log func(string)) (PreviewRemovalResult, error) {
+// It removes that one pointer and NOTHING the project's previews share. The
+// entrypoint worker attached to the project's wildcard, the deployments-store
+// instance behind it and the project-rooted function artifacts all outlive every
+// pointer, and reclaiming them is `ocel destroy --preview`'s job alone. Doing it
+// here — on the removal that happened to leave no pointers behind — would let one
+// teardown delete the worker out from under a preview another deploy is landing
+// at that moment, since a pointer only exists once its deploy has promoted.
+func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootStackState, cfg Config, slug, pointer string, persistent bool, progress, log func(string)) error {
 	report := nilSafe(progress)
 
 	var errs []error
-	var removal edge.PointerRemoval
-	stored := stack != nil && len(state) > 0
-	removed := false
-	if stored {
+	var removal edge.PruneResult
+	if stack != nil && len(state) > 0 {
 		report(fmt.Sprintf("Removing preview pointer %q from the store", pointer))
 		result, err := stack.RemovePointer(ctx, state, pointer)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("remove preview pointer %q: %w", pointer, err))
 		} else {
-			removal, removed = result, true
+			removal = result
 		}
 	}
 
@@ -85,130 +72,7 @@ func RemovePreview(ctx context.Context, stack edge.RootStack, state edge.RootSta
 		}
 	}
 
-	var result PreviewRemovalResult
-	switch {
-	case removed:
-		edgeErr := reclaimPreviewEdge(ctx, stack, state, slug, removal, report)
-		errs = append(errs, edgeErr)
-
-		// Artifact keys carry no pointer, so identical code under two pointers is
-		// one object: only the last pointer's removal leaves a prefix no live
-		// preview still points at. The `removed` guard above is load-bearing —
-		// RemainingPointers is also zero when RemovePointer failed, and purging on
-		// that would take every sibling pointer's artifacts with it.
-		if removal.RemainingPointers == 0 {
-			report("Purging preview function artifacts — no previews remain")
-			errs = append(errs, purgeProjectArtifacts(ctx, cfg, slug))
-			result.EdgeTornDown = edgeErr == nil
-		}
-	case stored:
-		errs = append(errs, fmt.Errorf("left this project's preview worker(s) and its deployments-store instance standing: the store did not report %q removed, so whether a sibling preview is still fronted by the same worker is unknown; re-run `ocel preview rm` once the store is reachable", pointer))
-	default:
-		errs = append(errs, sweepOrphanedPreviewEdge(ctx, stack, cfg, slug, report))
-	}
-
-	return result, errors.Join(errs...)
-}
-
-// sweepOrphanedPreviewEdge reclaims what a project holding no root-stack state
-// can still be paying for. A deploy that dies inside the root-stack reconcile
-// leaves its generic worker(s) deployed and records nothing, and the store
-// instance those workers would otherwise be listed from is exactly what was never
-// written — so listing the project's preview worker prefix on the edge is the
-// only thing that can ever name them again. Nothing was recorded, so no sibling
-// pointer can exist and the whole prefix is this teardown's to take.
-func sweepOrphanedPreviewEdge(ctx context.Context, stack edge.RootStack, cfg Config, slug string, report func(string)) error {
-	if stack == nil {
-		return nil
-	}
-	deployed, err := stack.ListDeployedWorkers(ctx, previewWorkerPrefix(slug))
-	if err != nil {
-		return fmt.Errorf("resolve orphaned preview workers: %w", err)
-	}
-	var errs []error
-	if len(deployed) > 0 {
-		report("Destroying the project's preview worker(s) — orphaned by a deploy that recorded no state")
-		if err := stack.DestroyRootStack(ctx, deployed); err != nil {
-			errs = append(errs, fmt.Errorf("destroy orphaned preview workers %v: %w", deployed, err))
-		}
-	}
-	report("Purging preview function artifacts")
-	errs = append(errs, purgeProjectArtifacts(ctx, cfg, slug))
 	return errors.Join(errs...)
-}
-
-// reclaimPreviewEdge frees the edge footprint a removed preview pointer leaves:
-// just this pointer's routes off the generic worker its live siblings share, or —
-// once it was the last pointer — those whole workers (each taking its routes with
-// it) and the project's store instance. Best-effort like its caller.
-func reclaimPreviewEdge(ctx context.Context, stack edge.RootStack, state edge.RootStackState, slug string, removal edge.PointerRemoval, report func(string)) error {
-	if removal.RemainingPointers > 0 {
-		var errs []error
-		for _, route := range removal.RemovedRoutes {
-			worker := previewGenericName(slug, route.App)
-			report("Removing preview route " + route.Hostname)
-			if err := stack.RemoveRoute(ctx, worker, route.Hostname); err != nil {
-				errs = append(errs, fmt.Errorf("remove preview route %s from %s: %w", route.Hostname, worker, err))
-			}
-		}
-		return errors.Join(errs...)
-	}
-
-	var errs []error
-	report("Destroying the project's preview worker(s) — no previews remain")
-	deployed, listErr := stack.ListDeployedWorkers(ctx, previewWorkerPrefix(slug))
-	if listErr != nil {
-		errs = append(errs, fmt.Errorf("resolve preview root workers: %w", listErr))
-	}
-	destroyErr := stack.DestroyRootStack(ctx, previewSweepWorkers(slug, removal, deployed))
-	if destroyErr != nil {
-		errs = append(errs, fmt.Errorf("destroy preview root workers: %w", destroyErr))
-	}
-
-	// The instance is the only thing a re-run can name these workers from: wiping
-	// it while any of them may still stand leaves them unreclaimable, because a
-	// second `preview rm` finds no pointer to remove and never reaches here.
-	if listErr == nil && destroyErr == nil {
-		report("Wiping the project's preview deployments-store instance")
-		if err := stack.DestroyInstance(ctx, state); err != nil {
-			errs = append(errs, fmt.Errorf("destroy preview deployments-store instance: %w", err))
-		}
-	}
-	return errors.Join(errs...)
-}
-
-// previewSweepWorkers is the set of preview generic workers a last-pointer
-// teardown destroys: every worker the edge reports under the project's preview
-// prefix, plus the deployed name of every app the removal names. Both sources are
-// needed — the prefix reaches workers whose app nothing remembers any more, while
-// the removal reaches names workerScriptName clamped out of that prefix to fit the
-// platform's name limit (a long slug). Destroying a name already gone is not an
-// error, so the union only ever risks a redundant call, where a missed name leaks
-// a billable worker. Pure.
-func previewSweepWorkers(slug string, removal edge.PointerRemoval, deployed []string) []string {
-	workers := make([]string, 0, len(deployed)+len(removal.RemovedRoutes))
-	seen := map[string]struct{}{}
-	add := func(name string) {
-		if _, dup := seen[name]; dup {
-			return
-		}
-		seen[name] = struct{}{}
-		workers = append(workers, name)
-	}
-	for _, name := range deployed {
-		add(name)
-	}
-	for _, route := range removal.RemovedRoutes {
-		if route.App != "" {
-			add(previewGenericName(slug, route.App))
-		}
-	}
-	for _, key := range removal.RemovedRecordKeys {
-		if app, _, ok := splitRecordKey(key); ok {
-			add(previewGenericName(slug, app))
-		}
-	}
-	return workers
 }
 
 // PreviewProjectTeardownPlan is what classifyPreviewStacks resolves from the
@@ -283,11 +147,14 @@ func classifyPreviewStacks(slug string, stackNames []string) PreviewProjectTeard
 // preview deploy still has a substrate to land on. Best-effort throughout; every
 // failure is joined so the host can report what remains and a re-run resumes.
 //
-// The preview generic workers are found by listing the edge for every worker
-// under the project's preview name prefix (previewWorkerPrefix, rooted at the
-// slug in the persisted root-stack state), not from the store's promotion
-// history: a shared generic worker fronts every pointer and outlives them, so a
+// The preview entrypoint worker is named deterministically from the slug in the
+// persisted root-stack state (previewWorkerName), not read from the store's
+// promotion history: one worker fronts every pointer and outlives them, so a
 // prior `ocel preview rm` can leave it standing with no history left to name it.
+// The edge is enumerated under that same name as a stem so the whole worker
+// family goes with it (previewProjectWorkers) — a project deployed under an
+// earlier shape of this holds a worker per app, which nothing computes a name
+// for any more and which nothing else would ever reclaim.
 // stack/state may be zero when the project never reconciled a preview root
 // stack, in which case only stray stacks/assets are swept.
 //
@@ -307,12 +174,14 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	result := DestroyProjectResult{RootTornDown: true}
 
 	if stack != nil && len(state) > 0 {
-		report("Destroying preview root worker(s)")
-		workers, wErr := stack.ListDeployedWorkers(ctx, previewWorkerPrefix(state[edge.RootStackKeySlug]))
-		if wErr != nil {
-			errs = append(errs, fmt.Errorf("resolve preview root workers: %w", wErr))
+		report("Destroying the preview root workers")
+		stateSlug := state[edge.RootStackKeySlug]
+		deployed, err := stack.ListDeployedWorkers(ctx, previewWorkerName(stateSlug))
+		if err != nil {
+			errs = append(errs, fmt.Errorf("list preview root workers: %w", err))
 			result.RootTornDown = false
-		} else if err := stack.DestroyRootStack(ctx, workers); err != nil {
+		}
+		if err := stack.DestroyRootStack(ctx, previewProjectWorkers(stateSlug, deployed)); err != nil {
 			errs = append(errs, fmt.Errorf("destroy preview root workers: %w", err))
 			result.RootTornDown = false
 		}
@@ -353,6 +222,30 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 	}
 
 	return result, errors.Join(errs...)
+}
+
+// previewProjectWorkers is the exact set of edge workers a project's preview
+// teardown reclaims: its entrypoint worker, always, plus every worker the edge
+// reported under that name as a stem — the per-app preview workers an earlier
+// shape of this deploy left standing. It filters the reported names itself
+// rather than trusting the enumeration, because what comes back is deleted:
+// nothing outside the family previewWorkerName heads can get in, so a sibling
+// project's worker and this project's production workers are never among them
+// (subject to previewWorkerName's collision caveat). Sorted, so a re-run tears
+// down in the same order. Pure.
+func previewProjectWorkers(slug string, deployed []string) []string {
+	stem := previewWorkerName(slug)
+	if slug == "" || stem == "" {
+		return nil
+	}
+	names := []string{stem}
+	for _, name := range deployed {
+		if edge.NameUnderStem(stem, name) && !slices.Contains(names, name) {
+			names = append(names, name)
+		}
+	}
+	slices.Sort(names)
+	return names
 }
 
 // planPreviewProjectTeardown lists the preview backend's stacks and classifies

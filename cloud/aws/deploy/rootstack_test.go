@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"reflect"
-	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -33,27 +32,17 @@ type recordingRootStack struct {
 	pruned            []int
 	prunePointers     []string
 	removedPointers   []string
-	removedRoutes     []routeRemoval
 	historyPointers   []string
 	destroyed         int
 	destroyedWorkers  []string
+	listedStems       []string
+	deployedWorkers   []string
+	listWorkersErr    error
 	destroyedInstance int
-	listedPrefixes    []string
 
 	history             []edge.HistoryEntry
-	deployedWorkers     []string
 	pruneResult         edge.PruneResult
 	destroyRootStackErr error
-	// pointerRemoval is what RemovePointer reports beyond pruneResult: the routes
-	// the pointer carried and how many pointers the project has left.
-	pointerRemoval edge.PointerRemoval
-}
-
-// routeRemoval is one RemoveRoute call: which worker script lost a route, and
-// which hostname's.
-type routeRemoval struct {
-	worker   string
-	hostname string
 }
 
 var _ edge.RootStack = (*recordingRootStack)(nil)
@@ -118,36 +107,32 @@ func (f *recordingRootStack) DeletePromotionArtifacts(_ context.Context, state e
 	return f.pruneResult, nil
 }
 
-func (f *recordingRootStack) RemovePointer(_ context.Context, state edge.RootStackState, pointer string) (edge.PointerRemoval, error) {
+func (f *recordingRootStack) RemovePointer(_ context.Context, state edge.RootStackState, pointer string) (edge.PruneResult, error) {
 	if err := f.checkAuth(state); err != nil {
-		return edge.PointerRemoval{}, err
+		return edge.PruneResult{}, err
 	}
 	f.removedPointers = append(f.removedPointers, pointer)
-	removal := f.pointerRemoval
-	removal.PruneResult = f.pruneResult
-	return removal, nil
+	return f.pruneResult, nil
 }
 
-func (f *recordingRootStack) RemoveRoute(_ context.Context, worker, hostname string) error {
-	f.removedRoutes = append(f.removedRoutes, routeRemoval{worker: worker, hostname: hostname})
-	return nil
+// RouteOwner answers unclaimed for everything: nothing in this package reads a
+// hostname's owner, it is the preflight that does.
+func (f *recordingRootStack) RouteOwner(_ context.Context, _ string) (string, error) {
+	return "", nil
+}
+
+// ListDeployedWorkers reports whatever the test seeded as standing at the edge,
+// unfiltered — the filtering is the caller's (previewProjectWorkers), and a fake
+// that did it here would hide a caller that did not.
+func (f *recordingRootStack) ListDeployedWorkers(_ context.Context, stem string) ([]string, error) {
+	f.listedStems = append(f.listedStems, stem)
+	return f.deployedWorkers, f.listWorkersErr
 }
 
 func (f *recordingRootStack) DestroyRootStack(_ context.Context, workers []string) error {
 	f.destroyedWorkers = append(f.destroyedWorkers, workers...)
 	f.destroyed++
 	return f.destroyRootStackErr
-}
-
-func (f *recordingRootStack) ListDeployedWorkers(_ context.Context, prefix string) ([]string, error) {
-	f.listedPrefixes = append(f.listedPrefixes, prefix)
-	var names []string
-	for _, name := range f.deployedWorkers {
-		if strings.HasPrefix(name, prefix) {
-			names = append(names, name)
-		}
-	}
-	return names, nil
 }
 
 func (f *recordingRootStack) DestroyInstance(_ context.Context, state edge.RootStackState) error {

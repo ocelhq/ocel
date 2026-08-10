@@ -242,13 +242,14 @@ func domainClassKeyFor(class deploymentsv1.Environment_Class) string {
 
 // workerDomains resolves the hostnames each worker-backed app *declares*, keyed
 // by app name and absent where the app takes the edge's vendor subdomain. An
-// app's own domains win; the project-level domains apply only when the project
-// has exactly one worker-backed app, because a hostname set (a production apex
-// plus its aliases, or a preview wildcard) cannot be split between two apps and
-// Ocel does not guess which owns it. Production may declare several hostnames and
-// is served on exactly those; a preview declares the single wildcard covering
-// every pointer, which workerRouteHostnames resolves to the one hostname this
-// pointer is served on.
+// app's own domains win.
+//
+// The project-level domains then apply by class. A production hostname set (an
+// apex plus its aliases) cannot be split between two apps, so it applies only
+// when the project has exactly one worker-backed app and is ambiguous otherwise —
+// Ocel does not guess which app owns it. A preview wildcard is claimed by the
+// whole project and covers every app and pointer under it (previewHostnames
+// gives each app its own label), so it applies to every app that declares none.
 func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (map[string][]string, error) {
 	if cfg.Class != deploymentsv1.Environment_CLASS_PRODUCTION &&
 		cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
@@ -269,6 +270,11 @@ func workerDomains(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploym
 	project := manifest.GetDomains()[domainClassKey].GetHostnames()
 	switch {
 	case len(project) == 0 || len(undeclared) == 0:
+		return domains, nil
+	case cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW:
+		for _, app := range undeclared {
+			domains[app] = project
+		}
 		return domains, nil
 	case len(apps) == 1:
 		domains[undeclared[0]] = project

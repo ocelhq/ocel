@@ -39,7 +39,10 @@ import (
 // bump it only when the frozen generic/store worker bundles change shape in a
 // way that needs re-deploying.
 //
-// A NEW WORKER VAR IS SUCH A CHANGE, and forgetting it is silent. Version 11 is
+// A NEW WORKER VAR IS SUCH A CHANGE, and forgetting it is silent. Version 12 is
+// OCEL_PREVIEW_APPS, which the preview entrypoint worker matches a request's
+// host label against: a project whose root stack still stamps 11 keeps a worker
+// that reads no app list, and every preview host under it 404s. Version 11 is
 // OCEL_REVALIDATE_QUEUE_URL: the var is bound from a bootstrap output, so a
 // substrate that gains a revalidator changes what every already-deployed
 // project's generic worker should carry — but a project whose root stack
@@ -50,7 +53,7 @@ import (
 // ocelhq-wvag.27: the CloudFormation output carried the URL and the deployed
 // worker did not. Version 10 (the ISR writer binding) is the same class of
 // change and did bump; the queue's did not.
-const rootStackVersion = "11"
+const rootStackVersion = "12"
 
 // appDeployResult is one app's app-deploy-stack outcome, fed into
 // finalizeProductionDeploy after Run has driven that stack (Pulumi) to
@@ -355,15 +358,15 @@ func finalizeDeploy(ctx context.Context, cfg Config, stack edge.RootStack, specs
 	return state, nil
 }
 
-// rootStackSpecs builds one edge.RootStackSpec per app needing a generic worker
-// (workerApps), plus a no-app fallback when a production project has none — the
-// project's store instance still has to be seeded for every app's Deployment
-// record to be staged into it, even one served straight off its own Function
-// URL. Every spec shares the version, slug and shared-store coordinates; only
-// the app-keyed fields (GenericName, Domains, the app's vars) vary per app, and
-// the hostname intent (PruneRoutes, RequiredRecord) per environment class. warn,
-// when non-nil, receives the edge's
-// non-fatal hostname advisories (an uncovered TLS name, a blocking DNS record).
+// rootStackSpecs builds the edge.RootStackSpecs one deploy reconciles: for
+// production, one per app needing a generic worker (workerApps) plus a no-app
+// fallback — the project's store instance still has to be seeded for every app's
+// Deployment record to be staged into it, even one served straight off its own
+// Function URL. A preview builds exactly one spec for the whole project: its
+// entrypoint worker is attached to the project's declared wildcard and resolves
+// the app from the request host, so it is neither per-app nor per-pointer. warn,
+// when non-nil, receives the edge's non-fatal hostname advisories (an uncovered
+// TLS name, a blocking DNS record).
 func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string, warn func(string)) ([]edge.RootStackSpec, error) {
 	generic, err := genericWorkerBundle(cfg)
 	if err != nil {
@@ -389,22 +392,46 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		Warn:                warn,
 	}
 
-	preview := cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW
+	apps := workerApps(manifest)
 
-	genericName := func(app string) string {
-		if preview {
-			return previewGenericName(cfg.Slug, app)
+	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
+		spec := base
+		spec.GenericName = previewWorkerName(cfg.Slug)
+		// The wildcard is the whole project's desired route set, so the sweep is
+		// the whole project's preview worker family — the entrypoint worker and
+		// the per-app workers an earlier shape of this deploy left standing,
+		// whose pointer-exact routes outrank the wildcard and would shadow it on
+		// those hostnames for good. It reaches nothing else: a production worker
+		// is "ocel-<slug>-<env>-<app>", outside this stem, and so is a sibling
+		// project's, subject to previewWorkerName's collision caveat.
+		spec.PruneWorkerStem = previewWorkerName(cfg.Slug)
+		// A project with no worker-backed app has nothing to serve at the edge:
+		// the spec exists only to seed the project's store instance, and the
+		// worker is attached to no hostname. The missing-preview-domain refusal
+		// is deliberately not reached here — it exists so a preview that WOULD be
+		// served does not end up on the wrong hostname, and a project that gains
+		// its first worker-backed app meets it on that deploy.
+		if len(apps) == 0 {
+			spec.Generic = withPreviewVars(generic, "", apps)
+			return []edge.RootStackSpec{spec}, nil
 		}
-		return workerScriptName(cfg.StackName, app)
+		resolved, err := resolveWorkerHostnames(cfg, manifest, apps)
+		if err != nil {
+			return nil, err
+		}
+		// The declared wildcard is the project's complete desired route set, held
+		// for the project's lifetime: every pointer of every app is served under
+		// it, so the worker is attached to it once and anything else on the script
+		// is drift. The project owns the base domain outright, so Ocel plants the
+		// record behind it like any other hostname it serves.
+		spec.Domains = []string{previewWildcard(resolved.previewBase)}
+		spec.Generic = withPreviewVars(generic, resolved.previewBase, apps)
+		return []edge.RootStackSpec{spec}, nil
 	}
 
-	apps := workerApps(manifest)
 	if len(apps) == 0 {
 		spec := base
-		spec.GenericName = genericName("root")
-		if preview {
-			spec.Generic = withPreviewVars(generic, "", "")
-		}
+		spec.GenericName = workerScriptName(cfg.StackName, "root")
 		return []edge.RootStackSpec{spec}, nil
 	}
 
@@ -416,21 +443,9 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	for _, app := range apps {
 		name := app.GetName()
 		spec := base
-		spec.GenericName = genericName(name)
+		spec.GenericName = workerScriptName(cfg.StackName, name)
 		spec.Generic = withVar(generic, "OCEL_APP", name)
-		spec.Domains = resolved.routes[name]
-		// A preview attaches only this pointer's own exact route to a script its
-		// sibling pointers share, so it prunes nothing. Everything else stays
-		// keyed to the declared wildcard: it is the one DNS record every pointer
-		// under the base resolves through (shared, so required rather than
-		// planted), and its base domain plus the app's route suffix are how the
-		// worker recovers the pointer from a request's subdomain.
-		if preview {
-			baseDomain := resolved.baseDomains[name]
-			spec.PruneRoutes = false
-			spec.RequiredRecord = previewWildcard(baseDomain)
-			spec.Generic = withPreviewVars(spec.Generic, baseDomain, previewRouteSuffix(cfg.Slug, name))
-		}
+		spec.Domains = resolved.hosts[name]
 		specs = append(specs, spec)
 	}
 	return specs, nil
@@ -439,47 +454,74 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 // Env var names the frozen preview worker reads to enter preview mode
 // (workers/nextjs/src/index.ts).
 const (
-	envPreview            = "OCEL_PREVIEW"
-	envPreviewBaseDomain  = "OCEL_PREVIEW_BASE_DOMAIN"
-	envPreviewLabelSuffix = "OCEL_PREVIEW_LABEL_SUFFIX"
+	envPreview           = "OCEL_PREVIEW"
+	envPreviewBaseDomain = "OCEL_PREVIEW_BASE_DOMAIN"
+	envPreviewApps       = "OCEL_PREVIEW_APPS"
 )
 
-// withPreviewVars turns a generic worker bundle into a preview root worker,
-// setting the base domain and route-label suffix only when they are known. The
-// worker recovers a request's pointer by stripping labelSuffix off the subdomain
-// label, and degrades to reading the whole label as the pointer without it.
-func withPreviewVars(worker edge.Worker, baseDomain, labelSuffix string) edge.Worker {
+// withPreviewVars turns a generic worker bundle into the project's preview
+// entrypoint worker, setting the base domain when it is known. The worker
+// recovers a request's pointer and app from the label below that base domain,
+// so — unlike a production worker — it is bound to no single app; the app list
+// is what it recovers the app half against, and is always bound.
+func withPreviewVars(worker edge.Worker, baseDomain string, apps []*deploymentsv1.ManifestApp) edge.Worker {
 	worker = withVar(worker, envPreview, "1")
+	worker = withVar(worker, envPreviewApps, previewAppNames(apps))
 	if baseDomain != "" {
 		worker = withVar(worker, envPreviewBaseDomain, baseDomain)
-	}
-	if labelSuffix != "" {
-		worker = withVar(worker, envPreviewLabelSuffix, labelSuffix)
 	}
 	return worker
 }
 
-// previewGenericName shapes the preview root worker's name as
-// "ocel-<project>-preview-<app>" so it can never collide with the production
-// root worker ("ocel-<project>-<app>") in the same account.
-func previewGenericName(slug, app string) string {
-	return workerScriptName(slug+"-preview", app)
+// previewAppNames is the OCEL_PREVIEW_APPS value: the project's worker-backed
+// app names, lowercased and comma-separated, in manifest order. The preview
+// entrypoint worker recognises the "<app>" half of a "<pointer>--<app>" host
+// label by matching this list — longest match winning — rather than by splitting
+// on the separator, and accepts a bare "<pointer>" label only when the list
+// names exactly one app. A project with no worker-backed app 404s every preview
+// host, which is why the var is bound on every preview reconcile rather than
+// only when there is something to say: an unbound var and an empty one would
+// otherwise differ, and the worker reads both as "no apps". Pure.
+func previewAppNames(apps []*deploymentsv1.ManifestApp) string {
+	names := make([]string, 0, len(apps))
+	for _, app := range apps {
+		if name := strings.ToLower(strings.TrimSpace(app.GetName())); name != "" {
+			names = append(names, name)
+		}
+	}
+	return strings.Join(names, ",")
 }
 
-// previewWorkerPrefix is the name stem every one of a project's preview generic
-// workers shares — the un-clamped stack segment of previewGenericName, so
-// previewGenericName(slug, app) == previewWorkerPrefix(slug)+"-"+<app segment>
-// for every app (see workerScriptName, which only clamps this stem when an
-// unusually long app segment leaves it no budget). Preview teardown sweeps every
-// deployed worker under this prefix, which is how it reclaims the shared,
-// pointer-independent generic worker after the store history that named it is
-// gone (a prior `ocel preview rm` dropped it). The "-preview" segment keeps the
-// prefix off this project's own production workers ("ocel-<slug>-production-…").
-// It cannot, by name alone, tell a sibling project slugged "<slug>-preview-…"
-// apart — the same prefix-collision caveat classifyProjectStacks carries — but
-// slugs are unique per org and that shape is pathological. Pure.
-func previewWorkerPrefix(slug string) string {
+// previewWorkerName is the project's one preview entrypoint worker,
+// "ocel-<project>-preview": project-scoped rather than per-app, because the
+// worker resolves the app from the request host, and never colliding with a
+// production root worker ("ocel-<project>-<env>-<app>") in the same account. It
+// is the single deterministic name preview teardown reclaims, so nothing has to
+// enumerate the edge to find it. It cannot, by name alone, tell a sibling
+// project slugged "<slug>-preview" apart — the same collision caveat
+// classifyProjectStacks carries — but slugs are unique per org and that shape is
+// pathological. Pure.
+func previewWorkerName(slug string) string {
 	return sanitizeWorkerName("ocel-" + slug + "-preview")
+}
+
+// ProjectOwnsWorker reports whether an edge worker script name is one of this
+// project's own: every worker Ocel deploys for a project is named "ocel-<slug>…"
+// (previewWorkerName, workerScriptName), so the slug segment is what tells a
+// project's own hold on a hostname apart from another project's. It answers the
+// domain-claim check's "is this mine?", and it lives here rather than in the CLI
+// because only the deploy host derives a worker name from a slug.
+//
+// It carries previewWorkerName's collision caveat — a sibling project slugged
+// "<slug>-something" reads as this one — and one of its own: a slug long enough
+// for workerScriptName to clamp the project segment is not recognised, which
+// reads as someone else's claim and refuses rather than lets a deploy through.
+// Pure.
+func ProjectOwnsWorker(slug, script string) bool {
+	if slug == "" || script == "" {
+		return false
+	}
+	return edge.NameUnderStem(sanitizeWorkerName("ocel-"+slug), script)
 }
 
 // firstDomain is the first hostname in an app's declared domain list, or "" for
@@ -501,10 +543,9 @@ func previewBaseDomain(wildcard string) string {
 	return wildcard[len("*."):]
 }
 
-// previewWildcard is previewBaseDomain's inverse: the one DNS record every
-// pointer hostname under base resolves through. Shared by every project and
-// pointer on that base, so a preview reconcile requires it rather than planting
-// one of its own (RootStackSpec.RequiredRecord). No base yields no record.
+// previewWildcard is previewBaseDomain's inverse: the wildcard the project
+// declared, which is both its one worker route and the one DNS record every
+// pointer hostname under base resolves through. No base yields no wildcard.
 func previewWildcard(base string) string {
 	if base == "" {
 		return ""
@@ -513,58 +554,78 @@ func previewWildcard(base string) string {
 }
 
 // workerHostnames is one deploy's resolved hostname intent for its worker-backed
-// apps: the hostnames each app's worker routes are attached to, plus — preview
-// only — the base domain the app's declared wildcard names, which the concrete
-// route hostname has nothing to recover it from.
+// apps: the hostnames each app is served on, plus — preview only — the project's
+// preview base domain, which the concrete pointer hostnames have nothing to
+// recover it from.
 type workerHostnames struct {
-	routes      map[string][]string
-	baseDomains map[string]string
+	hosts       map[string][]string
+	previewBase string
 }
 
 // resolveWorkerHostnames is the single resolution from declared domains
 // (workerDomains) to what a deploy actually serves on, shared by the root-stack
-// spec, the reported app URLs and the Deployment record so those three can never
-// disagree.
+// spec and the reported app URLs so the two can never disagree.
 func resolveWorkerHostnames(cfg Config, manifest *deploymentsv1.Manifest, apps []*deploymentsv1.ManifestApp) (workerHostnames, error) {
 	declared, err := workerDomains(cfg, manifest, apps)
 	if err != nil {
 		return workerHostnames{}, err
 	}
 	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
-		return workerHostnames{routes: declared}, nil
+		return workerHostnames{hosts: declared}, nil
 	}
-	return previewHostnames(cfg, declared)
+	return previewHostnames(cfg, apps, declared)
 }
 
-// previewHostnames resolves each app's declared preview wildcard to the one exact
-// hostname this pointer is served on, so the sibling pointers sharing the app's
-// script each hold a route of their own instead of fighting over one wildcard
-// route (ocelhq-5w3). It is the only place a declared domain reaches
-// previewBaseDomain: fed a concrete route host instead, that returns "" and the
-// worker silently leaves preview mode. Pure.
-func previewHostnames(cfg Config, declared map[string][]string) (workerHostnames, error) {
-	resolved := workerHostnames{
-		routes:      make(map[string][]string, len(declared)),
-		baseDomains: make(map[string]string, len(declared)),
-	}
-	for app, domains := range declared {
-		domain := firstDomain(domains)
-		base := previewBaseDomain(domain)
-		if base == "" {
-			return workerHostnames{}, fmt.Errorf("app %q declares the preview domain %q, which is not a \"*.\" wildcard: every pointer is served on its own subdomain, so declare \"*.%s\" instead — or declare no preview domain and be served on the edge's own subdomain", app, domain, domain)
+// previewHostnames resolves the project's declared preview wildcard to the
+// hostname each app is served on for this pointer. The base domain belongs to
+// the whole project — one wildcard, one entrypoint worker — so every worker-
+// backed app is served under it, and a deploy with a worker-backed app but no
+// wildcard to serve it under is refused rather than silently falling back to the
+// production default pointer. It is the only place a declared domain reaches
+// previewBaseDomain. Pure.
+func previewHostnames(cfg Config, apps []*deploymentsv1.ManifestApp, declared map[string][]string) (workerHostnames, error) {
+	base := ""
+	for _, app := range apps {
+		name := app.GetName()
+		domain := firstDomain(declared[name])
+		if domain == "" {
+			continue
 		}
-		resolved.baseDomains[app] = base
+		resolved := previewBaseDomain(domain)
+		if resolved == "" {
+			return workerHostnames{}, fmt.Errorf("app %q declares the preview domain %q, which is not a \"*.\" wildcard: every preview is served on its own subdomain of it, so declare \"*.%s\" instead", name, domain, domain)
+		}
+		if base != "" && resolved != base {
+			return workerHostnames{}, fmt.Errorf("this project declares more than one preview domain (%q and %q): a preview domain is claimed by the whole project, which serves every app from one wildcard, so declare a single project-level domains.preview", previewWildcard(base), domain)
+		}
+		base = resolved
+	}
+	if base == "" {
+		return workerHostnames{}, fmt.Errorf("this project declares no preview domain, so a preview deploy has nowhere to serve: add a project-level domains.preview wildcard (e.g. \"*.preview.acme.com\") to your ocel config and deploy again")
+	}
 
-		host := previewRouteHost(cfg.Slug, app, cfg.Identity, base)
+	// The separator is the grammar's, not a pointer's: the entrypoint worker
+	// recovers the app half of "<pointer>--<app>" by matching the project's app
+	// names, so a pointer carrying it can resolve to a shorter pointer naming no
+	// deployment. The CLI refuses such a name (previewid.ValidateLabel); this is
+	// the same rule at the RPC boundary, which any caller can cross.
+	if strings.Contains(cfg.Identity, previewAppSeparator) {
+		return workerHostnames{}, fmt.Errorf("preview name %q contains %q, which separates the preview from the app in the hostname it is served on: use a single hyphen", cfg.Identity, previewAppSeparator)
+	}
+
+	hosts := make(map[string][]string, len(apps))
+	for _, app := range apps {
+		name := app.GetName()
+		host := previewHost(cfg.Identity, name, base, len(apps) == 1)
 		if host == "" {
 			continue
 		}
 		if label, _, _ := strings.Cut(host, "."); len(label) > previewLabelMaxLen {
-			return workerHostnames{}, fmt.Errorf("preview pointer %q makes the route label %q %d characters, over the %d-character DNS limit: the pointer must be at most %d characters", cfg.Identity, label, len(label), previewLabelMaxLen, previewPointerMaxLen)
+			return workerHostnames{}, fmt.Errorf("preview pointer %q makes the hostname label %q %d characters, over the %d-character DNS limit: use a shorter preview name", cfg.Identity, label, len(label), previewLabelMaxLen)
 		}
-		resolved.routes[app] = []string{host}
+		hosts[name] = []string{host}
 	}
-	return resolved, nil
+	return workerHostnames{hosts: hosts, previewBase: base}, nil
 }
 
 // withVar returns worker with one additional plain-text var, leaving the
@@ -668,8 +729,9 @@ func genericWorkerBundle(cfg Config) (edge.Worker, error) {
 
 // loadWorkerBundle reads a compiled worker entrypoint off disk into the
 // edge.Worker shape ReconcileRootStack uploads: the generic worker carries no
-// per-deploy modules/vars/assets — those belong to the framework-assembled
-// per-app worker previews still use.
+// per-deploy modules/vars/assets at all — it resolves everything it serves from
+// the Deployment record at request time, which is what lets one frozen script
+// front a whole project's previews as well as each production app.
 func loadWorkerBundle(path string) (edge.Worker, error) {
 	main, err := os.ReadFile(path)
 	if err != nil {
@@ -759,7 +821,11 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	urlByLogical := functionURLsByLogicalName(outs)
 	fingerprint, variables := recordedAudit(cfg, app)
 	record := edge.DeploymentRecord{
-		App:              name,
+		App: name,
+		// One entrypoint worker fronts a whole project, so what can serve a
+		// Deployment travels on the Deployment: the worker dispatches on this and
+		// answers 501 for a framework it has no handler for.
+		Framework:        app.GetFramework(),
 		Identity:         id.String(),
 		FunctionURLs:     appFunctionURLsByRoute(manifest.GetFunctions(), name, urlByLogical),
 		CreatedAt:        time.Now().Unix(),
@@ -773,12 +839,6 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	// published; leaving AssetPrefix set for any other app would point at a
 	// prefix nothing was ever uploaded to.
 	record.AssetPrefix = appAssetR2Prefix(manifest.GetSlug(), name, id.BuildID())
-
-	routeHostnames, err := recordedRouteHostnames(cfg, manifest, name)
-	if err != nil {
-		return edge.DeploymentRecord{}, err
-	}
-	record.RouteHostnames = routeHostnames
 
 	raw, err := os.ReadFile(filepath.Join(appArtifactRoot(cfg.ArtifactRoot, name), "routing-manifest.json"))
 	if err != nil {
@@ -807,24 +867,6 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 	return record, nil
 }
 
-// recordedRouteHostnames are the worker-route hostnames one app's deploy
-// registered and its teardown therefore owns. Only a preview has any: its routes
-// are minted and retired with the pointer, so `preview rm` deletes exactly these
-// (edge.DeploymentRecord.RouteHostnames) without needing the project config that
-// named them. Production records none — its routes are project-lifetime and
-// reconciled declaratively, and deleting one per pointer would take the project's
-// own domain off the edge.
-func recordedRouteHostnames(cfg Config, manifest *deploymentsv1.Manifest, app string) ([]string, error) {
-	if cfg.Class != deploymentsv1.Environment_CLASS_PREVIEW {
-		return nil, nil
-	}
-	resolved, err := resolveWorkerHostnames(cfg, manifest, workerApps(manifest))
-	if err != nil {
-		return nil, err
-	}
-	return resolved.routes[app], nil
-}
-
 // workerURLOutputs reports each worker-fronted app's user-facing URL under the
 // same workerOutputName appURLs already reads: its custom domain for production,
 // and for a preview the concrete per-pointer subdomain (the ref under the
@@ -843,7 +885,7 @@ func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymen
 	}
 	var outs []*deploymentsv1.ResourceOutput
 	for _, app := range apps {
-		if url := workerAppURL(resolved.routes[app.GetName()]); url != "" {
+		if url := workerAppURL(resolved.hosts[app.GetName()]); url != "" {
 			outs = append(outs, collectFunctionOutput(workerOutputName(app.GetName()), url))
 		}
 	}

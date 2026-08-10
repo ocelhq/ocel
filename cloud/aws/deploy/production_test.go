@@ -94,6 +94,12 @@ func TestRootStackSpecs_ProductionPrunesStaleRoutes(t *testing.T) {
 	if !specs[0].PruneRoutes {
 		t.Error("PruneRoutes = false, want true for production")
 	}
+	// Production apps hold hostnames of their own on workers of their own, so a
+	// stem spanning them would let one app's reconcile sweep another's route —
+	// and one spanning the project would sweep its previews.
+	if specs[0].PruneWorkerStem != "" {
+		t.Errorf("PruneWorkerStem = %q, want empty: a production spec sweeps its own script alone", specs[0].PruneWorkerStem)
+	}
 }
 
 func TestPreviewBaseDomain(t *testing.T) {
@@ -122,26 +128,54 @@ func TestPreviewWildcard(t *testing.T) {
 	}
 }
 
-// One route per pointer, so concurrent previews of one project stop overwriting a
-// shared wildcard route (ocelhq-5w3). The base domain is carried alongside because
-// the concrete hostname it resolves to has nothing to recover it from.
-func TestPreviewHostnames_ResolvesTheWildcardToThePointerHost(t *testing.T) {
-	declared := map[string][]string{"web": {"*.preview.acme.com"}}
+// The project owns the wildcard, so every app resolves under one base domain and
+// each app gets its own label below it. The base is carried alongside because the
+// concrete hostnames have nothing to recover it from.
+func TestPreviewHostnames_ResolvesTheWildcardToThePointerHosts(t *testing.T) {
 	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
 
-	got, err := previewHostnames(cfg, declared)
+	t.Run("a single app elides the app label", func(t *testing.T) {
+		apps := []*deploymentsv1.ManifestApp{{Name: "web"}}
+		got, err := previewHostnames(cfg, apps, map[string][]string{"web": {"*.preview.acme.com"}})
+		if err != nil {
+			t.Fatalf("previewHostnames: %v", err)
+		}
+		if want := []string{"pr-42.preview.acme.com"}; !slicesEqual(got.hosts["web"], want) {
+			t.Errorf("hosts = %v, want %v", got.hosts["web"], want)
+		}
+		if got.previewBase != "preview.acme.com" {
+			t.Errorf("previewBase = %q, want preview.acme.com", got.previewBase)
+		}
+	})
+
+	t.Run("two apps qualify the label", func(t *testing.T) {
+		apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
+		declared := map[string][]string{"web": {"*.preview.acme.com"}, "api": {"*.preview.acme.com"}}
+		got, err := previewHostnames(cfg, apps, declared)
+		if err != nil {
+			t.Fatalf("previewHostnames: %v", err)
+		}
+		if want := []string{"pr-42--web.preview.acme.com"}; !slicesEqual(got.hosts["web"], want) {
+			t.Errorf("web hosts = %v, want %v", got.hosts["web"], want)
+		}
+		if want := []string{"pr-42--api.preview.acme.com"}; !slicesEqual(got.hosts["api"], want) {
+			t.Errorf("api hosts = %v, want %v", got.hosts["api"], want)
+		}
+	})
+}
+
+// The wildcard is claimed by the project, so an app that declares nothing of its
+// own is still served under it — there is no per-app preview domain to inherit.
+func TestPreviewHostnames_ServesAnAppThatDeclaresNothingUnderTheProjectWildcard(t *testing.T) {
+	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+	apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
+
+	got, err := previewHostnames(cfg, apps, map[string][]string{"web": {"*.preview.acme.com"}})
 	if err != nil {
 		t.Fatalf("previewHostnames: %v", err)
 	}
-	want := previewRouteHost("proj", "web", "pr-42", "preview.acme.com")
-	if len(got.routes["web"]) != 1 || got.routes["web"][0] != want {
-		t.Fatalf("route hostnames = %v, want [%s]", got.routes["web"], want)
-	}
-	if strings.Contains(got.routes["web"][0], "*") {
-		t.Errorf("preview route hostname %q is still a wildcard", got.routes["web"][0])
-	}
-	if got.baseDomains["web"] != "preview.acme.com" {
-		t.Errorf("base domain = %q, want preview.acme.com", got.baseDomains["web"])
+	if want := []string{"pr-42--api.preview.acme.com"}; !slicesEqual(got.hosts["api"], want) {
+		t.Errorf("api hosts = %v, want %v", got.hosts["api"], want)
 	}
 }
 
@@ -158,27 +192,30 @@ func TestResolveWorkerHostnames_ProductionServesItsDeclaredHostnames(t *testing.
 	if err != nil {
 		t.Fatalf("resolveWorkerHostnames: %v", err)
 	}
-	if want := []string{"acme.com", "www.acme.com"}; !slicesEqual(resolved.routes["web"], want) {
-		t.Errorf("route hostnames = %v, want the declared hostnames %v", resolved.routes["web"], want)
+	if want := []string{"acme.com", "www.acme.com"}; !slicesEqual(resolved.hosts["web"], want) {
+		t.Errorf("hostnames = %v, want the declared hostnames %v", resolved.hosts["web"], want)
 	}
 }
 
-// An app declaring no preview domain is served on the edge's own vendor
-// subdomain: no route, and no error — the legitimate no-route deploy.
-func TestResolveWorkerHostnames_PreviewWithNoDeclaredDomainGetsNoRoute(t *testing.T) {
+// A preview with no declared domain used to be served on the edge's own vendor
+// subdomain, which silently answers off the production default pointer. There is
+// no preview without a project-owned domain, so the deploy is refused instead.
+func TestRootStackSpecs_PreviewWithNoDeclaredDomainIsRefused(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
 	manifest := &deploymentsv1.Manifest{
 		Slug:      "proj",
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 	}
-	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}
 
-	resolved, err := resolveWorkerHostnames(cfg, manifest, workerApps(manifest))
-	if err != nil {
-		t.Fatalf("resolveWorkerHostnames: %v", err)
+	_, err := rootStackSpecs(cfg, manifest, "v1", nil)
+	if err == nil {
+		t.Fatal("expected a preview deploy with no declared preview domain to be refused")
 	}
-	if len(resolved.routes["web"]) != 0 {
-		t.Errorf("route hostnames = %v, want none", resolved.routes["web"])
+	if !strings.Contains(err.Error(), "domains.preview") {
+		t.Errorf("error must point at the config field to add, got %q", err)
 	}
 }
 
@@ -205,15 +242,32 @@ func TestRootStackSpecs_PreviewWithoutAWildcardFailsTheDeploy(t *testing.T) {
 	}
 }
 
+// One project, one preview wildcard: two apps claiming different bases would need
+// two entrypoint workers, which is the model this replaced.
+func TestPreviewHostnames_TwoPreviewDomainsInOneProjectAreRefused(t *testing.T) {
+	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: "pr-42"}
+	apps := []*deploymentsv1.ManifestApp{{Name: "web"}, {Name: "api"}}
+	declared := map[string][]string{"web": {"*.preview.acme.com"}, "api": {"*.preview.other.com"}}
+
+	_, err := previewHostnames(cfg, apps, declared)
+	if err == nil {
+		t.Fatal("expected two project preview domains to be refused")
+	}
+	if !strings.Contains(err.Error(), "*.preview.acme.com") || !strings.Contains(err.Error(), "*.preview.other.com") {
+		t.Errorf("error must name both domains, got %q", err)
+	}
+}
+
 // The pointer cap is mirrored in cli/internal/previewid and scripts/e2e-next
 // (separate modules, no shared constant), so drift is only ever caught here: an
-// over-long label yields a route the edge rejects or a hostname that never
-// resolves, with no deploy-time diagnostic.
+// over-long label yields a hostname that never resolves, with no deploy-time
+// diagnostic.
 func TestPreviewHostnames_OverLongPointerFailsTheDeploy(t *testing.T) {
-	pointer := strings.Repeat("p", previewPointerMaxLen+1)
+	pointer := strings.Repeat("p", previewLabelMaxLen+1)
 	cfg := Config{Class: deploymentsv1.Environment_CLASS_PREVIEW, Slug: "proj", Identity: pointer}
+	apps := []*deploymentsv1.ManifestApp{{Name: "web"}}
 
-	_, err := previewHostnames(cfg, map[string][]string{"web": {"*.preview.acme.com"}})
+	_, err := previewHostnames(cfg, apps, map[string][]string{"web": {"*.preview.acme.com"}})
 	if err == nil {
 		t.Fatalf("expected a pointer of %d characters to fail the deploy", len(pointer))
 	}
@@ -243,49 +297,32 @@ func TestWorkerAppURL(t *testing.T) {
 	}
 }
 
-func TestPreviewGenericName_DistinctFromProduction(t *testing.T) {
-	prod := workerScriptName("proj-production", "web")
-	preview := previewGenericName("proj", "web")
-	if prod == preview {
-		t.Fatalf("preview root worker name %q collides with production", preview)
+func TestPreviewWorkerName_ProjectScopedAndDistinctFromProduction(t *testing.T) {
+	name := previewWorkerName("shop")
+	if want := "ocel-shop-preview"; name != want {
+		t.Fatalf("previewWorkerName = %q, want %q", name, want)
 	}
-	if want := "ocel-proj-preview-web"; preview != want {
-		t.Errorf("previewGenericName = %q, want %q", preview, want)
-	}
-}
-
-func TestPreviewWorkerPrefix_PrefixesEveryPreviewWorkerAndNotProduction(t *testing.T) {
-	prefix := previewWorkerPrefix("shop")
-	if want := "ocel-shop-preview"; prefix != want {
-		t.Fatalf("previewWorkerPrefix = %q, want %q", prefix, want)
-	}
-	// Every worker a preview deploys — the per-app generic workers and the
-	// no-app "root" fallback — must sit under the prefix teardown sweeps, so a
-	// teardown finds them without the store history that named them.
-	for _, app := range []string{"web", "api", "root"} {
-		name := previewGenericName("shop", app)
-		if !strings.HasPrefix(name, prefix+"-") {
-			t.Errorf("previewGenericName(%q) = %q, not under prefix %q-", app, name, prefix)
-		}
-	}
-	// The prefix must never reach a production worker of the same project, or a
-	// destroy --preview would take production down.
-	if prod := workerScriptName("shop-production", "web"); strings.HasPrefix(prod, previewWorkerPrefix("shop")+"-") {
-		t.Errorf("production worker %q matches the preview prefix %q-", prod, previewWorkerPrefix("shop"))
+	// The worker resolves the app from the request host, so no app ever appears in
+	// its name — and it must never reach this project's production workers.
+	if prod := workerScriptName("shop-production", "web"); prod == name || strings.HasPrefix(prod, name) {
+		t.Errorf("production worker %q collides with the preview worker %q", prod, name)
 	}
 }
 
-// A preview reconciles one exact route per pointer, prunes nothing (its sibling
-// pointers' routes hang off the same shared script), and requires — never plants
-// — the wildcard record every pointer hostname resolves through (ocelhq-5w3).
-func TestRootStackSpecs_PreviewRoutesOnePointerExactHostname(t *testing.T) {
+// One entrypoint worker for the whole project, attached to the wildcard the
+// project declared, pruning everything else off itself and planting the record
+// behind it — the pointer is not in any of it.
+func TestRootStackSpecs_PreviewIsOneProjectScopedSpec(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 	manifest := &deploymentsv1.Manifest{
-		Slug:      "proj",
-		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
-		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
-		Domains:   map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
+		Slug: "proj",
+		Apps: []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "api", Framework: "next"}},
+		Functions: []*deploymentsv1.ManifestFunction{
+			{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"},
+			{LogicalName: "api_index", Framework: "next", App: "api", RouteId: "/"},
+		},
+		Domains: map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 	}
 	cfg := Config{
 		Edge:     &recordingEdge{},
@@ -299,44 +336,97 @@ func TestRootStackSpecs_PreviewRoutesOnePointerExactHostname(t *testing.T) {
 		t.Fatalf("rootStackSpecs: %v", err)
 	}
 	if len(specs) != 1 {
-		t.Fatalf("specs = %d, want 1", len(specs))
+		t.Fatalf("specs = %d, want 1 for the whole project", len(specs))
 	}
 	spec := specs[0]
-	if spec.GenericName != "ocel-proj-preview-web" {
-		t.Errorf("GenericName = %q, want ocel-proj-preview-web", spec.GenericName)
+	if spec.GenericName != "ocel-proj-preview" {
+		t.Errorf("GenericName = %q, want ocel-proj-preview", spec.GenericName)
 	}
-	wantHost := previewRouteHost("proj", "web", "pr-42", "preview.acme.com")
-	if len(spec.Domains) != 1 || spec.Domains[0] != wantHost {
-		t.Errorf("Domains = %v, want the pointer-exact host [%s]", spec.Domains, wantHost)
+	if !slicesEqual(spec.Domains, []string{"*.preview.acme.com"}) {
+		t.Errorf("Domains = %v, want the declared wildcard", spec.Domains)
 	}
-	if spec.PruneRoutes {
-		t.Error("PruneRoutes = true: pruning would delete a sibling pointer's route off the shared script")
+	if !spec.PruneRoutes {
+		t.Error("PruneRoutes = false: the wildcard is the project's complete desired route set")
 	}
-	if spec.RequiredRecord != "*.preview.acme.com" {
-		t.Errorf("RequiredRecord = %q, want the declared wildcard *.preview.acme.com", spec.RequiredRecord)
+	if spec.RequiredRecord != "" {
+		t.Errorf("RequiredRecord = %q, want empty: the project owns the base domain, so Ocel plants the record", spec.RequiredRecord)
+	}
+	// A pointer-exact route left on a per-app preview worker outranks the
+	// wildcard, so the sweep has to reach that whole worker family — and no
+	// further than it.
+	if spec.PruneWorkerStem != previewWorkerName("proj") {
+		t.Errorf("PruneWorkerStem = %q, want %q", spec.PruneWorkerStem, previewWorkerName("proj"))
 	}
 	if spec.Generic.Vars[envPreview] != "1" {
 		t.Errorf("Vars[%s] = %q, want 1", envPreview, spec.Generic.Vars[envPreview])
 	}
 	// Emitted empty, the worker leaves preview mode and every preview request
-	// 404s with nothing failing at deploy time — so it must survive the switch to
-	// a concrete Domains, which carries no wildcard to recover it from.
+	// 404s with nothing failing at deploy time.
 	if spec.Generic.Vars[envPreviewBaseDomain] != "preview.acme.com" {
 		t.Errorf("Vars[%s] = %q, want preview.acme.com", envPreviewBaseDomain, spec.Generic.Vars[envPreviewBaseDomain])
 	}
-	// The worker recovers the pointer by stripping this exact suffix off the
-	// request's subdomain label; empty or wrong, it reads the whole label as the
-	// pointer and resolves nothing.
-	suffix := spec.Generic.Vars[envPreviewLabelSuffix]
-	if suffix != previewRouteSuffix("proj", "web") {
-		t.Errorf("Vars[%s] = %q, want %q", envPreviewLabelSuffix, suffix, previewRouteSuffix("proj", "web"))
+	// The worker serves every app of the project and reads the app off the request
+	// host, so baking one app into it would answer every host with that app. The
+	// app list is what it recovers the app half of the label against instead.
+	if app, ok := spec.Generic.Vars["OCEL_APP"]; ok {
+		t.Errorf("Vars[OCEL_APP] = %q, want it unset for preview", app)
 	}
-	label, _, _ := strings.Cut(spec.Domains[0], ".")
-	if got := strings.TrimSuffix(label, suffix); got != "pr-42" {
-		t.Errorf("stripping Vars[%s] off label %q gave %q, want the pointer pr-42", envPreviewLabelSuffix, label, got)
+	if got := spec.Generic.Vars[envPreviewApps]; got != "web,api" {
+		t.Errorf("Vars[%s] = %q, want web,api", envPreviewApps, got)
 	}
-	if spec.Generic.Vars["OCEL_APP"] != "web" {
-		t.Errorf("Vars[OCEL_APP] = %q, want web", spec.Generic.Vars["OCEL_APP"])
+}
+
+// A project with no worker-backed app still binds the list — empty, which the
+// worker reads as "no apps" and 404s on, exactly as an unbound var would, so the
+// two can never be told apart by accident.
+func TestRootStackSpecs_PreviewAlwaysBindsTheAppList(t *testing.T) {
+	setWorkerBundle(t)
+	setStoreWorkerBundle(t)
+	manifest := &deploymentsv1.Manifest{Slug: "proj"}
+	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}
+
+	specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
+	if err != nil {
+		t.Fatalf("rootStackSpecs: %v", err)
+	}
+	if _, ok := specs[0].Generic.Vars[envPreviewApps]; !ok {
+		t.Errorf("Vars = %v, want %s bound even with no app to name", specs[0].Generic.Vars, envPreviewApps)
+	}
+}
+
+func TestPreviewAppNames_IsALowercasedCommaSeparatedList(t *testing.T) {
+	got := previewAppNames([]*deploymentsv1.ManifestApp{{Name: "Web"}, {Name: " admin "}, {Name: ""}})
+	if got != "web,admin" {
+		t.Errorf("previewAppNames = %q, want web,admin", got)
+	}
+	if got := previewAppNames(nil); got != "" {
+		t.Errorf("previewAppNames(nil) = %q, want empty", got)
+	}
+}
+
+// The claim check turns on this: a hostname held by one of the project's own
+// workers is the project's to keep, and anything else is a conflict.
+func TestProjectOwnsWorker(t *testing.T) {
+	cases := []struct {
+		name   string
+		slug   string
+		script string
+		want   bool
+	}{
+		{"its own preview worker", "shop", previewWorkerName("shop"), true},
+		{"its own production worker", "shop", workerScriptName("shop-production", "web"), true},
+		{"another project's preview worker", "shop", previewWorkerName("other"), false},
+		{"a hand-made worker", "shop", "my-worker", false},
+		{"a sibling whose slug merely starts with ours", "shop", previewWorkerName("shopfoo"), false},
+		{"no slug recognises nothing", "", previewWorkerName("shop"), false},
+		{"no script", "shop", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ProjectOwnsWorker(tc.slug, tc.script); got != tc.want {
+				t.Errorf("ProjectOwnsWorker(%q, %q) = %v, want %v", tc.slug, tc.script, got, tc.want)
+			}
+		})
 	}
 }
 
@@ -369,53 +459,71 @@ func TestRootStackSpecs_ProductionKeepsDeclarativeHostnames(t *testing.T) {
 	}
 }
 
-// A preview's teardown deletes exactly the routes its deploy registered, which it
-// reads back off the record — so the record has to carry them. Production carries
-// none: its routes outlive any one deploy.
-func TestBuildDeploymentRecord_RouteHostnamesByClass(t *testing.T) {
+// A preview pointer owns no route of its own — the project's wildcard serves them
+// all and is attached once for its lifetime — so a record has no hostname to
+// carry and a teardown has nothing to read back off it.
+func TestBuildDeploymentRecord_CarriesNoRouteHostnames(t *testing.T) {
 	manifest := &deploymentsv1.Manifest{
 		Slug:      "proj",
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
-		Domains: map[string]*deploymentsv1.DomainList{
-			"preview":    {Hostnames: []string{"*.preview.acme.com"}},
-			"production": {Hostnames: []string{"acme.com"}},
-		},
+		Domains:   map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 	}
-	app := manifest.GetApps()[0]
-	root := writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`})
+	cfg := Config{
+		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
+		Slug:         "proj",
+		Class:        deploymentsv1.Environment_CLASS_PREVIEW,
+		Identity:     "pr-42",
+	}
 
-	t.Run("preview records its pointer-exact host", func(t *testing.T) {
-		cfg := Config{
-			ArtifactRoot: root,
-			Slug:         "proj",
-			Class:        deploymentsv1.Environment_CLASS_PREVIEW,
-			Identity:     "pr-42",
-		}
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		want := previewRouteHost("proj", "web", "pr-42", "preview.acme.com")
-		if !slicesEqual(record.RouteHostnames, []string{want}) {
-			t.Errorf("RouteHostnames = %v, want [%s]", record.RouteHostnames, want)
-		}
-	})
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	encoded, err := json.Marshal(record)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), "routeHostnames") {
+		t.Errorf("record still carries route hostnames: %s", encoded)
+	}
+}
 
-	t.Run("production records none", func(t *testing.T) {
-		cfg := Config{
-			ArtifactRoot: root,
-			Slug:         "proj",
-			Class:        deploymentsv1.Environment_CLASS_PRODUCTION,
-		}
-		record, err := buildDeploymentRecord(cfg, manifest, app, buildOnly("WEB1"), nil)
-		if err != nil {
-			t.Fatalf("buildDeploymentRecord: %v", err)
-		}
-		if len(record.RouteHostnames) != 0 {
-			t.Errorf("RouteHostnames = %v, want none: production routes are project-lifetime", record.RouteHostnames)
-		}
-	})
+// One entrypoint worker fronts a project whose apps need not share a framework,
+// so the Deployment says what can serve it. The worker reads an absent field as
+// unsupported and 501s, so it must always be on the wire.
+func TestBuildDeploymentRecord_CarriesTheFramework(t *testing.T) {
+	manifest := &deploymentsv1.Manifest{
+		Slug:      "proj",
+		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}, {Name: "docs"}},
+		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
+	}
+	cfg := Config{
+		ArtifactRoot: writeTree(t, map[string]string{"apps/web/routing-manifest.json": `{"buildId":"WEB1"}`}),
+		Slug:         "proj",
+	}
+
+	record, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[0], buildOnly("WEB1"), nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	if record.Framework != "next" {
+		t.Errorf("Framework = %q, want next", record.Framework)
+	}
+
+	// An app declaring no framework still writes the field, empty: the worker
+	// answers 501 for it rather than reading a record with no framework at all.
+	bare, err := buildDeploymentRecord(cfg, manifest, manifest.GetApps()[1], buildOnly("DOCS1"), nil)
+	if err != nil {
+		t.Fatalf("buildDeploymentRecord: %v", err)
+	}
+	encoded, err := json.Marshal(bare)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(encoded), `"framework":""`) {
+		t.Errorf("record omits the framework field: %s", encoded)
+	}
 }
 
 // varsManifest is one Next app carrying the variables a Deployment record has
