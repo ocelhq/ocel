@@ -163,9 +163,9 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
 - **Deployments store** — the deployments-DO worker in the root stack, one per
   project. Holds a single Durable Object instance for the whole project: every
   app's Deployment records keyed by (app, deployment identity), plus the
-  active-deployment pointer map (app → deployment identity). Framework workers
-  read it via a service binding and cache the result in-isolate with a TTL, so
-  the single actor is not hit on the hot path.
+  active-deployment pointer map (app → deployment identity). The entry worker
+  reads it via a service binding and caches the result in-isolate with a TTL,
+  so the single actor is not hit on the hot path.
 
 - **Deployment record** — one entry in the deployments store describing a
   single app Deployment: everything the frozen generic worker needs to serve it

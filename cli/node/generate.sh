@@ -37,7 +37,7 @@ node "$node_dir/build.mjs"
   pnpm --filter @platform/cf-deployments-store build
   pnpm --filter @platform/cf-isr-writer build
 )
-cp "$root/platform/edge/cloudflare/workers/entry/dist/index.js" "$dist/workers/next-cloudflare.js"
+cp "$root/platform/edge/cloudflare/workers/entry/dist/index.js" "$dist/workers/entry-cloudflare.js"
 cp "$root/platform/edge/cloudflare/workers/deployments-store/dist/index.js" "$dist/workers/store-cloudflare.js"
 cp "$root/platform/edge/cloudflare/workers/isr-writer/dist/index.js" "$dist/workers/isr-writer-cloudflare.js"
 

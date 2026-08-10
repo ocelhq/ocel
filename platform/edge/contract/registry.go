@@ -1,13 +1,11 @@
 package edge
 
-type Framework string
+const RoutingManifestFile = "routing-manifest.json"
 
-const FrameworkNext Framework = "next"
+const StaticAssetDir = "static"
 
 type WorkerSource struct {
 	ArtifactRoot string
 	BundlePath   string
 	Routes       []string
 }
-
-type Assemble func(WorkerSource, Resolver) (Worker, error)

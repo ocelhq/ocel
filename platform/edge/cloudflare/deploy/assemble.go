@@ -1,4 +1,4 @@
-package nextjs
+package cloudflare
 
 import (
 	"fmt"
@@ -14,20 +14,16 @@ const (
 	objectStoreBinding = "OCEL_CACHE_STORE"
 )
 
-const routingManifest = "routing-manifest.json"
-
-const staticDir = "static"
-
-func AssembleCloudflare(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
+func (p *provider) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
 	main, err := os.ReadFile(src.BundlePath)
 	if err != nil {
-		return edge.Worker{}, fmt.Errorf("read next worker bundle: %w", err)
+		return edge.Worker{}, fmt.Errorf("read edge worker bundle: %w", err)
 	}
-	routing, err := os.ReadFile(filepath.Join(src.ArtifactRoot, routingManifest))
+	routing, err := os.ReadFile(filepath.Join(src.ArtifactRoot, edge.RoutingManifestFile))
 	if err != nil {
 		return edge.Worker{}, fmt.Errorf("read routing manifest: %w", err)
 	}
-	assets, err := collectStaticAssets(filepath.Join(src.ArtifactRoot, staticDir))
+	assets, err := collectStaticAssets(filepath.Join(src.ArtifactRoot, edge.StaticAssetDir))
 	if err != nil {
 		return edge.Worker{}, fmt.Errorf("collect static assets: %w", err)
 	}
@@ -44,7 +40,7 @@ func AssembleCloudflare(src edge.WorkerSource, r edge.Resolver) (edge.Worker, er
 			Content:     main,
 		},
 		Modules: []edge.WorkerModule{{
-			Name:        routingManifest,
+			Name:        edge.RoutingManifestFile,
 			ContentType: "text/plain",
 			Content:     routing,
 		}},

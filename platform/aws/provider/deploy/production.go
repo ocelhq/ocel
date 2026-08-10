@@ -265,7 +265,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		Warn:                warn,
 	}
 
-	apps := workerApps(manifest)
+	apps := workerApps(cfg.ArtifactRoot, manifest)
 
 	if cfg.Class == deploymentsv1.Environment_CLASS_PREVIEW {
 		spec := base
@@ -475,7 +475,7 @@ func genericWorkerBundle(cfg Config) (edge.Worker, error) {
 	if err != nil {
 		return edge.Worker{}, err
 	}
-	path, err := bundles.Path(edge.FrameworkNext, cfg.Edge.Kind())
+	path, err := bundles.Path(cfg.Edge.Kind())
 	if err != nil {
 		return edge.Worker{}, err
 	}
@@ -587,7 +587,7 @@ func buildDeploymentRecord(cfg Config, manifest *deploymentsv1.Manifest, app *de
 }
 
 func workerURLOutputs(cfg Config, manifest *deploymentsv1.Manifest) []*deploymentsv1.ResourceOutput {
-	apps := workerApps(manifest)
+	apps := workerApps(cfg.ArtifactRoot, manifest)
 	if len(apps) == 0 {
 		return nil
 	}

@@ -5,27 +5,27 @@ import (
 	"testing"
 )
 
-func TestBundleManifest_LoadsAndResolvesByFrameworkAndEdge(t *testing.T) {
-	t.Setenv(EnvWorkerBundles, `{"next":{"cloudflare":"/pkg/worker-nextjs/index.js"}}`)
+func TestBundleManifest_LoadsAndResolvesByEdge(t *testing.T) {
+	t.Setenv(EnvWorkerBundles, `{"cloudflare":"/pkg/entry/index.js"}`)
 
 	m, err := LoadBundleManifest()
 	if err != nil {
 		t.Fatalf("LoadBundleManifest: %v", err)
 	}
-	got, err := m.Path(FrameworkNext, KindCloudflare)
+	got, err := m.Path(KindCloudflare)
 	if err != nil {
 		t.Fatalf("Path: %v", err)
 	}
-	if got != "/pkg/worker-nextjs/index.js" {
+	if got != "/pkg/entry/index.js" {
 		t.Errorf("Path = %q", got)
 	}
 
-	_, err = m.Path(FrameworkNext, "provider-native")
+	_, err = m.Path("provider-native")
 	if err == nil {
-		t.Fatal("expected an error for a pairing with no bundle")
+		t.Fatal("expected an error for an edge with no bundle")
 	}
-	if !strings.Contains(err.Error(), "next") || !strings.Contains(err.Error(), "provider-native") {
-		t.Errorf("error must name both framework and edge, got %q", err)
+	if !strings.Contains(err.Error(), "provider-native") {
+		t.Errorf("error must name the edge, got %q", err)
 	}
 }
 
@@ -36,7 +36,7 @@ func TestLoadBundleManifest_UnsetEnvIsAnError(t *testing.T) {
 	}
 }
 
-func TestStoreBundleManifest_LoadsAndResolvesByEdge(t *testing.T) {
+func TestStoreBundleManifest_LoadsTheAccountLevelBundle(t *testing.T) {
 	t.Setenv(EnvStoreWorkerBundles, `{"cloudflare":"/pkg/worker-deployments-store/index.js"}`)
 
 	m, err := LoadStoreBundleManifest()

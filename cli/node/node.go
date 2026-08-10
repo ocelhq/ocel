@@ -27,9 +27,9 @@ func AdapterPath(projectDir string) string {
 	return filepath.Join(DistDir(projectDir), "next-adapter", "next-adapter.mjs")
 }
 
-func WorkerBundles(projectDir string) map[string]map[string]string {
-	return map[string]map[string]string{
-		"next": {"cloudflare": filepath.Join(DistDir(projectDir), "workers", "next-cloudflare.js")},
+func WorkerBundles(projectDir string) map[string]string {
+	return map[string]string{
+		"cloudflare": filepath.Join(DistDir(projectDir), "workers", "entry-cloudflare.js"),
 	}
 }
 

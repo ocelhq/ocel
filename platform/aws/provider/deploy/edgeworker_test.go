@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"os"
 	"path/filepath"
 	"strings"
@@ -48,6 +49,10 @@ type recordingEdge struct {
 }
 
 func (f *recordingEdge) Kind() edge.Kind { return edge.KindCloudflare }
+
+func (f *recordingEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
+	return cloudflare.New().AssembleApp(src, r)
+}
 
 func (f *recordingEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{Trust: edge.TrustExternal}, nil
@@ -276,7 +281,7 @@ func TestDeployEdgeWorker_UnresolvableRouteFailsNamingIt(t *testing.T) {
 	}
 }
 
-func TestDeployEdgeWorker_UnsupportedPairingNamesBoth(t *testing.T) {
+func TestDeployEdgeWorker_UnsupportedEdgeNamesTheEdge(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
 	cfg := Config{Edge: &otherEdge{}, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
 	manifest := &deploymentsv1.Manifest{
@@ -285,10 +290,10 @@ func TestDeployEdgeWorker_UnsupportedPairingNamesBoth(t *testing.T) {
 
 	_, err := deployEdgeWorker(context.Background(), cfg, manifest, nil, nil)
 	if err == nil {
-		t.Fatal("expected an unsupported framework/edge pairing to fail")
+		t.Fatal("expected an edge with no worker bundle to fail")
 	}
-	if !strings.Contains(err.Error(), "next") || !strings.Contains(err.Error(), "provider-native") {
-		t.Errorf("error must name both framework and edge, got %q", err)
+	if !strings.Contains(err.Error(), "provider-native") {
+		t.Errorf("error must name the edge that has no bundle, got %q", err)
 	}
 }
 
@@ -343,7 +348,7 @@ func setWorkerBundle(t *testing.T) {
 	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(edge.BundleManifest{edge.FrameworkNext: {edge.KindCloudflare: bundle}})
+	raw, err := json.Marshal(edge.KindBundleManifest{edge.KindCloudflare: bundle})
 	if err != nil {
 		t.Fatal(err)
 	}

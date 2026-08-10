@@ -52,6 +52,7 @@ import {
 import { createTagClock, invalidateSnapshot, type TagClock } from "./tag-clock";
 import {
   resolveDeployment,
+  type DeploymentRecord,
   type DeploymentsBinding,
   type DeploymentsDeps,
 } from "./deployments";
@@ -249,27 +250,29 @@ export interface RouteDeps {
   deployments?: DeploymentsDeps;
 }
 
+export type ResolveBase = Omit<
+  RouteDeps,
+  | "manifest"
+  | "functionUrls"
+  | "interception"
+  | "deployments"
+  | "assetStore"
+  | "edge"
+  | "slug"
+  | "app"
+> & {
+  interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
+  assetStore: Omit<AssetStoreDeps, "assetPrefix">;
+  edgeRuntime?: {
+    loader: WorkerLoader;
+    store: ObjectStoreReader;
+    cacheEntrypoint?: (opts: { props: CacheEntrypointProps }) => EdgeCacheStub;
+  };
+};
+
 export async function resolveRouteDeps(
   deployments: DeploymentsDeps,
-  base: Omit<
-    RouteDeps,
-    | "manifest"
-    | "functionUrls"
-    | "interception"
-    | "deployments"
-    | "assetStore"
-    | "edge"
-    | "slug"
-    | "app"
-  > & {
-    interception?: Pick<InterceptDeps, "store" | "snapshotCache" | "now" | "waitUntil">;
-    assetStore: Omit<AssetStoreDeps, "assetPrefix">;
-    edgeRuntime?: {
-      loader: WorkerLoader;
-      store: ObjectStoreReader;
-      cacheEntrypoint?: (opts: { props: CacheEntrypointProps }) => EdgeCacheStub;
-    };
-  },
+  base: ResolveBase,
 ): Promise<RouteDeps | Response> {
   const resolution = await resolveDeployment(deployments);
 
@@ -277,9 +280,27 @@ export async function resolveRouteDeps(
   if (resolution.kind === "unavailable") return unavailableResponse();
 
   const { record } = resolution;
-  if (record.framework !== NEXT_FRAMEWORK) {
-    return unsupportedFrameworkResponse(record.framework);
-  }
+  const handler = frameworkHandlers[record.framework];
+  if (!handler) return unsupportedFrameworkResponse(record.framework);
+
+  return handler(record, deployments, base);
+}
+
+type FrameworkHandler = (
+  record: DeploymentRecord,
+  deployments: DeploymentsDeps,
+  base: ResolveBase,
+) => RouteDeps;
+
+const frameworkHandlers: Record<string, FrameworkHandler> = {
+  next: nextRouteDeps,
+};
+
+function nextRouteDeps(
+  record: DeploymentRecord,
+  deployments: DeploymentsDeps,
+  base: ResolveBase,
+): RouteDeps {
   const { edgeRuntime, ...rest } = base;
   const { edgeWorkers } = record;
   return {
@@ -332,11 +353,12 @@ function deploymentNotFoundResponse(): Response {
   });
 }
 
-const NEXT_FRAMEWORK = "next";
-
 function unsupportedFrameworkResponse(framework: string | undefined): Response {
+  const served = Object.keys(frameworkHandlers)
+    .map((name) => `"${name}"`)
+    .join(", ");
   const body = framework
-    ? `This deployment declares "${framework}"; this runtime serves "${NEXT_FRAMEWORK}" only.`
+    ? `This deployment declares "${framework}"; this runtime serves ${served}.`
     : "This deployment predates framework-tagged deployments and cannot be served. Deploy the app again.";
   return new Response(body, {
     status: 501,

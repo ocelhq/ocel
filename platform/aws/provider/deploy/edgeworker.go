@@ -3,16 +3,14 @@ package deploy
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	edge "github.com/ocelhq/ocel/platform/edge/contract"
-	"github.com/ocelhq/ocel/platform/edge/contract/framework"
 )
-
-const frameworkNext = string(edge.FrameworkNext)
 
 func workerOutputName(app string) string {
 	return sanitizeWorkerName(app) + "-worker"
@@ -21,12 +19,12 @@ func workerOutputName(app string) string {
 func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.Manifest, outputs []*deploymentsv1.ResourceOutput, progress func(string)) ([]*deploymentsv1.ResourceOutput, error) {
 	warnOrphanedWorker(ctx, cfg, progress)
 
-	apps := workerApps(manifest)
+	apps := workerApps(cfg.ArtifactRoot, manifest)
 	if len(apps) == 0 {
 		return nil, nil
 	}
 	if cfg.Edge == nil {
-		return nil, fmt.Errorf("project has a %s app but no edge is configured", apps[0].GetFramework())
+		return nil, fmt.Errorf("project has an edge-served %s app but no edge is configured", apps[0].GetFramework())
 	}
 	domains, err := workerDomains(cfg, manifest, apps)
 	if err != nil {
@@ -39,19 +37,14 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 	urlByLogical := functionURLsByLogicalName(outputs)
 
 	var workerOutputs []*deploymentsv1.ResourceOutput
-	for _, app := range apps {
-		fw := edge.Framework(app.GetFramework())
-		assemble, err := framework.WorkerFor(fw, cfg.Edge.Kind())
-		if err != nil {
-			return nil, err
-		}
-		bundlePath, err := bundles.Path(fw, cfg.Edge.Kind())
-		if err != nil {
-			return nil, err
-		}
+	bundlePath, err := bundles.Path(cfg.Edge.Kind())
+	if err != nil {
+		return nil, err
+	}
 
+	for _, app := range apps {
 		name := app.GetName()
-		worker, err := assemble(
+		worker, err := cfg.Edge.AssembleApp(
 			edge.WorkerSource{
 				ArtifactRoot: appArtifactRoot(cfg.ArtifactRoot, name),
 				BundlePath:   bundlePath,
@@ -101,14 +94,21 @@ func manifestApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp
 	return apps
 }
 
-func workerApps(manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
+// An app is served from the edge when its build emitted a routing manifest —
+// a fact about the artifact, not a framework this package has to know by name.
+func workerApps(artifactRoot string, manifest *deploymentsv1.Manifest) []*deploymentsv1.ManifestApp {
 	var apps []*deploymentsv1.ManifestApp
 	for _, app := range manifestApps(manifest) {
-		if framework.NeedsWorker(edge.Framework(app.GetFramework())) && len(appRoutes(manifest.GetFunctions(), app)) > 0 {
+		if isEdgeServed(artifactRoot, app.GetName()) && len(appRoutes(manifest.GetFunctions(), app)) > 0 {
 			apps = append(apps, app)
 		}
 	}
 	return apps
+}
+
+func isEdgeServed(artifactRoot, app string) bool {
+	_, err := os.Stat(filepath.Join(appArtifactRoot(artifactRoot, app), edge.RoutingManifestFile))
+	return err == nil
 }
 
 func appRoutes(functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.ManifestApp) []string {
@@ -120,6 +120,8 @@ func appRoutes(functions []*deploymentsv1.ManifestFunction, app *deploymentsv1.M
 	}
 	return routes
 }
+
+const frameworkNext = "next"
 
 const appsDirName = "apps"
 
