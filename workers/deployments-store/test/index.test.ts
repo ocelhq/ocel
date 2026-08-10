@@ -42,6 +42,7 @@ function authedReq(path: string, init: RequestInit = {}) {
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
+    framework: "next",
     buildId: "build-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
@@ -63,16 +64,20 @@ describe("initialize", () => {
     expect(res.status).toBe(401);
   });
 
-  it("seeds the instance so per-project ops authenticate against it", async () => {
-    expect((await initialize()).status).toBe(204);
+  it("seeds the instance and reports the identity it now carries", async () => {
+    const res = await initialize();
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ownerToken: "owner-1", secret: SECRET });
 
-    const res = await SELF.fetch(
+    const staged = await SELF.fetch(
       authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) }),
     );
-    expect(res.status).toBe(204);
+    expect(staged.status).toBe(204);
   });
 
-  it("refuses a colliding owner token with 409", async () => {
+  // Convergent: a second first-deploy racing the same slug is handed the
+  // identity already seeded rather than clobbering it or failing.
+  it("returns the existing identity for an already-initialized instance", async () => {
     await initialize();
     const res = await SELF.fetch(
       bearerReq(`/${SLUG}/initialize`, BOOTSTRAP, {
@@ -80,8 +85,51 @@ describe("initialize", () => {
         body: JSON.stringify({ ownerToken: "owner-2", secret: "other" }),
       }),
     );
-    expect(res.status).toBe(409);
-    expect(await res.text()).toMatch(/already owned by a different project/);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ownerToken: "owner-1", secret: SECRET });
+
+    // The seeded secret still authenticates; the loser's never does.
+    expect(
+      (await SELF.fetch(authedReq("/staged", { method: "PUT", body: JSON.stringify(makeRecord()) })))
+        .status,
+    ).toBe(204);
+    expect(
+      (
+        await SELF.fetch(
+          bearerReq(`/${SLUG}/staged`, "other", {
+            method: "PUT",
+            body: JSON.stringify(makeRecord()),
+          }),
+        )
+      ).status,
+    ).toBe(401);
+  });
+
+  // The identity is retrievable, so the credential that retrieves it is the
+  // account-level one and nothing else: the project's own secret authenticates
+  // every other op but must never read the instance's ownership back out.
+  it("refuses to disclose the identity to the project secret", async () => {
+    await initialize();
+    const res = await SELF.fetch(
+      bearerReq(`/${SLUG}/initialize`, SECRET, {
+        method: "POST",
+        body: JSON.stringify({ ownerToken: "owner-2", secret: "other" }),
+      }),
+    );
+    expect(res.status).toBe(401);
+    expect(await res.text()).not.toMatch(/owner-1/);
+  });
+
+  it("adopts the presented identity when force is set", async () => {
+    await initialize();
+    const res = await SELF.fetch(
+      bearerReq(`/${SLUG}/initialize`, BOOTSTRAP, {
+        method: "POST",
+        body: JSON.stringify({ ownerToken: "owner-2", secret: "other", force: true }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ownerToken: "owner-2", secret: "other" });
   });
 });
 
@@ -196,12 +244,7 @@ describe("authenticated write endpoint", () => {
     await SELF.fetch(
       authedReq("/staged", {
         method: "PUT",
-        body: JSON.stringify(
-          makeRecord({
-            buildId: "pr-1",
-            routeHostnames: ["pr-42-abc1234567.preview.test"],
-          }),
-        ),
+        body: JSON.stringify(makeRecord({ buildId: "pr-1" })),
       }),
     );
     await SELF.fetch(
@@ -218,15 +261,9 @@ describe("authenticated write endpoint", () => {
     const result = (await res.json()) as {
       removedPromotionIds: string[];
       removedRecordKeys: string[];
-      removedRoutes: { app: string; hostname: string }[];
-      remainingPointers: number;
     };
     expect(result.removedPromotionIds).toEqual(["promo-pr-1"]);
     expect(result.removedRecordKeys).toEqual(["record:web/pr-1"]);
-    expect(result.removedRoutes).toEqual([
-      { app: "web", hostname: "pr-42-abc1234567.preview.test" },
-    ]);
-    expect(result.remainingPointers).toBe(0);
 
     // The pointer is gone.
     const history = await (await SELF.fetch(authedReq("/history?pointer=pr-42"))).json();

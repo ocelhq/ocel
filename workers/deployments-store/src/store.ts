@@ -19,6 +19,10 @@ export interface SqlStore {
 // so this shape is here to describe what it carries, not to validate it.
 export interface DeploymentRecord {
   app: string;
+  // The framework the app declared in its manifest ("next"). One entrypoint
+  // worker fronts a whole project, whose apps need not share a framework, so
+  // it is the Deployment that says what can serve it.
+  framework: string;
   buildId: string;
   routingManifest: unknown;
   functionUrls: Record<string, string>;
@@ -33,12 +37,6 @@ export interface DeploymentRecord {
   // lives and what runtime the serving worker's loader evaluates it under.
   // Absent when the build produced no edge output at all.
   edgeWorkers?: EdgeWorkers;
-  // The worker-route hostnames the deploy that produced this record registered
-  // for it, so a teardown can delete exactly those without recomputing them
-  // from config it does not have. A preview carries its one pointer-exact
-  // hostname; production carries none — its routes are project-lifetime and
-  // reconciled declaratively.
-  routeHostnames?: string[];
   // The digest of every entry in `variables`, so two Deployments that shipped
   // different values never read alike. Wider than the fingerprint inside the
   // identity, which covers baked values alone. Absent when nothing is
@@ -114,26 +112,6 @@ export interface PruneResult {
   survivingPointerRecordKeys: string[];
 }
 
-// One worker route a removed pointer owned: the app it fronted and the hostname
-// it was attached to.
-export interface RemovedRoute {
-  app: string;
-  hostname: string;
-}
-
-// What removePointer reports, over and above a prune's: the routes the pointer
-// owned and how many pointers the instance has left. Deliberately a type of its
-// own rather than fields on PruneResult, which prune() also returns — prune
-// keeps the pointer and its route alive, so a shared shape would let its result
-// read as "this pointer is gone, sweep its worker".
-export interface PointerRemoval extends PruneResult {
-  // Preview pointers left in this instance after the removal, excluding the
-  // reserved production default. Zero means the project just retired its last
-  // preview, so the generic worker every preview pointer shared can go too.
-  remainingPointers: number;
-  removedRoutes: RemovedRoute[];
-}
-
 // The reserved default pointer. The primary domain resolves it, and a promote
 // that names no pointer moves it. Its leading "@" can never appear in a DNS
 // label, so it can never collide with a preview pointer named after a subdomain
@@ -147,11 +125,6 @@ const VERSION_KEY = "versionStamp";
 // so a destroy() that clears storage takes them with it and frees the slug.
 const OWNER_KEY = "ownerToken";
 const SECRET_KEY = "secret";
-
-// Thrown by initialize() when the instance is already owned by a different
-// project (a slug collision). The account-level bootstrap credential can force
-// past it to adopt an instance after total state loss; see index.ts.
-export class OwnershipConflictError extends Error {}
 
 function recordKey(app: string, buildId: string): string {
   return `record:${app}/${buildId}`;
@@ -485,14 +458,11 @@ function promotedRecordKeys(
 // promotions name, and the pointer row itself. Unlike prune(), it pins nothing
 // — a `preview rm` tears the whole preview down, so its active promotion goes
 // too. Returns the removed record keys so the host reclaims the stacks and
-// R2/S3 objects they named, the worker routes those records carried so it can
-// detach exactly those, and the pointers left behind so it can tell whether it
-// just retired the project's last preview. Removing an unknown pointer is a
-// clean no-op.
+// R2/S3 objects they named. Removing an unknown pointer is a clean no-op.
 export function removePointer(
   store: SqlStore,
   pointer: string = DEFAULT_POINTER,
-): PointerRemoval {
+): PruneResult {
   return store.transactionSync(() => {
     const rows = store.sql
       .exec<{ promotion_id: string; builds: string }>(
@@ -508,7 +478,6 @@ export function removePointer(
     const removedRecordKeys = removed.flatMap((p) =>
       Object.entries(p.builds).map(([app, buildId]) => recordKey(app, buildId)),
     );
-    const removedRoutes = distinctRoutes(store, removed);
 
     for (const p of removed) {
       store.sql.exec(`DELETE FROM promotions WHERE promotion_id = ?`, p.promotionId);
@@ -530,32 +499,8 @@ export function removePointer(
       // The pointer is gone outright, so nothing of it survives to keep its
       // environment-scoped storage alive.
       survivingPointerRecordKeys: [],
-      remainingPointers: previewPointerCount(store),
-      removedRoutes,
     };
   });
-}
-
-// The (app, hostname) routes carried by the records these promotions name, each
-// pair once: several promotions of one pointer name records that all carry the
-// pointer's single hostname. Read before the records are deleted.
-function distinctRoutes(
-  store: SqlStore,
-  promotions: { builds: Record<string, string> }[],
-): RemovedRoute[] {
-  const routes: RemovedRoute[] = [];
-  const seen = new Set<string>();
-  for (const p of promotions) {
-    for (const [app, buildId] of Object.entries(p.builds)) {
-      for (const hostname of record(store, app, buildId)?.routeHostnames ?? []) {
-        const key = `${app} ${hostname}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        routes.push({ app, hostname });
-      }
-    }
-  }
-  return routes;
 }
 
 // Every record key left in the store, read after the deletions so a caller
@@ -569,37 +514,41 @@ function remainingRecordKeys(store: SqlStore): string[] {
     .map((r) => recordKey(r.app, r.build_id));
 }
 
-function previewPointerCount(store: SqlStore): number {
-  return store.sql
-    .exec<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM pointers WHERE name != ?`,
-      DEFAULT_POINTER,
-    )
-    .one().n;
+// The identity an instance carries: the self-minted owner token and the
+// per-project secret every authenticated op is checked against.
+export interface Identity {
+  ownerToken: string;
+  secret: string;
 }
 
-// Seeds (or rotates) this instance's ownership. The account-level bootstrap
-// credential authorizes the caller before this runs (index.ts); here we only
-// enforce that one project can't silently take over another's instance:
-// re-seeding with a matching owner token rotates the secret (recovery), a
-// mismatch is a collision and is refused — unless force adopts the instance
-// after total state loss, when only the human deploying can vouch for it.
+// Seeds this instance's identity, convergently: an already-initialized instance
+// keeps the identity it has and hands it back, so concurrent first deploys of
+// one slug all adopt the same one instead of clobbering each other. Only force
+// overwrites — adopting an instance after total state loss, when only the human
+// deploying can vouch for it. The account-level bootstrap credential authorizes
+// the caller before this runs (index.ts), and it alone: the identity is
+// returned here, so nothing weaker may reach it.
 export function initialize(
   store: SqlStore,
   ownerToken: string,
   secret: string,
   force: boolean,
-): void {
-  const existing = getMeta(store, OWNER_KEY);
-  if (existing !== undefined && existing !== ownerToken && !force) {
-    throw new OwnershipConflictError(
-      "instance is already owned by a different project",
-    );
-  }
-  store.transactionSync(() => {
+): Identity {
+  return store.transactionSync(() => {
+    const existing = storedIdentity(store);
+    if (existing && !force) return existing;
     setMeta(store, OWNER_KEY, ownerToken);
     setMeta(store, SECRET_KEY, secret);
+    return { ownerToken, secret };
   });
+}
+
+function storedIdentity(store: SqlStore): Identity | undefined {
+  const ownerToken = getMeta(store, OWNER_KEY);
+  const secret = getMeta(store, SECRET_KEY);
+  return ownerToken !== undefined && secret !== undefined
+    ? { ownerToken, secret }
+    : undefined;
 }
 
 // The instance's stored project secret, or undefined before it is initialized.

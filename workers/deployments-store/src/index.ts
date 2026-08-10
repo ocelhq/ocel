@@ -49,8 +49,11 @@ export default class extends WorkerEntrypoint<Env> {
     const sub = "/" + segments.slice(1).join("/");
     const store = stub(this.env, slug);
 
-    // Seeding/rotating a project's instance is the sole op the account-level
-    // bootstrap credential authorizes.
+    // Seeding a project's instance is the sole op the account-level bootstrap
+    // credential authorizes — and it alone, because the response discloses the
+    // instance's identity: an already-initialized instance answers with the
+    // identity it already carries, so concurrent first deploys of one slug
+    // converge on it instead of clobbering each other.
     if (request.method === "POST" && sub === "/initialize") {
       if (!(await authorized(request, this.env.BOOTSTRAP_SECRET))) {
         return new Response("Unauthorized", { status: 401 });
@@ -63,13 +66,9 @@ export default class extends WorkerEntrypoint<Env> {
       if (!body?.ownerToken || !body.secret) {
         return new Response("Bad Request", { status: 400 });
       }
-      const { conflict } = await store.initialize(
-        body.ownerToken,
-        body.secret,
-        body.force ?? false,
+      return Response.json(
+        await store.initialize(body.ownerToken, body.secret, body.force ?? false),
       );
-      if (conflict) return new Response(conflict, { status: 409 });
-      return new Response(null, { status: 204 });
     }
 
     // Every other op authenticates against the instance's own project secret.

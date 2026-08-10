@@ -6,7 +6,7 @@ import * as store from "./store";
 import type {
   DeploymentRecord,
   HistoryEntry,
-  PointerRemoval,
+  Identity,
   Promotion,
   PruneResult,
 } from "./store";
@@ -21,21 +21,15 @@ export class DeploymentsStore extends DurableObject<Env> {
     store.ensureSchema(ctx.storage);
   }
 
-  // Seeds or rotates this instance's ownership token and project secret. Like
-  // promote(), it returns { conflict } rather than throwing so an ownership
-  // collision survives the RPC boundary: index.ts turns it into a 409.
+  // Seeds this instance's identity and returns the one it now carries — the
+  // presented pair on a fresh instance (or a forced adoption), the existing one
+  // otherwise, so concurrent first deploys converge on a single identity.
   async initialize(
     ownerToken: string,
     secret: string,
     force: boolean,
-  ): Promise<{ conflict?: string }> {
-    try {
-      store.initialize(this.ctx.storage, ownerToken, secret, force);
-      return {};
-    } catch (e) {
-      if (e instanceof store.OwnershipConflictError) return { conflict: e.message };
-      throw e;
-    }
+  ): Promise<Identity> {
+    return store.initialize(this.ctx.storage, ownerToken, secret, force);
   }
 
   // Constant-time-compares a bearer token against this instance's own stored
@@ -106,7 +100,7 @@ export class DeploymentsStore extends DurableObject<Env> {
     return store.prune(this.ctx.storage, keepN, pointer);
   }
 
-  async removePointer(pointer?: string): Promise<PointerRemoval> {
+  async removePointer(pointer?: string): Promise<PruneResult> {
     return store.removePointer(this.ctx.storage, pointer);
   }
 
