@@ -276,6 +276,99 @@ describe("node middleware forwarding", () => {
   });
 });
 
+describe("Next's internal protocol headers are not honoured from the client", () => {
+  // Next's router-server strips these off every externally-originated
+  // request before anything runs — a client-forged x-nextjs-data reaching the
+  // middleware bundle makes Next's own edge adapter treat a redirect as a
+  // data-request "matched path" response instead of an ordinary redirect.
+  it("does not forward a client-supplied x-nextjs-data header to node middleware", async () => {
+    const origin = fakeOrigin(
+      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+    );
+    await serve(
+      new Request("https://app.example/static.txt", {
+        headers: { "x-nextjs-data": "1" },
+      }),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(origin.requests[0].headers.has("x-nextjs-data")).toBe(false);
+  });
+
+  it("does not forward a client-supplied x-matched-path header to node middleware", async () => {
+    const origin = fakeOrigin(
+      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+    );
+    await serve(
+      new Request("https://app.example/static.txt", {
+        headers: { "x-matched-path": "/forged" },
+      }),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(origin.requests[0].headers.has("x-matched-path")).toBe(false);
+  });
+});
+
+// Next sets x-nextjs-data on the request before middleware ever runs when the
+// URL genuinely is a data path (setIsNextDataRequest, ahead of the middleware
+// route in resolve-routes.ts) — its own edge adapter reads it to convert a
+// middleware Location into x-nextjs-redirect for a client-transition fetch.
+// This worker used to derive it from the client's own header (stripped above)
+// and never re-add the URL-derived truth, so middleware could never see it on
+// a genuine data request.
+describe("x-nextjs-data on the middleware invocation", () => {
+  it("sets x-nextjs-data on a genuine data request's middleware invocation", async () => {
+    const origin = fakeOrigin(
+      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+    );
+    await serve(
+      new Request("https://app.example/_next/data/t/static.txt.json"),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(origin.requests[0].headers.get("x-nextjs-data")).toBe("1");
+  });
+
+  it("does not set x-nextjs-data on an ordinary document request", async () => {
+    const origin = fakeOrigin(
+      () => new Response(null, { headers: { "x-middleware-next": "1" } }),
+    );
+    await serve(
+      new Request("https://app.example/static.txt"),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(origin.requests[0].headers.has("x-nextjs-data")).toBe(false);
+  });
+
+  // The full round trip, with a fake bundle standing in for Next's own edge
+  // adapter (adapter.ts:171,513-521): a middleware redirect comes back as
+  // x-nextjs-redirect with no Location only when the request it received
+  // carried x-nextjs-data — exactly the behaviour the client's fetchNextData
+  // depends on for a client-transition redirect (packages/next/src/shared/
+  // lib/router/router.ts). Without this worker setting the header, the bundle
+  // falls back to an ordinary Location redirect, which fetchNextData cannot
+  // use as a client-side transition.
+  it("carries a data-request redirect through as x-nextjs-redirect with no Location", async () => {
+    const origin = fakeOrigin((req) =>
+      req.headers.get("x-nextjs-data") === "1"
+        ? new Response(null, { status: 307, headers: { "x-nextjs-redirect": "/somewhere" } })
+        : new Response(null, { status: 307, headers: { location: "/somewhere" } }),
+    );
+    const res = await serve(
+      new Request("https://app.example/_next/data/t/static.txt.json", {
+        redirect: "manual",
+      }),
+      staticDeps(nodeMiddleware(), { fetch: origin.fetch }),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("x-nextjs-redirect")).toBe("/somewhere");
+    expect(res.headers.has("location")).toBe(false);
+  });
+});
+
 describe("node middleware fails closed", () => {
   it("returns 500 and never serves the page when no function URL is bound for the bundle", async () => {
     const res = await serve(
