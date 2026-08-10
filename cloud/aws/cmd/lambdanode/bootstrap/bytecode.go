@@ -23,7 +23,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/cloud/aws/awscfg"
+	"github.com/ocelhq/ocel/cloud/aws/awsconf"
 )
 
 // bytecodeCacheCeiling bounds what the membrane will upload: an S3 PUT that
@@ -824,7 +824,7 @@ func resolveBytecodeResolution(ctx context.Context, nodeVersion func(context.Con
 		return nil
 	}
 
-	cfg, err := awscfg.Runtime(ctx)
+	cfg, err := awsconf.Runtime(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "ocel: no aws config for the compile cache: %v\n", err)
 		return nil

@@ -20,6 +20,7 @@
 
 import { execFileSync } from "node:child_process";
 
+import { AWS_CLI_RETRY_ENV } from "./aws.mjs";
 import { TAG_PROBE_ROUTE, tagProbeTag } from "./lib.mjs";
 
 // The publisher is a stream consumer with a zero batching window, so the record
@@ -152,8 +153,17 @@ function resolveAssetBucket() {
   return found;
 }
 
+// Local rather than aws.mjs's wrapper because this script's calls run without
+// that module's per-call timeout, but it borrows its retry env: the poll below
+// lists a bucket every few seconds for three minutes, which is exactly the
+// shape of traffic that earns a throttle, and a throw here aborts the whole
+// assertion rather than costing it one attempt.
 function aws(args) {
-  return execFileSync("aws", args, { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 }).trim();
+  return execFileSync("aws", args, {
+    encoding: "utf8",
+    maxBuffer: 64 * 1024 * 1024,
+    env: { ...process.env, ...AWS_CLI_RETRY_ENV },
+  }).trim();
 }
 
 function sleep(ms) {

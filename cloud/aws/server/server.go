@@ -26,7 +26,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
-	"github.com/ocelhq/ocel/cloud/aws/awscfg"
+	"github.com/ocelhq/ocel/cloud/aws/awsconf"
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
@@ -318,7 +318,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// fresh and orphaning the root stack this run just reconciled. Written to
 	// this deploy's own substrate (production or preview), and nil when
 	// reconcile itself never ran (an error before it).
-	if persistRootStackState(priorRootStackState, res.RootStackState) {
+	if rootStackStateChanged(priorRootStackState, res.RootStackState) {
 		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), res.RootStackState); writeErr != nil {
 			if err != nil {
 				return res, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
@@ -329,7 +329,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	return res, err
 }
 
-// persistRootStackState reports whether a reconciled root-stack state is worth
+// rootStackStateChanged reports whether a reconciled root-stack state is worth
 // a write. The stored state is a cache of what the project's store instance
 // already holds — since /initialize became convergent, an instance hands its
 // identity back to anyone bearing the account's bootstrap credential — so it
@@ -339,7 +339,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 // parameter: many apps deploying into one project (an e2e run is the extreme
 // case, a whole matrix sharing one slug) otherwise converge on a single name and
 // throttle each other. It is pure.
-func persistRootStackState(prior, reconciled edge.RootStackState) bool {
+func rootStackStateChanged(prior, reconciled edge.RootStackState) bool {
 	return reconciled != nil && !maps.Equal(reconciled, prior)
 }
 
@@ -382,7 +382,7 @@ func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
 	return s3.NewFromConfig(aws.Config{
 		Region:      store.Region,
 		Credentials: credentials.NewStaticCredentialsProvider(store.AccessKeyID, store.SecretAccessKey, ""),
-		Retryer:     awscfg.ControlRetryer,
+		Retryer:     awsconf.ControlRetryer,
 	}, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(store.Endpoint)
 	})
@@ -507,10 +507,14 @@ func accountID(ctx context.Context, api STSAPI) (string, error) {
 	return aws.ToString(out.Account), nil
 }
 
-// loadAWS resolves AWS configuration from the standard default chain,
-// overriding the region only when one was supplied in the provider options.
+// loadAWS is this package's single door to the deploy host's AWS
+// configuration: the standard default chain, the region overridden only when
+// one was supplied in the provider options, and — the reason the indirection
+// survives a one-line body — awsconf's control-plane retry policy on every
+// client built from it. Calling LoadDefaultConfig here instead would silently
+// put that client back on the SDK's three attempts with no pacing.
 func loadAWS(ctx context.Context, region string) (aws.Config, error) {
-	return awscfg.Control(ctx, region)
+	return awsconf.Control(ctx, region)
 }
 
 // resourceSummary renders the typed config the provider decoded for a

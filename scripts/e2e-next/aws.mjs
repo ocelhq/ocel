@@ -60,7 +60,13 @@ export const LAMBDA_ARCH = "x86_64";
 // process is killed mid-retry. Adaptive mode would be the better policy and is
 // not available here — its rate limiter learns across calls, and each `aws` is
 // a fresh process that remembers nothing.
-const AWS_CLI_MAX_ATTEMPTS = "4";
+//
+// Exported because not every `aws` this suite runs can go through the wrapper
+// below — a binary read wants no encoding, and the harness scripts spawn with
+// their own timeouts — and a call left off this env is back on the CLI default
+// with nothing to say so. Spread it into `env` alongside process.env; that is
+// the whole contract.
+export const AWS_CLI_RETRY_ENV = Object.freeze({ AWS_RETRY_MODE: "standard", AWS_MAX_ATTEMPTS: "4" });
 
 export function aws(args) {
   return execFileSync("aws", args, {
@@ -68,7 +74,7 @@ export function aws(args) {
     timeout: AWS_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, AWS_RETRY_MODE: "standard", AWS_MAX_ATTEMPTS: AWS_CLI_MAX_ATTEMPTS },
+    env: { ...process.env, ...AWS_CLI_RETRY_ENV },
   }).trim();
 }
 
@@ -130,8 +136,15 @@ export function listParameterNames(pathPrefix) {
   return (response.Parameters ?? []).map((entry) => entry.Name);
 }
 
+// Not routed through aws() above: this one hands back the raw bytes (bytecode
+// archives, compressed assets), and the wrapper decodes as utf8 and trims,
+// which would corrupt them. It still spawns under AWS_CLI_RETRY_ENV — a
+// throttled read here is no less transient than a throttled list.
 export function getObject(bucket, key, maxBuffer = 128 * 1024 * 1024) {
-  return execFileSync("aws", ["s3", "cp", `s3://${bucket}/${key}`, "-"], { maxBuffer });
+  return execFileSync("aws", ["s3", "cp", `s3://${bucket}/${key}`, "-"], {
+    maxBuffer,
+    env: { ...process.env, ...AWS_CLI_RETRY_ENV },
+  });
 }
 
 export function describeFunction(functionName) {

@@ -13,7 +13,7 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
-	"github.com/ocelhq/ocel/cloud/aws/awscfg"
+	"github.com/ocelhq/ocel/cloud/aws/awsconf"
 	"github.com/ocelhq/ocel/cloud/aws/vars"
 	"github.com/ocelhq/ocel/cloud/aws/vars/live"
 )
@@ -342,7 +342,7 @@ func resolveLiveValues(ctx context.Context) (*liveValues, error) {
 		return nil, nil
 	}
 
-	cfg, err := awscfg.Runtime(ctx)
+	cfg, err := awsconf.Runtime(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load aws config: %w", err)
 	}
