@@ -33,6 +33,11 @@ export interface AssetStoreDeps {
   // This Deployment's own R2 key root (record.assetPrefix), joined directly
   // with a request's pathname to form the object key.
   assetPrefix: string;
+  // The app's basePath (e.g. "/docs"), needed only to recognize a request for
+  // basePath's own root — Next stores that document as `<basePath>/index.html`,
+  // not `<basePath>.html`, and nothing else this store does is basePath-aware.
+  // Absent (and "/" alone) covers the no-basePath app.
+  basePath?: string;
   // The PoP cache fronting the R2 read. Bound to caches.default in
   // production; a no-op on *.workers.dev (this feature never runs there) but
   // functional on the custom domain this feature targets.
@@ -135,8 +140,21 @@ export function cacheControlFor(pathname: string): string {
 // public/ file, and what serves a build made before documents were named. A
 // request that names a file is nearly always that file, so it comes first
 // there. A request already asking for .html can only be itself.
-function storedPathnames(pathname: string): string[] {
+//
+// The root — "/", or basePath's own root ("/docs" with no trailing segment) —
+// is the one case where the request name and the document name are not the
+// same string with ".html" appended: Next names the root document `index.html`
+// (the same normalizePagePath rule the build-complete adapter fix undoes for
+// routing — see routePathname in next-adapter.mts), so the candidate here is
+// "<root>/index.html" instead of "<root>.html".
+function storedPathnames(pathname: string, basePath = ""): string[] {
   if (pathname.endsWith(".html")) return [pathname];
+  if (pathname === "/" || pathname === basePath) {
+    return [
+      pathname === "/" ? "/index.html" : `${pathname}/index.html`,
+      pathname,
+    ];
+  }
   const document = `${pathname}.html`;
   return hasExtension(pathname) ? [pathname, document] : [document, pathname];
 }
@@ -184,7 +202,7 @@ export async function serveStaticAsset(
   let hit:
     | { pathname: string; object: AssetObject & { body: ReadableStream } }
     | undefined;
-  for (const pathname of storedPathnames(url.pathname)) {
+  for (const pathname of storedPathnames(url.pathname, deps.basePath)) {
     const object = await deps.store.get(`${deps.assetPrefix}${pathname}`);
     if (object?.body) {
       hit = { pathname, object: { ...object, body: object.body } };

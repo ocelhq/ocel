@@ -1944,3 +1944,440 @@ test("emits no fetch-cache folder for an app that cached no fetch", async () => 
   expect(await exists(join(projectDir, ".ocel/output/fetch-cache"))).toBe(false);
 });
 
+// Next's adapter runs normalizePagePath — a *filename* rule — over every Pages
+// Router output's pathname, so a build hands the adapter "/index" for the root
+// rather than "/". Left alone, the deployed app has a route for /index and none
+// for /, and every request to / 404s. These tests cover routePathname undoing
+// that, at each of the shapes a real build was found to produce it in
+// (bd ocelhq-t0ue).
+
+// The static case: id stays "/" (the route Next itself would resolve a static
+// root to) while only pathname carries the bug.
+test("un-normalizes a static Pages Router root output's pathname", async () => {
+  const { projectDir, args } = await synthProject();
+  const filePath = join(projectDir, ".next/server/pages/index.html");
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, "<html>root</html>");
+  args.outputs.staticFiles.push({ pathname: "/index", id: "/", filePath });
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"]).toEqual({ kind: "static" });
+  expect(manifest.dispatch["/index"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/");
+  expect(manifest.pathnames).not.toContain("/index");
+  // servedPathname must see the untranslated pathname: the stored object stays
+  // named index.html (what Next actually wrote to disk), not "/.html".
+  expect(manifest.assetHashes["/index.html"]).toBe(
+    createHash("sha256").update("<html>root</html>").digest("hex"),
+  );
+  expect(
+    await readFile(join(projectDir, ".ocel/output/static/index.html"), "utf8"),
+  ).toBe("<html>root</html>");
+});
+
+// The getServerSideProps case: unlike the static case, Next gets the *id*
+// wrong too ("/index" rather than "/"), so the lambda dispatch entry's
+// entryKey carries the bug through — un-normalizing the dispatch key alone
+// must still join it to the launcher's own "/index"-keyed entry.
+test("un-normalizes a getServerSideProps root's dispatch key, keeping its own id as entryKey", async () => {
+  const { projectDir, args } = await synthProject();
+  const handler = join(projectDir, ".next/server/pages/index.js");
+  await mkdir(dirname(handler), { recursive: true });
+  await writeFile(handler, "module.exports = () => {}");
+  args.outputs.pages.push({
+    pathname: "/index",
+    id: "/index",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "PAGES",
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/"]).toMatchObject({ kind: "lambda", entryKey: "/index" });
+  expect(manifest.dispatch["/index"]).toBeUndefined();
+  await expectManifestJoinsLaunchers(projectDir);
+});
+
+// The getStaticProps/ISR case: a prerender, parented by a PAGES output. A real
+// build never runs the prerender's own pathname through normalizePagePath —
+// only the parent's on-disk html/data path (build-complete.ts:1508,537-556) —
+// so its pathname already reads "/docs", the real route, with no leading
+// "/index" to undo. Only the parent PAGES output ("/docs/index") carries that.
+// The dispatch key must still translate for the *parent*'s sake (so a request
+// for /docs resolves to the entry the launcher actually carries under
+// "/docs/index"), while the prerender's own pathname — and therefore the
+// cache key Next's runtime re-derives at read time — stays exactly as built.
+test("un-normalizes a prerendered root's dispatch key from its PAGES parent, leaving the prerender's own raw pathname alone", async () => {
+  const { projectDir, args } = await synthProject();
+  args.config = { ...args.config, basePath: "/docs" };
+  const handler = join(projectDir, ".next/server/pages/docs/index.js");
+  const appDir = join(projectDir, ".next/server/pages/docs");
+  await mkdir(appDir, { recursive: true });
+  await writeFile(handler, "module.exports = () => {}");
+  await writeFile(join(appDir, "index.html"), "<html>root</html>");
+  // A real build never basePath-prefixes `id` — normalizePathnames
+  // (build-complete.ts:537-556) rewrites only `pathname` — so the raw ids
+  // here are "/index" and "/", not "/docs/index" and "/docs".
+  args.outputs.pages.push({
+    pathname: "/docs/index",
+    id: "/index",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "PAGES",
+  } as never);
+  args.outputs.prerenders.push({
+    pathname: "/docs",
+    id: "/",
+    type: "PRERENDER",
+    parentOutputId: "/index",
+    groupId: 1,
+    fallback: {
+      filePath: join(appDir, "index.html"),
+      initialRevalidate: false,
+      initialHeaders: { "content-type": "text/html; charset=utf-8" },
+    },
+    config: {},
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/docs"]).toMatchObject({
+    kind: "prerender",
+    entryKey: "/index",
+  });
+  expect(manifest.dispatch["/docs/index"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/docs");
+  expect(manifest.pathnames).not.toContain("/docs/index");
+  // The prerender's own pathname was never touched, so the entry Next's
+  // runtime incremental cache re-derives by cacheKey("/docs") — "docs" — is
+  // the one seeded, and no "docs/index" entry exists to shadow it.
+  expect(await exists(join(projectDir, ".ocel/output/cache/docs.cache.json"))).toBe(
+    true,
+  );
+  expect(
+    await exists(join(projectDir, ".ocel/output/cache/docs/index.cache.json")),
+  ).toBe(false);
+});
+
+// A page one directory below "index" — pages/index/foo.js — makes Next apply
+// the same rule to a non-root path: normalizePagePath prefixes another
+// "/index" segment on ("/index/foo" -> "/index/index/foo"), so routePathname
+// must undo it by dropping one leading "/index" segment, not by re-deriving
+// the root special case.
+test("un-normalizes a nested pages/index/foo output by dropping one leading /index segment", async () => {
+  const { projectDir, args } = await synthProject();
+  const handler = join(projectDir, ".next/server/pages/index/index/foo.js");
+  await mkdir(dirname(handler), { recursive: true });
+  await writeFile(handler, "module.exports = () => {}");
+  args.outputs.pages.push({
+    pathname: "/index/index/foo",
+    id: "/index/index/foo",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "PAGES",
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/index/foo"]).toMatchObject({ kind: "lambda" });
+  expect(manifest.dispatch["/index/index/foo"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/index/foo");
+});
+
+// A prerender's own pathname is never itself run through normalizePagePath —
+// only its parent's on-disk html/data path is (build-complete.ts:1508 pushes
+// `pathname: route` verbatim, never normalizePagePath(route) again) — so a
+// prerender under pages/index/foo.js already reads "/index/foo", not
+// "/index/index/foo". Gating the prerender's own key on its *parent's* kind
+// (the reverted round-2 approach) wrongly re-ran routePathname on it anyway,
+// dropping one more "/index" than the pathname ever had and sending the
+// prerender to a phantom "/foo" while the real "/index/foo" fell through to
+// the plain lambda entry above.
+test("keeps a prerendered pages/index/foo route on its own pathname, not a phantom /foo", async () => {
+  const { projectDir, args } = await synthProject();
+  const handler = join(projectDir, ".next/server/pages/index/index/foo.js");
+  await mkdir(dirname(handler), { recursive: true });
+  await writeFile(handler, "module.exports = () => {}");
+  await writeFile(join(dirname(handler), "foo.html"), "<html>foo</html>");
+  args.outputs.pages.push({
+    pathname: "/index/index/foo",
+    id: "/index/foo",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "PAGES",
+  } as never);
+  args.outputs.prerenders.push({
+    pathname: "/index/foo",
+    id: "/index/foo",
+    type: "PRERENDER",
+    parentOutputId: "/index/foo",
+    groupId: 1,
+    fallback: {
+      filePath: join(dirname(handler), "foo.html"),
+      initialRevalidate: false,
+      initialHeaders: { "content-type": "text/html; charset=utf-8" },
+    },
+    config: {},
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/index/foo"]).toMatchObject({ kind: "prerender" });
+  expect(manifest.dispatch["/foo"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/index/foo");
+  expect(manifest.pathnames).not.toContain("/foo");
+});
+
+// handleEdgeFunction denormalizes a Pages Router edge output's pathname
+// itself, with the *inverse* rule (`route === '/index' ? '/' : route.replace(
+// /\/index$/, '')`, build-complete.ts:749-753) before the adapter ever sees
+// it — so an edge PAGES/PAGES_API pathname is never normalizePagePath'd in
+// the first place. Gating routeKeyOf on `type` alone re-applies routePathname
+// to an already-correct pathname, un-normalizing it a second time and
+// dropping the route entirely.
+test("keeps an edge Pages Router output's already-denormalized pathname addressable by its own name", async () => {
+  const { projectDir, args } = await synthProject();
+  args.outputs.pages.push(
+    {
+      pathname: "/index/foo",
+      id: "/index/foo",
+      assets: {},
+      runtime: "edge",
+      filePath: join(projectDir, ".next/server/pages/index/foo.js"),
+      config: {},
+      type: "PAGES",
+      edgeRuntime: { entryKey: "pages/index/foo", handlerExport: "default" },
+    } as never,
+    {
+      pathname: "/",
+      id: "/",
+      assets: {},
+      runtime: "edge",
+      filePath: join(projectDir, ".next/server/pages/index.js"),
+      config: {},
+      type: "PAGES",
+      edgeRuntime: { entryKey: "pages/index", handlerExport: "default" },
+    } as never,
+  );
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/index/foo"]).toMatchObject({ kind: "edge" });
+  expect(manifest.dispatch["/foo"]).toBeUndefined();
+  expect(manifest.dispatch["/"]).toMatchObject({ kind: "edge" });
+  expect(manifest.pathnames).toContain("/index/foo");
+});
+
+// staticRouteKeyOf's gate is the file's location on disk, not its pathname's
+// shape: a STATIC_FILE whose pathname happens to look like normalizePagePath's
+// output but was never written under server/pages/ (e.g. an `output: 'export'`
+// file — build-complete.ts:625-645 names pathnames the same way but writes
+// under configOutDir) must be left untouched, while files genuinely under
+// server/pages/ that are not /index-shaped (an i18n locale document, the
+// static 404 fallback) translate to a no-op. withStaticFile's fixed
+// `.next/<pathname>` location never exercises this gate at all, so this test
+// calls addStaticOutput directly with each file's real location.
+test("only translates a STATIC_FILE named under server/pages/, not any /index-shaped pathname", async () => {
+  const { projectDir, args } = await synthProject();
+  await addStaticOutput(
+    args,
+    "/index/foo",
+    join(projectDir, "out/index/foo.html"),
+    "EXPORT FOO",
+  );
+  await addStaticOutput(
+    args,
+    "/en",
+    join(projectDir, ".next/server/pages/en.html"),
+    "LOCALE EN",
+  );
+  await addStaticOutput(
+    args,
+    "/404",
+    join(projectDir, ".next/server/pages/404.html"),
+    "NOT FOUND",
+  );
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  // Not under server/pages/: routePathname must never run on it, even though
+  // its pathname is shaped like normalizePagePath's output.
+  expect(manifest.dispatch["/index/foo"]).toEqual({ kind: "static" });
+  expect(manifest.dispatch["/foo"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/index/foo");
+  // Under server/pages/, but neither is /index-shaped, so translating them is
+  // a no-op.
+  expect(manifest.dispatch["/en"]).toEqual({ kind: "static" });
+  expect(manifest.dispatch["/404"]).toEqual({ kind: "static" });
+});
+
+// Negative cases: everything routePathname must leave alone. `.rsc` and
+// `.segment.rsc` variants, `_next/data/<buildId>/index.json`, `_next/static`
+// chunks and public/ files never match unindex's `/index` or `/index/…`
+// shape at all — unlike an App Router route genuinely named `/index`
+// (covered above), which does match it and is excluded by kind instead — so
+// the fix is a no-op on every one of these regardless of gating.
+test("leaves .rsc, _next/data, _next/static and public/ pathnames untouched", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/index.rsc", "RSC-ROOT");
+  await withStaticFile(
+    projectDir,
+    args,
+    "/_next/data/test-build/index.json",
+    "{}",
+  );
+  await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
+  await mkdir(join(projectDir, "public"), { recursive: true });
+  await writeFile(join(projectDir, "public", "index.txt"), "public root file");
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  for (const pathname of [
+    "/index.rsc",
+    "/_next/data/test-build/index.json",
+    "/_next/static/chunks/a.js",
+    "/index.txt",
+  ]) {
+    expect(manifest.dispatch[pathname]).toEqual({ kind: "static" });
+    expect(manifest.pathnames).toContain(pathname);
+  }
+});
+
+// App Router names its routes with normalizeAppPath, a different rule under
+// which a route literally at app/index/page.js is already correctly named
+// "/index" — routePathname must never be run on it. Fixture verified against
+// test/e2e/app-dir/app-edge/app/index/page.js in the Next.js repo, whose test
+// asserts next.render('/index') resolves.
+test("leaves an App Router route literally named /index untouched", async () => {
+  const { projectDir, args } = await synthProject();
+  const handler = join(projectDir, ".next/server/app/index/page.js");
+  await mkdir(dirname(handler), { recursive: true });
+  await writeFile(handler, "module.exports = () => {}");
+  args.outputs.appPages.push({
+    pathname: "/index",
+    id: "/index",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "APP_PAGE",
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/index"]).toMatchObject({ kind: "lambda" });
+  expect(manifest.dispatch["/"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/index");
+  expect(manifest.pathnames).not.toContain("/");
+  await expectManifestJoinsLaunchers(projectDir);
+});
+
+// normalizePagePath only double-prefixes a page under /index when the page is
+// *not* a dynamic route (normalize-page-path.ts:15) — so pages/index/[...slug]
+// keeps its own pathname, "/index/[...slug]", unlike the static
+// pages/index/foo case above. Fixture verified against
+// test/e2e/dynamic-routing/pages/index/[...slug].js in the Next.js repo, whose
+// routes-manifest records the page as "/index/[...slug]" verbatim.
+test("keeps a dynamic pages/index/[...slug] route addressable by its own name", async () => {
+  const { projectDir, args } = await synthProject();
+  const handler = join(projectDir, ".next/server/pages/index/[...slug].js");
+  await mkdir(dirname(handler), { recursive: true });
+  await writeFile(handler, "module.exports = () => {}");
+  args.outputs.pages.push({
+    pathname: "/index/[...slug]",
+    id: "/index/[...slug]",
+    assets: {},
+    runtime: "nodejs",
+    filePath: handler,
+    config: {},
+    type: "PAGES",
+  } as never);
+  args.routing.dynamicRoutes.push({
+    source: "/index/[...slug]",
+    sourceRegex: "^[/]?/index/(?<nxtPslug>.+?)(?:/)?$",
+    destination: "/index/[...slug]?nxtPslug=$nxtPslug",
+  } as never);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.dispatch["/index/[...slug]"]).toMatchObject({ kind: "lambda" });
+  expect(manifest.dispatch["/[...slug]"]).toBeUndefined();
+  expect(manifest.pathnames).toContain("/index/[...slug]");
+
+  const { routes } = await readLauncher(projectDir);
+  expect(routes.dynamic).toEqual([
+    ["^[/]?/index/(?<nxtPslug>.+?)(?:/)?$", "/index/[...slug]"],
+  ]);
+  await expectManifestJoinsLaunchers(projectDir);
+});
+
+// Insurance against exactly the failure mode above ever recurring under a
+// different guise: two routes that, after translation, name the same
+// dispatch key must fail the build rather than have one silently overwrite
+// the other in Object.fromEntries. Contrived (a real `next build` can never
+// itself emit a PAGES output at the literal pathname "/"), but it is the
+// most direct way to exercise the guard.
+test("fails the build when two routes resolve to the same dispatch key", async () => {
+  const { projectDir, args } = await synthProject();
+  const indexHandler = join(projectDir, ".next/server/pages/index.js");
+  const rootHandler = join(projectDir, ".next/server/pages/root.js");
+  await mkdir(dirname(indexHandler), { recursive: true });
+  await writeFile(indexHandler, "module.exports = () => {}");
+  await writeFile(rootHandler, "module.exports = () => {}");
+  args.outputs.pages.push(
+    {
+      pathname: "/index",
+      id: "/index",
+      assets: {},
+      runtime: "nodejs",
+      filePath: indexHandler,
+      config: {},
+      type: "PAGES",
+    } as never,
+    {
+      pathname: "/",
+      id: "/",
+      assets: {},
+      runtime: "nodejs",
+      filePath: rootHandler,
+      config: {},
+      type: "PAGES",
+    } as never,
+  );
+  const adapter = await loadAdapterIn(projectDir);
+
+  await expect(adapter.onBuildComplete(args as never)).rejects.toThrow(
+    /both resolve to dispatch key "\/"/,
+  );
+});
+

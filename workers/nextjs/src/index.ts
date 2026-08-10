@@ -424,7 +424,11 @@ export async function resolveRouteDeps(
       ...base.interception,
       config: { isrPrefix: record.isrPrefix },
     },
-    assetStore: { ...base.assetStore, assetPrefix: record.assetPrefix },
+    assetStore: {
+      ...base.assetStore,
+      assetPrefix: record.assetPrefix,
+      basePath: (record.routingManifest as Manifest).basePath,
+    },
   };
 }
 

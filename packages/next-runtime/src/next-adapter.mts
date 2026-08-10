@@ -102,6 +102,12 @@ const adapter = {
       buildId,
     } = args;
 
+    // Read once, ahead of routePathname's every call: Next bakes basePath onto
+    // every output pathname before the adapter ever sees it (normalizePathnames,
+    // build-complete.ts:537-556), and routePathname has to undo that prefixing
+    // to find the `/index` normalization underneath it.
+    const basePath = config.basePath || "";
+
     const allRoutes = [
       ...outputs.pages,
       ...outputs.pagesApi,
@@ -109,11 +115,11 @@ const adapter = {
       ...outputs.appRoutes,
     ];
 
-    const routableOutputs = [
-      ...allRoutes,
-      ...outputs.prerenders,
-      ...outputs.staticFiles,
-    ];
+    // The one location build-complete writes a Pages Router page's own HTML
+    // document to (build-complete.ts:864,922) — staticRouteKeyOf's signal for
+    // which STATIC_FILE outputs carry a normalizePagePath'd pathname, since
+    // that output kind carries no `type` field to gate on directly.
+    const pagesDistDir = join(distDir, "server", "pages") + sep;
 
     const { middleware } = outputs;
     if (middleware?.runtime === "nodejs") {
@@ -181,7 +187,10 @@ const adapter = {
       const entry = members[0]!;
       entryRoutes.push(entry);
       for (const m of members) {
-        entryKeyByPathname.set(m.pathname, entry.id);
+        // Keyed by the request path, not Next's filename: a self-fetch loopback
+        // (next-dispatch.cjs's routes.exact) asks for the route it actually
+        // hits, and for a Pages Router root that is `/`, never `/index`.
+        entryKeyByPathname.set(routeKeyOf(m, basePath), entry.id);
         entryKeyByRouteId.set(m.id, entry.id);
       }
     }
@@ -320,6 +329,132 @@ const adapter = {
     await emitCacheEntries(outputRoot, prerenderGroups, allRoutes);
     await emitFetchEntries(outputRoot, distDir);
 
+    // One bundle serves many routes, so the id names the Lambda and the entry
+    // key names which of its routes to render.
+    const functionDispatch = functionRoutes.map((o) => {
+      const routeKey = routeKeyOf(o, basePath);
+      const entryKey = entryKeyByPathname.get(routeKey);
+      if (entryKey === undefined) {
+        throw new Error(
+          `ocel: node route "${routeKey}" resolves to no bundle entry — this build cannot be served`,
+        );
+      }
+      return {
+        key: routeKey,
+        original: o.pathname,
+        value: {
+          kind: "lambda",
+          id: bundleNameOf(entryKey, routeKey),
+          entryKey,
+        },
+      };
+    });
+
+    // Edge variants (`.rsc`, `_next/data`) share one compiled entry, so
+    // several pathnames simply name the same entryKey — a different
+    // namespace from the node bundles' entry keys.
+    const edgeDispatch = edgeRoutes.map((o) => ({
+      key: routeKeyOf(o, basePath),
+      original: o.pathname,
+      value: { kind: "edge", entryKey: edgeEntryOf(o).entryKey },
+    }));
+
+    const staticDispatch = outputs.staticFiles.map((o) => ({
+      key: staticRouteKeyOf(o, pagesDistDir, basePath),
+      original: o.pathname,
+      value: { kind: "static" },
+    }));
+
+    // Every route a request can dispatch to on its own name, before a
+    // prerender is allowed to take one of those names over below. A route
+    // resolving to the same key as a different route is ambiguous — whichever
+    // was listed last would silently win the dispatch table and the other
+    // 404s — so a collision here fails the build, matching bundleNameOf's
+    // posture above. publicFiles is deliberately not part of this check: a
+    // public/ file intentionally shadowing a route it shares a name with is
+    // an existing, unrelated pattern this fix does not touch.
+    const routeDispatch = [...functionDispatch, ...edgeDispatch, ...staticDispatch];
+    const dispatchKeyOrigin = new Map<string, string>();
+    for (const { key, original } of routeDispatch) {
+      const prior = dispatchKeyOrigin.get(key);
+      if (prior !== undefined && prior !== original) {
+        throw new Error(
+          `ocel: routes "${prior}" and "${original}" both resolve to dispatch key "${key}" — this build cannot be served`,
+        );
+      }
+      dispatchKeyOrigin.set(key, original);
+    }
+
+    const publicDispatch = publicFiles.map((p) => [
+      p.pathname,
+      { kind: "static" },
+    ]);
+
+    // A prerendered pathname resolves to a prerender: its cache entry lives in
+    // the asset bucket (keyed by build id) and its id is the bundle carrying
+    // the parent output — the base route deployed as a Lambda that
+    // regenerates the entry. Spread last so it replaces the plain lambda
+    // entry a prerendered function route also produced above.
+    //
+    // The renderer is named by parentOutputId, never by the prerender's own
+    // pathname: a segment prerender has no route of its own, a prerender's
+    // pathname can collide with a different group's function pathname, and
+    // parentOutputId can name a non-representative member of its group —
+    // which the by-route-id map resolves to that group's entry.
+    //
+    // The fallback is projected down to the two freshness windows rather than
+    // spread: the shell, the postponed state, and the entry's own
+    // status/headers all travel in the cache entry, so carrying build-time
+    // copies here would only put a stale second source of truth (and, for
+    // postponedState, ~96KB of it per route) in front of every request.
+    const prerenderDispatch = outputs.prerenders.map((p) => {
+      const routeKey = p.pathname;
+      const allowQuery = p.config?.allowQuery;
+      const tags = cacheTags(p);
+      const entryKey = entryKeyByRouteId.get(p.parentOutputId);
+      const edgeEntryKey = edgeEntryByOutputId.get(p.parentOutputId);
+      if (entryKey === undefined && edgeEntryKey === undefined) {
+        throw new Error(
+          `ocel: prerender "${routeKey}" is parented by output "${p.parentOutputId}", which renders on neither a Lambda nor the edge — nothing can regenerate it`,
+        );
+      }
+
+      return [
+        routeKey,
+        {
+          kind: "prerender",
+          // An edge-parented prerender has no bundle at all: the worker
+          // regenerates it through edgeEntryKey and never reads the id, so it
+          // carries the parent output's own name for legibility.
+          id:
+            entryKey === undefined
+              ? p.parentOutputId
+              : bundleNameOf(entryKey, routeKey),
+          config: p.config,
+          fallback: {
+            initialRevalidate: p.fallback?.initialRevalidate,
+            initialExpiration: p.fallback?.initialExpiration,
+          },
+          ...(p.pprChain && { pprChain: p.pprChain }),
+          ...(tags.length > 0 && { tags }),
+          ...(allowQuery && { allowQuery }),
+          // Which entry of the parent's bundle regenerates this route.
+          ...(entryKey !== undefined && { entryKey }),
+          // Set only when the parent renders on the edge: there is no
+          // Function URL to fall back to, so the worker regenerates this
+          // route through the edge bundle's entry instead — and reads the
+          // key's absence as "this tier may revalidate".
+          ...(edgeEntryKey !== undefined && { edgeEntryKey }),
+        },
+      ];
+    });
+
+    const dispatch = Object.fromEntries([
+      ...routeDispatch.map((d) => [d.key, d.value]),
+      ...publicDispatch,
+      ...prerenderDispatch,
+    ]);
+
     const routingManifest = {
       buildId,
       appName,
@@ -344,7 +479,11 @@ const adapter = {
       assetHashes,
       pathnames: [
         ...new Set([
-          ...routableOutputs.map((o) => o.pathname),
+          ...allRoutes.map((o) => routeKeyOf(o, basePath)),
+          ...outputs.prerenders.map((p) => p.pathname),
+          ...outputs.staticFiles.map((o) =>
+            staticRouteKeyOf(o, pagesDistDir, basePath),
+          ),
           ...publicFiles.map((p) => p.pathname),
         ]),
       ],
@@ -359,93 +498,7 @@ const adapter = {
         },
       }),
 
-      dispatch: Object.fromEntries([
-        // One bundle serves many routes, so the id names the Lambda and the
-        // entry key names which of its routes to render.
-        ...functionRoutes.map((o) => {
-          const entryKey = entryKeyByPathname.get(o.pathname);
-          if (entryKey === undefined) {
-            throw new Error(
-              `ocel: node route "${o.pathname}" resolves to no bundle entry — this build cannot be served`,
-            );
-          }
-          return [
-            o.pathname,
-            {
-              kind: "lambda",
-              id: bundleNameOf(entryKey, o.pathname),
-              entryKey,
-            },
-          ];
-        }),
-        // Edge variants (`.rsc`, `_next/data`) share one compiled entry, so
-        // several pathnames simply name the same entryKey — a different
-        // namespace from the node bundles' entry keys.
-        ...edgeRoutes.map((o) => [
-          o.pathname,
-          { kind: "edge", entryKey: edgeEntryOf(o).entryKey },
-        ]),
-        ...outputs.staticFiles.map((o) => [o.pathname, { kind: "static" }]),
-        ...publicFiles.map((p) => [p.pathname, { kind: "static" }]),
-
-        // A prerendered pathname resolves to a prerender: its cache entry lives
-        // in the asset bucket (keyed by build id) and its id is the bundle
-        // carrying the parent output — the base route deployed as a Lambda that
-        // regenerates the entry. Spread last so it replaces the plain lambda
-        // entry a prerendered function route also produced above.
-        //
-        // The renderer is named by parentOutputId, never by the prerender's own
-        // pathname: a segment prerender has no route of its own, a prerender's
-        // pathname can collide with a different group's function pathname, and
-        // parentOutputId can name a non-representative member of its group —
-        // which the by-route-id map resolves to that group's entry.
-        //
-        // The fallback is projected down to the two freshness windows rather
-        // than spread: the shell, the postponed state, and the entry's own
-        // status/headers all travel in the cache entry, so carrying build-time
-        // copies here would only put a stale second source of truth (and, for
-        // postponedState, ~96KB of it per route) in front of every request.
-        ...outputs.prerenders.map((p) => {
-          const allowQuery = p.config?.allowQuery;
-          const tags = cacheTags(p);
-          const entryKey = entryKeyByRouteId.get(p.parentOutputId);
-          const edgeEntryKey = edgeEntryByOutputId.get(p.parentOutputId);
-          if (entryKey === undefined && edgeEntryKey === undefined) {
-            throw new Error(
-              `ocel: prerender "${p.pathname}" is parented by output "${p.parentOutputId}", which renders on neither a Lambda nor the edge — nothing can regenerate it`,
-            );
-          }
-
-          return [
-            p.pathname,
-            {
-              kind: "prerender",
-              // An edge-parented prerender has no bundle at all: the worker
-              // regenerates it through edgeEntryKey and never reads the id, so
-              // it carries the parent output's own name for legibility.
-              id:
-                entryKey === undefined
-                  ? p.parentOutputId
-                  : bundleNameOf(entryKey, p.pathname),
-              config: p.config,
-              fallback: {
-                initialRevalidate: p.fallback?.initialRevalidate,
-                initialExpiration: p.fallback?.initialExpiration,
-              },
-              ...(p.pprChain && { pprChain: p.pprChain }),
-              ...(tags.length > 0 && { tags }),
-              ...(allowQuery && { allowQuery }),
-              // Which entry of the parent's bundle regenerates this route.
-              ...(entryKey !== undefined && { entryKey }),
-              // Set only when the parent renders on the edge: there is no
-              // Function URL to fall back to, so the worker regenerates this
-              // route through the edge bundle's entry instead — and reads the
-              // key's absence as "this tier may revalidate".
-              ...(edgeEntryKey !== undefined && { edgeEntryKey }),
-            },
-          ];
-        }),
-      ]),
+      dispatch,
     };
 
     await mkdir(outputRoot, { recursive: true });
@@ -1207,6 +1260,115 @@ function renderLauncher(
       `})`,
     ].join("\n") + "\n"
   );
+}
+
+// routePathname undoes normalizePagePath, the *filename* rule Next's adapter
+// mistakenly uses as the *route* for every Pages Router output
+// (build-complete.ts:966,922): `/` -> `/index`, and any page whose own path
+// starts with `/index` gets a second `/index` prefixed on (`/index/foo` ->
+// `/index/index/foo`) — unless that page is a dynamic route, which
+// normalizePagePath leaves alone (normalize-page-path.ts:15) since a dynamic
+// segment already keeps it from colliding with the literal file `/index.js`.
+//
+// This is never safe to call on an App Router output: normalizeAppPath is a
+// different rule (`/index/page.js` -> `/index`), under which a route
+// genuinely named `/index` is already correct, and undoing normalizePagePath
+// on it would wrongly send it to `/`. Every call site gates on the output's
+// kind first — routeKeyOf and staticRouteKeyOf below — and this function
+// assumes that has already happened.
+//
+// This is the mirror image of servedPathname: that one names the bytes on
+// disk, this one names the route that serves them, and callers that need the
+// built file name (servedPathname, and cacheKey — Next's runtime incremental
+// cache re-derives its key with normalizePagePath, so the cache key must stay
+// spelled the way the build spelled it) must never call this.
+//
+// basePath is stripped before the fix and re-added after, on a segment
+// boundary (matching workers/nextjs's own withoutBasePath): Next bakes
+// basePath onto every output pathname ahead of the adapter, so `/docs/index`
+// must become `/docs`, not `/index/docs`.
+function routePathname(pathname: string, basePath: string): string {
+  if (!basePath) return unindex(pathname);
+  if (pathname === basePath) return basePath;
+  if (!pathname.startsWith(`${basePath}/`)) return pathname;
+  const fixed = unindex(pathname.slice(basePath.length));
+  return fixed === "/" ? basePath : `${basePath}${fixed}`;
+}
+
+// Mirrors isDynamicRoute's strict test (is-dynamic.ts:9-11) rather than
+// importing it: the adapter is esbuilt into the CLI's platform dist, and one
+// regex is not worth the coupling. Interception routes (isInterceptionRouteAppPath)
+// are App Router only and never reach this function, so that half of Next's
+// check is not needed here. The `(?=\/|$)` lookahead would not match a
+// *suffixed* pathname such as `/index/[...slug].rsc`, but that is unreachable
+// today: the only `.rsc` prerenders are PPR-only/App Router
+// (build-complete.ts:1894), and `_next/data` paths start `/_next`, never
+// reaching unindex through a Pages Router gate at all.
+const dynamicSegment = /\/\[[^/]+\](?=\/|$)/;
+
+function unindex(pathname: string): string {
+  if (dynamicSegment.test(pathname)) return pathname;
+  if (pathname === "/index") return "/";
+  if (pathname.startsWith("/index/")) return pathname.slice("/index".length);
+  return pathname;
+}
+
+// Only these two output kinds ever ran through normalizePagePath; App
+// Router's normalizeAppPath is a different rule and must never be undone.
+function isPagesRouterKind(type: string): boolean {
+  return type === "PAGES" || type === "PAGES_API";
+}
+
+// routeKeyOf is the dispatch/pathname key for a function or edge output's own
+// pathname, gated on its kind and runtime. Only the nodejs Pages Router path
+// (build-complete.ts's normalizePagePath call) ever produces a normalized
+// pathname; the edge Pages Router path already hands back a denormalized one
+// — handleEdgeFunction applies the *inverse* rule itself
+// (`route === '/index' ? '/' : route.replace(/\/index$/, '')`,
+// build-complete.ts:749-753) — so re-applying routePathname to an edge output
+// would un-normalize it a second time.
+function routeKeyOf(
+  output: { pathname: string; type: string; runtime: string },
+  basePath: string,
+): string {
+  return isPagesRouterKind(output.type) && output.runtime === "nodejs"
+    ? routePathname(output.pathname, basePath)
+    : output.pathname;
+}
+
+// staticRouteKeyOf gates a STATIC_FILE output's pathname. STATIC_FILE carries
+// no `type` to distinguish Pages from App (AdapterOutput['STATIC_FILE'] has
+// none) and no parentOutputId either, so neither of the two tricks above
+// applies — the file's own location on disk is the only signal build-complete
+// leaves behind. Only one STATIC_FILE writer names its pathname with
+// normalizePagePath's output: the Pages Router auto-static branch
+// (build-complete.ts:864,922), which is also the only one that puts the file
+// under server/pages/ *and* names it after the route. Every sibling under
+// server/pages/ (the locale variant, the static 404/500 fallback) already
+// carries its own raw, un-normalized pathname, so translating them is a
+// no-op — routePathname only changes a pathname that actually starts with
+// `/index`.
+//
+// A precise alternative was considered: the auto-static branch is also the
+// only STATIC_FILE writer where `id` is the raw page and `pathname` is
+// normalizePagePath(id) (build-complete.ts:921-922), so
+// `normalizePagePath(file.id) === pathname` looks like a layout-independent
+// test. It is not safe: the non-i18n `.rsc` fallback pushed alongside that
+// same branch (build-complete.ts:935) sets `id: \`${page}.rsc\`` and
+// `pathname: \`${route}.rsc\`` — different strings — and for a nested,
+// non-dynamic route under /index/ (e.g. page "/index/foo" coexisting with an
+// App Router, so the .rsc fallback exists) normalizePagePath(id) equals
+// pathname anyway, so the id-test would wrongly match and translate a `.rsc`
+// output, which must stay untouched. The filePath test has no such case, so
+// it stays.
+function staticRouteKeyOf(
+  file: { pathname: string; filePath: string },
+  pagesDistDir: string,
+  basePath: string,
+): string {
+  return file.filePath.startsWith(pagesDistDir)
+    ? routePathname(file.pathname, basePath)
+    : file.pathname;
 }
 
 // The file name a built static output is written and keyed under. Next names a
