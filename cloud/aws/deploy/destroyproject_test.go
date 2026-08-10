@@ -31,9 +31,9 @@ func TestRootStackWorkerNames_CoversEveryAppFromHistoryNotTheSharedStore(t *test
 	// "root" fallback and the legacy unqualified name) must appear.
 	for _, want := range []string{
 		legacyWorkerName(prod),
-		workerScriptName(prod, "root"),
-		workerScriptName(prod, "web"),
-		workerScriptName(prod, "api"),
+		workerScriptName("proj_x", "prod", "root"),
+		workerScriptName("proj_x", "prod", "web"),
+		workerScriptName("proj_x", "prod", "api"),
 	} {
 		if !contains(names, want) {
 			t.Errorf("worker names %v missing %q", names, want)

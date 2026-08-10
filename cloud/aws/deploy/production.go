@@ -402,8 +402,8 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 		// the per-app workers an earlier shape of this deploy left standing,
 		// whose pointer-exact routes outrank the wildcard and would shadow it on
 		// those hostnames for good. It reaches nothing else: a production worker
-		// is "ocel-<slug>-<env>-<app>", outside this stem, and so is a sibling
-		// project's, subject to previewWorkerName's collision caveat.
+		// is "ocel-<slug>--<env>-<app>", outside this stem, and a sibling
+		// project's worker is outside the project boundary the stem opens with.
 		spec.PruneWorkerStem = previewWorkerName(cfg.Slug)
 		// A project with no worker-backed app has nothing to serve at the edge:
 		// the spec exists only to seed the project's store instance, and the
@@ -431,7 +431,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 
 	if len(apps) == 0 {
 		spec := base
-		spec.GenericName = workerScriptName(cfg.StackName, "root")
+		spec.GenericName = workerScriptName(cfg.Slug, cfg.Env, "root")
 		return []edge.RootStackSpec{spec}, nil
 	}
 
@@ -443,7 +443,7 @@ func rootStackSpecs(cfg Config, manifest *deploymentsv1.Manifest, version string
 	for _, app := range apps {
 		name := app.GetName()
 		spec := base
-		spec.GenericName = workerScriptName(cfg.StackName, name)
+		spec.GenericName = workerScriptName(cfg.Slug, cfg.Env, name)
 		spec.Generic = withVar(generic, "OCEL_APP", name)
 		spec.Domains = resolved.hosts[name]
 		specs = append(specs, spec)
@@ -493,35 +493,36 @@ func previewAppNames(apps []*deploymentsv1.ManifestApp) string {
 }
 
 // previewWorkerName is the project's one preview entrypoint worker,
-// "ocel-<project>-preview": project-scoped rather than per-app, because the
+// "ocel-<project>--preview": project-scoped rather than per-app, because the
 // worker resolves the app from the request host, and never colliding with a
-// production root worker ("ocel-<project>-<env>-<app>") in the same account. It
+// production root worker ("ocel-<project>--<env>-<app>") in the same account. It
 // is the single deterministic name preview teardown reclaims, so nothing has to
-// enumerate the edge to find it. It cannot, by name alone, tell a sibling
-// project slugged "<slug>-preview" apart — the same collision caveat
-// classifyProjectStacks carries — but slugs are unique per org and that shape is
-// pathological. Pure.
+// enumerate the edge to find it. It is also the stem that teardown and route
+// pruning sweep, and the project boundary projectWorkerStem plants is what keeps
+// that sweep inside this project: a sibling slugged "<slug>-preview" names its
+// workers "ocel-<slug>-preview--…", under no stem of this project's. Pure.
 func previewWorkerName(slug string) string {
-	return sanitizeWorkerName("ocel-" + slug + "-preview")
+	return projectWorkerStem(slug) + "preview"
 }
 
 // ProjectOwnsWorker reports whether an edge worker script name is one of this
-// project's own: every worker Ocel deploys for a project is named "ocel-<slug>…"
-// (previewWorkerName, workerScriptName), so the slug segment is what tells a
-// project's own hold on a hostname apart from another project's. It answers the
-// domain-claim check's "is this mine?", and it lives here rather than in the CLI
-// because only the deploy host derives a worker name from a slug.
+// project's own: every worker Ocel deploys for a project carries the project
+// boundary "ocel-<slug>--" (previewWorkerName, workerScriptName), and no other
+// project's name can, so that prefix is what tells a project's own hold on a
+// hostname apart from another project's. It answers the domain-claim check's "is
+// this mine?", and it lives here rather than in the CLI because only the deploy
+// host derives a worker name from a slug.
 //
-// It carries previewWorkerName's collision caveat — a sibling project slugged
-// "<slug>-something" reads as this one — and one of its own: a slug long enough
-// for workerScriptName to clamp the project segment is not recognised, which
-// reads as someone else's claim and refuses rather than lets a deploy through.
-// Pure.
+// Two names it deliberately does not recognise, both erring toward "someone
+// else's claim" — which refuses a deploy rather than letting one repoint a route
+// it does not own: a slug long enough for workerScriptName to clamp the boundary
+// away, and the unqualified name a project deployed under before workers were
+// named per app (legacyWorkerName), which predates the boundary. Pure.
 func ProjectOwnsWorker(slug, script string) bool {
 	if slug == "" || script == "" {
 		return false
 	}
-	return edge.NameUnderStem(sanitizeWorkerName("ocel-"+slug), script)
+	return strings.HasPrefix(script, projectWorkerStem(slug))
 }
 
 // firstDomain is the first hostname in an app's declared domain list, or "" for

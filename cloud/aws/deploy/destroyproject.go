@@ -192,14 +192,14 @@ func rootStackWorkerNames(ctx context.Context, stack edge.RootStack, state edge.
 	}
 
 	add(legacyWorkerName(prodStack))
-	add(workerScriptName(prodStack, "root"))
+	add(workerScriptName(slug, env, "root"))
 	sortedApps := make([]string, 0, len(apps))
 	for app := range apps {
 		sortedApps = append(sortedApps, app)
 	}
 	sort.Strings(sortedApps)
 	for _, app := range sortedApps {
-		add(workerScriptName(prodStack, app))
+		add(workerScriptName(slug, env, app))
 	}
 
 	return names, nil
