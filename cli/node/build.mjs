@@ -22,8 +22,8 @@ await build({
 });
 
 await build({
-  entryPoints: [join(root, "packages/next-runtime/src/next-adapter.mts")],
-  outfile: join(dist, "next-runtime/next-adapter.mjs"),
+  entryPoints: [join(root, "frameworks/next/adapter/src/next-adapter.mts")],
+  outfile: join(dist, "next-adapter/next-adapter.mjs"),
   bundle: true,
   platform: "node",
   format: "esm",
@@ -46,8 +46,8 @@ await copyFile(
 await Promise.all(
   ["edge-cache-handler.cjs", "next-dispatch.cjs"].map((name) =>
     copyFile(
-      join(root, "packages/next-runtime/src", name),
-      join(dist, "next-runtime", name),
+      join(root, "frameworks/next/adapter/src", name),
+      join(dist, "next-adapter", name),
     ),
   ),
 );

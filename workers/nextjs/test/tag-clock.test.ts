@@ -1,4 +1,4 @@
-import { tagSnapshotKey, type TagSnapshot } from "@ocel/next-cache";
+import { tagSnapshotKey, type TagSnapshot } from "@framework/next-cache";
 import { describe, expect, it, vi } from "vitest";
 
 import {

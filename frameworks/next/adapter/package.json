@@ -1,11 +1,11 @@
 {
-  "name": "@ocel/next-runtime",
+  "name": "@framework/next-adapter",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "main": "./dist/next-adapter.mjs",
   "dependencies": {
-    "@ocel/next-cache": "workspace:*"
+    "@framework/next-cache": "workspace:*"
   },
   "scripts": {
     "build": "tsc && node scripts/copy-edge-handler.mjs",

@@ -1,5 +1,5 @@
-import { entryMissHeader } from "@ocel/next-cache";
-import type { CacheEntryFile } from "@ocel/next-cache";
+import { entryMissHeader } from "@framework/next-cache";
+import type { CacheEntryFile } from "@framework/next-cache";
 
 const writerURLEnv = "OCEL_ISR_WRITER_URL";
 const writerSecretEnv = "OCEL_ISR_WRITER_SECRET";

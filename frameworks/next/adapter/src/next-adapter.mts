@@ -1,4 +1,4 @@
-import { cacheKey, variantHeadersFile } from "@ocel/next-cache/naming";
+import { cacheKey, variantHeadersFile } from "@framework/next-cache/naming";
 import type { AdapterOutput, NextAdapter } from "next";
 import { PHASE_PRODUCTION_BUILD } from "next/constants.js";
 import { createHash } from "node:crypto";

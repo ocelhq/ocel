@@ -1,21 +1,8 @@
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
-import { tagNamespace, tagSnapshotKey } from "@ocel/next-cache";
+import { tagNamespace, tagSnapshotKey } from "@framework/next-cache";
+import contract from "@framework/next-cache/fixtures/edge-contract.json" with {
+  type: "json",
+};
 import { afterEach, expect, test } from "vitest";
-
-const contract: {
-  tagSnapshotSuffix: string;
-  tagNamespace: { isrPrefix: string; partitionKeyPrefix: string };
-  cacheStoreEnv: Record<"bucket", string>;
-} = JSON.parse(
-  readFileSync(
-    fileURLToPath(
-      new URL("../../next-cache/fixtures/edge-contract.json", import.meta.url),
-    ),
-    "utf8",
-  ),
-);
 
 afterEach(() => {
   for (const name of Object.values(contract.cacheStoreEnv)) delete process.env[name];

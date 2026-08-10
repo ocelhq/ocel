@@ -1,4 +1,4 @@
-import { entryMissHeader, entryObjectKey } from "@ocel/next-cache";
+import { entryMissHeader, entryObjectKey } from "@framework/next-cache";
 import { WorkerEntrypoint } from "cloudflare:workers";
 
 import { bearer, matchesHash, matchesSecret } from "@ocel/worker-auth";
@@ -10,7 +10,7 @@ import { forget, memoize, memoized } from "./memo";
 import { isSecretHash } from "./registry";
 import type { Env } from "./env";
 import type { Memo } from "./memo";
-import type { TagRecord } from "@ocel/next-cache";
+import type { TagRecord } from "@framework/next-cache";
 
 export { IsrDeploy, IsrSnapshot };
 

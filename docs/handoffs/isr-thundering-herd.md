@@ -97,7 +97,7 @@ between-PR work piled on top of 07. Each tip above was verified green after the 
 Filed out of band: `ocelhq-wvag.9` (measure the L1 write-visibility window; **blocks `.8`**),
 `ocelhq-wvag.10` (live e2e for the writer), `ocelhq-wvag.11` (destroy leaves per-build writer
 DO instances behind), `ocelhq-wvag.12` (collapse the twice-derived projection key and
-filename into `@ocel/next-cache` — **done**, and it needed no dist build; see "Current
+filename into `@framework/next-cache` — **done**, and it needed no dist build; see "Current
 position"). Outside the epic,
 `ocelhq-uroj` (the edge user's account-global `Query`/`BatchGetItem` grants, dead before this
 stack began; see PR 5).
@@ -389,7 +389,7 @@ described in `.27`'s section above.
 ### Verified offline at the tip of 18, 2026-08-05
 
 Re-run while writing this handoff, not transcribed: `@ocel/revalidator` **70**,
-`@ocel/worker-nextjs` **639**, `@ocel/isr-writer` **70**, `@ocel/next-cache` **42**,
+`@ocel/worker-nextjs` **639**, `@ocel/isr-writer` **70**, `@framework/next-cache` **42**,
 `@ocel/tag-publisher` **15**, `@ocel-scripts/e2e-next` **43**. `cloud/aws` and `cloud/edge` both
 build, test and `gofmt` clean — the single `gofmt -l cloud/edge` hit,
 `cloud/edge/cloudflare/cloudflare_test.go`, is still the pre-existing drift from `b17467f` and is
@@ -1107,7 +1107,7 @@ which stays fail-closed until first sync. Both are commented at the site as load
 `dynamodb:BatchGetItem` is dropped from `isrPolicy`; `UpdateItem` stays, because `writeTags` and
 the plural tier's `writeTag` both still need it.
 
-Verified: `lambda-entrypoints` 199, `next-cache` 42, `workers/nextjs` 545, `next-runtime` 157,
+Verified: `lambda-entrypoints` 199, `next-cache` 42, `workers/nextjs` 545, `next-adapter` 157,
 `cloud/aws` build and test clean. Eight mutations applied, each caught by the named test.
 
 Two honest weaknesses, recorded rather than papered over:
@@ -1157,16 +1157,16 @@ checked, each caught by the intended test — including reverting to the origina
 **`ocelhq-wvag.12` — done, on the PR 7 branch (`#111`), now pushed. Issue CLOSED.**
 
 Commit `7c63132` (was `6928e98`), taken between PRs as planned. `cacheKey` and `variant-headers.json` now
-have one spelling each, in `packages/next-cache/src/naming.mts`, exported at the subpath
-`@ocel/next-cache/naming`. PR 3's contract tests are gone: the property they policed is true
+have one spelling each, in `frameworks/next/cache/src/naming.mts`, exported at the subpath
+`@framework/next-cache/naming`. PR 3's contract tests are gone: the property they policed is true
 by construction.
 
 **It needed no packaging change, and the issue's stated blocker was wrong on two counts.**
 Do not re-derive this — it was established by running the builds, not by reading:
 
 - **The artifact that ships is already an esbuild bundle.** `cli/node/build.mjs`
-  bundles `packages/next-runtime/src/next-adapter.mts` directly, so "next-runtime cannot import
-  it as shipped" was only ever true of the *dev* `tsc` dist at `packages/next-runtime/dist/`.
+  bundles `frameworks/next/adapter/src/next-adapter.mts` directly, so "next-adapter cannot import
+  it as shipped" was only ever true of the *dev* `tsc` dist at `frameworks/next/adapter/dist/`.
 - **Node's type-stripping works through the pnpm symlink.** The blocker was narrower than "raw
   `.mts`": `index.mts` re-exports `./tag-index.mjs`, and Node does not rewrite that specifier.
   A leaf `.mts` that imports nothing loads fine.
@@ -1176,24 +1176,24 @@ vitest, esbuild and wrangler would all have started reading compiled output inst
 across six build sites, in a repo with no turbo to order them. The `"."` export is untouched
 and every existing importer resolves identically.
 
-**The one thing to know before touching `packages/next-runtime`:** adding the workspace
-dependency made a new mistake writable. An `import { entryObjectKey } from "@ocel/next-cache"`
-in the adapter's source typechecks, passes all 157 next-runtime tests, both wrangler builds and
+**The one thing to know before touching `frameworks/next/adapter`:** adding the workspace
+dependency made a new mistake writable. An `import { entryObjectKey } from "@framework/next-cache"`
+in the adapter's source typechecks, passes all 157 next-adapter tests, both wrangler builds and
 both esbuild builds — and breaks `next build`, because every other `@ocel/*` consumer is
 bundled and resolves the graph itself. That is why the guard is
-`packages/next-runtime/test/plain-node-imports.test.mts` and not a test beside the module: it
+`frameworks/next/adapter/test/plain-node-imports.test.mts` and not a test beside the module: it
 resolves each specifier the source imports the way the adapter itself resolves it, from
-`packages/next-runtime`, over the real `node_modules` link. Mutation-checked against both ways
+`frameworks/next/adapter`, over the real `node_modules` link. Mutation-checked against both ways
 a module stops being loadable — an added import, and syntax Node cannot erase (an `enum`).
 
-Verified: `next-cache` 42, `next-runtime` 157, `lambda-entrypoints` 197, `workers/nextjs` 545,
+Verified: `next-cache` 42, `next-adapter` 157, `lambda-entrypoints` 197, `workers/nextjs` 545,
 `workers/isr-writer` 70, `tag-publisher` 15, `cli-platform` 38; `pnpm -r --no-bail typecheck`
 clean except `examples/next-cache-lab` (see "Standing notes"); all five build paths green and the built adapter
 dist loads under plain Node.
 
 Two things came out of the review and were **filed rather than fixed**:
 
-- **`ocelhq-heo2`** — `packages/next-runtime/tsconfig.json` includes only `src/**`, so its test
+- **`ocelhq-heo2`** — `frameworks/next/adapter/tsconfig.json` includes only `src/**`, so its test
   files are never typechecked. Pre-existing; this change makes it load-bearing.
 - **Node < 22.18** (or `--no-experimental-strip-types`) breaks the dev `tsc` dist at
   `next build` with `ERR_UNKNOWN_FILE_EXTENSION`. Loud, not silent, and the new guard fails
@@ -1349,7 +1349,7 @@ Four quality findings were applied in `57b92c5`:
 
 Verified after the fixes: `packages/lambda-entrypoints` 197/197 — the long-standing failing
 case died with the paging mechanism it tested, so the suite is green for the first time in this
-stack; `packages/next-cache` 42; `packages/tag-publisher` 15; `workers/nextjs` 529;
+stack; `frameworks/next/cache` 42; `packages/tag-publisher` 15; `workers/nextjs` 529;
 `workers/isr-writer` 70; `pnpm -r --no-bail typecheck` clean except
 `examples/next-cache-lab` (see "Standing notes"); `cloud/aws` builds and tests clean.
 
@@ -1424,7 +1424,7 @@ Two independent reviews (spec + adversarial). Six findings, all fixed:
   **this same PR deleted**.
 - Two concurrent bootstraps failed instead of converging on one seed.
 
-Verified: `workers/isr-writer` 70; `packages/tag-publisher` 15; `packages/next-cache` 41;
+Verified: `workers/isr-writer` 70; `packages/tag-publisher` 15; `frameworks/next/cache` 41;
 `workers/nextjs` 529; `workers/deployments-store` 63; `packages/lambda-entrypoints` 190 of 191
 (the known pre-existing `test/tag-clock.test.mts` case, which survives the publisher's retirement
 because it covers cursor advancement, not publishing); `pnpm -r --no-bail typecheck` clean except
@@ -1474,7 +1474,7 @@ fixed on the branch. Four came out of it:
   now rejects anything that is not a non-null, non-array object, and the whole matrix
   (absent, unreadable, empty, malformed, `null`, array, string, number) is table-tested.
 - **The projection's key space was derived twice** — the adapter's entry key and
-  `cacheKey()` in `@ocel/next-cache` are the same transform, authored independently. Drift
+  `cacheKey()` in `@framework/next-cache` are the same transform, authored independently. Drift
   would make every lookup miss and quietly disable PPR, the exact failure the projection
   exists to prevent. Contract tests now pin both that pair and the twice-spelled filename.
   Collapsing them to one derivation was filed as **`ocelhq-wvag.12`**, on the belief that it
@@ -1487,9 +1487,9 @@ fixed on the branch. Four came out of it:
 - Comment/name cleanups: `PrerenderGroup.key` → `entryKey` (the name now carries what four
   lines of comment did), and a paragraph duplicated verbatim across two packages kept once.
 
-Verified after the fixes: `packages/next-runtime` 157; `packages/lambda-entrypoints` 217 of
+Verified after the fixes: `frameworks/next/adapter` 157; `packages/lambda-entrypoints` 217 of
 218 (the one failure is the known pre-existing `test/tag-clock.test.mts`, identical on the
-base commit); `workers/nextjs` 525; `packages/next-cache` 34; `pnpm -r --no-bail typecheck`
+base commit); `workers/nextjs` 525; `frameworks/next/cache` 34; `pnpm -r --no-bail typecheck`
 clean except `examples/next-cache-lab` (see "Standing notes"), which fails on the base commit
 identically. No Go changed — a
 `.func` is zipped whole, so the new file rides the existing artifact path.
@@ -1531,7 +1531,7 @@ credential primitives both account-level workers had copied are now one package,
 Verified after the fixes: `pnpm -r --no-bail typecheck` clean across every source package
 (the `examples/*` failure is pre-existing — see "Standing notes");
 `workers/isr-writer` 42; `workers/deployments-store` 63; `packages/worker-auth` 7;
-`packages/next-cache` 34; `workers/nextjs` 523; `packages/lambda-entrypoints` 207 of 208 (the
+`frameworks/next/cache` 34; `workers/nextjs` 523; `packages/lambda-entrypoints` 207 of 208 (the
 known pre-existing `test/tag-clock.test.mts`); `cloud/aws` and `cloud/edge` build and test
 clean. Note `gofmt -l` flags `cloud/edge/cloudflare/cloudflare_test.go` — pre-existing drift
 from `b17467f`, untouched by this stack.
@@ -1675,7 +1675,7 @@ into `.27`'s run.)
 **Open and ungated, so pickable right now:** `ocelhq-wvag.29` (the pages-router `_next/data`
 admission-slot dilution, filed out of `.25`'s review), `ocelhq-wvag.11` (destroy leaves
 per-build writer DO instances behind) and `ocelhq-heo2`
-(`packages/next-runtime/tsconfig.json` never typechecks its tests), which came out of `.12`'s
+(`frameworks/next/adapter/tsconfig.json` never typechecks its tests), which came out of `.12`'s
 review. `.20`, `.21` and `.22` from the herd sweep are also open and ungated.
 
 Five review rounds have now landed twelve real defects rather than polish, and **in every

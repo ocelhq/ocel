@@ -4,7 +4,7 @@ import {
   type StoredTagSnapshot,
   type TagSnapshot,
   type TagSnapshotStore,
-} from "@ocel/next-cache";
+} from "@framework/next-cache";
 
 export interface S3Like {
   send(command: any): Promise<any>;

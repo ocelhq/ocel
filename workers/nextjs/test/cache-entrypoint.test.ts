@@ -1,4 +1,4 @@
-import { tagSnapshotKey, type TagRecord, type TagSnapshot } from "@ocel/next-cache";
+import { tagSnapshotKey, type TagRecord, type TagSnapshot } from "@framework/next-cache";
 import { createExecutionContext, env } from "cloudflare:test";
 import { beforeEach, expect, it } from "vitest";
 

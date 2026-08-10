@@ -10,7 +10,7 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@ocel/next-runtime": "workspace:^",
+    "@framework/next-adapter": "workspace:^",
     "@ocel/worker-nextjs": "workspace:^",
     "@ocel/worker-deployments-store": "workspace:^",
     "@ocel/worker-isr-writer": "workspace:^",

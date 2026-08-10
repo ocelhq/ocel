@@ -14,9 +14,9 @@ import {
   tagRecordUpdate,
   type CacheEntryFile,
   type TagRecord,
-} from "@ocel/next-cache";
+} from "@framework/next-cache";
 
-export type { CacheEntryFile, TagRecord } from "@ocel/next-cache";
+export type { CacheEntryFile, TagRecord } from "@framework/next-cache";
 
 export interface CacheStore {
   readEntry(key: string): Promise<CacheEntryFile | null>;

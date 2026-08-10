@@ -10,7 +10,7 @@ sha256() {
 }
 
 inputs() {
-  find "$node_dir/src/builder" "$node_dir/src/vars-ui" "$root/packages/next-runtime/src" -type f
+  find "$node_dir/src/builder" "$node_dir/src/vars-ui" "$root/frameworks/next/adapter/src" -type f
   find "$root"/workers/*/src -type f
   ls "$root"/workers/*/wrangler.jsonc
   echo "$root/pnpm-lock.yaml"

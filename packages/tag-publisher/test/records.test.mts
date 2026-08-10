@@ -1,4 +1,4 @@
-import { tagNamespace } from "@ocel/next-cache";
+import { tagNamespace } from "@framework/next-cache";
 import { describe, expect, it } from "vitest";
 
 import { raisesOf, type StreamRecord } from "../src/records.mjs";

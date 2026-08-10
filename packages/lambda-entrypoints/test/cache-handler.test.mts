@@ -1,7 +1,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { variantHeadersFile, type TagRecord } from "@ocel/next-cache";
+import { variantHeadersFile, type TagRecord } from "@framework/next-cache";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import OcelCacheHandler from "../src/next/cache-handler.mjs";
 import { runWithWaitUntil } from "../src/shared/background.mjs";

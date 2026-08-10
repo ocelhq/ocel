@@ -1,11 +1,12 @@
 {
-  "name": "@ocel/next-cache",
+  "name": "@framework/next-cache",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.mts",
-    "./naming": "./src/naming.mts"
+    "./naming": "./src/naming.mts",
+    "./fixtures/*": "./fixtures/*"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

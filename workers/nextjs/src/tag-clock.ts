@@ -4,7 +4,7 @@ import {
   tagSnapshotKey,
   type TagRecord,
   type TagSnapshot,
-} from "@ocel/next-cache";
+} from "@framework/next-cache";
 
 export interface StoredObject {
   etag?: string;

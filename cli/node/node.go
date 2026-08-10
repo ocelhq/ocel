@@ -24,7 +24,7 @@ func BuilderPath(projectDir string) string {
 }
 
 func AdapterPath(projectDir string) string {
-	return filepath.Join(DistDir(projectDir), "next-runtime", "next-adapter.mjs")
+	return filepath.Join(DistDir(projectDir), "next-adapter", "next-adapter.mjs")
 }
 
 func WorkerBundles(projectDir string) map[string]map[string]string {

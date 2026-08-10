@@ -1,4 +1,4 @@
-import type { TagRecord, TagRecordUpdate } from "@ocel/next-cache";
+import type { TagRecord, TagRecordUpdate } from "@framework/next-cache";
 
 export type TagRow = TagRecordUpdate & { tag: string };
 

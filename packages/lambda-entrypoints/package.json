@@ -9,7 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@ocel/next-cache": "workspace:*"
+    "@framework/next-cache": "workspace:*"
   },
   "devDependencies": {
     "@aws-sdk/client-dynamodb": "^3.1086.0",

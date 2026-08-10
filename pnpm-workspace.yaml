@@ -2,6 +2,7 @@ packages:
   - console/*
   - cli/node
   - packages/*
+  - frameworks/*/*
   - packages/native-lib/*
   - tools/*
   - scripts/*

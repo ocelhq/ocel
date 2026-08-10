@@ -4,7 +4,7 @@ import { claimBuild, claimedBuild } from "./build";
 import { TagClock } from "./snapshot";
 import type { PublishOutcome } from "./snapshot";
 import type { Env } from "./env";
-import type { TagRecord } from "@ocel/next-cache";
+import type { TagRecord } from "@framework/next-cache";
 
 export const HEARTBEAT_MS = 60_000;
 

@@ -9,15 +9,32 @@ const run = promisify(execFile);
 const packageDir = join(dirname(fileURLToPath(import.meta.url)), "..");
 const srcDir = join(packageDir, "src");
 
+async function workspaceDependencies(): Promise<Set<string>> {
+  const manifest = JSON.parse(
+    await readFile(join(packageDir, "package.json"), "utf8"),
+  ) as { dependencies?: Record<string, string> };
+  return new Set(
+    Object.entries(manifest.dependencies ?? {})
+      .filter(([, range]) => range.startsWith("workspace:"))
+      .map(([name]) => name),
+  );
+}
+
+function packageOf(specifier: string): string {
+  const segments = specifier.split("/");
+  return specifier.startsWith("@") ? segments.slice(0, 2).join("/") : segments[0]!;
+}
+
 async function workspaceSpecifiers(): Promise<string[]> {
+  const workspaceDeps = await workspaceDependencies();
   const files = (await readdir(srcDir)).filter((f) => f.endsWith(".mts"));
   const found = new Set<string>();
   for (const file of files) {
     const source = await readFile(join(srcDir, file), "utf8");
     for (const [, specifier] of source.matchAll(
-      /^import[^"']*["'](@ocel\/[^"']+)["']/gm,
+      /^import[^"']*["']([^"'.][^"']*)["']/gm,
     )) {
-      found.add(specifier!);
+      if (workspaceDeps.has(packageOf(specifier!))) found.add(specifier!);
     }
   }
   return [...found].sort();

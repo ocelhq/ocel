@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       nextjsRef:
-        description: "Next.js repo ref (branch/tag/SHA). Match the `next` version packages/next-runtime pins."
+        description: "Next.js repo ref (branch/tag/SHA). Match the `next` version frameworks/next/adapter pins."
         default: "v16.2.10"
         type: string
       recordBaseline:
@@ -84,7 +84,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile
           pnpm --filter ocel build
-          pnpm --filter @ocel/next-runtime build
+          pnpm --filter @framework/next-adapter build
           pnpm --filter @ocel/worker-nextjs build
           pnpm --filter @ocel/worker-deployments-store build
 

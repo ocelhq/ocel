@@ -1,4 +1,4 @@
-import { publishTagSnapshot, type TagRecord } from "@ocel/next-cache";
+import { publishTagSnapshot, type TagRecord } from "@framework/next-cache";
 
 import { S3TagSnapshotStore, type S3Commands, type S3Like } from "./snapshot.mjs";
 import { raise } from "./writer.mjs";
