@@ -58,7 +58,7 @@ import {
 // it, which is the only way the edge's dynamic worker can reach storage.
 export { CacheEntrypoint } from "./cache-entrypoint";
 import type { CacheEntrypointProps, IsrWriterBinding } from "./cache-entrypoint";
-import { normalizeBaseDomain, previewPointer } from "./preview";
+import { normalizeBaseDomain, previewApps, previewTarget } from "./preview";
 import { edgeOriginFetch } from "./signing";
 import type { ObjectStoreReader } from "./tag-clock";
 
@@ -123,20 +123,22 @@ export interface Env {
   // deployments-store worker (idFromName), carried on every resolve RPC.
   OCEL_SLUG: string;
   // This frozen worker's own app identity — one script per app — used to look
-  // up its Deployment in the project's deployments-store instance.
-  OCEL_APP: string;
-  // Preview mode: when OCEL_PREVIEW is "1" and a base domain is set, the worker
-  // is deployed behind one exact route per preview deployment and resolves the
-  // deployment pointer named by each request's subdomain instead of the default
-  // one. Both must be present and well-formed; a partial config degrades to
-  // normal mode.
+  // up its Deployment in the project's deployments-store instance. Baked for
+  // production only; a preview worker fronts the whole project and reads the
+  // app off the request host instead.
+  OCEL_APP?: string;
+  // Preview mode: when OCEL_PREVIEW is "1" and a base domain is set, this one
+  // worker serves the whole project behind the single wildcard route
+  // *.<base>/*, and each request's subdomain label names both the deployment
+  // pointer and the app to serve (see ./preview). Both must be present and
+  // well-formed; a partial config degrades to normal mode.
   OCEL_PREVIEW?: string;
   OCEL_PREVIEW_BASE_DOMAIN?: string;
-  // The trailing part of the preview subdomain label that is not the pointer —
-  // a per-project-and-app hash keeping preview hostnames unique across the
-  // zone. Stripped off the label to recover the pointer; absent means the whole
-  // label is the pointer.
-  OCEL_PREVIEW_LABEL_SUFFIX?: string;
+  // The project's app names, comma-separated (e.g. "web,admin"). It is what
+  // makes the label grammar unambiguous: the app half of <pointer>--<app> is
+  // recognized by matching this list, and a bare <pointer> label is legal only
+  // where this names exactly one app.
+  OCEL_PREVIEW_APPS?: string;
   // Bound only where the edge provisioned a cache store; together with the
   // active Deployment's ISR prefix, its presence is what lets the worker
   // read the ISR cache directly.
@@ -396,6 +398,9 @@ export async function resolveRouteDeps(
   if (resolution.kind === "unavailable") return unavailableResponse();
 
   const { record } = resolution;
+  if (record.framework !== NEXT_FRAMEWORK) {
+    return unsupportedFrameworkResponse(record.framework);
+  }
   const { edgeRuntime, ...rest } = base;
   const { edgeWorkers } = record;
   return {
@@ -445,6 +450,26 @@ function deploymentNotFoundResponse(): Response {
   return new Response(DEPLOYMENT_NOT_FOUND_HTML, {
     status: 404,
     headers: { "content-type": "text/html; charset=utf-8" },
+  });
+}
+
+// The one framework this bundle serves. A Deployment declaring anything else
+// resolved fine and is simply not this runtime's to render, so it is answered
+// as unimplemented rather than as a missing or broken deployment.
+const NEXT_FRAMEWORK = "next";
+
+// A record with no framework at all is not a foreign framework but an older
+// record: the field is required and every deploy writes it, so only a promotion
+// made before it existed can still be missing one — which a rollback can reach
+// and a redeploy cannot. The two cases read alike from here and would leave
+// whoever hit the second with nothing to act on, so each names its own remedy.
+function unsupportedFrameworkResponse(framework: string | undefined): Response {
+  const body = framework
+    ? `This deployment declares "${framework}"; this runtime serves "${NEXT_FRAMEWORK}" only.`
+    : "This deployment predates framework-tagged deployments and cannot be served. Deploy the app again.";
+  return new Response(body, {
+    status: 501,
+    headers: { "content-type": "text/plain; charset=utf-8" },
   });
 }
 
@@ -1572,28 +1597,32 @@ export default {
       env.OCEL_EDGE_SECRET_KEY,
     );
 
-    // In preview mode the deployment pointer is named by the request's
-    // subdomain; a host that yields no valid preview label has nothing to serve.
-    // Preview mode is on only when OCEL_PREVIEW is "1" and a well-formed base
-    // domain is configured — a missing or malformed one degrades to normal
-    // serving rather than 404-ing every request.
+    // In preview mode both the deployment pointer and the app are named by the
+    // request's subdomain; a host that yields no valid preview label has nothing
+    // to serve. Preview mode is on only when OCEL_PREVIEW is "1" and a
+    // well-formed base domain is configured — a missing or malformed one
+    // degrades to normal serving under the baked app identity rather than
+    // 404-ing every request.
     let pointer: string | undefined;
+    let app = env.OCEL_APP;
     const baseDomain =
       env.OCEL_PREVIEW === "1"
         ? normalizeBaseDomain(env.OCEL_PREVIEW_BASE_DOMAIN)
         : "";
     if (baseDomain) {
-      const label = previewPointer(
+      const target = previewTarget(
         new URL(request.url).host,
         baseDomain,
-        env.OCEL_PREVIEW_LABEL_SUFFIX,
+        previewApps(env.OCEL_PREVIEW_APPS),
       );
-      if (label === null) return deploymentNotFoundResponse();
-      pointer = label;
+      if (target === null) return deploymentNotFoundResponse();
+      pointer = target.pointer;
+      app = target.app;
     }
+    if (!app) return deploymentNotFoundResponse();
 
     const deps = await resolveRouteDeps(
-      { binding: env.DEPLOYMENTS, slug: env.OCEL_SLUG, app: env.OCEL_APP, pointer },
+      { binding: env.DEPLOYMENTS, slug: env.OCEL_SLUG, app, pointer },
       {
         fetch,
         originFetch,

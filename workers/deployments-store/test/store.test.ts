@@ -18,6 +18,7 @@ function storeStub() {
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
+    framework: "next",
     buildId: "build-1",
     routingManifest: { pathnames: [] },
     functionUrls: { "/": "https://fn.example.com" },
@@ -436,32 +437,6 @@ describe("prune", () => {
     expect(await store.record("web", "prod-1")).toBeDefined();
     expect(await store.record("web", "prev-1")).toBeUndefined();
   });
-
-  it("reports neither removed routes nor a remaining-pointer count", async () => {
-    const store = storeStub();
-    await store.putStaged(
-      makeRecord({ buildId: "prev-1", routeHostnames: ["pr-42-abc1234567.preview.test"] }),
-    );
-    await store.promote(
-      makePromotion({ promotionId: "prev-1", builds: { web: "prev-1" } }),
-      "pr-42",
-    );
-    await store.putStaged(
-      makeRecord({ buildId: "prev-2", routeHostnames: ["pr-42-abc1234567.preview.test"] }),
-    );
-    await store.promote(
-      makePromotion({ promotionId: "prev-2", ts: 2_000, builds: { web: "prev-2" } }),
-      "pr-42",
-    );
-
-    // A prune keeps the pointer and the route it serves on alive, so its result
-    // must never carry the fields a teardown sweeps routes from.
-    const result = await store.prune(1, "pr-42");
-
-    expect(result.removedPromotionIds).toEqual(["prev-1"]);
-    expect(result).not.toHaveProperty("removedRoutes");
-    expect(result).not.toHaveProperty("remainingPointers");
-  });
 });
 
 describe("removePointer", () => {
@@ -520,68 +495,22 @@ describe("removePointer", () => {
     const result = await store.removePointer("never-existed");
     expect(result.removedPromotionIds).toEqual([]);
     expect(result.removedRecordKeys).toEqual([]);
-    expect(result.removedRoutes).toEqual([]);
   });
 
-  it("reports the distinct routes the removed records carried", async () => {
-    const store = storeStub();
-    const webHost = "pr-42-abc1234567.preview.test";
-    const apiHost = "pr-42-def7654321.preview.test";
-    // Two promotions on the pointer, each app's record carrying the same
-    // hostname: the repeated app+hostname collapses to one entry.
-    for (let i = 1; i <= 2; i++) {
-      await store.putStaged(
-        makeRecord({ app: "web", buildId: `web-${i}`, routeHostnames: [webHost] }),
-      );
-      await store.putStaged(
-        makeRecord({ app: "api", buildId: `api-${i}`, routeHostnames: [apiHost] }),
-      );
-      await store.promote(
-        makePromotion({
-          promotionId: `prev-${i}`,
-          ts: i * 1_000,
-          builds: { web: `web-${i}`, api: `api-${i}` },
-        }),
-        "pr-42",
-      );
-    }
-
-    const result = await store.removePointer("pr-42");
-
-    expect([...result.removedRoutes].sort((a, b) => a.app.localeCompare(b.app))).toEqual([
-      { app: "api", hostname: apiHost },
-      { app: "web", hostname: webHost },
-    ]);
-  });
-
-  it("reports no routes for records that carry none", async () => {
-    const store = storeStub();
-    await store.putStaged(makeRecord({ buildId: "prev-1" }));
-    await store.promote(
-      makePromotion({ promotionId: "prev-1", builds: { web: "prev-1" } }),
-      "pr-42",
-    );
-
-    const result = await store.removePointer("pr-42");
-
-    expect(result.removedRecordKeys).toEqual(["record:web/prev-1"]);
-    expect(result.removedRoutes).toEqual([]);
-  });
-
-  it("counts the pointers left behind, never the production default", async () => {
+  it("leaves every other pointer intact", async () => {
     const store = storeStub();
     await store.putStaged(makeRecord({ buildId: "prod-1" }));
     await store.promote(makePromotion({ promotionId: "prod-1", builds: { web: "prod-1" } }));
-    for (const p of ["pr-1", "pr-2", "pr-3"]) {
+    for (const p of ["pr-1", "pr-2"]) {
       await store.putStaged(makeRecord({ buildId: p }));
       await store.promote(makePromotion({ promotionId: p, builds: { web: p } }), p);
     }
 
-    expect((await store.removePointer("pr-1")).remainingPointers).toBe(2);
-    expect((await store.removePointer("pr-2")).remainingPointers).toBe(1);
-    // Production is still promoted, so a zero here is what proves the reserved
-    // default pointer is excluded from the count.
-    expect((await store.removePointer("pr-3")).remainingPointers).toBe(0);
+    await store.removePointer("pr-1");
+
+    expect(await store.pointerBuildId("web", "pr-1")).toBeUndefined();
+    expect(await store.pointerBuildId("web", "pr-2")).toBe("pr-2");
+    expect(await store.pointerBuildId("web")).toBe("prod-1");
   });
 });
 
@@ -623,39 +552,51 @@ describe("initialize / authorized", () => {
     const store = storeStub();
     expect(await store.authorized("s3cret")).toBe(false); // not seeded yet
 
-    expect(await store.initialize("owner-1", "s3cret", false)).toEqual({});
+    expect(await store.initialize("owner-1", "s3cret", false)).toEqual({
+      ownerToken: "owner-1",
+      secret: "s3cret",
+    });
 
     expect(await store.authorized("s3cret")).toBe(true);
     expect(await store.authorized("wrong")).toBe(false);
   });
 
-  it("rotates the secret when re-initialized with a matching owner token", async () => {
-    const store = storeStub();
-    await store.initialize("owner-1", "old", false);
-
-    expect(await store.initialize("owner-1", "new", false)).toEqual({});
-
-    expect(await store.authorized("new")).toBe(true);
-    expect(await store.authorized("old")).toBe(false);
-  });
-
-  it("refuses a mismatched owner token as a collision", async () => {
+  // What makes concurrent first deploys converge: the loser of the race is
+  // handed the identity the winner seeded rather than an error, and adopts it.
+  it("returns the existing identity instead of re-seeding", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
 
-    const { conflict } = await store.initialize("owner-2", "other", false);
+    expect(await store.initialize("owner-2", "other", false)).toEqual({
+      ownerToken: "owner-1",
+      secret: "s3cret",
+    });
 
-    expect(conflict).toMatch(/already owned by a different project/);
-    // The original owner's secret is untouched.
     expect(await store.authorized("s3cret")).toBe(true);
     expect(await store.authorized("other")).toBe(false);
   });
 
-  it("adopts a mismatched instance when force is set", async () => {
+  it("converges a matching owner token onto the stored secret too", async () => {
+    const store = storeStub();
+    await store.initialize("owner-1", "old", false);
+
+    expect(await store.initialize("owner-1", "new", false)).toEqual({
+      ownerToken: "owner-1",
+      secret: "old",
+    });
+
+    expect(await store.authorized("old")).toBe(true);
+    expect(await store.authorized("new")).toBe(false);
+  });
+
+  it("adopts the presented identity when force is set", async () => {
     const store = storeStub();
     await store.initialize("owner-1", "s3cret", false);
 
-    expect(await store.initialize("owner-2", "other", true)).toEqual({});
+    expect(await store.initialize("owner-2", "other", true)).toEqual({
+      ownerToken: "owner-2",
+      secret: "other",
+    });
 
     expect(await store.authorized("other")).toBe(true);
     expect(await store.authorized("s3cret")).toBe(false);

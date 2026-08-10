@@ -1,13 +1,14 @@
-// Preview routing: each preview deployment gets its own exact route
-// (<pointer><labelSuffix>.<baseDomain>/*), so a request's subdomain label names
-// the deployment pointer to resolve. The suffix is a hash of the project slug
-// and app name, which makes the hostname unique across every project and app
-// sharing the zone while leaving the pointer itself human-readable —
-// flaky-web-2626-a1b2c3d4e5.myapp.com resolves the "flaky-web-2626" pointer.
-// previewPointer mirrors exactly what such a route matches: a single non-empty
-// DNS label directly under the base domain, ending in the suffix. Anything else
-// (the apex, a foreign host, a multi-label subdomain, a label belonging to
-// another app) yields null, which the worker turns into its 404.
+// Preview routing: a project gets one entrypoint worker behind one wildcard
+// route (*.<base>/*), so a request's subdomain label is the only thing naming
+// which deployment of which app to serve. The label carries both:
+//
+//   <pointer>.<base>          the project's sole app, elided
+//   <pointer>--<app>.<base>   any project
+//
+// The elided form is legal only where the project has exactly one app, which is
+// why the worker is told its app names rather than its own identity. Everything
+// else — the apex, a foreign host, a multi-label subdomain, an app the project
+// does not have — yields null, which the worker turns into its 404.
 
 // The base domain, lowercased and stripped of surrounding dots. Empty means no
 // usable base domain was configured — the signal the worker uses to decide
@@ -17,19 +18,36 @@ export function normalizeBaseDomain(baseDomain: string | undefined): string {
   return (baseDomain ?? "").toLowerCase().replace(/^\.+/, "").replace(/\.+$/, "");
 }
 
-// The label suffix, lowercased. Empty means no usable suffix, so the whole label
-// is the pointer; a suffix carrying a dot is unmatchable by any DNS label, so it
-// degrades to empty rather than 404-ing every request.
-function normalizeLabelSuffix(labelSuffix: string | undefined): string {
-  const suffix = (labelSuffix ?? "").toLowerCase();
-  return suffix.includes(".") ? "" : suffix;
+// The project's app names, as the worker var carries them: comma-separated,
+// lowercased to match the host, empties dropped so a trailing comma can never
+// make a single-app project look like two.
+export function previewApps(apps: string | undefined): string[] {
+  return (apps ?? "")
+    .toLowerCase()
+    .split(",")
+    .map((app) => app.trim())
+    .filter(Boolean);
 }
 
-export function previewPointer(
+export interface PreviewTarget {
+  pointer: string;
+  app: string;
+}
+
+// A DNS label cannot carry a dot, so a doubled hyphen is what separates the two
+// halves — and both halves may contain one, which is why the app half is
+// resolved by matching the project's own app names rather than by splitting.
+//
+// Keep in step with previewAppSeparator in cloud/aws/deploy, which builds the
+// hostname, and appSeparator in cli/internal/previewid, which refuses a pointer
+// carrying it: three modules, no shared constant.
+const APP_SEPARATOR = "--";
+
+export function previewTarget(
   host: string,
   baseDomain: string,
-  labelSuffix: string | undefined,
-): string | null {
+  apps: string[],
+): PreviewTarget | null {
   const h = host.toLowerCase().split(":", 1)[0];
   const base = normalizeBaseDomain(baseDomain);
   if (base === "") return null;
@@ -40,9 +58,20 @@ export function previewPointer(
   const label = h.slice(0, -baseSuffix.length);
   if (label === "" || label.includes(".")) return null;
 
-  const suffix = normalizeLabelSuffix(labelSuffix);
-  if (!label.endsWith(suffix)) return null;
+  // Left to right, so the longest app name wins where two could match
+  // (apps "b" and "a--b" against the label "p--a--b").
+  for (
+    let at = label.indexOf(APP_SEPARATOR);
+    at !== -1;
+    at = label.indexOf(APP_SEPARATOR, at + 1)
+  ) {
+    const app = label.slice(at + APP_SEPARATOR.length);
+    const pointer = label.slice(0, at);
+    if (pointer !== "" && apps.includes(app)) return { pointer, app };
+  }
 
-  const pointer = suffix === "" ? label : label.slice(0, -suffix.length);
-  return pointer === "" ? null : pointer;
+  // No app named: the whole label is the pointer, which only a single-app
+  // project can resolve.
+  if (apps.length !== 1) return null;
+  return { pointer: label, app: apps[0] };
 }

@@ -6,6 +6,7 @@ import type { DeploymentRecord, DeploymentsBinding } from "../src/deployments";
 function makeRecord(over: Partial<DeploymentRecord> = {}): DeploymentRecord {
   return {
     app: "web",
+    framework: "next",
     buildId: "build-1",
     routingManifest: {
       buildId: "build-1",
@@ -109,6 +110,36 @@ describe("resolveRouteDeps", () => {
     const response = deps as Response;
     expect(response.status).toBe(404);
     expect(await response.text()).toMatch(/deployment/i);
+  });
+
+  it("returns 501 for a Deployment declaring another framework", async () => {
+    const record = makeRecord({ framework: "sveltekit" });
+    const deps = await resolveRouteDeps(
+      { binding: bindingReturning("build-1", record), app: "web" },
+      { assetStore },
+    );
+
+    expect(deps).toBeInstanceOf(Response);
+    const response = deps as Response;
+    expect(response.status).toBe(501);
+    expect(await response.text()).toMatch(/sveltekit/);
+  });
+
+  // A record with no framework is one promoted before the field existed, which
+  // only a rollback can still reach — a fresh deploy writes the field. The body
+  // has to name that remedy, since nothing else about the response suggests it.
+  it("returns 501 naming the redeploy for a Deployment that declares no framework at all", async () => {
+    const { framework: _dropped, ...record } = makeRecord();
+    const deps = await resolveRouteDeps(
+      { binding: bindingReturning("build-1", record as DeploymentRecord), app: "web" },
+      { assetStore },
+    );
+
+    const response = deps as Response;
+    expect(response.status).toBe(501);
+    const body = await response.text();
+    expect(body).toMatch(/predates/i);
+    expect(body).toMatch(/deploy/i);
   });
 
   it("returns 503 when the store is unreachable on a cold isolate", async () => {
