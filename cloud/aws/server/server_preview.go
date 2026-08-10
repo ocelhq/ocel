@@ -64,6 +64,8 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 		resp.Identity.AwsProfile = os.Getenv("AWS_PROFILE")
 	}
 
+	resp.DomainClaims = domainClaims(ctx, edgeRouteOwner(), req.GetSlug(), req.GetDomains())
+
 	// Cloudflare edge: verify through the edge seam. Every production deploy
 	// reconciles the root stack on the edge, so its credentials are always
 	// required.
@@ -98,6 +100,54 @@ func (s *Server) Preflight(ctx context.Context, req *deploymentsv1.PreflightRequ
 	}
 
 	return resp, nil
+}
+
+// routeOwnerFunc is the edge lookup a claim check runs per hostname: the worker
+// script bound to a route pattern, "" when nothing holds it.
+type routeOwnerFunc func(ctx context.Context, pattern string) (string, error)
+
+// edgeRouteOwner is this provider's edge lookup.
+func edgeRouteOwner() routeOwnerFunc {
+	return cloudflare.New().(edge.RootStack).RouteOwner
+}
+
+// domainClaims reports who currently holds each requested hostname, one entry
+// per hostname in the order asked for, so a deploy whose domain another project
+// already owns is refused before anything is built. No hostnames is no lookup:
+// the check is opt-in per request.
+//
+// A hostname held by one of THIS project's own workers is reported unclaimed.
+// Nothing is claiming it against this deploy — the reconcile that follows
+// repoints its own route idempotently — and reporting it claimed would refuse
+// every redeploy of a project's own domain. That comparison lives here, on the
+// deploy host, because only the host derives a worker name from a slug
+// (deploy.ProjectOwnsWorker); the CLI is left with the simple rule that a
+// claimed hostname is someone else's. A request that carried no slug can
+// recognise nothing as its own.
+//
+// Nothing here can fail a preflight: a lookup that errors, and a hostname in no
+// zone this account owns, both leave the status unspecified, which the CLI reads
+// as "could not say" and skips.
+func domainClaims(ctx context.Context, owner routeOwnerFunc, slug string, domains []string) []*deploymentsv1.DomainClaim {
+	if len(domains) == 0 {
+		return nil
+	}
+	claims := make([]*deploymentsv1.DomainClaim, 0, len(domains))
+	for _, hostname := range domains {
+		claim := &deploymentsv1.DomainClaim{Hostname: hostname}
+		claims = append(claims, claim)
+		script, err := owner(ctx, cloudflare.RoutePattern(hostname))
+		switch {
+		case err != nil:
+			continue
+		case script == "" || deploy.ProjectOwnsWorker(slug, script):
+			claim.Status = deploymentsv1.DomainClaim_STATUS_UNCLAIMED
+		default:
+			claim.Status = deploymentsv1.DomainClaim_STATUS_CLAIMED
+			claim.Owner = script
+		}
+	}
+	return claims
 }
 
 // knownSlugs names the other projects the required class's Pulumi backend
@@ -193,8 +243,10 @@ func (s *Server) DestroyPreview(ctx context.Context, req *deploymentsv1.DestroyP
 // app-deploy stack the pointer's builds live in, the pointer and its records in
 // the preview store, the pointer's R2/S3 assets, and — for a persistent preview
 // only — its per-name infra stack. It resolves the preview substrate's backend
-// and root-stack state, then drives deploy.RemovePreview. Best-effort like
-// DestroyProject; it retains nothing.
+// and root-stack state, then drives deploy.RemovePreview. It leaves the
+// project's own root-stack state in place: the entrypoint worker and store
+// instance that state names front every pointer of the project, and only
+// `ocel destroy --preview` retires them.
 func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.DestroyPreviewRequest, progress, logf func(string)) error {
 	opts, err := parseOptions(req.GetOptions())
 	if err != nil {
@@ -208,24 +260,7 @@ func (s *Server) runDestroyPreview(ctx context.Context, req *deploymentsv1.Destr
 
 	pointer := env.GetIdentity()
 	persistent := env.GetLifecycle() == deploymentsv1.Environment_LIFECYCLE_PERSISTENT
-	result, rerr := deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, progress, logf)
-
-	// Forget the persisted preview root-stack state only once this project's last
-	// preview is gone and nothing edge-side survived it, exactly as the
-	// whole-project teardown does. Kept otherwise, because it is the only thing
-	// that can name a surviving worker or the store instance to a re-run; dropped
-	// here, because it would otherwise point at an instance that no longer exists
-	// and make every later `preview rm` fail against it.
-	if result.EdgeTornDown && len(state) > 0 {
-		awscfg, awsErr := loadAWS(ctx, opts.Region)
-		if awsErr != nil {
-			return errors.Join(rerr, awsErr)
-		}
-		if err := bootstrap.DeleteRootStackStateFor(ctx, ssm.NewFromConfig(awscfg), bootstrap.ClassPreview, req.GetSlug()); err != nil {
-			rerr = errors.Join(rerr, err)
-		}
-	}
-	return rerr
+	return deploy.RemovePreview(ctx, stack, state, cfg, req.GetSlug(), pointer, persistent, progress, logf)
 }
 
 // previewTeardownContext resolves everything a preview teardown (rm/prune/

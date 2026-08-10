@@ -160,9 +160,10 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 		return nil, err
 	}
 
-	// A route is per hostname, not per project version, so an up-to-date root
-	// stack still has route work: without it a second preview pointer would
-	// never get a route.
+	// The version stamp gates the script upload alone. Routes and their DNS
+	// records are reconciled every time, against a desired set that is constant
+	// for the project's lifetime, so one deleted out of band heals on the next
+	// deploy instead of surviving until the version happens to move.
 	genericUp := upload{accountID: accountID, scriptName: spec.GenericName}
 	if !upToDate {
 		genericUp.worker = genericWorker(spec, slug)
@@ -178,6 +179,7 @@ func (p *provider) ReconcileRootStack(ctx context.Context, spec edge.RootStackSp
 	if err := p.reconcileWorkerRoutes(ctx, genericUp, routePlan{
 		desired:        spec.Domains,
 		prune:          spec.PruneRoutes,
+		pruneStem:      spec.PruneWorkerStem,
 		requiredRecord: spec.RequiredRecord,
 	}, spec.Warn); err != nil {
 		return nil, err
@@ -212,49 +214,40 @@ type storeIdentity struct {
 // ensureInstance brings the project's store instance to one this reconcile can
 // write to, and reports whether the root stack already carries spec.Version.
 //
-// A project's first reconcile has no secret; a renamed project's prior names a
-// different slug. Either way it mints fresh ownership and seeds a new instance —
-// the slug is the project's durable identity, so renaming it forks a new project
-// (fresh history), leaving the old instance orphaned.
+// A state whose secret the instance still accepts is the whole story: the
+// version stamp comes back and nothing is seeded. Every other path — a first
+// reconcile, a renamed project (whose prior names a different slug, forking a
+// new project with fresh history), an instance a failed teardown wiped —
+// presents a freshly minted pair to the convergent /initialize and ADOPTS the
+// identity it answers with. The store seeds an unclaimed instance with what it
+// was presented and answers an already-claimed one with the pair it already
+// carries, so two first deploys of one slug converge on one identity instead of
+// each persisting the pair it happened to mint and the loser's state naming an
+// instance that rejects it.
 //
-// An instance that rejects the secret in state no longer holds it: a teardown
-// wiped its storage and then failed before the state naming it could be
-// forgotten. Re-seeding with the owner token in state is the recovery the store
-// is built for — it rotates the secret for a matching owner and refuses a
-// different one — so a wiped instance costs the project its promotion history,
-// not its ability to ever deploy or tear down again. A state old enough to carry
-// no owner token has nothing to prove the instance is this project's, so it can
-// only seed a new one and let the store refuse a slug someone else owns.
+// Only a rejected credential leads here from an existing state; any other store
+// failure is surfaced, because re-seeding on it would present the bootstrap
+// credential to an instance that is merely unreachable.
 func (p *provider) ensureInstance(ctx context.Context, spec edge.RootStackSpec, prior edge.RootStackState) (storeIdentity, bool, error) {
-	id := storeIdentity{
-		secret:     prior[edge.RootStackKeySecret],
-		ownerToken: prior[edge.RootStackKeyOwnerToken],
-	}
-	reseed := false
-
-	if id.secret != "" && prior[edge.RootStackKeySlug] == spec.Slug {
-		current, res, err := p.getVersionStamp(ctx, spec.StoreEndpoint, spec.Slug, id.secret)
+	if secret := prior[edge.RootStackKeySecret]; secret != "" && prior[edge.RootStackKeySlug] == spec.Slug {
+		current, res, err := p.getVersionStamp(ctx, spec.StoreEndpoint, spec.Slug, secret)
 		switch {
 		case err == nil:
-			return id, current == spec.Version, nil
+			return storeIdentity{secret: secret, ownerToken: prior[edge.RootStackKeyOwnerToken]}, current == spec.Version, nil
 		case !unauthorized(res):
 			return storeIdentity{}, false, fmt.Errorf("read root-stack version stamp: %w", err)
-		case id.ownerToken != "":
-			reseed = true
 		}
 	}
 
-	if !reseed {
-		minted, err := mintIdentity()
-		if err != nil {
-			return storeIdentity{}, false, err
-		}
-		id = minted
+	minted, err := mintIdentity()
+	if err != nil {
+		return storeIdentity{}, false, err
 	}
-	if err := p.initializeInstance(ctx, spec.StoreEndpoint, spec.Slug, spec.BootstrapCred, id.ownerToken, id.secret); err != nil {
+	adopted, err := p.initializeInstance(ctx, spec.StoreEndpoint, spec.Slug, spec.BootstrapCred, minted)
+	if err != nil {
 		return storeIdentity{}, false, fmt.Errorf("initialize project store instance: %w", err)
 	}
-	return id, false, nil
+	return adopted, false, nil
 }
 
 // mintIdentity mints a project a fresh identity for a store instance it is
@@ -276,6 +269,28 @@ func mintIdentity() (storeIdentity, error) {
 // not the one presented.
 func unauthorized(res *http.Response) bool {
 	return res != nil && res.StatusCode == http.StatusUnauthorized
+}
+
+// ListDeployedWorkers returns the account's worker script names falling under
+// stem. It pages the account's full script list and matches by name — the only
+// project scoping a bare list offers — so what a stem reaches is exactly what
+// edge.NameUnderStem says it does, and the caller's naming carries the rest.
+func (p *provider) ListDeployedWorkers(ctx context.Context, stem string) ([]string, error) {
+	accountID := os.Getenv(envAccountID)
+	if accountID == "" {
+		return nil, fmt.Errorf("%s is not set; it is required to list deployed workers", envAccountID)
+	}
+	var names []string
+	iter := p.client.Workers.Scripts.ListAutoPaging(ctx, workers.ScriptListParams{AccountID: cf.F(accountID)})
+	for iter.Next() {
+		if name := iter.Current().ID; edge.NameUnderStem(stem, name) {
+			names = append(names, name)
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, fmt.Errorf("list workers: %w", err)
+	}
+	return names, nil
 }
 
 // DestroyRootStack deletes every worker in names — a project's generic
@@ -309,59 +324,6 @@ func (p *provider) DestroyRootStack(ctx context.Context, names []string) error {
 		}
 	}
 	return errors.Join(errs...)
-}
-
-// RemoveRoute deletes the worker route "<hostname>/*" off the named script,
-// resolving the hostname's owning zone the way the deploy path does and touching
-// no DNS record. A route that is already gone is not an error, so a re-run
-// resumes (edge.RootStack).
-func (p *provider) RemoveRoute(ctx context.Context, worker, hostname string) error {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return fmt.Errorf("%s is not set; it is required to remove a worker route", envAccountID)
-	}
-	zoneID, _, err := p.resolveZone(ctx, accountID, routeBaseDomain(hostname))
-	if err != nil {
-		return err
-	}
-
-	pattern := hostname + "/*"
-	routes := p.client.Workers.Routes.ListAutoPaging(ctx, workers.RouteListParams{ZoneID: cf.F(zoneID)})
-	for routes.Next() {
-		route := routes.Current()
-		if route.Script != worker || route.Pattern != pattern {
-			continue
-		}
-		if _, err := p.client.Workers.Routes.Delete(ctx, route.ID, workers.RouteDeleteParams{ZoneID: cf.F(zoneID)}); err != nil {
-			return fmt.Errorf("delete worker route %q: %w", pattern, err)
-		}
-	}
-	if err := routes.Err(); err != nil {
-		return fmt.Errorf("list worker routes in zone %s: %w", zoneID, err)
-	}
-	return nil
-}
-
-// ListDeployedWorkers returns the account's worker script names beginning with
-// prefix. It pages the account's full script list and filters by name — the
-// only project scoping a bare list offers — so the caller's prefix carries
-// whatever collision guarantees the naming gives (edge.RootStack).
-func (p *provider) ListDeployedWorkers(ctx context.Context, prefix string) ([]string, error) {
-	accountID := os.Getenv(envAccountID)
-	if accountID == "" {
-		return nil, fmt.Errorf("%s is not set; it is required to list deployed workers", envAccountID)
-	}
-	var names []string
-	iter := p.client.Workers.Scripts.ListAutoPaging(ctx, workers.ScriptListParams{AccountID: cf.F(accountID)})
-	for iter.Next() {
-		if name := iter.Current().ID; strings.HasPrefix(name, prefix) {
-			names = append(names, name)
-		}
-	}
-	if err := iter.Err(); err != nil {
-		return nil, fmt.Errorf("list workers: %w", err)
-	}
-	return names, nil
 }
 
 // detachRouteRecords deletes the proxied placeholder DNS records the route path
@@ -627,10 +589,10 @@ func (p *provider) History(ctx context.Context, state edge.RootStackState, point
 	return history, nil
 }
 
-func (p *provider) RemovePointer(ctx context.Context, state edge.RootStackState, pointer string) (edge.PointerRemoval, error) {
-	var result edge.PointerRemoval
+func (p *provider) RemovePointer(ctx context.Context, state edge.RootStackState, pointer string) (edge.PruneResult, error) {
+	var result edge.PruneResult
 	if _, err := p.storeRequest(ctx, state, http.MethodPost, "/remove-pointer", map[string]string{"pointer": pointer}, &result); err != nil {
-		return edge.PointerRemoval{}, err
+		return edge.PruneResult{}, err
 	}
 	return result, nil
 }
@@ -648,14 +610,25 @@ func (p *provider) DeletePromotionArtifacts(ctx context.Context, state edge.Root
 }
 
 // initializeInstance seeds the project's own instance in the shared
-// deployments-store worker with its owner token and secret, authenticated with
-// the account-level bootstrap credential. force is false: the deploy host
-// never silently adopts an instance already owned by a different project (a
-// slug collision), which the store surfaces as a 409.
-func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred, ownerToken, secret string) error {
-	body := map[string]any{"ownerToken": ownerToken, "secret": secret, "force": false}
-	_, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, nil)
-	return err
+// deployments-store worker with the presented identity, authenticated with the
+// account-level bootstrap credential, and returns the identity the instance
+// actually holds afterwards: what was presented when the instance was
+// unclaimed, and the pair it already carried when it was not. force is false —
+// the deploy host never overwrites an identity a live instance is authenticated
+// under; it adopts it.
+func (p *provider) initializeInstance(ctx context.Context, endpoint, slug, bootstrapCred string, present storeIdentity) (storeIdentity, error) {
+	body := map[string]any{"ownerToken": present.ownerToken, "secret": present.secret, "force": false}
+	var out struct {
+		OwnerToken string `json:"ownerToken"`
+		Secret     string `json:"secret"`
+	}
+	if _, err := p.storeRequestTo(ctx, endpoint, slug, bootstrapCred, http.MethodPost, "/initialize", body, &out); err != nil {
+		return storeIdentity{}, err
+	}
+	if out.Secret == "" || out.OwnerToken == "" {
+		return storeIdentity{}, fmt.Errorf("deployments store reported no identity for %q", slug)
+	}
+	return storeIdentity{secret: out.Secret, ownerToken: out.OwnerToken}, nil
 }
 
 // getVersionStamp reads the version the instance's root stack last deployed. It
@@ -693,6 +666,10 @@ func (p *provider) storeRequest(ctx context.Context, state edge.RootStackState, 
 // a Bearer credential, a JSON body when body is non-nil, and a JSON response
 // decoded into out when out is non-nil. A non-2xx status is an error naming the
 // path and status.
+//
+// A throttled, unreachable or failing store is retried under storeRetryable's
+// policy rather than failing the deploy on the first attempt: the store is a
+// Durable Object that a project's first deploy of the day wakes up cold.
 func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, method, subpath string, body, out any) (*http.Response, error) {
 	if endpoint == "" {
 		return nil, fmt.Errorf("deployments store: no endpoint; bootstrap the edge first")
@@ -701,21 +678,41 @@ func (p *provider) storeRequestTo(ctx context.Context, endpoint, slug, secret, m
 		return nil, fmt.Errorf("deployments store: no project slug")
 	}
 
-	var reader io.Reader
+	var encoded []byte
 	if body != nil {
-		encoded, err := json.Marshal(body)
+		marshalled, err := json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("marshal deployments-store request body: %w", err)
 		}
-		reader = bytes.NewReader(encoded)
+		encoded = marshalled
 	}
 
+	var res *http.Response
+	var err error
+	for attempt := 0; ; attempt++ {
+		res, err = p.storeAttempt(ctx, endpoint, slug, secret, method, subpath, encoded, out)
+		if attempt == storeMaxAttempts-1 || !storeRetryable(res, err) {
+			return res, err
+		}
+		if waitErr := waitBeforeRetry(ctx, storeRetryDelay(res, attempt, retryJitter())); waitErr != nil {
+			return res, err
+		}
+	}
+}
+
+// storeAttempt is one storeRequestTo call over the wire. The encoded body is
+// carried as bytes rather than a reader so every attempt sends the same request.
+func (p *provider) storeAttempt(ctx context.Context, endpoint, slug, secret, method, subpath string, encoded []byte, out any) (*http.Response, error) {
+	var reader io.Reader
+	if encoded != nil {
+		reader = bytes.NewReader(encoded)
+	}
 	req, err := http.NewRequestWithContext(ctx, method, endpoint+"/"+slug+subpath, reader)
 	if err != nil {
 		return nil, fmt.Errorf("build deployments-store request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+secret)
-	if body != nil {
+	if encoded != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
 

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -98,6 +99,66 @@ func TestPreflightResponse(t *testing.T) {
 					got.GetInfraClass(), got.GetInfrastructurePresent(), tc.wantClass, tc.wantPresent)
 			}
 		})
+	}
+}
+
+// routeOwners is a stand-in edge lookup: who holds each pattern, and a failure
+// for the patterns it is told to fail on.
+func routeOwners(byPattern map[string]string, fail map[string]bool) routeOwnerFunc {
+	return func(_ context.Context, pattern string) (string, error) {
+		if fail[pattern] {
+			return "", errors.New("cloudflare said no")
+		}
+		return byPattern[pattern], nil
+	}
+}
+
+func TestDomainClaims_AnswersInRequestOrderWithTheOwningScript(t *testing.T) {
+	owner := routeOwners(map[string]string{
+		"*.preview.app.com/*": "ocel-other-preview",
+		"shop.com/*":          "ocel-shop-prod-web",
+	}, nil)
+
+	got := domainClaims(context.Background(), owner, "shop", []string{"*.preview.app.com", "free.com", "shop.com"})
+
+	if len(got) != 3 {
+		t.Fatalf("claims = %d, want one per requested hostname", len(got))
+	}
+	if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel-other-preview" {
+		t.Errorf("claim[0] = %+v, want another project's worker reported as the owner", got[0])
+	}
+	if got[1].GetHostname() != "free.com" || got[1].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[1].GetOwner() != "" {
+		t.Errorf("claim[1] = %+v, want an unheld hostname reported unclaimed", got[1])
+	}
+	// This project's own worker is not a conflict: redeploying reclaims the
+	// hostname idempotently, and refusing there would refuse every redeploy.
+	if got[2].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[2].GetOwner() != "" {
+		t.Errorf("claim[2] = %+v, want this project's own hold to read as free to take", got[2])
+	}
+}
+
+// "Nobody holds it" and "nobody could say" must never collapse: a lookup the
+// edge could not answer leaves the status unspecified, so the CLI skips the
+// guard instead of failing a deploy it cannot verify.
+func TestDomainClaims_AnEdgeThatCannotAnswerIsUnspecified(t *testing.T) {
+	failing := domainClaims(context.Background(), routeOwners(nil, map[string]bool{"app.com/*": true}), "shop", []string{"app.com"})
+	if len(failing) != 1 || failing[0].GetHostname() != "app.com" || failing[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNSPECIFIED {
+		t.Errorf("claims = %+v, want a failed lookup reported as unanswerable", failing)
+	}
+}
+
+// The check is opt-in per the request: no hostnames means no lookup is paid for.
+func TestDomainClaims_NoDomainsAsksTheEdgeNothing(t *testing.T) {
+	asked := 0
+	owner := func(context.Context, string) (string, error) {
+		asked++
+		return "", nil
+	}
+	if got := domainClaims(context.Background(), owner, "shop", nil); got != nil {
+		t.Errorf("claims = %+v, want none", got)
+	}
+	if asked != 0 {
+		t.Errorf("edge lookups = %d, want 0", asked)
 	}
 }
 

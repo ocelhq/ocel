@@ -121,15 +121,12 @@ func TestPurgeProjectArtifacts_MissingBucketIsANoOp(t *testing.T) {
 }
 
 // The artifact key carries no pointer, so identical code under two pointers is
-// one object: a sibling still live means the prefix must stay.
-func TestRemovePreview_LeavesArtifactsWhileSiblingPointersRemain(t *testing.T) {
+// one object — and a pointer that looks like the project's last one is not:
+// another deploy's pointer appears only once it promotes. The project prefix is
+// `ocel destroy --preview`'s to reclaim, never one pointer's.
+func TestRemovePreview_NeverPurgesTheProjectsArtifacts(t *testing.T) {
 	rec := &sweepRecorder{}
-	fake := &recordingRootStack{
-		pointerRemoval: edge.PointerRemoval{
-			RemainingPointers: 1,
-			RemovedRoutes:     []edge.RemovedRoute{{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"}},
-		},
-	}
+	fake := &recordingRootStack{}
 	ctx := context.Background()
 	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
 	if err != nil {
@@ -137,49 +134,22 @@ func TestRemovePreview_LeavesArtifactsWhileSiblingPointersRemain(t *testing.T) {
 	}
 	cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 
-	if _, err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
+	if err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 
 	if rec.swept != nil {
-		t.Errorf("swept %v: a live sibling pointer may still run this code", rec.swept)
+		t.Errorf("swept %v: the project prefix is shared by every pointer, live or landing", rec.swept)
 	}
 }
 
-func TestRemovePreview_PurgesArtifactsWhenItWasTheLastPointer(t *testing.T) {
-	rec := &sweepRecorder{}
-	fake := &recordingRootStack{
-		pointerRemoval: edge.PointerRemoval{
-			RemainingPointers: 0,
-			RemovedRoutes:     []edge.RemovedRoute{{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"}},
-		},
-	}
-	ctx := context.Background()
-	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
-	if err != nil {
-		t.Fatalf("ReconcileRootStack: %v", err)
-	}
-	cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
-
-	if _, err := RemovePreview(ctx, fake, state, cfg, "shop", "pr-1", false, nil, nil); err != nil {
-		t.Fatalf("RemovePreview: %v", err)
-	}
-
-	if want := []string{"artifact-bucket|shop/"}; !reflect.DeepEqual(rec.swept, want) {
-		t.Errorf("swept = %v, want %v", rec.swept, want)
-	}
-}
-
-// RemainingPointers is zero both when the pointer was the last one and when
-// RemovePointer failed outright — purging on the latter would take every
-// sibling pointer's artifacts with it.
 func TestRemovePreview_LeavesArtifactsWhenThePointerRemovalFailed(t *testing.T) {
 	rec := &sweepRecorder{}
 	fake := &recordingRootStack{}
 	cfg := Config{ArtifactBucket: "artifact-bucket", Uploader: rec}
 	state := edge.RootStackState{edge.RootStackKeySlug: "shop", edge.RootStackKeySecret: "stale"}
 
-	_, err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, nil, nil)
+	err := RemovePreview(context.Background(), fake, state, cfg, "shop", "pr-1", false, nil, nil)
 	if err == nil {
 		t.Fatal("RemovePreview err = nil, want the failed pointer removal reported")
 	}
@@ -279,19 +249,14 @@ func TestDestroyProject_AFailedValueRemovalDoesNotStopTheStepsAfterIt(t *testing
 // overrides are tiny.
 func TestRemovePreview_KeepsTheEnvironmentsOverrides(t *testing.T) {
 	values := &valueRecorder{}
-	fake := &recordingRootStack{
-		pointerRemoval: edge.PointerRemoval{
-			RemainingPointers: 0,
-			RemovedRoutes:     []edge.RemovedRoute{{App: "web", Hostname: "pr-1-aaaaaaaaaa.preview.acme.com"}},
-		},
-	}
+	fake := &recordingRootStack{}
 	ctx := context.Background()
 	state, err := fake.ReconcileRootStack(ctx, edge.RootStackSpec{Version: "v1", Slug: "shop"}, nil)
 	if err != nil {
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
 
-	if _, err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, nil, nil); err != nil {
+	if err := RemovePreview(ctx, fake, state, Config{Values: values}, "shop", "pr-1", false, nil, nil); err != nil {
 		t.Fatalf("RemovePreview: %v", err)
 	}
 

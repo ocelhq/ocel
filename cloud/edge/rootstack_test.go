@@ -6,6 +6,34 @@ import (
 	"testing"
 )
 
+// A worker-name stem names a family: the stem itself and every name segmented
+// below it. It is deliberately not a raw string prefix — a sibling whose name
+// merely starts with the same characters is a different family, and pruning and
+// teardown both act on what this answers.
+func TestNameUnderStem(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		stem, script string
+		want         bool
+	}{
+		{"the stem itself", "ocel-shop-preview", "ocel-shop-preview", true},
+		{"a name segmented below it", "ocel-shop-preview", "ocel-shop-preview-web", true},
+		{"two segments below it", "ocel-shop-preview", "ocel-shop-preview-web-api", true},
+		{"a sibling sharing only characters", "ocel-shop-preview", "ocel-shop-previewer", false},
+		{"another project's stem", "ocel-shop-preview", "ocel-other-preview", false},
+		{"a sibling project slugged past ours", "ocel-shop-preview", "ocel-shopfoo-preview", false},
+		{"a production worker of the same project", "ocel-shop-preview", "ocel-shop-prod-web", false},
+		{"an empty stem matches nothing", "", "ocel-shop-preview", false},
+		{"an empty name is nothing's", "ocel-shop-preview", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := NameUnderStem(tc.stem, tc.script); got != tc.want {
+				t.Errorf("NameUnderStem(%q, %q) = %v, want %v", tc.stem, tc.script, got, tc.want)
+			}
+		})
+	}
+}
+
 // The audit fields are additions to a record shape already on the wire, so a
 // Deployment that bakes nothing must still marshal byte-for-byte as it did
 // before them: a record the store already holds and one written now differ

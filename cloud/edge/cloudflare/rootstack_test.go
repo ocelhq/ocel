@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/ocelhq/ocel/cloud/edge"
@@ -272,10 +273,12 @@ const (
 // /staged, /promote, /history, /prune, /version-stamp and /destroy.
 //
 // Ownership is modelled as the real store does it (store.ts initialize): the
-// instance starts seeded with secret under storeOwnerToken, /initialize rotates
-// the secret for a matching owner and 409s for a different one, and /destroy
-// clears the secret with the rest of the storage — so every later op on the
-// wiped instance is a 401, exactly as it is in production.
+// instance starts seeded with secret under storeOwnerToken, /initialize is
+// convergent — it seeds an unclaimed instance with the presented pair, answers
+// an already-seeded one with the pair it already carries, and overwrites only
+// under force — and always answers 200 with the identity the instance now
+// holds. /destroy clears the secret with the rest of the storage, so every
+// later op on the wiped instance is a 401, exactly as it is in production.
 func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 	t.Helper()
 	var (
@@ -313,12 +316,10 @@ func fakeStoreServer(t *testing.T, secret string) *httptest.Server {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if owner != "" && owner != body.OwnerToken && !body.Force {
-			w.WriteHeader(http.StatusConflict)
-			return
+		if owner == "" || body.Force {
+			owner, live = body.OwnerToken, body.Secret
 		}
-		owner, live = body.OwnerToken, body.Secret
-		w.WriteHeader(http.StatusNoContent)
+		json.NewEncoder(w).Encode(map[string]string{"ownerToken": owner, "secret": live})
 	})
 	mux.HandleFunc("PUT /{slug}/staged", authed(func(w http.ResponseWriter, r *http.Request) {
 		var rec edge.DeploymentRecord
@@ -406,14 +407,15 @@ func testSpec(endpoint, version string) edge.RootStackSpec {
 	}
 }
 
-// previewSpec is testSpec shaped like a preview pointer's reconcile: one exact
-// pointer hostname resolved by the shared base wildcard, and no pruning.
-func previewSpec(endpoint, version, hostname string) edge.RootStackSpec {
+// previewSpec is testSpec shaped like a project's preview reconcile: the one
+// wildcard the project declared, pruned to it, with Ocel planting the record
+// behind it.
+func previewSpec(endpoint, version string) edge.RootStackSpec {
 	spec := testSpec(endpoint, version)
 	spec.GenericName = "ocel-preview"
 	spec.Generic = testStoreWorker()
-	spec.Domains = []string{hostname}
-	spec.RequiredRecord = "*.preview.app.com"
+	spec.Domains = []string{"*.preview.app.com"}
+	spec.PruneRoutes = true
 	return spec
 }
 
@@ -427,10 +429,10 @@ func previewZoneMock() *cfMock {
 	}
 }
 
-// ocelhq-5w3: the version stamp is keyed on the project but a worker route is
-// per pointer, so a second pointer deploying against a root stack already at
-// spec.Version still gets its own route, while uploading nothing.
-func TestReconcileRootStack_UpToDateStillAttachesTheRoute(t *testing.T) {
+// The version stamp gates the script upload alone. Routes and records are
+// reconciled every time, so one deleted out of band heals on the next deploy
+// instead of surviving until the version happens to move.
+func TestReconcileRootStack_UpToDateStillReconcilesTheRoute(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
 	store := fakeStoreServer(t, "s3cr3t")
 	m := previewZoneMock()
@@ -441,7 +443,7 @@ func TestReconcileRootStack_UpToDateStillAttachesTheRoute(t *testing.T) {
 	}
 
 	prior := testState(store.URL, "s3cr3t")
-	state, err := p.ReconcileRootStack(ctx, previewSpec(store.URL, "v2", "pr-2-abc1234567.preview.app.com"), prior)
+	state, err := p.ReconcileRootStack(ctx, previewSpec(store.URL, "v2"), prior)
 	if err != nil {
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
@@ -449,11 +451,51 @@ func TestReconcileRootStack_UpToDateStillAttachesTheRoute(t *testing.T) {
 	if !reflect.DeepEqual(state, prior) {
 		t.Errorf("state = %v, want prior handed back unchanged (%v)", state, prior)
 	}
-	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "pr-2-abc1234567.preview.app.com/*" {
-		t.Errorf("created routes = %v, want this pointer's own route", m.createdRoutes)
+	if len(m.createdRoutes) != 1 || m.createdRoutes[0]["pattern"] != "*.preview.app.com/*" {
+		t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 	}
 	if len(m.putScripts) != 0 {
 		t.Errorf("uploaded scripts = %v, want none: the root stack already carries spec.Version", m.putScripts)
+	}
+}
+
+// The project owns its preview base domain outright, so the wildcard is its
+// complete desired route set: a pointer-exact route left over from the per-pointer
+// model is drift, and pruning is what sweeps it.
+func TestReconcileRootStack_PreviewPrunesEveryRouteButItsWildcard(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	store := fakeStoreServer(t, "s3cr3t")
+	m := previewZoneMock()
+	m.existingRoutes = []map[string]any{
+		{"id": "stale", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
+		{"id": "other", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "someone-else"},
+	}
+	p := m.provider(t)
+
+	if _, err := p.ReconcileRootStack(context.Background(), previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t")); err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	if len(m.deletedRoutes) != 1 || m.deletedRoutes[0] != "stale" {
+		t.Errorf("deleted routes = %v, want only the stale pointer-exact route", m.deletedRoutes)
+	}
+}
+
+// Nothing outside the project shares its preview base domain, so Ocel plants the
+// record the wildcard resolves through itself, exactly as production does.
+func TestReconcileRootStack_PreviewPlantsItsOwnWildcardRecord(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	store := fakeStoreServer(t, "s3cr3t")
+	m := previewZoneMock()
+	m.existingRecords = nil
+	p := m.provider(t)
+
+	if _, err := p.ReconcileRootStack(context.Background(), previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t")); err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+
+	if len(m.createdRecords) != 1 || m.createdRecords[0]["name"] != "*.preview.app.com" {
+		t.Errorf("created records = %v, want the proxied placeholder for *.preview.app.com", m.createdRecords)
 	}
 }
 
@@ -466,7 +508,7 @@ func TestReconcileRootStack_BehindVersionUploadsAndStamps(t *testing.T) {
 	p := m.provider(t)
 	ctx := context.Background()
 
-	state, err := p.ReconcileRootStack(ctx, previewSpec(store.URL, "v2", "pr-1-abc1234567.preview.app.com"), testState(store.URL, "s3cr3t"))
+	state, err := p.ReconcileRootStack(ctx, previewSpec(store.URL, "v2"), testState(store.URL, "s3cr3t"))
 	if err != nil {
 		t.Fatalf("ReconcileRootStack: %v", err)
 	}
@@ -475,7 +517,7 @@ func TestReconcileRootStack_BehindVersionUploadsAndStamps(t *testing.T) {
 		t.Errorf("uploaded scripts = %v, want [ocel-preview]", m.putScripts)
 	}
 	if len(m.createdRoutes) != 1 {
-		t.Errorf("created routes = %v, want the pointer's route", m.createdRoutes)
+		t.Errorf("created routes = %v, want the project's wildcard route", m.createdRoutes)
 	}
 	version, _, err := p.getVersionStamp(ctx, store.URL, "acme-web", state[edge.RootStackKeySecret])
 	if err != nil {
@@ -486,50 +528,43 @@ func TestReconcileRootStack_BehindVersionUploadsAndStamps(t *testing.T) {
 	}
 }
 
-// Per-pointer teardown: the shared script, its sibling pointers' routes and the
-// base wildcard record all keep serving.
-func TestRemoveRoute_DeletesOnlyTheNamedRoute(t *testing.T) {
+// Teardown hands DestroyRootStack an exact set, so the list it computes it from
+// must be the stem's family and nothing adjacent to it.
+func TestListDeployedWorkers_ReturnsTheStemsFamilyOnly(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	m := previewZoneMock()
-	m.existingRoutes = []map[string]any{
-		{"id": "gone", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-		{"id": "sibling", "pattern": "pr-2-abc1234567.preview.app.com/*", "script": "ocel-preview"},
-		{"id": "other", "pattern": "pr-1-abc1234567.preview.app.com/*", "script": "someone-else"},
+	m := &cfMock{
+		zoneID:   "zone1",
+		zoneName: "app.com",
+		existingScripts: []string{
+			"ocel-shop-preview",
+			"ocel-shop-preview-web",
+			"ocel-shop-previewer",
+			"ocel-shopfoo-preview",
+			"ocel-shop-prod-web",
+			"ocel-other-preview",
+		},
 	}
-	p := m.provider(t)
 
-	if err := p.RemoveRoute(context.Background(), "ocel-preview", "pr-1-abc1234567.preview.app.com"); err != nil {
-		t.Fatalf("RemoveRoute: %v", err)
+	names, err := m.provider(t).ListDeployedWorkers(context.Background(), "ocel-shop-preview")
+	if err != nil {
+		t.Fatalf("ListDeployedWorkers: %v", err)
 	}
-
-	if len(m.deletedRoutes) != 1 || m.deletedRoutes[0] != "gone" {
-		t.Errorf("deleted routes = %v, want [gone]", m.deletedRoutes)
-	}
-	if len(m.deletedRecords) != 0 {
-		t.Errorf("deleted records = %v, want none: the base wildcard is shared by every pointer", m.deletedRecords)
+	want := []string{"ocel-shop-preview", "ocel-shop-preview-web"}
+	if !slices.Equal(names, want) {
+		t.Errorf("names = %v, want %v", names, want)
 	}
 }
 
-// A route that is already gone is not an error, so a teardown that failed
-// half-way resumes on a re-run.
-func TestRemoveRoute_AlreadyGoneIsSuccess(t *testing.T) {
+func TestListDeployedWorkers_NothingUnderTheStemIsNotAnError(t *testing.T) {
 	t.Setenv(envAccountID, "acct")
-	m := previewZoneMock()
-	p := m.provider(t)
+	m := &cfMock{zoneID: "zone1", zoneName: "app.com", existingScripts: []string{"ocel-other-preview"}}
 
-	if err := p.RemoveRoute(context.Background(), "ocel-preview", "pr-1-abc1234567.preview.app.com"); err != nil {
-		t.Fatalf("RemoveRoute on a missing route: err = %v, want nil", err)
+	names, err := m.provider(t).ListDeployedWorkers(context.Background(), "ocel-shop-preview")
+	if err != nil {
+		t.Fatalf("ListDeployedWorkers: %v", err)
 	}
-	if len(m.deletedRoutes) != 0 {
-		t.Errorf("deleted routes = %v, want none", m.deletedRoutes)
-	}
-}
-
-func TestRemoveRoute_RequiresAccountID(t *testing.T) {
-	t.Setenv(envAccountID, "")
-	p := &provider{}
-	if err := p.RemoveRoute(context.Background(), "ocel-preview", "pr-1.preview.app.com"); err == nil {
-		t.Fatal("RemoveRoute without an account id err = nil, want an error")
+	if len(names) != 0 {
+		t.Errorf("names = %v, want none", names)
 	}
 }
 
@@ -692,13 +727,9 @@ func TestRemovePointer_SendsThePointerAndReturnsReclaimTargets(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /{slug}/remove-pointer", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
-		json.NewEncoder(w).Encode(edge.PointerRemoval{
-			PruneResult: edge.PruneResult{
-				RemovedPromotionIDs: []string{"promo-1"},
-				RemovedRecordKeys:   []string{"record:web/b1"},
-			},
-			RemainingPointers: 2,
-			RemovedRoutes:     []edge.RemovedRoute{{App: "web", Hostname: "pr-42-abc1234567.preview.test"}},
+		json.NewEncoder(w).Encode(edge.PruneResult{
+			RemovedPromotionIDs: []string{"promo-1"},
+			RemovedRecordKeys:   []string{"record:web/b1"},
 		})
 	})
 	srv := httptest.NewServer(mux)
@@ -715,12 +746,72 @@ func TestRemovePointer_SendsThePointerAndReturnsReclaimTargets(t *testing.T) {
 	if len(result.RemovedRecordKeys) != 1 || result.RemovedRecordKeys[0] != "record:web/b1" {
 		t.Errorf("result = %+v, want the removed record keys to reclaim", result)
 	}
-	if result.RemainingPointers != 2 {
-		t.Errorf("remaining pointers = %d, want 2", result.RemainingPointers)
+}
+
+// The deployments store is a Durable Object a project's first deploy of the day
+// wakes up cold, so a throttled or unavailable answer must not fail the deploy
+// outright.
+func TestStoreRequest_RetriesUntilTheStoreAnswers(t *testing.T) {
+	attempts := 0
+	mux := http.NewServeMux()
+	mux.HandleFunc("PUT /{slug}/staged", func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		if attempts < 3 {
+			w.Header().Set("Retry-After-Ms", "1")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+	srv := httptest.NewServer(mux)
+	t.Cleanup(srv.Close)
+
+	p := &provider{}
+	if err := p.PutStaged(context.Background(), testState(srv.URL, "s3cr3t"), edge.DeploymentRecord{App: "web"}); err != nil {
+		t.Fatalf("PutStaged: %v", err)
 	}
-	want := edge.RemovedRoute{App: "web", Hostname: "pr-42-abc1234567.preview.test"}
-	if len(result.RemovedRoutes) != 1 || result.RemovedRoutes[0] != want {
-		t.Errorf("removed routes = %+v, want %+v", result.RemovedRoutes, want)
+	if attempts != 3 {
+		t.Errorf("attempts = %d, want 3: the two unavailable answers must have been retried", attempts)
+	}
+}
+
+// A rejected credential is the store's answer, not a failure to reach it —
+// retrying it would only slow every recovery path that reads a 401 as a signal.
+func TestStoreRequest_DoesNotRetryARejectedCredential(t *testing.T) {
+	attempts := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(srv.Close)
+
+	p := &provider{}
+	if err := p.PutStaged(context.Background(), testState(srv.URL, "wrong"), edge.DeploymentRecord{App: "web"}); err == nil {
+		t.Fatal("PutStaged err = nil, want the rejection surfaced")
+	}
+	if attempts != 1 {
+		t.Errorf("attempts = %d, want 1", attempts)
+	}
+}
+
+// A cancelled deploy stops waiting immediately rather than sleeping out its
+// remaining attempts.
+func TestStoreRequest_CancelledContextStopsRetrying(t *testing.T) {
+	attempts := 0
+	ctx, cancel := context.WithCancel(context.Background())
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		attempts++
+		cancel()
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+
+	p := &provider{}
+	if err := p.PutStaged(ctx, testState(srv.URL, "s3cr3t"), edge.DeploymentRecord{App: "web"}); err == nil {
+		t.Fatal("PutStaged err = nil, want the failure surfaced")
+	}
+	if attempts != 1 {
+		t.Errorf("attempts = %d, want 1: a cancelled context must not wait out the backoff", attempts)
 	}
 }
 
@@ -840,22 +931,54 @@ func TestEnsureInstance_ReseedsAnInstanceWipedByAFailedTeardown(t *testing.T) {
 	if upToDate {
 		t.Error("upToDate = true, want false: a wiped instance carries no version stamp")
 	}
-	if id.ownerToken != storeOwnerToken {
-		t.Errorf("ownerToken = %q, want the project's own %q", id.ownerToken, storeOwnerToken)
+	if id.secret == "" || id.ownerToken == "" {
+		t.Fatalf("identity = %+v, want the freshly seeded pair the wiped instance now carries", id)
 	}
 	if err := p.putVersionStamp(ctx, srv.URL, "acme-web", id.secret, "v2"); err != nil {
 		t.Fatalf("the re-seeded instance still rejects the project: %v", err)
 	}
 }
 
-func TestEnsureInstance_RefusesAnInstanceOwnedByAnotherProject(t *testing.T) {
+// Two first deploys of one slug race: the loser's initialize is answered with
+// the identity the winner seeded, and adopting it is what keeps both deploys
+// writing to the same instance instead of clobbering each other's SSM record.
+func TestEnsureInstance_AdoptsTheIdentityAnAlreadySeededInstanceReports(t *testing.T) {
 	srv := fakeStoreServer(t, "s3cr3t")
 	p := &provider{}
-	state := testState(srv.URL, "stale-secret")
-	state[edge.RootStackKeyOwnerToken] = "another-projects-owner-token"
+	ctx := context.Background()
 
-	if _, _, err := p.ensureInstance(context.Background(), testSpec(srv.URL, "v2"), state); err == nil {
-		t.Fatal("ensureInstance err = nil, want a refusal: the slug belongs to another project")
+	id, upToDate, err := p.ensureInstance(ctx, testSpec(srv.URL, "v2"), nil)
+	if err != nil {
+		t.Fatalf("ensureInstance: %v", err)
+	}
+	if upToDate {
+		t.Error("upToDate = true, want false: this reconcile read no version stamp of its own")
+	}
+	if id.secret != "s3cr3t" || id.ownerToken != storeOwnerToken {
+		t.Fatalf("identity = %+v, want the pair the instance already carries", id)
+	}
+	if err := p.putVersionStamp(ctx, srv.URL, "acme-web", id.secret, "v2"); err != nil {
+		t.Fatalf("the adopted secret does not authenticate: %v", err)
+	}
+}
+
+// The adopted identity is what the caller persists, so it must reach
+// RootStackState verbatim — the whole point of adopting it.
+func TestReconcileRootStack_PersistsTheAdoptedIdentity(t *testing.T) {
+	t.Setenv(envAccountID, "acct")
+	store := fakeStoreServer(t, "s3cr3t")
+	m := previewZoneMock()
+	p := m.provider(t)
+
+	state, err := p.ReconcileRootStack(context.Background(), previewSpec(store.URL, "v3"), nil)
+	if err != nil {
+		t.Fatalf("ReconcileRootStack: %v", err)
+	}
+	if state[edge.RootStackKeySecret] != "s3cr3t" {
+		t.Errorf("persisted secret = %q, want the instance's own", state[edge.RootStackKeySecret])
+	}
+	if state[edge.RootStackKeyOwnerToken] != storeOwnerToken {
+		t.Errorf("persisted owner token = %q, want the instance's own", state[edge.RootStackKeyOwnerToken])
 	}
 }
 
@@ -904,6 +1027,8 @@ func TestEnsureInstance_DoesNotReseedOnAStoreFailure(t *testing.T) {
 		if r.Method == http.MethodPost {
 			initialized++
 		}
+		// A 5xx is retried, so the store asks for a wait this test can afford.
+		w.Header().Set("Retry-After-Ms", "1")
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
