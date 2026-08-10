@@ -29,8 +29,8 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sts v1.44.0
 	github.com/aws/smithy-go v1.27.3
 	github.com/blang/semver v3.5.1+incompatible
-	github.com/ocelhq/ocel/cloud/edge v0.0.0-00010101000000-000000000000
-	github.com/ocelhq/ocel/cloud/edge/cloudflare v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/edge/contract v0.0.0-00010101000000-000000000000
+	github.com/ocelhq/ocel/platform/edge/cloudflare/deploy v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/channel v0.0.0-00010101000000-000000000000
 	github.com/ocelhq/ocel/pkg/proto v0.0.0-00010101000000-000000000000
 	github.com/pulumi/pulumi-aws/sdk/v7 v7.36.0
@@ -176,6 +176,6 @@ replace github.com/ocelhq/ocel/pkg/channel => ../../../pkg/channel
 
 replace github.com/ocelhq/ocel/pkg/proto => ../../../pkg/proto
 
-replace github.com/ocelhq/ocel/cloud/edge => ../../../cloud/edge
+replace github.com/ocelhq/ocel/platform/edge/contract => ../../edge/contract
 
-replace github.com/ocelhq/ocel/cloud/edge/cloudflare => ../../../cloud/edge/cloudflare
+replace github.com/ocelhq/ocel/platform/edge/cloudflare/deploy => ../../edge/cloudflare/deploy

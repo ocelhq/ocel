@@ -8,9 +8,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 func TestPreviewExpiry(t *testing.T) {

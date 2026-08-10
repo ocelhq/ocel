@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ocelhq/ocel/cloud/edge"
-	"github.com/ocelhq/ocel/cloud/edge/framework"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
+	"github.com/ocelhq/ocel/platform/edge/contract/framework"
 )
 
 const frameworkNext = string(edge.FrameworkNext)

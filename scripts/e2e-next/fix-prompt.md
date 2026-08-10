@@ -250,7 +250,7 @@ Known couplings from the last run (none of these edges exist in the DB yet —
   `.html` extension the adapter fails to append when emitting
   `outputs.staticFiles` (`frameworks/next/adapter/src/next-adapter.mts`); iud is
   the R2 dispatch key the worker builds from the raw request pathname
-  (`workers/nextjs/src/assets.ts`). They overlap in both files and the second
+  (`platform/edge/cloudflare/workers/entry/src/assets.ts`). They overlap in both files and the second
   is not fixed by the first. **Do not split them across two agents** — give one
   implementer both issues, or serialize them with a dependency edge.
 - **`ocelhq-dan` is explicitly marked "re-verify only after `ocelhq-hzp`"** and
@@ -259,7 +259,7 @@ Known couplings from the last run (none of these edges exist in the DB yet —
   it may need no fix at all.
 - **`ocelhq-sae` and `ocelhq-9q8` both concern response content-type** on
   different paths (static metadata routes vs prerendered RSC). Check for file
-  overlap in `workers/nextjs/src/assets.ts` / `index.ts` and
+  overlap in `platform/edge/cloudflare/workers/entry/src/assets.ts` / `index.ts` and
   `cloud/aws/deploy/assets.go` before letting them run concurrently.
 
 Anything you spawn in the same wave must have a **disjoint file set**. If you
@@ -340,8 +340,8 @@ cd <WORKTREE>
 pnpm install --frozen-lockfile
 pnpm --filter ocel build
 pnpm --filter @framework/next-adapter build
-pnpm --filter @ocel/worker-nextjs build
-pnpm --filter @ocel/worker-deployments-store build
+pnpm --filter @platform/cf-entry build
+pnpm --filter @platform/cf-deployments-store build
 node scripts/build-native.mjs --host --target cli
 node scripts/build-native.mjs --host --target provider
 ```
@@ -402,7 +402,7 @@ cd "$SIDECAR" && npm init -y >/dev/null && npm install --no-audit --no-fund "$TA
 test -x node_modules/@ocel/provider-aws-linux-x64/bin/deploy
 ```
 
-If your change is confined to `workers/nextjs/**`, `frameworks/next/adapter/**`,
+If your change is confined to `platform/edge/cloudflare/workers/entry/**`, `frameworks/next/adapter/**`,
 `packages/ocel/bin/**`, `cli/**` (which includes the node builder at
 `cli/node/**`) or `scripts/e2e-next/**`, use the shared sidecar read-only
 and skip this.
@@ -474,7 +474,7 @@ a killed agent still leaves a reclaimable slug behind.
 Edit code in the worktree, rebuild only what changed, redeploy in place:
 
 ```bash
-cd <WORKTREE> && pnpm --filter @ocel/worker-nextjs build     # or next-adapter / ocel
+cd <WORKTREE> && pnpm --filter @platform/cf-entry build     # or next-adapter / ocel
 # Go changes: node scripts/build-native.mjs --host --target cli|provider
 #   (and rebuild your sidecar if the change was under cloud/**)
 
@@ -491,7 +491,7 @@ ref, and the temp app directory is not a repo. `--prebuilt` ships the
 `.ocel/output` the preceding `ocel build` produced rather than building twice.
 
 You can **skip `ocel build`** when the change cannot affect build output —
-worker-only (`workers/nextjs/**`) or provider-only (`cloud/aws/**`) changes go
+worker-only (`platform/edge/cloudflare/workers/entry/**`) or provider-only (`cloud/aws/**`) changes go
 straight to `preview up --prebuilt`, which is much faster. Changes that feed the
 build output require it: the node builder (`cli/node/**`, which also needs
 `go generate` via `build-native.mjs --target cli`), the Next adapter
@@ -507,7 +507,7 @@ cat /tmp/h.txt
 
 ### 5E — The warm-PoP trap (content-type and static-asset fixes)
 
-`serveStaticAsset` (`workers/nextjs/src/assets.ts`) answers from the Cloudflare
+`serveStaticAsset` (`platform/edge/cloudflare/workers/entry/src/assets.ts`) answers from the Cloudflare
 colo Cache API before it ever reads R2:
 
 ```ts
@@ -588,7 +588,7 @@ stop and report it — do not paper over it with retries.
 2. The raw HTTP evidence: the `curl` request and the full response headers,
    before and after, with `x-amzn-requestid` present on both.
 3. The repo's own tests for every package you touched, e.g.
-   `pnpm --filter @ocel/worker-nextjs test`,
+   `pnpm --filter @platform/cf-entry test`,
    `pnpm --filter @framework/next-adapter test`,
    `pnpm --filter @ocel-scripts/e2e-next test`, `go test ./...` in the module.
 
@@ -741,7 +741,7 @@ exact human actions blocking the rest.
 
 ## Appendix — traps that already cost budget
 
-- **`workers/nextjs/routing-manifest.json` in the working tree is a red
+- **`platform/edge/cloudflare/workers/entry/routing-manifest.json` in the working tree is a red
   herring.** It is a scratch artifact for a different app (`appName:
   next-cache-lab`), not the deployed manifest. The real one is in the app's
   `.ocel/output/apps/app/`. Two debuggers wasted budget on it last run.

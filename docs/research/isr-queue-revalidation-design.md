@@ -89,7 +89,7 @@ What this obliges, beyond `.23`:
   window) → `claimSentinel` → `askBelow` (`satisfiedFromBelow`) → render. The seam was
   renamed from `refreshedFromBelow` to `satisfiedFromBelow` in `4bcfec1`.
   `refreshSentinelTtlSeconds = 5`, `refreshBackoffSeconds = 30`, `admissionJitterMs = 1000`
-  (`workers/nextjs/src/cache.ts:471,569,489`). Do not change any of these constants — the
+  (`platform/edge/cloudflare/workers/entry/src/cache.ts:471,569,489`). Do not change any of these constants — the
   `.16` spike's two-way staleness clause pins them.
 - **The queue dedupes renders; the tag publisher propagates staleness. Both stay.** The
   stream-driven tag publisher makes entries *become* stale without per-request DynamoDB
@@ -130,7 +130,7 @@ pnpm store; `platform/aws/functions/entrypoints` has no `next` dependency).
    response cache's serve-stale early-resolve is guarded on `!context.isOnDemandRevalidate`
    (`response-cache/index.js:198-204`); `checkIsOnDemandRevalidate` compares the header to
    the prerender-manifest `preview.previewModeId` (`api-utils/index.js:103-112`). The edge
-   already sends this header on `originBlocking` (`workers/nextjs/src/index.ts:741-744`,
+   already sends this header on `originBlocking` (`platform/edge/cloudflare/workers/entry/src/index.ts:741-744`,
    value = `target.config.bypassToken`, which the adapter emits verbatim from the routing
    manifest).
 2. **This does NOT prevent Next's own self-revalidation — that is a separate, real,
@@ -272,7 +272,7 @@ Provision account-globally beside the tag-publisher block (wired where
 
 ---
 
-## 4. Component: the edge enqueue (workers/nextjs)
+## 4. Component: the edge enqueue (platform/edge/cloudflare/workers/entry)
 
 ### 4.1 New dep
 
@@ -486,7 +486,7 @@ failure mode:
 
 ---
 
-## 6. Component: self-revalidation suppression (workers/nextjs + tests only)
+## 6. Component: self-revalidation suppression (platform/edge/cloudflare/workers/entry + tests only)
 
 Two halves, both required (Decision 18):
 
@@ -527,7 +527,7 @@ suppression must be one boolean constant that can be reverted alone.
 
 ---
 
-## 7. Component: blocking-miss collapse (workers/nextjs) — DEFERRED
+## 7. Component: blocking-miss collapse (platform/edge/cloudflare/workers/entry) — DEFERRED
 
 **Do not build this section yet** (amendment B). `.28` is filed deferred with a dep edge
 on `.17`. `missWaitBudgetMs = 3000` below sits on the SERVING path and is asserted, not
@@ -586,7 +586,7 @@ The standing bar applies: every **[M]** assertion is mutation-checked (break the
 production line, watch the named test fail, restore). All `CacheDeps` built through
 `test/cache-deps.ts`.
 
-### workers/nextjs
+### platform/edge/cloudflare/workers/entry
 
 - **[M]** An admitted refresh with `enqueueRevalidation` present and resolving `true`
   never calls `originBlocking`, and settles the sentinel "landed" (re-armed, not
@@ -718,9 +718,9 @@ error clamp `server/response-cache/index.js:290-307`.
 **Ocel** (at `63e35a1`): membrane waitUntil `platform/aws/functions/entrypoints/src/shared/
 membrane.mts:80-93`, `cloud/aws/cmd/lambdanode/bootstrap/forward.go:48-61`; cache
 handler real lastModified `platform/aws/functions/entrypoints/src/next/cache-handler.mts:186-205`;
-originBlocking + signing `workers/nextjs/src/index.ts:741-744`, `workers/nextjs/src/
-signing.ts:11,50-92`; forward/safeHeaders seam `workers/nextjs/src/index.ts:694-699` (the `render` thunk),
-`723-739`; admission machinery `workers/nextjs/src/cache.ts:471,489,525-533,
+originBlocking + signing `platform/edge/cloudflare/workers/entry/src/index.ts:741-744`, `platform/edge/cloudflare/workers/entry/src/
+signing.ts:11,50-92`; forward/safeHeaders seam `platform/edge/cloudflare/workers/entry/src/index.ts:694-699` (the `render` thunk),
+`723-739`; admission machinery `platform/edge/cloudflare/workers/entry/src/cache.ts:471,489,525-533,
 549,551-557,569,576-596,601-607,623-646`; three sites `cache.ts:698`, `index.ts:866-875,
 902-912`; miss path `cache.ts:707-755`; publisher pattern `cloud/aws/bootstrap/
 publisher.go:22-102,118,120-140,181-347`, `publisherversion.go:35-44`, `artifact.go:105-181`;
@@ -749,7 +749,7 @@ AmazonSQS.SendMessage` / `application/x-amz-json-1.0`
 (API_SendMessage.html — note the page names no error *code* for the omission; `MissingParameter`
 is HTTP 400 in APIReference/CommonErrors.html, and every error listed on API_SendMessage is
 400). `content-type` in aws4fetch's `UNSIGNABLE_HEADERS`:
-`workers/nextjs/node_modules/aws4fetch/dist/aws4fetch.esm.mjs:18-28`.
+`platform/edge/cloudflare/workers/entry/node_modules/aws4fetch/dist/aws4fetch.esm.mjs:18-28`.
 **Cloudflare Queues has no dedup** (developers.cloudflare.com/
 queues/reference/delivery-guarantees/ — application-layer idempotency recommended;
 /queues/platform/limits/).

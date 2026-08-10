@@ -7012,7 +7012,7 @@
    "ranAt": "2026-07-27T19:45:46.929Z",
    "waves": 7,
    "suitesPerWave": 5,
-   "notes": "Lambda ConcurrentExecutions quota re-verified at 1000; zero throttle-classified failures (hazard 1 stays resolved). Cloudflare RUM could NOT be disabled: the API token is active but lacks the Web Analytics scope (10000 Authentication error on both account and zone RUM endpoints). Hazard 2 remained live for this run. HEADLESS=true was set (ocelhq-7gk). ocelhq-a9x fix confirmed working in practice: hydration fires immediately ('Next.js page already hydrated'), and waves completed in ~7min against a 15min budget. NEW 4th STRUCTURAL TRAP: 27 of 92 sized candidates are dev-only (isNextDev-gated or dev:true) or set skipStart:true, and no-op under deploy mode exactly like skipDeployment. Screen for these pre-dispatch alongside the three documented traps. HOUSEKEEPING HAZARD: .coverage/ is NOT cleaned between sweeps. 36 result files from sweep-2026-07-27e were still present and would have been merged into this run's totals by any glob-based reader. Drive merging and reporting from _ledger.json, not from a directory glob. TRIAGE: 12 failures collapsed to 3 root causes. ocelhq-9q8 owns 10 of 12 across FOUR suites (navigation-focus, back-forward-cache, parallel-routes-use-selected-layout-segment, interception-segments-two-levels-above). ocelhq-hzp was REFUTED four independent times - RSC requests carrying Next-Router-State-Tree return 200 with a valid flight body, not 500. Do not schedule debuggers against hzp on that evidence again without re-verifying it. ocelhq-9q8 IS A RACE, not deterministic. RSC:1 alone returns content-type text/html (x-ocel-cache: MISS); RSC:1 + Next-Router-Prefetch:1 correctly returns text/x-component (x-ocel-cache: PRERENDER). Prefetches land ~1.4-2.7s after page load, so a click that beats the prefetch gets a hard reload and a click after it passes. Inserting ~3s waits made all four navigation-focus assertions pass. This makes 9q8 an intermittent, retry-flaky failure across ANY suite that clicks a Link, and it interacts with ocelhq-2gz3 (prefetch landing latency), which widens the window. Origin-isolated by direct aws lambda invoke - Cloudflare is exonerated. Root cause: the cache entry holds BOTH value.headers (html) and value.rscHeaders (text/x-component) and the html set is served; routing-manifest declares routes.rsc.contentTypeHeader but nothing in workers/nextjs/src reads it. ocelhq-9d3 NEEDS RETITLING. Its 'concurrency quota is 10' framing is obsolete (quota is now 1000) but the defect is real and reproduced: the first server-action POST after an idle gap gets a Cloudflare 502 (text/html, retry-after: 60, no x-amzn-requestid), then iterations 1-13 succeed. NEW EVIDENCE CORRECTS THE ISSUE BODY: the Lambda WAS invoked (START RequestId, REPORT Duration 2.27ms, CF 502 delivered 167ms later) at concurrency 1 with no x-amzn-errortype, so this is NOT throttling and the response/streaming leg is implicated, not just the request leg. NEW ISSUES FILED: ocelhq-d2wo (P0) - any dynamic param outside generateStaticParams 500s with NEXT_STATIC_GEN_BAILOUT because the adapter renders cache MISSes in prerender mode instead of dynamically; found incidentally, not the cause of any Jest failure this run. ocelhq-2435 (P2) - app-esm-js missing a DOM subtree in-sweep but complete on redeploy; suspected cause is that deploy.mjs returns the URL with no edge-readiness gate, same shape as ocelhq-zpu, which would be a sweep-wide source of phantom failures.",
+   "notes": "Lambda ConcurrentExecutions quota re-verified at 1000; zero throttle-classified failures (hazard 1 stays resolved). Cloudflare RUM could NOT be disabled: the API token is active but lacks the Web Analytics scope (10000 Authentication error on both account and zone RUM endpoints). Hazard 2 remained live for this run. HEADLESS=true was set (ocelhq-7gk). ocelhq-a9x fix confirmed working in practice: hydration fires immediately ('Next.js page already hydrated'), and waves completed in ~7min against a 15min budget. NEW 4th STRUCTURAL TRAP: 27 of 92 sized candidates are dev-only (isNextDev-gated or dev:true) or set skipStart:true, and no-op under deploy mode exactly like skipDeployment. Screen for these pre-dispatch alongside the three documented traps. HOUSEKEEPING HAZARD: .coverage/ is NOT cleaned between sweeps. 36 result files from sweep-2026-07-27e were still present and would have been merged into this run's totals by any glob-based reader. Drive merging and reporting from _ledger.json, not from a directory glob. TRIAGE: 12 failures collapsed to 3 root causes. ocelhq-9q8 owns 10 of 12 across FOUR suites (navigation-focus, back-forward-cache, parallel-routes-use-selected-layout-segment, interception-segments-two-levels-above). ocelhq-hzp was REFUTED four independent times - RSC requests carrying Next-Router-State-Tree return 200 with a valid flight body, not 500. Do not schedule debuggers against hzp on that evidence again without re-verifying it. ocelhq-9q8 IS A RACE, not deterministic. RSC:1 alone returns content-type text/html (x-ocel-cache: MISS); RSC:1 + Next-Router-Prefetch:1 correctly returns text/x-component (x-ocel-cache: PRERENDER). Prefetches land ~1.4-2.7s after page load, so a click that beats the prefetch gets a hard reload and a click after it passes. Inserting ~3s waits made all four navigation-focus assertions pass. This makes 9q8 an intermittent, retry-flaky failure across ANY suite that clicks a Link, and it interacts with ocelhq-2gz3 (prefetch landing latency), which widens the window. Origin-isolated by direct aws lambda invoke - Cloudflare is exonerated. Root cause: the cache entry holds BOTH value.headers (html) and value.rscHeaders (text/x-component) and the html set is served; routing-manifest declares routes.rsc.contentTypeHeader but nothing in platform/edge/cloudflare/workers/entry/src reads it. ocelhq-9d3 NEEDS RETITLING. Its 'concurrency quota is 10' framing is obsolete (quota is now 1000) but the defect is real and reproduced: the first server-action POST after an idle gap gets a Cloudflare 502 (text/html, retry-after: 60, no x-amzn-requestid), then iterations 1-13 succeed. NEW EVIDENCE CORRECTS THE ISSUE BODY: the Lambda WAS invoked (START RequestId, REPORT Duration 2.27ms, CF 502 delivered 167ms later) at concurrency 1 with no x-amzn-errortype, so this is NOT throttling and the response/streaming leg is implicated, not just the request leg. NEW ISSUES FILED: ocelhq-d2wo (P0) - any dynamic param outside generateStaticParams 500s with NEXT_STATIC_GEN_BAILOUT because the adapter renders cache MISSes in prerender mode instead of dynamically; found incidentally, not the cause of any Jest failure this run. ocelhq-2435 (P2) - app-esm-js missing a DOM subtree in-sweep but complete on redeploy; suspected cause is that deploy.mjs returns the URL with no edge-readiness gate, same shape as ocelhq-zpu, which would be a sweep-wide source of phantom failures.",
    "suites": 35,
    "passed": 98,
    "failed": 12,
@@ -7300,7 +7300,7 @@
    "kind": "adapter",
    "tests": 5,
    "oneLine": "Static metadata assets stamped with Go mime.TypeByExtension at upload; immutable cache-control applied unconditionally",
-   "fixSite": "cloud/aws/deploy/assets.go:78, workers/nextjs/src/assets.ts:113-114",
+   "fixSite": "cloud/aws/deploy/assets.go:78, platform/edge/cloudflare/workers/entry/src/assets.ts:113-114",
    "needsSidecarRebuild": true,
    "matchers": [
     {
@@ -7345,7 +7345,7 @@
      "check": "test name matches \"should redirect to\""
     }
    ],
-   "note": "WIDENED in sweep-2026-07-27c: no longer trailing-slash-specific. On a fixture with NO trailingSlash anywhere, all four next.config.js redirects returned 200 carrying a byte-correct Location (correct :path* substitution and query string), each with x-amzn-requestid so throttling is ruled out. Rule loading and matching are FINE - only the status is never set to 3xx, and browsers ignore Location on a 200 so the user silently lands on the wrong page. Mechanism: result.redirect is never populated, so dispatch falls past index.ts:458 to resolvedPathname -> Lambda -> catch-all renders 200 while the rule's location is merged on at :390-392. NARROWED: middleware redirects WORK (307, answered in-worker, no x-amzn-*), and next.config.js REWRITES WORK (verified by body: /config-rewrite-before renders page_config-rewrite-after). So the rule pipeline applies rewrites but not redirect statuses. REFUTED: an earlier probe in this same sweep saw HTTP 522 on the itms-apps:// (with slashes) destination and hypothesised an external-scheme doFetch failure at index.ts:464-465; on a clean deployment it returns the same 200+location face as the other three. That 522 was teardown contamination - do not chase a separate external-scheme defect. Downstream partner remains ocelhq-xlj. Shared fix site: workers/nextjs/src/index.ts. [sweep-2026-07-28d] WIDENED from \"next.config redirects\" to EVERY routing-level redirect: result.status is consumed only for middleware in workers/nextjs/src/index.ts, so a 308/307 falls through to serveStaticAsset and returns 404 while carrying a correct but RELATIVE Location. Now owns 6 tests in the basepath family.",
+   "note": "WIDENED in sweep-2026-07-27c: no longer trailing-slash-specific. On a fixture with NO trailingSlash anywhere, all four next.config.js redirects returned 200 carrying a byte-correct Location (correct :path* substitution and query string), each with x-amzn-requestid so throttling is ruled out. Rule loading and matching are FINE - only the status is never set to 3xx, and browsers ignore Location on a 200 so the user silently lands on the wrong page. Mechanism: result.redirect is never populated, so dispatch falls past index.ts:458 to resolvedPathname -> Lambda -> catch-all renders 200 while the rule's location is merged on at :390-392. NARROWED: middleware redirects WORK (307, answered in-worker, no x-amzn-*), and next.config.js REWRITES WORK (verified by body: /config-rewrite-before renders page_config-rewrite-after). So the rule pipeline applies rewrites but not redirect statuses. REFUTED: an earlier probe in this same sweep saw HTTP 522 on the itms-apps:// (with slashes) destination and hypothesised an external-scheme doFetch failure at index.ts:464-465; on a clean deployment it returns the same 200+location face as the other three. That 522 was teardown contamination - do not chase a separate external-scheme defect. Downstream partner remains ocelhq-xlj. Shared fix site: platform/edge/cloudflare/workers/entry/src/index.ts. [sweep-2026-07-28d] WIDENED from \"next.config redirects\" to EVERY routing-level redirect: result.status is consumed only for middleware in platform/edge/cloudflare/workers/entry/src/index.ts, so a 308/307 falls through to serveStaticAsset and returns 404 while carrying a correct but RELATIVE Location. Now owns 6 tests in the basepath family.",
    "notes": " [sweep-2026-07-28g] Sharpened to a VERSION SKEW: the worker pins @next/routing@16.2.10 whose processRoutes gates redirects behind if(destination), so a destination-less Location rule yields no redirect object and Response.redirect (index.ts:459-465) is never reached. Local canary resolve-routes.ts:150-186 already handles the destination-less case but returns {stopped,status} with NO redirect and NO resolvedPathname — so upgrading the library is NECESSARY BUT NOT SUFFICIENT; dispatch() must also honour a bare 3xx result.status + Location. Confirmed by replaying the shipped resolveRoutes offline against both real manifests: the trailing-slash rules ARE emitted in both fixtures."
   },
   "ocelhq-8xo": {
@@ -7479,7 +7479,7 @@
    "kind": "adapter",
    "tests": 1,
    "oneLine": "Dynamic pages-router prerender stored under the literal bracket key but read by request path",
-   "fixSite": "workers/nextjs/src/assets.ts:108",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/assets.ts:108",
    "matchers": [
     {
      "kind": "http",
@@ -7505,7 +7505,7 @@
    "kind": "adapter",
    "tests": 1,
    "oneLine": "Worker forwards unencoded path chars to the Function URL; AWS 400s before invoke",
-   "fixSite": "workers/nextjs/src/index.ts:718-721",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/index.ts:718-721",
    "matchers": [
     {
      "kind": "jest-error",
@@ -7582,7 +7582,7 @@
    "kind": "adapter",
    "tests": 1,
    "oneLine": "Worker SigV4-signs a payload hash the Workers runtime never sends for DELETE/OPTIONS with a body; Function URL 403s before invoke",
-   "fixSite": "workers/nextjs/src/signing.ts (edgeOriginFetch)",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/signing.ts (edgeOriginFetch)",
    "matchers": [
     {
      "kind": "http-header",
@@ -7604,7 +7604,7 @@
    "kind": "adapter",
    "tests": 1,
    "oneLine": "With trailingSlash, the canonical with-slash URL 404s for every statically-prerendered pathname (/a/ -> 404 while /a -> 200)",
-   "fixSite": "workers/nextjs/src/index.ts - normalization must run AFTER the beforeMiddleware 308 rules",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/index.ts - normalization must run AFTER the beforeMiddleware 308 rules",
    "blockedBy": [
     "ocelhq-e8z"
    ],
@@ -7684,7 +7684,7 @@
      "kind": "http-body",
      "pattern": "^Edge invocation failed$",
      "confidence": "specific",
-     "check": "Body is exactly 'Edge invocation failed' (22 B) with content-type text/plain;charset=UTF-8 (NO space after the semicolon - Cloudflare's own error pages use a space). That string is the catch-all at workers/nextjs/src/index.ts:814, so the invoker THREW; it is not a missing entry."
+     "check": "Body is exactly 'Edge invocation failed' (22 B) with content-type text/plain;charset=UTF-8 (NO space after the semicolon - Cloudflare's own error pages use a space). That string is the catch-all at platform/edge/cloudflare/workers/entry/src/index.ts:814, so the invoker THREW; it is not a missing entry."
     },
     {
      "kind": "jest-error",
@@ -7708,7 +7708,7 @@
    "kind": "adapter",
    "tests": 2,
    "oneLine": "Dynamic route params always empty for runtime='edge' routes; worker never injects Next's nxtP query params",
-   "fixSite": "workers/nextjs/src/index.ts:493-501 (the edge branch, NOT originUrl's shared body)",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/index.ts:493-501 (the edge branch, NOT originUrl's shared body)",
    "matchers": [
     {
      "kind": "jest-error",
@@ -7725,7 +7725,7 @@
    "kind": "adapter",
    "tests": 5,
    "oneLine": "No /_next/image optimizer: every next/image src 404s (worker finds no route, falls through to the 404 asset)",
-   "fixSite": "frameworks/next/adapter/src/next-adapter.mts:247 (routingManifest.dispatch) + workers/nextjs/src/index.ts",
+   "fixSite": "frameworks/next/adapter/src/next-adapter.mts:247 (routingManifest.dispatch) + platform/edge/cloudflare/workers/entry/src/index.ts",
    "matchers": [
     {
      "kind": "http-request",
@@ -7929,7 +7929,7 @@
      "confidence": "specific"
     }
    ],
-   "rootCause": "LOCATED in sweep-2026-07-28c: workers/nextjs/src/assets.ts:113-114 defines IMMUTABLE_CACHE_CONTROL = \"public, max-age=31536000, immutable\" and applies it UNCONDITIONALLY on every asset-store hit. This is why the build reporting supportsImmutableAssets: false has no effect - the flag never reaches the asset-header path. Discriminator: THREE distinct cache-control emitters are separable by whitespace - \"public, max-age=31536000, immutable\" (asset-store metadata, spaces), \"public,max-age=31536000,immutable\" (/_next/static/chunks, no spaces), and \"public, max-age=0, must-revalidate\" (Lambda/prerender).",
+   "rootCause": "LOCATED in sweep-2026-07-28c: platform/edge/cloudflare/workers/entry/src/assets.ts:113-114 defines IMMUTABLE_CACHE_CONTROL = \"public, max-age=31536000, immutable\" and applies it UNCONDITIONALLY on every asset-store hit. This is why the build reporting supportsImmutableAssets: false has no effect - the flag never reaches the asset-header path. Discriminator: THREE distinct cache-control emitters are separable by whitespace - \"public, max-age=31536000, immutable\" (asset-store metadata, spaces), \"public,max-age=31536000,immutable\" (/_next/static/chunks, no spaces), and \"public, max-age=0, must-revalidate\" (Lambda/prerender).",
    "summary": "serveStaticAsset unconditionally stamps public, max-age=31536000, immutable — assets.ts:112-115 hardcodes the constant instead of honouring the manifest header rules. The manifest is already correct: beforeMiddleware sets Service-Worker-Allowed: /, and the onMatch immutability regex deliberately omits service-worker from its alternation.",
    "seenInSuites": [
     "test/e2e/service-worker-pages/service-worker-pages.test.ts"
@@ -8030,7 +8030,7 @@
    "kind": "adapter",
    "tests": 1,
    "oneLine": "Worker's originUrl() forwards the resolved pathname with the CLIENT's search string, dropping resolveRoutes' invocationTarget.query; interception routes with a dynamic segment at the (.) marker get params.a === '(.)x'",
-   "fixSite": "workers/nextjs/src/index.ts:717-721 (originUrl) and the RouteResult.invocationTarget type at :173",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/index.ts:717-721 (originUrl) and the RouteResult.invocationTarget type at :173",
    "matchers": [
     {
      "kind": "jest-error",
@@ -8370,7 +8370,7 @@
    "kind": "adapter",
    "tests": 3,
    "oneLine": "kind:static dispatch reached via a rewrite is read from the asset store by the ORIGINAL request path (rewrite face of ocelhq-iud)",
-   "fixSite": "workers/nextjs/src/index.ts:479-481 + workers/nextjs/src/assets.ts:110",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/index.ts:479-481 + platform/edge/cloudflare/workers/entry/src/assets.ts:110",
    "discoveredIn": "sweep-2026-07-28b",
    "related": [
     "ocelhq-iud"
@@ -8804,7 +8804,7 @@
    "priority": "P1",
    "tests": 2,
    "oneLine": "with basePath the app 404 document is unreachable: the fallback probes <root>/404.html while the build wrote <root>/base/404 (no basePath prefix AND no .html)",
-   "fixSite": "workers/nextjs/src/assets.ts:82-84 (notFound probe never given manifest.basePath) + frameworks/next/adapter next-adapter.mts:233-241 (.html appended only when pathname === literal /404 or /500)",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/assets.ts:82-84 (notFound probe never given manifest.basePath) + frameworks/next/adapter next-adapter.mts:233-241 (.html appended only when pathname === literal /404 or /500)",
    "suites": [
     "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app-base-path.test.ts",
     "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-base-path.test.ts"
@@ -8830,7 +8830,7 @@
    "priority": "P1",
    "tests": 1,
    "oneLine": "fallback:true pages route serves the fallback shell to crawlers - worker strips user-agent via allowHeader and the Lambda never runs in minimal mode",
-   "fixSite": "workers/nextjs/src/index.ts:558-572 (allowHeader filter drops user-agent) or an edge-side bot check before originBlocking at :576-579",
+   "fixSite": "platform/edge/cloudflare/workers/entry/src/index.ts:558-572 (allowHeader filter drops user-agent) or an edge-side bot check before originBlocking at :576-579",
    "suites": [
     "test/e2e/prerender-crawler.test.ts"
    ],
@@ -9110,7 +9110,7 @@
     "test/e2e/app-dir/rewrite-with-search-params/rewrite-with-search-params.test.ts"
    ],
    "lastSeen": "sweep-2026-07-28h",
-   "summary": "@next/routing@16.2.10 (pinned in workers/nextjs) never exposes a has-condition's named capture groups to replaceDestination, so the rewrite destination keeps its literal $placeholder. checkHasConditions discards match.groups; the host variant additionally hits a type !== 'host' gate. Canary merges namedCaptures unconditionally BEFORE that gate, so one dependency bump fixes both variants.",
+   "summary": "@next/routing@16.2.10 (pinned in platform/edge/cloudflare/workers/entry) never exposes a has-condition's named capture groups to replaceDestination, so the rewrite destination keeps its literal $placeholder. checkHasConditions discards match.groups; the host variant additionally hits a type !== 'host' gate. Canary merges namedCaptures unconditionally BEFORE that gate, so one dependency bump fixes both variants.",
    "note": "CONTESTED THEN RECONCILED in sweep-2026-07-28h. The C6 debugger ruled these DISTINCT on the grounds that \"$nxtPlocale is a regex named group, which replaceDestination DOES handle\". That is factually wrong against the pinned source: C5's beforeFiles sourceRegex ^(?:\\/([^\\/]+?))\\/show(?:\\/)?$ has an UNNAMED group, so t.groups is undefined and the value can only arrive through the same has-captures argument $subdomain needs. Empirically routeMatches.nxtPlocale === \"$nxtPlocale\" — the later dynamic-route named group merely re-captured an already-corrupted value. Survivor of the merge; ocelhq-nafw survives separately for the minimal-mode half."
   },
   "ocelhq-040u": {

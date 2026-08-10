@@ -21,14 +21,14 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/awsconf"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumirt"
-	"github.com/ocelhq/ocel/cloud/edge"
-	"github.com/ocelhq/ocel/cloud/edge/cloudflare"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const deployEnv = "prod"

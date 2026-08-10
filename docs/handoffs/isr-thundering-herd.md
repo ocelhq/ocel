@@ -160,7 +160,7 @@ for the same reason and was deliberately left alone.
 **Writer retirement is bounded, not instant (PR 2).** The writer worker memoizes each
 deploy's secret hash per isolate. `destroy` clears the memo only in the isolate that served
 it, so an isolate that never handled the retirement keeps authorizing that build's writes
-until its memo lapses — up to `MEMO_TTL_MS` (60s) in `workers/isr-writer/src/index.ts`. That
+until its memo lapses — up to `MEMO_TTL_MS` (60s) in `platform/edge/cloudflare/workers/isr-writer/src/index.ts`. That
 is the accepted bound, not an oversight: closing it means consulting the Durable Object on
 every entry write, which is what the memo exists to avoid, and epic decision 6c mandates the
 memo. Read decision 6d and commit `79900d5`'s message with that bound in mind — both are
@@ -389,7 +389,7 @@ described in `.27`'s section above.
 ### Verified offline at the tip of 18, 2026-08-05
 
 Re-run while writing this handoff, not transcribed: `@platform/aws-revalidator` **70**,
-`@ocel/worker-nextjs` **639**, `@ocel/isr-writer` **70**, `@framework/next-cache` **42**,
+`@platform/cf-entry` **639**, `@ocel/isr-writer` **70**, `@framework/next-cache` **42**,
 `@platform/aws-tag-publisher` **15**, `@ocel-scripts/e2e-next` **43**. `cloud/aws` and `cloud/edge` both
 build, test and `gofmt` clean — the single `gofmt -l cloud/edge` hit,
 `cloud/edge/cloudflare/cloudflare_test.go`, is still the pre-existing drift from `b17467f` and is
@@ -504,7 +504,7 @@ exactly that shape.
 `*/origin.json`, because IAM's `*` spans `/`. No truncation trick needed; the appended suffix
 lands inside the edge's write region on its own. **The reasoning error is the thing to record:**
 the comment asserting the two grants were disjoint rested on "every edge-writable key ends
-`.cache.json`" — which is a property of `workers/nextjs`'s `fetchObjectKey`, i.e. of the
+`.cache.json`" — which is a property of `platform/edge/cloudflare/workers/entry`'s `fetchObjectKey`, i.e. of the
 worker's **CODE**, while the threat modelled is a stolen **CREDENTIAL**, which that code does
 not bind.
 
@@ -598,7 +598,7 @@ rendered and the tier below answers.
 #### A "secret is absent" assertion is only as good as its serializer
 
 The log test's assertion helper renders the **whole call list with `JSON.stringify`**, and the
-comment in `workers/nextjs/test/revalidation.test.ts` says why: a record logged as an *argument*
+comment in `platform/edge/cloudflare/workers/entry/test/revalidation.test.ts` says why: a record logged as an *argument*
 is `[object Object]` to `String`, which is precisely the leak being asserted against — so the
 mutation that leaks the bypass token passes a `String(arg)`-based check and fails this one. Any
 future "this secret never appears in a log" test in this repo has to serialize structurally, not
@@ -614,7 +614,7 @@ body and never the record, which carries the bypass token.
 ### Two settled questions worth not re-opening
 
 - **The SQS query protocol is not being retired.** The edge's send is the AWS *query* protocol
-  (`content-type: application/x-www-form-urlencoded`, `workers/nextjs/src/revalidation.ts`),
+  (`content-type: application/x-www-form-urlencoded`, `platform/edge/cloudflare/workers/entry/src/revalidation.ts`),
   which periodically prompts a "isn't that deprecated?" reflex. Settled from primary sources:
   AWS's own FAQ states it **"will continue to be supported"**, and the JSON protocol is a
   **client-side SDK upgrade, not a server migration** — nothing on the queue changes. The send
@@ -704,7 +704,7 @@ Branch `isr-herd/12-edge-snapshot-join`, rooted on `4bcfec1` (tip of 11). Five c
 isolate issued its own `store.get()`; above it the only cross-isolate sharing was a Cache API
 entry at a **flat** 10 s TTL that lapsed colo-wide at one instant — the same shared-schedule
 shape `.16` removed from admission. It now has an in-flight join (the shape of
-`workers/isr-writer`'s `registryReads` — the same defect PR 2's review fixed 40 lines away, which
+`platform/edge/cloudflare/workers/isr-writer`'s `registryReads` — the same defect PR 2's review fixed 40 lines away, which
 the edge read path never swept) plus a TTL drawn from `{7,8,9,10}` s, **drawn downward from the
 ceiling so the staleness bound is unchanged**: only the mean moves, 10 → 8.5 s. The cost is ~15%
 more refills, not more staleness.
@@ -787,9 +787,9 @@ destroy; and every upload fan-out.
 
 ### Verified across the whole stack at the tip of 13 (superseded by the block above)
 
-`workers/nextjs` **583 passing / 19 files** at the tip of 12 and unchanged at the tip of 13.
+`platform/edge/cloudflare/workers/entry` **583 passing / 19 files** at the tip of 12 and unchanged at the tip of 13.
 `cloud/aws` builds and tests clean; `gofmt -l cloud/aws` empty. `pnpm typecheck` and `pnpm build`
-(`wrangler deploy --dry-run`) clean on `workers/nextjs`. `pnpm -r --no-bail typecheck`: exactly
+(`wrangler deploy --dry-run`) clean on `platform/edge/cloudflare/workers/entry`. `pnpm -r --no-bail typecheck`: exactly
 one failure, `examples/next-cache-lab` (see "Standing notes"). Every parent edge re-derived with
 `git merge-base --is-ancestor`. The one `gofmt -l cloud/edge` hit,
 `cloud/edge/cloudflare/cloudflare_test.go`, is still the pre-existing drift from `b17467f` and is
@@ -809,7 +809,7 @@ an acceptance criterion — and see the amendment above: `C` itself is what `.17
 Branch `isr-herd/10-admission-jitter`, rooted on `db25a0f` (tip of 09). **Nine commits**, the
 ninth being this handoff edit; last content commit `063ce84`. PR `#113`. Findings in `docs/research/cloudflare-cache-api-spike.md`, section
 "Follow-up: the admission-jitter sweep"; the code is `admissionJitterMs` in
-`workers/nextjs/src/cache.ts`. A third `ocel-cache-probe` deploy was taken and **is torn down**,
+`platform/edge/cloudflare/workers/entry/src/cache.ts`. A third `ocel-cache-probe` deploy was taken and **is torn down**,
 verified via the API: the script is absent from the account's script list and
 `probe.ocel.dev/*` / `probe.ocel.site/*` are absent from both zones' routes.
 
@@ -826,7 +826,7 @@ ways yields `k` origin renders, restoring the herd) nor to raise the TTL (which 
 sustained rate and leaves the burst): it is to wait a uniform draw from `[0, 1000 ms)` before
 claiming.
 
-Measured before a line of `workers/nextjs` was written, because falsifying it would have
+Measured before a line of `platform/edge/cloudflare/workers/entry` was written, because falsifying it would have
 changed `.8`'s shape to a hierarchical per-`(route,colo)` tier. Two runs, 600 trials each, zero
 discarded: **`E(128)` mean 1.41 and 1.46 at `J = 1000 ms`, against 54.79 and 61.98 at `J = 0`**.
 The gate was 3.
@@ -908,7 +908,7 @@ broken worker before the runs were taken.
 - **The suite was sleeping the real jitter.** Eighteen inline `CacheDeps` meant every background
   refresh a test drove slept a real `U[0, 1000)` draw — ~2.5 s expected, up to ~5 s worst case,
   redrawn every run, with five tests inside 4× of vitest's default timeout. One constructor
-  (`test/cache-deps.ts`) now builds them all; `workers/nextjs` test time fell from 6.71 s to
+  (`test/cache-deps.ts`) now builds them all; `platform/edge/cloudflare/workers/entry` test time fell from 6.71 s to
   2.84 s and stopped varying.
 - **Not disputed but worth recording as corrected:** the review placed "wrong by a factor of
   twenty" in `.16`'s description. It is not there — it is in `.8`'s 2026-08-04 19:58 comment,
@@ -939,7 +939,7 @@ and the conclusion that a synchronized herd exceeds one DO per route by an order
 
 Four things to carry forward:
 
-- **Every colo-cache key in `workers/nextjs` is on a synthetic hostname that is on no zone**
+- **Every colo-cache key in `platform/edge/cloudflare/workers/entry` is on a synthetic hostname that is on no zone**
   (`cache.ocel`, `refresh.ocel`, `isr.ocel`, `image.ocel`) and nothing had ever tested whether
   `caches.default` stores such a key. PR 1 only proved an *on-zone* key, and Miniflare stores
   any hostname happily. It does store them — 340/340 cross-isolate reads, five runs, two zones.
@@ -952,7 +952,7 @@ Four things to carry forward:
   trip after the write executed at the edge, so the window had already elapsed twice over before
   that clock started, and the old `10 + 65 + 125` decomposition double-counted it. Cold sockets
   and 64-way queueing are the most likely explanation for the residual and that is **untested**.
-  The comment in `workers/nextjs/src/cache.ts` justifying `refreshSentinelTtlSeconds = 5` by
+  The comment in `platform/edge/cloudflare/workers/entry/src/cache.ts` justifying `refreshSentinelTtlSeconds = 5` by
   citing "~200 ms" is wrong by a factor of twenty-five; the constant is not. **That edit was
   made under `.16`, not PR 8**, since `.16` is where the same file gained `admissionJitterMs`,
   which is derived from the 8 ms and carries the same staleness clause.
@@ -998,7 +998,7 @@ invocation (a cold start two seconds after the raise, in the publisher's own log
 — it has to sit at or below what it gates, and what it gates is PRs 2-5's Lambda-side work.
 
 **R2 was read directly through the Cloudflare API, not inferred from a status code, and that is
-the trap.** `workers/isr-writer/src/index.ts` returns **204 for the `"absent"` outcome as well as
+the trap.** `platform/edge/cloudflare/workers/isr-writer/src/index.ts` returns **204 for the `"absent"` outcome as well as
 for a real publish**, so a 204 cannot distinguish "landed" from "there was no snapshot to land
 in". The R2 object was fetched and its records compared byte for byte against the S3 copy.
 
@@ -1043,7 +1043,7 @@ four alarms OK, the ESM's `LastProcessingResult` moved from "No records processe
 deployed publisher's `CodeSize` is 473419 bytes, byte-identical to the pinned artifact.
 
 **R2 was checked DIRECTLY rather than inferred, and that mattered.**
-`workers/isr-writer/src/index.ts` returns **204 for the `"absent"` outcome as well as for a real
+`platform/edge/cloudflare/workers/isr-writer/src/index.ts` returns **204 for the `"absent"` outcome as well as for a real
 publish**, so a 204 from the writer is *not* proof the records landed — it cannot distinguish
 "landed" from "there is no snapshot to land in". Do not treat a raise's status as a receipt.
 
@@ -1107,7 +1107,7 @@ which stays fail-closed until first sync. Both are commented at the site as load
 `dynamodb:BatchGetItem` is dropped from `isrPolicy`; `UpdateItem` stays, because `writeTags` and
 the plural tier's `writeTag` both still need it.
 
-Verified: `lambda-entrypoints` 199, `next-cache` 42, `workers/nextjs` 545, `next-adapter` 157,
+Verified: `lambda-entrypoints` 199, `next-cache` 42, `platform/edge/cloudflare/workers/entry` 545, `next-adapter` 157,
 `cloud/aws` build and test clean. Eight mutations applied, each caught by the named test.
 
 Two honest weaknesses, recorded rather than papered over:
@@ -1186,8 +1186,8 @@ resolves each specifier the source imports the way the adapter itself resolves i
 `frameworks/next/adapter`, over the real `node_modules` link. Mutation-checked against both ways
 a module stops being loadable — an added import, and syntax Node cannot erase (an `enum`).
 
-Verified: `next-cache` 42, `next-adapter` 157, `lambda-entrypoints` 197, `workers/nextjs` 545,
-`workers/isr-writer` 70, `tag-publisher` 15, `cli-platform` 38; `pnpm -r --no-bail typecheck`
+Verified: `next-cache` 42, `next-adapter` 157, `lambda-entrypoints` 197, `platform/edge/cloudflare/workers/entry` 545,
+`platform/edge/cloudflare/workers/isr-writer` 70, `tag-publisher` 15, `cli-platform` 38; `pnpm -r --no-bail typecheck`
 clean except `examples/next-cache-lab` (see "Standing notes"); all five build paths green and the built adapter
 dist loads under plain Node.
 
@@ -1206,7 +1206,7 @@ Branch `isr-herd/07-edge-l0-l1`, now rooted on **PR 6** (whose tip is now `776d8
 originally branched off PR 5, jumping the then-gated `.6`, and its issue was closed with
 `--force` past that dependency edge. The rebase was mechanical, as predicted — `.6` is the origin
 Lambda, `.7` is the edge worker. Serves decisions 9 and 12. Two commits (`80deb26`, `e826284`),
-both in `workers/nextjs`: nothing else in the repo is touched, and no Go changed.
+both in `platform/edge/cloudflare/workers/entry`: nothing else in the repo is touched, and no Go changed.
 
 Two verified herds are closed:
 
@@ -1281,7 +1281,7 @@ response turns out unstorable pays the leader's latency plus its own render (the
 of coalescing, versus a timeout carrying its own failure mode), and a render longer than the
 TTL can be re-admitted mid-flight. Both are commented at the site.
 
-Verified after the fixes: `workers/nextjs` 545/545 (was 531 before this PR), `pnpm typecheck`
+Verified after the fixes: `platform/edge/cloudflare/workers/entry` 545/545 (was 531 before this PR), `pnpm typecheck`
 and `pnpm build` (`wrangler deploy --dry-run`) clean on the package; `pnpm -r --no-bail
 typecheck` clean except `examples/next-cache-lab` (see "Standing notes"). Every new assertion was
 mutation-checked — including reverting the registration to after the `await`, which fails with
@@ -1349,8 +1349,8 @@ Four quality findings were applied in `57b92c5`:
 
 Verified after the fixes: `platform/aws/functions/entrypoints` 197/197 — the long-standing failing
 case died with the paging mechanism it tested, so the suite is green for the first time in this
-stack; `frameworks/next/cache` 42; `platform/aws/functions/tag-publisher` 15; `workers/nextjs` 529;
-`workers/isr-writer` 70; `pnpm -r --no-bail typecheck` clean except
+stack; `frameworks/next/cache` 42; `platform/aws/functions/tag-publisher` 15; `platform/edge/cloudflare/workers/entry` 529;
+`platform/edge/cloudflare/workers/isr-writer` 70; `pnpm -r --no-bail typecheck` clean except
 `examples/next-cache-lab` (see "Standing notes"); `cloud/aws` builds and tests clean.
 
 Two `pnpm -r test` failures are **pre-existing and unrelated** — confirmed by running both
@@ -1367,7 +1367,7 @@ Built as **four sequential units**, each independently testable, because the iss
 schema change, a new DO class, a new AWS Lambda, an observability stack and a credential
 removal into one ticket:
 
-1. **The snapshot Durable Object** (`workers/isr-writer/src/{snapshot,isr-snapshot,build,r2}.ts`)
+1. **The snapshot Durable Object** (`platform/edge/cloudflare/workers/isr-writer/src/{snapshot,isr-snapshot,build,r2}.ts`)
    — one coordinator per build at `idFromName(isrPrefix)`, which is what makes the in-memory
    merge safe and the CAS loop unnecessary. New op `POST /<isrPrefix>/tags` on the existing
    per-deploy write secret. Plus the Go generalization that lets a script gain a DO class.
@@ -1424,8 +1424,8 @@ Two independent reviews (spec + adversarial). Six findings, all fixed:
   **this same PR deleted**.
 - Two concurrent bootstraps failed instead of converging on one seed.
 
-Verified: `workers/isr-writer` 70; `platform/aws/functions/tag-publisher` 15; `frameworks/next/cache` 41;
-`workers/nextjs` 529; `workers/deployments-store` 63; `platform/aws/functions/entrypoints` 190 of 191
+Verified: `platform/edge/cloudflare/workers/isr-writer` 70; `platform/aws/functions/tag-publisher` 15; `frameworks/next/cache` 41;
+`platform/edge/cloudflare/workers/entry` 529; `platform/edge/cloudflare/workers/deployments-store` 63; `platform/aws/functions/entrypoints` 190 of 191
 (the known pre-existing `test/tag-clock.test.mts` case, which survives the publisher's retirement
 because it covers cursor advancement, not publishing); `pnpm -r --no-bail typecheck` clean except
 `examples/next-cache-lab` (see "Standing notes"); `cloud/aws` and `cloud/edge` build and test clean.
@@ -1482,14 +1482,14 @@ fixed on the branch. Four came out of it:
   position".
 - The acceptance criterion "segment prefetch verified" was asserted only as bytes on the
   entry; nothing drove a rewritten entry through `reconstructSegment`, the consumer that
-  returns null and disables PPR without `segmentHeaders`. Now covered in `workers/nextjs`,
+  returns null and disables PPR without `segmentHeaders`. Now covered in `platform/edge/cloudflare/workers/entry`,
   both directions, and the negative was mutation-checked to confirm it has teeth.
 - Comment/name cleanups: `PrerenderGroup.key` → `entryKey` (the name now carries what four
   lines of comment did), and a paragraph duplicated verbatim across two packages kept once.
 
 Verified after the fixes: `frameworks/next/adapter` 157; `platform/aws/functions/entrypoints` 217 of
 218 (the one failure is the known pre-existing `test/tag-clock.test.mts`, identical on the
-base commit); `workers/nextjs` 525; `frameworks/next/cache` 34; `pnpm -r --no-bail typecheck`
+base commit); `platform/edge/cloudflare/workers/entry` 525; `frameworks/next/cache` 34; `pnpm -r --no-bail typecheck`
 clean except `examples/next-cache-lab` (see "Standing notes"), which fails on the base commit
 identically. No Go changed — a
 `.func` is zipped whole, so the new file rides the existing artifact path.
@@ -1497,7 +1497,7 @@ identically. No Go changed — a
 **PR 2 (`ocelhq-wvag.2`) — code complete and reviewed twice, open as `#105`. Issue CLOSED.**
 
 Branch `isr-herd/02-isr-writer`, rooted on PR 1. New account-level package
-`workers/isr-writer/` (worker entry, per-deploy `IsrDeploy` Durable Object, registry SQL,
+`platform/edge/cloudflare/workers/isr-writer/` (worker entry, per-deploy `IsrDeploy` Durable Object, registry SQL,
 entry read/write, auth primitives), the Go deploy plumbing that provisions it, mints and
 seeds each build's write secret, and prunes it on retirement, plus the Lambda-side client
 that routes ISR entries through it.
@@ -1526,12 +1526,12 @@ that routes ISR entries through it.
 Two smaller ones: a misdirected read is no longer indistinguishable from a cold cache (the
 worker marks an entry-miss 404; the Lambda warns on any other 404 and still misses), and the
 credential primitives both account-level workers had copied are now one package,
-`@ocel/worker-auth`.
+`@platform/cf-auth`.
 
 Verified after the fixes: `pnpm -r --no-bail typecheck` clean across every source package
 (the `examples/*` failure is pre-existing — see "Standing notes");
-`workers/isr-writer` 42; `workers/deployments-store` 63; `packages/worker-auth` 7;
-`frameworks/next/cache` 34; `workers/nextjs` 523; `platform/aws/functions/entrypoints` 207 of 208 (the
+`platform/edge/cloudflare/workers/isr-writer` 42; `platform/edge/cloudflare/workers/deployments-store` 63; `platform/edge/cloudflare/lib/auth` 7;
+`frameworks/next/cache` 34; `platform/edge/cloudflare/workers/entry` 523; `platform/aws/functions/entrypoints` 207 of 208 (the
 known pre-existing `test/tag-clock.test.mts`); `cloud/aws` and `cloud/edge` build and test
 clean. Note `gofmt -l` flags `cloud/edge/cloudflare/cloudflare_test.go` — pre-existing drift
 from `b17467f`, untouched by this stack.
@@ -1585,7 +1585,7 @@ that can write any object in the shared `ocel-edge-cache` bucket for every proje
   it is 8 ms, and PR 1's 201 ms never contained the window at all. See `.9`'s section.**
 - **TTL is honored exactly from 1 s to 60 s with no floor.** The 1/2/5/10/30/60 s brackets all
   contain the requested TTL, and the reported `age` reaches `ttl − 1` at every step. So
-  `snapshotTtlSeconds = 10` in `workers/nextjs/src/tag-clock.ts` **holds as specced** and needs
+  `snapshotTtlSeconds = 10` in `platform/edge/cloudflare/workers/entry/src/tag-clock.ts` **holds as specced** and needs
   no change. Note Cloudflare returns `cache-control: max-age=14400` regardless; the honored
   lifetime is the one the probe measured, not the one the header claims.
 - **Isolates per colo: 99, a lower bound that had not plateaued.** Connection-to-isolate
@@ -1712,7 +1712,7 @@ theorem — the globally first `match` on a fresh key must miss, so the detector
 and `lowerBound` guarding on dispersion's *median* when the failure it exists for lives in the
 tail: at `J = 2000` the median was 1.51 ms and the p90 was 115 ms, fourteen times `W`, and those
 rows printed clean over an instrument that had stopped holding the arrivals concurrent. Neither
-is a bug in `workers/nextjs`. Both would have put a green number in a document that `.8` sizes
+is a bug in `platform/edge/cloudflare/workers/entry`. Both would have put a green number in a document that `.8` sizes
 against, which is worse: a product defect gets caught by the next test, and a measurement defect
 gets *quoted*.
 
@@ -1761,7 +1761,7 @@ Standing constraints PR 7 hands to PR 8, which builds L2 on top of L1:
 - **Every layer admits on error.** L1 fails open on an inert cache, a missing `delete`, and a
   `match`/`put`/`delete` that throws. Decision 10 already requires the same of L2.
 - **L1's sizing is measured, not assumed.** `refreshSentinelTtlSeconds = 5` in
-  `workers/nextjs/src/cache.ts` rested on the spike's ~200 ms cross-isolate visibility and its
+  `platform/edge/cloudflare/workers/entry/src/cache.ts` rested on the spike's ~200 ms cross-isolate visibility and its
   exact 1–60 s TTLs. `ocelhq-wvag.9` has since measured the write-visibility window at **8 ms**,
   which is what tells you how much L1 leaks into L2 — do not size L2 off the epic's original
   `1 − crossIsolateHitRate` formula, which degenerates to zero. The 5 s constant is unaffected;

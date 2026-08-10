@@ -11,7 +11,7 @@ Serves epic decision 10, under the auth boundary decision 6c already drew for it
 
 - **One DO per route, `idFromName` on the route.** Sharding is rejected on merit (k shards ⇒ k
   renders); a shared coordinator is Cloudflare's named anti-pattern (correction 6).
-- **The jitter is built and measured.** `admissionJitterMs = 1000` in `workers/nextjs/src/cache.ts`,
+- **The jitter is built and measured.** `admissionJitterMs = 1000` in `platform/edge/cloudflare/workers/entry/src/cache.ts`,
   `E = 1.41–1.46` claims per colo per stale event. `.16` is closed; no hierarchical
   per-`(route,colo)` tier is needed (`E` had not plateaued at `J = 2000`).
 - **L1 is live and its key scope is proven.** All four synthetic-hostname tiers store in
@@ -25,7 +25,7 @@ Serves epic decision 10, under the auth boundary decision 6c already drew for it
 
 ## 1. Where the class lives, and how the edge reaches it
 
-**`workers/isr-writer`, as a third DO class `IsrLease`.** Not a new package: decision 7's reason for
+**`platform/edge/cloudflare/workers/isr-writer`, as a third DO class `IsrLease`.** Not a new package: decision 7's reason for
 an account-level worker (the namespace must survive project redeploys) already holds, the generic
 worker already carries the `ISR_WRITER` service binding (`genericISRWriterBinding`,
 `cloud/edge/cloudflare/rootstack.go:138`), the auth boundary and the per-isolate secret memo already
@@ -34,7 +34,7 @@ exist there, and `pendingMigrations` already knows how to add a class to a live 
 **Reached over the existing service binding, never as a DO stub.** A DO namespace binding is
 script-scoped; binding `IsrLease` into the generic worker with `script_name` would put an
 unauthenticated namespace on the request-serving script, which decision 6c forbids. So the edge
-calls `env.ISR_WRITER.fetch(...)` and `workers/isr-writer/src/index.ts` derives the object name
+calls `env.ISR_WRITER.fetch(...)` and `platform/edge/cloudflare/workers/isr-writer/src/index.ts` derives the object name
 from the **authenticated** prefix — the same rule `entryObjectKey(isrPrefix, key)` follows today.
 
 Cost: one extra worker-to-worker hop per consult. It is inside `waitUntil`, off the serving path,
@@ -45,7 +45,7 @@ and it is what buys the auth boundary and one provisioning site instead of two.
 ## 2. Wire protocol
 
 Two ops, single path segments so `deployPrefix()`'s four-segment grammar is untouched
-(`workers/isr-writer/src/index.ts:20-27`). Both authenticate with the deploy's own write secret via
+(`platform/edge/cloudflare/workers/isr-writer/src/index.ts:20-27`). Both authenticate with the deploy's own write secret via
 the existing `authorized()` (per-isolate hash memo, no DO hop).
 
 ```
@@ -63,7 +63,7 @@ POST /<isrPrefix>/lease-settle
 ```
 
 `key` is exactly `CacheTarget.refreshKey` — `${buildId}:${routePath}`, built once in
-`workers/nextjs/src/index.ts:769` and already the unit of admission at all three sites. The object
+`platform/edge/cloudflare/workers/entry/src/index.ts:769` and already the unit of admission at all three sites. The object
 is `env.ISR_LEASE_DO.idFromName(`${isrPrefix}:${key}`)`. The `buildId` appears twice (it is the last
 segment of `isrPrefix`); that is deliberate — the name is *the authenticated prefix plus the
 caller's admission key*, and re-deriving the edge's admission key at the writer would be a second
@@ -322,10 +322,10 @@ before a refresh starts. It is a constant, not a redesign. (Open decision 3.)
 
 `.4` established the pattern and it is followed literally. Three literals and one type:
 
-1. `workers/isr-writer/wrangler.jsonc`: a `durable_objects.bindings` entry
+1. `platform/edge/cloudflare/workers/isr-writer/wrangler.jsonc`: a `durable_objects.bindings` entry
    `{name: "ISR_LEASE_DO", class_name: "IsrLease"}` and a **new, appended, never-edited** migration
    step `{tag: "v3", new_sqlite_classes: ["IsrLease"]}`.
-2. `workers/isr-writer/src/env.ts`: `ISR_LEASE_DO: DurableObjectNamespace<IsrLease>`; the class is
+2. `platform/edge/cloudflare/workers/isr-writer/src/env.ts`: `ISR_LEASE_DO: DurableObjectNamespace<IsrLease>`; the class is
    re-exported from `src/index.ts` beside `IsrDeploy` and `IsrSnapshot`.
 3. `cloud/edge/cloudflare/rootstack.go`, `isrWriterWorker`: one more `durableObjectClass`
    `{binding: "ISR_LEASE_DO", className: "IsrLease"}` and one more `migrationStep`
@@ -350,7 +350,7 @@ Every assertion marked **[M]** is mutation-checked: the production line is broke
 confirmed failing, the line restored. That is the standing bar in this stack and the reason five
 review rounds' worth of dead detectors were found.
 
-### `workers/nextjs` (unit, vitest, all deps built through `test/cache-deps.ts`)
+### `platform/edge/cloudflare/workers/entry` (unit, vitest, all deps built through `test/cache-deps.ts`)
 
 Ordering and sizing — the assertions the whole 423–438 rps figure rests on:
 - **[M]** No lease call at all when `claimSentinel` finds the colo already holds the sentinel
@@ -394,7 +394,7 @@ Wiring — the "seam left unwired" guard, which is the failure this stack keeps 
   constructed in production passes every other test in this file.
 - **[M]** Adding `lease` to `CacheDeps` does not fragment L0 (`inFlight` is keyed on `deps.cache`).
 
-### `workers/isr-writer`
+### `platform/edge/cloudflare/workers/isr-writer`
 
 - `test/lease.test.ts`, the class over a fake `ctx`: grant → deny(in-flight) → settle(landed) →
   deny(refill) → past `holdMs` → grant. **[M]** on each transition.

@@ -17,8 +17,8 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/auto/optup"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 
-	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const rootStackVersion = "12"

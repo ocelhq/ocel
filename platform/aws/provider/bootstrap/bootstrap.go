@@ -17,7 +17,7 @@ import (
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 	smithy "github.com/aws/smithy-go"
 
-	"github.com/ocelhq/ocel/cloud/edge"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const (

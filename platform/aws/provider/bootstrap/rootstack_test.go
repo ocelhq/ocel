@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ocelhq/ocel/cloud/edge"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestRootStackState_WriteThenReadRoundTrips(t *testing.T) {

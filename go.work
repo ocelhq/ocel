@@ -3,8 +3,8 @@ go 1.25.11
 use (
 	./cli
 	./platform/aws/provider
-	./cloud/edge
-	./cloud/edge/cloudflare
+	./platform/edge/contract
+	./platform/edge/cloudflare/deploy
 	./pkg/channel
 	./pkg/proto
 	./sdk

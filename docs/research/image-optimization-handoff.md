@@ -25,7 +25,7 @@ under epic `ocelhq-pf6q`, children `.1`–`.6`.
 Verification state at handoff:
 - `frameworks/next/adapter`: typecheck, build, 154 tests pass.
 - `cloud/aws`: `go build ./...`, `go test -race ./...`, `gofmt -l .` all clean.
-- `workers/nextjs`: typecheck clean, 456 tests pass.
+- `platform/edge/cloudflare/workers/entry`: typecheck clean, 456 tests pass.
 
 ## Working agreement for this stack
 
@@ -96,7 +96,7 @@ gh stack add image-opt-colo-cache
 
 Scope is the design doc's "PR 4" section. The pieces:
 
-- Wire the image route through the existing colo machinery in `workers/nextjs/src/cache.ts`
+- Wire the image route through the existing colo machinery in `platform/edge/cloudflare/workers/entry/src/cache.ts`
   (`serveCached`, `storeInColo`, `refreshOnce`, `evaluate`).
 - Cache key exactly as the doc's "Cache key" section specifies, `configHash` included.
 - TTL derivation per the doc: `max(minimumCacheTTL, upstreamMaxAge)`, `s-maxage` before

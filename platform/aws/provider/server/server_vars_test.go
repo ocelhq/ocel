@@ -13,11 +13,11 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 	"github.com/ocelhq/ocel/pkg/proto/env/v1/envv1connect"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 )
 
 func newTestVarsClient(t *testing.T, token string) envv1connect.EnvVarsServiceClient {

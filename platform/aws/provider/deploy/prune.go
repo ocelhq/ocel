@@ -10,7 +10,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 
-	"github.com/ocelhq/ocel/cloud/edge"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type PruneTarget struct {

@@ -4,12 +4,13 @@ packages:
   - packages/*
   - frameworks/*/*
   - platform/aws/functions/*
+  - platform/edge/cloudflare/workers/*
+  - platform/edge/cloudflare/lib/*
   - packages/native-lib/*
   - tools/*
   - scripts/*
   - examples/*
   - tests/*
-  - workers/*
 
 allowBuilds:
   '@bufbuild/buf': true

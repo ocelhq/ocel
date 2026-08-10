@@ -11,9 +11,9 @@
   "license": "MIT",
   "dependencies": {
     "@framework/next-adapter": "workspace:^",
-    "@ocel/worker-nextjs": "workspace:^",
-    "@ocel/worker-deployments-store": "workspace:^",
-    "@ocel/worker-isr-writer": "workspace:^",
+    "@platform/cf-entry": "workspace:^",
+    "@platform/cf-deployments-store": "workspace:^",
+    "@platform/cf-isr-writer": "workspace:^",
     "@vercel/nft": "^0.27.4",
     "es-module-lexer": "^1.5.4",
     "package-manager-detector": "^0.2.11",

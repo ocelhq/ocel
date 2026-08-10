@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ocelhq/ocel/cloud/edge"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func TestRollbackTarget_NoArgSelectsImmediatelyPreviousPromotion(t *testing.T) {

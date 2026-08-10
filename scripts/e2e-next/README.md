@@ -220,7 +220,7 @@ Next serves a stale entry without starting its own render (bd ocelhq-wvag.26) �
 the edge's admission tiers are then the only thing that can start one. That rests
 on one line of `next@16.2.10`, and OpenNext's caveat about it comes with it: a
 change to Next's prefetch handling would break it. `SUPPRESS_SELF_REVALIDATION`
-in `workers/nextjs/src/cache.ts` is the one-line revert — it gates both the stamp
+in `platform/edge/cloudflare/workers/entry/src/cache.ts` is the one-line revert — it gates both the stamp
 and the colo tier's refusal to store the stale serve it produces;
 `assert-suppression-golden.mjs` is the tripwire.
 

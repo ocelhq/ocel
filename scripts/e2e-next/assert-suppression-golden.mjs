@@ -73,7 +73,7 @@ if (failures > 0) {
   fail(
     `${failures} of ${VARIANTS.length} variants differ. purpose: prefetch is meant to change only ` +
       `whether Next starts a revalidating render. If Next's prefetch handling has changed, the revert ` +
-      `is SUPPRESS_SELF_REVALIDATION = false in workers/nextjs/src/cache.ts`,
+      `is SUPPRESS_SELF_REVALIDATION = false in platform/edge/cloudflare/workers/entry/src/cache.ts`,
   );
 }
 log(`${target}: no side effect from purpose: prefetch in ${VARIANTS.length} variants`);

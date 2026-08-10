@@ -153,7 +153,7 @@ carrying it while a 400 does not. (A passthrough body
 Next's own server compressed also picks up `Vary: Accept, Accept-Encoding` — an artifact of
 that server's compression middleware, not of the optimizer.)
 
-`CacheStatus` in `workers/nextjs/src/cache.ts` gains `STALE`, and it is emitted by **both**
+`CacheStatus` in `platform/edge/cloudflare/workers/entry/src/cache.ts` gains `STALE`, and it is emitted by **both**
 route classes, not just images. Until now a stale colo serve on a prerendered route
 reported `HIT`, on the reasoning that the header names the tier that answered and
 staleness only drives the background refresh. That made one header mean two different
@@ -305,7 +305,7 @@ Tests: deploy-path unit tests asserting both targets receive identical keys and 
 
 Branch: `image-opt-edge-validation`
 
-Add the route to `workers/nextjs/src/index.ts`. It must be handled **before middleware
+Add the route to `platform/edge/cloudflare/workers/entry/src/index.ts`. It must be handled **before middleware
 runs**, which is where Next handles it (`handleNextImageRequest` inside
 `normalizeAndAttachMetadata`, ahead of `handleCatchallMiddlewareRequest`) — and therefore
 also before the `serveStaticAsset` fallthrough. A broad matcher such as
@@ -373,7 +373,7 @@ visible diff.
 Branch: `image-opt-colo-cache`
 
 Wire the image route through the existing colo cache machinery in
-`workers/nextjs/src/cache.ts` (`serveCached`, `storeInColo`, `refreshOnce`, `evaluate`).
+`platform/edge/cloudflare/workers/entry/src/cache.ts` (`serveCached`, `storeInColo`, `refreshOnce`, `evaluate`).
 
 `serveCached` as written cannot carry an image response. Its storability gate
 (`storagePolicy`) demands `s-maxage`, which an image response — `public, max-age=<ttl>,

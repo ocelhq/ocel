@@ -27,7 +27,7 @@ Two behaviours the L1 sentinel design rests on are undocumented by Cloudflare:
   many machines, so the answer is a **rate**, not a yes/no: the measurement that matters is
   what fraction of foreign-isolate reads see the write, because that fraction is the
   suppression factor L2 must be sized by.
-- **Honored minimum TTL.** `workers/nextjs/src/tag-clock.ts` already ships
+- **Honored minimum TTL.** `platform/edge/cloudflare/workers/entry/src/tag-clock.ts` already ships
   `snapshotTtlSeconds = 10` and fronts the tag-snapshot read with a `cache.put` carrying
   `cache-control: max-age=10`. Cloudflare documents minimum edge TTLs only for zone-level
   Cache Rules; nothing documents a floor for `cache.put`. If `cache.put` floors TTLs upward,
@@ -228,7 +228,7 @@ stored. Re-run at `--pollSeconds 0.25` (run3) brackets it at [977, 1300] ms.
 1. **`cache.put` does not floor TTLs upward.** A 1 s entry was demonstrably gone by 1300 ms
    and a 2 s entry by 2265 ms. Cloudflare's own `age` never exceeded the requested TTL in any
    run (max `age` of 9 for a 10 s request, 59 for a 60 s request). There is no observed
-   minimum above 1 s. `snapshotTtlSeconds = 10` in `workers/nextjs/src/tag-clock.ts` is
+   minimum above 1 s. `snapshotTtlSeconds = 10` in `platform/edge/cloudflare/workers/entry/src/tag-clock.ts` is
    honored as written.
 2. **The returned `cache-control` header is not evidence about retention.** Every hit came
    back as `max-age=14400` regardless of whether 1, 2, 5, 10, 30 or 60 was written — including
@@ -305,7 +305,7 @@ across four runs, and Cloudflare's own `age` peaked at 9 in every one. The tag-c
 invalidation bound ("an invalidation reaches a PoP within one TTL") is correct as written and
 the constant needs no change.
 
-One correction to make in `workers/nextjs/src/tag-clock.ts`'s vicinity if anyone reasons from
+One correction to make in `platform/edge/cloudflare/workers/entry/src/tag-clock.ts`'s vicinity if anyone reasons from
 response headers there: the `cache-control` Cloudflare returns on a colo hit is
 `max-age=14400` regardless of what was `put`, so it cannot be used to infer the entry's
 remaining life. See §2 above.
@@ -402,7 +402,7 @@ after three consecutive clean bursts of 60. The runner's own preflight repeats t
 
 ### 0. The key-scope control, which gates everything else — **P0 held**
 
-Every colo-cache key in `workers/nextjs` is on a **synthetic hostname that belongs to no
+Every colo-cache key in `platform/edge/cloudflare/workers/entry` is on a **synthetic hostname that belongs to no
 zone**: `https://cache.ocel/…` (entries), `https://refresh.ocel/…` (the L1 sentinel),
 `https://isr.ocel/…` (the tag-clock front), `https://image.ocel/…` (the optimized-image tier).
 The spike above only ever proved an **on-zone** key (`/__cache-probe/<run>` on the serving
@@ -596,7 +596,7 @@ Two corrections to `ocelhq-wvag.8`'s own arithmetic fall out of this:
 
 - **The baseline is 60 rps, not 30.** `.8` computes "300 colos / sentinel TTL ≈ 30 rps",
   which implies a TTL of 10. PR 7 shipped `refreshSentinelTtlSeconds = 5`
-  (`workers/nextjs/src/cache.ts`), so one escape per colo is `300/5 = 60 rps`.
+  (`platform/edge/cloudflare/workers/entry/src/cache.ts`), so one escape per colo is `300/5 = 60 rps`.
 - **`E` is not 1.** It is `1 + λ_colo · W`, and under a *synchronized* herd it is not that
   either.
 
@@ -634,11 +634,11 @@ both rows are floors.
 ### 6. Staleness clause
 
 **`W` was measured against a `match`-then-`put` claim with no compare-and-set
-(`workers/nextjs/src/cache.ts`, `claimSentinel`) and against `refreshSentinelTtlSeconds = 5`
+(`platform/edge/cloudflare/workers/entry/src/cache.ts`, `claimSentinel`) and against `refreshSentinelTtlSeconds = 5`
 (same file). If either changes, this number is void.** `workers/cache-probe/src/race.ts`
 carries the same warning at the mirror itself.
 
-One comment in `workers/nextjs/src/cache.ts` — the one justifying
+One comment in `platform/edge/cloudflare/workers/entry/src/cache.ts` — the one justifying
 `refreshSentinelTtlSeconds = 5` by citing "a sentinel becoming readable from sibling isolates
 at ~200 ms" — is now **wrong by a factor of twenty-five**. The constant it justifies is
 unaffected (5 s is still far above 8 ms), only the reasoning is. That edit was made under
@@ -928,16 +928,16 @@ kind of green number this document keeps having to retract.
   would produce different ones. Nothing above depends on a difference smaller than that 13%.
 - **The delay is measured on the claim path, not on the serving path.** That the wait costs no
   user-visible latency is a property of *where* production puts it — inside `waitUntil`, behind
-  an already-served stale response — and is asserted by `workers/nextjs`' tests, not by this.
+  an already-served stale response — and is asserted by `platform/edge/cloudflare/workers/entry`' tests, not by this.
 
 ### 13. Staleness clause
 
 `E(J)` was measured against **the same claim primitive `W` was**: `match` then `put` on a miss,
 no compare-and-set, `refreshSentinelTtlSeconds = 5`
-(`workers/nextjs/src/cache.ts`, `claimSentinel`) — and against a delay drawn uniformly in
+(`platform/edge/cloudflare/workers/entry/src/cache.ts`, `claimSentinel`) — and against a delay drawn uniformly in
 `[0, J)` immediately before that `match`. **Changing the claim's shape, the sentinel TTL, or the
 place the delay is taken voids these numbers, and voids `W` with them.** The dependency runs
-both ways and `workers/nextjs/src/cache.ts` now says so at both constants.
+both ways and `platform/edge/cloudflare/workers/entry/src/cache.ts` now says so at both constants.
 
 One deliberate difference between production and this instrument: production draws from
 `[0, min(J, remaining stale window))`, because a route whose stale window is shorter than `J`
