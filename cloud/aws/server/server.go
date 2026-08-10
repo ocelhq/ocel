@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"time"
@@ -16,7 +17,6 @@ import (
 	connect "connectrpc.com/connect"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/credentials"
 	"github.com/aws/aws-sdk-go-v2/service/cloudformation"
 	"github.com/aws/aws-sdk-go-v2/service/iam"
@@ -26,9 +26,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	"github.com/aws/aws-sdk-go-v2/service/sts"
 
+	"github.com/ocelhq/ocel/cloud/aws/awscfg"
 	"github.com/ocelhq/ocel/cloud/aws/bootstrap"
 	"github.com/ocelhq/ocel/cloud/aws/deploy"
 	"github.com/ocelhq/ocel/cloud/aws/pulumirt"
+	"github.com/ocelhq/ocel/cloud/edge"
 	"github.com/ocelhq/ocel/cloud/edge/cloudflare"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -316,7 +318,7 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 	// fresh and orphaning the root stack this run just reconciled. Written to
 	// this deploy's own substrate (production or preview), and nil when
 	// reconcile itself never ran (an error before it).
-	if res.RootStackState != nil {
+	if persistRootStackState(priorRootStackState, res.RootStackState) {
 		if writeErr := bootstrap.WriteRootStackStateFor(ctx, ssmClient, substrateClass, manifest.GetSlug(), res.RootStackState); writeErr != nil {
 			if err != nil {
 				return res, fmt.Errorf("%w (additionally failed to persist root-stack state: %v)", err, writeErr)
@@ -325,6 +327,20 @@ func (s *Server) runDeploy(ctx context.Context, req *deploymentsv1.DeployRequest
 		}
 	}
 	return res, err
+}
+
+// persistRootStackState reports whether a reconciled root-stack state is worth
+// a write. The stored state is a cache of what the project's store instance
+// already holds — since /initialize became convergent, an instance hands its
+// identity back to anyone bearing the account's bootstrap credential — so it
+// changes only on a first reconcile, a renamed project, or an instance a failed
+// teardown wiped. Rewriting an identical value costs a SecureString put and its
+// KMS encrypt per deploy, and Parameter Store enforces write throughput per
+// parameter: many apps deploying into one project (an e2e run is the extreme
+// case, a whole matrix sharing one slug) otherwise converge on a single name and
+// throttle each other. It is pure.
+func persistRootStackState(prior, reconciled edge.RootStackState) bool {
+	return reconciled != nil && !maps.Equal(reconciled, prior)
 }
 
 // previewTTL is how long an ephemeral preview lives before it is considered
@@ -366,6 +382,7 @@ func cacheStoreUploader(store bootstrap.CacheStore) deploy.ArtifactUploader {
 	return s3.NewFromConfig(aws.Config{
 		Region:      store.Region,
 		Credentials: credentials.NewStaticCredentialsProvider(store.AccessKeyID, store.SecretAccessKey, ""),
+		Retryer:     awscfg.ControlRetryer,
 	}, func(o *s3.Options) {
 		o.BaseEndpoint = aws.String(store.Endpoint)
 	})
@@ -493,11 +510,7 @@ func accountID(ctx context.Context, api STSAPI) (string, error) {
 // loadAWS resolves AWS configuration from the standard default chain,
 // overriding the region only when one was supplied in the provider options.
 func loadAWS(ctx context.Context, region string) (aws.Config, error) {
-	var loadOpts []func(*awsconfig.LoadOptions) error
-	if region != "" {
-		loadOpts = append(loadOpts, awsconfig.WithRegion(region))
-	}
-	return awsconfig.LoadDefaultConfig(ctx, loadOpts...)
+	return awscfg.Control(ctx, region)
 }
 
 // resourceSummary renders the typed config the provider decoded for a

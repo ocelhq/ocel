@@ -53,12 +53,22 @@ export const LOG_PAGE_LIMIT = 1000;
 // spelling this suite's deploys can ever produce a key under.
 export const LAMBDA_ARCH = "x86_64";
 
+// One more in-process attempt than the CLI's default of three, which is what a
+// throttled call spends before it ever reaches a caller's poll loop. It cannot
+// go much higher: every attempt after the first waits an exponentially growing
+// backoff, and the whole ladder has to finish inside AWS_TIMEOUT_MS or the
+// process is killed mid-retry. Adaptive mode would be the better policy and is
+// not available here — its rate limiter learns across calls, and each `aws` is
+// a fresh process that remembers nothing.
+const AWS_CLI_MAX_ATTEMPTS = "4";
+
 export function aws(args) {
   return execFileSync("aws", args, {
     encoding: "utf8",
     timeout: AWS_TIMEOUT_MS,
     stdio: ["ignore", "pipe", "pipe"],
     maxBuffer: 64 * 1024 * 1024,
+    env: { ...process.env, AWS_RETRY_MODE: "standard", AWS_MAX_ATTEMPTS: AWS_CLI_MAX_ATTEMPTS },
   }).trim();
 }
 
