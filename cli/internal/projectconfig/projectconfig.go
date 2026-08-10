@@ -419,6 +419,10 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			boundFolders[a.Folder] = a.Name
 		}
 
+		if a.Domains.Preview != "" {
+			return nil, fmt.Errorf("app %q declares domains.preview %q: a preview domain binds to the whole project — every app is served from the project's one preview entrypoint — so declare it as a project-level domains.preview instead (per-app domains.production stays supported). Account-wide preview domains will be managed by the planned `ocel domains` command", a.Name, a.Domains.Preview)
+		}
+
 		domains, err := normalizeDomains(a.Domains)
 		if err != nil {
 			return nil, fmt.Errorf("app %q: %w", a.Name, err)

@@ -7,14 +7,18 @@ export interface ProviderDescriptor {
   options: unknown;
 }
 
-// DomainConfig maps an environment class to the custom hostname(s) served for
-// it. It is the same shape at the project level and per app; an app's entry
-// wins for that app. Production may name several hostnames (an apex plus its
-// aliases, or a "*." wildcard for a multitenant app), each attached as a
-// Cloudflare worker route; preview names a single wildcard the per-pointer
-// preview subdomains live under.
-export interface DomainConfig {
+// AppDomainConfig is the production hostname(s) one app is served on: an apex
+// plus its aliases, say, or a "*." wildcard for a multitenant app, each attached
+// as its own worker route. An app's entry wins for that app; the project-level
+// entry covers the apps that declare none.
+export interface AppDomainConfig {
   production?: string | string[];
+}
+
+// ProjectDomainConfig adds the preview wildcard, which is project-level only: a
+// preview domain is claimed by the whole project, whose one preview entrypoint
+// worker serves every app under it, so an app cannot declare one of its own.
+export interface ProjectDomainConfig extends AppDomainConfig {
   preview?: string;
 }
 
@@ -26,7 +30,7 @@ export interface AppConfig {
   path: string;
   framework: "next" | "express" | "fastify";
   entrypoint?: string;
-  domains?: DomainConfig;
+  domains?: AppDomainConfig;
   // folder is the variable folder this app's values come from — an absolute
   // path like "/checkout", and the reason two apps in one project can require
   // the same key name and get different values. Omit it to read the project
@@ -48,7 +52,7 @@ export interface OcelConfig {
   };
   provider?: ProviderDescriptor;
   apps?: AppConfig[];
-  domains?: DomainConfig;
+  domains?: ProjectDomainConfig;
 }
 
 export function defineConfig(config: OcelConfig): OcelConfig {

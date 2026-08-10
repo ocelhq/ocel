@@ -7,11 +7,10 @@ import (
 	"testing"
 )
 
-// validKey matches a valid DNS label short enough to leave the preview route
-// suffix room: leading lowercase letter, then letters, digits and hyphens, not
-// ending in a hyphen, 1–52 chars. Key is used as a preview subdomain label and
-// store pointer.
-var validKey = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,50}[a-z0-9])?$`)
+// validKey matches a valid DNS label: leading lowercase letter, then letters,
+// digits and hyphens, not ending in a hyphen, 1–maxKeyLen chars. Key is used as
+// a preview subdomain label and store pointer, and the whole label is its own.
+var validKey = regexp.MustCompile(`^[a-z]([a-z0-9-]{0,` + strconv.Itoa(maxKeyLen-2) + `}[a-z0-9])?$`)
 
 func TestResolve_KeyIsStable(t *testing.T) {
 	a, err := Resolve("feature/login", "")
@@ -149,7 +148,7 @@ func TestValidateLabel(t *testing.T) {
 			t.Errorf("ValidateLabel(%q) = %v, want nil", s, err)
 		}
 	}
-	invalid := []string{"", "Staging", "1web", "-x", "x-", "foo_bar", "a.b", "*"}
+	invalid := []string{"", "Staging", "1web", "-x", "x-", "foo_bar", "a.b", "*", "a--b", "staging--web"}
 	for _, s := range invalid {
 		if err := ValidateLabel(s); err == nil {
 			t.Errorf("ValidateLabel(%q) = nil, want an error", s)
@@ -170,13 +169,15 @@ func TestValidateLabel_TooLongNameIsRefusedActionably(t *testing.T) {
 	}
 }
 
-func TestRouteSuffixIsReservedInEveryKey(t *testing.T) {
-	if maxKeyLen+routeSuffixLen != maxLabelLen {
-		t.Errorf("maxKeyLen + routeSuffixLen = %d, want %d", maxKeyLen+routeSuffixLen, maxLabelLen)
+// A preview is served on "<key>.<base>" (or "<key>--<app>.<base>"), so the key
+// has the whole DNS label to itself.
+func TestKeyBudgetIsTheWholeLabel(t *testing.T) {
+	if maxKeyLen != maxLabelLen {
+		t.Errorf("maxKeyLen = %d, want the full DNS label %d", maxKeyLen, maxLabelLen)
 	}
 }
 
-func TestResolve_KeyLeavesRoomForRouteSuffix(t *testing.T) {
+func TestResolve_KeyFitsTheDNSLabel(t *testing.T) {
 	cases := []struct {
 		name string
 		ref  string

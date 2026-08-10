@@ -44,20 +44,40 @@ var destroyCmd = &cobra.Command{
 		ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
 
+		if err := checkDestroyFlags(destroyPreview, destroyYes); err != nil {
+			return err
+		}
 		if destroyPreview {
-			return runDestroyPreviewProject(ctx, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
+			return runDestroyPreviewProject(ctx, cwd, destroyYes, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 		}
 		return runDestroy(ctx, cwd, cmd.OutOrStdout(), cmd.ErrOrStderr(), cmd.InOrStdin())
 	},
 }
 
 // destroyPreview selects the whole-project preview footprint instead of
-// production for `ocel destroy`.
-var destroyPreview bool
+// production for `ocel destroy`; destroyYes runs that teardown without a
+// terminal.
+var (
+	destroyPreview bool
+	destroyYes     bool
+)
 
 func init() {
 	destroyCmd.Flags().BoolVar(&destroyPreview, "preview", false, "Destroy this project's entire preview footprint instead of production (leaves account-level preview bootstrap intact)")
+	destroyCmd.Flags().BoolVarP(&destroyYes, "yes", "y", false, "With --preview only: destroy the whole preview footprint — every preview, ALL its data, assets and variables — with no confirmation and no terminal, for CI. Skips both the typed-name confirmation and the interactive-terminal requirement")
 	rootCmd.AddCommand(destroyCmd)
+}
+
+// checkDestroyFlags refuses `--yes` for a production teardown. Preview
+// infrastructure is disposable by construction and CI has to be able to reclaim
+// it unattended; production is the copy of record, so typing its name at a real
+// terminal stays the only way through — and a flag that were silently ignored
+// there would be worse than one that is refused.
+func checkDestroyFlags(preview, yes bool) error {
+	if yes && !preview {
+		return errors.New("`ocel destroy --yes` is only accepted with --preview; destroying production always requires typing the project name at an interactive terminal")
+	}
+	return nil
 }
 
 // runDestroy drives a production project teardown: it refuses without a
@@ -140,10 +160,11 @@ func runDestroy(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin
 // preview pointer's app-deploy and per-name infra stacks, the preview store
 // instance, the preview root worker(s), the R2 assets and the preview root-stack
 // state — leaving the account-level preview bootstrap intact. Like production
-// destroy it refuses without a terminal and requires typing the project name.
-func runDestroyPreviewProject(ctx context.Context, cwd string, stdout, stderr io.Writer, stdin io.Reader) error {
-	if !isReaderTTY(stdin) {
-		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; it cannot be run non-interactively")
+// destroy it refuses without a terminal and requires typing the project name;
+// yes waives both, which is how CI reclaims a run's preview project.
+func runDestroyPreviewProject(ctx context.Context, cwd string, yes bool, stdout, stderr io.Writer, stdin io.Reader) error {
+	if !yes && !isReaderTTY(stdin) {
+		return errors.New("`ocel destroy --preview` needs an interactive terminal to confirm the project name; re-run with --yes to tear the preview footprint down non-interactively")
 	}
 
 	cfg, err := projectconfig.Resolve(cwd)
@@ -175,13 +196,15 @@ func runDestroyPreviewProject(ctx context.Context, cwd string, stdout, stderr io
 		fmt.Fprintln(stdout, "  • every preview variable value this project holds, including each preview's own overrides")
 		fmt.Fprintln(stdout, "The account-level preview bootstrap is left intact. This cannot be undone.")
 
-		confirmed, err := confirmDestroyProject(cfg.Slug, stdout, stdin)
-		if err != nil {
-			return err
-		}
-		if !confirmed {
-			fmt.Fprintln(stdout, "Aborted.")
-			return nil
+		if !yes {
+			confirmed, err := confirmDestroyProject(cfg.Slug, stdout, stdin)
+			if err != nil {
+				return err
+			}
+			if !confirmed {
+				fmt.Fprintln(stdout, "Aborted.")
+				return nil
+			}
 		}
 
 		req := &deploymentsv1.DestroyProjectRequest{

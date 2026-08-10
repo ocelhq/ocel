@@ -160,7 +160,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 
 	provW := ui.BuildWriter()
 	err = runProviderSession(ctx, cfg, provider, provW, provW, func(runner *providerrunner.Runner) error {
-		knownSlugs, err := preflightDeploy(ctx, runner, provider, cfg.Slug, stdout)
+		knownSlugs, err := preflightDeploy(ctx, runner, provider, cfg, stdout)
 		if err != nil {
 			return err
 		}
