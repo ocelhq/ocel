@@ -256,6 +256,17 @@ describe("trailingSlash: true", () => {
     expect(res.status).toBe(200);
     expect(res.headers.get("x-matched-path")).toBe("/_next/data/t/a.json");
   });
+
+  // canonicalPathname's isDataRequest is derived from the URL alone (a client
+  // header is not trusted for this either — see the describe above this one),
+  // so it has to recognize a data pathname even once a trailing slash has been
+  // appended to it, or this dotted-segment path gets stripped and 308'd like
+  // any other file with an extension.
+  it("does not redirect a data request that already carries a trailing slash", async () => {
+    const res = await serve(get("/_next/data/t/a.json/"), deps(scenario));
+    expect(res.status).toBe(200);
+    expect(res.headers.get("x-matched-path")).toBe("/_next/data/t/a.json");
+  });
 });
 
 describe("trailingSlash: true, basePath: /docs", () => {

@@ -115,6 +115,19 @@ function dataPagePathname(
   return `${basePath}${page === "index" ? "" : `/${page}`}` || "/";
 }
 
+// Whether a pathname is a genuine `/_next/data/<buildId>/….json` request — the
+// URL-derived source of truth for "is this a data request", used wherever that
+// question used to be answered by trusting a client-supplied x-nextjs-data
+// header. A client cannot make this true by sending a header, and Next itself
+// never treats one as a data request unless the URL says so either.
+export function isNextDataPathname(
+  pathname: string,
+  config: TrailingSlashConfig,
+  buildId: string,
+): boolean {
+  return dataPagePathname(pathname, config, buildId) !== undefined;
+}
+
 // The URL middleware is handed, which is not the routing URL: middleware runs
 // ahead of the filesystem lookup, so it sees the canonical form, and it sees a
 // data request as the page that request is for.

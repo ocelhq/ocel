@@ -6,6 +6,7 @@ import {
 import { serveStaticAsset, type AssetStoreDeps } from "./assets";
 import {
   canonicalPathname,
+  isNextDataPathname,
   middlewareMatchPathname,
   middlewarePathname,
   routingPathname,
@@ -113,6 +114,32 @@ function withoutControlHeaders(headers: Headers): Headers {
       kept.delete(name);
     }
   }
+  return kept;
+}
+
+// Next's own router-server strips these off every externally-originated
+// request before anything else runs — they are its internal protocol with
+// middleware and the render worker, not something a client is ever meant to
+// set. This worker's own transport re-adds the one it still needs
+// (x-nextjs-data, in forward() below) once it has established that itself
+// from the URL, never by trusting what arrived on the wire.
+const NEXT_INTERNAL_HEADERS = [
+  "x-middleware-rewrite",
+  "x-middleware-redirect",
+  "x-middleware-set-cookie",
+  "x-middleware-skip",
+  "x-middleware-override-headers",
+  "x-middleware-next",
+  "x-now-route-matches",
+  "x-matched-path",
+  "x-nextjs-data",
+  "x-next-resume-state-length",
+  "next-resume",
+];
+
+function withoutNextInternalHeaders(headers: Headers): Headers {
+  const kept = new Headers(headers);
+  for (const name of NEXT_INTERNAL_HEADERS) kept.delete(name);
   return kept;
 }
 
@@ -309,7 +336,17 @@ interface RouteResult {
   redirect?: { url: URL | string; status: number };
   externalRewrite?: string | URL;
   resolvedPathname?: string | null;
-  invocationTarget?: { pathname: string } | null;
+  invocationTarget?: {
+    pathname: string;
+    // The query resolveRoutes merged onto the invocation target — the client's
+    // own params plus whatever a rewrite (next.config or middleware) added.
+    // Absent only in a synthetic RouteResult a test built by hand; a real
+    // resolveRoutes result always carries one, even if empty.
+    query?: Record<string, string | string[]>;
+  } | null;
+  // Present only alongside a dynamic-route match; absent for an exact
+  // pathname, a redirect, or a miss.
+  routeMatches?: Record<string, string | string[]>;
   // next.config `headers()` rules and the middleware's own response headers.
   resolvedHeaders?: Headers;
   middleware?: MiddlewareOutcome;
@@ -536,17 +573,67 @@ type RoutingTable = Parameters<typeof resolveRoutes>[0]["routes"];
 // before routing runs — and the URL routing then sees is the *routing* form,
 // which the add-slash rule matches. Left in the table they would not sit inert:
 // they would 308 every canonical request straight back into a loop.
-function withoutInternalRedirects(routes: unknown): RoutingTable {
+//
+// @next/routing's beforeMiddleware loop only short-circuits a redirect inside
+// `if (destination)` — a next.config redirects() rule with no destination
+// (just a Location header) instead sets it on the shared resolvedHeaders and
+// keeps walking the table, so a later matching rule silently overwrites an
+// earlier one's Location. Next's own router-server stops at the first match.
+// A rule is only ever an unconditional match-and-win when it carries no `has`
+// / `missing` of its own — those still depend on runtime state this function
+// cannot evaluate, so the last-wins bug is left alone for them (worth its own
+// follow-up). Truncating the table right after the first such rule that
+// matches this request can never drop the rule that would have been the real
+// match: an unconditional redirect always wins in Next.
+type BeforeMiddlewareRule = RoutingTable["beforeMiddleware"][number] & {
+  priority?: boolean;
+};
+
+function isUnconditionalRedirect(route: BeforeMiddlewareRule): boolean {
+  return (
+    route.status !== undefined &&
+    route.status >= 300 &&
+    route.status < 400 &&
+    route.destination === undefined &&
+    !route.has &&
+    !route.missing
+  );
+}
+
+// resolveRoutes normalizes a /_next/data/<buildId>/….json URL to its page path
+// (its own normalizeNextDataUrl, gated on shouldNormalizeNextData) before it
+// ever walks beforeMiddleware — so the pathname tested here has to go through
+// the same normalization, or a data request never agrees with the library on
+// which rule matches. Mirrors the library's own algorithm exactly, including
+// its lack of a "/index" -> "/" fold (dataPagePathname's is for a different
+// purpose — the middleware-visible pathname — and does not apply here).
+function nextDataMatchPathname(pathname: string, basePath: string, buildId: string): string {
+  const prefix = `${basePath}/_next/data/${buildId}/`;
+  if (!pathname.startsWith(prefix)) return pathname;
+  const page = pathname.slice(prefix.length).replace(/\.json$/, "");
+  return basePath ? `${basePath}/${page}` : `/${page}`;
+}
+
+function withoutInternalRedirects(
+  routes: unknown,
+  pathname: string,
+  basePath: string,
+  buildId: string,
+): RoutingTable {
   const table = routes as RoutingTable;
-  const beforeMiddleware = (table.beforeMiddleware ?? []) as ({
-    priority?: boolean;
-  } & RoutingTable["beforeMiddleware"][number])[];
-  return {
-    ...table,
-    beforeMiddleware: beforeMiddleware.filter(
-      (route) => !(route.priority && route.status !== undefined),
-    ),
-  };
+  const tested = table.shouldNormalizeNextData
+    ? nextDataMatchPathname(pathname, basePath, buildId)
+    : pathname;
+  const beforeMiddleware = (table.beforeMiddleware ?? []) as BeforeMiddlewareRule[];
+  const kept: BeforeMiddlewareRule[] = [];
+  for (const route of beforeMiddleware) {
+    if (route.priority && route.status !== undefined) continue;
+    kept.push(route);
+    if (isUnconditionalRedirect(route) && new RegExp(route.sourceRegex).test(tested)) {
+      break;
+    }
+  }
+  return { ...table, beforeMiddleware: kept };
 }
 
 // Next's `headers()` rules live in the same list as the trailing-slash redirects
@@ -621,11 +708,15 @@ async function serveRequest(
   if (image) return image;
 
   const url = new URL(request.url);
-  const canonical = canonicalPathname(
-    url.pathname,
-    deps.manifest,
-    request.headers.has("x-nextjs-data"),
-  );
+  // isDataRequest is only ever consulted for a pathname that still ends in
+  // "/" (the one case applyPolicy needs it to suppress a strip-slash
+  // redirect for), which a genuine data path — ending in ".json" — never
+  // does on its own: tested against the slash-stripped form instead, so a
+  // client-supplied /_next/data/<buildId>/x.json/ is still recognized as one.
+  const isDataRequest =
+    url.pathname.endsWith("/") &&
+    isNextDataPathname(url.pathname.slice(0, -1), deps.manifest, deps.manifest.buildId);
+  const canonical = canonicalPathname(url.pathname, deps.manifest, isDataRequest);
   // Before bufferBody and before routing, so a redirected request neither has
   // its body read nor reaches middleware. Relative Location, as the manifest's
   // own redirect rules emit — which are now inert, because everything past here
@@ -644,17 +735,22 @@ async function serveRequest(
   if (rerouted) url.pathname = routed;
   // The single rebuild of the served request: routing, dispatch, the asset key,
   // the colo cache key and the origin forward all read the routing form off it
-  // and none of them normalize again.
-  if (body || rerouted) {
-    request = new Request(url, {
-      method: request.method,
-      headers: request.headers,
-      body,
-      redirect: "manual",
-      cf: request.cf,
-      signal: request.signal,
-    });
-  }
+  // and none of them normalize again. Unconditional (not just on a body or a
+  // reroute) because it is also where a client-supplied copy of Next's
+  // internal protocol headers — its own contract with middleware and the
+  // render worker, forged from the outside — is stripped, exactly as Next's
+  // router-server does at ingress. Built from `url` and the already-buffered
+  // `body`, never from `request` itself, so this never touches request's own
+  // body stream — a request answered by the redirect above must reach here
+  // having never been read.
+  request = new Request(url, {
+    method: request.method,
+    headers: withoutNextInternalHeaders(request.headers),
+    body,
+    redirect: "manual",
+    cf: request.cf,
+    signal: request.signal,
+  });
 
   // Ahead of routing and behind normalization, as Next's router-server does it:
   // a request that names no locale is given one to match on, and the root may
@@ -692,7 +788,12 @@ async function serveRequest(
     headers: request.headers,
     requestBody: streamOf(body) as ReadableStream,
     pathnames: deps.manifest.pathnames,
-    routes: withoutInternalRedirects(deps.manifest.routes),
+    routes: withoutInternalRedirects(
+      deps.manifest.routes,
+      routingUrl.pathname,
+      deps.manifest.basePath,
+      deps.manifest.buildId,
+    ),
 
     // resolveRoutes has no matcher field: whether middleware runs at all is
     // entirely this callback's decision, and it returns neither the middleware's
@@ -701,6 +802,16 @@ async function serveRequest(
       const middleware = deps.manifest.middleware;
       if (!middleware) return {};
       try {
+        // Next sets this on the request before middleware ever runs
+        // (setIsNextDataRequest, ahead of the middleware route in its own
+        // routing table) — it is what the edge adapter reads to turn a
+        // middleware redirect into x-nextjs-redirect instead of Location for
+        // a client-transition fetch. Derived from the URL alone, same as
+        // everywhere else this question is asked: a client-forged header was
+        // already stripped at ingress and must not be trusted back in here.
+        if (isNextDataPathname(requested, deps.manifest, deps.manifest.buildId)) {
+          ctx.headers.set("x-nextjs-data", "1");
+        }
         // Middleware runs ahead of the filesystem lookup, so the URL it is
         // handed is not the routing one ctx carries: it is the canonical form
         // the client is on, and for a data request the page that request is
@@ -766,7 +877,38 @@ async function serveRequest(
     return new Response("Middleware failed", { status: 500 });
   }
 
-  return dispatchResult({ ...result, middleware: outcome }, request, deps);
+  return dispatchResult(
+    { ...preferExactPathname(result, deps.manifest), middleware: outcome },
+    request,
+    deps,
+  );
+}
+
+// @next/routing checks a dynamic route before the exact-pathname (filesystem)
+// check inside its afterFiles/fallback rewrite branches — the opposite of
+// Next's own router-server, which checks the filesystem first (checkTrue() in
+// resolve-routes.ts). A rewrite landing on a page that also happens to match a
+// dynamic template is resolved to the template instead of the page it named.
+// invocationTarget.pathname is always the rewrite's real destination, so when
+// that destination is itself one of the build's pathnames, it is the page
+// Next would have served — swap it back in. A destination the build never
+// registered (an unmatched dynamic-route param) is left alone: that is the
+// dynamic route genuinely winning, not this bug.
+function preferExactPathname(result: RouteResult, manifest: Manifest): RouteResult {
+  const target = result.invocationTarget?.pathname;
+  if (
+    // Only ever a swap, never how a redirect or middleware-responded result
+    // (neither of which sets resolvedPathname) picks one up — that would
+    // stamp x-matched-path on a response the invariant at dispatchResult says
+    // must carry none.
+    result.resolvedPathname &&
+    target !== undefined &&
+    target !== result.resolvedPathname &&
+    manifest.pathnames.includes(target)
+  ) {
+    return { ...result, resolvedPathname: target };
+  }
+  return result;
 }
 
 export async function dispatchResult(
@@ -891,6 +1033,17 @@ async function dispatch(
     return staticAsset();
   }
 
+  // Next applies redirects() ahead of its dynamic-param decode check
+  // (checkTrue runs after the redirect table), so a path that both matches a
+  // next.config redirect and carries an undecodable dynamic segment is
+  // redirected, not 400'd. routeMatches is only ever populated alongside a
+  // resolved page — every branch above that can fire without one (middleware,
+  // a redirect, an external rewrite) has already returned — so this is the
+  // earliest point that agrees with Next's ordering.
+  if (hasUndecodableRouteMatch(result.routeMatches)) {
+    return new Response("Bad Request", { status: 400 });
+  }
+
   const target = manifest.dispatch[result.resolvedPathname];
   if (!target) {
     // Not in the manifest — fall back to the asset store before giving up, so
@@ -937,6 +1090,26 @@ async function dispatch(
     default:
       return staticAsset();
   }
+}
+
+// Next throws DecodeError and answers 400 when a matched dynamic route's
+// captured param fails decodeURIComponent (route-matcher.ts) — routeMatches is
+// only ever populated by a dynamic-route match, so an unmatched path (no
+// dynamic route at all) is unaffected and still falls through to a 404.
+function hasUndecodableRouteMatch(
+  routeMatches: Record<string, string | string[]> | undefined,
+): boolean {
+  if (!routeMatches) return false;
+  for (const value of Object.values(routeMatches)) {
+    for (const v of Array.isArray(value) ? value : [value]) {
+      try {
+        decodeURIComponent(v);
+      } catch {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 type PrerenderTarget = Extract<DispatchTarget, { kind: "prerender" }>;
@@ -1318,6 +1491,18 @@ function dataPathname(pathname: string, url: URL, manifest: Manifest): string {
   return `${prefix}${route || "/index"}.json`;
 }
 
+// A rewrite (next.config or middleware) can add query params that exist
+// nowhere on the client's URL — resolveRoutes merges them onto
+// invocationTarget.query, which is the only place they can be read back from.
+function searchFromQuery(query: Record<string, string | string[]>): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(query)) {
+    for (const v of Array.isArray(value) ? value : [value]) params.append(key, v);
+  }
+  const search = params.toString();
+  return search ? `?${search}` : "";
+}
+
 // originUrl points a request at its Function URL, preferring the routing
 // result's invocation target so a rewritten path reaches the right handler.
 function originUrl(
@@ -1327,7 +1512,9 @@ function originUrl(
   manifest: Manifest,
 ): URL {
   const pathname = result.invocationTarget?.pathname ?? url.pathname;
-  return new URL(dataPathname(pathname, url, manifest) + url.search, fnUrl);
+  const query = result.invocationTarget?.query;
+  const search = query ? searchFromQuery(query) : url.search;
+  return new URL(dataPathname(pathname, url, manifest) + search, fnUrl);
 }
 
 // bufferBody reads a request's body into memory so every forward of it carries a
@@ -1389,6 +1576,11 @@ function originFetch(deps: RouteDeps): typeof fetch {
 // the `origin` header against `x-forwarded-host` (falling back to `host`), so the
 // public host is stamped here — as the reverse proxy, this worker is authoritative
 // for it — or every forwarded action would abort on a host/origin mismatch.
+// Matches the origin URL forward() is about to call — after originUrl's own
+// dataPathname rewrite, so a middleware's own forward (whose URL is always the
+// page path, never the data one) never trips it.
+const ORIGIN_DATA_PATH = /\/_next\/data\/[^/]+\/.*\.json$/;
+
 export function forward(
   url: URL,
   request: Request,
@@ -1399,6 +1591,11 @@ export function forward(
   const forwarded = new Headers(headers);
   forwarded.set("x-forwarded-host", publicUrl.host);
   forwarded.set("x-forwarded-proto", publicUrl.protocol.replace(/:$/, ""));
+  // Next's router-server sets this itself once it recognizes a data URL, and
+  // the origin's own x-nextjs-matched-path response header depends on seeing
+  // it — a signal this worker must supply rather than trust from the client
+  // (see withoutNextInternalHeaders above).
+  if (ORIGIN_DATA_PATH.test(url.pathname)) forwarded.set("x-nextjs-data", "1");
   return new Request(url, {
     method: request.method,
     headers: forwarded,

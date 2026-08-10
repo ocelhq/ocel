@@ -1871,7 +1871,11 @@ describe("dispatchResult", () => {
 // it reach isRoutingRedirect at all. Next's own internal trailing-slash rules
 // never get this far — serve drops them (see trailing-slash-serve.test.ts).
 describe("routing redirects that name no destination", () => {
-  function redirectDeps(beforeMiddleware: Route[], files: Record<string, string> = {}) {
+  function redirectDeps(
+    beforeMiddleware: Route[],
+    files: Record<string, string> = {},
+    routesOverrides: Record<string, unknown> = {},
+  ) {
     return baseDeps({
       manifest: {
         buildId: "t",
@@ -1884,6 +1888,7 @@ describe("routing redirects that name no destination", () => {
           dynamicRoutes: [],
           onMatch: [],
           fallback: [],
+          ...routesOverrides,
         },
         dispatch: Object.fromEntries(
           Object.keys(files).map((path) => [path, { kind: "static" as const }]),
@@ -1946,6 +1951,116 @@ describe("routing redirects that name no destination", () => {
 
     expect(res.status).toBe(308);
     expect(res.headers.get("location")).toBe("/about/");
+  });
+
+  // @next/routing's beforeMiddleware loop only short-circuits a redirect
+  // inside `if (destination)` — a destination-less rule (bare Location) just
+  // sets it on the shared resolvedHeaders and keeps walking the table, so a
+  // later matching rule silently overwrites the earlier one's Location. Next's
+  // own router-server stops at the first match — the unprefixed default-locale
+  // rule exists precisely to win over the locale-prefixed one that follows it.
+  it("stops at the first unconditional redirect match instead of letting a later rule overwrite it", async () => {
+    const res = await serve(
+      new Request("https://app.example/en/redirect-1", { redirect: "manual" }),
+      redirectDeps([
+        {
+          sourceRegex: "^/en/redirect-1(?:/)?$",
+          headers: { Location: "/somewhere/else" },
+          status: 307,
+        },
+        {
+          sourceRegex: "^(?:/(en|fr|nl))/redirect-1(?:/)?$",
+          headers: { Location: "/$1/somewhere/else" },
+          status: 307,
+        },
+      ]),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/somewhere/else");
+  });
+
+  // resolveRoutes normalizes a /_next/data/<buildId>/….json URL to its page
+  // path before it ever walks beforeMiddleware (gated on
+  // shouldNormalizeNextData, which every deployed build sets) — so the
+  // truncation predicate has to test the same normalized form, or it never
+  // agrees with the library on which rule matched. The client-transition half
+  // of "should redirect the same for direct visit and client-transition"
+  // fetches exactly this URL.
+  it("truncates the same way for the client-transition data-request pathname", async () => {
+    const res = await serve(
+      new Request("https://app.example/_next/data/t/en/redirect-1.json", {
+        redirect: "manual",
+      }),
+      redirectDeps(
+        [
+          {
+            sourceRegex: "^/en/redirect-1(?:/)?$",
+            headers: { Location: "/somewhere/else" },
+            status: 307,
+          },
+          {
+            sourceRegex: "^(?:/(en|fr|nl))/redirect-1(?:/)?$",
+            headers: { Location: "/$1/somewhere/else" },
+            status: 307,
+          },
+        ],
+        {},
+        { shouldNormalizeNextData: true },
+      ),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/somewhere/else");
+  });
+
+  // A rule that depends on runtime state (a header, a cookie, a query param)
+  // is not an unconditional match-and-win the way a bare Location rule is —
+  // truncating the table on it could drop a later rule that really would
+  // have been the actual match once its own condition failed.
+  it("does not truncate on a redirect rule that carries a has/missing condition", async () => {
+    const res = await serve(
+      new Request("https://app.example/conditional", { redirect: "manual" }),
+      redirectDeps([
+        {
+          sourceRegex: "^/conditional(?:/)?$",
+          headers: { Location: "/from-condition" },
+          has: [{ type: "header", key: "x-flag" }],
+          status: 307,
+        },
+        {
+          sourceRegex: "^/conditional(?:/)?$",
+          headers: { Location: "/fallback" },
+          status: 307,
+        },
+      ]),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/fallback");
+  });
+
+  // A rule that does not match this request's pathname must never truncate
+  // the table out from under a later rule that does.
+  it("does not truncate on a rule that does not match this request", async () => {
+    const res = await serve(
+      new Request("https://app.example/other", { redirect: "manual" }),
+      redirectDeps([
+        {
+          sourceRegex: "^/unrelated(?:/)?$",
+          headers: { Location: "/nope" },
+          status: 307,
+        },
+        {
+          sourceRegex: "^/other(?:/)?$",
+          headers: { Location: "/matched" },
+          status: 307,
+        },
+      ]),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/matched");
   });
 });
 
@@ -2402,6 +2517,42 @@ describe("data-request invocation pathname", () => {
     expect(invoked().search).toBe("?a=1");
   });
 
+  // A rewrite (next.config or middleware) can add a query param that exists
+  // nowhere on the client's own URL — resolveRoutes merges it onto
+  // invocationTarget.query, which is the only place it can be read back from.
+  it("forwards the query resolveRoutes merged onto invocationTarget, not just the client's own search string", async () => {
+    const { deps, invoked } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: {
+          pathname: "/middleware/works",
+          query: { a: "b", foo: "bar" },
+        },
+      },
+      new Request("https://app.example/middleware/works?a=b"),
+      deps,
+    );
+
+    expect(invoked().search).toBe("?a=b&foo=bar");
+  });
+
+  it("falls back to the client's own search string when invocationTarget carries no query", async () => {
+    const { deps, invoked } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works" },
+      },
+      new Request("https://app.example/middleware/works?a=b"),
+      deps,
+    );
+
+    expect(invoked().search).toBe("?a=b");
+  });
+
   it("leaves a document request's invocation pathname untouched", async () => {
     const { deps, invoked } = lambdaDeps();
 
@@ -2450,6 +2601,285 @@ describe("data-request invocation pathname", () => {
     );
 
     expect(captured!.pathname).toBe("/_next/data/t/index.json");
+  });
+});
+
+// Next's router-server itself sets x-nextjs-data on the request it hands its
+// render worker once it recognizes a /_next/data/<buildId>/….json URL — the
+// origin's own x-nextjs-matched-path response header depends on seeing it.
+// This worker forwards under the same URL but never carried the header, so a
+// data request that did not happen to arrive with it (see also
+// withoutNextInternalHeaders, which now strips a client-sent one anyway) got
+// no x-nextjs-matched-path back.
+describe("x-nextjs-data on the origin forward", () => {
+  function lambdaDeps(): { deps: RouteDeps; headers: () => Headers } {
+    let captured: Headers | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/[...route]": { kind: "lambda", id: "fn", entryKey: "e" } },
+      },
+      functionUrls: { fn: "https://fn.example.com" },
+      fetch: (async (req: Request) => {
+        captured = req.headers;
+        return new Response("{}", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+    return { deps, headers: () => captured! };
+  }
+
+  it("stamps x-nextjs-data on a genuine data request's origin forward", async () => {
+    const { deps, headers } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works" },
+      },
+      new Request("https://app.example/_next/data/t/middleware/works.json"),
+      deps,
+    );
+
+    expect(headers().get("x-nextjs-data")).toBe("1");
+  });
+
+  it("does not stamp it on a document request's origin forward", async () => {
+    const { deps, headers } = lambdaDeps();
+
+    await dispatchResult(
+      {
+        resolvedPathname: "/[...route]",
+        invocationTarget: { pathname: "/middleware/works" },
+      },
+      new Request("https://app.example/middleware/works"),
+      deps,
+    );
+
+    expect(headers().has("x-nextjs-data")).toBe(false);
+  });
+});
+
+// Next throws DecodeError and 400s when a matched dynamic route's captured
+// param fails decodeURIComponent (route-matcher.ts) — this worker had no such
+// check and served the page normally.
+describe("decode failures on a routed dynamic param", () => {
+  it("answers 400 when a routeMatches value fails to decode", async () => {
+    const res = await dispatchResult(
+      {
+        resolvedPathname: "/[id]",
+        routeMatches: { "1": "%2", nxtPid: "%2" },
+        invocationTarget: { pathname: "/%2" },
+      },
+      new Request("https://app.example/%2"),
+      baseDeps(),
+    );
+
+    expect(res.status).toBe(400);
+  });
+
+  it("does not 400 when every routeMatches value decodes cleanly", async () => {
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: [],
+        routes: {},
+        dispatch: { "/[id]": { kind: "static" } },
+      },
+      assetStore: assetStoreServing({ "/[id].html": "doc" }),
+    });
+
+    const res = await dispatchResult(
+      {
+        resolvedPathname: "/[id]",
+        routeMatches: { "1": "hello" },
+        invocationTarget: { pathname: "/hello" },
+      },
+      new Request("https://app.example/hello"),
+      deps,
+    );
+
+    expect(res.status).toBe(200);
+  });
+
+  it("still 404s an unmatched path rather than 400ing it", async () => {
+    const res = await dispatchResult(
+      {},
+      new Request("https://app.example/%2"),
+      baseDeps({ assetStore: assetStoreServing({}) }),
+    );
+
+    expect(res.status).not.toBe(400);
+  });
+
+  // Next applies redirects() ahead of its decode check, so a next.config
+  // redirect spanning a path segment (a `/:path` destination) wins over the
+  // 400 for a request whose captured param happens to be undecodable —
+  // `resolveRoutes` still returns routeMatches alongside a redirect's
+  // resolvedHeaders/status in exactly this shape.
+  it("redirects rather than 400ing a decode failure the routing result also redirects", async () => {
+    const res = await dispatchResult(
+      {
+        resolvedPathname: "/[id]",
+        routeMatches: { "1": "%2" },
+        invocationTarget: { pathname: "/%2" },
+        status: 307,
+        resolvedHeaders: new Headers({ location: "/dest" }),
+      },
+      new Request("https://app.example/%2", { redirect: "manual" }),
+      baseDeps(),
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/dest");
+  });
+});
+
+// @next/routing checks a dynamic route before the exact-pathname (filesystem)
+// check inside its afterFiles rewrite branch — Next's own router-server does
+// the opposite. A next.config rewrite landing on a page that also happens to
+// match a dynamic template (an /[id] catch-all, say) was served as that
+// template instead of the page the rewrite named.
+describe("an afterFiles rewrite shadowed by a dynamic route", () => {
+  function shadowDeps() {
+    return baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/ssr-page", "/[id]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [
+            { sourceRegex: "^/rewrite-1(?:/)?$", destination: "/ssr-page?from=config" },
+          ],
+          dynamicRoutes: [
+            { sourceRegex: "^[/]?/(?<nxtPid>[^/]+?)(?:/)?$", destination: "/[id]?nxtPid=$nxtPid" },
+          ],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: {
+          "/ssr-page": { kind: "lambda", id: "/ssr-page" },
+          "/[id]": { kind: "static" },
+        },
+      },
+      functionUrls: { "/ssr-page": "https://fn.example.com" },
+      fetch: (async () => new Response("ssr-page rendered", { status: 200 })) as unknown as typeof fetch,
+      assetStore: assetStoreServing({ "/[id].html": "dynamic route doc" }),
+    });
+  }
+
+  it("serves the page the rewrite named rather than the dynamic route @next/routing shadows it with", async () => {
+    const res = await serve(new Request("https://app.example/rewrite-1"), shadowDeps());
+
+    expect(res.headers.get("x-matched-path")).toBe("/ssr-page");
+    expect(await res.text()).toBe("ssr-page rendered");
+  });
+
+  it("still serves the dynamic route when the rewrite's destination is not itself a build pathname", async () => {
+    const deps = shadowDeps();
+    deps.manifest.routes = {
+      ...(deps.manifest.routes as object),
+      afterFiles: [{ sourceRegex: "^/rewrite-1(?:/)?$", destination: "/foo" }],
+    } as typeof deps.manifest.routes;
+
+    const res = await serve(new Request("https://app.example/rewrite-1"), deps);
+
+    expect(res.headers.get("x-matched-path")).toBe("/[id]");
+    expect(await res.text()).toBe("dynamic route doc");
+  });
+
+  // preferExactPathname's guard requires result.resolvedPathname to already be
+  // set — a redirect result (middleware or next.config) never sets it, so the
+  // swap must never fire for one even though a redirect's invocationTarget is
+  // undefined today and could not satisfy the guard's other conditions either.
+  it("leaves a redirect result alone rather than stamping x-matched-path on it", async () => {
+    const deps = shadowDeps();
+    deps.manifest.middleware = { runtime: "edge", entryKey: "mw" };
+    deps.edge = async () =>
+      new Response(null, { status: 307, headers: { location: "/elsewhere" } });
+
+    const res = await serve(
+      new Request("https://app.example/ssr-page", { redirect: "manual" }),
+      deps,
+    );
+
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toBe("/elsewhere");
+    expect(res.headers.has("x-matched-path")).toBe(false);
+  });
+
+  // Swapping resolvedPathname also swaps which manifest.dispatch entry (and
+  // therefore which prerender config — allowHeader, allowQuery, etc.) answers
+  // the request; a rewrite to a page that also matches a dynamic template must
+  // pick up the page's own config, not the template's.
+  it("uses the exact page's own prerender config after the swap, not the shadowing template's", async () => {
+    let captured: { host: string; headers: Headers } | undefined;
+    const deps = baseDeps({
+      manifest: {
+        buildId: "t",
+        basePath: "",
+        pathnames: ["/ssg/hello", "/ssg/[slug]"],
+        routes: {
+          beforeMiddleware: [],
+          beforeFiles: [],
+          afterFiles: [
+            { sourceRegex: "^/to-ssg(?:/)?$", destination: "/ssg/hello" },
+          ],
+          dynamicRoutes: [
+            {
+              sourceRegex: "^/ssg/(?<nxtPslug>[^/]+?)(?:/)?$",
+              destination: "/ssg/[slug]?nxtPslug=$nxtPslug",
+            },
+          ],
+          onMatch: [],
+          fallback: [],
+        },
+        dispatch: {
+          "/ssg/hello": {
+            kind: "prerender",
+            id: "hello-fn",
+            config: { allowHeader: ["x-marker-hello"], allowQuery: ["keep-hello"] },
+          },
+          "/ssg/[slug]": {
+            kind: "prerender",
+            id: "slug-fn",
+            config: { allowHeader: ["x-marker-slug"], allowQuery: ["keep-slug"] },
+          },
+        },
+      },
+      functionUrls: {
+        "hello-fn": "https://hello.example.com",
+        "slug-fn": "https://slug.example.com",
+      },
+      cache: coloDeps({
+        cache: {
+          match: async () => undefined,
+          put: async () => {},
+        } as unknown as Cache,
+        waitUntil: () => {},
+      }),
+      fetch: (async (req: Request) => {
+        captured = { host: new URL(req.url).host, headers: req.headers };
+        return new Response("rendered", { status: 200 });
+      }) as unknown as typeof fetch,
+    });
+
+    const res = await serve(
+      new Request("https://app.example/to-ssg", {
+        headers: { "x-marker-hello": "1", "x-marker-slug": "1" },
+      }),
+      deps,
+    );
+
+    expect(res.headers.get("x-matched-path")).toBe("/ssg/hello");
+    expect(captured?.host).toBe("hello.example.com");
+    expect(captured?.headers.get("x-marker-hello")).toBe("1");
+    expect(captured?.headers.has("x-marker-slug")).toBe(false);
   });
 });
 
