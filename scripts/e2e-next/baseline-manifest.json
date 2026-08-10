@@ -1151,20 +1151,8 @@
   },
   "test/e2e/middleware-general/test/index.test.ts": {
     "failed": [
-      "Middleware Runtime with i18n should not treat as _next/data request with just header",
-      "Middleware Runtime with i18n passes search params with rewrites",
-      "Middleware Runtime with i18n should have correct query values for rewrite to ssg page",
-      "Middleware Runtime with i18n should redirect the same for direct visit and client-transition",
-      "Middleware Runtime with i18n should rewrite the same for direct visit and client-transition",
-      "Middleware Runtime with i18n should respond with 400 on decode failure",
       "Middleware Runtime with i18n allows to access env variables",
-      "Middleware Runtime with i18n should add a rewrite header on data requests for rewrites",
       "Middleware Runtime with i18n allows shallow linking with middleware",
-      "Middleware Runtime without i18n should not treat as _next/data request with just header",
-      "Middleware Runtime without i18n passes search params with rewrites",
-      "Middleware Runtime without i18n should have correct query values for rewrite to ssg page",
-      "Middleware Runtime without i18n should rewrite the same for direct visit and client-transition",
-      "Middleware Runtime without i18n should respond with 400 on decode failure",
       "Middleware Runtime without i18n allows to access env variables",
       "Middleware Runtime without i18n allows shallow linking with middleware"
     ],
