@@ -1,30 +1,17 @@
-import { parseMessage, type RevalidationMessage } from "../src/message.mjs";
+import { parseMessage, type RevalidationMessage } from "@platform/edge-contract/revalidation";
+import { body, isrPrefix, routeId } from "@platform/edge-contract/revalidation/sample";
 import { resolve, type Target } from "../src/origin.mjs";
+
+export { body, isrPrefix, routeId };
 
 export const bucket = "ocel-assets-1a2b3c";
 export const region = "us-east-1";
-export const isrPrefix = "prod/proj/web/BID";
-export const routeId = "/";
 export const host = "abc123.lambda-url.us-east-1.on.aws";
 export const originUrl = `https://${host}/`;
 export const recordUrl = `https://${bucket}.s3.${region}.amazonaws.com/${isrPrefix}/origin.json`;
 
 export function originDocument(functionUrls: Record<string, unknown> = { [routeId]: originUrl }): string {
   return JSON.stringify({ v: 1, functionUrls });
-}
-
-export function body(overrides: Record<string, unknown> = {}): string {
-  return JSON.stringify({
-    v: 1,
-    headers: { "x-prerender-revalidate": "s3cr3t-preview-mode-id", "x-forwarded-host": "example.com" },
-    expect: { header: "x-nextjs-cache", value: "REVALIDATED" },
-    isrPrefix,
-    routeId,
-    routePath: "/blog/post",
-    lastModified: 1_700_000_000_000,
-    enqueuedAt: 1_700_000_000_500,
-    ...overrides,
-  });
 }
 
 export const credentials = { accessKeyId: "AKIAEXAMPLE", secretAccessKey: "shhh", sessionToken: "session" };

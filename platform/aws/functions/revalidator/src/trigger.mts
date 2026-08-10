@@ -2,7 +2,7 @@ import { AwsClient } from "aws4fetch";
 
 import { triggerTimeoutMs } from "./limits.mjs";
 import type { Outcome } from "./log.mjs";
-import type { RevalidationMessage } from "./message.mjs";
+import type { RevalidationMessage } from "@platform/edge-contract/revalidation";
 import type { Target } from "./origin.mjs";
 
 export interface TriggerDeps {

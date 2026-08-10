@@ -1,5 +1,5 @@
 import { context, report, type Outcome } from "./log.mjs";
-import { parseMessage } from "./message.mjs";
+import { parseMessage } from "@platform/edge-contract/revalidation";
 import { resolve, type OriginDeps } from "./origin.mjs";
 import { trigger, type TriggerDeps } from "./trigger.mjs";
 

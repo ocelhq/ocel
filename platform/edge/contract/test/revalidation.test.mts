@@ -1,7 +1,7 @@
 import { expect, it } from "vitest";
 
-import { parseMessage } from "../src/message.mjs";
-import { body, isrPrefix, routeId } from "./fixture.mjs";
+import { parseMessage } from "../src/revalidation.mjs";
+import { body, isrPrefix, routeId } from "../src/revalidation-sample.mjs";
 
 it("accepts a well-formed message", () => {
   expect(parseMessage(body())).toEqual({

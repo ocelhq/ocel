@@ -1,7 +1,7 @@
 import { afterEach, expect, it, vi } from "vitest";
 
 import { context, report } from "../src/log.mjs";
-import { parseMessage } from "../src/message.mjs";
+import { parseMessage } from "@platform/edge-contract/revalidation";
 import { body, host, isrPrefix } from "./fixture.mjs";
 
 const bypassToken = "s3cr3t-preview-mode-id";

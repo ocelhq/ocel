@@ -1,4 +1,4 @@
-import type { Rejection, RevalidationMessage } from "./message.mjs";
+import type { Rejection, RevalidationMessage } from "@platform/edge-contract/revalidation";
 import type { ResolveFailure } from "./origin.mjs";
 
 export interface LogContext {

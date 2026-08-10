@@ -1,7 +1,7 @@
 import { expect, it, vi } from "vitest";
 
 import { originTimeoutMs } from "../src/limits.mjs";
-import { parseMessage, type RevalidationMessage } from "../src/message.mjs";
+import { parseMessage, type RevalidationMessage } from "@platform/edge-contract/revalidation";
 import { resolve, type OriginDeps, type Target } from "../src/origin.mjs";
 import { body, bucket, credentials, host, isrPrefix, originDocument, recordUrl, region } from "./fixture.mjs";
 
