@@ -20,8 +20,9 @@
     "wrangler": "^4.110.0"
   },
   "dependencies": {
-    "@next/routing": "^16.2.10",
     "@framework/next-cache": "workspace:*",
+    "@next/routing": "^16.2.10",
+    "@platform/edge-contract": "workspace:*",
     "aws4fetch": "^1.0.20"
   }
 }

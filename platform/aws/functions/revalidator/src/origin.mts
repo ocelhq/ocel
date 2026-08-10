@@ -1,7 +1,7 @@
 import { AwsClient } from "aws4fetch";
 
 import { originTimeoutMs } from "./limits.mjs";
-import type { RevalidationMessage } from "./message.mjs";
+import type { RevalidationMessage } from "@platform/edge-contract/revalidation";
 
 class ResolvedTarget {
   readonly #resolved = true;

@@ -11,7 +11,7 @@ import {
 } from "../src/cache";
 import { dispatchResult, type RouteDeps } from "../src/index";
 import type { RevalidationMessage, RevalidationRoute } from "../src/revalidation";
-import { parseMessage } from "../../../../../../platform/aws/functions/revalidator/src/message.mts";
+import { parseMessage } from "@platform/edge-contract/revalidation";
 import { coloDeps } from "./cache-deps";
 
 const isrPrefix = "prod/p/app/build";

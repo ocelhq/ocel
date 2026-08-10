@@ -1,0 +1,20 @@
+{
+  "name": "@platform/edge-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "what an edge and an origin cloud agree on, so neither has to import the other",
+  "exports": {
+    "./revalidation": "./src/revalidation.mts",
+    "./revalidation/sample": "./src/revalidation-sample.mts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  }
+}
