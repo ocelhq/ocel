@@ -117,7 +117,37 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
   infrastructure: the generic app worker(s), their custom domain(s), and the
   deployments-store worker. Created once per project and reconciled only on an
   ocel version upgrade — never mutated by a user `ocel deploy`. Managed
-  imperatively via the edge provider's API (not a Pulumi stack).
+  imperatively via the edge provider's API (not a Pulumi stack). Production gets
+  one generic worker per app, each on that app's own exact hostnames; preview
+  gets one preview entrypoint worker for the whole project.
+
+- **Preview entrypoint worker** — the single frozen worker a preview project
+  gets, named for the project alone. Neither per-app nor per-pointer: it is
+  attached once, for the project's lifetime, to the one wildcard route the
+  project's preview domain names, and resolves which app's Deployment to serve
+  from the request's own host. A preview is a pointer record in the deployments
+  store, never a worker route of its own.
+
+- **Preview domain** — the wildcard a project declares to serve its previews
+  under. It binds to the **project**, not an app (ADR 0006): declaring it claims
+  the whole wildcard, an app may not declare one of its own, and a preview deploy
+  with a worker-backed app but no preview domain is refused rather than served
+  somewhere unintended. Account-wide preview domains are a later, separate
+  concept.
+
+- **Preview host** — the hostname one pointer is served on:
+  `<pointer>.<base>` when the project has a single app, `<pointer>--<app>.<base>`
+  otherwise. Both halves live in one DNS label, so `--` separates them and the
+  app half is recovered by matching the project's own app names rather than by
+  splitting. Eliding the app is legal only in the single-app case; there is no
+  configured "default app".
+
+- **Domain claim** — who holds a hostname at the edge: the worker script bound
+  to its exact route pattern, or nobody. Preflight reports one per declared
+  hostname so a deploy onto a hostname another project owns is refused before
+  anything is built; a project's own worker never claims against it. Matching is
+  exact-pattern — an overlapping wildcard is not a match — and an edge that
+  cannot answer leaves the claim unstated rather than failing the deploy.
 
 - **Infra stack** (infra stack) — the per-project Pulumi stack holding SDK-declared
   resources (postgres, bucket, …). Runs before app stacks that depend on its
@@ -164,8 +194,9 @@ details, no specs. See `docs/adr/` for decisions with lasting consequence.
   the DO worker to write records and flip the pointer. Minted when the root stack
   is created, bound as a secret on the DO worker, and persisted in the provider's
   per-project state. The frozen worker needs none — it reads via a service
-  binding. Note: this feature is production-only; previews keep the existing
-  single-in-place-stack model with no deployments store and no rollback.
+  binding. A preview project has a store instance of its own — its pointers live
+  there — but no rollback: previews produce no retained Deployments to roll back
+  to.
 
 - **Deployment-not-found** — what the frozen worker serves (a branded 404 page
   baked into its bundle) when no active-deployment pointer exists for its app
