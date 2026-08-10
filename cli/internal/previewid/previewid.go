@@ -105,6 +105,10 @@ func sanitize(ref string) string {
 // dnsLabelPattern is the shape of a DNS label: lowercase letter start, then
 // letters, digits and hyphens, not ending in a hyphen. Length is checked
 // separately so an over-long name gets its own message.
+//
+// Deliberately stricter than the label projectconfig accepts for a slug or an
+// app name: a pointer is minted by Resolve, which always leads with a letter,
+// so a digit-led pointer would be a name no ref could produce.
 var dnsLabelPattern = regexp.MustCompile(`^[a-z]([a-z0-9-]*[a-z0-9])?$`)
 
 // appSeparator is what a multi-app project's preview host puts between the

@@ -349,8 +349,10 @@ func load(configPath string) (*Config, error) {
 	}, nil
 }
 
-// slugPattern is the DNS-label shape ValidSlug enforces.
-var slugPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
+// dnsLabelPattern is the DNS label both a project slug and an app name must
+// be: lowercase letters, digits and hyphens, 1–63 characters, not starting or
+// ending with a hyphen.
+var dnsLabelPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 
 // ValidSlug reports whether s is a usable project slug: a DNS label, meaning
 // lowercase letters, digits and hyphens only, 1–63 characters, not starting or
@@ -363,22 +365,23 @@ var slugPattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$`)
 // one back — enforces the identical rule; slug is the sole project identity, so
 // two copies of this test drifting apart would orphan infrastructure.
 func ValidSlug(s string) bool {
-	return slugPattern.MatchString(s)
+	return dnsLabelPattern.MatchString(s)
 }
 
-// validAppName reports whether a name is usable as an app's identity. Build
-// output is namespaced per app by directory, so the only constraint is that the
-// name stay a single path segment inside the output tree: anything that is a
-// separator, climbs out, or roots elsewhere is rejected. Everything else — dots
-// included — is harmless in a directory name and stays allowed.
+// validAppName reports whether a name is usable as an app's identity: the same
+// DNS label a slug must be.
+//
+// The app name is spent as a DNS label directly — a multi-app project serves a
+// preview at "<pointer>--<app>.<base>" — and as a segment of every deployed
+// name derived from it: worker scripts, asset prefixes, Pulumi stacks. Those
+// derivations already sanitized it, which left the constraint real but
+// implicit and per-caller. Per ADR 0005 there is one naming scope for every
+// deployed thing, so the constraint is made explicit and singular here, at the
+// config boundary, where an unusable name fails on read rather than partway
+// through a deploy. Being a DNS label also subsumes the path-segment rule this
+// replaces: no separator, no "..", no absolute path.
 func validAppName(name string) bool {
-	if name == "" || name == "." || name == ".." {
-		return false
-	}
-	if strings.ContainsAny(name, `/\`) || filepath.IsAbs(name) {
-		return false
-	}
-	return true
+	return dnsLabelPattern.MatchString(name)
 }
 
 // normalizeApps validates the raw apps and applies internal defaults. It is
@@ -398,7 +401,7 @@ func normalizeApps(raw rawConfig) ([]App, error) {
 			return nil, fmt.Errorf("app is missing required \"name\"")
 		}
 		if !validAppName(a.Name) {
-			return nil, fmt.Errorf("invalid app name %q — an app name is one directory segment of the build output, so it may not be a path separator, \"..\", or an absolute path", a.Name)
+			return nil, fmt.Errorf("invalid app name %q — an app name must be a DNS label: lowercase letters, digits and hyphens, 1–63 characters, not starting or ending with a hyphen. It is served as a label of a preview hostname (\"<preview>--%s.<your-preview-domain>\") and is a segment of every resource name this app deploys", a.Name, a.Name)
 		}
 		if seen[a.Name] {
 			return nil, fmt.Errorf("duplicate app name %q — app names must be unique", a.Name)

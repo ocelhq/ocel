@@ -574,9 +574,9 @@ export default {
 
 // An app name becomes a directory in the build output and part of every one of
 // that app's function logical names, so a name that could escape the output
-// tree has to be rejected at the config boundary.
-// An app name is one directory segment of the build output, so only names that
-// would escape that tree are rejected.
+// tree has to be rejected at the config boundary. The DNS-label rule subsumes
+// this, but the protection is what app-name validation exists for and must not
+// regress.
 func TestResolve_AppUnsafeNameErrors(t *testing.T) {
 	for _, name := range []string{"..", "../escape", "web/admin", `web\\admin`, "/abs"} {
 		t.Run(name, func(t *testing.T) {
@@ -599,10 +599,38 @@ export default {
 	}
 }
 
-// Names that are unremarkable as a directory segment must keep resolving —
-// a dotted name like "web.app" worked before app names were validated at all.
-func TestResolve_AppNameAllowsHarmlessPathSegments(t *testing.T) {
-	for _, name := range []string{"web.app", "we b", "app.v2", "-web"} {
+// An app name is spent as a DNS label — the app half of a multi-app preview
+// host, "<pointer>--<app>.<base>" — so names that are merely harmless as a
+// directory segment are not enough. These four were once explicitly allowed;
+// each of them makes a hostname that cannot be parsed or does not exist.
+func TestResolve_AppNameRejectsNonDNSLabels(t *testing.T) {
+	for _, name := range []string{"web.app", "we b", "app.v2", "-web", "web-", "Web", "web_admin", strings.Repeat("a", 64)} {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [{ name: "`+name+`", path: "services/api", framework: "express" }],
+};
+`)
+
+			_, err := Resolve(root)
+			if err == nil {
+				t.Fatal("Resolve: expected error, got nil")
+			}
+			if !strings.Contains(err.Error(), "invalid app name") {
+				t.Fatalf("err = %q, want it to reject the app name", err.Error())
+			}
+			if !strings.Contains(err.Error(), name) {
+				t.Fatalf("err = %q, want it to name the offending value %q", err.Error(), name)
+			}
+		})
+	}
+}
+
+// The shapes a DNS label allows must keep resolving.
+func TestResolve_AppNameAllowsDNSLabels(t *testing.T) {
+	for _, name := range []string{"web", "web-admin", "app2", "2app", "a", strings.Repeat("a", 63)} {
 		t.Run(name, func(t *testing.T) {
 			root := t.TempDir()
 			writeConfig(t, root, `
