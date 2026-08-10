@@ -26,6 +26,10 @@ export interface ProjectDomainConfig extends AppDomainConfig {
 // restricted to the frameworks Ocel supports this iteration; `entrypoint` is
 // an optional override relative to `path`.
 export interface AppConfig {
+  // name is the app's identity: a DNS-label string
+  // (^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$), because it is served as a label of
+  // a multi-app project's preview hostname ("<preview>--<app>.<base>") and is a
+  // segment of every resource name the app deploys.
   name: string;
   path: string;
   framework: "next" | "express" | "fastify";
