@@ -29,6 +29,16 @@ import { stableStringify } from "./stable-json.mjs";
 const launcherName = "__next_launcher.cjs";
 const dispatchName = "__ocel_dispatch.cjs";
 
+// The dispatch key node middleware is loaded under, in the bundle it is packed
+// into. Reserved rather than derived from the output's own id (which Next also
+// happens to spell "/_middleware") so the adapter, the dispatcher and the
+// worker cannot drift on what names it. next-dispatch.cjs hardcodes the same
+// string, because it ships as plain CJS and cannot import it — a test in
+// next-adapter.test.mts reads that source back and asserts the two literals
+// match, so a change to one without the other fails there rather than at
+// runtime.
+export const middlewareEntryKey = "/_middleware";
+
 // The ocel builder passes this app's own subtree; a bare `next build` outside
 // ocel falls back to the flat cwd path.
 function resolveOutputRoot(): string {
@@ -122,11 +132,11 @@ const adapter = {
     const pagesDistDir = join(distDir, "server", "pages") + sep;
 
     const { middleware } = outputs;
-    if (middleware?.runtime === "nodejs") {
-      throw new Error(
-        `ocel: the nodejs middleware runtime is not supported — ${middleware.sourcePage || middleware.filePath} must export \`config = { runtime: 'edge' }\``,
-      );
-    }
+    // proxy.ts builds as node middleware unconditionally (Next has no edge
+    // option for it); legacy middleware.ts stays edge unless it opts into
+    // `runtime: 'nodejs'`, which throws inside Next's own build for a proxy
+    // file. Either way this is the only field that says which tier it runs on.
+    const nodeMiddleware = middleware?.runtime === "nodejs" ? middleware : undefined;
 
     const images = compileImageConfig(config.images);
 
@@ -198,16 +208,25 @@ const adapter = {
     // A route's compiled module is an asset like any other here: it is what the
     // launcher requires, and leaving it out of the union would hide every
     // route's own bytes from the size accounting the packing rests on.
-    const assetsOf = (route: NodeRoute) => ({
+    const assetsOf = (route: { assets: Record<string, string>; filePath: string }) => ({
       ...route.assets,
       [relative(repoRoot, route.filePath)]: route.filePath,
     });
 
+    // Node middleware is never packed as an ordinary member — assertUniqueEntryKeys
+    // would reject the same entry landing in more than one bundle — but every
+    // bundle still has to be able to load it, and the manifest only ever calls
+    // bundles[0]. seedAssets absorbs it into that one bundle through the
+    // packer's own accounting (sizeBytes, missingAssets, the budget ceiling),
+    // opening bundles[0] itself when a fully static app with a proxy.ts traces
+    // zero node routes and therefore packs zero bundles.
     const { bundles, missingAssets } = packBundles(entryRoutes, {
       entryKeyOf: (route) => route.id,
       assetsOf,
       partitionBy: configClass,
+      ...(nodeMiddleware && { seedAssets: assetsOf(nodeMiddleware) }),
     });
+    const nodeMiddlewareBundleId = nodeMiddleware ? bundles[0]!.name : undefined;
 
     const bundleNameByEntryKey = new Map(
       bundles.flatMap((b) =>
@@ -239,6 +258,15 @@ const adapter = {
 
     const routes = routeTable(entryKeyByPathname, routing.dynamicRoutes ?? []);
 
+    // See NextConfigProjection for why this is computed here rather than read
+    // back from required-server-files.json at runtime.
+    const nextConfigProjection = {
+      basePath: config.basePath || "",
+      i18n: config.i18n ?? null,
+      trailingSlash: !!config.trailingSlash,
+      experimental: config.experimental ?? {},
+    };
+
     await Promise.all(
       bundles.map(async (bundle) => {
         const funcDir = join(outputRoot, "functions", `${bundle.name}.func`);
@@ -254,19 +282,32 @@ const adapter = {
           dispatchDest,
         );
 
+        const entries: Record<string, string> = Object.fromEntries(
+          bundle.members.map(({ member }) => [
+            member.id,
+            "./" + relative(projectDir, member.filePath).split(sep).join("/"),
+          ]),
+        );
+        // Only the bundle carrying middleware's assets (bundles[0]) also carries
+        // its dispatch entry — never a route table entry: routeTable() above
+        // was built from entryKeyByPathname, which knows nothing of
+        // middleware, so `/_middleware` reaches the dispatcher only via an
+        // explicit x-ocel-entry header, never as a pathname a self-fetch could
+        // hit.
+        if (nodeMiddleware && bundle.name === nodeMiddlewareBundleId) {
+          entries[middlewareEntryKey] =
+            "./" +
+            relative(projectDir, nodeMiddleware.filePath).split(sep).join("/");
+        }
+
         const launcherRel = join(appRel, launcherName);
         await writeFile(
           join(funcDir, launcherRel),
           renderLauncher(
-            Object.fromEntries(
-              bundle.members.map(({ member }) => [
-                member.id,
-                "./" +
-                  relative(projectDir, member.filePath).split(sep).join("/"),
-              ]),
-            ),
+            entries,
             primaryEntryKey(bundle.members),
             routes,
+            nextConfigProjection,
           ),
         );
 
@@ -323,6 +364,14 @@ const adapter = {
         filePath,
         join(outputRoot, "static", pathname),
       );
+    }
+
+    if (nodeMiddleware) {
+      warnNodeMiddlewareBlastRadius(nodeMiddleware, [
+        ...outputs.prerenders.map((p) => p.pathname),
+        ...outputs.staticFiles.map((f) => f.pathname),
+        ...publicFiles.map((f) => f.pathname),
+      ]);
     }
 
     // Seed each prerendered route's cache entry from the build output.
@@ -490,12 +539,25 @@ const adapter = {
       routes: routing,
 
       // An absent or empty matcher list is Next's "run on everything" — the
-      // shape a bare middleware.ts with no `config` export produces.
+      // shape a bare middleware.ts (or proxy.ts) with no `config` export
+      // produces. `runtime` is always present so the worker never has to guess
+      // which dispatch namespace `entryKey` names: a node middleware's id
+      // names a Lambda bundle the same way dispatch[...].id does for
+      // kind: "lambda", while an edge middleware's entryKey names an entry in
+      // the edge bundle instead.
       ...(middleware && {
-        middleware: {
-          entryKey: edgeEntryOf(middleware).entryKey,
-          matchers: middleware.config.matchers ?? [],
-        },
+        middleware: nodeMiddleware
+          ? {
+              runtime: "nodejs" as const,
+              id: nodeMiddlewareBundleId!,
+              entryKey: middlewareEntryKey,
+              matchers: nodeMiddleware.config.matchers ?? [],
+            }
+          : {
+              runtime: "edge" as const,
+              entryKey: edgeEntryOf(middleware).entryKey,
+              matchers: middleware.config.matchers ?? [],
+            },
       }),
 
       dispatch,
@@ -519,7 +581,9 @@ const adapter = {
 
     await emitEdgeBundle(outputRoot, distDir, [
       ...edgeRoutes,
-      ...(middleware ? [middleware] : []),
+      // Node middleware never reaches the edge bundle — it runs on Lambda like
+      // any other node output, injected into the function bundles above.
+      ...(middleware?.runtime === "edge" ? [middleware] : []),
     ]);
   },
 } satisfies NextAdapter;
@@ -551,6 +615,37 @@ function primaryEntryKey(
     (a, b) => b.sizeBytes - a.sizeBytes || (a.member.id < b.member.id ? -1 : 1),
   );
   return weighed[0]?.member.id ?? null;
+}
+
+// warnNodeMiddlewareBlastRadius reports when node middleware's matcher covers
+// part of the build's own cached surface — prerenders, static outputs and
+// public/ files, all of which the edge can otherwise answer with no Lambda
+// involved at all. Node middleware runs ahead of both, so a matcher that
+// covers one of these turns every hit on it into a round trip to the function
+// region instead. One aggregate line, never one per path, matching the voice
+// of the other build-time warnings here.
+//
+// The predicate reads only sourceRegex, never the matcher's `has`/`missing`
+// conditions the worker also applies (workers/nextjs/src/index.ts) — those can
+// only narrow a match the regex already made, never widen one, so treating
+// every sourceRegex hit as a hit makes this an upper bound on the blast
+// radius rather than an exact one, which is the right side to err on for a
+// warning.
+function warnNodeMiddlewareBlastRadius(
+  middleware: { config: { matchers?: { sourceRegex: string }[] } },
+  cachedPathnames: readonly string[],
+): void {
+  const matchers = middleware.config.matchers ?? [];
+  const regexes = matchers.map((m) => new RegExp(m.sourceRegex));
+  const matches = (pathname: string) =>
+    matchers.length === 0 || regexes.some((re) => re.test(pathname));
+  const hit = [...new Set(cachedPathnames.filter(matches))].sort();
+  if (hit.length === 0) return;
+
+  const sample = hit.slice(0, 5);
+  console.warn(
+    `ocel: node middleware's matcher covers ${hit.length} cached route(s), including ${sample.join(", ")}${hit.length > sample.length ? ", …" : ""} — each will round-trip to the function region on every request instead of being answered at the edge`,
+  );
 }
 
 // Every output that runs on the edge: the `runtime: 'edge'` routes and, when the
@@ -1237,12 +1332,24 @@ function routeTable(
   return { exact, dynamic };
 }
 
+// The `nextConfig` a node middleware invocation needs, projected once at build
+// time rather than reconstructed per bundle: basePath/i18n/trailingSlash shape
+// how Next's own adapter mirrors a request, and experimental carries whatever
+// flags that mirroring reads off it.
+interface NextConfigProjection {
+  basePath: string;
+  i18n: unknown;
+  trailingSlash: boolean;
+  experimental: unknown;
+}
+
 // The bundle's Lambda handler: the entry table, and the dispatcher wired to the
 // launcher's own `require` so the table's relative specifiers resolve from here.
 function renderLauncher(
   entries: Record<string, string>,
   primary: string | null,
   routes: RouteTable,
+  nextConfig: NextConfigProjection,
 ): string {
   return (
     [
@@ -1252,10 +1359,12 @@ function renderLauncher(
       `const ENTRIES = ${JSON.stringify(entries)}`,
       `const PRIMARY = ${JSON.stringify(primary)}`,
       `const ROUTES = ${JSON.stringify(routes)}`,
+      `const NEXT_CONFIG = ${JSON.stringify(nextConfig)}`,
       `module.exports = require(${JSON.stringify(`./${dispatchName}`)})({`,
       `  entries: ENTRIES,`,
       `  primary: PRIMARY,`,
       `  routes: ROUTES,`,
+      `  nextConfig: NEXT_CONFIG,`,
       `  load: (specifier) => require(specifier),`,
       `})`,
     ].join("\n") + "\n"

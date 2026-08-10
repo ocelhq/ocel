@@ -60,6 +60,7 @@ export { CacheEntrypoint } from "./cache-entrypoint";
 import type { CacheEntrypointProps, IsrWriterBinding } from "./cache-entrypoint";
 import { normalizeBaseDomain, previewApps, previewTarget } from "./preview";
 import { edgeOriginFetch } from "./signing";
+import { retryTransientOrigin } from "./retry";
 import type { ObjectStoreReader } from "./tag-clock";
 
 // The request headers a Next App Router response varies on. The colo cache key
@@ -255,8 +256,23 @@ interface Manifest {
   pathnames: string[];
   routes: unknown;
   dispatch: Record<string, DispatchTarget>;
-  // Absent when the app ships no middleware.
-  middleware?: { entryKey: string; matchers?: MiddlewareMatcher[] };
+  // Absent when the app ships no middleware. A discriminated union on
+  // `runtime`: legacy middleware.ts always ran on the edge, so a manifest
+  // built before this field existed carries none at all — absent reads as
+  // "edge", never a separate migration path. Next 16 deprecated
+  // middleware.ts for proxy.ts, which the framework pins to the Node.js
+  // runtime with no way to opt back to edge — so it ships inside the app's
+  // own Lambda bundle as a reserved entry (entryKey "/_middleware") and is
+  // reached the same way any other route on that bundle is: `id` names it in
+  // `functionUrls`, exactly like a `kind: "lambda"` dispatch target.
+  middleware?:
+    | { runtime?: "edge"; entryKey: string; matchers?: MiddlewareMatcher[] }
+    | {
+        runtime: "nodejs";
+        id: string;
+        entryKey: string;
+        matchers?: MiddlewareMatcher[];
+      };
   // Absent when the app opted out of the built-in optimizer (a custom loader,
   // or unoptimized: true). next/image then emits the original src and never
   // requests /_next/image, so the route is not registered at all and the path
@@ -661,7 +677,9 @@ async function serveRequest(
   }
 
   let outcome: MiddlewareOutcome | undefined;
-  let failure: unknown;
+  // Wrapped so the fail-closed check below is a presence test, not a
+  // truthiness test — a thrown falsy value must still trip it.
+  let failure: { error: unknown } | undefined;
 
   const result = (await resolveRoutes({
     url: routingUrl,
@@ -704,17 +722,16 @@ async function serveRequest(
           deps.manifest,
           deps.manifest.buildId,
         );
-        if (!deps.edge) {
-          throw new Error("no edge runtime is bound to this deployment");
-        }
-        const response = await deps.edge(
-          middleware.entryKey,
-          new Request(mwUrl, {
-            method: request.method,
-            headers: ctx.headers,
-            body,
-            redirect: "manual",
-          }),
+        const response = await invokeMiddleware(
+          middleware,
+          deps,
+          () =>
+            new Request(mwUrl, {
+              method: request.method,
+              headers: ctx.headers,
+              body,
+              redirect: "manual",
+            }),
         );
         // ctx.headers is resolveRoutes' own mutable clone, which
         // responseToMiddlewareResult rewrites in place and never returns; hold
@@ -736,7 +753,7 @@ async function serveRequest(
         outcome = { response, headers: ctx.headers };
         return middlewareResult;
       } catch (error) {
-        failure = error;
+        failure = { error };
         return {};
       }
     },
@@ -745,7 +762,7 @@ async function serveRequest(
   // Fail closed: middleware that could not run must not be routed past. An auth
   // middleware failing open serves the pages it exists to protect.
   if (failure) {
-    console.error("ocel: middleware invocation failed", failure);
+    console.error("ocel: middleware invocation failed", failure.error);
     return new Response("Middleware failed", { status: 500 });
   }
 
@@ -1403,6 +1420,38 @@ function withEntry(request: Request, entryKey: string | undefined): Request {
   if (entryKey !== undefined) headers.set(ENTRY_HEADER, entryKey);
   else headers.delete(ENTRY_HEADER);
   return new Request(request, { headers });
+}
+
+// makeRequest is a thunk, not a Request: its body is single-use, and a retry
+// needs a fresh one per attempt.
+function invokeMiddleware(
+  middleware: NonNullable<Manifest["middleware"]>,
+  deps: RouteDeps,
+  makeRequest: () => Request,
+): Promise<Response> {
+  if (middleware.runtime === "nodejs") {
+    const fnUrl = deps.functionUrls[middleware.id];
+    if (!fnUrl) {
+      throw new Error(`no function URL for middleware bundle ${middleware.id}`);
+    }
+    const doOrigin = originFetch(deps);
+    return retryTransientOrigin(() => {
+      const request = makeRequest();
+      const url = new URL(request.url);
+      const forwardUrl = new URL(url.pathname + url.search, fnUrl);
+      return doOrigin(
+        withEntry(
+          forward(forwardUrl, request, withoutControlHeaders(request.headers)),
+          middleware.entryKey,
+        ),
+      );
+    });
+  }
+
+  if (!deps.edge) {
+    throw new Error("no edge runtime is bound to this deployment");
+  }
+  return deps.edge(middleware.entryKey, makeRequest());
 }
 
 function noFunctionUrl(id: string): Response {

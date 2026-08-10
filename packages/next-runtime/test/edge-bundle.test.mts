@@ -509,16 +509,18 @@ test("fails the build when two edge outputs disagree on an env value", async () 
   );
 });
 
-test("fails the build on nodejs middleware, naming the source file", async () => {
+// proxy.ts always builds as node middleware, so the edge bundle has to stay
+// buildable without it: the edge tier never runs it, only the Lambda tier
+// does (see next-adapter.test.mts for the node-middleware injection tests).
+test("excludes node middleware from the edge bundle", async () => {
   const { projectDir, args } = await synthEdgeProject();
   args.outputs.middleware.runtime = "nodejs";
 
-  await expect(adapter.onBuildComplete!(args as never)).rejects.toThrow(
-    /\/middleware.*runtime: 'edge'/s,
-  );
-  expect(await exists(join(outputDir(projectDir), "edge/bundle.json"))).toBe(
-    false,
-  );
+  await adapter.onBuildComplete!(args as never);
+
+  const bundle = await readBundle(projectDir);
+  expect(Object.keys(bundle.entries)).not.toContain("middleware_middleware");
+  expect(Object.values(bundle.chunks)).not.toContain("MW");
 });
 
 test("dispatches each edge pathname to its entry key", async () => {
@@ -556,6 +558,7 @@ test("copies the middleware matchers into the routing manifest verbatim", async 
   await adapter.onBuildComplete!(args as never);
 
   const manifest = await readManifest(projectDir);
+  expect(manifest.middleware.runtime).toBe("edge");
   expect(manifest.middleware.entryKey).toBe("middleware_middleware");
   expect(manifest.middleware.matchers).toEqual([
     {

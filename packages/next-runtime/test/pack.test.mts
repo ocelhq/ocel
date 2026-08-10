@@ -24,6 +24,7 @@ const keys = (bundle: { members: { member: Route }[] }) =>
 function pack(routes: readonly Route[], sizes: Record<string, number> = {}, opts: {
   budgetBytes?: number;
   partitionBy?: (r: Route) => string;
+  seedAssets?: Record<string, string>;
 } = {}) {
   return packBundles(routes, {
     entryKeyOf: (r) => r.key,
@@ -424,4 +425,60 @@ test("the default budget applies when none is given", () => {
   );
 
   expect(bundles).toHaveLength(2);
+});
+
+// seedAssets is node middleware's path into a bundle: absorbed into bundles[0]
+// after ordinary packing, through the same accounting (sizeBytes,
+// missingAssets, the budget) as any other member's assets.
+test("seedAssets absorbs into bundles[0] through the packer's own accounting", () => {
+  const sizes = { "/abs/a": 100, "/abs/mw": 50 };
+  const { bundles, missingAssets } = pack(
+    [{ key: "a", assets: { "a.js": "/abs/a" } }],
+    sizes,
+    { seedAssets: { "mw.js": "/abs/mw" } },
+  );
+
+  expect(bundles).toHaveLength(1);
+  expect(bundles[0]!.assets).toEqual({ "a.js": "/abs/a", "mw.js": "/abs/mw" });
+  expect(bundles[0]!.sizeBytes).toBe(150);
+  expect(missingAssets).toEqual([]);
+});
+
+test("seedAssets opens bundle-0 itself when packing produced no bundles", () => {
+  const { bundles } = pack([], { "/abs/mw": 50 }, {
+    seedAssets: { "mw.js": "/abs/mw" },
+  });
+
+  expect(bundles).toHaveLength(1);
+  expect(bundles[0]!.name).toBe("bundle-0");
+  expect(bundles[0]!.assets).toEqual({ "mw.js": "/abs/mw" });
+  expect(bundles[0]!.members).toEqual([]);
+});
+
+test("a seedAssets source missing on disk is reported like any other missing asset", () => {
+  const { missingAssets } = packBundles(
+    [{ key: "a", assets: { "a.js": "/abs/a" } } satisfies Route],
+    {
+      entryKeyOf: (r) => r.key,
+      assetsOf: (r) => r.assets,
+      sizeOf: (abs) => (abs === "/abs/ghost" ? undefined : 1),
+      seedAssets: { "mw.js": "/abs/ghost" },
+    },
+  );
+
+  expect(missingAssets).toEqual(["mw.js"]);
+});
+
+test("warns when seedAssets pushes bundles[0] over the budget", () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const sizes = { "/abs/a": 80, "/abs/mw": 80 };
+
+  const { bundles } = pack(
+    [{ key: "a", assets: { "a.js": "/abs/a" } }],
+    sizes,
+    { budgetBytes: 100, seedAssets: { "mw.js": "/abs/mw" } },
+  );
+
+  expect(bundles[0]!.sizeBytes).toBe(160);
+  expect(warn).toHaveBeenCalledWith(expect.stringMatching(/over the 100-byte function limit/));
 });

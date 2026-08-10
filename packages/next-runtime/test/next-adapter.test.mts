@@ -2381,3 +2381,325 @@ test("fails the build when two routes resolve to the same dispatch key", async (
   );
 });
 
+// proxy.ts builds as node middleware unconditionally, with no `edgeRuntime`
+// field — this is the shape build-complete.js actually emits for it (see the
+// hasNodeMiddleware branch), reused verbatim rather than re-derived per test.
+// Matchers default to one that matches nothing, so a test that isn't about the
+// blast-radius warning stays silent by construction.
+async function withNodeMiddleware(
+  projectDir: string,
+  args: { outputs: Record<string, unknown> },
+  matchers: { source: string; sourceRegex: string }[] = [
+    { source: "/__unmatched", sourceRegex: "^/__unmatched$" },
+  ],
+): Promise<string> {
+  const filePath = join(projectDir, ".next/server/middleware.js");
+  await mkdir(dirname(filePath), { recursive: true });
+  await writeFile(filePath, "module.exports = { default: () => {} }");
+  args.outputs.middleware = {
+    pathname: "/_middleware",
+    id: "/_middleware",
+    sourcePage: "middleware",
+    assets: {},
+    type: "MIDDLEWARE",
+    runtime: "nodejs",
+    filePath,
+    config: { matchers },
+  };
+  return filePath;
+}
+
+// next-dispatch.cjs ships as plain CJS straight into the bundle and cannot
+// import middlewareEntryKey, so it hardcodes the same literal instead — this
+// is what makes that comment's claim true rather than aspirational: a change
+// to one without the other fails here, not at runtime as a 502 on every
+// matched request.
+test("pins the dispatcher's hardcoded middleware key to the adapter's exported constant", async () => {
+  const { middlewareEntryKey } = await import("../src/next-adapter.mts");
+  const dispatchSource = await readFile(
+    fileURLToPath(new URL("../src/next-dispatch.cjs", import.meta.url)),
+    "utf8",
+  );
+  const literal = dispatchSource.match(/MIDDLEWARE_ENTRY_KEY = "([^"]+)"/)?.[1];
+  expect(literal).toBe(middlewareEntryKey);
+});
+
+test("names the bundle and the reserved entry key in a nodejs middleware manifest entry", async () => {
+  const { projectDir, args } = await synthProject();
+  await withNodeMiddleware(projectDir, args, [
+    { source: "/dashboard/:path*", sourceRegex: "^/dashboard(?:/(.*))?$" },
+  ]);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.middleware).toEqual({
+    runtime: "nodejs",
+    id: "bundle-0",
+    entryKey: "/_middleware",
+    matchers: [
+      { source: "/dashboard/:path*", sourceRegex: "^/dashboard(?:/(.*))?$" },
+    ],
+  });
+});
+
+// Edge middleware keeps its own shape, discriminated the same way, so a worker
+// reading `runtime` never has to guess which entryKey namespace it names.
+test("names an edge middleware manifest entry by its edge entry key", async () => {
+  const { projectDir, args } = await synthProject();
+  const edgeFile = join(projectDir, ".next/server/edge/middleware.js");
+  await mkdir(dirname(edgeFile), { recursive: true });
+  await writeFile(edgeFile, "export default () => {}");
+  args.outputs.middleware = {
+    pathname: "/_middleware",
+    id: "middleware",
+    sourcePage: "middleware",
+    assets: {},
+    wasmAssets: {},
+    type: "MIDDLEWARE",
+    runtime: "edge",
+    filePath: edgeFile,
+    edgeRuntime: {
+      modulePath: edgeFile,
+      entryKey: "middleware_middleware",
+      handlerExport: "handler",
+    },
+    config: { matchers: [] },
+  } as never;
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.middleware).toEqual({
+    runtime: "edge",
+    entryKey: "middleware_middleware",
+    matchers: [],
+  });
+});
+
+// Only bundles[0] is ever named by the manifest as the worker's call target,
+// so that is the only bundle middleware's entry and assets need to land in —
+// a split build's other bundles carry neither.
+test("injects node middleware's entry and assets into bundle-0 only, including a split build", async () => {
+  const { projectDir, args } = await synthDedupProject();
+  const filler = join(projectDir, ".next/server/chunks/filler.js");
+  await writeFile(filler, "x".repeat(4096));
+  (args.outputs.appRoutes[0] as Record<string, unknown>).assets = {
+    "chunks/filler.js": filler,
+  };
+  args.outputs.appRoutes[1]!.assets = args.outputs.appRoutes[0]!.assets;
+  const shared = args.outputs.appPages[0]!.assets["chunks/shared.js"]!;
+  await writeFile(shared, "x".repeat(4096));
+  await withNodeMiddleware(projectDir, args as never);
+
+  process.chdir(projectDir);
+  vi.resetModules();
+  vi.doMock("../src/pack.mts", async () => {
+    const actual =
+      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    return {
+      ...actual,
+      packBundles: (members: never, opts: never) =>
+        actual.packBundles(members, { ...(opts as object), budgetBytes: 6000 }),
+    };
+  });
+  try {
+    const { default: adapter } = await import("../src/next-adapter.mts");
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    vi.doUnmock("../src/pack.mts");
+    vi.resetModules();
+  }
+
+  const { real } = await partitionFuncDirs(projectDir);
+  expect(real).toEqual(["bundle-0.func", "bundle-1.func"]);
+
+  const { entries: entries0 } = await readLauncher(projectDir, "bundle-0");
+  expect(entries0).toHaveProperty("/_middleware", "./.next/server/middleware.js");
+  expect(
+    await exists(
+      join(functionsDir(projectDir), "bundle-0.func/.next/server/middleware.js"),
+    ),
+  ).toBe(true);
+
+  const { entries: entries1 } = await readLauncher(projectDir, "bundle-1");
+  expect(entries1).not.toHaveProperty("/_middleware");
+  expect(
+    await exists(
+      join(functionsDir(projectDir), "bundle-1.func/.next/server/middleware.js"),
+    ),
+  ).toBe(false);
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.middleware.id).toBe("bundle-0");
+});
+
+// A fully static app can still ship a proxy.ts — it traces zero node routes
+// and therefore packs zero bundles, so middleware has to open its own rather
+// than being lost.
+test("opens its own bundle for node middleware when the build traces zero node routes", async () => {
+  const { projectDir, args } = await synthProject();
+  args.outputs.appRoutes = [];
+  await withNodeMiddleware(projectDir, args);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const { real } = await partitionFuncDirs(projectDir);
+  expect(real).toEqual(["bundle-0.func"]);
+
+  const { entries, primary } = await readLauncher(projectDir);
+  expect(Object.keys(entries)).toEqual(["/_middleware"]);
+  // No route entry exists to elect, so nothing is primed at INIT through the
+  // ordinary primary path — the dispatcher primes middleware itself.
+  expect(primary).toBeNull();
+
+  const manifest = await readManifest(projectDir);
+  expect(manifest.middleware).toMatchObject({ runtime: "nodejs", id: "bundle-0" });
+});
+
+// Middleware's assets are routed through the packer's own accounting
+// (absorb/seedAssets), not a hand-rolled loop — so a missing source is
+// reported in the same aggregate warning a missing route asset gets, rather
+// than silently excluded from it.
+test("reports a missing middleware asset in the aggregate no-source warning", async () => {
+  const { projectDir, args } = await synthProject();
+  await withNodeMiddleware(projectDir, args);
+  const ghost = join(projectDir, ".next/server/ghost.js");
+  (args.outputs.middleware as { assets: Record<string, string> }).assets = {
+    "chunks/ghost.js": ghost,
+  };
+
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const adapter = await loadAdapterIn(projectDir);
+  let lines: string[];
+  try {
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    lines = warn.mock.calls.map((c) => String(c[0]));
+    warn.mockRestore();
+  }
+
+  const noSourceLines = lines.filter((l) => l.includes("no source on disk"));
+  expect(noSourceLines).toHaveLength(1);
+  expect(noSourceLines[0]).toContain("chunks/ghost.js");
+  expect(await exists(join(functionsDir(projectDir), "bundle-0.func/chunks/ghost.js"))).toBe(
+    false,
+  );
+});
+
+// Same accounting path as an ordinary route: a bundle middleware's assets push
+// over the artifact ceiling warns, the way a member overflowing a fresh bundle
+// already does in pack.mts — rather than shipping an artifact AWS silently
+// rejects at deploy.
+test("warns when node middleware's assets push a bundle over the budget", async () => {
+  const { projectDir, args } = await synthProject();
+  args.outputs.appRoutes = [];
+  await withNodeMiddleware(projectDir, args);
+  const filePath = (args.outputs.middleware as { filePath: string }).filePath;
+  await writeFile(filePath, "x".repeat(8192));
+
+  process.chdir(projectDir);
+  vi.resetModules();
+  vi.doMock("../src/pack.mts", async () => {
+    const actual =
+      await vi.importActual<typeof import("../src/pack.mts")>("../src/pack.mts");
+    return {
+      ...actual,
+      packBundles: (members: never, opts: never) =>
+        actual.packBundles(members, { ...(opts as object), budgetBytes: 100 }),
+    };
+  });
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  let lines: string[];
+  try {
+    const { default: adapter } = await import("../src/next-adapter.mts");
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    lines = warn.mock.calls.map((c) => String(c[0]));
+    warn.mockRestore();
+    vi.doUnmock("../src/pack.mts");
+    vi.resetModules();
+  }
+
+  expect(lines.some((l) => l.includes("over the") && l.includes("function limit"))).toBe(true);
+});
+
+// The dispatcher reaches `/_middleware` only through an explicit x-ocel-entry
+// header the worker sends — never through a loopback self-fetch to that
+// pathname — so it must never occupy a slot in the route table a self-fetch
+// could land on.
+test("never lets /_middleware enter the launcher's route table", async () => {
+  const { projectDir, args } = await synthProject();
+  await withNodeMiddleware(projectDir, args);
+  const adapter = await loadAdapterIn(projectDir);
+
+  await adapter.onBuildComplete(args as never);
+
+  const { entries, routes } = await readLauncher(projectDir);
+  expect(entries).toHaveProperty("/_middleware");
+  expect(routes.exact).not.toHaveProperty("/_middleware");
+  expect(routes.dynamic.some(([, key]) => key === "/_middleware")).toBe(false);
+});
+
+test("warns once when node middleware's matcher covers part of the build's cached surface", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
+  await withNodeMiddleware(projectDir, args, [
+    { source: "/:path*", sourceRegex: "^/.*$" },
+  ]);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const adapter = await loadAdapterIn(projectDir);
+  let lines: string[];
+  try {
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    lines = warn.mock.calls.map((c) => String(c[0]));
+    warn.mockRestore();
+  }
+
+  const blastRadius = lines.filter((l) => l.includes("matcher covers"));
+  expect(blastRadius).toHaveLength(1);
+  expect(blastRadius[0]).toContain("round-trip to the function region");
+});
+
+test("stays silent when node middleware's matcher covers no cached route", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
+  await withNodeMiddleware(projectDir, args, [
+    { source: "/only-dynamic", sourceRegex: "^/only-dynamic$" },
+  ]);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const adapter = await loadAdapterIn(projectDir);
+  let lines: string[];
+  try {
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    lines = warn.mock.calls.map((c) => String(c[0]));
+    warn.mockRestore();
+  }
+
+  expect(lines.some((l) => l.includes("matcher covers"))).toBe(false);
+});
+
+// An absent/empty matcher list is "run on everything", the same reading the
+// manifest gives it — so it has to warn about the build's whole cached
+// surface, not stay silent because it named no pattern.
+test("treats an empty matcher list as covering everything for the blast-radius warning", async () => {
+  const { projectDir, args } = await synthProject();
+  await withStaticFile(projectDir, args, "/_next/static/chunks/a.js", "JS");
+  await withNodeMiddleware(projectDir, args, []);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const adapter = await loadAdapterIn(projectDir);
+  let lines: string[];
+  try {
+    await adapter.onBuildComplete(args as never);
+  } finally {
+    lines = warn.mock.calls.map((c) => String(c[0]));
+    warn.mockRestore();
+  }
+
+  expect(lines.some((l) => l.includes("matcher covers"))).toBe(true);
+});

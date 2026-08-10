@@ -312,6 +312,14 @@ jobs:
           NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
         run: node "$ADAPTER_DIR/scripts/e2e-next/assert-isr.mjs"
 
+      # A 200 from / cannot see whether node middleware ever ran at all — the
+      # top-level-await bug this guards against 502'd every matched request,
+      # forever, from a message pointing at the wrong thing.
+      - name: Assert node middleware (proxy.ts) actually runs
+        env:
+          NEXT_TEST_DEPLOY_URL: ${{ env.SMOKE_URL }}
+        run: node "$ADAPTER_DIR/scripts/e2e-next/assert-proxy.mjs"
+
       - name: Assert the logs script emits all three markers
         working-directory: ${{ env.SMOKE_APP }}
         env:

@@ -1,5 +1,7 @@
 import Module, { createRequire } from "node:module";
 import fs, { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { Writable } from "node:stream";
+import type http from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -813,4 +815,379 @@ test("reports a route module that exposes no response-cache getter, once", () =>
 
   expect(errors).toHaveBeenCalledTimes(1);
   expect(String(errors.mock.calls[0]?.[0])).toMatch(/getResponseCache/);
+});
+
+// Node middleware (proxy.ts). The launcher injects it under this reserved key
+// — see middlewareEntryKey in next-adapter.mts, mirrored as MIDDLEWARE_ENTRY_KEY
+// in the source under test — never as an ordinary route.
+const MIDDLEWARE_KEY = "/_middleware";
+
+// A Writable stand-in for the real http.ServerResponse the membrane hands the
+// dispatcher: middleware's response can carry a real body, so a plain object
+// with just `.end()` can't be piped through node:stream/promises' pipeline.
+function fakeMiddlewareRes() {
+  const chunks: Buffer[] = [];
+  const res = new Writable({
+    write(chunk, _enc, cb) {
+      chunks.push(Buffer.from(chunk));
+      cb();
+    },
+  }) as Writable & {
+    statusCode: number;
+    headers: Record<string, unknown>;
+    setHeader: (name: string, value: unknown) => void;
+    text: () => string;
+  };
+  res.statusCode = 200;
+  res.headers = {};
+  res.setHeader = (name, value) => {
+    res.headers[name.toLowerCase()] = value;
+  };
+  res.text = () => Buffer.concat(chunks).toString("utf8");
+  return res;
+}
+
+// The worker always names middleware explicitly via x-ocel-entry — it is
+// absent from the route table by design, so a self-fetch can never land on it
+// by pathname (see next-adapter.mts's routeTable()).
+function middlewareReq(overrides: Partial<http.IncomingMessage> = {}) {
+  return {
+    url: "/dashboard",
+    method: "GET",
+    headers: { host: "app.example.com", "x-ocel-entry": MIDDLEWARE_KEY },
+    ...overrides,
+  } as unknown as http.IncomingMessage;
+}
+
+test("loads the middleware entry at INIT alongside the primary", () => {
+  const { loads, load } = fakeLoader();
+
+  createDispatch({
+    entries: { ...ENTRIES, [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
+    primary: "app/page",
+    load,
+  });
+
+  expect(loads).toEqual([
+    ENTRIES["app/page"],
+    "./.next/server/middleware.js",
+  ]);
+});
+
+test("loads the middleware entry at INIT even with no primary to elect", () => {
+  const { loads, load } = fakeLoader();
+
+  createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./.next/server/middleware.js" },
+    primary: null,
+    load,
+  });
+
+  expect(loads).toEqual(["./.next/server/middleware.js"]);
+});
+
+test("dispatches the reserved key through the adapter-function contract, not .handler", async () => {
+  const seen: unknown[] = [];
+  const response = new Response("hi", { status: 200 });
+  const load = () => ({
+    default: (args: unknown) => {
+      seen.push(args);
+      return { response };
+    },
+    handler: () => {
+      throw new Error("must not be called for middleware");
+    },
+  });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    nextConfig: { basePath: "", i18n: null, trailingSlash: false, experimental: {} },
+    load,
+  });
+  const res = fakeMiddlewareRes();
+
+  await dispatch.handler(middlewareReq(), res, {});
+
+  expect(res.statusCode).toBe(200);
+  expect(res.text()).toBe("hi");
+  expect(seen).toHaveLength(1);
+  const call = seen[0] as { page: string; handler: unknown; request: Record<string, unknown> };
+  expect(call.page).toBe("middleware");
+  expect(call.request.method).toBe("GET");
+  expect(call.request.url).toBe("https://app.example.com/dashboard");
+  expect(call.request.nextConfig).toEqual({
+    basePath: "",
+    i18n: null,
+    trailingSlash: false,
+    experimental: {},
+  });
+  // GET carries no body: constructing a Request with one throws.
+  expect(call.request.body).toBeUndefined();
+});
+
+test("prefers the forwarded host and proto the membrane normalizes onto the request", async () => {
+  let seenUrl = "";
+  const load = () => ({
+    default: (args: { request: { url: string } }) => {
+      seenUrl = args.request.url;
+      return { response: new Response(null, { status: 200 }) };
+    },
+  });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+
+  await dispatch.handler(
+    middlewareReq({
+      url: "/blog/hello?x=1",
+      headers: {
+        host: "internal.local",
+        "x-forwarded-host": "app.example.com",
+        "x-forwarded-proto": "https",
+        "x-ocel-entry": MIDDLEWARE_KEY,
+      },
+    } as never),
+    fakeMiddlewareRes(),
+    {},
+  );
+
+  expect(seenUrl).toBe("https://app.example.com/blog/hello?x=1");
+});
+
+test("carries a POST body as a readable web stream of the request's real bytes", async () => {
+  const bodies: unknown[] = [];
+  const load = () => ({
+    default: async (args: { request: { body: ReadableStream } }) => {
+      bodies.push(args.request.body);
+      const chunks: Buffer[] = [];
+      for await (const chunk of args.request.body) chunks.push(Buffer.from(chunk));
+      return {
+        response: new Response(Buffer.concat(chunks).toString("utf8"), { status: 200 }),
+      };
+    },
+  });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+
+  // Readable.toWeb throws on a non-Uint8Array chunk, so this has to be real
+  // Buffer chunks — a Readable.from(["string"]) source would throw the moment
+  // anything actually consumed it, which a test that never reads the stream
+  // would never notice.
+  const { Readable } = await import("node:stream");
+  const postReq = Readable.from([Buffer.from("pay"), Buffer.from("load")]) as unknown as http.IncomingMessage;
+  Object.assign(postReq, {
+    url: "/submit",
+    method: "POST",
+    headers: { host: "a", "x-ocel-entry": MIDDLEWARE_KEY },
+  });
+  const res = fakeMiddlewareRes();
+
+  await dispatch.handler(postReq, res, {});
+
+  expect(bodies[0]).toBeInstanceOf(ReadableStream);
+  expect(res.text()).toBe("payload");
+});
+
+test("forwards every Set-Cookie value onto the real response", async () => {
+  const response = new Response(null, { status: 200 });
+  response.headers.append("set-cookie", "a=1; Path=/");
+  response.headers.append("set-cookie", "b=2; Path=/");
+  const load = () => ({ default: () => ({ response }) });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+  const res = fakeMiddlewareRes();
+
+  await dispatch.handler(middlewareReq(), res, {});
+
+  expect(res.headers["set-cookie"]).toEqual(["a=1; Path=/", "b=2; Path=/"]);
+});
+
+// A `proxy.ts` with a top-level await compiles to a module whose exports are
+// a Promise, not the object itself — Next's own next-server.js documents and
+// handles this. Without awaiting it, `.default` reads off the Promise object
+// and is undefined, so every matched request 502s for the life of the
+// deployment.
+test("awaits a top-level-await middleware module before reading its default export", async () => {
+  const load = () =>
+    Promise.resolve({ default: () => ({ response: new Response("hi", { status: 200 }) }) });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+  const res = fakeMiddlewareRes();
+
+  await dispatch.handler(middlewareReq(), res, {});
+
+  expect(res.statusCode).toBe(200);
+  expect(res.text()).toBe("hi");
+});
+
+// The failure is deterministic, so both requests see it — matching the
+// memoized-failure semantics a synchronous require throw already gets.
+test("fails closed on both requests when a top-level-await module rejects", async () => {
+  silenceErrors();
+  const load = () => Promise.reject(new Error("boom"));
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+
+  const first = fakeMiddlewareRes();
+  await dispatch.handler(middlewareReq(), first, {});
+  const second = fakeMiddlewareRes();
+  await dispatch.handler(middlewareReq(), second, {});
+
+  expect(first.statusCode).toBe(502);
+  expect(first.text()).toMatch(/boom/);
+  expect(second.statusCode).toBe(502);
+  expect(second.text()).toMatch(/boom/);
+});
+
+// The module is primed at INIT (loadEntry runs synchronously, kicking off the
+// require's underlying work) even though nothing awaits its settlement until
+// a request arrives — this is what proves priming does not regress under a
+// Promise-valued module.
+test("primes a top-level-await middleware module at INIT, not deferred to first request", () => {
+  const loads: string[] = [];
+  const load = (path: string) => {
+    loads.push(path);
+    return Promise.resolve({ default: () => ({}) });
+  };
+
+  createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+
+  expect(loads).toEqual(["./middleware.js"]);
+});
+
+test("registers the adapter's waitUntil on the invocation's own ctx", async () => {
+  let settled = false;
+  const backgroundWork = Promise.resolve().then(() => {
+    settled = true;
+  });
+  const load = () => ({
+    default: () => ({ response: new Response(null, { status: 200 }), waitUntil: backgroundWork }),
+  });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+  const registered: Promise<unknown>[] = [];
+  const ctx = { waitUntil: (p: Promise<unknown>) => registered.push(p) };
+
+  await dispatch.handler(middlewareReq(), fakeMiddlewareRes(), ctx);
+
+  expect(registered).toEqual([backgroundWork]);
+  await backgroundWork;
+  expect(settled).toBe(true);
+});
+
+// Next's own next-server.js passes waitUntil inside the request object, not
+// only as the return channel — a middleware that calls request.waitUntil()
+// directly (rather than returning it) would otherwise register nothing, and
+// the adapter's own NextFetchEvent fallback drops anything registered after
+// the adapter returns instead of deferring it.
+test("passes a request.waitUntil that forwards to the invocation's own ctx", async () => {
+  let captured: ((p: Promise<unknown>) => void) | undefined;
+  const registered: Promise<unknown>[] = [];
+  const load = () => ({
+    default: (args: { request: { waitUntil: (p: Promise<unknown>) => void } }) => {
+      captured = args.request.waitUntil;
+      return { response: new Response(null, { status: 200 }) };
+    },
+  });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+  const ctx = { waitUntil: (p: Promise<unknown>) => registered.push(p) };
+
+  await dispatch.handler(middlewareReq(), fakeMiddlewareRes(), ctx);
+  const work = Promise.resolve();
+  captured?.(work);
+
+  expect(registered).toEqual([work]);
+});
+
+test("fails closed when the middleware module throws", async () => {
+  silenceErrors();
+  const load = () => ({
+    default: () => {
+      throw new Error("boom");
+    },
+  });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+  const res = fakeMiddlewareRes();
+
+  await dispatch.handler(middlewareReq(), res, {});
+
+  expect(res.statusCode).toBe(502);
+  expect(res.text()).toMatch(/boom/);
+});
+
+test("fails closed when the middleware module exports no adapter function", async () => {
+  const load = () => ({ notAnAdapter: true });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+  const res = fakeMiddlewareRes();
+
+  await dispatch.handler(middlewareReq(), res, {});
+
+  expect(res.statusCode).toBe(502);
+  expect(res.text()).toMatch(new RegExp(MIDDLEWARE_KEY.replace(/\//g, "\\/")));
+});
+
+test("fails closed when the adapter function returns no Response", async () => {
+  const load = () => ({ default: () => ({ response: undefined }) });
+  const dispatch = createDispatch({
+    entries: { [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: null,
+    load,
+  });
+  const res = fakeMiddlewareRes();
+
+  await dispatch.handler(middlewareReq(), res, {});
+
+  expect(res.statusCode).toBe(502);
+});
+
+// warm() iterates every entry the bundle carries with no special case for
+// middleware, so priming it at scale-out time falls out of the existing walk
+// rather than needing its own path.
+test("warm() picks up the middleware entry for free", () => {
+  stubCompileCache();
+  const { loads, load } = cachingLoader({});
+  const dispatch = createDispatch({
+    entries: { ...WARM_ENTRIES, [MIDDLEWARE_KEY]: "./middleware.js" },
+    primary: "app/page",
+    load,
+  });
+
+  const report = dispatch.warm(NO_LIMITS);
+
+  expect(loads).toContain("./middleware.js");
+  expect(report.entries).toBe(4);
+  expect(report.loaded).toBe(4);
 });
