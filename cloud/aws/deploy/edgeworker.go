@@ -84,7 +84,7 @@ func deployEdgeWorker(ctx context.Context, cfg Config, manifest *deploymentsv1.M
 			progress(fmt.Sprintf("Deploying %s to the edge", name))
 		}
 		result, err := cfg.Edge.DeployApp(ctx, edge.AppDeployment{
-			Name:    workerScriptName(cfg.StackName, name),
+			Name:    workerScriptName(cfg.Slug, cfg.Env, name),
 			Domains: domains[name],
 			Worker:  worker,
 			Values:  cfg.EdgeValues,
@@ -302,18 +302,32 @@ func quotedList(names []string) string {
 // maxWorkerNameLen is the platform limit on an edge deployment name.
 const maxWorkerNameLen = 63
 
+// projectWorkerStem is the prefix every worker Ocel deploys for a project
+// carries: "ocel-<slug>--". The doubled hyphen is the project boundary, and it
+// is what makes a worker name answer "whose is this?" exactly: sanitizeWorkerName
+// collapses every run of out-of-charset characters to a single hyphen, so no
+// slug, environment or app segment can contain "--", and a sibling project
+// slugged "<slug>-something" renders "ocel-<slug>-something--…", which is not
+// under this stem. Without it the slug's own hyphens are indistinguishable from
+// the segment boundary, and one project's claim check, route pruning and
+// teardown all reach the sibling's workers. Pure.
+func projectWorkerStem(slug string) string {
+	return sanitizeWorkerName("ocel-"+slug) + "--"
+}
+
 // workerScriptName is the deterministic deployment identity of one app's
 // worker: the project and environment, then the app. The app segment is what
 // keeps two apps in one project apart, so the project-and-environment segment
 // absorbs any clamping needed to fit the platform limit and the app segment is
-// carried whole.
-func workerScriptName(stackName, app string) string {
+// carried whole. Clamping can eat into the project boundary, which reads as
+// nobody's worker rather than someone else's — see ProjectOwnsWorker.
+func workerScriptName(slug, env, app string) string {
 	appSegment := sanitizeWorkerName(app)
 	budget := maxWorkerNameLen - len(appSegment) - 1
 	if budget <= 0 {
 		return appSegment
 	}
-	stackSegment := clamp(sanitizeWorkerName("ocel-"+stackName), budget)
+	stackSegment := clamp(projectWorkerStem(slug)+sanitizeWorkerName(env), budget)
 	if stackSegment == "" {
 		return appSegment
 	}

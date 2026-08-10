@@ -130,7 +130,7 @@ func TestDeployEdgeWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	setWorkerBundle(t)
 
 	fake := &recordingEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
 	manifest := &deploymentsv1.Manifest{
 		Functions: []*deploymentsv1.ManifestFunction{
 			{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"},
@@ -144,8 +144,8 @@ func TestDeployEdgeWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	}
 
 	up := fake.only(t)
-	if up.Name != "ocel-proj-1-prod-web" {
-		t.Errorf("Name = %q, want ocel-proj-1-prod-web", up.Name)
+	if up.Name != "ocel-proj-1--prod-web" {
+		t.Errorf("Name = %q, want ocel-proj-1--prod-web", up.Name)
 	}
 	if string(up.Worker.Main.Content) != "export default {}" {
 		t.Errorf("Main content = %q", up.Worker.Main.Content)
@@ -159,7 +159,7 @@ func TestDeployEdgeWorker_AssemblesUploadAndReportsURL(t *testing.T) {
 	if len(up.Worker.Assets) != 1 || up.Worker.Assets[0].Path != "/next.svg" {
 		t.Errorf("expected the static asset, got %v", up.Worker.Assets)
 	}
-	if len(out) != 1 || out[0].GetFunction().GetUrl() != "https://ocel-proj-1-prod-web.acme.workers.dev" {
+	if len(out) != 1 || out[0].GetFunction().GetUrl() != "https://ocel-proj-1--prod-web.acme.workers.dev" {
 		t.Errorf("expected the worker URL output, got %v", out)
 	}
 }
@@ -178,6 +178,7 @@ func TestDeployEdgeWorker_FullyConfiguredBindingSet(t *testing.T) {
 		Edge:            fake,
 		ArtifactRoot:    artifactRoot,
 		StackName:       "proj_1-prod",
+		Slug:            "proj_1",
 		Region:          "us-west-2",
 		AssetBucket:     "ocel-assets",
 		StateTable:      "ocel-state",
@@ -223,7 +224,7 @@ func TestDeployEdgeWorker_FullyConfiguredBindingSet(t *testing.T) {
 func TestDeployEdgeWorker_NoCacheBindingsWithoutEdgeCreds(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
 	fake := &recordingEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
 	manifest := &deploymentsv1.Manifest{
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 	}
@@ -274,7 +275,7 @@ func TestDeployResolver_EdgeCredentialsConfigured(t *testing.T) {
 func TestDeployEdgeWorker_UnresolvableRouteFailsNamingIt(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
 	fake := &recordingEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
 	manifest := &deploymentsv1.Manifest{
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "orphan", Framework: "next", App: "web", RouteId: "/orphan"}},
 	}
@@ -293,7 +294,7 @@ func TestDeployEdgeWorker_UnresolvableRouteFailsNamingIt(t *testing.T) {
 
 func TestDeployEdgeWorker_UnsupportedPairingNamesBoth(t *testing.T) {
 	artifactRoot := writeMinimalWorkerArtifacts(t)
-	cfg := Config{Edge: &otherEdge{}, ArtifactRoot: artifactRoot, StackName: "proj_1-prod"}
+	cfg := Config{Edge: &otherEdge{}, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod"}
 	manifest := &deploymentsv1.Manifest{
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "index", Framework: "next", App: "web", RouteId: "/"}},
 	}
@@ -323,7 +324,7 @@ func TestDeployEdgeWorker_DomainsOnlyForProduction(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			artifactRoot := writeMinimalWorkerArtifacts(t)
 			fake := &recordingEdge{}
-			cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Class: tc.class}
+			cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj_1-prod", Slug: "proj_1", Env: "prod", Class: tc.class}
 			manifest := &deploymentsv1.Manifest{
 				Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "api_documents", Framework: "next", App: "web", RouteId: "/api/documents"}},
 				Domains:   tc.domains,
@@ -419,14 +420,14 @@ func twoNextApps(t *testing.T) (string, *deploymentsv1.Manifest, []*deploymentsv
 func TestDeployEdgeWorker_OneWorkerPerApp(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
 	fake := &recordingEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod"}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod"}
 
 	out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 	if err != nil {
 		t.Fatalf("deployEdgeWorker: %v", err)
 	}
 
-	want := []string{"ocel-proj-prod-web", "ocel-proj-prod-docs"}
+	want := []string{"ocel-proj--prod-web", "ocel-proj--prod-docs"}
 	if got := fake.names(); !slicesEqual(got, want) {
 		t.Fatalf("deployed script names = %v, want %v", got, want)
 	}
@@ -437,8 +438,8 @@ func TestDeployEdgeWorker_OneWorkerPerApp(t *testing.T) {
 		t.Fatalf("expected one output per worker, got %v", out)
 	}
 	if got := appURLs(manifest, append(outputs, out...)); !slicesEqual(got, []string{
-		"https://ocel-proj-prod-web.acme.workers.dev",
-		"https://ocel-proj-prod-docs.acme.workers.dev",
+		"https://ocel-proj--prod-web.acme.workers.dev",
+		"https://ocel-proj--prod-docs.acme.workers.dev",
 	}) {
 		t.Errorf("appURLs = %v, want both worker URLs", got)
 	}
@@ -447,9 +448,9 @@ func TestDeployEdgeWorker_OneWorkerPerApp(t *testing.T) {
 // The app segment is what keeps two apps apart, so it must survive a project and
 // environment long enough to overrun the platform's 63-char script-name limit.
 func TestWorkerScriptName_AppSegmentSurvivesTruncation(t *testing.T) {
-	stack := strings.Repeat("verylongproject", 5) + "-production"
-	web := workerScriptName(stack, "web")
-	docs := workerScriptName(stack, "docs")
+	slug := strings.Repeat("verylongproject", 5)
+	web := workerScriptName(slug, "prod", "web")
+	docs := workerScriptName(slug, "prod", "docs")
 
 	for _, name := range []string{web, docs} {
 		if len(name) > maxWorkerNameLen {
@@ -473,12 +474,12 @@ func TestDeployEdgeWorker_AppDomainWins(t *testing.T) {
 	manifest.GetApps()[1].Domains = classDomains("production", "docs.acme.com")
 
 	fake := &recordingEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 	if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 		t.Fatalf("deployEdgeWorker: %v", err)
 	}
 
-	want := map[string][]string{"ocel-proj-prod-web": {"web.acme.com"}, "ocel-proj-prod-docs": {"docs.acme.com"}}
+	want := map[string][]string{"ocel-proj--prod-web": {"web.acme.com"}, "ocel-proj--prod-docs": {"docs.acme.com"}}
 	for _, d := range fake.deployed {
 		if !slicesEqual(d.Domains, want[d.Name]) {
 			t.Errorf("%s Domains = %v, want %v", d.Name, d.Domains, want[d.Name])
@@ -510,7 +511,7 @@ func TestDeployEdgeWorker_ProjectDomainNeedsExactlyOneWorkerApp(t *testing.T) {
 	}
 
 	fake := &recordingEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 	out, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 	if err != nil {
 		t.Fatalf("deployEdgeWorker: %v", err)
@@ -521,7 +522,7 @@ func TestDeployEdgeWorker_ProjectDomainNeedsExactlyOneWorkerApp(t *testing.T) {
 	// The Express app has no registry entry, so it is served from its own
 	// Function URL.
 	if got := appURLs(manifest, append(outputs, out...)); !slicesEqual(got, []string{
-		"https://ocel-proj-prod-web.acme.workers.dev",
+		"https://ocel-proj--prod-web.acme.workers.dev",
 		"https://api-fn.lambda-url.aws/",
 	}) {
 		t.Errorf("appURLs = %v", got)
@@ -533,7 +534,7 @@ func TestDeployEdgeWorker_ProjectDomainWithTwoWorkerAppsIsAmbiguous(t *testing.T
 	manifest.Domains = classDomains("production", "project.acme.com")
 
 	fake := &recordingEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
 	_, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil)
 	if err == nil {
 		t.Fatal("expected an ambiguous project-level domain to fail the deploy")
@@ -557,12 +558,12 @@ func TestDeployEdgeWorker_PreviewDeploysEveryWorkerWithoutDomains(t *testing.T) 
 	manifest.GetApps()[0].Domains = classDomains("production", "web.acme.com")
 
 	fake := &recordingEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-preview-pr-7", Class: deploymentsv1.Environment_CLASS_PREVIEW}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-preview-pr-7", Slug: "proj", Env: "preview-pr-7", Class: deploymentsv1.Environment_CLASS_PREVIEW}
 	if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 		t.Fatalf("deployEdgeWorker: %v", err)
 	}
 
-	want := []string{"ocel-proj-preview-pr-7-web", "ocel-proj-preview-pr-7-docs"}
+	want := []string{"ocel-proj--preview-pr-7-web", "ocel-proj--preview-pr-7-docs"}
 	if got := fake.names(); !slicesEqual(got, want) {
 		t.Fatalf("deployed script names = %v, want %v", got, want)
 	}
@@ -576,7 +577,7 @@ func TestDeployEdgeWorker_PreviewDeploysEveryWorkerWithoutDomains(t *testing.T) 
 func TestDeployEdgeWorker_WarnsAboutWorkerAtThePreviousName(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
 	fake := &legacyEdge{existing: map[string]bool{"ocel-proj-prod": true}}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod"}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod"}
 
 	var msgs []string
 	if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, func(m string) { msgs = append(msgs, m) }); err != nil {
@@ -585,7 +586,7 @@ func TestDeployEdgeWorker_WarnsAboutWorkerAtThePreviousName(t *testing.T) {
 
 	var warned string
 	for _, m := range msgs {
-		if strings.Contains(m, "ocel-proj-prod") && !strings.Contains(m, "ocel-proj-prod-") {
+		if strings.Contains(m, "ocel-proj-prod") && !strings.Contains(m, "ocel-proj--prod-") {
 			warned = m
 		}
 	}
@@ -603,7 +604,7 @@ func TestDeployEdgeWorker_WarnsAboutWorkerAtThePreviousName(t *testing.T) {
 func TestDeployEdgeWorker_NoWarningWithoutALegacyWorker(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
 	fake := &legacyEdge{}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod"}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod"}
 
 	var msgs []string
 	if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, func(m string) { msgs = append(msgs, m) }); err != nil {
@@ -638,7 +639,7 @@ func TestDeployEdgeWorker_HandsTheEdgeItsOwnBootstrapValues(t *testing.T) {
 	artifactRoot, manifest, outputs := twoNextApps(t)
 	fake := &recordingEdge{}
 	values := map[string]string{"bucketName": "edge-cache-7f3", "zoneID": "z1"}
-	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", EdgeValues: values}
+	cfg := Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod", EdgeValues: values}
 
 	if _, err := deployEdgeWorker(context.Background(), cfg, manifest, outputs, nil); err != nil {
 		t.Fatalf("deployEdgeWorker: %v", err)
@@ -668,7 +669,7 @@ func TestDeployEdgeWorker_ConfiguredAppWithNoFunctionsDeploysNoWorker(t *testing
 		Slug: "proj",
 		Apps: []*deploymentsv1.ManifestApp{{Name: "marketing", Framework: "next"}},
 	}
-	cfg := Config{Edge: fake, ArtifactRoot: t.TempDir(), StackName: "proj-prod"}
+	cfg := Config{Edge: fake, ArtifactRoot: t.TempDir(), StackName: "proj-prod", Slug: "proj", Env: "prod"}
 
 	out, err := deployEdgeWorker(context.Background(), cfg, manifest, nil, nil)
 	if err != nil {
@@ -697,10 +698,10 @@ func TestDeployEdgeWorker_ZeroFunctionAppDoesNotBlockOthers(t *testing.T) {
 	outputs := []*deploymentsv1.ResourceOutput{fnOutput("web_index", "https://web-fn.lambda-url.aws/")}
 	fake := &recordingEdge{}
 
-	if _, err := deployEdgeWorker(context.Background(), Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod"}, manifest, outputs, nil); err != nil {
+	if _, err := deployEdgeWorker(context.Background(), Config{Edge: fake, ArtifactRoot: artifactRoot, StackName: "proj-prod", Slug: "proj", Env: "prod"}, manifest, outputs, nil); err != nil {
 		t.Fatalf("deployEdgeWorker: %v", err)
 	}
-	if got := fake.names(); !slicesEqual(got, []string{"ocel-proj-prod-web"}) {
+	if got := fake.names(); !slicesEqual(got, []string{"ocel-proj--prod-web"}) {
 		t.Errorf("deployed = %v, want only the app that emitted functions", got)
 	}
 }

@@ -101,7 +101,7 @@ func TestPreviewProjectWorkers_ReclaimsTheWholeWorkerFamily(t *testing.T) {
 		previewWorkerName("shop"),
 		previewWorkerName("shop") + "-api",
 	})
-	want := []string{"ocel-shop-preview", "ocel-shop-preview-api", "ocel-shop-preview-web"}
+	want := []string{"ocel-shop--preview", "ocel-shop--preview-api", "ocel-shop--preview-web"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("workers = %v, want %v", got, want)
 	}
@@ -109,7 +109,7 @@ func TestPreviewProjectWorkers_ReclaimsTheWholeWorkerFamily(t *testing.T) {
 
 func TestPreviewProjectWorkers_AnEmptyListStillReclaimsTheEntrypoint(t *testing.T) {
 	got := previewProjectWorkers("shop", nil)
-	if !reflect.DeepEqual(got, []string{"ocel-shop-preview"}) {
+	if !reflect.DeepEqual(got, []string{"ocel-shop--preview"}) {
 		t.Errorf("workers = %v, want just the entrypoint worker", got)
 	}
 }
@@ -120,18 +120,19 @@ func TestPreviewProjectWorkers_NeverAdoptsANameOutsideTheFamily(t *testing.T) {
 	got := previewProjectWorkers("shop", []string{
 		previewWorkerName("shopfoo"),
 		previewWorkerName("other") + "-web",
-		"ocel-shop-preview-web",
-		"ocel-shop-previewer",
-		workerScriptName("shop-production", "web"),
+		"ocel-shop--preview-web",
+		"ocel-shop--previewer",
+		"ocel-shop-preview--prod-web",
+		workerScriptName("shop", "prod", "web"),
 	})
-	want := []string{"ocel-shop-preview", "ocel-shop-preview-web"}
+	want := []string{"ocel-shop--preview", "ocel-shop--preview-web"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("workers = %v, want %v", got, want)
 	}
 }
 
 func TestPreviewProjectWorkers_NoSlugNamesNothing(t *testing.T) {
-	if got := previewProjectWorkers("", []string{"ocel-shop-preview"}); got != nil {
+	if got := previewProjectWorkers("", []string{"ocel-shop--preview"}); got != nil {
 		t.Errorf("workers = %v, want none for a project with no slug", got)
 	}
 }

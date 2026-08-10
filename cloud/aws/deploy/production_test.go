@@ -299,12 +299,12 @@ func TestWorkerAppURL(t *testing.T) {
 
 func TestPreviewWorkerName_ProjectScopedAndDistinctFromProduction(t *testing.T) {
 	name := previewWorkerName("shop")
-	if want := "ocel-shop-preview"; name != want {
+	if want := "ocel-shop--preview"; name != want {
 		t.Fatalf("previewWorkerName = %q, want %q", name, want)
 	}
 	// The worker resolves the app from the request host, so no app ever appears in
 	// its name — and it must never reach this project's production workers.
-	if prod := workerScriptName("shop-production", "web"); prod == name || strings.HasPrefix(prod, name) {
+	if prod := workerScriptName("shop", "prod", "web"); prod == name || strings.HasPrefix(prod, name) {
 		t.Errorf("production worker %q collides with the preview worker %q", prod, name)
 	}
 }
@@ -339,8 +339,8 @@ func TestRootStackSpecs_PreviewIsOneProjectScopedSpec(t *testing.T) {
 		t.Fatalf("specs = %d, want 1 for the whole project", len(specs))
 	}
 	spec := specs[0]
-	if spec.GenericName != "ocel-proj-preview" {
-		t.Errorf("GenericName = %q, want ocel-proj-preview", spec.GenericName)
+	if spec.GenericName != "ocel-proj--preview" {
+		t.Errorf("GenericName = %q, want ocel-proj--preview", spec.GenericName)
 	}
 	if !slicesEqual(spec.Domains, []string{"*.preview.acme.com"}) {
 		t.Errorf("Domains = %v, want the declared wildcard", spec.Domains)
@@ -414,10 +414,16 @@ func TestProjectOwnsWorker(t *testing.T) {
 		want   bool
 	}{
 		{"its own preview worker", "shop", previewWorkerName("shop"), true},
-		{"its own production worker", "shop", workerScriptName("shop-production", "web"), true},
+		{"its own production worker", "shop", workerScriptName("shop", "prod", "web"), true},
 		{"another project's preview worker", "shop", previewWorkerName("other"), false},
 		{"a hand-made worker", "shop", "my-worker", false},
 		{"a sibling whose slug merely starts with ours", "shop", previewWorkerName("shopfoo"), false},
+		// The reason worker names carry a doubled hyphen at the project
+		// boundary: "shop-preview" is a valid slug, and reading its workers as
+		// "shop"'s would let one project repoint and prune the other's routes.
+		{"a sibling whose slug extends ours by a segment", "shop", previewWorkerName("shop-preview"), false},
+		{"that sibling's production worker", "shop", workerScriptName("shop-preview", "prod", "web"), false},
+		{"and ours is not theirs either", "shop-preview", previewWorkerName("shop"), false},
 		{"no slug recognises nothing", "", previewWorkerName("shop"), false},
 		{"no script", "shop", "", false},
 	}

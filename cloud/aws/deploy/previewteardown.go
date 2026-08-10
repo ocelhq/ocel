@@ -230,9 +230,9 @@ func DestroyPreviewProject(ctx context.Context, stack edge.RootStack, state edge
 // shape of this deploy left standing. It filters the reported names itself
 // rather than trusting the enumeration, because what comes back is deleted:
 // nothing outside the family previewWorkerName heads can get in, so a sibling
-// project's worker and this project's production workers are never among them
-// (subject to previewWorkerName's collision caveat). Sorted, so a re-run tears
-// down in the same order. Pure.
+// project's worker — which cannot render a name under this project's boundary
+// (projectWorkerStem) — and this project's production workers are never among
+// them. Sorted, so a re-run tears down in the same order. Pure.
 func previewProjectWorkers(slug string, deployed []string) []string {
 	stem := previewWorkerName(slug)
 	if slug == "" || stem == "" {

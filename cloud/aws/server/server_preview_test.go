@@ -115,8 +115,8 @@ func routeOwners(byPattern map[string]string, fail map[string]bool) routeOwnerFu
 
 func TestDomainClaims_AnswersInRequestOrderWithTheOwningScript(t *testing.T) {
 	owner := routeOwners(map[string]string{
-		"*.preview.app.com/*": "ocel-other-preview",
-		"shop.com/*":          "ocel-shop-prod-web",
+		"*.preview.app.com/*": "ocel-other--preview",
+		"shop.com/*":          "ocel-shop--prod-web",
 	}, nil)
 
 	got := domainClaims(context.Background(), owner, "shop", []string{"*.preview.app.com", "free.com", "shop.com"})
@@ -124,7 +124,7 @@ func TestDomainClaims_AnswersInRequestOrderWithTheOwningScript(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("claims = %d, want one per requested hostname", len(got))
 	}
-	if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel-other-preview" {
+	if got[0].GetHostname() != "*.preview.app.com" || got[0].GetStatus() != deploymentsv1.DomainClaim_STATUS_CLAIMED || got[0].GetOwner() != "ocel-other--preview" {
 		t.Errorf("claim[0] = %+v, want another project's worker reported as the owner", got[0])
 	}
 	if got[1].GetHostname() != "free.com" || got[1].GetStatus() != deploymentsv1.DomainClaim_STATUS_UNCLAIMED || got[1].GetOwner() != "" {
