@@ -421,7 +421,7 @@ behind two manual steps.
   downloads, verifies and uploads the artifact; the worker binds it. Both human-gated
   steps land here.
 
-Source lives in a new **`packages/image-optimizer`**, not in `packages/lambda-entrypoints`.
+Source lives in a new **`platform/aws/functions/image-optimizer`**, not in `platform/aws/functions/entrypoints`.
 Its lifecycle is the reason: this artifact is account-global, versioned independently and
 pinned by a digest compiled into the CLI, whereas `lambda-entrypoints` ships per-deploy
 alongside an app build. A separate package also keeps sharp — a heavy native dependency —

@@ -1140,7 +1140,7 @@
    "projectSlug": "e2e-sweep-2026-07-27e-b9c074ce",
    "openIssues": [],
    "failedTests": {},
-   "infraError": "ocel build exited with 1 before deploy: \"ocel: the nodejs middleware runtime is not supported — middleware must export `config = { runtime: 'edge' }`\" thrown from onBuildComplete in packages/next-runtime/dist/next-adapter.mjs:78. Exact signature of ocelhq-dly. The suite's 9 test cases are all reported failed by Jest ONLY because beforeAll could not deploy — they produced no adapter signal and must NOT be counted as test failures."
+   "infraError": "ocel build exited with 1 before deploy: \"ocel: the nodejs middleware runtime is not supported — middleware must export `config = { runtime: 'edge' }`\" thrown from onBuildComplete in frameworks/next/adapter/dist/next-adapter.mjs:78. Exact signature of ocelhq-dly. The suite's 9 test cases are all reported failed by Jest ONLY because beforeAll could not deploy — they produced no adapter signal and must NOT be counted as test failures."
   },
   "test/e2e/app-dir/pages-to-app-routing/pages-to-app-routing.test.ts": {
    "lastRun": "sweep-2026-07-27e",
@@ -7383,7 +7383,7 @@
    "kind": "adapter",
    "tests": 15,
    "oneLine": "Prerendered app-page RSC responses carry content-type text/html; client navigation degrades to a full page reload",
-   "fixSite": "packages/lambda-entrypoints/src/next/cache-handler.mts",
+   "fixSite": "platform/aws/functions/entrypoints/src/next/cache-handler.mts",
    "inMembraneLayer": true,
    "matchers": [
     {
@@ -7725,7 +7725,7 @@
    "kind": "adapter",
    "tests": 5,
    "oneLine": "No /_next/image optimizer: every next/image src 404s (worker finds no route, falls through to the 404 asset)",
-   "fixSite": "packages/next-runtime/src/next-adapter.mts:247 (routingManifest.dispatch) + workers/nextjs/src/index.ts",
+   "fixSite": "frameworks/next/adapter/src/next-adapter.mts:247 (routingManifest.dispatch) + workers/nextjs/src/index.ts",
    "matchers": [
     {
      "kind": "http-request",
@@ -8804,7 +8804,7 @@
    "priority": "P1",
    "tests": 2,
    "oneLine": "with basePath the app 404 document is unreachable: the fallback probes <root>/404.html while the build wrote <root>/base/404 (no basePath prefix AND no .html)",
-   "fixSite": "workers/nextjs/src/assets.ts:82-84 (notFound probe never given manifest.basePath) + packages/next-runtime next-adapter.mts:233-241 (.html appended only when pathname === literal /404 or /500)",
+   "fixSite": "workers/nextjs/src/assets.ts:82-84 (notFound probe never given manifest.basePath) + frameworks/next/adapter next-adapter.mts:233-241 (.html appended only when pathname === literal /404 or /500)",
    "suites": [
     "test/e2e/invalid-static-asset-404-app/invalid-static-asset-404-app-base-path.test.ts",
     "test/e2e/invalid-static-asset-404-pages/invalid-static-asset-404-pages-base-path.test.ts"

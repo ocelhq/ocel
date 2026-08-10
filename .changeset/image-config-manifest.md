@@ -1,5 +1,5 @@
 ---
-"@ocel/next-runtime": minor
+"@framework/next-adapter": minor
 ---
 
 Carry the Next `images` config and static-asset content hashes in the routing manifest

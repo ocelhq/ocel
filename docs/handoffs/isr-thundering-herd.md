@@ -286,7 +286,7 @@ duplicate render, never a suppressed one.
 - **The query-string divergence was confirmed on one leg only.** The queue leg is confirmed —
   `/q?x=1` stores at `…/cache/q.cache.json`, one key, no query. The fallback leg was not driven.
 
-- **The artifact is deterministic.** `pnpm --filter @ocel/revalidator zip` from a clean `dist/`
+- **The artifact is deterministic.** `pnpm --filter @platform/aws-revalidator zip` from a clean `dist/`
   three times produced a byte-identical archive, confirmed with `cmp` and not merely by
   comparing hashes: **sha256 `2f830a670b3fbc9f313018375cb2f1d88f6b5950e986373079d212548ca8a0dd`,
   5843 bytes**. Re-derived from a clean rebuild while writing this handoff and unchanged.
@@ -388,9 +388,9 @@ described in `.27`'s section above.
 
 ### Verified offline at the tip of 18, 2026-08-05
 
-Re-run while writing this handoff, not transcribed: `@ocel/revalidator` **70**,
+Re-run while writing this handoff, not transcribed: `@platform/aws-revalidator` **70**,
 `@ocel/worker-nextjs` **639**, `@ocel/isr-writer` **70**, `@framework/next-cache` **42**,
-`@ocel/tag-publisher` **15**, `@ocel-scripts/e2e-next` **43**. `cloud/aws` and `cloud/edge` both
+`@platform/aws-tag-publisher` **15**, `@ocel-scripts/e2e-next` **43**. `cloud/aws` and `cloud/edge` both
 build, test and `gofmt` clean — the single `gofmt -l cloud/edge` hit,
 `cloud/edge/cloudflare/cloudflare_test.go`, is still the pre-existing drift from `b17467f` and is
 still untouched. `pnpm -r --no-bail typecheck`: **15 pass / 1 fail**, the known
@@ -1347,9 +1347,9 @@ Four quality findings were applied in `57b92c5`:
   branch, so the `unusable` guard cannot affect them). Deleted as redundant; its sibling has
   the teeth.
 
-Verified after the fixes: `packages/lambda-entrypoints` 197/197 — the long-standing failing
+Verified after the fixes: `platform/aws/functions/entrypoints` 197/197 — the long-standing failing
 case died with the paging mechanism it tested, so the suite is green for the first time in this
-stack; `frameworks/next/cache` 42; `packages/tag-publisher` 15; `workers/nextjs` 529;
+stack; `frameworks/next/cache` 42; `platform/aws/functions/tag-publisher` 15; `workers/nextjs` 529;
 `workers/isr-writer` 70; `pnpm -r --no-bail typecheck` clean except
 `examples/next-cache-lab` (see "Standing notes"); `cloud/aws` builds and tests clean.
 
@@ -1373,7 +1373,7 @@ removal into one ticket:
    per-deploy write secret. Plus the Go generalization that lets a script gain a DO class.
 2. **The edge stops writing R2** and raises through the DO instead, over a new `ISR_WRITER`
    service binding.
-3. **DynamoDB Streams + the account-level publisher Lambda** (`packages/tag-publisher/`),
+3. **DynamoDB Streams + the account-level publisher Lambda** (`platform/aws/functions/tag-publisher/`),
    mirroring `cloud/aws/bootstrap/optimizer.go` end to end, with the ESM, a DLQ and an alarm.
 4. **The Lambda publisher and the last standing R2 credential are gone.**
 
@@ -1424,8 +1424,8 @@ Two independent reviews (spec + adversarial). Six findings, all fixed:
   **this same PR deleted**.
 - Two concurrent bootstraps failed instead of converging on one seed.
 
-Verified: `workers/isr-writer` 70; `packages/tag-publisher` 15; `frameworks/next/cache` 41;
-`workers/nextjs` 529; `workers/deployments-store` 63; `packages/lambda-entrypoints` 190 of 191
+Verified: `workers/isr-writer` 70; `platform/aws/functions/tag-publisher` 15; `frameworks/next/cache` 41;
+`workers/nextjs` 529; `workers/deployments-store` 63; `platform/aws/functions/entrypoints` 190 of 191
 (the known pre-existing `test/tag-clock.test.mts` case, which survives the publisher's retirement
 because it covers cursor advancement, not publishing); `pnpm -r --no-bail typecheck` clean except
 `examples/next-cache-lab` (see "Standing notes"); `cloud/aws` and `cloud/edge` build and test clean.
@@ -1487,7 +1487,7 @@ fixed on the branch. Four came out of it:
 - Comment/name cleanups: `PrerenderGroup.key` → `entryKey` (the name now carries what four
   lines of comment did), and a paragraph duplicated verbatim across two packages kept once.
 
-Verified after the fixes: `frameworks/next/adapter` 157; `packages/lambda-entrypoints` 217 of
+Verified after the fixes: `frameworks/next/adapter` 157; `platform/aws/functions/entrypoints` 217 of
 218 (the one failure is the known pre-existing `test/tag-clock.test.mts`, identical on the
 base commit); `workers/nextjs` 525; `frameworks/next/cache` 34; `pnpm -r --no-bail typecheck`
 clean except `examples/next-cache-lab` (see "Standing notes"), which fails on the base commit
@@ -1531,7 +1531,7 @@ credential primitives both account-level workers had copied are now one package,
 Verified after the fixes: `pnpm -r --no-bail typecheck` clean across every source package
 (the `examples/*` failure is pre-existing — see "Standing notes");
 `workers/isr-writer` 42; `workers/deployments-store` 63; `packages/worker-auth` 7;
-`frameworks/next/cache` 34; `workers/nextjs` 523; `packages/lambda-entrypoints` 207 of 208 (the
+`frameworks/next/cache` 34; `workers/nextjs` 523; `platform/aws/functions/entrypoints` 207 of 208 (the
 known pre-existing `test/tag-clock.test.mts`); `cloud/aws` and `cloud/edge` build and test
 clean. Note `gofmt -l` flags `cloud/edge/cloudflare/cloudflare_test.go` — pre-existing drift
 from `b17467f`, untouched by this stack.
@@ -1562,7 +1562,7 @@ serving path, and both are regression-tested:
 
 ### The credential is narrowed, not gone
 
-The tag-clock snapshot publisher (`packages/lambda-entrypoints/src/next/use-cache-store.mts`)
+The tag-clock snapshot publisher (`platform/aws/functions/entrypoints/src/next/use-cache-store.mts`)
 still writes `tag-clock.json` into the adopted store directly, so `OCEL_CACHE_STORE_PARAM`,
 the `OCEL_ISR_STORE_ACCESS_KEY_ID` / `OCEL_ISR_STORE_SECRET_ACCESS_KEY` injection and the
 accessor behind them survive PR 2, narrowed to that one consumer (the accessor is renamed
@@ -1852,7 +1852,7 @@ already-bootstrapped account and `ocel-isr-writer-preview` carries both `IsrDepl
 
 `tag-publisher-v0.0.1` is cut and both constants are pinned (`fdf045c`). Verified rather than
 assumed: the asset downloaded from the public release URL hashes to the pinned digest, and
-`pnpm --filter @ocel/tag-publisher zip` reproduces it byte for byte (473419 bytes), so the
+`pnpm --filter @platform/aws-tag-publisher zip` reproduces it byte for byte (473419 bytes), so the
 reproducible-archive claim behind the pin holds. `artifactPin.pinned()` is now true, so
 bootstrap renders the publisher instead of skipping it.
 

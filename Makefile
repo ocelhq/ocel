@@ -22,14 +22,14 @@ proto:
 	pnpm gen
 
 layer:
-	pnpm --filter @ocel/lambda-entrypoints build
+	pnpm --filter @platform/aws-entrypoints build
 	rm -rf $(LAYER_DIR)/ocel
 	mkdir -p $(LAYER_DIR)/ocel
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
 	  go build -tags lambda.norpc -ldflags="-s -w" \
-	  -o $(CURDIR)/$(LAYER_DIR)/ocel/bootstrap ./cloud/aws/cmd/lambdanode/bootstrap
+	  -o $(CURDIR)/$(LAYER_DIR)/ocel/bootstrap ./platform/aws/provider/cmd/lambdanode/bootstrap
 	chmod +x $(LAYER_DIR)/ocel/bootstrap
-	cp -R packages/lambda-entrypoints/dist/. $(LAYER_DIR)/ocel/
+	cp -R platform/aws/functions/entrypoints/dist/. $(LAYER_DIR)/ocel/
 	rm -f $(LAYER_ZIP)
 	cd $(LAYER_DIR) && zip -r $(CURDIR)/$(LAYER_ZIP) ocel
 

@@ -7,14 +7,14 @@ re-derived from the spec.**
 
 Spec of record: `docs/research/isr-queue-revalidation-design.md` (read §0a's amendment
 index first; §9 is the acceptance list this runbook executes). Package contract:
-`packages/revalidator/README.md`. Prior live runs and the traps they hit:
+`platform/aws/functions/revalidator/README.md`. Prior live runs and the traps they hit:
 `docs/handoffs/isr-thundering-herd.md`, sections `.14`, `.15`, `ocelhq-yo9b`.
 
 ## 0. What is already established, and what is not
 
 | Fact | Established how |
 | --- | --- |
-| The artifact builds reproducibly | `pnpm --filter @ocel/revalidator zip` run three times from a clean `dist/`, byte-identical each time |
+| The artifact builds reproducibly | `pnpm --filter @platform/aws-revalidator zip` run three times from a clean `dist/`, byte-identical each time |
 | Its digest | `2f830a670b3fbc9f313018375cb2f1d88f6b5950e986373079d212548ca8a0dd`, 5843 bytes |
 | `ensureArtifact` refuses a mismatch | Run against the real pin with corrupted bytes: zero `PutObject`s, error text in §2 below. Regression tests: `TestEnsureRevalidatorArtifact_RefusesADigestMismatch` / `_UploadsAVerifiedArtifact` |
 | The release `revalidator-v0.0.1` | **DOES NOT EXIST.** `gh release list` shows only `tag-publisher-v0.0.1` and two `image-optimizer` tags |
@@ -48,9 +48,9 @@ that read as a misconfiguration rather than as a missing credential.
 The build is deterministic, so re-derive the digest rather than trusting this document:
 
 ```bash
-rm -rf packages/revalidator/dist
-pnpm --filter @ocel/revalidator zip
-sha256sum packages/revalidator/dist/revalidator.zip
+rm -rf platform/aws/functions/revalidator/dist
+pnpm --filter @platform/aws-revalidator zip
+sha256sum platform/aws/functions/revalidator/dist/revalidator.zip
 # expect 2f830a670b3fbc9f313018375cb2f1d88f6b5950e986373079d212548ca8a0dd
 ```
 
@@ -59,7 +59,7 @@ ask for is `revalidatorReleaseURL` in `cloud/aws/bootstrap/revalidator.go`):
 
 ```bash
 gh release create revalidator-v0.0.1 \
-  packages/revalidator/dist/revalidator.zip \
+  platform/aws/functions/revalidator/dist/revalidator.zip \
   --title 'revalidator v0.0.1' --notes '<...>'
 ```
 
@@ -205,7 +205,7 @@ aws s3api get-object --bucket <asset bucket> --key "$ISR_PREFIX/origin.json" /de
 
 The R2 key for a route entry is `<isrPrefix>/cache/<cacheKey>.cache.json`, where
 `cacheKey` is the route path with the leading `/` stripped (`/` and `""` become `index`),
-in bucket `ocel-edge-cache` (`packages/next-cache/src/index.mts`, `entryObjectKey`).
+in bucket `ocel-edge-cache` (`frameworks/next/cache/src/index.mts`, `entryObjectKey`).
 
 ```bash
 KEY="$ISR_PREFIX/cache/isr.cache.json"

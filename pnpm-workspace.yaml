@@ -3,6 +3,7 @@ packages:
   - cli/node
   - packages/*
   - frameworks/*/*
+  - platform/aws/functions/*
   - packages/native-lib/*
   - tools/*
   - scripts/*

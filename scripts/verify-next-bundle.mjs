@@ -28,14 +28,14 @@ function main() {
 }
 
 function buildAdapter() {
-  log("building @ocel/next-runtime");
-  run("pnpm", ["--filter", "@ocel/next-runtime", "build"], repoRoot);
+  log("building @framework/next-adapter");
+  run("pnpm", ["--filter", "@framework/next-adapter", "build"], repoRoot);
 }
 
 function buildApp() {
-  const adapter = join(repoRoot, "packages/next-runtime/dist/next-adapter.mjs");
+  const adapter = join(repoRoot, "frameworks/next/adapter/dist/next-adapter.mjs");
   if (!existsSync(adapter)) {
-    fatal(`no built adapter at ${adapter} — drop --skip-adapter or run \`pnpm --filter @ocel/next-runtime build\``);
+    fatal(`no built adapter at ${adapter} — drop --skip-adapter or run \`pnpm --filter @framework/next-adapter build\``);
   }
   rmSync(outRoot, { recursive: true, force: true });
   log(`building ${relative(repoRoot, appDir)} into ${relative(repoRoot, appOut)}`);
