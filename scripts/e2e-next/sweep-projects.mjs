@@ -17,12 +17,43 @@
 // domain another project still claims, which fails later, slower and less
 // legibly.
 
-import { listParameterNames } from "./aws.mjs";
+import { POLL_INTERVAL_MS, listParameterNames, sleep } from "./aws.mjs";
 import { PREVIEW_ROOT_STACK_PARAM_PREFIX, projectSlugForRun, strandedProjectSlugs } from "./lib.mjs";
 import { destroyProject } from "./project-teardown.mjs";
 
+// Long enough to outlast an SSM throttling window, because the alternative is
+// re-running the whole workflow: this job gates every other one, and the list
+// below is the only thing it rests on.
+const LIST_DEADLINE_MS = 120_000;
+
+// The list, retried until it is *made*. SSM throttles DescribeParameters
+// readily — the CLI pages it, so the more projects are stranded the more calls
+// one sweep is — and the CLI gives up after two attempts of its own, which is
+// what failed this job outright. An empty list is a real answer and returned as
+// one; only a list that could not be made at all is retried, the same shape
+// assert-embed.mjs's listRetrying has for the same reason.
+async function listRootStackParams() {
+  const deadline = Date.now() + LIST_DEADLINE_MS;
+  for (;;) {
+    try {
+      return listParameterNames(PREVIEW_ROOT_STACK_PARAM_PREFIX);
+    } catch (err) {
+      if (Date.now() >= deadline) {
+        console.error(
+          `[ocel-e2e] could not list ${PREVIEW_ROOT_STACK_PARAM_PREFIX} at all within ` +
+            `${LIST_DEADLINE_MS / 1000}s — every attempt failed, so nothing here says which projects are ` +
+            `stranded: ${err.message}`,
+        );
+        process.exit(1);
+      }
+      console.error(`[ocel-e2e] could not list ${PREVIEW_ROOT_STACK_PARAM_PREFIX} (${err.message}); will retry`);
+      await sleep(POLL_INTERVAL_MS);
+    }
+  }
+}
+
 const keep = projectSlugForRun();
-const stranded = strandedProjectSlugs(listParameterNames(PREVIEW_ROOT_STACK_PARAM_PREFIX), keep);
+const stranded = strandedProjectSlugs(await listRootStackParams(), keep);
 
 if (stranded.length === 0) {
   console.error(`[ocel-e2e] no stranded e2e projects; ${keep} is the only one`);
