@@ -1164,7 +1164,7 @@ by construction.
 **It needed no packaging change, and the issue's stated blocker was wrong on two counts.**
 Do not re-derive this — it was established by running the builds, not by reading:
 
-- **The artifact that ships is already an esbuild bundle.** `cli/platform/build-platform.mjs`
+- **The artifact that ships is already an esbuild bundle.** `cli/node/build.mjs`
   bundles `packages/next-runtime/src/next-adapter.mts` directly, so "next-runtime cannot import
   it as shipped" was only ever true of the *dev* `tsc` dist at `packages/next-runtime/dist/`.
 - **Node's type-stripping works through the pnpm symlink.** The blocker was narrower than "raw

@@ -36,8 +36,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: pnpm --filter @ocel/cli-platform typecheck
-        run: pnpm --filter @ocel/cli-platform typecheck
+      - name: pnpm --filter @cli/node typecheck
+        run: pnpm --filter @cli/node typecheck
 
       - name: go generate (cli platform dist)
         working-directory: cli
@@ -61,4 +61,4 @@ jobs:
       - name: JS unit tests
         run: |
           pnpm --filter ocel test
-          pnpm --filter @ocel/cli-platform test
+          pnpm --filter @cli/node test

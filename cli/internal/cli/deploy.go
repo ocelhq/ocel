@@ -27,7 +27,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerlocator"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/platform"
+	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
@@ -100,7 +100,7 @@ func runDeploy(ctx context.Context, cwd string, opts deployOptions, stdout, stde
 		return err
 	}
 
-	if err := platform.Ensure(cfg.Dir); err != nil {
+	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 
@@ -469,15 +469,15 @@ func runProviderSession(ctx context.Context, cfg *projectconfig.Config, provider
 }
 
 func workerBundleEnv(projectDir string) ([]string, error) {
-	bundles, err := json.Marshal(platform.WorkerBundles(projectDir))
+	bundles, err := json.Marshal(node.WorkerBundles(projectDir))
 	if err != nil {
 		return nil, fmt.Errorf("marshal worker bundles: %w", err)
 	}
-	store, err := json.Marshal(platform.StoreWorkerBundles(projectDir))
+	store, err := json.Marshal(node.StoreWorkerBundles(projectDir))
 	if err != nil {
 		return nil, fmt.Errorf("marshal store worker bundles: %w", err)
 	}
-	isrWriter, err := json.Marshal(platform.ISRWriterBundles(projectDir))
+	isrWriter, err := json.Marshal(node.ISRWriterBundles(projectDir))
 	if err != nil {
 		return nil, fmt.Errorf("marshal isr writer worker bundles: %w", err)
 	}

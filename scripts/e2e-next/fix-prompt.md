@@ -371,8 +371,8 @@ example — static-asset content-type is stamped at upload time by
 Note `packages/ocel` now has two faces and they resolve from opposite places:
 its `src/**` is the SDK and travels in the sidecar (rebuild needed), while its
 `bin/run.js` launcher is invoked straight out of `ADAPTER_DIR` (no rebuild). The
-node builder no longer lives there at all — it is at `cli/platform/**`, esbuilt
-into `cli/platform/dist` and embedded in the Go binary at `go generate`, so it
+node builder no longer lives there at all — it is at `cli/node/**`, esbuilt
+into `cli/node/dist` and embedded in the Go binary at `go generate`, so it
 reaches a deploy through the `ADAPTER_DIR` CLI build like the rest of `cli/**`.
 
 **Precondition — the shared sidecar must carry `ocel`.** It was packed before
@@ -404,7 +404,7 @@ test -x node_modules/@ocel/provider-aws-linux-x64/bin/deploy
 
 If your change is confined to `workers/nextjs/**`, `packages/next-runtime/**`,
 `packages/ocel/bin/**`, `cli/**` (which includes the node builder at
-`cli/platform/**`) or `scripts/e2e-next/**`, use the shared sidecar read-only
+`cli/node/**`) or `scripts/e2e-next/**`, use the shared sidecar read-only
 and skip this.
 
 ### 5C — Stage one live app (a single deploy that stays up)
@@ -493,7 +493,7 @@ ref, and the temp app directory is not a repo. `--prebuilt` ships the
 You can **skip `ocel build`** when the change cannot affect build output —
 worker-only (`workers/nextjs/**`) or provider-only (`cloud/aws/**`) changes go
 straight to `preview up --prebuilt`, which is much faster. Changes that feed the
-build output require it: the node builder (`cli/platform/**`, which also needs
+build output require it: the node builder (`cli/node/**`, which also needs
 `go generate` via `build-native.mjs --target cli`), the Next adapter
 (`packages/next-runtime/**`), and the SDK (`packages/ocel/src/**`, which the
 builder traces into the app's function bundles).

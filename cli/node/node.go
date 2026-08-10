@@ -1,4 +1,4 @@
-package platform
+package node
 
 import (
 	"bytes"
@@ -54,7 +54,7 @@ func VarsUI() (fs.FS, error) {
 func Ensure(projectDir string) error {
 	want, err := embedded.ReadFile("dist/STAMP")
 	if err != nil {
-		return fmt.Errorf("read embedded platform stamp: %w", err)
+		return fmt.Errorf("read embedded node bundle stamp: %w", err)
 	}
 
 	dir := DistDir(projectDir)

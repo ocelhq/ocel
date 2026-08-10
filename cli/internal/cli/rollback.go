@@ -13,7 +13,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/platform"
+	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -57,7 +57,7 @@ func runRollback(ctx context.Context, cwd string, opts rollbackOptions, stdout, 
 		return err
 	}
 
-	if err := platform.Ensure(cfg.Dir); err != nil {
+	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 	provider, err := cfg.RequireProvider()

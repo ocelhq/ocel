@@ -21,7 +21,7 @@ import (
 	"github.com/ocelhq/ocel/cli/internal/previewid"
 	"github.com/ocelhq/ocel/cli/internal/projectconfig"
 	"github.com/ocelhq/ocel/cli/internal/providerrunner"
-	"github.com/ocelhq/ocel/cli/platform"
+	"github.com/ocelhq/ocel/cli/node"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
@@ -165,7 +165,7 @@ func runPreviewUp(ctx context.Context, cwd string, opts previewUpOptions, stdout
 		return err
 	}
 
-	if err := platform.Ensure(cfg.Dir); err != nil {
+	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 	provider, err := cfg.RequireProvider()
@@ -273,7 +273,7 @@ func runPreviewRm(ctx context.Context, cwd string, opts previewRmOptions, stdout
 		return err
 	}
 
-	if err := platform.Ensure(cfg.Dir); err != nil {
+	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 	provider, err := cfg.RequireProvider()
@@ -331,7 +331,7 @@ func runPreviewLs(ctx context.Context, cwd string, stdout, stderr io.Writer) err
 		return err
 	}
 
-	if err := platform.Ensure(cfg.Dir); err != nil {
+	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 	provider, err := cfg.RequireProvider()
@@ -367,7 +367,7 @@ func runPreviewPrune(ctx context.Context, cwd string, opts previewPruneOptions, 
 		return err
 	}
 
-	if err := platform.Ensure(cfg.Dir); err != nil {
+	if err := node.Ensure(cfg.Dir); err != nil {
 		return err
 	}
 	provider, err := cfg.RequireProvider()
