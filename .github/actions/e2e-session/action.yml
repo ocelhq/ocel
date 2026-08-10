@@ -1,0 +1,72 @@
+name: E2E session
+description: >-
+  Node, pnpm and a short-lived AWS role session guarded to the expected AWS and
+  Cloudflare accounts — the preamble every job of test-e2e-deploy that touches
+  the disposable e2e accounts needs.
+
+# Referenced as `./adapter/.github/actions/e2e-session`, because the jobs that
+# use it have the repo at `adapter/` (checked out, or restored from the build
+# cache) rather than at the workspace root. The step that puts it there must
+# therefore run before the one that uses it.
+
+inputs:
+  node-version:
+    description: Node version to install.
+    required: true
+  pnpm-version:
+    description: pnpm version to install.
+    required: true
+  aws-region:
+    description: Region the role session is minted in.
+    required: true
+  role-to-assume:
+    description: ARN of the E2E deploy role.
+    required: true
+  role-session-name:
+    description: Session name, per job, so CloudTrail attributes the calls.
+    required: true
+  role-duration-seconds:
+    # The session is minted once and never refreshed: the deploy path reads it
+    # off the default credential chain (cloud/aws/server/server.go loadAWS),
+    # which has nowhere to go back to for a new one. It must outlive the job
+    # that mints it, and the role's MaxSessionDuration must be at least this —
+    # an assume that is too long fails loudly at the top of the job, which is
+    # the failure mode to want.
+    description: How long the session lives. Must outlive the calling job.
+    required: false
+    default: "7200"
+  expected-aws-account-id:
+    description: The only AWS account this workflow may deploy into.
+    required: true
+  expected-cloudflare-account-id:
+    description: The only Cloudflare account this workflow may deploy into.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - uses: pnpm/action-setup@v4
+      with:
+        version: ${{ inputs.pnpm-version }}
+
+    - name: Assume the E2E deploy role
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        role-to-assume: ${{ inputs.role-to-assume }}
+        aws-region: ${{ inputs.aws-region }}
+        role-session-name: ${{ inputs.role-session-name }}
+        role-duration-seconds: ${{ inputs.role-duration-seconds }}
+
+    # Runs before anything is built, let alone deployed: a misconfigured secret
+    # must never reach a real account. The expected ids are inputs rather than
+    # read from `secrets`, which a composite action cannot see.
+    - name: Guard the target accounts
+      shell: bash
+      env:
+        EXPECTED_AWS_ACCOUNT_ID: ${{ inputs.expected-aws-account-id }}
+        EXPECTED_CLOUDFLARE_ACCOUNT_ID: ${{ inputs.expected-cloudflare-account-id }}
+      run: adapter/scripts/e2e-next/guard-accounts.sh

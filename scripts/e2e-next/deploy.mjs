@@ -3,13 +3,15 @@
 // harness. Runs with cwd set to the harness's isolated temp app; prints only the
 // deployment URL to stdout, everything else to stderr or files in cwd.
 //
-// Each temp app gets its own Ocel PROJECT (projectSlug), deployed as one
-// persistent preview inside it. The project namespaces the Pulumi stacks, the
-// deployments store, the asset prefixes and the Cloudflare worker scripts and
-// routes, so suites running concurrently contend over nothing at all.
+// The whole run shares ONE Ocel PROJECT (projectSlug), and each temp app is an
+// EPHEMERAL PREVIEW POINTER inside it (previewRef). The project owns the
+// preview wildcard domain and the single entrypoint worker attached to it, so a
+// pointer is a record in the deployments store — no worker, no route, nothing
+// for concurrent suites to contend over, and nothing whose propagation a
+// request has to wait on.
 
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, openSync, readFileSync, closeSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { existsSync, openSync, readFileSync, closeSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -18,12 +20,14 @@ import {
   DEPLOY_RESULT_FILE,
   STATE_FILE,
   deployURL,
-  projectSlugForApp,
+  previewRefForApp,
+  projectSlugForRun,
   renderOcelConfig,
   tail,
   withBuildScript,
   withPinnedTypeScript,
 } from "./lib.mjs";
+import { linkSidecar } from "./sidecar.mjs";
 
 // How long building and deploying one app may take, in total, before it is
 // killed. A hung deploy must fail its own suite rather than burn the job's whole
@@ -82,30 +86,32 @@ function deploy() {
   const previewDomain = process.env.OCEL_E2E_PREVIEW_DOMAIN || "";
   const sidecarDir = required("OCEL_E2E_SIDECAR_DIR");
 
-  const slug = projectSlugForApp(appDir);
+  const slug = projectSlugForRun();
+  const ref = previewRefForApp(appDir);
   // Persisted first, before anything is provisioned: cleanup has to be able to
   // tear down a deploy that failed halfway through.
   writeFileSync(
     join(appDir, STATE_FILE),
-    JSON.stringify({ slug, appName: APP_NAME, previewDomain, startedAt: Date.now() }, null, 2) + "\n",
+    JSON.stringify({ slug, ref, appName: APP_NAME, previewDomain, startedAt: Date.now() }, null, 2) + "\n",
   );
-  console.error(`[ocel-e2e] project ${slug} in ${appDir}`);
+  console.error(`[ocel-e2e] preview ${ref} of project ${slug} in ${appDir}`);
 
   writeFileSync(join(appDir, "ocel.config.ts"), renderOcelConfig({ slug, previewDomain }));
   // Before ensureDeps: the TypeScript pin is only worth anything if it is in
   // package.json when pnpm resolves it.
   patchPackageJson();
   ensureDeps();
-  linkSidecar(sidecarDir);
+  linkSidecar(appDir, sidecarDir);
 
   // Build and deploy are separate CLI runs so a build failure is reported as
   // one, rather than as a failed deploy. `preview up --prebuilt` then ships the
   // .ocel/output this produced instead of building the app a second time.
   //
-  // `--name` makes it a persistent preview: an ephemeral one resolves its
-  // identity from a git ref, and the harness's temp app directory is not a repo.
+  // `--ref` makes it an ephemeral preview keyed by an explicit ref rather than
+  // by the checked-out branch: the harness's temp app directory is not a repo,
+  // and the temp directory is the identity that has to be unique here.
   runOcel(adapterDir, ["build"]);
-  runOcel(adapterDir, ["preview", "up", "--name", slug, "--prebuilt"]);
+  runOcel(adapterDir, ["preview", "up", "--ref", ref, "--prebuilt"]);
 
   const resultPath = join(appDir, DEPLOY_RESULT_FILE);
   if (!existsSync(resultPath)) {
@@ -124,43 +130,6 @@ function ensureDeps() {
   }
   console.error("[ocel-e2e] no node_modules/.bin/next; installing dependencies");
   run("pnpm install", "pnpm", ["install", "--prefer-offline"]);
-}
-
-// linkSidecar points the temp app at the prebuilt Ocel packages. Only `ocel`
-// and the @ocel scope are linked: the harness owns the rest of node_modules
-// (notably its isolated `next`), and replacing the directory would break the
-// app it built.
-//
-// `ocel` (the bundled ocel.config.ts imports ocel/config) and
-// `@ocel/provider-aws-<platform>` (providerlocator require.resolve's it from the
-// project dir) are the two that must resolve from here.
-function linkSidecar(sidecarDir) {
-  const modules = join(appDir, "node_modules");
-  mkdirSync(modules, { recursive: true });
-  for (const name of ["ocel", "@ocel"]) {
-    const target = join(sidecarDir, "node_modules", name);
-    if (!existsSync(target)) {
-      throw new Error(
-        `sidecar has no ${name} package at ${target}. A sidecar packed before ` +
-          `@ocel/sdk folded into the root ocel package carries only @ocel/*; ` +
-          `repack it from the ocel and @ocel/provider-aws* tarballs — see ` +
-          `"Repacking the sidecar" in scripts/e2e-next/README.md.`,
-      );
-    }
-    const link = join(modules, name);
-    if (existsSync(link) || isSymlink(link)) {
-      rmSync(link, { recursive: true, force: true });
-    }
-    symlinkSync(target, link, "dir");
-  }
-}
-
-function isSymlink(path) {
-  try {
-    return lstatSync(path).isSymbolicLink();
-  } catch {
-    return false;
-  }
 }
 
 // patchPackageJson gives the fixture the `build` script buildNext requires

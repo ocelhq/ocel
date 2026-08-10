@@ -13,6 +13,8 @@ import {
   ISR_REVALIDATE_SECONDS,
   ISR_ROUTE,
   MAX_SLUG_LEN,
+  PREVIEW_ROOT_STACK_PARAM_PREFIX,
+  SLUG_PREFIX,
   WARM_SUMMARY_MARKER,
   appAssetPrefix,
   buildBaselineManifest,
@@ -32,9 +34,12 @@ import {
   logWindowVerdict,
   markerLines,
   mergeBaselineManifest,
+  previewRef,
+  previewRefForApp,
   projectSlug,
-  projectSlugForApp,
+  projectSlugForRun,
   renderOcelConfig,
+  strandedProjectSlugs,
   strongestCoverage,
   suitesFromHarnessOutput,
   suitesStartedInHarnessOutput,
@@ -52,59 +57,115 @@ import {
 
 describe("projectSlug", () => {
   it("is a valid single DNS label carrying the run id", () => {
-    const slug = projectSlug({ runId: "1234567890", dir: "/tmp/next-e2e-abc" });
+    const slug = projectSlug({ runId: "1234567890" });
     expect(slug).toMatch(DNS_LABEL);
     expect(slug).toContain("1234567890");
     expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
   });
 
-  it("gives two temp apps in the same run their own project", () => {
-    const a = projectSlug({ runId: "7", dir: "/tmp/next-e2e-a" });
-    const b = projectSlug({ runId: "7", dir: "/tmp/next-e2e-b" });
-    expect(a).not.toBe(b);
+  it("gives the whole run one project, whatever app is asking", () => {
+    expect(projectSlug({ runId: "7" })).toBe(projectSlug({ runId: "7" }));
   });
 
-  it("is stable for the same run id and directory", () => {
-    expect(projectSlug({ runId: "7", dir: "/tmp/x" })).toBe(projectSlug({ runId: "7", dir: "/tmp/x" }));
+  it("gives two runs their own project", () => {
+    expect(projectSlug({ runId: "7" })).not.toBe(projectSlug({ runId: "8" }));
   });
 
-  it("stays a valid label with no run id and a hostile directory name", () => {
-    const slug = projectSlug({ runId: "", dir: "/tmp/Next E2E_App/../weird" });
+  it("stays a valid label outside CI, where there is no run id", () => {
+    const slug = projectSlug({ runId: "" });
     expect(slug).toMatch(DNS_LABEL);
+    expect(slug).toBe("e2e-local");
+    expect(projectSlug({})).toBe(slug);
   });
 
   it("stays within the slug budget for an absurdly long run id", () => {
-    const slug = projectSlug({ runId: "9".repeat(200), dir: "/tmp/x" });
+    const slug = projectSlug({ runId: "9".repeat(200) });
     expect(slug).toMatch(DNS_LABEL);
     expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
   });
+
+  it("stays a valid label when a hostile run id would cap onto a hyphen", () => {
+    const slug = projectSlug({ runId: `${"a".repeat(MAX_SLUG_LEN - SLUG_PREFIX.length - 1)} tail` });
+    expect(slug).toMatch(DNS_LABEL);
+    expect(slug.length).toBeLessThanOrEqual(MAX_SLUG_LEN);
+  });
+
+  it("carries the prefix the sweeper reclaims projects by", () => {
+    expect(projectSlug({ runId: "7" }).startsWith(SLUG_PREFIX)).toBe(true);
+  });
 });
 
-describe("projectSlugForApp", () => {
+describe("previewRef", () => {
+  it("is the temp directory, so a stranded pointer names the suite that left it", () => {
+    expect(previewRef({ dir: "/tmp/next-e2e-abc" })).toBe("/tmp/next-e2e-abc");
+  });
+
+  it("gives two temp apps in one run their own pointer", () => {
+    expect(previewRef({ dir: "/tmp/a" })).not.toBe(previewRef({ dir: "/tmp/b" }));
+  });
+
+  it("resolves two spellings of one directory to one pointer", () => {
+    expect(previewRef({ dir: "/tmp/a/" })).toBe(previewRef({ dir: "/tmp/a" }));
+    expect(previewRef({ dir: " /tmp/a " })).toBe(previewRef({ dir: "/tmp/a" }));
+  });
+
+  it("refuses a missing directory rather than inventing a pointer", () => {
+    expect(() => previewRef({ dir: "" })).toThrow(/needs a directory/);
+    expect(() => previewRef({})).toThrow(/needs a directory/);
+  });
+});
+
+describe("projectSlugForRun and previewRefForApp", () => {
   it("prefers NEXT_TEST_DIR over the app directory, so deploy and cleanup agree", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
     vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
-    expect(projectSlugForApp("/somewhere/else")).toBe(projectSlug({ runId: "42", dir: "/tmp/harness-app" }));
+    expect(projectSlugForRun()).toBe(projectSlug({ runId: "42" }));
+    expect(previewRefForApp("/somewhere/else")).toBe(previewRef({ dir: "/tmp/harness-app" }));
   });
 
   it("falls back to the app directory when the harness sets no NEXT_TEST_DIR", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
     vi.stubEnv("NEXT_TEST_DIR", "");
-    expect(projectSlugForApp("/tmp/app")).toBe(projectSlug({ runId: "42", dir: "/tmp/app" }));
+    expect(previewRefForApp("/tmp/app")).toBe(previewRef({ dir: "/tmp/app" }));
   });
 
-  it("derives the same slug twice, so cleanup can recover it without the state file", () => {
+  it("derives the same pair twice, so cleanup can recover it without the state file", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
     vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
-    expect(projectSlugForApp("/tmp/harness-app")).toBe(projectSlugForApp("/tmp/harness-app"));
+    expect(projectSlugForRun()).toBe(projectSlugForRun());
+    expect(previewRefForApp("/tmp/harness-app")).toBe(previewRefForApp("/tmp/harness-app"));
+  });
+});
+
+describe("strandedProjectSlugs", () => {
+  const param = (slug) => `${PREVIEW_ROOT_STACK_PARAM_PREFIX}${slug}`;
+
+  it("reclaims every e2e project but the running run's own", () => {
+    const names = [param("e2e-1"), param("e2e-2"), param("e2e-3")];
+    expect(strandedProjectSlugs(names, "e2e-2")).toEqual(["e2e-1", "e2e-3"]);
+  });
+
+  it("leaves projects that are not this suite's alone", () => {
+    const names = [param("acme-shop"), param("e2e-1"), "/ocel/rootstack/e2e-9"];
+    expect(strandedProjectSlugs(names, "e2e-2")).toEqual(["e2e-1"]);
+  });
+
+  it("reclaims a slug in the shape earlier runs minted, one project per temp app", () => {
+    expect(strandedProjectSlugs([param("e2e-42-abcd1234")], "e2e-42")).toEqual(["e2e-42-abcd1234"]);
+  });
+
+  it("has nothing to do when the run's own project is the only one", () => {
+    expect(strandedProjectSlugs([param("e2e-2")], "e2e-2")).toEqual([]);
+    expect(strandedProjectSlugs([], "e2e-2")).toEqual([]);
+    expect(strandedProjectSlugs(undefined, "e2e-2")).toEqual([]);
   });
 });
 
 describe("renderOcelConfig", () => {
-  const config = renderOcelConfig({ slug: "e2e-42-abcd1234", previewDomain: "*.e2e.example.com" });
+  const config = renderOcelConfig({ slug: "e2e-42", previewDomain: "*.e2e.example.com" });
 
-  it("carries this temp app's own project slug, the provider and the preview wildcard", () => {
-    expect(config).toContain(`slug: "e2e-42-abcd1234"`);
+  it("carries the run's project slug, the provider and the preview wildcard", () => {
+    expect(config).toContain(`slug: "e2e-42"`);
     expect(config).toContain("awsProvider()");
     expect(config).toContain(`preview: "*.e2e.example.com"`);
   });
@@ -114,10 +175,9 @@ describe("renderOcelConfig", () => {
     expect(config).toContain(`apps: [{ name: "app", path: ".", framework: "next" }]`);
   });
 
-  it("is pure, so cleanup re-renders byte-for-byte what deploy wrote", () => {
+  it("is pure, so cleanup and teardown re-render byte-for-byte what deploy wrote", () => {
     vi.stubEnv("GITHUB_RUN_ID", "42");
-    vi.stubEnv("NEXT_TEST_DIR", "/tmp/harness-app");
-    const args = { slug: projectSlugForApp("/tmp/harness-app"), previewDomain: "*.e2e.example.com" };
+    const args = { slug: projectSlugForRun(), previewDomain: "*.e2e.example.com" };
     expect(renderOcelConfig(args)).toBe(renderOcelConfig(args));
     expect(renderOcelConfig(args)).toContain(`slug: ${JSON.stringify(args.slug)}`);
   });
