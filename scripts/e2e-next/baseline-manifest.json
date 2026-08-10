@@ -627,78 +627,6 @@
     "flakey": [],
     "runtimeError": true
   },
-  "test/e2e/app-dir/scss/3rd-party-module/3rd-party-module.test.ts": {
-    "failed": [
-      "3rd Party CSS Module Support ({\"sass\": \"1.54.0\"}) should render the module",
-      "3rd Party CSS Module Support ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/basic-module-additional-data/basic-module-additional-data.test.ts": {
-    "failed": [
-      "Basic Module Additional Data Support ({\"sass\": \"1.54.0\"}) should render the module",
-      "Basic Module Additional Data Support ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/basic-module-include-paths/basic-module-include-paths.test.ts": {
-    "failed": [
-      "Basic Module Include Paths Support ({\"sass\": \"1.54.0\"}) should render the module",
-      "Basic Module Include Paths Support ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/basic-module-prepend-data/basic-module-prepend-data.test.ts": {
-    "failed": [
-      "Basic Module Prepend Data Support ({\"sass\": \"1.54.0\"}) should render the module",
-      "Basic Module Prepend Data Support ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/basic-module/basic-module.test.ts": {
-    "failed": [
-      "Basic SCSS Module Support ({\"sass\": \"1.54.0\"}) should render the module",
-      "Basic SCSS Module Support ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/composes-basic/composes-basic.test.ts": {
-    "failed": [
-      "CSS Module Composes Usage (Basic) ({\"sass\": \"1.54.0\"}) should render the module",
-      "CSS Module Composes Usage (Basic) ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/composes-external/composes-external.test.ts": {
-    "failed": [
-      "CSS Module Composes Usage (External) ({\"sass\": \"1.54.0\"}) should render the module",
-      "CSS Module Composes Usage (External) ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/data-url/data-url.test.ts": {
-    "failed": [
-      "SCSS Support loader handling Data Urls ({\"sass\": \"1.54.0\"}) should render the module",
-      "SCSS Support loader handling Data Urls ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/dev-module/dev-module.test.ts": {
-    "failed": [
-      "Has CSS Module in computed styles in Development ({\"sass\": \"1.54.0\"}) should have CSS for page",
-      "Has CSS Module in computed styles in Development ({\"sass-embedded\": \"1.75.0\"}) should have CSS for page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/app-dir/scss/hmr-module/hmr-module.test.ts": {
     "failed": [],
     "flakey": [],
@@ -719,102 +647,6 @@
     "flakey": [],
     "runtimeError": true
   },
-  "test/e2e/app-dir/scss/loader-order/loader-order.test.ts": {
-    "failed": [
-      "SCSS Support loader handling Preprocessor loader order ({\"sass\": \"1.54.0\"}) should render the module",
-      "SCSS Support loader handling Preprocessor loader order ({\"sass-embedded\": \"1.75.0\"}) should render the module"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/multi-global-reversed/multi-global-reversed.test.ts": {
-    "failed": [
-      "(SCSS) Multi Global Support (reversed) ({\"sass\": \"1.54.0\"}) should render the page",
-      "(SCSS) Multi Global Support (reversed) ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/multi-global/multi-global.test.ts": {
-    "failed": [
-      "Multi Global Support ({\"sass\": \"1.54.0\"}) should render the page",
-      "Multi Global Support ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/nested-global/nested-global.test.ts": {
-    "failed": [
-      "Nested @import() Global Support ({\"sass\": \"1.54.0\"}) should render the page",
-      "Nested @import() Global Support ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/nm-module-nested/nm-module-nested.test.ts": {
-    "failed": [
-      "Valid Nested CSS Module Usage from within node_modules ({\"sass\": \"1.54.0\"}) should render the page",
-      "Valid Nested CSS Module Usage from within node_modules ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/nm-module/nm-module.test.ts": {
-    "failed": [
-      "Valid CSS Module Usage from within node_modules ({\"sass\": \"1.54.0\"}) should render the page",
-      "Valid CSS Module Usage from within node_modules ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/npm-import-nested/npm-import-nested.test.ts": {
-    "failed": [
-      "Good Nested CSS Import from node_modules ({\"sass\": \"1.54.0\"}) should render the page",
-      "Good Nested CSS Import from node_modules ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/npm-import-tilde/npm-import-tilde.test.ts": {
-    "failed": [
-      "Good CSS Import from node_modules with tilde ({\"sass\": \"1.54.0\"}) should render the page",
-      "Good CSS Import from node_modules with tilde ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/npm-import/npm-import.test.ts": {
-    "failed": [
-      "Good CSS Import from node_modules ({\"sass\": \"1.54.0\"}) should render the page",
-      "Good CSS Import from node_modules ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/prod-module/prod-module.test.ts": {
-    "failed": [
-      "Has CSS Module in computed styles in Production ({\"sass\": \"1.54.0\"}) should render the page",
-      "Has CSS Module in computed styles in Production ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/single-global-src/single-global-src.test.ts": {
-    "failed": [
-      "Basic Global Support with src/ dir ({\"sass\": \"1.54.0\"}) should render the page",
-      "Basic Global Support with src/ dir ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/single-global/single-global.test.ts": {
-    "failed": [
-      "Basic Global Support scss ({\"sass\": \"1.54.0\"}) should render the page",
-      "Basic Global Support scss ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/app-dir/scss/unused/unused.test.ts": {
     "failed": [],
     "flakey": [],
@@ -829,30 +661,6 @@
     "failed": [],
     "flakey": [],
     "runtimeError": true
-  },
-  "test/e2e/app-dir/scss/url-global-partial/url-global-partial.test.ts": {
-    "failed": [
-      "SCSS Support loader handling CSS URL via file-loader sass partial ({\"sass\": \"1.54.0\"}) should render the page",
-      "SCSS Support loader handling CSS URL via file-loader sass partial ({\"sass-embedded\": \"1.75.0\"}) should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/url-global/url-global.test.ts": {
-    "failed": [
-      "SCSS Support loader handling ({\"sass\": \"1.54.0\"}) CSS URL via `file-loader` should render the page",
-      "SCSS Support loader handling ({\"sass-embedded\": \"1.75.0\"}) CSS URL via `file-loader` should render the page"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/app-dir/scss/with-styled-jsx/with-styled-jsx.test.ts": {
-    "failed": [
-      "Ordering with styled-jsx ({\"sass\": \"1.54.0\"}) should have the correct color (css ordering)",
-      "Ordering with styled-jsx ({\"sass-embedded\": \"1.75.0\"}) should have the correct color (css ordering)"
-    ],
-    "flakey": [],
-    "runtimeError": false
   },
   "test/e2e/app-dir/searchparams-reuse-loading/searchparams-reuse-loading.test.ts": {
     "failed": [
@@ -1049,13 +857,6 @@
     "flakey": [],
     "runtimeError": false
   },
-  "test/e2e/browserslist-extends/index.test.ts": {
-    "failed": [
-      "browserslist-extends should work"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/browserslist/browserslist.test.ts": {
     "failed": [],
     "flakey": [],
@@ -1117,13 +918,6 @@
   "test/e2e/css-data-url-global-pages/css-data-url-global-pages.test.ts": {
     "failed": [
       "css-data-url-global-pages should apply styles from data url correctly"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/disable-js-preload/test/index.test.ts": {
-    "failed": [
-      "disabled JS preloads should render the page"
     ],
     "flakey": [],
     "runtimeError": false
@@ -1223,16 +1017,6 @@
   "test/e2e/handle-non-hoisted-swc-helpers/index.test.ts": {
     "failed": [
       "handle-non-hoisted-swc-helpers should work"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/hello-world/hello-world.test.ts": {
-    "failed": [
-      "hello-world should work using cheerio",
-      "hello-world should work using browser",
-      "hello-world should work with html",
-      "hello-world should work with fetch"
     ],
     "flakey": [],
     "runtimeError": false
@@ -1581,16 +1365,6 @@
     "flakey": [],
     "runtimeError": true
   },
-  "test/e2e/next-head/index.test.ts": {
-    "failed": [
-      "next/head should place charset element at the top of <head>",
-      "next/head should have correct head tags in initial document",
-      "next/head should have correct head tags from a fragment",
-      "next/head should have correct head tags after hydration"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/next-test/next-test.test.ts": {
     "failed": [],
     "flakey": [],
@@ -1605,17 +1379,9 @@
   },
   "test/e2e/og-api/index.test.ts": {
     "failed": [
-      "og-api should respond from index",
       "og-api should work in pages/api",
       "og-api should work in app route",
       "og-api should work in middleware"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/optimized-loading/test/index.test.ts": {
-    "failed": [
-      "Optimized loading page / should render the page /"
     ],
     "flakey": [],
     "runtimeError": false
@@ -1705,13 +1471,6 @@
     "flakey": [],
     "runtimeError": false
   },
-  "test/e2e/ssr-react-context/index.test.ts": {
-    "failed": [
-      "React Context should render a page with context"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/streaming-ssr-edge/streaming-ssr-edge.test.ts": {
     "failed": [
       "streaming-ssr-edge should render 500 error from gIP correctly"
@@ -1724,55 +1483,15 @@
     "flakey": [],
     "runtimeError": true
   },
-  "test/e2e/test-template/{{ toFileName name }}/{{ toFileName name }}.test.ts": {
-    "failed": [
-      "{{name}} should work using cheerio",
-      "{{name}} should work using browser",
-      "{{name}} should work with html",
-      "{{name}} should work with fetch"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/test-utils-tests/basic/basic.test.ts": {
-    "failed": [
-      "nextTestSetup should work"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/trailing-slashes/basepath.test.ts": {
     "failed": [],
     "flakey": [],
     "runtimeError": true
   },
-  "test/e2e/trailing-slashes/with-trailing-slash.test.ts": {
-    "failed": [
-      "Trailing slashes with trailingSlash: true / should resolve to /index.js, with router path /",
-      "Trailing slashes with trailingSlash: true / should client side render /index.js, with router path /"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/trailing-slashes/without-trailing-slash.test.ts": {
-    "failed": [
-      "Trailing slashes with trailingSlash: false / should resolve to /index.js, with router path /",
-      "Trailing slashes with trailingSlash: false / should client side render /index.js, with router path /"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
   "test/e2e/twoslash/index.test.ts": {
     "failed": [
       "twoslash should annotate twoslash types default",
       "twoslash should annotate twoslash types esnext"
-    ],
-    "flakey": [],
-    "runtimeError": false
-  },
-  "test/e2e/type-module-interop/index.test.ts": {
-    "failed": [
-      "Type module interop should render server-side"
     ],
     "flakey": [],
     "runtimeError": false
