@@ -80,6 +80,63 @@ func TestPrintDestroyPlan_ListsEveryTarget(t *testing.T) {
 	}
 }
 
+// TestCheckDestroyFlags_YesIsPreviewOnly pins the asymmetry: --yes automates a
+// project's preview footprint, which is disposable by construction, and is
+// refused for production, whose only confirmation is typing the project name.
+func TestCheckDestroyFlags_YesIsPreviewOnly(t *testing.T) {
+	if err := checkDestroyFlags(true, true); err != nil {
+		t.Errorf("--preview --yes rejected: %v", err)
+	}
+	if err := checkDestroyFlags(true, false); err != nil {
+		t.Errorf("--preview rejected: %v", err)
+	}
+	if err := checkDestroyFlags(false, false); err != nil {
+		t.Errorf("bare destroy rejected: %v", err)
+	}
+	err := checkDestroyFlags(false, true)
+	if err == nil {
+		t.Fatal("`ocel destroy --yes` accepted for production, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "--preview") {
+		t.Errorf("err = %v, want it to say --yes is only accepted with --preview", err)
+	}
+}
+
+// TestRunDestroyPreviewProject_YesSkipsTTYAndTypedName proves the
+// non-interactive teardown path the e2e sweeper and the workflow's destroy job
+// need: --yes skips both the terminal requirement and the typed-name prompt.
+func TestRunDestroyPreviewProject_YesSkipsTTYAndTypedName(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	if err := runDestroyPreviewProject(context.Background(), root, true, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDestroyPreviewProject err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "DESTROY PROJECT project=test-app class=CLASS_PREVIEW") {
+		t.Errorf("stdout = %q, want the preview DestroyProject echo", out)
+	}
+	if strings.Contains(out, "Type the project name") {
+		t.Errorf("stdout = %q, want --yes to skip the typed-name confirmation", out)
+	}
+}
+
+// TestRunDestroyPreviewProject_WithoutYesRefusesWithoutTTY keeps the default
+// safe: without --yes there is still no non-interactive path.
+func TestRunDestroyPreviewProject_WithoutYesRefusesWithoutTTY(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	err := runDestroyPreviewProject(context.Background(), t.TempDir(), false, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runDestroyPreviewProject without a TTY err = nil, want a refusal")
+	}
+	if !strings.Contains(err.Error(), "interactive terminal") {
+		t.Errorf("err = %v, want the no-TTY refusal", err)
+	}
+}
+
 // TestRunDestroy_RefusesWithoutTTY proves destroy will not run when stdin is not
 // an interactive terminal — the only confirmation is typing the project name,
 // and it must never be bypassable. It refuses before resolving config or

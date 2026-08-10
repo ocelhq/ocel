@@ -3,12 +3,14 @@ package cli
 import (
 	"bytes"
 	"context"
+	"errors"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/ocelhq/ocel/cli/internal/manifestbuilder"
 	"github.com/ocelhq/ocel/cli/internal/previewid"
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 )
 
 // stubGit points the preview git/PR seams at fixed values for the duration of
@@ -83,6 +85,71 @@ func TestRunPreviewUp_WithApp_BuildsFunctionsIntoManifest(t *testing.T) {
 	waitForNoStaleSocket(t, sockPath)
 }
 
+// TestRunPreviewUp_Ref_StandsUpTheExplicitRefsEphemeral mirrors
+// TestRunPreviewRm_Ref_DestroysExplicitRef: --ref keys the ephemeral preview
+// off an explicit ref, so a checkout that is not a git repository at all can
+// still address one.
+func TestRunPreviewUp_Ref_StandsUpTheExplicitRefsEphemeral(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	// The current branch differs from --ref to prove --ref wins.
+	stubGit(t, "some-other-branch", "")
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	want, err := previewid.Resolve("release/v2", "")
+	if err != nil {
+		t.Fatalf("previewid.Resolve: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{ref: "release/v2"}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "DEPLOY class=CLASS_PREVIEW lifecycle=LIFECYCLE_EPHEMERAL identity="+want.Key+" source=IDENTITY_SOURCE_GIT") {
+		t.Errorf("stdout = %q, want the ephemeral Deploy echo for the explicit ref", out)
+	}
+}
+
+// TestRunPreviewUp_RefNeedsNoGit proves the point of the flag: --ref never
+// consults git, so a directory that is not a repository still resolves.
+func TestRunPreviewUp_RefNeedsNoGit(t *testing.T) {
+	prev := currentGitBranch
+	currentGitBranch = func(string) (string, error) { return "", errNotARepo }
+	t.Cleanup(func() { currentGitBranch = prev })
+
+	env, err := resolveUpEnvironment("", previewUpOptions{ref: "/tmp/some-fixture"})
+	if err != nil {
+		t.Fatalf("resolveUpEnvironment(--ref) err = %v, want it to resolve without git", err)
+	}
+	want, err := previewid.Resolve("/tmp/some-fixture", "")
+	if err != nil {
+		t.Fatalf("previewid.Resolve: %v", err)
+	}
+	if env.GetIdentity() != want.Key {
+		t.Errorf("identity = %q, want %q", env.GetIdentity(), want.Key)
+	}
+	if env.GetLifecycle() != deploymentsv1.Environment_LIFECYCLE_EPHEMERAL {
+		t.Errorf("lifecycle = %v, want ephemeral", env.GetLifecycle())
+	}
+	if env.GetIdentitySource() != deploymentsv1.Environment_IDENTITY_SOURCE_GIT {
+		t.Errorf("identity source = %v, want git", env.GetIdentitySource())
+	}
+}
+
+var errNotARepo = errors.New("determine current git branch: not a git repository")
+
+func TestResolveUpEnvironment_NameAndRefAreMutuallyExclusive(t *testing.T) {
+	_, err := resolveUpEnvironment("", previewUpOptions{name: "staging", ref: "release/v2"})
+	if err == nil {
+		t.Fatal("resolveUpEnvironment(name+ref) err = nil, want a mutual-exclusion error")
+	}
+	if !strings.Contains(err.Error(), "mutually exclusive") {
+		t.Errorf("err = %v, want it to explain --name and --ref are mutually exclusive", err)
+	}
+}
+
 func TestRunPreviewUp_PersistentNamed_SendsPersistentDeclaredEnvironment(t *testing.T) {
 	root, sockPath := setUpDeployFixture(t)
 	stubGit(t, "feature/login", "")
@@ -100,6 +167,79 @@ func TestRunPreviewUp_PersistentNamed_SendsPersistentDeclaredEnvironment(t *test
 	}
 
 	waitForNoStaleSocket(t, sockPath)
+}
+
+// TestRunPreviewUp_DeclaresSlugAndPreviewWildcard proves the preflight carries
+// what the domain-claim check needs: the wildcard the project is about to
+// attach, and the slug the provider recognises this project's own workers by —
+// without it, a project's own wildcard would read as another project's claim on
+// every redeploy.
+func TestRunPreviewUp_DeclaresSlugAndPreviewWildcard(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	stubGit(t, "feature/login", "")
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	if err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runPreviewUp err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
+	if !strings.Contains(stdout.String(), "PREFLIGHT slug=test-app domains=*.preview.acme.com") {
+		t.Errorf("stdout = %q, want the slug and preview wildcard to have reached Preflight", stdout.String())
+	}
+}
+
+// TestRunPreviewUp_RefusesWithoutAPreviewDomain is the preflight's point: a
+// preview that has nowhere to serve is refused before the build, so nothing is
+// built and nothing is stranded.
+func TestRunPreviewUp_RefusesWithoutAPreviewDomain(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+};
+`)
+	stubGit(t, "feature/login", "")
+	t.Setenv(fakeInfraClassEnvVar, "preview")
+	t.Setenv(fakeInfraPresentEnvVar, "1")
+
+	var stdout, stderr bytes.Buffer
+	err := runPreviewUp(context.Background(), root, previewUpOptions{}, &stdout, &stderr, strings.NewReader(""))
+	if err == nil {
+		t.Fatal("runPreviewUp err = nil, want a missing-preview-domain refusal")
+	}
+	for _, want := range []string{"declares no preview domain", "domains.preview", "*.preview."} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to contain %q", err, want)
+		}
+	}
+
+	out := stdout.String()
+	if strings.Contains(out, "Building project") {
+		t.Errorf("stdout = %q, want the refusal before anything is built", out)
+	}
+	if strings.Contains(out, "DEPLOY ") {
+		t.Errorf("stdout = %q, want no Deploy to have been driven", out)
+	}
+}
+
+// A production-only project still deploys: the preview wildcard is required of
+// `ocel preview up` alone, never of loading the config.
+func TestRunDeploy_NeedsNoPreviewDomain(t *testing.T) {
+	root, _ := setUpDeployFixture(t)
+	writeFile(t, filepath.Join(root, "ocel.config.ts"), `
+export default {
+  slug: "test-app",
+  provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { production: "acme.com" },
+};
+`)
+
+	var stdout, stderr bytes.Buffer
+	if err := runDeploy(context.Background(), root, deployOptions{yes: true}, &stdout, &stderr, strings.NewReader("")); err != nil {
+		t.Fatalf("runDeploy err = %v; stdout=%s stderr=%s", err, stdout.String(), stderr.String())
+	}
 }
 
 func TestRunPreviewUp_RefusesOnClassMismatch_NoDeploy(t *testing.T) {
@@ -199,15 +339,18 @@ func TestResolveRmEnvironment_NameAndRefAreMutuallyExclusive(t *testing.T) {
 	}
 }
 
-func TestPersistentPreviewNameIsCappedForTheRouteHostname(t *testing.T) {
-	atCap := "a" + strings.Repeat("b", 51)
+// TestPersistentPreviewNameIsCappedForTheSubdomainLabel pins the cap at the
+// whole DNS label: a preview is served on the bare label of the project's
+// preview wildcard, so nothing is reserved out of it.
+func TestPersistentPreviewNameIsCappedForTheSubdomainLabel(t *testing.T) {
+	atCap := "a" + strings.Repeat("b", 62)
 	overCap := atCap + "c"
 
 	cases := []struct {
 		name    string
 		resolve func(string) error
 	}{
-		{"up", func(n string) error { _, err := resolveUpEnvironment("", n); return err }},
+		{"up", func(n string) error { _, err := resolveUpEnvironment("", previewUpOptions{name: n}); return err }},
 		{"rm", func(n string) error { _, err := resolveRmEnvironment("", previewRmOptions{name: n}); return err }},
 	}
 	for _, tc := range cases {

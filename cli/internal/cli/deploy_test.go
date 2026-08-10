@@ -559,6 +559,7 @@ func setUpDeployFixture(t *testing.T) (root, sockPath string) {
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { preview: "*.preview.acme.com" },
 };
 `)
 	writeFile(t, filepath.Join(root, "ocel", "main.ts"), `
@@ -618,6 +619,7 @@ func addAppToFixtureConfig(t *testing.T, root string) {
 export default {
   slug: "test-app",
   provider: { package: "@ocel/provider-aws", options: {} },
+  domains: { preview: "*.preview.acme.com" },
   apps: [{ name: "api", path: "apps/api", framework: "express" }],
 };
 `)

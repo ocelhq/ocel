@@ -691,6 +691,55 @@ export default {
 	}
 }
 
+// TestResolve_RejectsPerAppPreviewDomain pins the project-level rule: a preview
+// domain binds to the project, which serves every app from one entrypoint
+// worker, so an app declaring its own is a config error rather than a silently
+// ignored field.
+func TestResolve_RejectsPerAppPreviewDomain(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  apps: [
+    { name: "web", path: "apps/web", framework: "express", domains: { preview: "*.preview.acme.com" } },
+  ],
+};
+`)
+
+	_, err := Resolve(root)
+	if err == nil {
+		t.Fatal("Resolve accepted a per-app preview domain, want an error")
+	}
+	for _, want := range []string{`app "web"`, "domains.preview", "project", "ocel domains"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want it to mention %q", err, want)
+		}
+	}
+}
+
+// TestResolve_PerAppProductionDomainStaysLegal guards the other half of the
+// rule: only preview is project-level.
+func TestResolve_PerAppProductionDomainStaysLegal(t *testing.T) {
+	root := t.TempDir()
+	writeConfig(t, root, `
+export default {
+  slug: "test-app",
+  domains: { preview: "*.preview.acme.com" },
+  apps: [
+    { name: "web", path: "apps/web", framework: "express", domains: { production: "app.acme.com" } },
+  ],
+};
+`)
+
+	cfg, err := Resolve(root)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if got := cfg.Apps[0].Domains["production"]; len(got) != 1 || got[0] != "app.acme.com" {
+		t.Fatalf("Apps[0].Domains[production] = %v, want [app.acme.com]", got)
+	}
+}
+
 func TestResolve_ParsesPreviewWildcardDomain(t *testing.T) {
 	root := t.TempDir()
 	writeConfig(t, root, `

@@ -60,6 +60,12 @@ const (
 // Like the real provider it answers them only when the request carries a slug.
 const fakeKnownSlugsEnvVar = "OCEL_TEST_FAKE_KNOWN_SLUGS"
 
+// fakeDomainOwnerEnvVar names the edge worker the fake provider reports as
+// holding every hostname the request declared, so tests can drive the CLI's
+// domain-claim refusal. Unset means every declared hostname comes back
+// unclaimed.
+const fakeDomainOwnerEnvVar = "OCEL_TEST_FAKE_DOMAIN_OWNER"
+
 const (
 	fakeAppURL      = "https://fake-app.example.com"
 	fakePromotionID = "prm_fake_1234"
@@ -118,23 +124,25 @@ type deployFakeProviderServer struct {
 	token string
 	mode  string
 
-	// preflightSlug records the slug the last Preflight carried, echoed back
-	// by Deploy so a test can assert which project the CLI identified itself
-	// as before it deployed.
-	mu            sync.Mutex
-	preflightSlug string
+	// preflightSlug/preflightDomains record what the last Preflight carried,
+	// echoed back by Deploy so a test can assert which project the CLI
+	// identified itself as, and which hostnames it declared, before it
+	// deployed.
+	mu               sync.Mutex
+	preflightSlug    string
+	preflightDomains []string
 }
 
-func (s *deployFakeProviderServer) recordPreflightSlug(slug string) {
+func (s *deployFakeProviderServer) recordPreflight(slug string, domains []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.preflightSlug = slug
+	s.preflightSlug, s.preflightDomains = slug, domains
 }
 
-func (s *deployFakeProviderServer) lastPreflightSlug() string {
+func (s *deployFakeProviderServer) lastPreflight() (string, []string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.preflightSlug
+	return s.preflightSlug, s.preflightDomains
 }
 
 func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv1.DeployRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
@@ -148,10 +156,12 @@ func (s *deployFakeProviderServer) Deploy(ctx context.Context, req *deploymentsv
 		})
 	}
 
-	// Echo the slug the preceding Preflight carried, so tests can assert the
-	// CLI names the project it is about to deploy in its identity check.
+	// Echo what the preceding Preflight carried, so tests can assert the CLI
+	// names the project it is about to deploy in its identity check, and
+	// declares the hostnames it is about to attach.
+	slug, domains := s.lastPreflight()
 	if err := stream.Send(&deploymentsv1.DeployEvent{
-		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "PREFLIGHT slug=" + s.lastPreflightSlug()}},
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "PREFLIGHT slug=" + slug + " domains=" + strings.Join(domains, ",")}},
 	}); err != nil {
 		return err
 	}
@@ -216,7 +226,7 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 	if err := s.checkToken(ctx); err != nil {
 		return nil, err
 	}
-	s.recordPreflightSlug(req.GetSlug())
+	s.recordPreflight(req.GetSlug(), req.GetDomains())
 	resp := &deploymentsv1.PreflightResponse{
 		InfraClass:            parseInfraClass(os.Getenv(fakeInfraClassEnvVar)),
 		InfrastructurePresent: os.Getenv(fakeInfraPresentEnvVar) != "0",
@@ -233,6 +243,14 @@ func (s *deployFakeProviderServer) Preflight(ctx context.Context, req *deploymen
 				resp.KnownSlugs = append(resp.KnownSlugs, s)
 			}
 		}
+	}
+	owner := os.Getenv(fakeDomainOwnerEnvVar)
+	for _, host := range req.GetDomains() {
+		claim := &deploymentsv1.DomainClaim{Hostname: host, Status: deploymentsv1.DomainClaim_STATUS_UNCLAIMED}
+		if owner != "" {
+			claim.Status, claim.Owner = deploymentsv1.DomainClaim_STATUS_CLAIMED, owner
+		}
+		resp.DomainClaims = append(resp.DomainClaims, claim)
 	}
 	if p := os.Getenv(fakeCredProblemEnvVar); p != "" {
 		resp.CredentialProblems = append(resp.CredentialProblems, &deploymentsv1.CredentialProblem{
@@ -253,6 +271,23 @@ func (s *deployFakeProviderServer) DestroyPreview(ctx context.Context, req *depl
 	}
 	if err := stream.Send(&deploymentsv1.DeployEvent{
 		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY project=" + req.GetSlug() + " " + describeEnv(req.GetEnvironment())}},
+	}); err != nil {
+		return err
+	}
+	return stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Result{Result: &deploymentsv1.ResultEvent{Success: true}},
+	})
+}
+
+// DestroyProject echoes the slug and Environment it was addressed with (so
+// tests can assert which footprint the CLI targeted) and streams a terminal
+// success.
+func (s *deployFakeProviderServer) DestroyProject(ctx context.Context, req *deploymentsv1.DestroyProjectRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {
+	if err := s.checkToken(ctx); err != nil {
+		return err
+	}
+	if err := stream.Send(&deploymentsv1.DeployEvent{
+		Event: &deploymentsv1.DeployEvent_Progress{Progress: &deploymentsv1.ProgressEvent{Message: "DESTROY PROJECT project=" + req.GetSlug() + " " + describeEnv(req.GetEnvironment())}},
 	}); err != nil {
 		return err
 	}
