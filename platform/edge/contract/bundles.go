@@ -8,25 +8,8 @@ import (
 
 const EnvWorkerBundles = "OCEL_WORKER_BUNDLES"
 
-type BundleManifest map[Framework]map[Kind]string
-
-func LoadBundleManifest() (BundleManifest, error) {
-	raw := os.Getenv(EnvWorkerBundles)
-	if raw == "" {
-		return nil, fmt.Errorf("%s is not set; the ocel CLI exports it when spawning a provider", EnvWorkerBundles)
-	}
-	var m BundleManifest
-	if err := json.Unmarshal([]byte(raw), &m); err != nil {
-		return nil, fmt.Errorf("parse %s: %w", EnvWorkerBundles, err)
-	}
-	return m, nil
-}
-
-func (m BundleManifest) Path(f Framework, k Kind) (string, error) {
-	if p := m[f][k]; p != "" {
-		return p, nil
-	}
-	return "", fmt.Errorf("no worker bundle for framework %q on edge %q", f, k)
+func LoadBundleManifest() (KindBundleManifest, error) {
+	return loadKindBundles(EnvWorkerBundles)
 }
 
 const (
@@ -34,31 +17,31 @@ const (
 	EnvISRWriterWorkerBundles = "OCEL_ISR_WRITER_WORKER_BUNDLES"
 )
 
-type StoreBundleManifest map[Kind]string
+type KindBundleManifest map[Kind]string
 
-func LoadStoreBundleManifest() (StoreBundleManifest, error) {
+func LoadStoreBundleManifest() (KindBundleManifest, error) {
 	return loadKindBundles(EnvStoreWorkerBundles)
 }
 
-func LoadISRWriterBundleManifest() (StoreBundleManifest, error) {
+func LoadISRWriterBundleManifest() (KindBundleManifest, error) {
 	return loadKindBundles(EnvISRWriterWorkerBundles)
 }
 
-func loadKindBundles(envName string) (StoreBundleManifest, error) {
+func loadKindBundles(envName string) (KindBundleManifest, error) {
 	raw := os.Getenv(envName)
 	if raw == "" {
 		return nil, fmt.Errorf("%s is not set; the ocel CLI exports it when spawning a provider", envName)
 	}
-	var m StoreBundleManifest
+	var m KindBundleManifest
 	if err := json.Unmarshal([]byte(raw), &m); err != nil {
 		return nil, fmt.Errorf("parse %s: %w", envName, err)
 	}
 	return m, nil
 }
 
-func (m StoreBundleManifest) Path(k Kind) (string, error) {
+func (m KindBundleManifest) Path(k Kind) (string, error) {
 	if p := m[k]; p != "" {
 		return p, nil
 	}
-	return "", fmt.Errorf("no account-level worker bundle for edge %q", k)
+	return "", fmt.Errorf("no worker bundle for edge %q", k)
 }

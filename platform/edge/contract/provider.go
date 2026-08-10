@@ -11,6 +11,8 @@ type Provider interface {
 
 	Bootstrap(ctx context.Context, class Class) (BootstrapOutput, error)
 
+	AssembleApp(src WorkerSource, r Resolver) (Worker, error)
+
 	DeployApp(ctx context.Context, app AppDeployment) (AppResult, error)
 }
 

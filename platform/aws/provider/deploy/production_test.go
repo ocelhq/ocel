@@ -22,7 +22,7 @@ func setStoreWorkerBundle(t *testing.T) {
 	if err := os.WriteFile(bundle, []byte("export default {}"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	raw, err := json.Marshal(edge.StoreBundleManifest{edge.KindCloudflare: bundle})
+	raw, err := json.Marshal(edge.KindBundleManifest{edge.KindCloudflare: bundle})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -70,7 +70,7 @@ func TestRootStackSpecs_ThreadsEdgeValues(t *testing.T) {
 func TestRootStackSpecs_ProductionPrunesStaleRoutes(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
-	cfg := Config{Edge: &recordingEdge{}, Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+	cfg := Config{Edge: &recordingEdge{}, Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: t.TempDir()}
 
 	specs, err := rootStackSpecs(cfg, &deploymentsv1.Manifest{Slug: "proj"}, "v1", nil)
 	if err != nil {
@@ -166,9 +166,11 @@ func TestResolveWorkerHostnames_ProductionServesItsDeclaredHostnames(t *testing.
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		Domains:   map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}},
 	}
-	cfg := Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION, Slug: "proj"}
+	artifactRoot := t.TempDir()
+	writeRoutingManifest(t, artifactRoot, "web", `{"buildId":"b1"}`)
+	cfg := Config{Class: deploymentsv1.Environment_CLASS_PRODUCTION, Slug: "proj", ArtifactRoot: artifactRoot}
 
-	resolved, err := resolveWorkerHostnames(cfg, manifest, workerApps(manifest))
+	resolved, err := resolveWorkerHostnames(cfg, manifest, workerApps(artifactRoot, manifest))
 	if err != nil {
 		t.Fatalf("resolveWorkerHostnames: %v", err)
 	}
@@ -185,7 +187,7 @@ func TestRootStackSpecs_PreviewWithNoDeclaredDomainIsRefused(t *testing.T) {
 		Apps:      []*deploymentsv1.ManifestApp{{Name: "web", Framework: "next"}},
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 	}
-	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}
+	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 	_, err := rootStackSpecs(cfg, manifest, "v1", nil)
 	if err == nil {
@@ -205,7 +207,7 @@ func TestRootStackSpecs_PreviewWithoutAWildcardFailsTheDeploy(t *testing.T) {
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		Domains:   map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"app.acme.com"}}},
 	}
-	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}
+	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 	_, err := rootStackSpecs(cfg, manifest, "v1", nil)
 	if err == nil {
@@ -288,10 +290,11 @@ func TestRootStackSpecs_PreviewIsOneProjectScopedSpec(t *testing.T) {
 		Domains: map[string]*deploymentsv1.DomainList{"preview": {Hostnames: []string{"*.preview.acme.com"}}},
 	}
 	cfg := Config{
-		Edge:     &recordingEdge{},
-		Slug:     "proj",
-		Class:    deploymentsv1.Environment_CLASS_PREVIEW,
-		Identity: "pr-42",
+		Edge:         &recordingEdge{},
+		Slug:         "proj",
+		Class:        deploymentsv1.Environment_CLASS_PREVIEW,
+		Identity:     "pr-42",
+		ArtifactRoot: specsArtifactRoot(t, manifest),
 	}
 
 	specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
@@ -335,7 +338,7 @@ func TestRootStackSpecs_PreviewAlwaysBindsTheAppList(t *testing.T) {
 	setWorkerBundle(t)
 	setStoreWorkerBundle(t)
 	manifest := &deploymentsv1.Manifest{Slug: "proj"}
-	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42"}
+	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PREVIEW, Identity: "pr-42", ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 	specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
 	if err != nil {
@@ -392,7 +395,7 @@ func TestRootStackSpecs_ProductionKeepsDeclarativeHostnames(t *testing.T) {
 		Functions: []*deploymentsv1.ManifestFunction{{LogicalName: "web_index", Framework: "next", App: "web", RouteId: "/"}},
 		Domains:   map[string]*deploymentsv1.DomainList{"production": {Hostnames: []string{"acme.com", "www.acme.com"}}},
 	}
-	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION}
+	cfg := Config{Edge: &recordingEdge{}, Slug: "proj", Class: deploymentsv1.Environment_CLASS_PRODUCTION, ArtifactRoot: specsArtifactRoot(t, manifest)}
 
 	specs, err := rootStackSpecs(cfg, manifest, "v1", nil)
 	if err != nil {
@@ -1285,4 +1288,13 @@ func TestFinalizeDeploy_PromotionCarriesRenderedIdentities(t *testing.T) {
 	if got := fake.promotions[0].Builds["web"]; got != id.String() {
 		t.Errorf("promotion.Builds[web] = %q, want %q", got, id.String())
 	}
+}
+
+func specsArtifactRoot(t *testing.T, manifest *deploymentsv1.Manifest) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, app := range manifestApps(manifest) {
+		writeRoutingManifest(t, root, app.GetName(), `{"buildId":"b1"}`)
+	}
+	return root
 }

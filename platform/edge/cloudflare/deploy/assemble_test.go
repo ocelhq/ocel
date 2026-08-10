@@ -1,4 +1,4 @@
-package nextjs
+package cloudflare
 
 import (
 	"os"
@@ -30,7 +30,7 @@ type errNoURL struct{ route string }
 
 func (e errNoURL) Error() string { return "no function URL for route " + e.route }
 
-func writeNextArtifacts(t *testing.T) edge.WorkerSource {
+func writeAppArtifacts(t *testing.T) edge.WorkerSource {
 	t.Helper()
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, "routing-manifest.json"), []byte(`{"buildId":"b1"}`), 0o644); err != nil {
@@ -49,8 +49,8 @@ func writeNextArtifacts(t *testing.T) edge.WorkerSource {
 	return edge.WorkerSource{ArtifactRoot: root, BundlePath: bundle}
 }
 
-func TestAssembleCloudflare_FullyConfigured(t *testing.T) {
-	src := writeNextArtifacts(t)
+func TestAssembleApp_FullyConfigured(t *testing.T) {
+	src := writeAppArtifacts(t)
 	src.Routes = []string{"/api/documents"}
 	r := stubResolver{
 		urls:     map[string]string{"/api/documents": "https://fn.lambda-url.aws/"},
@@ -58,7 +58,7 @@ func TestAssembleCloudflare_FullyConfigured(t *testing.T) {
 		hasCreds: true,
 	}
 
-	w, err := AssembleCloudflare(src, r)
+	w, err := assembleFor(t)(src, r)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
@@ -95,12 +95,12 @@ func TestAssembleCloudflare_FullyConfigured(t *testing.T) {
 	}
 }
 
-func TestAssembleCloudflare_NoCredentialsOmitsSigningBindings(t *testing.T) {
-	src := writeNextArtifacts(t)
+func TestAssembleApp_NoCredentialsOmitsSigningBindings(t *testing.T) {
+	src := writeAppArtifacts(t)
 	src.Routes = []string{"/"}
 	r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
 
-	w, err := AssembleCloudflare(src, r)
+	w, err := assembleFor(t)(src, r)
 	if err != nil {
 		t.Fatalf("a substrate predating edge credentials must not fail the deploy: %v", err)
 	}
@@ -112,12 +112,12 @@ func TestAssembleCloudflare_NoCredentialsOmitsSigningBindings(t *testing.T) {
 	}
 }
 
-func TestAssembleCloudflare_AsksForItsObjectStoreByName(t *testing.T) {
-	src := writeNextArtifacts(t)
+func TestAssembleApp_AsksForItsObjectStoreByName(t *testing.T) {
+	src := writeAppArtifacts(t)
 	src.Routes = []string{"/"}
 	r := stubResolver{urls: map[string]string{"/": "https://fn.lambda-url.aws/"}}
 
-	w, err := AssembleCloudflare(src, r)
+	w, err := assembleFor(t)(src, r)
 	if err != nil {
 		t.Fatalf("assemble: %v", err)
 	}
@@ -129,11 +129,11 @@ func TestAssembleCloudflare_AsksForItsObjectStoreByName(t *testing.T) {
 	}
 }
 
-func TestAssembleCloudflare_UnresolvableRouteIsAnError(t *testing.T) {
-	src := writeNextArtifacts(t)
+func TestAssembleApp_UnresolvableRouteIsAnError(t *testing.T) {
+	src := writeAppArtifacts(t)
 	src.Routes = []string{"/orphan"}
 
-	_, err := AssembleCloudflare(src, stubResolver{urls: map[string]string{}})
+	_, err := assembleFor(t)(src, stubResolver{urls: map[string]string{}})
 	if err == nil {
 		t.Fatal("expected an error for an unresolvable route")
 	}
@@ -183,4 +183,9 @@ func TestCollectStaticAssets_MissingDirYieldsNone(t *testing.T) {
 	if len(assets) != 0 {
 		t.Errorf("expected no assets, got %d", len(assets))
 	}
+}
+
+func assembleFor(t *testing.T) func(edge.WorkerSource, edge.Resolver) (edge.Worker, error) {
+	t.Helper()
+	return New().AssembleApp
 }

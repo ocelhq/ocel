@@ -83,6 +83,10 @@ func (f *fakeCFN) UpdateStack(_ context.Context, in *cloudformation.UpdateStackI
 	return &cloudformation.UpdateStackOutput{}, nil
 }
 
+func (*fakeEdge) AssembleApp(edge.WorkerSource, edge.Resolver) (edge.Worker, error) {
+	return edge.Worker{}, errors.New("bootstrap never assembles an app worker")
+}
+
 type fakeEdge struct {
 	out        edge.BootstrapOutput
 	err        error

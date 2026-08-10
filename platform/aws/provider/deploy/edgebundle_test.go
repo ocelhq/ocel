@@ -3,6 +3,7 @@ package deploy
 import (
 	"context"
 	"encoding/json"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
 	"sort"
 	"strings"
 	"testing"
@@ -17,6 +18,10 @@ type loaderEdge struct {
 }
 
 func (loaderEdge) Kind() edge.Kind { return edge.KindCloudflare }
+
+func (loaderEdge) AssembleApp(src edge.WorkerSource, r edge.Resolver) (edge.Worker, error) {
+	return cloudflare.New().AssembleApp(src, r)
+}
 
 func (loaderEdge) Bootstrap(context.Context, edge.Class) (edge.BootstrapOutput, error) {
 	return edge.BootstrapOutput{}, nil
