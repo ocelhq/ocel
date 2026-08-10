@@ -121,7 +121,7 @@ moves.
   vector.
 
   That the edge worker only ever writes `.cache.json` keys is true
-  (`workers/nextjs/src/cache-entrypoint.ts`, `fetchObjectKey`) but is **not**
+  (`platform/edge/cloudflare/workers/entry/src/cache-entrypoint.ts`, `fetchObjectKey`) but is **not**
   what makes this safe: the threat modelled here is a stolen edge *credential*,
   which the worker's code does not constrain. Only the grant does.
 

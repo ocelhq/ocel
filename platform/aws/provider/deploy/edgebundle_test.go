@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 type loaderEdge struct {

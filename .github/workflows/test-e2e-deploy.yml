@@ -85,8 +85,8 @@ jobs:
           pnpm install --frozen-lockfile
           pnpm --filter ocel build
           pnpm --filter @framework/next-adapter build
-          pnpm --filter @ocel/worker-nextjs build
-          pnpm --filter @ocel/worker-deployments-store build
+          pnpm --filter @platform/cf-entry build
+          pnpm --filter @platform/cf-deployments-store build
 
       - name: Build the Go binaries for this host
         working-directory: adapter

@@ -11,8 +11,8 @@ sha256() {
 
 inputs() {
   find "$node_dir/src/builder" "$node_dir/src/vars-ui" "$root/frameworks/next/adapter/src" -type f
-  find "$root"/workers/*/src -type f
-  ls "$root"/workers/*/wrangler.jsonc
+  find "$root"/platform/edge/cloudflare/workers/*/src -type f
+  ls "$root"/platform/edge/cloudflare/workers/*/wrangler.jsonc
   echo "$root/pnpm-lock.yaml"
   echo "$node_dir/generate.sh"
   echo "$node_dir/build.mjs"
@@ -33,12 +33,12 @@ node "$node_dir/build.mjs"
 
 (
   cd "$root"
-  pnpm --filter @ocel/worker-nextjs build
-  pnpm --filter @ocel/worker-deployments-store build
-  pnpm --filter @ocel/worker-isr-writer build
+  pnpm --filter @platform/cf-entry build
+  pnpm --filter @platform/cf-deployments-store build
+  pnpm --filter @platform/cf-isr-writer build
 )
-cp "$root/workers/nextjs/dist/index.js" "$dist/workers/next-cloudflare.js"
-cp "$root/workers/deployments-store/dist/index.js" "$dist/workers/store-cloudflare.js"
-cp "$root/workers/isr-writer/dist/index.js" "$dist/workers/isr-writer-cloudflare.js"
+cp "$root/platform/edge/cloudflare/workers/entry/dist/index.js" "$dist/workers/next-cloudflare.js"
+cp "$root/platform/edge/cloudflare/workers/deployments-store/dist/index.js" "$dist/workers/store-cloudflare.js"
+cp "$root/platform/edge/cloudflare/workers/isr-writer/dist/index.js" "$dist/workers/isr-writer-cloudflare.js"
 
 printf '%s' "$stamp" >"$dist/STAMP"

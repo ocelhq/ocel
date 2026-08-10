@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 )
 
 const (

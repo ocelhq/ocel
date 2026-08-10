@@ -238,15 +238,15 @@ importers:
       '@framework/next-adapter':
         specifier: workspace:^
         version: link:../../frameworks/next/adapter
-      '@ocel/worker-deployments-store':
+      '@platform/cf-deployments-store':
         specifier: workspace:^
-        version: link:../../workers/deployments-store
-      '@ocel/worker-isr-writer':
+        version: link:../../platform/edge/cloudflare/workers/deployments-store
+      '@platform/cf-entry':
         specifier: workspace:^
-        version: link:../../workers/isr-writer
-      '@ocel/worker-nextjs':
+        version: link:../../platform/edge/cloudflare/workers/entry
+      '@platform/cf-isr-writer':
         specifier: workspace:^
-        version: link:../../workers/nextjs
+        version: link:../../platform/edge/cloudflare/workers/isr-writer
       '@vercel/nft':
         specifier: ^0.27.4
         version: 0.27.10(rollup@4.62.2)
@@ -832,18 +832,6 @@ importers:
         specifier: workspace:^
         version: link:../native-lib/provider-aws-win32-x64
 
-  packages/worker-auth:
-    devDependencies:
-      '@types/node':
-        specifier: ^24
-        version: 24.13.2
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-      vitest:
-        specifier: ^3.2.7
-        version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
-
   platform/aws/functions/entrypoints:
     dependencies:
       '@framework/next-cache':
@@ -944,6 +932,93 @@ importers:
         specifier: ^3.2.7
         version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
 
+  platform/edge/cloudflare/lib/auth:
+    devDependencies:
+      '@types/node':
+        specifier: ^24
+        version: 24.13.2
+      typescript:
+        specifier: ^5.9.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.2.7
+        version: 3.2.7(@types/node@24.13.2)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
+
+  platform/edge/cloudflare/workers/deployments-store:
+    dependencies:
+      '@platform/cf-auth':
+        specifier: workspace:*
+        version: link:../../lib/auth
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.12.4
+        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0))
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: ^5.5.2
+        version: 5.9.3
+      vitest:
+        specifier: ~3.2.0
+        version: 3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
+      wrangler:
+        specifier: ^4.110.0
+        version: 4.110.0
+
+  platform/edge/cloudflare/workers/entry:
+    dependencies:
+      '@framework/next-cache':
+        specifier: workspace:*
+        version: link:../../../../../frameworks/next/cache
+      '@next/routing':
+        specifier: ^16.2.10
+        version: 16.2.10
+      aws4fetch:
+        specifier: ^1.0.20
+        version: 1.0.20
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.12.4
+        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0))
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: ^5.5.2
+        version: 5.9.3
+      vitest:
+        specifier: ~3.2.0
+        version: 3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
+      wrangler:
+        specifier: ^4.110.0
+        version: 4.110.0
+
+  platform/edge/cloudflare/workers/isr-writer:
+    dependencies:
+      '@framework/next-cache':
+        specifier: workspace:*
+        version: link:../../../../../frameworks/next/cache
+      '@platform/cf-auth':
+        specifier: workspace:*
+        version: link:../../lib/auth
+    devDependencies:
+      '@cloudflare/vitest-pool-workers':
+        specifier: ^0.12.4
+        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0))
+      '@types/node':
+        specifier: ^26.1.1
+        version: 26.1.1
+      typescript:
+        specifier: ^5.5.2
+        version: 5.9.3
+      vitest:
+        specifier: ~3.2.0
+        version: 3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
+      wrangler:
+        specifier: ^4.110.0
+        version: 4.110.0
+
   scripts/e2e-next:
     devDependencies:
       vitest:
@@ -993,81 +1068,6 @@ importers:
       typescript:
         specifier: ^6.0.3
         version: 6.0.3
-
-  workers/deployments-store:
-    dependencies:
-      '@ocel/worker-auth':
-        specifier: workspace:*
-        version: link:../../packages/worker-auth
-    devDependencies:
-      '@cloudflare/vitest-pool-workers':
-        specifier: ^0.12.4
-        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0))
-      '@types/node':
-        specifier: ^26.1.1
-        version: 26.1.1
-      typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
-      vitest:
-        specifier: ~3.2.0
-        version: 3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
-      wrangler:
-        specifier: ^4.110.0
-        version: 4.110.0
-
-  workers/isr-writer:
-    dependencies:
-      '@framework/next-cache':
-        specifier: workspace:*
-        version: link:../../frameworks/next/cache
-      '@ocel/worker-auth':
-        specifier: workspace:*
-        version: link:../../packages/worker-auth
-    devDependencies:
-      '@cloudflare/vitest-pool-workers':
-        specifier: ^0.12.4
-        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0))
-      '@types/node':
-        specifier: ^26.1.1
-        version: 26.1.1
-      typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
-      vitest:
-        specifier: ~3.2.0
-        version: 3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
-      wrangler:
-        specifier: ^4.110.0
-        version: 4.110.0
-
-  workers/nextjs:
-    dependencies:
-      '@framework/next-cache':
-        specifier: workspace:*
-        version: link:../../frameworks/next/cache
-      '@next/routing':
-        specifier: ^16.2.10
-        version: 16.2.10
-      aws4fetch:
-        specifier: ^1.0.20
-        version: 1.0.20
-    devDependencies:
-      '@cloudflare/vitest-pool-workers':
-        specifier: ^0.12.4
-        version: 0.12.21(@vitest/runner@4.1.9)(@vitest/snapshot@4.1.9)(vitest@3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0))
-      '@types/node':
-        specifier: ^26.1.1
-        version: 26.1.1
-      typescript:
-        specifier: ^5.5.2
-        version: 5.9.3
-      vitest:
-        specifier: ~3.2.0
-        version: 3.2.7(@types/node@26.1.1)(jiti@2.7.0)(lightningcss@1.32.0)(tsx@4.23.0)
-      wrangler:
-        specifier: ^4.110.0
-        version: 4.110.0
 
 packages:
 

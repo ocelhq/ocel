@@ -16,7 +16,7 @@ import (
 	s3types "github.com/aws/aws-sdk-go-v2/service/s3/types"
 	"gopkg.in/yaml.v3"
 
-	"github.com/ocelhq/ocel/cloud/edge"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var fixtureArtifact = []byte("PK\x03\x04 pretend this is a Lambda zip")

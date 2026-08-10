@@ -8,8 +8,8 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/server"
 	"github.com/ocelhq/ocel/pkg/channel"
+	"github.com/ocelhq/ocel/platform/aws/provider/server"
 )
 
 var version = "dev"

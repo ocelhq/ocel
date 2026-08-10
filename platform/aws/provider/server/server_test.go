@@ -11,10 +11,10 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 	ssmtypes "github.com/aws/aws-sdk-go-v2/service/ssm/types"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
-	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func wellFormedManifest() *deploymentsv1.Manifest {

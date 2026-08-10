@@ -12,8 +12,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const edgeBundleFile = "edge/bundle.json"

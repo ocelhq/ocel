@@ -9,9 +9,9 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/secretsmanager"
 
-	"github.com/ocelhq/ocel/platform/aws/provider/vars"
-	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	"github.com/ocelhq/ocel/platform/aws/provider/vars"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func pulumiEnv(region, backendURL, passphrase string) map[string]string {

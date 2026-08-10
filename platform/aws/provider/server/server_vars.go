@@ -16,11 +16,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	envv1 "github.com/ocelhq/ocel/pkg/proto/env/v1"
 )
 
 type VarsServer struct {

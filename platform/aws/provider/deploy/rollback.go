@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ocelhq/ocel/cloud/edge"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func RollbackTarget(history []edge.HistoryEntry, to, tag string) (edge.Promotion, error) {

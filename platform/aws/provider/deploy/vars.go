@@ -11,12 +11,12 @@ import (
 	"strconv"
 	"strings"
 
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/baked"
 	"github.com/ocelhq/ocel/platform/aws/provider/vars/live"
-	"github.com/ocelhq/ocel/cloud/edge"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
-	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 const functionEnvBudgetBytes = 4096

@@ -80,7 +80,7 @@ look exactly like adapter bugs.
 3. **Cloudflare serves a managed `robots.txt`** on the zone — ~1860 bytes of
    Content Signals Policy that never reaches the worker. It fails the
    `robots.txt` metadata test independently of any adapter bug.
-4. **`workers/nextjs/routing-manifest.json` in the working tree is a red
+4. **`platform/edge/cloudflare/workers/entry/routing-manifest.json` in the working tree is a red
    herring** — a scratch artifact for a different app (`appName: next-cache-lab`),
    not the deployed manifest. The real one is in the app's
    `.ocel/output/apps/app/`. Two debuggers wasted budget on this.

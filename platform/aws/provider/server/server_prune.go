@@ -12,11 +12,11 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
 	"github.com/ocelhq/ocel/platform/aws/provider/pulumirt"
-	"github.com/ocelhq/ocel/cloud/edge"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func (s *Server) Prune(ctx context.Context, req *deploymentsv1.PruneRequest, stream *connect.ServerStream[deploymentsv1.DeployEvent]) error {

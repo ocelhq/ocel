@@ -11,9 +11,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ocelhq/ocel/cloud/edge"
 	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	resourcesv1 "github.com/ocelhq/ocel/pkg/proto/resources/v1"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 func setStoreWorkerBundle(t *testing.T) {

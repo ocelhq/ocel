@@ -9,11 +9,11 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/service/ssm"
 
+	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
 	"github.com/ocelhq/ocel/platform/aws/provider/bootstrap"
 	"github.com/ocelhq/ocel/platform/aws/provider/deploy"
-	"github.com/ocelhq/ocel/cloud/edge"
-	"github.com/ocelhq/ocel/cloud/edge/cloudflare"
-	deploymentsv1 "github.com/ocelhq/ocel/pkg/proto/deployments/v1"
+	cloudflare "github.com/ocelhq/ocel/platform/edge/cloudflare/deploy"
+	edge "github.com/ocelhq/ocel/platform/edge/contract"
 )
 
 var errNoProductionDeploy = errors.New("this project has no production deploys yet; run `ocel deploy` first")

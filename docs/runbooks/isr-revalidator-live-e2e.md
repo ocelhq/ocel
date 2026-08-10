@@ -169,7 +169,7 @@ curl -s -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
   | jq '.result.bindings[] | select(.name=="OCEL_REVALIDATE_QUEUE_URL")'
 ```
 
-**`sqsRegion` is strict about the queue URL's shape** (`workers/nextjs/src/signing.ts`,
+**`sqsRegion` is strict about the queue URL's shape** (`platform/edge/cloudflare/workers/entry/src/signing.ts`,
 `labels[0] === "sqs"`). A FIPS or dualstack endpoint yields no sender at all and the whole
 path is silently inert — no queue bound, every refresh renders as before. Read the actual
 output value and confirm it is the plain regional form
@@ -249,7 +249,7 @@ r2_get() {
    the Lambda log group shows no new invocation for that route and the served entry is the
    new generation (`x-ocel-cache` of `HIT`/`PRERENDER`/`STALE`, never `MISS`).
 
-**A 204 from `workers/isr-writer` is NOT proof the write landed.** It returns 204 for the
+**A 204 from `platform/edge/cloudflare/workers/isr-writer` is NOT proof the write landed.** It returns 204 for the
 `"absent"` outcome too, so it cannot distinguish "landed" from "there was no snapshot to
 land in". Every R2 assertion above must be a direct read through the Cloudflare API and a
 byte comparison — this is the trap that `.15` and `ocelhq-yo9b` both call out.
@@ -367,7 +367,7 @@ for every one, including "no observable difference", which is a result.
    window. **Zero queue messages plus zero of these lines means the sender was never
    constructed** (missing env var, or `sqsRegion` rejecting the URL shape — see §4), which
    is a different failure from a refused send.
-3. **Confirm the query-string divergence.** `originUrl` in `workers/nextjs/src/index.ts`
+3. **Confirm the query-string divergence.** `originUrl` in `platform/edge/cloudflare/workers/entry/src/index.ts`
    builds `pathname + url.search`; the consumer composes `origin + routePath` alone. So
    the queue leg triggers without the query and the fallback leg with it. Drive the §5
    query-string route as `/q?x=1` on both legs and record whether the regenerated entry
@@ -379,7 +379,7 @@ for every one, including "no observable difference", which is a result.
    two suppression halves compose into a **permanently frozen route** there: with no ISR
    store there is no interception, so no tier can observe the entry's staleness, and the
    `purpose: prefetch` stamp asks the Lambda not to render either. The fix gates the stamp
-   on a named `admissionTier` (`workers/nextjs/src/index.ts`, `87d620e`). Deploy one app
+   on a named `admissionTier` (`platform/edge/cloudflare/workers/entry/src/index.ts`, `87d620e`). Deploy one app
    onto a substrate whose Cloudflare upload has no cache-store binding, make a route
    stale, and assert it **still regenerates** — the stamp must be absent on that forward.
    A pages-router `_next/data` request takes the same path on a fully bound worker, so
