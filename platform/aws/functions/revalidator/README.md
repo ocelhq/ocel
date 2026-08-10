@@ -35,7 +35,7 @@ real boundary is this, and it is two things, not one:
 
 - **`isrPrefix` is validated as a key prefix** (`src/message.mts`), to the same
   standard `routePath` is: dot-free segments of the characters
-  `cloud/aws/deploy` composes it from, no separator, no traversal, no absolute
+  `platform/aws/provider/deploy` composes it from, no separator, no traversal, no absolute
   key, nothing empty, and no `fetch-cache` segment. Without that check a `#` or
   a `?` truncates the `/origin.json` the consumer appends, and the message names
   an arbitrary object — including one under the fetch-cache segment the edge
@@ -130,7 +130,7 @@ moves.
   matches under any leading prefix.
 - **Env**, `OCEL_ASSET_BUCKET: !Ref AssetBucket`, exactly as `publisher.go`
   renders it for the tag publisher.
-- **A deploy-side write** (`cloud/aws/deploy`), which does not exist yet: after
+- **A deploy-side write** (`platform/aws/provider/deploy`), which does not exist yet: after
   the app stack's outputs are read, `PutObject` `<isrPrefix>/origin.json` into
   the asset bucket with the `{v, functionUrls}` document above. The map is the
   one `buildDeploymentRecord` already computes via `appFunctionURLsByRoute`; the
@@ -200,5 +200,5 @@ could hold them.
 `pnpm --filter @platform/aws-revalidator zip` builds a reproducible
 `dist/revalidator.zip` (fixed timestamps, sorted entries). It is published as a
 GitHub release asset `revalidator-v<version>` and pinned by version + sha256 in
-`cloud/aws/bootstrap/revalidatorversion.go`, which bootstrap verifies
+`platform/aws/provider/bootstrap/revalidatorversion.go`, which bootstrap verifies
 fail-closed. Unpinned, bootstrap renders no consumer at all.

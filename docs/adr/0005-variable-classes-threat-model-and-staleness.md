@@ -40,9 +40,9 @@ the read path asks about a class (`definition.ts:64-66`).
 | | `plain` | `sensitive` (encrypted-baked) | `secret` (the live class) |
 |---|---|---|---|
 | **Confidentiality** | None. Legible in a function-configuration listing. | Ciphertext at rest in the artifact; plaintext only inside the running process. | Never in an artifact or a function configuration at all. |
-| **Delivery** | A plaintext entry in the Lambda's environment under the bare key the user chose (`cloud/aws/deploy/vars.go:84-96`, `variableEnv`). | AES-256-GCM ciphertext at `.ocel/variables.enc` inside every one of the app's deployment packages (`cloud/aws/vars/baked/baked.go:20-23`); the per-deploy data key is the one plaintext configuration entry, `OCEL_VARS_ENVELOPE` (`baked.go:25-29`); the Go membrane opens the file and re-injects each value under `OCEL_VAR_<KEY>` (`baked.go:31-34`, read by the SDK at `packages/ocel/src/env/index.ts:145,169`). | The deploy pins **coordinates only** into `.ocel/variables.live.json` (`cloud/aws/vars/live/live.go:26-56`); the membrane reads them, fetches plaintext from DynamoDB+KMS through `vars.Store.Reveal` (`cloud/aws/cmd/lambdanode/bootstrap/live.go:58-74`) and pushes it to node over the one-way control socket as a `liveValues` message (`live.go:76-90`). |
-| **Rotation cost** | A redeploy. The value is function configuration, written at deploy. | A redeploy. A new value means a new seal — a fresh nonce and fresh ciphertext on every `Seal` (`baked.go:41-59`) — so it is a new artifact by construction. | **None.** Rotating changes nothing in the package, which is precisely why the package holds an address and not a value (`cloud/aws/vars/live/live.go:5-10`). Picked up within the staleness bound below. |
-| **Who can read the plaintext** | Anyone who can read the function's configuration: the console, `GetFunctionConfiguration`, or a log line that dumps `process.env`. | Anyone who can read the function's configuration **and** download its deployment package. On Lambda that is one API surface, not two — see the threat model. | Only the function's own execution role: `kms:Decrypt` on its class's key, plus a `dynamodb:Query` conditioned on that project's partition and the partitions its own live values are referenced out of (`cloud/aws/deploy/vars.go`, `varsReadPolicy`). No artifact and no configuration ever carries it. |
+| **Delivery** | A plaintext entry in the Lambda's environment under the bare key the user chose (`platform/aws/provider/deploy/vars.go:84-96`, `variableEnv`). | AES-256-GCM ciphertext at `.ocel/variables.enc` inside every one of the app's deployment packages (`platform/aws/provider/vars/baked/baked.go:20-23`); the per-deploy data key is the one plaintext configuration entry, `OCEL_VARS_ENVELOPE` (`baked.go:25-29`); the Go membrane opens the file and re-injects each value under `OCEL_VAR_<KEY>` (`baked.go:31-34`, read by the SDK at `packages/ocel/src/env/index.ts:145,169`). | The deploy pins **coordinates only** into `.ocel/variables.live.json` (`platform/aws/provider/vars/live/live.go:26-56`); the membrane reads them, fetches plaintext from DynamoDB+KMS through `vars.Store.Reveal` (`platform/aws/provider/cmd/lambdanode/bootstrap/live.go:58-74`) and pushes it to node over the one-way control socket as a `liveValues` message (`live.go:76-90`). |
+| **Rotation cost** | A redeploy. The value is function configuration, written at deploy. | A redeploy. A new value means a new seal — a fresh nonce and fresh ciphertext on every `Seal` (`baked.go:41-59`) — so it is a new artifact by construction. | **None.** Rotating changes nothing in the package, which is precisely why the package holds an address and not a value (`platform/aws/provider/vars/live/live.go:5-10`). Picked up within the staleness bound below. |
+| **Who can read the plaintext** | Anyone who can read the function's configuration: the console, `GetFunctionConfiguration`, or a log line that dumps `process.env`. | Anyone who can read the function's configuration **and** download its deployment package. On Lambda that is one API surface, not two — see the threat model. | Only the function's own execution role: `kms:Decrypt` on its class's key, plus a `dynamodb:Query` conditioned on that project's partition and the partitions its own live values are referenced out of (`platform/aws/provider/deploy/vars.go`, `varsReadPolicy`). No artifact and no configuration ever carries it. |
 
 **`client` is not a fourth class.** It is an orthogonal boolean that only
 `plain` may carry (`definition.ts:31-43`, `proto/resources/v1/env.proto:36-38`).
@@ -87,7 +87,7 @@ What `sensitive` genuinely protects against is narrower and still worth having:
 **`secret` is the only class with a real trust boundary.** Its plaintext exists
 in exactly two places: the store, and the memory of a running function whose
 execution role was granted a `kms:Decrypt` and a partition-scoped
-`dynamodb:Query` (`cloud/aws/deploy/vars.go`, `varsReadPolicy`). The scope is
+`dynamodb:Query` (`platform/aws/provider/deploy/vars.go`, `varsReadPolicy`). The scope is
 the project's own partition plus the partition of every project that function's
 own live values are referenced out of, because a reference is followed where it
 is read — see the amendment
@@ -98,7 +98,7 @@ learn nothing but the key's address.
 
 **`plain` claims nothing.** It exists for interop with code that reads
 `process.env` itself, which is the property that distinguishes it
-(`cloud/aws/deploy/vars.go:75-83`).
+(`platform/aws/provider/deploy/vars.go:75-83`).
 
 The practical rule: choose `secret` when the value's disclosure matters, and
 `sensitive` when you want it off the configuration surface but can accept that
@@ -107,7 +107,7 @@ anyone who can fetch the artifact can open it.
 ### The staleness bound: 60 seconds, plus the next invocation
 
 `liveStalenessBound = 60 * time.Second`
-(`cloud/aws/cmd/lambdanode/bootstrap/live.go:37`) — one bound for the whole
+(`platform/aws/provider/cmd/lambdanode/bootstrap/live.go:37`) — one bound for the whole
 project, because rotation latency is a project-wide operational property. It is
 **not user-configurable**: doing so needs a project-config settings surface that
 does not exist and a wire field to carry it, so changing it today is a source
@@ -117,7 +117,7 @@ Three qualifications, all of which matter more than the number:
 
 1. **The clock is read when an invocation arrives, not on a timer.** Lambda
    freezes the sandbox between invocations, so `refreshIfStale` is called on the
-   forward path (`cloud/aws/cmd/lambdanode/bootstrap/forward.go:31`) rather than
+   forward path (`platform/aws/provider/cmd/lambdanode/bootstrap/forward.go:31`) rather than
    from a ticker (`live.go:32-36`). An idle warm sandbox holds a value well past
    60 seconds and refreshes on the first work it is given. The bound is
    therefore **"60 seconds plus the next invocation"**, not a wall-clock
@@ -195,7 +195,7 @@ interact.
   folder, then the project root (`cli/internal/envgate/folder.go:46-56`,
   `Resolve`). Nesting never participates — a folder is matched whole, never as a
   path prefix, and the store's key layout enforces that with a terminator
-  (`cloud/aws/vars/keys.go:122-128`). A root cell is the fallback for every app;
+  (`platform/aws/provider/vars/keys.go:122-128`). A root cell is the fallback for every app;
   a folder cell is read only by the app bound there
   (`cli/internal/envgate/envgate.go:293-296`). A key scoped to folders the app
   does not bind is absent from the result rather than resolved from somewhere
@@ -206,7 +206,7 @@ interact.
   below narrows this**: the run that *is* an environment resolves that
   environment's own overrides too. The partition key separates projects *and* env
   classes, so a value can never be read across the class boundary
-  (`cloud/aws/vars/keys.go:112-120`).
+  (`platform/aws/provider/vars/keys.go:112-120`).
 
 Consequence: moving a value from the root to a folder never changes which
 environment it belongs to.

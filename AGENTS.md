@@ -44,6 +44,16 @@ test commands. Read those first, then the code. A few invariants that rarely cha
   proto bindings, SDK, provider binaries) has an isolated dependency graph so heavy CLI /
   provider deps never reach SDK consumers, tied together for local dev by `go.work`. The JS
   side is a single pnpm workspace.
+- **Top-level directories are boundaries by role, not by language.** `packages/` is only what
+  publishes to npm. `console/` is our hosted control plane — never call it a cloud; Ocel does
+  not offer one, and "cloud" means the customer's account. `platform/<vendor>/` is code
+  targeting someone else's infrastructure, holding the Go that provisions it *and* the JS that
+  runs on it; `platform/edge/` is for edges bought independently of an origin cloud, so a
+  vendor's native edge belongs under that vendor. `frameworks/<name>/` holds only what is not
+  a branch of some host. A scope says whether something ships: `@ocel/*` is public API and
+  nothing internal may claim it (`@console/*`, `@platform/*`, `@framework/*`, `@cli/node`).
+- **No import may cross from one `platform/<vendor>/` into another.** What the two sides agree
+  on goes in `platform/edge/contract`, which both depend on and neither owns.
 - `proto/` is the **source of truth**; bindings are generated (`pnpm gen`) — never hand-edit
   generated output.
 - The control-plane core is split into framework-agnostic packages so a future framework swap
